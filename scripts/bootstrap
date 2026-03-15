@@ -1,0 +1,5 @@
+#!/usr/bin/env zsh
+
+set -euo pipefail
+
+./.venv/bin/python -m pip install -e .

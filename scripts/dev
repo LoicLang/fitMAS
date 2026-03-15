@@ -1,0 +1,5 @@
+#!/usr/bin/env zsh
+
+set -euo pipefail
+
+./.venv/bin/python -m uvicorn --app-dir backend/src fitmas.main:app --reload --host 127.0.0.1 --port 8000

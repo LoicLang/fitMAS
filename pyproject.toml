@@ -1,0 +1,20 @@
+[project]
+name = "fitmas"
+version = "0.1.0"
+description = "FitMAS V0 backend prototype."
+requires-python = ">=3.12"
+dependencies = [
+  "fastapi>=0.115,<1.0",
+  "uvicorn>=0.30,<1.0",
+  "pydantic>=2.9,<3.0",
+]
+
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+package-dir = {"" = "backend/src"}
+
+[tool.setuptools.packages.find]
+where = ["backend/src"]
