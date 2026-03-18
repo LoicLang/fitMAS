@@ -1,12 +1,13 @@
 from __future__ import annotations
 
+import logging
 from contextlib import asynccontextmanager
 from pathlib import Path
 
 from dotenv import load_dotenv
 from fastapi import Depends, FastAPI, HTTPException
 
-load_dotenv(Path(__file__).resolve().parents[4] / ".env")
+load_dotenv(Path(__file__).resolve().parents[3] / ".env")
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
@@ -27,18 +28,26 @@ from fitmas.models import (
 from fitmas.nlp import extract_reply, generate_reply
 from fitmas.seed import seed_if_empty
 
+logger = logging.getLogger(__name__)
+
 ROOT_DIR = Path(__file__).resolve().parents[3]
-FRONTEND_INDEX = ROOT_DIR / "frontend" / "index.html"
+FRONTEND_DIR = ROOT_DIR / "frontend"
+FRONTEND_INDEX = FRONTEND_DIR / "index.html"
 
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s [%(name)s] %(levelname)s: %(message)s",
+    )
     init_db()
     db = SessionLocal()
     try:
         seed_if_empty(db)
     finally:
         db.close()
+    logger.info("FitMAS API ready")
     yield
 
 
@@ -54,6 +63,11 @@ class IncomingMessage(BaseModel):
 @app.get("/", include_in_schema=False)
 def frontend() -> FileResponse:
     return FileResponse(FRONTEND_INDEX)
+
+
+@app.get("/manifest.json", include_in_schema=False)
+def manifest() -> FileResponse:
+    return FileResponse(FRONTEND_DIR / "manifest.json")
 
 
 @app.get("/health")
@@ -110,19 +124,30 @@ def post_message(payload: IncomingMessage, db: Session = Depends(get_db)) -> Mes
     plan = repo.get_active_plan(db, user.id)
 
     repo.add_message(db, user.id, "user", payload.text)
+    logger.info("User message: %s", payload.text[:120])
+
+    # Build conversation history for LLM context
+    msgs = repo.get_messages(db, user.id)
+    conversation_history = [{"role": m.role, "text": m.text} for m in msgs]
 
     # LLM decision — falls back to rule-based if key missing or error
     pydantic_plan = repo.to_pydantic_plan(plan)
-    decision = decide(payload.text, make_plan_summary(pydantic_plan.days))
+    decision = decide(
+        payload.text,
+        make_plan_summary(pydantic_plan.days),
+        conversation_history=conversation_history,
+    )
 
     if decision:
         mutations.apply(db, plan.id, decision)
         reply_text = decision.fitmas_message
         extraction = Extraction(confidence=0.85)
+        logger.info("LLM reply (%s): %s", decision.mutation_type, reply_text[:120])
     else:
         extraction = extract_reply(payload.text)
         fallback = generate_reply(payload.text, extraction)
         reply_text = fallback.assistant_message.text
+        logger.info("Fallback reply: %s", reply_text[:120])
 
     repo.add_message(db, user.id, "agent", reply_text)
 

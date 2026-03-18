@@ -1,0 +1,6 @@
+#!/usr/bin/env zsh
+set -euo pipefail
+echo "→ Starting FitMAS Telegram bot..."
+echo "→ Make sure the API server is running (./scripts/dev)"
+echo ""
+./.venv/bin/python -m fitmas.telegram_bot

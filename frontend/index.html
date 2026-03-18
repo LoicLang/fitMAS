@@ -3,6 +3,11 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="manifest" href="/manifest.json">
+    <meta name="theme-color" content="#0f766e">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="FitMAS">
     <title>FitMAS V0</title>
     <style>
       :root {
@@ -381,6 +386,38 @@
         color: var(--muted);
       }
 
+      .day-card.mutated {
+        border-left: 3px solid var(--accent);
+        position: relative;
+      }
+
+      .day-card.mutated::after {
+        content: "";
+        position: absolute;
+        top: 12px;
+        right: 12px;
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: var(--accent);
+      }
+
+      .bubble-timestamp {
+        font-size: 0.72rem;
+        color: var(--muted);
+        margin-top: 2px;
+        padding: 0 4px;
+      }
+
+      .bubble-timestamp.user-ts {
+        text-align: right;
+      }
+
+      button.primary:disabled {
+        opacity: 0.6;
+        cursor: not-allowed;
+      }
+
       @media (max-width: 1080px) {
         .layout {
           grid-template-columns: 1fr;
@@ -508,7 +545,7 @@
         <aside class="panel messages-panel">
           <div class="messages-header">
             <p class="eyebrow">Presence</p>
-            <h2>WhatsApp</h2>
+            <h2>Chat</h2>
             <p class="muted" style="margin-top: 8px;">
               Pas de boutons ni d'options. Tu parles comme tu veux, FitMAS prend ce qui est utile.
             </p>
@@ -522,7 +559,7 @@
               placeholder="Exemple: jeudi soir c'est mieux, mardi ca risque d'etre serre."
             ></textarea>
             <div class="status" id="composer-status"></div>
-            <button class="primary" type="submit">Envoyer</button>
+            <button class="primary" type="submit" id="send-btn">Envoyer</button>
           </form>
         </aside>
       </div>
@@ -535,10 +572,14 @@
       const messageForm = document.getElementById("message-form");
       const messageInput = document.getElementById("message-input");
       const composerStatus = document.getElementById("composer-status");
+      const sendBtn = document.getElementById("send-btn");
 
       let weekPlan = null;
       let profile = null;
       let selectedDay = mapDayToApiKey(new Date().getDay());
+
+      // Track messages sent this session for timestamps
+      const sessionMessages = [];
 
       function mapDayToApiKey(dayIndex) {
         return [
@@ -615,12 +656,21 @@
         renderList(document.getElementById("watch-list"), today.watch_items);
       }
 
+      function hasMutations(day) {
+        return day.change_notes && day.change_notes.length > 0 &&
+          day.change_notes[0].title !== "Rien n'a bouge";
+      }
+
       function renderWeek() {
         const container = document.getElementById("week-grid");
         container.innerHTML = weekPlan.days
           .map(
-            (day) => `
-              <article class="card day-card ${day.day === selectedDay ? "active" : ""}" data-day="${day.day}">
+            (day) => {
+              const classes = ["card", "day-card"];
+              if (day.day === selectedDay) classes.push("active");
+              if (hasMutations(day)) classes.push("mutated");
+              return `
+              <article class="${classes.join(" ")}" data-day="${day.day}">
                 <div class="day-card-head">
                   <div>
                     <p class="eyebrow">${day.label}</p>
@@ -631,7 +681,7 @@
                 <p class="muted" style="margin-top: 10px;">${day.session_goal}</p>
                 <p class="muted" style="margin-top: 12px;">${day.session_note}</p>
               </article>
-            `
+            `;}
           )
           .join("");
 
@@ -656,16 +706,39 @@
         renderTextList(document.getElementById("profile-preferences"), profile.preferences);
       }
 
+      function formatRelativeTime(date) {
+        const seconds = Math.floor((Date.now() - date.getTime()) / 1000);
+        if (seconds < 10) return "a l'instant";
+        if (seconds < 60) return `il y a ${seconds}s`;
+        const minutes = Math.floor(seconds / 60);
+        if (minutes < 60) return `il y a ${minutes} min`;
+        return `il y a ${Math.floor(minutes / 60)}h`;
+      }
+
       async function loadMessages() {
         const data = await fetchJson("/api/v0/messages");
+        const totalMessages = data.messages.length;
+        // Session messages are the last N messages (pairs sent this session)
+        const sessionCount = sessionMessages.length;
+
         messagesFeed.innerHTML = data.messages
           .map(
-            (message) => `
+            (message, index) => {
+              const isSession = index >= totalMessages - sessionCount;
+              const sessionIdx = index - (totalMessages - sessionCount);
+              let timestampHtml = "";
+              if (isSession && sessionIdx >= 0 && sessionIdx < sessionMessages.length) {
+                const ts = formatRelativeTime(sessionMessages[sessionIdx].time);
+                const alignClass = message.role === "user" ? "user-ts" : "";
+                timestampHtml = `<div class="bubble-timestamp ${alignClass}">${ts}</div>`;
+              }
+              return `
               <div class="bubble ${message.role === "agent" ? "agent" : "user"}">${message.text}</div>
-            `
+              ${timestampHtml}
+            `;}
           )
           .join("");
-        messagesFeed.scrollTop = messagesFeed.scrollHeight;
+        messagesFeed.scrollTo({ top: messagesFeed.scrollHeight, behavior: "smooth" });
       }
 
       function activateTab(tabName) {
@@ -682,8 +755,7 @@
         tab.addEventListener("click", () => activateTab(tab.dataset.tab));
       });
 
-      messageForm.addEventListener("submit", async (event) => {
-        event.preventDefault();
+      async function handleSend() {
         const text = messageInput.value.trim();
 
         if (!text) {
@@ -691,13 +763,22 @@
           return;
         }
 
+        // Loading state
+        sendBtn.disabled = true;
+        const originalLabel = sendBtn.textContent;
+        sendBtn.textContent = "...";
         composerStatus.textContent = "FitMAS relit la semaine...";
 
         try {
+          const now = new Date();
           await fetchJson("/api/v0/messages", {
             method: "POST",
             body: JSON.stringify({ text }),
           });
+          // Track user + agent messages for timestamp display
+          sessionMessages.push({ role: "user", time: now });
+          sessionMessages.push({ role: "agent", time: new Date() });
+
           messageInput.value = "";
           composerStatus.textContent = "Message pris en compte.";
           await loadMessages();
@@ -710,6 +791,22 @@
           await loadToday(selectedDay);
         } catch (error) {
           composerStatus.textContent = "Impossible d'envoyer le message pour le moment.";
+        } finally {
+          sendBtn.disabled = false;
+          sendBtn.textContent = originalLabel;
+        }
+      }
+
+      messageForm.addEventListener("submit", async (event) => {
+        event.preventDefault();
+        await handleSend();
+      });
+
+      // Enter to send, Shift+Enter for newline
+      messageInput.addEventListener("keydown", (event) => {
+        if (event.key === "Enter" && !event.shiftKey) {
+          event.preventDefault();
+          handleSend();
         }
       });
 
