@@ -1,0 +1,18 @@
+app = "fitmas"
+primary_region = "cdg"  # Paris
+
+[build]
+
+[env]
+  FITMAS_DB_PATH = "/data/fitmas.db"
+
+[http_service]
+  internal_port = 8000
+  force_https = true
+  auto_stop_machines = "stop"
+  auto_start_machines = true
+  min_machines_running = 0
+
+[mounts]
+  source = "fitmas_data"
+  destination = "/data"
