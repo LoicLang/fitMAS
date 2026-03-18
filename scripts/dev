@@ -2,4 +2,10 @@
 
 set -euo pipefail
 
-./.venv/bin/python -m uvicorn --app-dir backend/src fitmas.main:app --reload --host 127.0.0.1 --port 8000
+# Show local IP for phone access
+LOCAL_IP=$(ipconfig getifaddr en0 2>/dev/null || ipconfig getifaddr en1 2>/dev/null || echo "unknown")
+echo "→ Local:   http://127.0.0.1:8000"
+echo "→ Réseau:  http://${LOCAL_IP}:8000"
+echo ""
+
+./.venv/bin/python -m uvicorn --app-dir backend/src fitmas.main:app --reload --host 0.0.0.0 --port 8000

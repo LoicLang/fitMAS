@@ -1,37 +1,42 @@
 # FitMAS
 
+Equipe IA proactive qui ajuste ton entrainement et ta nutrition selon ta vraie vie.
+
 ## Status
 
-Bootstrap / cadrage initial.
+V0 en construction. Cadrage termine. Code en cours.
 
-Le repository contient encore peu de code produit.
-La manière de travailler est mise en place avant l'implémentation.
+## Stack
 
-## Current assumptions
+- Backend: Python + FastAPI + SQLite
+- Front: webapp mobile-first
+- Messagerie: Telegram bot (WhatsApp plus tard)
+- IA: appels LLM directs + Pydantic structured outputs
 
-- projet Python
-- stockage local possible via SQLite
-- possibilité d'une base PostgreSQL en environnement cloud
-- le détail fonctionnel de FitMAS reste à préciser dans les docs et le code
+## Ordre de lecture
 
-## Working model
+1. `AGENTS.md` — regles de travail
+2. `PROJECT.md` — ce fichier
+3. `docs/PRODUCT.md` — vision, scope, parcours utilisateur
+4. `docs/ARCHITECTURE.md` — stack, modele de donnees, flux
+5. `docs/SOUL.md` — voix, heartbeat, messagerie
+6. `docs/BUILD-ORDER.md` — quoi coder et dans quel ordre
 
-Le repository doit devenir auto-explicatif.
+## Structure du repo
 
-Ordre de lecture recommandé:
+```
+AGENTS.md          — regles agentiques
+PROJECT.md         — point d'entree
+docs/              — 4 docs essentiels + README
+backend/           — API FastAPI
+frontend/          — webapp mobile-first
+scripts/           — utilitaires repo
+```
 
-1. `AGENTS.md`
-2. `PROJECT.md`
-3. `docs/README.md`
-4. `docs/project-overview.md`
-5. `docs/repository-structure.md`
+## Principes
 
-## Immediate objective
-
-Installer un cadre de documentation simple:
-
-- règles de documentation
-- point d'entrée projet
-- script `docs:list`
-
-Puis faire évoluer ces documents au rythme du code réel.
+- Determinisme avant LLM
+- Un seul "agent" bien prompte en V0
+- Heuristiques d'entrainement en dur, LLM pour personnaliser/formuler
+- Telegram pour valider la proactivite, WhatsApp quand prouve
+- SQLite en dev, PostgreSQL en prod

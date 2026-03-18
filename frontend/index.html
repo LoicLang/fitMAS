@@ -701,6 +701,12 @@
           messageInput.value = "";
           composerStatus.textContent = "Message pris en compte.";
           await loadMessages();
+          // Re-fetch plan so mutations are reflected in both Plan and Today views
+          const updated = await fetchJson("/api/v0/week");
+          weekPlan = updated;
+          document.getElementById("plan-intention").textContent = weekPlan.intention;
+          document.getElementById("plan-summary").textContent = weekPlan.summary;
+          renderWeek();
           await loadToday(selectedDay);
         } catch (error) {
           composerStatus.textContent = "Impossible d'envoyer le message pour le moment.";
