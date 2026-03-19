@@ -1,10 +1,10 @@
 ---
-summary: architecture technique MVP, stack, modele de donnees, flux et decisions tranchees
+summary: architecture technique, stack, modèle de données, flux et décisions tranchées
 read_when:
   - choisir la stack
-  - implementer le backend
-  - modeliser la base de donnees
-  - ajouter une integration
+  - implémenter le backend
+  - modéliser la base de données
+  - ajouter une intégration
   - comprendre les flux techniques
 ---
 
@@ -12,212 +12,217 @@ read_when:
 
 ## Principe directeur
 
-Determinisme avant LLM. Le LLM propose, formule et adapte le ton.
-Les garde-fous, la planification de jobs, les permissions, les cooldowns et la persistance sont deterministes.
+Déterminisme avant LLM. Le LLM propose, formule et adapte le ton.
+Les garde-fous, la planification, les permissions, les cooldowns et la persistance sont déterministes.
 
-## Stack MVP
+## État réel du code — Mars 2026
+
+**Déployé sur Fly.io : https://the deployed app/**
+
+### Ce qui existe et tourne
+
+- API FastAPI (17 modules, ~4100 lignes Python)
+- Webapp HTML/CSS/JS mobile-first (single-file, ~530 lignes)
+- Bot Telegram avec onboarding conversationnel + commandes + crons
+- Planner hebdo multisport déterministe
+- Mutation loop : message → LLM → decision → update plan → réponse
+- Mémoire utile via UserFact (extraction + upsert + sélection pour prompt)
+- Activités manuelles + Strava OAuth + import + synchro automatique
+- Heartbeat proactif : briefing matin 7h30, rappel pré-séance 18h, revue dimanche 20h
+- Cooldowns : 4h entre messages proactifs, skip si échange récent (<2h)
+- Revue hebdomadaire avec régénération automatique du plan
+- Seed intelligent si pas d'utilisateur (profil multisport complet)
+
+### Ce qui n'existe pas encore
+
+- Webhook Strava (actuellement polling toutes les 2h)
+- Module `signals.py` pour signaux dérivés
+- Lineage de plans (historique des plans passés)
+- Decision log explicite
+- Tests automatisés
+- Apple Health / wearable data
+- WhatsApp
+
+## Stack
 
 | Composant | Choix | Pourquoi |
 |-----------|-------|----------|
-| Backend API | Python + FastAPI | Cohérent, iteration rapide, bon fit IA |
-| Base de donnees | SQLite (dev) → PostgreSQL (prod) | SQLite suffit pour valider. Postgres quand multi-users. |
-| Front MVP | Webapp mobile-first (React/Next.js ou similaire) | Valider le produit avant d'investir dans iOS natif. Pas besoin de Xcode pour lancer. |
-| Workflow/cron | APScheduler ou simple cron | Pas de Temporal en V0. Un cron par user pour heartbeat suffit. |
-| Messagerie V0 | Telegram bot | Valider la mecanique proactive avant le process Meta WhatsApp. Migration WhatsApp quand le produit est prouve. |
-| Service IA | Appels LLM directs (Anthropic/OpenAI) + Pydantic pour structured outputs | Un seul "agent" bien prompte. Pas de multi-agent, pas de LangGraph. |
-| Auth | Simple (email magic link ou Sign in with Apple plus tard) | Pas de friction inutile en beta. |
+| Backend API | Python 3.13 + FastAPI | Cohérent, itération rapide, bon fit IA |
+| Base de données | SQLite (Fly.io volume persistant) | Suffit pour single-user. Postgres quand multi-users. |
+| ORM | SQLAlchemy 2.0 + Pydantic | Types stricts, structured outputs LLM |
+| Front | Webapp mobile-first HTML/CSS/JS | Aller vite. Single-file. Pas de framework. |
+| Cron | APScheduler (in-process) | Pas de Temporal en V0. Suffisant pour 1 user. |
+| Messagerie | Telegram bot (python-telegram-bot 21) | Gratuit, instantané, proactivité validée |
+| IA | Anthropic Claude (Haiku quotidien, Sonnet plans) | Structured outputs + bonne qualité français |
+| Déploiement | Fly.io CDG + Docker + volume SQLite | Simple, pas cher, Paris |
 
-### Decisions tranchees
+### Décisions tranchées
 
-**Pas de Temporal en V0.** Temporal est pour des systemes a l'echelle. Un cron + task queue simple (APScheduler) fait le meme travail pour 5-50 users.
+**Pas de Temporal.** APScheduler in-process fait le travail pour 1 user.
 
-**Pas de SwiftUI natif en V0.** Le produit doit etre valide avant d'investir dans iOS natif. Une webapp mobile-first permet d'iterer sans App Store review. HealthKit et Strava se gèrent via webhooks/APIs côté serveur pour le MVP.
+**Pas d'app native.** Webapp mobile-first permet d'itérer sans App Store review.
 
-**Pas de multi-agent en V0.** Un seul appel LLM bien structure avec un system prompt complet (SOUL + user context + plan courant + signaux recents) produit de meilleurs resultats qu'un pipeline multi-agent avec overhead de routing.
+**Pas de multi-agent.** Un seul appel LLM bien structuré > pipeline multi-agent.
 
-**Telegram avant WhatsApp.** WhatsApp Business API demande: verification Meta, templates approuves, fenetre de 24h, cout par message. Telegram est instantane, gratuit, et la mecanique proactive est identique. On migre quand la valeur est prouvee.
+**Telegram avant WhatsApp.** WhatsApp Business API = vérification Meta + templates + coût/msg. Telegram est instantané et gratuit.
 
-**Heuristiques d'entrainement en dur.** Le plan ne sort pas d'un prompt libre. Un moteur deterministe gere: progression de volume (~10%/semaine), cycles charge/decharge, repartition des types de seances, placement des jours de repos. Le LLM personnalise et formule autour de ce squelette.
+**Heuristiques d'entraînement en dur.** Le plan sort d'un moteur déterministe. Le LLM personnalise et formule autour du squelette.
 
-## Modele de donnees MVP
+**SQLite, pas Postgres.** Single-user, un seul process, volume Fly.io. Migration Postgres si multi-user.
 
-### Tables principales
+**Haiku pour le quotidien, Sonnet pour les plans.** Coût ~$0.05-0.15/user/jour. Viable avec pricing $10-15/mois.
+
+## Modules
+
+```
+backend/src/fitmas/
+├── api.py            (611 lignes) — FastAPI, endpoints, lifespan
+├── llm.py            (542 lignes) — Anthropic client, decisions, extraction, formulation
+├── telegram_bot.py   (529 lignes) — Bot, onboarding, commandes, crons
+├── repository.py     (437 lignes) — CRUD + convertisseurs Pydantic
+├── planner.py        (359 lignes) — Planner multisport déterministe
+├── heartbeat.py      (326 lignes) — Messages proactifs, cooldowns
+├── seed.py           (235 lignes) — Seed profil multisport si vide
+├── schema.py         (229 lignes) — SQLAlchemy ORM (13 tables)
+├── strava.py         (169 lignes) — OAuth + import activités
+├── state.py          (151 lignes) — État global app
+├── models.py         (145 lignes) — Pydantic API models
+├── mutations.py      (113 lignes) — Mutations plan (move, lighten, swap, update)
+├── db.py              (87 lignes) — Engine SQLite, SessionLocal, init_db
+├── nlp.py             (81 lignes) — Fallback NLP rule-based (sans API key)
+├── activities.py      (78 lignes) — Normalisation + matching activités
+├── main.py             (3 lignes) — Re-export app
+└── __init__.py         (2 lignes)
+
+frontend/
+└── index.html        (~530 lignes) — Webapp complète
+```
+
+## Modèle de données
+
+### Tables (13)
 
 ```
 User
-  id, email, timezone, locale, onboarding_status
+  id, name, age, objective, coaching_style, timezone
+  telegram_chat_id, onboarding_status
+  primary_objective, weekly_structure_notes
+  coach_name, coach_style, coach_relationship
+  coach_do, coach_dont, coach_soul
   created_at, updated_at
 
-DigitalTwin
-  user_id (FK)
-  primary_goal, target_event, target_date
-  planning_constraints (JSONB)  -- jours dispo, creneaux, jours a eviter
-  sport_profile (JSONB)         -- volume recent, niveau, fragilites
-  nutrition_preferences (JSONB) -- habitudes, contraintes, gouts
-  coaching_style (JSONB)        -- ton, challenge level, relance tolerance
-  non_negotiables (JSONB)
-  version, updated_at
+UserSport
+  id, user_id (FK), sport_type, priority_rank, level_note, active
+
+UserConstraint
+  id, user_id (FK), text
+
+UserPreference
+  id, user_id (FK), text
 
 WeeklyPlan
-  id, user_id (FK)
-  status (active/superseded)
-  week_start_date
-  intent                        -- intention de la semaine (TEXT)
-  sessions (JSONB)              -- [{day, type, objective, duration, intensity, flexible}]
-  nutrition_notes (JSONB)       -- [{day, focus, timing_note}]
-  rationale (TEXT)               -- pourquoi ce plan
-  parent_plan_id (FK, nullable) -- lineage
-  created_at
+  id, user_id (FK), status (active/superseded)
+  intention, summary, created_at
 
-DailySnapshot
-  id, user_id (FK), date
-  planned_session (JSONB)
-  actual_session (JSONB, nullable)
-  nutrition_focus (TEXT)
-  adaptations (JSONB)           -- [{change, reason, impact}]
-  watching (JSONB)              -- ce que FitMAS surveille
-  created_at, updated_at
+DayPlan
+  id, weekly_plan_id (FK), sort_order
+  day, label, sport_type, session_type
+  session_title, session_goal, session_note
+  duration_min, intensity, load_score
+  priority, nutrition_focus, flexibility
+  completion_status (planned/done/skipped/adapted)
 
-RawEvent
-  id, user_id (FK)
-  provider (strava/healthkit/telegram/calendar/system)
-  event_type
-  occurred_at, received_at
-  payload (JSONB)
-  dedupe_key
+ChangeNote
+  id, day_plan_id (FK), title, detail
+
+WatchItem
+  id, day_plan_id (FK), title, detail
 
 CoachMessage
-  id, user_id (FK)
-  channel (telegram/app)
-  direction (inbound/outbound)
-  message_type (adaptation/clarification/feedback/spontaneous)
-  content (TEXT)
-  trigger_reason (TEXT)
-  sent_at, delivered_at
+  id, user_id (FK), role (user/agent), text, created_at
 
 UserFact
-  id, user_id (FK)
-  fact (TEXT)                   -- "prefere courir tot le matin"
-  source (onboarding/observed/inferred/user_confirmed)
-  confidence (float)
-  created_at, last_confirmed_at
+  id, user_id (FK), category, key, value
+  source, confidence, confirmed, active
+  created_at, updated_at
 
-Decision
-  id, user_id (FK)
-  decision_type (move_session/reduce_volume/send_message/no_op)
-  reason_summary (TEXT)
-  confidence (float)
-  requires_confirmation (bool)
-  executed_at
+Activity
+  id, user_id (FK), source (manual/strava)
+  external_id, sport_type, title
+  duration_min, distance_m, elevation_m
+  perceived_load, note, started_at
+  matched_day, match_reason, created_at
+
+StravaConnection
+  id, user_id (FK), athlete_id
+  access_token, refresh_token
+  expires_at, scopes, last_sync_at
 ```
 
-### Principes de donnees
+### Principes de données
 
-- SQL est la source de verite. Le LLM n'est jamais source de verite.
-- JSONB pour les objets souples (plan sessions, preferences, payloads).
-- TEXT pour les explications et rationales.
-- Tout plan doit avoir un `parent_plan_id` pour le lineage.
-- Les facts distinguent: declare / observe / infere / confirme par user.
-- Les preferences explicites user priment toujours sur les inferences.
+- SQL est la source de vérité. Le LLM n'est jamais source de vérité.
+- Les preferences explicites user priment sur les inférences.
+- Les facts distinguent : déclaré / observé / inféré / confirmé.
+- Le modèle reste petit tant que le produit n'est pas stabilisé.
 
 ## Flux techniques
 
-### Flux onboarding
-1. User complete les 6 blocs
-2. Backend cree DigitalTwin
-3. Moteur de planification genere WeeklyPlan (heuristiques + LLM formulation)
-4. App affiche recap → plan → Today
+### Flux onboarding (Telegram → API)
+1. User fait `/start` sur Telegram
+2. ConversationHandler guide à travers les étapes
+3. Bot appelle `POST /api/v0/onboard` avec le payload complet
+4. Backend normalise sports, contraintes, préférences, âme du coach
+5. `planner.py` génère un squelette hebdo multisport déterministe
+6. `llm.py` formule le récap et l'habillage du plan (Sonnet)
+7. Backend persiste User + UserSport + UserFact + WeeklyPlan + DayPlan
+8. Webapp affiche récap → semaine → today
 
-### Flux heartbeat (cron, 1-2x/jour par user)
-1. Cron reveille le heartbeat pour chaque user
-2. Lecture: nouveaux RawEvents, DigitalTwin, WeeklyPlan courant
-3. Derivation de signaux (seance faite? fatigue? conflit agenda?)
-4. Decision: no-op / adapter plan / poser question / envoyer message
-5. Si action: persister Decision + mettre a jour plan + envoyer message si policy OK
-6. Si no-op: persister Decision(type=no_op) pour tracabilite
+### Flux message entrant
+1. User envoie un message (Telegram ou webapp)
+2. Backend persiste CoachMessage(role=user)
+3. Prompt assemblé : âme du coach + plan courant + derniers messages + facts
+4. LLM (Haiku) propose une MutationDecision ou no-op
+5. `mutations.py` applique le changement si besoin
+6. Backend persiste CoachMessage(role=agent)
+7. LLM extrait des facts stables à mémoriser
 
-### Flux message entrant (Telegram webhook)
-1. User repond
-2. Backend persiste RawEvent
-3. Extracteur structure (1 appel LLM): intent, disponibilites, ressenti, confidence
-4. Decision: action directe / clarification / no-op
-5. Si update: modifier plan + confirmer dans l'app
+### Flux activité
+1. Import Strava (toutes les 2h) ou log manuel (webapp/Telegram)
+2. Normalisation sport + titre
+3. `activities.py` matche vers un jour du plan (heuristique : sport +4, jour +3, durée +1-2)
+4. Persist Activity + marque le jour comme "done" si match
 
-### Flux Strava (webhook)
-1. Strava envoie webhook activity.create
-2. Backend accuse reception rapide
-3. Fetch async des details de l'activite
-4. Persiste RawEvent normalise
-5. Reveille le heartbeat si seance notable
+### Flux heartbeat
+1. APScheduler déclenche le trigger (matin 7h30, soir 18h, dimanche 20h)
+2. Garde-fous déterministes : cooldown 4h, échange récent <2h
+3. Si OK → LLM génère le message avec contexte (plan, veille, coach soul)
+4. Envoi via Telegram
+5. Persist CoachMessage(role=agent)
 
-### Flux planification hebdo
-1. Cron dimanche soir / lundi matin
-2. Lecture: DigitalTwin + DailySnapshots de la semaine + facts
-3. Moteur deterministe genere le squelette (types de seances, volume, placement)
-4. LLM personnalise: intention, formulation, arbitrages visibles
-5. Persiste nouveau WeeklyPlan (parent = ancien plan)
-6. Genere revue de semaine passee
+### Flux revue hebdomadaire (dimanche 20h)
+1. Heartbeat weekly_review() : bilan de la semaine (fait/prévu/sauté)
+2. LLM génère le récap avec la voix du coach
+3. `_regenerate_next_week()` : planner + LLM → nouveau plan
+4. Persist nouveau WeeklyPlan + message
 
-## Moteur de planification (heuristiques)
+## Stratégie mémoire
 
-Le coeur du produit. Pas du LLM libre.
+3 couches :
 
-### Regles de base V0
-- Progression volume: ~10% par semaine max
-- Cycle: 3 semaines charge → 1 semaine decharge
-- Repartition: 80% facile / 20% qualite (regle 80/20 endurance)
-- Repos: minimum 1 jour complet ou actif leger
-- Sortie longue: 1x/semaine, placement fixe si possible
-- Qualite: 1x/semaine, pas le lendemain de la longue
-- Respect des contraintes user: jours bloques, creneaux preferes
+1. **État produit (SQL)** — user, sports, contraintes, plans, messages, facts, activités
+2. **Âme système (coach soul)** — définie à l'onboarding, injectée dans chaque prompt
+3. **Contexte LLM assemblé** — plan courant + derniers messages + facts sélectionnés
 
-### Ce que le LLM fait
-- Choisir l'intention de la semaine en langage naturel
-- Formuler les arbitrages de facon personnalisee
-- Adapter le ton selon le coaching style
-- Generer les messages proactifs
-- Extraire le feedback des reponses utilisateur
+Pas en V0 : vector DB, RAG, mémoire épisodique, pgvector.
 
-## Integrations V0
+## Coût LLM estimé
 
-### Strava
-- Webhook pour activity.create
-- Fetch detail via API
-- Signaux: seance faite, duree, distance, allure, effort percu
+Par user par jour (~3-4 appels LLM) :
+- Heartbeat briefing : ~500 tokens in + 200 out (Haiku)
+- Message mutation : ~800 tokens in + 300 out (Haiku)
+- Fact extraction : ~400 tokens in + 100 out (Haiku)
+- Plan generation : ~1200 tokens in + 800 out (Sonnet, hebdomadaire)
 
-### Apple Health (differe)
-- Pas en V0 webapp. Viendra avec l'app native.
-- En attendant: user peut rapporter manuellement ou via Strava.
-
-### Telegram (V0) → WhatsApp (plus tard)
-- Bot Telegram pour messages proactifs et reception feedback
-- Interface abstraite: `send_message`, `receive_message`, `check_policy`
-- Migration WhatsApp quand: produit valide + process Meta complete
-
-### Calendrier (optionnel V0)
-- Si trop de friction, repousser.
-- Le user peut signaler les conflits via messagerie.
-
-## Strategie memoire MVP
-
-3 couches suffisent en V0:
-
-1. **Etat produit (SQL)** — DigitalTwin, plans, facts, decisions, events
-2. **Ame systeme (Markdown)** — SOUL.md injecte dans chaque prompt
-3. **Contexte LLM (assemble dynamiquement)** — objectif + contraintes + plan courant + signaux recents + derniers messages
-
-Pas en V0: vector DB, RAG, memoire episodique, pgvector.
-A introduire quand il y a assez de donnees pour que ca serve.
-
-## Cout LLM estime
-
-Par user par jour (~2 appels LLM en moyenne):
-- Heartbeat decision: ~500 tokens in + 200 out
-- Message generation: ~800 tokens in + 150 out
-- Feedback extraction: ~400 tokens in + 100 out
-
-Estimation: ~$0.05-0.15/user/jour avec Claude Haiku ou GPT-4o-mini.
-~$1.5-4.5/user/mois. Marge viable avec pricing a $10-15/mois.
-
-Optimisation: utiliser un modele rapide/cheap (Haiku) pour extraction et heartbeat decision.
-Modele premium (Sonnet/GPT-4o) seulement pour generation de plan et messages importants.
+Estimation : ~$0.05-0.15/user/jour avec Haiku.
+~$1.5-4.5/user/mois. Marge viable avec pricing $10-15/mois.

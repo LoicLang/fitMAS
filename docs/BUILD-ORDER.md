@@ -1,130 +1,218 @@
 ---
-summary: ordre de construction concret de la V0, par phase, avec les premieres taches ce soir
+summary: état actuel de chaque phase, plan de priorités et prochaines étapes
 read_when:
-  - commencer a coder
-  - choisir le prochain chantier
-  - verifier l'avancement
+  - commencer un chantier
+  - donner du contexte à un agent de code
+  - vérifier l'avancement
+  - recadrer les priorités produit
 ---
 
-# FitMAS Build Order
+# FitMAS — Build Order
 
-## Phase 1 — Ce soir: squelette API + modele de donnees
+## Phrase guide
 
-Objectif: un backend qui tourne avec les vrais objets produit.
+**Un premier coach que Loïc reconnaît, comprend, et a envie de rouvrir demain.**
 
-### 1.1 Modele de donnees SQLite
+---
 
-Creer les tables:
-- User
-- DigitalTwin
-- WeeklyPlan
-- DailySnapshot
-- RawEvent
-- CoachMessage
-- UserFact
-- Decision
+## État actuel — 19 mars 2026
 
-Utiliser SQLAlchemy ou SQL brut. Garder simple.
+### ✅ Phase 1 — Onboarding + création du coach
 
-### 1.2 API endpoints de base
+**Statut : TERMINÉ**
+
+- `/start` sur Telegram → flow conversationnel complet
+- Création du coach : nom, style, relation, do/dont, âme
+- Preview de voix avant validation
+- Récap + génération plan
+- Endpoint `POST /api/v0/onboard` + `POST /api/v0/onboard/preview`
+- Seed intelligent si pas d'utilisateur (profil multisport complet Loïc)
+
+### ✅ Phase 2 — Planner multisport déterministe
+
+**Statut : TERMINÉ**
+
+- `planner.py` : squelette hebdo déterministe
+- Règles : max 1 dur/jour, pas 2 durs d'affilée, repos, respect contraintes
+- Alternance cross-sport, charge lisible
+- LLM formulation : intention, summary, notes coach
+- Régénération via `/newweek` ou revue hebdo
+
+### ✅ Phase 3 — App webapp
+
+**Statut : TERMINÉ**
+
+- 5 onglets : Aujourd'hui, Semaine, Activités, Profil, Debug
+- Navigation mobile bottom bar
+- Actions rapides : Fait / Trop fatigué / Décaler
+- Badges statut : fait ✓ / prévu / sauté / adapté
+- Barre de charge semaine
+- Strava connect button + synchro
+- Formulaire activité manuelle
+- Textes en français avec accents corrects
+- Déployée sur https://the deployed app/
+
+### ✅ Phase 4 — Activités réelles
+
+**Statut : TERMINÉ**
+
+- Logging manuel (webapp + Telegram `/log`)
+- Strava OAuth + import + synchro auto (2h)
+- Matching activité → jour plan (heuristique sport+jour+durée)
+- Marquage automatique "done"
+- `POST /api/v0/activities/manual`, `GET /api/v0/activities`
+- `POST /api/v0/strava/sync`, Strava status/auth/callback
+
+### ✅ Phase 5 — Heartbeat proactif
+
+**Statut : TERMINÉ (base)**
+
+- Briefing matin 7h30 (contexte veille + séance du jour)
+- Rappel pré-séance 18h (séances clé seulement)
+- Revue dimanche 20h (bilan + régénération)
+- Cooldown 4h entre messages proactifs
+- Skip si échange récent (<2h)
+- Voix du coach dans tous les messages (system prompt = coach soul)
+
+### ✅ Phase 6 — Mémoire utile
+
+**Statut : TERMINÉ (base)**
+
+- UserFact : category, key, value, source, confidence, confirmed
+- Extraction LLM après chaque échange
+- Upsert intelligent (merge, pas overwrite)
+- Sélection pour prompt (12 facts max, tri par confiance)
+- Facts onboarding pré-remplis
+- Onglet Debug pour visualiser
+
+### ✅ Phase 7 — Revue hebdomadaire
+
+**Statut : TERMINÉ**
+
+- Bilan avec comptage fait/prévu/sauté
+- LLM génère le récap avec voix coach
+- Régénération automatique du plan suivant
+- Message Telegram + persist en DB
+
+---
+
+## Ce qui reste — Plan de priorités
+
+### Sprint A — Robustesse et dogfooding (PRIORITAIRE)
+
+**Objectif : utiliser FitMAS chaque jour pendant 2 semaines sans friction.**
+
+| Tâche | Fichiers | Impact |
+|-------|----------|--------|
+| Configurer STRAVA_CLIENT_ID/SECRET sur Fly.io | Fly.io secrets | Strava end-to-end |
+| Tester le flow complet : /start → semaine → activité → revue | Tous | Valider la boucle produit |
+| Fixer les bugs trouvés en dogfood | Variable | Fiabilité |
+| Vérifier que le heartbeat se déclenche bien en prod | heartbeat.py, telegram_bot.py | Proactivité |
+| Callback Strava OAuth redirect → webapp plutôt que JSON | api.py | UX |
+| Ajouter /help sur le bot Telegram | telegram_bot.py | Discoverability |
+
+### Sprint B — Signaux et intelligence
+
+**Objectif : le coach réagit au réel, pas juste au plan.**
+
+| Tâche | Fichiers | Impact |
+|-------|----------|--------|
+| Créer `signals.py` : dériver signaux utiles | Nouveau fichier | Base intelligence |
+| Signal "séance clé manquée" → message proactif | signals.py, heartbeat.py | Relance juste |
+| Signal "3 jours sans activité" → check-in | signals.py, heartbeat.py | Détection décrochage |
+| Signal "charge cumulée haute" → suggestion repos | signals.py, mutations.py | Protection |
+| Post-activité : feedback contextuel après grosse séance | heartbeat.py, strava.py | Boucle utile |
+| Ajustement next-day basé sur activité réelle | signals.py, heartbeat.py | Adaptation réelle |
+
+### Sprint C — Enrichissement plan
+
+**Objectif : le plan est plus intelligent et plus précis.**
+
+| Tâche | Fichiers | Impact |
+|-------|----------|--------|
+| Planner V2 : progression charge semaine sur semaine | planner.py | Volume progressif |
+| Lineage de plans : garder l'historique des semaines | schema.py, repository.py | Continuité |
+| Périodisation légère : alternance charge/décharge | planner.py | Récupération |
+| Nutrition focus plus pertinent par sport | planner.py, llm.py | Valeur ajoutée |
+| Détail séance : échauffement, corps, retour au calme | llm.py | Précision |
+
+### Sprint D — Qualité et tests
+
+**Objectif : le code est fiable et maintenable.**
+
+| Tâche | Fichiers | Impact |
+|-------|----------|--------|
+| Tests unitaires : planner, mutations, activities | tests/ | Confiance |
+| Tests d'intégration : flux message → mutation → réponse | tests/ | Régression |
+| Test heartbeat : cooldowns, triggers, edge cases | tests/ | Fiabilité proactive |
+| CI/CD : tests automatiques avant deploy | .github/workflows/ | Qualité continue |
+| Decision log : tracer chaque décision LLM | Nouveau module | Debugging |
+
+### Sprint E — Polish et scale
+
+**Objectif : prêt pour les premiers beta testers.**
+
+| Tâche | Fichiers | Impact |
+|-------|----------|--------|
+| Webhook Strava (vs polling) | strava.py, api.py | Réactivité |
+| WhatsApp migration (si produit validé) | Nouveau module | Canal principal |
+| Multi-user : auth simple, isolation données | schema.py, api.py | Scale |
+| App native iOS (si webapp validée) | Nouveau projet | Expérience premium |
+| Mémoire sémantique (vector DB, si masse de données) | Nouveau module | Intelligence long-terme |
+
+---
+
+## Ordre d'exécution recommandé
 
 ```
-POST /onboarding          → cree User + DigitalTwin
-GET  /today/{user_id}     → retourne DailySnapshot du jour
-GET  /plan/{user_id}      → retourne WeeklyPlan actif
-GET  /profile/{user_id}   → retourne DigitalTwin
-POST /plan/generate       → genere un premier WeeklyPlan
+Sprint A  ← MAINTENANT : dogfood, bugs, Strava end-to-end
+Sprint B  ← Semaine prochaine : signaux, intelligence
+Sprint C  ← Ensuite : planner V2, périodisation
+Sprint D  ← En parallèle : tests, CI
+Sprint E  ← Quand le produit est prouvé : scale, WhatsApp, natif
 ```
 
-### 1.3 Moteur de planification V0
+Le Sprint A est le plus important. Pas de nouvelles features tant que la boucle quotidienne n'est pas rodée.
 
-Heuristiques deterministes:
-- Placer les seances selon les jours dispo du user
-- 80/20: majoritairement facile, 1 qualite, 1 sortie longue
-- Respecter les contraintes (jours bloques, creneaux)
-- Progression volume ~10%/semaine
-- LLM appele pour: intention de la semaine + formulation des arbitrages
+---
 
-### 1.4 Premier appel LLM
+## Risques principaux
 
-Un seul prompt qui recoit:
-- SOUL (system prompt)
-- DigitalTwin du user
-- Squelette de plan (genere par heuristiques)
-- Tache: "personnalise ce plan et formule l'intention"
+### 1. Le coach sonne faux
+- **Mitigation** : preview de voix + coach_do/coach_dont + exemples concrets
+- **Test** : est-ce que le message ressemble à "ton" coach ?
 
-Retour: plan enrichi avec intention + arbitrages en langage naturel.
+### 2. Le heartbeat spam
+- **Mitigation** : cooldowns déterministes, no-op fréquent, pas de message sans signal
+- **Test** : jamais plus de 2-3 messages proactifs par jour
 
-## Phase 2 — Webapp mobile-first
+### 3. L'escalade disparaît du système
+- **Mitigation** : logging manuel first-class, matching même sans Strava
+- **Test** : une séance d'escalade loggée manuellement se reflète dans le plan
 
-### 2.1 Today screen
-- Decision du jour
-- Focus nutrition
-- Ce qui a change
-- Feedback simple
+### 4. La mémoire hallucine
+- **Mitigation** : facts simples, confidence, confirmation si sensible
+- **Test** : les facts en DB correspondent à des faits réels
 
-### 2.2 Plan screen
-- Vue semaine
-- Intention
-- Jours avec seances
+### 5. Le plan devient rigide
+- **Mitigation** : mutations souples, jours flexibles, no-op acceptable
+- **Test** : "décale ma séance" fonctionne proprement
 
-### 2.3 Profil screen
-- DigitalTwin lisible
-- Preferences editables
+---
 
-### 2.4 Onboarding flow
-- 6 blocs de questions
-- Recap
-- Generation du plan
+## Vérification concrète par phase
 
-## Phase 3 — Messagerie proactive (Telegram)
+### Dogfood (Sprint A)
+- [ ] `/start` sur Telegram → profil + plan générés
+- [ ] Webapp affiche le plan correct
+- [ ] Briefing matin reçu sur Telegram à 7h30
+- [ ] "Fait" dans l'app → jour marqué done
+- [ ] Activité Strava importée → jour matché
+- [ ] Revue dimanche → nouveau plan
+- [ ] Pas de message proactif quand on vient de parler au coach
 
-### 3.1 Bot Telegram
-- Envoyer des messages proactifs
-- Recevoir des reponses libres
-- Webhook → RawEvent
-
-### 3.2 Extracteur de feedback
-- 1 appel LLM sur le message entrant
-- Sortie structuree: intent, contraintes, ressenti, confidence
-
-### 3.3 Heartbeat simple
-- Cron 2x/jour par user
-- Checklist: changement? adapter? question? message? no-op?
-- Persister la decision
-
-## Phase 4 — Integrations reelles
-
-### 4.1 Strava
-- OAuth flow
-- Webhook pour activity.create
-- Fetch detail + normalisation en RawEvent
-
-### 4.2 Adaptation automatique
-- Seance detectee via Strava → comparer au plan
-- Adapter si ecart significatif
-
-## Phase 5 — Hardening
-
-- Migration SQLite → PostgreSQL
-- Auth robuste
-- WhatsApp Business API (si Telegram valide)
-- App iOS native (si webapp validee)
-- Memoire episodique et retrieval
-
-## Questions d'audit — reponses tranchees
-
-### "Quelle est la source de verite pour la logique d'entrainement?"
-→ Heuristiques deterministes. Pas le LLM. Regles codees en dur: progression 10%, 80/20, cycles charge/decharge, placement contraint. Le LLM personnalise et formule par-dessus.
-
-### "Comment trouver les 10 premiers utilisateurs?"
-→ Reseau personnel de coureurs motives. Pas besoin de landing page. 5-10 personnes en beta privee, contact direct, feedback hebdo en face-a-face ou par message. L'acquisition viendra apres la preuve de valeur.
-
-### "Quel est le modele de cout LLM?"
-→ Haiku/GPT-4o-mini pour heartbeat et extraction (~$0.05/jour/user). Sonnet/GPT-4o pour generation de plan et messages importants (~$0.10/jour/user). Total: ~$2-4/mois/user. Viable avec pricing $10-15/mois.
-
-### "Comment gerer le cold start?"
-→ L'onboarding de 20 min EST le cold start fix. Les heuristiques produisent un plan structurellement correct. Le LLM ajoute la personnalisation visible (arbitrages, ton, intention). Le plan n'est pas magique au jour 1 — il est "correct et comprehensible". La magie vient a J2-J4 avec les premieres adaptations.
-
-### "WhatsApp est-il un risque de dependance?"
-→ Oui. C'est pourquoi on commence par Telegram. Interface abstraite des le jour 1. Migration WhatsApp quand le produit est prouve et le process Meta complete. Si WhatsApp s'avere impossible, Telegram ou SMS restent viables.
+### Signaux (Sprint B)
+- [ ] Séance clé manquée → message de relance approprié
+- [ ] 3 jours silence → check-in contextuel
+- [ ] Grosse séance Strava → feedback coach
+- [ ] Charge haute cumulée → suggestion repos automatique

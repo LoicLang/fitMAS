@@ -1,9 +1,9 @@
 ---
-summary: vision produit, wedge V0, scope, ICP, parcours utilisateur et criteres de succes
+summary: vision produit, wedge multisport, scope actuel, ICP, parcours utilisateur et critères de succès
 read_when:
   - comprendre le produit
   - arbitrer le scope
-  - verifier si une idee rentre dans la V0
+  - vérifier si une idée rentre dans le scope
   - designer une feature
 ---
 
@@ -11,168 +11,165 @@ read_when:
 
 ## Une phrase
 
-FitMAS est une equipe IA proactive qui ajuste ton entrainement et ta nutrition selon ta vraie vie.
+FitMAS est un coach IA multisport proactif qui ajuste ton entraînement selon ta vraie vie.
 
 ## Promesse
 
-- mieux performer
-- moins reflechir / moins planifier
-- avoir le sentiment d'etre suivi par une equipe premium
+- mieux performer sur la durée
+- moins réfléchir, moins planifier
+- avoir le sentiment d'être suivi par quelqu'un qui te connaît
 
 La promesse externe est "mieux performer".
-Le mecanisme interne ressenti est "moins de charge mentale".
+Le mécanisme interne ressenti est "moins de charge mentale".
 
-## ICP V0
+## ICP
 
-- coureur deja engage (3+ sorties/semaine)
+- sportif engagé multisport (3+ séances/semaine)
 - agenda parfois instable
-- interesse par la personnalisation
-- a l'aise avec un setup initial de 15-20 minutes
-- tone preference: direct, pas cheerleader
+- intéressé par la personnalisation
+- à l'aise avec un setup initial de 15-20 minutes
+- tone preference : direct, pas cheerleader
 
-## Wedge V0: running endurance
+## Wedge : multisport personnel
 
-Pourquoi running en premier:
-- meilleur fit avec Apple Health et Strava
-- donnees plus riches et progression plus facile a mesurer
-- adaptation quotidienne plus lisible
-- boucle proactive plus naturelle
+Sports supportés :
+- running (trail / route)
+- cycling (route / gravel)
+- swimming (piscine / eau libre)
+- climbing (bloc / voie)
+- strength (renfo fonctionnel)
+- rest
 
-Pas en V0: musculation, hybrid, triathlon.
+Pourquoi multisport et pas running seul :
+- c'est la vraie pratique de l'ICP
+- la charge cross-sport est le vrai enjeu d'arbitrage
+- l'escalade et le renfo ne sont pas sur Strava → le manuel est indispensable
+- un coach qui gère le multi est bien plus crédible qu'un coach running
 
-## Ce que la V0 sait faire
+Ce qu'on ne fait pas encore :
+- périodisation avancée par discipline
+- nutrition complexe / meal planning
+- triathlon structuré
+- SaaS multi-user
 
-### 1. Onboarding (6 blocs, 15-20 min max)
+## Ce que FitMAS sait faire aujourd'hui
 
-1. **Cap et objectif** — objectif principal, echeance, ambition
-2. **Realite de vie** — jours disponibles, creneaux, contraintes
-3. **Niveau running** — volume recent, types de seances, fragilites
-4. **Nutrition utile** — habitudes, contraintes, gouts (leger, pas de tracking)
-5. **Style de coaching** — ton, niveau de challenge, tolerance aux relances
-6. **Integrations** — Apple Health, Strava, calendrier, messagerie
+### 1. Onboarding (Telegram, ~15 min)
 
-Ecran recap final: ce que FitMAS a compris. Critique pour la confiance.
+Via `/start` sur le bot Telegram :
+1. **Sports pratiqués** — sélection multiple
+2. **Objectif principal** — texte libre
+3. **Réalité de semaine** — créneaux, jours forts/fragiles
+4. **Contraintes** — blessures, matériel, horaires
+5. **Préférences** — terrain, style de renfo, etc.
+6. **Création du coach** — nom, style, do/dont, âme
+7. **Preview de voix** — le coach parle avant que tu valides
+8. **Récap final** — ce que FitMAS a compris
 
-### 2. Premier plan hebdo running
+### 2. Plan hebdomadaire multisport
 
-- intention de la semaine
-- 3-5 seances (footing, qualite, sortie longue, recup, repos)
-- 2-3 arbitrages de personnalisation visibles
-- focus nutrition leger attache au plan (timing, collations)
+- Généré par un planner déterministe (`planner.py`)
+- Enrichi par le LLM (intention, wording, arbitrages)
+- 7 jours avec : sport, type, durée, intensité, charge, priorité, note coach
+- Régénération à la demande ou automatique le dimanche soir
 
-### 3. App (3 tabs)
+### 3. App (5 onglets)
 
-**Today** — ecran principal quotidien
-- decision du jour (seance + objectif)
-- focus nutrition
-- ce qui a change + pourquoi
-- ce que FitMAS surveille
-- feedback simple
+**Aujourd'hui** — écran quotidien
+- séance du jour + objectif + note coach
+- actions rapides : Fait / Trop fatigué / Décaler
+- métriques : sport, durée, intensité, priorité
+- ce qui a changé + ce que le coach regarde
 
-**Plan** — vue semaine
-- intention hebdo
-- jours avec seances, charge, flexibilite
-- arbitrages recents
+**Semaine** — vue plan
+- 7 cartes jour avec badge statut (fait/prévu/sauté/adapté)
+- barre de charge visuelle
+- bouton régénérer
 
-**Profil** — double numerique visible
-- objectifs, contraintes, preferences, style coaching
-- integrations connectees
-- ce que FitMAS croit savoir
+**Activités** — réel vs prévu
+- formulaire activité manuelle
+- connexion Strava (OAuth + synchro)
+- liste activités avec matching plan
 
-### 4. Messagerie proactive
+**Profil** — double numérique
+- objectif, sports, contraintes, préférences
+- carte coach : nom, style, do/dont, âme
 
-4 categories de messages:
+**Debug** — mémoire
+- facts actifs avec catégorie, source, confiance
+
+### 4. Messagerie proactive (Telegram)
+
+3 triggers programmés :
+1. **Briefing matin** (7h30) — séance du jour + statut veille
+2. **Rappel pré-séance** (18h) — veille d'une séance clé
+3. **Revue hebdo** (dimanche 20h) — bilan + régénération plan
+
+4 types de messages :
 1. **Adaptation** — ce qui change, pourquoi, impact
 2. **Clarification** — question courte quand info manque
-3. **Feedback** — question simple apres seance cle ou signal de fatigue
-4. **Spontane contextuel** — reconnaissance d'effort, lecture situationnelle
+3. **Feedback** — question simple après séance clé
+4. **Spontané contextuel** — reconnaissance d'effort
 
-### 5. Adaptation simple
+### 5. Adaptation
 
-- deplacer une seance
-- alleger une journee
-- ajuster la recuperation
+Via message naturel au coach :
+- déplacer une séance
+- alléger une journée
+- échanger deux jours
+- mettre à jour une séance
+- marquer comme fait
 
-### 6. Revue de fin de semaine
+### 6. Boucle activité
 
-- ce qui a ete suivi
-- ce qui a ete adapte
-- ce que FitMAS a appris
+- Import Strava automatique (toutes les 2h)
+- Logging manuel (escalade, renfo, oublis)
+- Matching activité → jour du plan (heuristique : sport +4, jour +3, durée +1-2)
+- Marquage automatique "fait" quand match
 
-## Ce que la V0 ne fait pas
+## Ce que FitMAS ne fait pas encore
 
-- pas de nutrition riche / meal planning
-- pas de chat in-app
-- pas de coaching mental profond
-- pas de multi-agent visible
-- pas de memoire semantique avancee
-- pas de recommandations medicales
-- pas d'Android
+- chat web (chat = Telegram uniquement)
+- nutrition / meal planning
+- coaching mental profond
+- multi-agent visible
+- mémoire sémantique avancée (vector DB)
+- recommandations médicales
+- Android natif / iOS natif
+- WhatsApp (prévu après validation Telegram)
+- webhook Strava (actuellement polling)
+- Apple Health
 
-## Boucle produit V0
+## Boucle produit
 
-1. onboarding → recap FitMAS
-2. generation du premier plan
-3. premiere vue Today
-4. message de clarification si necessaire
-5. adaptation simple visible dans l'app
-6. message de feedback ou spontane contextuel
-7. revue de fin de semaine
+1. `/start` → onboarding → récap → plan
+2. Vue Today chaque matin
+3. Briefing proactif sur Telegram
+4. Adaptation si besoin (message ou action rapide)
+5. Activité réelle → import ou log manuel
+6. Revue dimanche → nouveau plan
 
-## Semaine 1 — scenario de reference
+## Critères de succès
 
-**Persona**: 31 ans, court 3x/semaine, veut progresser sur semi, agenda variable, mardi soir fragile, jeudi prefer leger, sortie longue dimanche, ton direct.
-
-| Jour | Produit | Canal |
-|------|---------|-------|
-| J0 | Onboarding → premier plan. "J'ai evite un bloc mardi soir, jeudi leger, longue dimanche." | App |
-| J1 | Footing facile 45 min. Pas de message. | App |
-| J2 | Conflit agenda mardi. "Tu peux courir demain matin ou plutot jeudi?" → user: "jeudi" → adaptation | WhatsApp + App |
-| J3 | Pas de signal utile. Silence. | — |
-| J4 | Seance qualite (deplacee). Strava remonte. "Belle seance. Bloc valide. Demain plus souple." | WhatsApp |
-| J5 | "Recup: jambes lourdes ou fatigue normale?" → user: "un peu lourdes" → ajustement | WhatsApp |
-| J6 | User consulte Plan. Semaine coherente malgre les changements. Pas de message. | App |
-| J7 | Sortie longue. "Belle sortie longue. Semaine propre malgre l'ajustement mardi." | WhatsApp |
-| Fin | Revue: suivi, adapte, appris. "Mardi doit rester flexible. Tu recuperes bien mais besoin de legerete apres qualite." | App |
-
-## Criteres de succes
-
-La V0 est bonne si les premiers utilisateurs disent:
+La V0 est bonne si :
 - "le plan me ressemble"
 - "j'ai compris quoi faire"
 - "les messages tombent juste"
-- "j'ai moins a gerer"
+- "j'ai moins à gérer"
 
-## Criteres d'echec
+## Critères d'échec
 
-La V0 echoue si:
-- le plan parait standard
-- les messages paraissent generiques
-- l'app parait complexe
+La V0 échoue si :
+- le plan paraît standard
+- les messages paraissent génériques
+- l'app paraît complexe
 - il faut trop d'actions manuelles
 - la personnalisation n'est pas ressentie vite
 
-## Frontiere d'autonomie
+## Positionnement
 
-**Sans validation humaine:**
-- ordre/timing des seances
-- ajustements moderes de volume
-- repos/deload legers
-- collations et timing alimentaire
-- ajustements fins de macros
-- niveau de challenge dans les messages
+Le marché a déjà : Humango (plans adaptatifs), Runna (exécution running), Oura Advisor (data wearable), WHOOP Coach (IA wearable).
 
-**Sous validation explicite:**
-- changement d'objectif principal
-- forte variation calorique
-- suppression d'une seance cle
-- bascule majeure de strategie
-- situations de sante/blessure
+Ce qui manque : une expérience qui combine plan adaptatif + personnalisation durable + voix cohérente + proactivité utile + faible charge mentale + vrai multisport.
 
-## Positionnement concurrentiel
-
-Le marche a deja: Humango (plans adaptatifs endurance), Runna (excellente execution running), Oura Advisor (data wearable + conversation), WHOOP Coach (IA sur wearable).
-
-Ce qui manque: une experience qui combine plan adaptatif + personnalisation durable + voix coherente + proactivite utile + faible charge mentale.
-
-FitMAS ne bat personne sur un axe. FitMAS gagne sur l'orchestration, la delegation mentale, et la sensation de suivi premium continu.
+FitMAS ne bat personne sur un axe. FitMAS gagne sur l'orchestration, la délégation mentale, et la sensation de suivi premium continu.

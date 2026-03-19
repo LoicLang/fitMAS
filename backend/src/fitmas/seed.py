@@ -1,153 +1,235 @@
 from __future__ import annotations
 
+import logging
+
 from sqlalchemy.orm import Session
 
 from fitmas import schema as s
 
+logger = logging.getLogger(__name__)
+
 
 def seed_if_empty(db: Session) -> None:
-    """Populate DB with V0 seed data if empty. No-op if user already exists."""
-    if db.query(s.User).count() > 0:
+    """Seed a coherent multisport profile for Loïc if no user exists.
+
+    This is a fallback so the webapp is usable even before Telegram onboarding.
+    Real users go through /start on Telegram which calls the onboard endpoint.
+    """
+    existing = db.query(s.User).first()
+    if existing is not None:
         return
 
+    logger.info("No user found — seeding default multisport profile")
+
     user = s.User(
-        name="Loic",
-        age=31,
-        objective="Progresser sur 10 km / semi sans rendre la semaine trop rigide.",
-        coaching_style="Direct, calme, pas cheerleader.",
+        name="Loïc",
+        age=30,
+        objective="Progresser en trail et escalade tout en gardant un socle vélo et natation",
+        primary_objective="Progresser en trail et escalade tout en gardant un socle vélo et natation",
+        weekly_structure_notes="Semaine chargée en journée. Créneaux le matin tôt ou en fin de journée. Week-end plus libre.",
+        coaching_style="direct",
+        coach_name="FitMAS",
+        coach_style="Direct, pragmatique, pas de cheerleading. Tu parles comme un pote qui s'y connaît.",
+        coach_relationship="Un binôme lucide. Tu me dis ce que je dois entendre, pas ce que je veux entendre.",
+        coach_do="Donner des repères clairs. Adapter la charge au ressenti. Protéger la récupération.",
+        coach_dont="Jamais de motivation creuse. Pas de emojis excessifs. Pas de formules toutes faites.",
+        coach_soul="Tu es le coach que j'aurais voulu avoir plus tôt : quelqu'un qui comprend que la performance passe par la régularité et la lucidité, pas par la motivation du dimanche soir.",
+        onboarding_status="completed",
     )
     db.add(user)
     db.flush()
 
-    for text in [
-        "Mardi soir fragile",
-        "Jeudi prefere leger",
-        "Sortie longue plutot dimanche matin",
-    ]:
+    # Sports
+    sports = [
+        ("running", 0),
+        ("climbing", 1),
+        ("cycling", 2),
+        ("swimming", 3),
+        ("strength", 4),
+    ]
+    for sport_type, rank in sports:
+        db.add(s.UserSport(user_id=user.id, sport_type=sport_type, priority_rank=rank, active=True))
+
+    # Constraints
+    constraints = [
+        "Disponible surtout matin tôt et soir après 18h",
+        "Week-end : créneaux longs possibles",
+        "Pas de salle d'escalade le lundi (fermée)",
+        "Vélo seulement outdoor quand la météo le permet",
+    ]
+    for text in constraints:
         db.add(s.UserConstraint(user_id=user.id, text=text))
 
-    for text in [
-        "Aime les produits tech",
-        "Veut comprendre ce qui change sans grands discours",
-        "Veut moins gerer seul la planification",
-    ]:
+    # Preferences
+    preferences = [
+        "Trail plutôt que route pour la course",
+        "Escalade en bloc, pas de voie",
+        "Natation en eau libre quand c'est possible",
+        "Renfo fonctionnel, pas de musculation classique",
+    ]
+    for text in preferences:
         db.add(s.UserPreference(user_id=user.id, text=text))
 
+    db.flush()
+
+    # Weekly plan — realistic multisport
     plan = s.WeeklyPlan(
         user_id=user.id,
-        intention="Placer un vrai bloc de qualite sans rigidifier la semaine.",
-        summary="Mardi reste flexible, jeudi porte le bloc fort, et dimanche reste le repere long.",
+        intention="Construire une base solide trail + escalade avec un socle cardio vélo/natation",
+        summary="Semaine équilibrée : 2 courses, 2 escalades, 1 vélo, 1 natation, 1 renfo. Charge progressive.",
         status="active",
     )
     db.add(plan)
     db.flush()
 
-    days = [
-        dict(
-            sort_order=0, day="monday", label="Lundi",
-            session_title="Sortie facile 45 min",
-            session_goal="Lancer la semaine proprement",
-            session_note="Pas besoin de bruit aujourd'hui. L'app suffit.",
-            priority="Clarte", flexibility="stable",
-            nutrition_focus="Pense surtout a bien remettre quelque chose apres la seance.",
-            change_notes=[("Rien n'a bouge", "Le meilleur choix aujourd'hui, c'est de garder la semaine simple.")],
-            watch_items=[("Recuperation generale", "On lit surtout comment le corps repond au depart de semaine.")],
-        ),
-        dict(
-            sort_order=1, day="tuesday", label="Mardi",
-            session_title="Creneau fragile",
-            session_goal="Verifier si le bon jour reste mardi ou bascule jeudi",
-            session_note="On ne force pas un creneau instable.",
-            priority="Clarification", flexibility="flexible",
-            nutrition_focus="Rien a pousser tant que le bon creneau n'est pas confirme.",
-            change_notes=[("Bloc qualite en attente", "FitMAS verifie si jeudi devient le meilleur point d'ancrage.")],
-            watch_items=[
-                ("Agenda du soir", "Mardi ne doit pas casser tout le bloc de la semaine."),
-                ("Qualite", "Le bon jour compte plus que tenir un plan rigide."),
-            ],
-        ),
-        dict(
-            sort_order=2, day="wednesday", label="Mercredi",
-            session_title="Footing simple ou repos mobile",
-            session_goal="Garder de l'air pour proteger la qualite",
-            session_note="La semaine reste propre pendant qu'on protege le bloc fort.",
-            priority="Stabilite", flexibility="flexible",
-            nutrition_focus="Routine simple, sans surjouer.",
-            change_notes=[("Mercredi reste simple", "Le deplacement de la qualite evite de raidir le milieu de semaine.")],
-            watch_items=[("Souplesse agenda", "On garde de la marge pour jeudi.")],
-        ),
-        dict(
-            sort_order=3, day="thursday", label="Jeudi",
-            session_title="Bloc qualite",
-            session_goal="Valider la vraie seance cle de la semaine",
-            session_note="Mieux place ici que force mardi.",
-            priority="Seance cle", flexibility="stable",
-            nutrition_focus="Prevois quelque chose avant si le creneau est serre, puis une recup simple derriere.",
-            change_notes=[
-                ("Seance deplacee ici", "Mardi ne paraissait pas assez stable cette semaine."),
-                ("Vendredi sera plus light", "Si le bloc passe bien, la recup du lendemain sera protegee."),
-            ],
-            watch_items=[
-                ("Qualite de seance", "Le but est de valider le bloc proprement, pas d'aller trop loin."),
-                ("Recup demain", "Le lendemain dira comment ajuster la suite."),
-            ],
-        ),
-        dict(
-            sort_order=4, day="friday", label="Vendredi",
-            session_title="Journee plus light",
-            session_goal="Encaisser le bloc d'hier",
-            session_note="Aujourd'hui on consolide, on n'empile pas.",
-            priority="Recuperation", flexibility="stable",
-            nutrition_focus="Ne sous-mange pas aujourd'hui. L'objectif est de consolider.",
-            change_notes=[("Vendredi allege", "Le bloc d'hier etait solide, on protege la suite.")],
-            watch_items=[
-                ("Jambes", "FitMAS veut savoir si la fatigue est normale ou plus lourde."),
-                ("Dimanche", "La sortie longue depend aussi de ce qui se passe aujourd'hui."),
-            ],
-        ),
-        dict(
-            sort_order=5, day="saturday", label="Samedi",
-            session_title="Preparation legere",
-            session_goal="Arriver propre sur la sortie longue",
-            session_note="Rien a compliquer aujourd'hui.",
-            priority="Preparation", flexibility="stable",
-            nutrition_focus="Reste simple et laisse de la place a demain.",
-            change_notes=[("Pas de bruit", "Si rien ne coince, FitMAS laisse de l'espace.")],
-            watch_items=[("Fraicheur", "Le long de dimanche reste le vrai repere de fin de semaine.")],
-        ),
-        dict(
-            sort_order=6, day="sunday", label="Dimanche",
-            session_title="Sortie longue",
-            session_goal="Fermer la semaine avec un vrai repere",
-            session_note="C'est ici qu'on lit si la structure tenait.",
-            priority="Repere fort", flexibility="stable",
-            nutrition_focus="Avant la sortie: simple et digeste. Apres: recup propre.",
-            change_notes=[("Semaine coherente", "Le deplacement de mardi n'a pas casse la logique globale.")],
-            watch_items=[
-                ("Tenue du bloc", "FitMAS lit si l'ensemble reste soutenable dans la vraie vie."),
-                ("Semaine prochaine", "Le message de preparation part seulement si ca vaut le coup."),
-            ],
-        ),
+    days_data = [
+        {
+            "day": "monday",
+            "label": "Lundi",
+            "sport_type": "running",
+            "session_type": "endurance",
+            "session_title": "Footing vallonné",
+            "session_goal": "Relancer en douceur après le week-end. Travail aérobie sur terrain varié.",
+            "session_note": "Privilégie un parcours avec du dénivelé léger pour simuler le trail.",
+            "duration_min": 50,
+            "intensity": "easy",
+            "load_score": 2,
+            "priority": "Socle aérobie",
+            "nutrition_focus": "Bien hydraté, petit-déjeuner léger avant si matin.",
+            "flexibility": "flexible",
+            "completion_status": "planned",
+        },
+        {
+            "day": "tuesday",
+            "label": "Mardi",
+            "sport_type": "climbing",
+            "session_type": "technique",
+            "session_title": "Bloc technique",
+            "session_goal": "Travailler la lecture de voie et la précision des pieds. Pas de force max.",
+            "session_note": "Échauffement long. Blocs en dessous du niveau max pour polir la technique.",
+            "duration_min": 75,
+            "intensity": "moderate",
+            "load_score": 2,
+            "priority": "Technique grimpe",
+            "nutrition_focus": "Collation protéinée après pour la récupération musculaire.",
+            "flexibility": "stable",
+            "completion_status": "planned",
+        },
+        {
+            "day": "wednesday",
+            "label": "Mercredi",
+            "sport_type": "cycling",
+            "session_type": "endurance",
+            "session_title": "Sortie vélo endurance",
+            "session_goal": "Volume aérobie sans forcer. Tourner les jambes, ventiler.",
+            "session_note": "Idéal en extérieur. Si météo mauvaise, home trainer en zone 2.",
+            "duration_min": 60,
+            "intensity": "easy",
+            "load_score": 2,
+            "priority": "Socle cardio",
+            "nutrition_focus": "Eau suffisante. Barre si sortie > 1h.",
+            "flexibility": "flexible",
+            "completion_status": "planned",
+        },
+        {
+            "day": "thursday",
+            "label": "Jeudi",
+            "sport_type": "running",
+            "session_type": "quality",
+            "session_title": "Fractionné côtes",
+            "session_goal": "Séance clé trail : 6×3min en côte, récup trot descente. Puissance aérobie.",
+            "session_note": "Séance dure. Bien échauffé avant (15min footing). Écoute le corps.",
+            "duration_min": 55,
+            "intensity": "hard",
+            "load_score": 3,
+            "priority": "Séance clé",
+            "nutrition_focus": "Bien manger la veille. Rien de lourd 2h avant.",
+            "flexibility": "stable",
+            "completion_status": "planned",
+        },
+        {
+            "day": "friday",
+            "label": "Vendredi",
+            "sport_type": "swimming",
+            "session_type": "technique",
+            "session_title": "Natation technique",
+            "session_goal": "Travail de glisse et respiration. Éducatifs + nage continue.",
+            "session_note": "Objectif : fluidité, pas vitesse. Récupération active après la séance dure de jeudi.",
+            "duration_min": 45,
+            "intensity": "easy",
+            "load_score": 1,
+            "priority": "Récup active",
+            "nutrition_focus": "Léger. La natation aide à récupérer.",
+            "flexibility": "flexible",
+            "completion_status": "planned",
+        },
+        {
+            "day": "saturday",
+            "label": "Samedi",
+            "sport_type": "climbing",
+            "session_type": "strength",
+            "session_title": "Bloc force + renfo",
+            "session_goal": "Blocs proches du niveau max. Enchaîner avec 20min de renfo fonctionnel.",
+            "session_note": "Séance forte de la semaine en grimpe. Gainage, tractions, antagonistes après les blocs.",
+            "duration_min": 90,
+            "intensity": "hard",
+            "load_score": 3,
+            "priority": "Séance clé grimpe",
+            "nutrition_focus": "Protéines et glucides après. Bien récupérer pour demain.",
+            "flexibility": "stable",
+            "completion_status": "planned",
+        },
+        {
+            "day": "sunday",
+            "label": "Dimanche",
+            "sport_type": "running",
+            "session_type": "long",
+            "session_title": "Sortie longue trail",
+            "session_goal": "Volume en terrain trail. 1h15–1h30 à allure confort, dénivelé libre.",
+            "session_note": "Le cœur de la semaine trail. Pas de chrono, juste le plaisir du terrain.",
+            "duration_min": 85,
+            "intensity": "moderate",
+            "load_score": 3,
+            "priority": "Sortie longue",
+            "nutrition_focus": "Petit-déjeuner consistant. Emporte de l'eau et un gel si > 1h15.",
+            "flexibility": "stable",
+            "completion_status": "planned",
+        },
     ]
 
-    for d in days:
-        change_notes = d.pop("change_notes")
-        watch_items = d.pop("watch_items")
-        day_row = s.DayPlan(weekly_plan_id=plan.id, **d)
-        db.add(day_row)
-        db.flush()
-        for title, detail in change_notes:
-            db.add(s.ChangeNote(day_plan_id=day_row.id, title=title, detail=detail))
-        for title, detail in watch_items:
-            db.add(s.WatchItem(day_plan_id=day_row.id, title=title, detail=detail))
+    for sort_order, d in enumerate(days_data):
+        db.add(s.DayPlan(weekly_plan_id=plan.id, sort_order=sort_order, **d))
 
-    # Seed initial messages
-    for role, text in [
-        ("agent", "Je suis en train d'ajuster ta semaine. Tu peux courir demain matin ou c'est mort et on bascule plutot a jeudi ?"),
-        ("user", "Mardi ca sent pas bon, plutot jeudi."),
-        ("agent", "Ca marche. Je garde mercredi simple et je pose la qualite jeudi pour que le bloc reste propre."),
-        ("agent", "Belle seance aujourd'hui. Le bloc est bien passe. Je garde demain un peu plus light pour bien encaisser."),
-    ]:
-        db.add(s.CoachMessage(user_id=user.id, role=role, text=text))
+    # Initial coach message
+    db.add(s.CoachMessage(
+        user_id=user.id,
+        role="agent",
+        text="FitMAS est en place. Première semaine posée — trail, escalade, vélo, natation. On ajuste au fur et à mesure.",
+    ))
+
+    # Onboarding facts
+    facts = [
+        ("sport", "sport_principal", "Trail running", "onboarding", 1.0, True),
+        ("sport", "sport_secondaire_1", "Escalade bloc", "onboarding", 1.0, True),
+        ("sport", "sport_secondaire_2", "Vélo route/gravel", "onboarding", 0.9, True),
+        ("sport", "sport_secondaire_3", "Natation eau libre", "onboarding", 0.8, True),
+        ("constraint", "disponibilite", "Matin tôt ou soir après 18h en semaine", "onboarding", 1.0, True),
+        ("constraint", "salle_escalade", "Salle fermée le lundi", "onboarding", 1.0, True),
+        ("preference", "terrain", "Trail > route pour la course", "onboarding", 1.0, True),
+        ("preference", "grimpe_style", "Bloc, pas de voie", "onboarding", 1.0, True),
+        ("coaching", "coach_style_preference", "Direct, pragmatique, binôme lucide", "onboarding", 1.0, True),
+    ]
+    for cat, key, val, src, conf, confirmed in facts:
+        db.add(s.UserFact(
+            user_id=user.id,
+            category=cat,
+            key=key,
+            value=val,
+            source=src,
+            confidence=conf,
+            confirmed=confirmed,
+            active=True,
+        ))
 
     db.commit()
+    logger.info("Seeded multisport profile for user %s (id=%s)", user.name, user.id)

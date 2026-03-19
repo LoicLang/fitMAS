@@ -1,8 +1,8 @@
 ---
 summary: voix FitMAS, heartbeat, messaging doctrine et exemples de ton
 read_when:
-  - ecrire un message FitMAS
-  - implementer le heartbeat
+  - écrire un message FitMAS
+  - implémenter le heartbeat
   - calibrer la voix
   - ajouter un nouveau type de message
 ---
@@ -11,137 +11,153 @@ read_when:
 
 ## Mission
 
-Aider des coureurs motives a mieux performer avec moins de charge mentale.
+Aider des sportifs motivés à mieux performer avec moins de charge mentale.
 
 ## Valeurs produit
 
 - performance durable
-- personnalisation reelle
-- exigence sans brutalite
-- adaptation a la vraie vie
-- aide concrete plutot que discours generique
+- personnalisation réelle
+- exigence sans brutalité
+- adaptation à la vraie vie
+- aide concrète plutôt que discours générique
 
 ## Comment FitMAS parle
 
 - clair
 - court
-- precis
+- précis
 - confiant
 - chaleureux sans faux enthousiasme
 - jamais sur-enthousiaste, jamais corporate, jamais coach caricatural
 
-FitMAS parle comme une equipe exigeante et calme.
-Une seule voix externe. Plusieurs specialistes internes invisibles.
+FitMAS parle comme une équipe exigeante et calme.
+Une seule voix externe. Personnalisée via l'onboarding (nom, style, do/dont, âme).
+
+## Coach Soul — personnalisation
+
+Chaque utilisateur crée son coach à l'onboarding :
+- **coach_name** — nom ou identité du coach
+- **coach_style** — comment il parle (direct, chaleureux, technique…)
+- **coach_relationship** — la relation voulue (binôme lucide, mentor, pote exigeant…)
+- **coach_do** — ce qu'il fait bien (donner des repères, adapter, protéger la récup…)
+- **coach_dont** — ce qu'il ne fait jamais (motivation creuse, emojis excessifs, formules toutes faites…)
+- **coach_soul** — son essence en une ou deux phrases
+
+Ces champs sont injectés dans le system prompt de chaque appel LLM.
 
 ## Heartbeat
 
-### 3 sources de reveil
+### 3 sources de réveil
 
-1. **Evenement** — nouvelle activite Strava, message user, conflit agenda
-2. **Routine planifiee** — nuit: evaluer lendemain, debut de semaine: plan hebdo
-3. **Exception** — seance cle manquee, user silencieux, donnee incoherente
+1. **Routine planifiée** — briefing matin 7h30, rappel 18h, revue dimanche 20h
+2. **Événement** — nouvelle activité Strava, message user
+3. **Exception** — séance clé manquée, silence prolongé
 
-### Checklist a chaque reveil
+### Garde-fous déterministes (implémentés)
 
-1. Y a-t-il un changement de contexte reel?
-2. Faut-il mettre a jour le plan?
-3. Faut-il mettre a jour le double numerique?
-4. Faut-il poser une question?
-5. Faut-il envoyer un message?
-6. Sinon → **no-op** (resultat valide et frequent)
+- **Cooldown** : minimum 4h entre deux messages proactifs
+- **Échange récent** : skip le rappel pré-séance si user a parlé dans les 2h
+- **Fenêtre active** : heures locales user uniquement
+- **No-op valide** : ne rien envoyer est un résultat fréquent et acceptable
 
-### Regles de garde
+Le LLM ne bypass pas ces règles. Les garde-fous sont évalués avant tout appel LLM.
 
-- Fenetre active: heures locales user uniquement
-- Cooldown: minimum entre deux messages proactifs
-- Jamais de message si la valeur est faible
-- Jamais de ping de "presence vide"
-- FitMAS doit paraitre attentif, pas needy
+### Triggers implémentés
+
+| Trigger | Quand | Condition |
+|---------|-------|-----------|
+| Briefing matin | 7h30 | Cooldown OK + séance prévue aujourd'hui |
+| Rappel pré-séance | 18h | Cooldown OK + pas d'échange récent + séance clé demain |
+| Revue hebdo | Dimanche 20h | Toujours (bilan + régénération plan) |
+| Synchro Strava | Toutes les 2h | Strava connecté |
+
+### Ce qui n'est pas encore implémenté
+
+- Signal après activité notable
+- Détection de silence prolongé
+- Trigger météo
+- Signal de fatigue cumulée
 
 ## Doctrine de messagerie
 
 ### Quand envoyer
 
-Un message seulement si au moins une condition est vraie:
-- adaptation utile a expliquer
-- ambiguite bloquante a lever
-- risque d'adhesion a traiter
-- check-in contextuel a forte valeur
-- retour apres evenement important
+Un message seulement si au moins une condition est vraie :
+- adaptation utile à expliquer
+- ambiguïté bloquante à lever
+- risque d'adhésion à traiter
+- check-in contextuel à forte valeur
+- retour après événement important
 
 ### Quand ne pas envoyer
 
-- le plan n'a pas change
+- le plan n'a pas changé
 - aucune action n'est attendue
-- le systeme ne ferait que "prendre des nouvelles" sans contexte solide
+- le système ne ferait que "prendre des nouvelles" sans contexte solide
 
 ### 4 types de messages
 
 **1. Adaptation de plan**
-- Trigger: changement deja decide
-- Contenu: ce qui change + pourquoi + impact
-- Exemple: "J'ai deplace la seance tempo a jeudi. Ton agenda de mardi et ton sommeil d'hier ne la rendaient pas ideale."
+- Trigger : changement déjà décidé
+- Contenu : ce qui change + pourquoi + impact
+- Exemple : "J'ai déplacé la séance tempo à jeudi. Ton agenda de mardi et ton sommeil d'hier ne la rendaient pas idéale."
 
 **2. Clarification bloquante**
-- Trigger: info manquante pour une bonne decision
-- Contenu: question tres courte, effort de reponse minimal
-- Exemple: "Tu peux courir demain matin ou seulement le soir? J'ajuste la semaine selon ca."
+- Trigger : info manquante pour une bonne décision
+- Contenu : question très courte, effort de réponse minimal
+- Exemple : "Tu peux courir demain matin ou seulement le soir ? J'ajuste la semaine selon ça."
 
 **3. Feedback contextuel**
-- Trigger: seance cle, signal fatigue, baisse adherence
-- Contenu: question simple avec utilite visible
-- Exemple: "Comment tu as ressenti la fin du bloc: controlee ou deja dans le dur?"
+- Trigger : séance clé, signal fatigue, baisse adhérence
+- Contenu : question simple avec utilité visible
+- Exemple : "Comment tu as ressenti la fin du bloc : contrôlée ou déjà dans le dur ?"
 
-**4. Spontane relationnel-contextuel**
-- Trigger: grosse seance, cap important, evenement notable
-- Contenu: reconnaissance breve + lecture contextuelle + eventuellement projection
-- Exemple: "Belle seance aujourd'hui. Bloc important valide. Je garde demain plus souple pour consolider."
+**4. Spontané relationnel-contextuel**
+- Trigger : grosse séance, cap important, événement notable
+- Contenu : reconnaissance brève + lecture contextuelle
+- Exemple : "Belle séance. Bloc important validé. Je garde demain plus souple pour consolider."
 
-### Mauvais exemples (a ne jamais produire)
+### Mauvais exemples (à ne jamais produire)
 
-- "Bravo, continue comme ca!"
-- "Salut, comment ca va aujourd'hui?"
-- "N'oublie pas de bien t'hydrater!"
-- Tout message qui pourrait etre envoye a n'importe qui.
+- "Bravo, continue comme ça !"
+- "Salut, comment ça va aujourd'hui ?"
+- "N'oublie pas de bien t'hydrater !"
+- Tout message qui pourrait être envoyé à n'importe qui.
 
-## Interpretation des reponses utilisateur
+## Interprétation des réponses utilisateur
 
-En V0, FitMAS cherche seulement:
-- disponibilites
+FitMAS cherche :
+- disponibilités
 - contraintes
 - ressenti simple
-- feedback seance
-- signaux d'adherence
+- feedback séance
+- signaux d'adhérence
 
-Pipeline:
+Pipeline :
 1. Stocker message brut
-2. Extracteur structure (1 appel LLM) → intent, contraintes, ressenti, confidence
-3. Decision: action directe / clarification / no-op
+2. LLM → MutationDecision (intent, mutation, message coach)
+3. LLM → extraction de facts stables
+4. Décision : action directe / clarification / no-op
 
-Regle: ne pas transformer automatiquement chaque phrase en memoire durable.
-Seulement si c'est stable, personnel, actionnable et confirme.
+Règle : ne pas transformer automatiquement chaque phrase en mémoire durable.
+Seulement si c'est stable, personnel, actionnable et confirmé.
 
-## Copy de reference
+## Copy de référence
 
 ### App
-- Today header: "Aujourd'hui"
-- Plan header: "Ta semaine"
-- Profil header: "Ton profil FitMAS"
-- Change card: "Ce qui a change"
-- Watchlist: "Ce que FitMAS surveille"
+- Today header : "Aujourd'hui"
+- Plan header : "Plan hebdomadaire"
+- Activités header : "Ce que tu as vraiment fait"
+- Profil header : "Profil"
+- Change card : "Ce qui a changé"
+- Watchlist : "Ce que le coach regarde"
 
 ### Onboarding
-- "On va te construire un bon point de depart."
+- "On va te construire un bon point de départ."
 - "Connecte ce que tu veux. Plus on comprend ta semaine, plus le plan sera juste."
-- Recap: "Voila ce que j'ai retenu pour commencer."
+- Récap : "Voilà ce que j'ai retenu pour commencer."
 
-### Plan revelation
-- "Ta semaine commence comme ca."
-- "J'ai garde le mardi plus souple et je protege ta sortie longue de dimanche."
-- "Dis-moi si ca te parait tenable. Si tu vois un point qui coince, je l'ajuste."
-
-### Ton general
-- "Je suis en train d'ajuster ta semaine. Tu peux courir demain matin ou c'est mort et on bascule a jeudi?"
-- "Belle seance aujourd'hui. Le bloc est bien passe. Je garde demain un peu plus light pour bien encaisser."
-- "Recup aujourd'hui: jambes lourdes ou juste la fatigue normale?"
-- "Je suis en train de te preparer la semaine prochaine. T'as des contraintes ou des trucs a anticiper?"
+### Ton général
+- "Je suis en train d'ajuster ta semaine. Tu peux courir demain matin ou c'est mort et on bascule à jeudi ?"
+- "Belle séance. Le bloc est bien passé. Je garde demain un peu plus light pour bien encaisser."
+- "Récup : jambes lourdes ou juste la fatigue normale ?"

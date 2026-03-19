@@ -40,7 +40,20 @@ def apply(db: Session, plan_id: int, decision: MutationDecision) -> None:
             return
 
         # Swap all session fields
-        for field in ("session_title", "session_goal", "session_note", "priority", "flexibility"):
+        for field in (
+            "sport_type",
+            "session_type",
+            "session_title",
+            "session_goal",
+            "session_note",
+            "duration_min",
+            "intensity",
+            "load_score",
+            "priority",
+            "nutrition_focus",
+            "flexibility",
+            "completion_status",
+        ):
             src_val = getattr(src, field)
             dst_val = getattr(dst, field)
             setattr(src, field, dst_val)
@@ -78,11 +91,18 @@ def apply(db: Session, plan_id: int, decision: MutationDecision) -> None:
         if not day:
             return
 
+        day.sport_type = "rest"
+        day.session_type = "rest"
         day.session_title = "Journee flexible"
         day.session_goal = "Recuperation et disponibilite"
+        day.duration_min = None
+        day.intensity = "easy"
+        day.load_score = 0
         day.priority = "Leger"
+        day.nutrition_focus = "Rester simple. Le but est surtout de recuperer."
         day.session_note = f"Journee allegee. {decision.rationale}"
         day.flexibility = "flexible"
+        day.completion_status = "adapted"
         db.commit()
         repo.set_change_notes(db, day.id, [("Journee allegee", decision.rationale)])
 

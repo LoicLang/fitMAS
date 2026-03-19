@@ -4,7 +4,7 @@ import os
 from pathlib import Path
 from typing import Generator
 
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, text
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 
 # DB path: env var (for prod/Docker) or repo root (for dev)
@@ -30,3 +30,58 @@ def get_db() -> Generator[Session, None, None]:
 def init_db() -> None:
     from fitmas import schema  # noqa: F401 — registers all ORM models with Base
     Base.metadata.create_all(bind=engine)
+    _ensure_sqlite_columns()
+
+
+def _ensure_sqlite_columns() -> None:
+    if engine.dialect.name != "sqlite":
+        return
+
+    migrations = {
+        "users": [
+            ("timezone", "ALTER TABLE users ADD COLUMN timezone VARCHAR(64) DEFAULT 'Europe/Paris'"),
+            ("telegram_chat_id", "ALTER TABLE users ADD COLUMN telegram_chat_id INTEGER"),
+            ("primary_objective", "ALTER TABLE users ADD COLUMN primary_objective TEXT DEFAULT ''"),
+            ("weekly_structure_notes", "ALTER TABLE users ADD COLUMN weekly_structure_notes TEXT DEFAULT ''"),
+            ("coach_name", "ALTER TABLE users ADD COLUMN coach_name VARCHAR(64) DEFAULT 'FitMAS'"),
+            ("coach_style", "ALTER TABLE users ADD COLUMN coach_style VARCHAR(32) DEFAULT 'direct'"),
+            ("coach_relationship", "ALTER TABLE users ADD COLUMN coach_relationship TEXT DEFAULT ''"),
+            ("coach_do", "ALTER TABLE users ADD COLUMN coach_do TEXT DEFAULT ''"),
+            ("coach_dont", "ALTER TABLE users ADD COLUMN coach_dont TEXT DEFAULT ''"),
+            ("coach_soul", "ALTER TABLE users ADD COLUMN coach_soul TEXT DEFAULT ''"),
+            ("onboarding_status", "ALTER TABLE users ADD COLUMN onboarding_status VARCHAR(32) DEFAULT 'not_started'"),
+        ],
+        "day_plans": [
+            ("sport_type", "ALTER TABLE day_plans ADD COLUMN sport_type VARCHAR(32) DEFAULT 'running'"),
+            ("session_type", "ALTER TABLE day_plans ADD COLUMN session_type VARCHAR(32) DEFAULT 'easy'"),
+            ("duration_min", "ALTER TABLE day_plans ADD COLUMN duration_min INTEGER"),
+            ("intensity", "ALTER TABLE day_plans ADD COLUMN intensity VARCHAR(16) DEFAULT 'easy'"),
+            ("load_score", "ALTER TABLE day_plans ADD COLUMN load_score INTEGER DEFAULT 1"),
+            ("completion_status", "ALTER TABLE day_plans ADD COLUMN completion_status VARCHAR(16) DEFAULT 'planned'"),
+        ],
+        "activities": [
+            ("external_id", "ALTER TABLE activities ADD COLUMN external_id VARCHAR(64)"),
+            ("distance_m", "ALTER TABLE activities ADD COLUMN distance_m FLOAT"),
+            ("elevation_m", "ALTER TABLE activities ADD COLUMN elevation_m FLOAT"),
+            ("perceived_load", "ALTER TABLE activities ADD COLUMN perceived_load INTEGER"),
+            ("started_at", "ALTER TABLE activities ADD COLUMN started_at DATETIME"),
+            ("matched_day", "ALTER TABLE activities ADD COLUMN matched_day VARCHAR(16)"),
+            ("match_reason", "ALTER TABLE activities ADD COLUMN match_reason TEXT DEFAULT ''"),
+        ],
+    }
+
+    with engine.begin() as connection:
+        for table_name, statements in migrations.items():
+            tables = {
+                row[0]
+                for row in connection.execute(text("SELECT name FROM sqlite_master WHERE type='table'")).fetchall()
+            }
+            if table_name not in tables:
+                continue
+            existing = {
+                row[1]
+                for row in connection.execute(text(f"PRAGMA table_info({table_name})")).fetchall()
+            }
+            for column_name, statement in statements:
+                if column_name not in existing:
+                    connection.execute(text(statement))

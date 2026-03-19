@@ -1,28 +1,28 @@
 ---
-summary: point d'entree documentaire du projet
+summary: point d'entrée documentaire du projet
 read_when:
-  - commencer a travailler sur le projet
+  - commencer à travailler sur le projet
   - chercher un document
 ---
 
 # Docs
 
-4 documents essentiels:
+4 documents essentiels :
 
 | Document | Contenu |
 |----------|---------|
-| `PRODUCT.md` | Vision, wedge, V0 scope, ICP, parcours utilisateur, criteres de succes |
-| `ARCHITECTURE.md` | Stack MVP, modele de donnees, flux techniques, decisions tranchees |
+| `PRODUCT.md` | Vision, wedge multisport, scope, parcours utilisateur, critères de succès |
+| `ARCHITECTURE.md` | Stack, modèle de données, flux techniques, décisions tranchées |
 | `SOUL.md` | Voix FitMAS, heartbeat, messagerie, exemples de ton |
-| `BUILD-ORDER.md` | Ordre de construction, phases, quoi coder ce soir |
+| `BUILD-ORDER.md` | État actuel, plan de priorités, prochaines phases |
 
-## Regles
+## Règles
 
 - Chaque doc a un front matter `summary` + `read_when`
-- Quand le comportement change, mettre a jour le doc concerne
-- Pas de doc jetable. Si ca ne survit pas a la conversation, ca ne rentre pas ici.
+- Quand le comportement change, mettre à jour le doc concerné
+- Pas de doc jetable. Si ça ne survit pas à la conversation, ça ne rentre pas ici.
 
 ## Archive
 
 Les anciens documents de cadrage (30+ fichiers v1) sont dans `docs/archive/`.
-Ils ont ete condenses dans les 4 docs ci-dessus.
+Ils ont été condensés dans les 4 docs ci-dessus.

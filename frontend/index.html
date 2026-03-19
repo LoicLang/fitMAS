@@ -8,684 +8,825 @@
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="apple-mobile-web-app-title" content="FitMAS">
-    <title>FitMAS V0</title>
+    <title>FitMAS</title>
     <style>
+      @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
       :root {
         color-scheme: light;
         --bg: #f4efe8;
-        --panel: rgba(255, 252, 247, 0.88);
+        --panel: rgba(255, 252, 247, 0.92);
         --panel-strong: #fffaf2;
-        --border: rgba(69, 47, 32, 0.12);
+        --border: rgba(69, 47, 32, 0.10);
         --text: #24160d;
         --muted: #6c584a;
         --accent: #0f766e;
-        --accent-soft: rgba(15, 118, 110, 0.1);
+        --accent-soft: rgba(15, 118, 110, 0.08);
         --warm: #c26b3b;
-        --shadow: 0 16px 40px rgba(42, 23, 11, 0.08);
-        --radius-xl: 28px;
-        --radius-lg: 20px;
-        --radius-md: 14px;
+        --warm-soft: rgba(194, 107, 59, 0.08);
+        --green: #16a34a;
+        --green-soft: rgba(22, 163, 74, 0.08);
+        --red: #dc2626;
+        --red-soft: rgba(220, 38, 38, 0.06);
+        --yellow: #ca8a04;
+        --yellow-soft: rgba(202, 138, 4, 0.06);
+        --strava: #fc4c02;
+        --strava-soft: rgba(252, 76, 2, 0.08);
+        --shadow-sm: 0 2px 8px rgba(42, 23, 11, 0.04);
+        --shadow: 0 8px 32px rgba(42, 23, 11, 0.06);
+        --shadow-lg: 0 16px 48px rgba(42, 23, 11, 0.08);
+        --radius-xl: 24px;
+        --radius-lg: 18px;
+        --radius-md: 12px;
+        --radius-sm: 8px;
+        --transition: 180ms cubic-bezier(0.4, 0, 0.2, 1);
       }
 
-      * {
-        box-sizing: border-box;
-      }
+      * { box-sizing: border-box; margin: 0; padding: 0; }
 
       body {
-        margin: 0;
         min-height: 100vh;
-        font-family: "Inter", "Avenir Next", "SF Pro Display", sans-serif;
+        min-height: 100dvh;
+        font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
         color: var(--text);
-        background:
-          radial-gradient(circle at top left, rgba(194, 107, 59, 0.16), transparent 24%),
-          radial-gradient(circle at top right, rgba(15, 118, 110, 0.14), transparent 28%),
-          linear-gradient(180deg, #f8f3eb 0%, var(--bg) 100%);
+        background: var(--bg);
+        -webkit-font-smoothing: antialiased;
+        padding-bottom: env(safe-area-inset-bottom, 0);
       }
 
       .shell {
-        width: min(1320px, calc(100% - 32px));
-        margin: 24px auto;
+        width: min(860px, calc(100% - 20px));
+        margin: 0 auto;
+        padding: 16px 0 100px;
         display: grid;
-        gap: 18px;
+        gap: 14px;
       }
 
+      /* ── Header ── */
       .topbar {
         display: flex;
         align-items: center;
         justify-content: space-between;
-        gap: 16px;
-        padding: 20px 24px;
-        border: 1px solid var(--border);
+        gap: 14px;
+        padding: 16px 20px;
         border-radius: var(--radius-xl);
         background: var(--panel);
-        backdrop-filter: blur(16px);
+        border: 1px solid var(--border);
         box-shadow: var(--shadow);
       }
 
-      .brand {
-        display: flex;
-        align-items: center;
-        gap: 14px;
-      }
+      .brand { display: flex; align-items: center; gap: 12px; min-width: 0; }
 
       .brand-mark {
-        width: 42px;
-        height: 42px;
-        border-radius: 14px;
-        display: grid;
-        place-items: center;
-        font-weight: 700;
-        color: white;
-        background: linear-gradient(135deg, var(--accent), #124f4b);
+        width: 42px; height: 42px; border-radius: 14px;
+        display: grid; place-items: center; flex-shrink: 0;
+        font-weight: 700; color: white; font-size: 0.85rem;
+        background: linear-gradient(135deg, var(--accent), #0d5c56);
+        box-shadow: 0 4px 12px rgba(15, 118, 110, 0.3);
       }
+
+      .topbar-copy { min-width: 0; }
 
       .eyebrow {
-        margin: 0 0 4px;
-        font-size: 12px;
-        text-transform: uppercase;
-        letter-spacing: 0.12em;
-        color: var(--muted);
+        font-size: 0.7rem; font-weight: 600;
+        text-transform: uppercase; letter-spacing: 0.1em; color: var(--muted);
       }
 
-      h1,
-      h2,
-      h3,
-      p {
-        margin: 0;
-      }
+      h1, h2, h3, p { margin: 0; }
 
       .topbar-copy h1 {
-        font-size: clamp(1.3rem, 2vw, 1.7rem);
+        font-size: clamp(1rem, 2vw, 1.25rem);
+        font-weight: 700; line-height: 1.3;
+        white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
       }
 
-      .topbar-copy p {
-        margin-top: 6px;
-        color: var(--muted);
-        max-width: 640px;
-      }
+      .topbar-copy p { margin-top: 2px; color: var(--muted); font-size: 0.82rem; line-height: 1.4; }
 
       .pill {
-        display: inline-flex;
-        align-items: center;
-        gap: 8px;
-        padding: 10px 14px;
-        border-radius: 999px;
-        border: 1px solid var(--border);
-        background: var(--panel-strong);
-        color: var(--muted);
-        font-size: 0.94rem;
+        display: inline-flex; align-items: center; gap: 6px;
+        padding: 7px 12px; border-radius: 999px; flex-shrink: 0;
+        background: var(--accent-soft);
+        color: var(--accent); font-size: 0.78rem; font-weight: 600;
       }
 
-      .layout {
-        display: grid;
-        grid-template-columns: minmax(0, 1.6fr) minmax(320px, 0.9fr);
-        gap: 18px;
-      }
-
+      /* ── Panel / Card ── */
       .panel {
-        border: 1px solid var(--border);
         border-radius: var(--radius-xl);
         background: var(--panel);
-        backdrop-filter: blur(16px);
+        border: 1px solid var(--border);
         box-shadow: var(--shadow);
-      }
-
-      .main-panel {
-        padding: 18px;
-      }
-
-      .tabs {
-        display: flex;
-        gap: 10px;
-        padding-bottom: 18px;
-      }
-
-      .tab {
-        border: 0;
-        border-radius: 999px;
-        padding: 11px 16px;
-        cursor: pointer;
-        background: transparent;
-        color: var(--muted);
-        font: inherit;
-      }
-
-      .tab.active {
-        background: var(--accent-soft);
-        color: var(--accent);
-        font-weight: 600;
-      }
-
-      .view {
-        display: none;
-        gap: 18px;
-      }
-
-      .view.active {
-        display: grid;
-      }
-
-      .hero {
-        padding: 26px;
-        border-radius: var(--radius-xl);
-        background:
-          linear-gradient(135deg, rgba(15, 118, 110, 0.14), rgba(15, 118, 110, 0.03)),
-          linear-gradient(180deg, rgba(255, 255, 255, 0.86), rgba(255, 250, 242, 0.7));
-        border: 1px solid rgba(15, 118, 110, 0.12);
-      }
-
-      .hero-grid {
-        margin-top: 18px;
-        display: grid;
-        grid-template-columns: repeat(3, minmax(0, 1fr));
-        gap: 12px;
-      }
-
-      .metric {
         padding: 16px;
-        border-radius: var(--radius-lg);
-        background: rgba(255, 255, 255, 0.72);
-        border: 1px solid rgba(69, 47, 32, 0.08);
-      }
-
-      .metric-label {
-        font-size: 0.82rem;
-        color: var(--muted);
-      }
-
-      .metric-value {
-        margin-top: 8px;
-        font-size: 1rem;
-        font-weight: 600;
-      }
-
-      .section-grid {
-        display: grid;
-        grid-template-columns: repeat(2, minmax(0, 1fr));
-        gap: 14px;
       }
 
       .card {
-        padding: 18px;
-        border-radius: var(--radius-lg);
-        background: rgba(255, 255, 255, 0.7);
-        border: 1px solid var(--border);
+        padding: 16px; border-radius: var(--radius-lg);
+        background: white; border: 1px solid var(--border);
+        box-shadow: var(--shadow-sm);
       }
 
-      .card h3 {
-        margin-bottom: 12px;
-        font-size: 1rem;
+      .card h3 { margin-bottom: 12px; font-size: 0.88rem; font-weight: 600; color: var(--text); }
+
+      /* ── Tabs ── */
+      .tabs {
+        display: flex; gap: 4px; padding: 4px;
+        background: rgba(108, 88, 74, 0.06);
+        border-radius: 999px; margin-bottom: 14px;
+        overflow-x: auto; -webkit-overflow-scrolling: touch;
       }
 
-      .list {
+      .tab {
+        flex: 1; border: 0; border-radius: 999px; padding: 10px 12px;
+        cursor: pointer; background: transparent;
+        color: var(--muted); font: inherit; font-size: 0.82rem;
+        font-weight: 500; white-space: nowrap; transition: all var(--transition);
+      }
+
+      .tab.active {
+        background: white; color: var(--accent); font-weight: 600;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+      }
+
+      .view { display: none; gap: 14px; }
+      .view.active { display: grid; }
+
+      /* ── Hero (section header) ── */
+      .hero {
+        padding: 20px; border-radius: var(--radius-lg);
+        background: linear-gradient(135deg, rgba(15, 118, 110, 0.08), rgba(15, 118, 110, 0.02));
+        border: 1px solid rgba(15, 118, 110, 0.10);
+      }
+
+      .hero h2 { font-size: 1.1rem; font-weight: 700; line-height: 1.35; }
+
+      .hero-grid {
+        margin-top: 14px; display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 8px;
+      }
+
+      .metric {
+        padding: 12px; border-radius: var(--radius-md);
+        background: rgba(255, 255, 255, 0.8);
+        border: 1px solid rgba(69, 47, 32, 0.06);
+      }
+
+      .metric-label { font-size: 0.7rem; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; }
+      .metric-value { margin-top: 4px; font-size: 0.92rem; font-weight: 600; }
+
+      /* ── Lists ── */
+      .section-grid {
         display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
         gap: 12px;
       }
+
+      .list { display: grid; gap: 8px; }
 
       .list-item {
-        padding: 14px;
-        border-radius: var(--radius-md);
-        background: rgba(255, 255, 255, 0.68);
-        border: 1px solid rgba(69, 47, 32, 0.08);
+        padding: 12px; border-radius: var(--radius-md);
+        background: rgba(244, 239, 232, 0.5);
+        border: 1px solid rgba(69, 47, 32, 0.06);
       }
 
-      .list-item strong {
-        display: block;
-        margin-bottom: 6px;
-        font-size: 0.96rem;
+      .list-item strong { display: block; margin-bottom: 3px; font-size: 0.88rem; font-weight: 600; }
+      .list-item span { color: var(--muted); line-height: 1.5; font-size: 0.84rem; }
+
+      /* ── Quick actions ── */
+      .quick-actions {
+        display: flex; gap: 8px; flex-wrap: wrap; margin-top: 14px;
       }
 
-      .list-item span {
-        color: var(--muted);
-        line-height: 1.45;
+      .quick-btn {
+        border: 1px solid var(--border); border-radius: 999px;
+        padding: 9px 16px; cursor: pointer;
+        background: white; color: var(--text);
+        font: inherit; font-size: 0.84rem; font-weight: 500;
+        transition: all var(--transition);
+        box-shadow: var(--shadow-sm);
       }
 
-      .week-grid {
-        display: grid;
-        grid-template-columns: repeat(2, minmax(0, 1fr));
-        gap: 14px;
+      .quick-btn:hover { border-color: var(--accent); color: var(--accent); transform: translateY(-1px); }
+      .quick-btn:active { transform: translateY(0); }
+      .quick-btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+
+      /* ── Badges ── */
+      .badge {
+        display: inline-flex; align-items: center; gap: 4px;
+        padding: 4px 10px; border-radius: 999px; font-size: 0.72rem;
+        font-weight: 600; letter-spacing: 0.02em;
       }
 
-      .day-card {
-        cursor: pointer;
-        transition: transform 140ms ease, border-color 140ms ease;
-      }
-
-      .day-card:hover {
-        transform: translateY(-1px);
-        border-color: rgba(15, 118, 110, 0.28);
-      }
-
-      .day-card.active {
-        border-color: rgba(15, 118, 110, 0.4);
-        background: rgba(15, 118, 110, 0.06);
-      }
-
-      .day-card-head {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        gap: 12px;
-      }
+      .badge-done { color: var(--green); background: var(--green-soft); }
+      .badge-planned { color: var(--muted); background: rgba(108, 88, 74, 0.06); }
+      .badge-skipped { color: var(--red); background: var(--red-soft); }
+      .badge-adapted { color: var(--yellow); background: var(--yellow-soft); }
 
       .tag {
-        display: inline-flex;
-        align-items: center;
-        padding: 5px 10px;
-        border-radius: 999px;
-        font-size: 0.78rem;
-        color: var(--warm);
-        background: rgba(194, 107, 59, 0.12);
+        display: inline-flex; align-items: center;
+        padding: 3px 8px; border-radius: 999px;
+        font-size: 0.7rem; font-weight: 500;
       }
 
-      .muted {
-        color: var(--muted);
-      }
+      .tag-priority { color: var(--warm); background: var(--warm-soft); }
 
-      .profile-grid {
+      .muted { color: var(--muted); }
+
+      /* ── Week ── */
+      .week-grid {
         display: grid;
-        grid-template-columns: repeat(2, minmax(0, 1fr));
-        gap: 14px;
-      }
-
-      .chip-row {
-        display: flex;
-        flex-wrap: wrap;
+        grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
         gap: 10px;
       }
 
+      .day-card {
+        cursor: pointer; transition: all var(--transition);
+        position: relative; overflow: hidden;
+      }
+
+      .day-card:hover { transform: translateY(-2px); box-shadow: var(--shadow); border-color: rgba(15, 118, 110, 0.2); }
+      .day-card.active { border-color: var(--accent); background: rgba(15, 118, 110, 0.03); box-shadow: 0 0 0 2px rgba(15, 118, 110, 0.12); }
+      .day-card.mutated { border-left: 3px solid var(--accent); }
+
+      .day-card-head {
+        display: flex; align-items: flex-start;
+        justify-content: space-between; gap: 8px;
+      }
+
+      .day-card-head h3 { font-size: 0.9rem; font-weight: 600; }
+
+      /* ── Load bar ── */
+      .load-bar {
+        display: flex; gap: 3px; align-items: flex-end;
+        height: 28px; margin-top: 10px;
+      }
+
+      .load-segment {
+        flex: 1; border-radius: 4px;
+        min-height: 4px; transition: height 300ms cubic-bezier(0.4, 0, 0.2, 1);
+      }
+
+      /* ── Profile ── */
+      .profile-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+        gap: 12px;
+      }
+
+      .coach-card {
+        padding: 16px; border-radius: var(--radius-lg);
+        background: linear-gradient(135deg, rgba(15, 118, 110, 0.05), rgba(15, 118, 110, 0.01));
+        border: 1px solid rgba(15, 118, 110, 0.10);
+      }
+
+      .coach-card h3 { color: var(--accent); font-size: 1.05rem; }
+      .coach-field { margin-top: 12px; }
+      .coach-field-label { font-size: 0.7rem; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; }
+      .coach-field-value { margin-top: 3px; font-size: 0.88rem; line-height: 1.5; }
+
+      .chip-row { display: flex; flex-wrap: wrap; gap: 6px; }
+
       .chip {
-        padding: 10px 12px;
-        border-radius: 999px;
-        background: rgba(255, 255, 255, 0.74);
-        border: 1px solid rgba(69, 47, 32, 0.08);
-        color: var(--muted);
+        padding: 6px 12px; border-radius: 999px;
+        background: var(--accent-soft);
+        border: 1px solid rgba(15, 118, 110, 0.10);
+        color: var(--accent); font-size: 0.82rem; font-weight: 500;
       }
 
-      .messages-panel {
+      /* ── Forms ── */
+      .form-grid {
         display: grid;
-        grid-template-rows: auto 1fr auto;
-        min-height: 680px;
-        overflow: hidden;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 10px;
       }
 
-      .messages-header {
-        padding: 22px 22px 14px;
-        border-bottom: 1px solid var(--border);
+      .field { display: grid; gap: 5px; }
+      .field.full { grid-column: 1 / -1; }
+
+      .field label {
+        font-size: 0.72rem; font-weight: 600; letter-spacing: 0.06em;
+        text-transform: uppercase; color: var(--muted);
       }
 
-      .messages-feed {
-        padding: 18px;
-        display: grid;
-        gap: 12px;
-        align-content: start;
-        overflow: auto;
+      input, select {
+        width: 100%; border: 1px solid var(--border);
+        border-radius: var(--radius-md); padding: 10px 12px;
+        font: inherit; font-size: 0.88rem; color: var(--text); background: white;
+        transition: border-color var(--transition);
       }
 
-      .bubble {
-        max-width: 86%;
-        padding: 14px 15px;
-        border-radius: 18px;
-        line-height: 1.5;
-        white-space: pre-wrap;
-      }
-
-      .bubble.agent {
-        justify-self: start;
-        background: rgba(15, 118, 110, 0.11);
-        color: #134441;
-      }
-
-      .bubble.user {
-        justify-self: end;
-        background: rgba(194, 107, 59, 0.14);
-      }
-
-      .composer {
-        display: grid;
-        gap: 12px;
-        padding: 18px;
-        border-top: 1px solid var(--border);
-        background: rgba(255, 250, 242, 0.84);
+      input:focus, select:focus, textarea:focus {
+        outline: none; border-color: var(--accent);
+        box-shadow: 0 0 0 3px rgba(15, 118, 110, 0.08);
       }
 
       textarea {
-        width: 100%;
-        min-height: 96px;
-        resize: vertical;
-        border: 1px solid rgba(69, 47, 32, 0.12);
-        border-radius: 18px;
-        padding: 14px 16px;
-        font: inherit;
-        color: var(--text);
-        background: white;
+        width: 100%; min-height: 60px; resize: vertical;
+        border: 1px solid var(--border);
+        border-radius: var(--radius-md); padding: 10px 12px;
+        font: inherit; font-size: 0.88rem; color: var(--text); background: white;
+        transition: border-color var(--transition);
       }
 
+      /* ── Buttons ── */
       button.primary {
-        justify-self: end;
-        border: 0;
-        border-radius: 999px;
-        padding: 12px 18px;
-        font: inherit;
-        font-weight: 600;
-        cursor: pointer;
-        color: white;
-        background: linear-gradient(135deg, var(--accent), #145c57);
+        border: 0; border-radius: 999px;
+        padding: 11px 20px; font: inherit; font-size: 0.88rem; font-weight: 600;
+        cursor: pointer; color: white;
+        background: linear-gradient(135deg, var(--accent), #0d5c56);
+        box-shadow: 0 4px 12px rgba(15, 118, 110, 0.25);
+        transition: all var(--transition);
       }
 
-      .status {
-        min-height: 20px;
-        font-size: 0.9rem;
-        color: var(--muted);
+      button.primary:hover { transform: translateY(-1px); box-shadow: 0 6px 16px rgba(15, 118, 110, 0.3); }
+      button.primary:active { transform: translateY(0); }
+      button.primary:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+
+      button.strava-btn {
+        border: 0; border-radius: 999px;
+        padding: 11px 20px; font: inherit; font-size: 0.88rem; font-weight: 600;
+        cursor: pointer; color: white;
+        background: linear-gradient(135deg, var(--strava), #e04400);
+        box-shadow: 0 4px 12px rgba(252, 76, 2, 0.25);
+        transition: all var(--transition);
+        display: inline-flex; align-items: center; gap: 8px;
       }
+
+      button.strava-btn:hover { transform: translateY(-1px); box-shadow: 0 6px 16px rgba(252, 76, 2, 0.3); }
+
+      button.secondary {
+        border: 1px solid var(--border); border-radius: 999px;
+        padding: 10px 16px; font: inherit; font-size: 0.84rem; font-weight: 500;
+        cursor: pointer; color: var(--text); background: white;
+        transition: all var(--transition);
+      }
+
+      button.secondary:hover { border-color: var(--accent); color: var(--accent); }
+      button.secondary:disabled { opacity: 0.5; cursor: not-allowed; }
+
+      .status { min-height: 18px; font-size: 0.84rem; color: var(--muted); margin-top: 4px; }
 
       .empty {
-        padding: 18px;
-        border-radius: var(--radius-lg);
-        background: rgba(255, 255, 255, 0.62);
-        color: var(--muted);
+        padding: 14px; border-radius: var(--radius-md);
+        background: rgba(244, 239, 232, 0.5); color: var(--muted);
+        font-size: 0.85rem; text-align: center;
       }
 
-      .day-card.mutated {
-        border-left: 3px solid var(--accent);
-        position: relative;
+      /* ── Strava card ── */
+      .strava-card {
+        padding: 16px; border-radius: var(--radius-lg);
+        background: linear-gradient(135deg, rgba(252, 76, 2, 0.04), rgba(252, 76, 2, 0.01));
+        border: 1px solid rgba(252, 76, 2, 0.10);
       }
 
-      .day-card.mutated::after {
-        content: "";
-        position: absolute;
-        top: 12px;
-        right: 12px;
-        width: 8px;
-        height: 8px;
-        border-radius: 50%;
-        background: var(--accent);
+      .strava-card h3 { color: var(--strava); display: flex; align-items: center; gap: 8px; }
+
+      /* ── Facts ── */
+      .debug-grid { display: grid; gap: 12px; }
+
+      .fact-meta { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 6px; }
+
+      .fact-chip {
+        padding: 3px 8px; border-radius: 999px;
+        background: var(--accent-soft);
+        border: 1px solid rgba(15, 118, 110, 0.08);
+        color: var(--accent); font-size: 0.68rem; font-weight: 500;
       }
 
-      .bubble-timestamp {
-        font-size: 0.72rem;
-        color: var(--muted);
-        margin-top: 2px;
-        padding: 0 4px;
+      /* ── Bottom nav (mobile) ── */
+      .bottom-nav {
+        position: fixed; bottom: 0; left: 0; right: 0;
+        display: none; /* shown on mobile */
+        background: var(--panel); border-top: 1px solid var(--border);
+        padding: 8px 12px calc(8px + env(safe-area-inset-bottom, 0));
+        backdrop-filter: blur(20px);
+        z-index: 100;
       }
 
-      .bubble-timestamp.user-ts {
-        text-align: right;
+      .bottom-nav-inner {
+        display: flex; justify-content: space-around;
+        max-width: 500px; margin: 0 auto;
       }
 
-      button.primary:disabled {
-        opacity: 0.6;
-        cursor: not-allowed;
+      .bnav {
+        border: 0; background: none; cursor: pointer;
+        display: flex; flex-direction: column; align-items: center; gap: 2px;
+        padding: 6px 12px; border-radius: var(--radius-sm);
+        color: var(--muted); font: inherit; font-size: 0.68rem; font-weight: 500;
+        transition: color var(--transition);
       }
 
-      @media (max-width: 1080px) {
-        .layout {
-          grid-template-columns: 1fr;
-        }
+      .bnav .bnav-icon { font-size: 1.2rem; }
+      .bnav.active { color: var(--accent); }
 
-        .messages-panel {
-          min-height: 560px;
-        }
-      }
-
-      @media (max-width: 760px) {
-        .shell {
-          width: min(100% - 20px, 100%);
-          margin: 10px auto 20px;
-        }
-
-        .topbar,
-        .main-panel {
-          padding: 16px;
-        }
-
-        .hero-grid,
-        .section-grid,
-        .week-grid,
-        .profile-grid {
-          grid-template-columns: 1fr;
-        }
-
-        .tabs {
-          overflow: auto;
-        }
+      @media (max-width: 640px) {
+        .shell { width: calc(100% - 12px); padding: 10px 0 90px; gap: 10px; }
+        .topbar { padding: 12px 16px; border-radius: var(--radius-lg); }
+        .panel { padding: 12px; border-radius: var(--radius-lg); }
+        .hero { padding: 16px; }
+        .hero-grid { grid-template-columns: repeat(2, 1fr); }
+        .week-grid { grid-template-columns: 1fr; }
+        .form-grid { grid-template-columns: 1fr; }
+        .tabs { display: none; }
+        .bottom-nav { display: block; }
       }
     </style>
   </head>
   <body>
     <div class="shell">
-      <header class="topbar panel">
+      <header class="topbar">
         <div class="brand">
           <div class="brand-mark">F</div>
           <div class="topbar-copy">
-            <p class="eyebrow">V0 endurance</p>
-            <h1>Une semaine qui s'ajuste sans te faire tout gerer.</h1>
-            <p id="topbar-summary">
-              FitMAS lit la semaine, protege le bloc cle et t'ecrit seulement quand ca vaut le coup.
-            </p>
+            <p class="eyebrow" id="topbar-eyebrow">FitMAS</p>
+            <h1 id="topbar-headline">Chargement…</h1>
+            <p id="topbar-summary"></p>
           </div>
         </div>
-        <div class="pill" id="topbar-pill">WhatsApp + plan app</div>
+        <div class="pill" id="topbar-pill"></div>
       </header>
 
-      <div class="layout">
-        <main class="panel main-panel">
-          <nav class="tabs" aria-label="Navigation principale">
-            <button class="tab active" data-tab="today">Today</button>
-            <button class="tab" data-tab="plan">Plan</button>
-            <button class="tab" data-tab="profile">Profil</button>
-          </nav>
+      <main class="panel">
+        <nav class="tabs" aria-label="Navigation">
+          <button class="tab active" data-tab="today">Aujourd'hui</button>
+          <button class="tab" data-tab="plan">Semaine</button>
+          <button class="tab" data-tab="activities">Activités</button>
+          <button class="tab" data-tab="profile">Profil</button>
+          <button class="tab" data-tab="debug">Debug</button>
+        </nav>
 
-          <section class="view active" data-view="today">
-            <div class="hero">
-              <p class="eyebrow" id="today-eyebrow">Aujourdhui</p>
-              <h2 id="today-title">Chargement...</h2>
-              <p class="muted" id="today-goal" style="margin-top: 10px;"></p>
-              <div class="hero-grid">
-                <div class="metric">
-                  <div class="metric-label">Priorite</div>
-                  <div class="metric-value" id="today-priority">-</div>
-                </div>
-                <div class="metric">
-                  <div class="metric-label">Nutrition</div>
-                  <div class="metric-value" id="today-nutrition">-</div>
-                </div>
-                <div class="metric">
-                  <div class="metric-label">Etat du plan</div>
-                  <div class="metric-value" id="today-plan-state">Semaine vivante</div>
-                </div>
-              </div>
+        <!-- TODAY -->
+        <section class="view active" data-view="today">
+          <div class="hero">
+            <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
+              <p class="eyebrow" id="today-eyebrow" style="margin: 0;">Aujourd'hui</p>
+              <span class="badge badge-planned" id="today-badge">prévu</span>
+            </div>
+            <h2 id="today-title" style="margin-top: 8px;">Chargement…</h2>
+            <p class="muted" id="today-goal" style="margin-top: 8px; line-height: 1.5;"></p>
+
+            <div class="quick-actions" id="today-actions">
+              <button class="quick-btn" data-action="done">✅ Fait</button>
+              <button class="quick-btn" data-action="skip">😴 Trop fatigué</button>
+              <button class="quick-btn" data-action="move">↗️ Décaler</button>
             </div>
 
-            <div class="section-grid">
-              <div class="card">
-                <h3>Ce qui a change</h3>
-                <div class="list" id="changes-list"></div>
+            <div class="hero-grid">
+              <div class="metric">
+                <div class="metric-label">Sport</div>
+                <div class="metric-value" id="today-sport">-</div>
               </div>
-              <div class="card">
-                <h3>Ce que FitMAS regarde</h3>
-                <div class="list" id="watch-list"></div>
+              <div class="metric">
+                <div class="metric-label">Durée</div>
+                <div class="metric-value" id="today-duration">-</div>
               </div>
-            </div>
-          </section>
-
-          <section class="view" data-view="plan">
-            <div class="hero">
-              <p class="eyebrow">Plan hebdo</p>
-              <h2 id="plan-intention">Chargement...</h2>
-              <p class="muted" id="plan-summary" style="margin-top: 10px;"></p>
-            </div>
-            <div class="week-grid" id="week-grid"></div>
-          </section>
-
-          <section class="view" data-view="profile">
-            <div class="profile-grid">
-              <div class="card">
-                <p class="eyebrow">Double numerique V0</p>
-                <h2 id="profile-name">Chargement...</h2>
-                <p class="muted" id="profile-objective" style="margin-top: 8px;"></p>
-                <div class="chip-row" id="profile-integrations" style="margin-top: 16px;"></div>
+              <div class="metric">
+                <div class="metric-label">Intensité</div>
+                <div class="metric-value" id="today-intensity">-</div>
               </div>
-              <div class="card">
-                <h3>Comment FitMAS te lit</h3>
-                <div class="chip-row" id="profile-style"></div>
-              </div>
-              <div class="card">
-                <h3>Contraintes</h3>
-                <div class="list" id="profile-constraints"></div>
-              </div>
-              <div class="card">
-                <h3>Preferences</h3>
-                <div class="list" id="profile-preferences"></div>
+              <div class="metric">
+                <div class="metric-label">Priorité</div>
+                <div class="metric-value" id="today-priority">-</div>
               </div>
             </div>
-          </section>
-        </main>
-
-        <aside class="panel messages-panel">
-          <div class="messages-header">
-            <p class="eyebrow">Presence</p>
-            <h2>Chat</h2>
-            <p class="muted" style="margin-top: 8px;">
-              Pas de boutons ni d'options. Tu parles comme tu veux, FitMAS prend ce qui est utile.
-            </p>
           </div>
-          <div class="messages-feed" id="messages-feed"></div>
-          <form class="composer" id="message-form">
-            <label for="message-input" class="eyebrow">Envoyer un message</label>
-            <textarea
-              id="message-input"
-              name="text"
-              placeholder="Exemple: jeudi soir c'est mieux, mardi ca risque d'etre serre."
-            ></textarea>
-            <div class="status" id="composer-status"></div>
-            <button class="primary" type="submit" id="send-btn">Envoyer</button>
-          </form>
-        </aside>
-      </div>
+
+          <div class="status" id="today-status"></div>
+
+          <div class="section-grid">
+            <div class="card">
+              <h3>Ce qui a changé</h3>
+              <div class="list" id="changes-list"></div>
+            </div>
+            <div class="card">
+              <h3>Ce que le coach regarde</h3>
+              <div class="list" id="watch-list"></div>
+            </div>
+          </div>
+        </section>
+
+        <!-- PLAN -->
+        <section class="view" data-view="plan">
+          <div class="hero">
+            <p class="eyebrow">Plan hebdomadaire</p>
+            <h2 id="plan-intention">Chargement…</h2>
+            <p class="muted" id="plan-summary" style="margin-top: 8px; line-height: 1.5;"></p>
+            <div class="load-bar" id="plan-load-bar"></div>
+          </div>
+          <div class="week-grid" id="week-grid"></div>
+          <div style="display: flex; justify-content: flex-end; margin-top: 4px;">
+            <button class="secondary" id="btn-regen" onclick="regenerateWeek()">🔄 Régénérer la semaine</button>
+          </div>
+        </section>
+
+        <!-- ACTIVITIES -->
+        <section class="view" data-view="activities">
+          <div class="hero">
+            <p class="eyebrow">Activités</p>
+            <h2>Ce que tu as vraiment fait</h2>
+          </div>
+
+          <div class="section-grid">
+            <div class="card">
+              <h3>Logger une activité</h3>
+              <form class="form-grid" id="activity-form">
+                <div class="field">
+                  <label for="activity-sport">Sport</label>
+                  <select id="activity-sport" name="sport_type">
+                    <option value="running">Course à pied</option>
+                    <option value="cycling">Vélo</option>
+                    <option value="swimming">Natation</option>
+                    <option value="climbing">Escalade</option>
+                    <option value="strength">Renforcement</option>
+                  </select>
+                </div>
+                <div class="field">
+                  <label for="activity-duration">Durée (min)</label>
+                  <input id="activity-duration" name="duration_min" type="number" min="0" placeholder="45" />
+                </div>
+                <div class="field">
+                  <label for="activity-distance">Distance (m)</label>
+                  <input id="activity-distance" name="distance_m" type="number" min="0" step="100" placeholder="10000" />
+                </div>
+                <div class="field">
+                  <label for="activity-load">Charge ressentie</label>
+                  <select id="activity-load" name="perceived_load">
+                    <option value="">—</option>
+                    <option value="1">1 — Très facile</option>
+                    <option value="2">2 — Facile</option>
+                    <option value="3">3 — Modéré</option>
+                    <option value="4">4 — Dur</option>
+                    <option value="5">5 — Très dur</option>
+                  </select>
+                </div>
+                <div class="field full">
+                  <label for="activity-note">Note</label>
+                  <textarea id="activity-note" name="note" placeholder="Ex : bloc lourd, natation propre, bonne sensation…"></textarea>
+                </div>
+                <div class="field full">
+                  <label for="activity-started-at">Date et heure</label>
+                  <input id="activity-started-at" name="started_at" type="datetime-local" />
+                </div>
+                <div class="field full">
+                  <div class="status" id="activity-status"></div>
+                  <button class="primary" type="submit" id="activity-send-btn">Ajouter l'activité</button>
+                </div>
+              </form>
+            </div>
+
+            <div>
+              <div class="strava-card" id="strava-section" style="margin-bottom: 12px;">
+                <h3>
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M15.387 17.944l-2.089-4.116h-3.065L15.387 24l5.15-10.172h-3.066m-7.008-5.599l2.836 5.598h4.172L10.463 0l-7 13.828h4.169"/></svg>
+                  Strava
+                </h3>
+                <div id="strava-status" style="margin-top: 10px;"></div>
+              </div>
+
+              <div class="card">
+                <h3>Activités récentes</h3>
+                <div class="list" id="activities-list"></div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- PROFILE -->
+        <section class="view" data-view="profile">
+          <div class="profile-grid">
+            <div class="card">
+              <p class="eyebrow">Profil</p>
+              <h2 id="profile-name" style="margin-top: 4px;">Chargement…</h2>
+              <p class="muted" id="profile-objective" style="margin-top: 6px; line-height: 1.5;"></p>
+              <div class="chip-row" id="profile-sports" style="margin-top: 14px;"></div>
+            </div>
+            <div class="coach-card">
+              <p class="eyebrow">Ton coach</p>
+              <h3 id="coach-name" style="margin-top: 4px;">FitMAS</h3>
+              <div class="coach-field">
+                <div class="coach-field-label">Style</div>
+                <div class="coach-field-value" id="coach-style">-</div>
+              </div>
+              <div class="coach-field">
+                <div class="coach-field-label">Ce qu'il fait bien</div>
+                <div class="coach-field-value" id="coach-do">-</div>
+              </div>
+              <div class="coach-field">
+                <div class="coach-field-label">Ce qu'il ne fait jamais</div>
+                <div class="coach-field-value" id="coach-dont">-</div>
+              </div>
+              <div class="coach-field">
+                <div class="coach-field-label">Âme</div>
+                <div class="coach-field-value" id="coach-soul">-</div>
+              </div>
+            </div>
+            <div class="card">
+              <h3>Contraintes</h3>
+              <div class="list" id="profile-constraints"></div>
+            </div>
+            <div class="card">
+              <h3>Préférences</h3>
+              <div class="list" id="profile-preferences"></div>
+            </div>
+          </div>
+        </section>
+
+        <!-- DEBUG -->
+        <section class="view" data-view="debug">
+          <div class="hero">
+            <p class="eyebrow">Debug</p>
+            <h2>Mémoire active</h2>
+          </div>
+          <div class="debug-grid">
+            <div class="card">
+              <h3>Facts actifs</h3>
+              <div class="list" id="facts-list"></div>
+            </div>
+          </div>
+        </section>
+      </main>
     </div>
+
+    <!-- Mobile bottom navigation -->
+    <nav class="bottom-nav">
+      <div class="bottom-nav-inner">
+        <button class="bnav active" data-tab="today">
+          <span class="bnav-icon">📋</span>
+          Aujourd'hui
+        </button>
+        <button class="bnav" data-tab="plan">
+          <span class="bnav-icon">📅</span>
+          Semaine
+        </button>
+        <button class="bnav" data-tab="activities">
+          <span class="bnav-icon">🏃</span>
+          Activités
+        </button>
+        <button class="bnav" data-tab="profile">
+          <span class="bnav-icon">👤</span>
+          Profil
+        </button>
+      </div>
+    </nav>
 
     <script>
       const tabs = document.querySelectorAll(".tab");
+      const bnavs = document.querySelectorAll(".bnav");
       const views = document.querySelectorAll(".view");
-      const messagesFeed = document.getElementById("messages-feed");
-      const messageForm = document.getElementById("message-form");
-      const messageInput = document.getElementById("message-input");
-      const composerStatus = document.getElementById("composer-status");
-      const sendBtn = document.getElementById("send-btn");
 
       let weekPlan = null;
       let profile = null;
+      let facts = [];
+      let activities = [];
+      let stravaStatus = { configured: false, connected: false };
       let selectedDay = mapDayToApiKey(new Date().getDay());
 
-      // Track messages sent this session for timestamps
-      const sessionMessages = [];
+      const activityForm = document.getElementById("activity-form");
+      const activityStatus = document.getElementById("activity-status");
+      const activitySendBtn = document.getElementById("activity-send-btn");
 
-      function mapDayToApiKey(dayIndex) {
-        return [
-          "sunday",
-          "monday",
-          "tuesday",
-          "wednesday",
-          "thursday",
-          "friday",
-          "saturday",
-        ][dayIndex];
+      const SPORT_EMOJI = {
+        running: "🏃", cycling: "🚴", swimming: "🏊",
+        climbing: "🧗", strength: "💪", rest: "🛌",
+      };
+
+      const SPORT_LABEL = {
+        running: "Course", cycling: "Vélo", swimming: "Natation",
+        climbing: "Escalade", strength: "Renfo", rest: "Repos",
+      };
+
+      function mapDayToApiKey(i) {
+        return ["sunday","monday","tuesday","wednesday","thursday","friday","saturday"][i];
       }
 
-      async function fetchJson(url, options = {}) {
-        const response = await fetch(url, {
-          headers: {
-            "Content-Type": "application/json",
-          },
-          ...options,
-        });
-
-        if (!response.ok) {
-          throw new Error("La requete a echoue.");
-        }
-
-        return response.json();
+      async function fetchJson(url, opts = {}) {
+        const r = await fetch(url, { headers: { "Content-Type": "application/json" }, ...opts });
+        if (!r.ok) throw new Error(`${r.status}`);
+        return r.json();
       }
 
-      function renderList(container, items) {
-        if (!items || !items.length) {
-          container.innerHTML = '<div class="empty">Rien a signaler ici.</div>';
-          return;
-        }
-
-        container.innerHTML = items
-          .map(
-            (item) => `
-              <div class="list-item">
-                <strong>${item.title}</strong>
-                <span>${item.detail}</span>
-              </div>
-            `
-          )
-          .join("");
+      function renderList(el, items) {
+        if (!items?.length) { el.innerHTML = '<div class="empty">Rien à signaler.</div>'; return; }
+        el.innerHTML = items.map(i => `
+          <div class="list-item"><strong>${i.title}</strong><span>${i.detail}</span></div>
+        `).join("");
       }
 
-      function renderTextList(container, items) {
-        if (!items || !items.length) {
-          container.innerHTML = '<div class="empty">Aucune donnee pour le moment.</div>';
-          return;
-        }
-
-        container.innerHTML = items
-          .map(
-            (item) => `
-              <div class="list-item">
-                <span>${item}</span>
-              </div>
-            `
-          )
-          .join("");
+      function renderTextList(el, items) {
+        if (!items?.length) { el.innerHTML = '<div class="empty">—</div>'; return; }
+        el.innerHTML = items.map(i => `<div class="list-item"><span>${i}</span></div>`).join("");
       }
 
+      function statusBadgeClass(s) {
+        if (s === "done") return "badge-done";
+        if (s === "skipped") return "badge-skipped";
+        if (s === "adapted") return "badge-adapted";
+        return "badge-planned";
+      }
+
+      function statusLabel(s) {
+        return { done: "fait ✓", planned: "prévu", skipped: "sauté", adapted: "adapté" }[s] || s;
+      }
+
+      // ── Today ──
       async function loadToday(dayKey) {
-        const today = await fetchJson(`/api/v0/today/${dayKey}`);
-        const dayLabel = weekPlan?.days.find((entry) => entry.day === dayKey)?.label ?? "Aujourd'hui";
+        const t = await fetchJson(`/api/v0/today/${dayKey}`);
+        const dayLabel = weekPlan?.days.find(d => d.day === dayKey)?.label ?? "Aujourd'hui";
+        const dayData = weekPlan?.days.find(d => d.day === dayKey);
+        const status = dayData?.completion_status || "planned";
 
         document.getElementById("today-eyebrow").textContent = dayLabel;
-        document.getElementById("today-title").textContent = today.session_title;
-        document.getElementById("today-goal").textContent = today.session_goal;
-        document.getElementById("today-priority").textContent = today.priority;
-        document.getElementById("today-nutrition").textContent = today.nutrition_focus;
-        renderList(document.getElementById("changes-list"), today.change_notes);
-        renderList(document.getElementById("watch-list"), today.watch_items);
+        document.getElementById("today-title").textContent =
+          `${SPORT_EMOJI[t.sport_type] || ""} ${t.session_title}`;
+        document.getElementById("today-goal").textContent = t.session_goal;
+        document.getElementById("today-priority").textContent = t.priority;
+        document.getElementById("today-sport").textContent =
+          SPORT_LABEL[t.sport_type] || t.sport_type;
+        document.getElementById("today-duration").textContent =
+          t.duration_min ? `${t.duration_min} min` : "Libre";
+        document.getElementById("today-intensity").textContent = t.intensity;
+
+        const badge = document.getElementById("today-badge");
+        badge.className = `badge ${statusBadgeClass(status)}`;
+        badge.textContent = statusLabel(status);
+
+        const actions = document.getElementById("today-actions");
+        actions.style.display = (status === "done" || t.sport_type === "rest") ? "none" : "flex";
+
+        renderList(document.getElementById("changes-list"), t.change_notes);
+        renderList(document.getElementById("watch-list"), t.watch_items);
       }
 
+      // ── Quick actions ──
+      document.getElementById("today-actions").addEventListener("click", async (e) => {
+        const btn = e.target.closest("[data-action]");
+        if (!btn) return;
+        const action = btn.dataset.action;
+        const todayStatus = document.getElementById("today-status");
+        btn.disabled = true;
+
+        try {
+          if (action === "done") {
+            await fetchJson("/api/v0/messages", {
+              method: "POST",
+              body: JSON.stringify({ text: `Séance du jour faite. Marque ${selectedDay} comme fait.` }),
+            });
+            todayStatus.textContent = "Séance marquée comme faite.";
+          } else if (action === "skip") {
+            await fetchJson("/api/v0/messages", {
+              method: "POST",
+              body: JSON.stringify({ text: `Trop fatigué pour aujourd'hui. Allège ${selectedDay}.` }),
+            });
+            todayStatus.textContent = "Journée allégée.";
+          } else if (action === "move") {
+            await fetchJson("/api/v0/messages", {
+              method: "POST",
+              body: JSON.stringify({ text: `Décale la séance d'aujourd'hui au prochain jour libre.` }),
+            });
+            todayStatus.textContent = "Séance décalée.";
+          }
+          weekPlan = await fetchJson("/api/v0/week");
+          renderWeek();
+          await loadToday(selectedDay);
+        } catch (err) {
+          todayStatus.textContent = "Erreur. Réessaie.";
+        } finally {
+          btn.disabled = false;
+        }
+      });
+
+      // ── Week ──
       function hasMutations(day) {
-        return day.change_notes && day.change_notes.length > 0 &&
-          day.change_notes[0].title !== "Rien n'a bouge";
+        return day.change_notes?.length > 0 && day.change_notes[0].title !== "Rien n'a bougé";
       }
 
       function renderWeek() {
-        const container = document.getElementById("week-grid");
-        container.innerHTML = weekPlan.days
-          .map(
-            (day) => {
-              const classes = ["card", "day-card"];
-              if (day.day === selectedDay) classes.push("active");
-              if (hasMutations(day)) classes.push("mutated");
-              return `
-              <article class="${classes.join(" ")}" data-day="${day.day}">
-                <div class="day-card-head">
-                  <div>
-                    <p class="eyebrow">${day.label}</p>
-                    <h3>${day.session_title}</h3>
-                  </div>
-                  <span class="tag">${day.priority}</span>
+        const el = document.getElementById("week-grid");
+        el.innerHTML = weekPlan.days.map(day => {
+          const cls = ["card", "day-card"];
+          if (day.day === selectedDay) cls.push("active");
+          if (hasMutations(day)) cls.push("mutated");
+          const emoji = SPORT_EMOJI[day.sport_type] || "";
+          const status = day.completion_status || "planned";
+          const dur = day.duration_min ? `${day.duration_min} min` : "";
+          return `
+            <article class="${cls.join(" ")}" data-day="${day.day}">
+              <div class="day-card-head">
+                <div>
+                  <p class="eyebrow">${day.label}</p>
+                  <h3>${emoji} ${day.session_title}</h3>
+                  ${dur ? `<p class="muted" style="font-size:0.78rem;margin-top:2px;">${dur} · ${day.intensity || ""}</p>` : ""}
                 </div>
-                <p class="muted" style="margin-top: 10px;">${day.session_goal}</p>
-                <p class="muted" style="margin-top: 12px;">${day.session_note}</p>
-              </article>
-            `;}
-          )
-          .join("");
+                <div style="display: flex; flex-direction: column; gap: 4px; align-items: flex-end;">
+                  <span class="badge ${statusBadgeClass(status)}">${statusLabel(status)}</span>
+                  <span class="tag tag-priority">${day.priority}</span>
+                </div>
+              </div>
+              <p class="muted" style="margin-top: 8px; font-size: 0.84rem; line-height: 1.45;">${day.session_goal}</p>
+              ${day.session_note ? `<p class="muted" style="margin-top: 6px; font-size: 0.8rem; font-style: italic;">${day.session_note}</p>` : ""}
+            </article>
+          `;
+        }).join("");
 
-        container.querySelectorAll("[data-day]").forEach((card) => {
+        el.querySelectorAll("[data-day]").forEach(card => {
           card.addEventListener("click", async () => {
             selectedDay = card.dataset.day;
             renderWeek();
@@ -693,148 +834,236 @@
             activateTab("today");
           });
         });
+
+        // Load bar
+        const bar = document.getElementById("plan-load-bar");
+        const maxLoad = Math.max(4, ...weekPlan.days.map(d => d.load_score || 0));
+        bar.innerHTML = weekPlan.days.map(day => {
+          const h = Math.max(4, ((day.load_score || 0) / maxLoad) * 28);
+          const color = day.load_score >= 3 ? "var(--warm)" :
+                        day.load_score >= 2 ? "var(--accent)" :
+                        "rgba(15, 118, 110, 0.25)";
+          return `<div class="load-segment" style="height:${h}px;background:${color};" title="${day.label} : charge ${day.load_score}"></div>`;
+        }).join("");
       }
 
-      function renderProfile() {
-        document.getElementById("profile-name").textContent = `${profile.name}, ${profile.age} ans`;
-        document.getElementById("profile-objective").textContent = profile.objective;
-        document.getElementById("profile-integrations").innerHTML = profile.integrations
-          .map((item) => `<span class="chip">${item}</span>`)
-          .join("");
-        document.getElementById("profile-style").innerHTML = `<span class="chip">${profile.coaching_style}</span>`;
-        renderTextList(document.getElementById("profile-constraints"), profile.constraints);
-        renderTextList(document.getElementById("profile-preferences"), profile.preferences);
-      }
-
-      function formatRelativeTime(date) {
-        const seconds = Math.floor((Date.now() - date.getTime()) / 1000);
-        if (seconds < 10) return "a l'instant";
-        if (seconds < 60) return `il y a ${seconds}s`;
-        const minutes = Math.floor(seconds / 60);
-        if (minutes < 60) return `il y a ${minutes} min`;
-        return `il y a ${Math.floor(minutes / 60)}h`;
-      }
-
-      async function loadMessages() {
-        const data = await fetchJson("/api/v0/messages");
-        const totalMessages = data.messages.length;
-        // Session messages are the last N messages (pairs sent this session)
-        const sessionCount = sessionMessages.length;
-
-        messagesFeed.innerHTML = data.messages
-          .map(
-            (message, index) => {
-              const isSession = index >= totalMessages - sessionCount;
-              const sessionIdx = index - (totalMessages - sessionCount);
-              let timestampHtml = "";
-              if (isSession && sessionIdx >= 0 && sessionIdx < sessionMessages.length) {
-                const ts = formatRelativeTime(sessionMessages[sessionIdx].time);
-                const alignClass = message.role === "user" ? "user-ts" : "";
-                timestampHtml = `<div class="bubble-timestamp ${alignClass}">${ts}</div>`;
-              }
-              return `
-              <div class="bubble ${message.role === "agent" ? "agent" : "user"}">${message.text}</div>
-              ${timestampHtml}
-            `;}
-          )
-          .join("");
-        messagesFeed.scrollTo({ top: messagesFeed.scrollHeight, behavior: "smooth" });
-      }
-
-      function activateTab(tabName) {
-        tabs.forEach((tab) => {
-          tab.classList.toggle("active", tab.dataset.tab === tabName);
-        });
-
-        views.forEach((view) => {
-          view.classList.toggle("active", view.dataset.view === tabName);
-        });
-      }
-
-      tabs.forEach((tab) => {
-        tab.addEventListener("click", () => activateTab(tab.dataset.tab));
-      });
-
-      async function handleSend() {
-        const text = messageInput.value.trim();
-
-        if (!text) {
-          composerStatus.textContent = "Ecris juste comme tu parlerais a ton equipe.";
-          return;
-        }
-
-        // Loading state
-        sendBtn.disabled = true;
-        const originalLabel = sendBtn.textContent;
-        sendBtn.textContent = "...";
-        composerStatus.textContent = "FitMAS relit la semaine...";
-
+      // ── Regenerate week ──
+      async function regenerateWeek() {
+        const btn = document.getElementById("btn-regen");
+        btn.disabled = true;
+        btn.textContent = "⏳ Génération…";
         try {
-          const now = new Date();
-          await fetchJson("/api/v0/messages", {
-            method: "POST",
-            body: JSON.stringify({ text }),
-          });
-          // Track user + agent messages for timestamp display
-          sessionMessages.push({ role: "user", time: now });
-          sessionMessages.push({ role: "agent", time: new Date() });
-
-          messageInput.value = "";
-          composerStatus.textContent = "Message pris en compte.";
-          await loadMessages();
-          // Re-fetch plan so mutations are reflected in both Plan and Today views
-          const updated = await fetchJson("/api/v0/week");
-          weekPlan = updated;
+          weekPlan = await fetchJson("/api/v0/week/regenerate", { method: "POST" });
           document.getElementById("plan-intention").textContent = weekPlan.intention;
           document.getElementById("plan-summary").textContent = weekPlan.summary;
           renderWeek();
           await loadToday(selectedDay);
-        } catch (error) {
-          composerStatus.textContent = "Impossible d'envoyer le message pour le moment.";
+        } catch (err) {
+          alert("Erreur lors de la régénération. Vérifie que l'onboarding a été fait.");
         } finally {
-          sendBtn.disabled = false;
-          sendBtn.textContent = originalLabel;
+          btn.disabled = false;
+          btn.textContent = "🔄 Régénérer la semaine";
         }
       }
 
-      messageForm.addEventListener("submit", async (event) => {
-        event.preventDefault();
-        await handleSend();
-      });
+      // ── Profile ──
+      function renderProfile() {
+        const nameAge = profile.age ? `${profile.name}, ${profile.age} ans` : profile.name;
+        document.getElementById("profile-name").textContent = nameAge;
+        document.getElementById("profile-objective").textContent = profile.objective || profile.primary_objective || "";
+        document.getElementById("profile-sports").innerHTML =
+          (profile.sports || []).map(s => `<span class="chip">${SPORT_EMOJI[s] || ""} ${SPORT_LABEL[s] || s}</span>`).join("")
+          || '<span class="muted" style="font-size:0.85rem;">Aucun sport configuré — fais /start sur Telegram</span>';
 
-      // Enter to send, Shift+Enter for newline
-      messageInput.addEventListener("keydown", (event) => {
-        if (event.key === "Enter" && !event.shiftKey) {
-          event.preventDefault();
-          handleSend();
+        document.getElementById("coach-name").textContent = profile.coach_name || "FitMAS";
+        document.getElementById("coach-style").textContent = profile.coach_style || "—";
+        document.getElementById("coach-do").textContent = profile.coach_do || "—";
+        document.getElementById("coach-dont").textContent = profile.coach_dont || "—";
+        document.getElementById("coach-soul").textContent = profile.coach_soul || "—";
+
+        renderTextList(document.getElementById("profile-constraints"), profile.constraints);
+        renderTextList(document.getElementById("profile-preferences"), profile.preferences);
+      }
+
+      // ── Facts ──
+      function renderFacts() {
+        const el = document.getElementById("facts-list");
+        if (!facts?.length) { el.innerHTML = '<div class="empty">Aucun fait mémorisé.</div>'; return; }
+        el.innerHTML = facts.map(f => `
+          <div class="list-item">
+            <div class="fact-meta">
+              <span class="fact-chip">${f.category}</span>
+              <span class="fact-chip">${f.source}</span>
+              <span class="fact-chip">${Math.round((f.confidence||0)*100)}%</span>
+              <span class="fact-chip">${f.confirmed ? "confirmé" : "inféré"}</span>
+            </div>
+            <strong>${f.key}</strong>
+            <span>${f.value}</span>
+          </div>
+        `).join("");
+      }
+
+      // ── Activities ──
+      function formatDate(raw) {
+        if (!raw) return "sans date";
+        const d = new Date(raw);
+        if (isNaN(d)) return "sans date";
+        return d.toLocaleString("fr-FR", { weekday: "short", day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
+      }
+
+      function renderActivities() {
+        const el = document.getElementById("activities-list");
+        if (!activities?.length) { el.innerHTML = '<div class="empty">Aucune activité enregistrée.</div>'; return; }
+        el.innerHTML = activities.map(a => `
+          <div class="list-item">
+            <strong>${SPORT_EMOJI[a.sport_type]||""} ${a.title}</strong>
+            <span>${[
+              a.duration_min ? `${a.duration_min} min` : null,
+              a.distance_m ? `${Math.round(a.distance_m/100)/10} km` : null,
+              a.perceived_load ? `charge ${a.perceived_load}/5` : null,
+              formatDate(a.started_at),
+            ].filter(Boolean).join(" · ")}</span>
+            <span style="display:block;margin-top:6px;">
+              ${a.matched_day
+                ? `<span class="badge badge-done">→ ${a.matched_day}</span> <span class="muted" style="font-size:0.78rem;">${a.match_reason||""}</span>`
+                : '<span class="badge badge-planned">non matché</span>'}
+            </span>
+          </div>
+        `).join("");
+      }
+
+      function renderStravaStatus() {
+        const el = document.getElementById("strava-status");
+
+        if (stravaStatus.connected) {
+          const syncText = stravaStatus.last_sync_at
+            ? `Dernière synchro : ${formatDate(stravaStatus.last_sync_at)}`
+            : "Pas encore synchronisé";
+          el.innerHTML = `
+            <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+              <span class="badge badge-done">Connecté ✓</span>
+              <span class="muted" style="font-size:0.82rem;">${syncText}</span>
+            </div>
+            <div style="margin-top:10px;">
+              <button class="secondary" onclick="syncStrava()">🔄 Synchroniser</button>
+            </div>
+          `;
+          return;
+        }
+
+        if (stravaStatus.configured) {
+          el.innerHTML = `
+            <p class="muted" style="font-size:0.85rem;margin-bottom:10px;">
+              Connecte ton compte Strava pour importer automatiquement tes activités.
+            </p>
+            <a href="/api/v0/strava/auth" style="text-decoration:none;">
+              <button class="strava-btn" type="button">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M15.387 17.944l-2.089-4.116h-3.065L15.387 24l5.15-10.172h-3.066m-7.008-5.599l2.836 5.598h4.172L10.463 0l-7 13.828h4.169"/></svg>
+                Connecter Strava
+              </button>
+            </a>
+          `;
+          return;
+        }
+
+        el.innerHTML = `
+          <p class="muted" style="font-size:0.85rem;">
+            Strava n'est pas configuré sur ce serveur. Tu peux logger tes activités manuellement.
+          </p>
+        `;
+      }
+
+      async function syncStrava() {
+        try {
+          const result = await fetchJson("/api/v0/strava/sync", { method: "POST" });
+          if (result.synced) {
+            activities = await fetchJson("/api/v0/activities");
+            renderActivities();
+            weekPlan = await fetchJson("/api/v0/week");
+            renderWeek();
+            await loadToday(selectedDay);
+            alert(`Synchro OK — ${result.imported} nouvelle(s) activité(s).`);
+          }
+        } catch (err) {
+          alert("Erreur lors de la synchronisation.");
+        }
+      }
+
+      // ── Activity form ──
+      activityForm.addEventListener("submit", async (e) => {
+        e.preventDefault();
+        const fd = new FormData(activityForm);
+        const payload = {
+          sport_type: fd.get("sport_type"),
+          duration_min: fd.get("duration_min") ? Number(fd.get("duration_min")) : null,
+          distance_m: fd.get("distance_m") ? Number(fd.get("distance_m")) : null,
+          perceived_load: fd.get("perceived_load") ? Number(fd.get("perceived_load")) : null,
+          note: fd.get("note")?.toString().trim() || "",
+          started_at: fd.get("started_at") ? new Date(fd.get("started_at")).toISOString() : null,
+        };
+        activitySendBtn.disabled = true;
+        activityStatus.textContent = "Ajout en cours…";
+        try {
+          await fetchJson("/api/v0/activities/manual", { method: "POST", body: JSON.stringify(payload) });
+          activityForm.reset();
+          activityStatus.textContent = "Activité ajoutée ✓";
+          activities = await fetchJson("/api/v0/activities");
+          renderActivities();
+          weekPlan = await fetchJson("/api/v0/week");
+          renderWeek();
+          await loadToday(selectedDay);
+        } catch (err) {
+          activityStatus.textContent = "Erreur lors de l'ajout.";
+        } finally {
+          activitySendBtn.disabled = false;
         }
       });
 
+      // ── Tabs ──
+      function activateTab(name) {
+        tabs.forEach(t => t.classList.toggle("active", t.dataset.tab === name));
+        bnavs.forEach(b => b.classList.toggle("active", b.dataset.tab === name));
+        views.forEach(v => v.classList.toggle("active", v.dataset.view === name));
+      }
+
+      tabs.forEach(t => t.addEventListener("click", () => activateTab(t.dataset.tab)));
+      bnavs.forEach(b => b.addEventListener("click", () => activateTab(b.dataset.tab)));
+
+      // ── Boot ──
       async function boot() {
         try {
-          const [profileData, planData] = await Promise.all([
+          const [p, w, f, a, st] = await Promise.all([
             fetchJson("/api/v0/profile"),
             fetchJson("/api/v0/week"),
+            fetchJson("/api/v0/facts"),
+            fetchJson("/api/v0/activities"),
+            fetchJson("/api/v0/strava/status"),
           ]);
+          profile = p; weekPlan = w; facts = f; activities = a; stravaStatus = st;
 
-          profile = profileData;
-          weekPlan = planData;
-
+          document.getElementById("topbar-eyebrow").textContent = profile.coach_name || "FitMAS";
+          document.getElementById("topbar-headline").textContent = weekPlan.intention;
+          document.getElementById("topbar-summary").textContent = weekPlan.summary;
+          document.getElementById("topbar-pill").textContent = `${profile.name} · ${profile.objective || profile.primary_objective || ""}`;
           document.getElementById("plan-intention").textContent = weekPlan.intention;
           document.getElementById("plan-summary").textContent = weekPlan.summary;
-          document.getElementById("topbar-summary").textContent = weekPlan.summary;
-          document.getElementById("topbar-pill").textContent = `${profile.name} · ${profile.objective}`;
 
           renderWeek();
           renderProfile();
-          await Promise.all([loadToday(selectedDay), loadMessages()]);
-        } catch (error) {
-          document.body.innerHTML = `
-            <div style="padding: 32px; font-family: Inter, sans-serif;">
-              <h1>FitMAS V0</h1>
-              <p>Le front n'arrive pas a joindre l'API. Lance le backend puis recharge la page.</p>
-            </div>
-          `;
+          renderFacts();
+          renderActivities();
+          renderStravaStatus();
+          await loadToday(selectedDay);
+        } catch (err) {
+          document.querySelector(".shell").innerHTML = `
+            <div class="panel" style="text-align:center;padding:40px 24px;">
+              <div class="brand-mark" style="width:56px;height:56px;font-size:1.2rem;margin:0 auto 16px;">F</div>
+              <h2 style="margin-bottom:8px;">FitMAS</h2>
+              <p class="muted" style="line-height:1.6;">
+                L'API ne répond pas ou aucun profil n'existe encore.<br>
+                Lance le backend ou fais <strong>/start</strong> sur Telegram d'abord.
+              </p>
+            </div>`;
         }
       }
 

@@ -1,11 +1,8 @@
 .venv/
 .env
-*.db
+fitmas.db
 __pycache__/
 *.pyc
-*.egg-info/
+*.pyo
 .git/
-.claude/
-docs/
-*.bak
-.DS_Store
+docs/archive/

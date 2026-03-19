@@ -33,14 +33,20 @@ class WatchItem(BaseModel):
 class DayPlan(BaseModel):
     day: DayId
     label: str
+    sport_type: str = "running"
+    session_type: str = "easy"
     session_title: str
     session_goal: str
     session_note: str
+    duration_min: int | None = None
+    intensity: str = "easy"
+    load_score: int = 1
     priority: str
     nutrition_focus: str
     change_notes: list[ChangeNote] = Field(default_factory=list)
     watch_items: list[WatchItem] = Field(default_factory=list)
     flexibility: str
+    completion_status: str = "planned"
 
 
 class WeeklyPlan(BaseModel):
@@ -54,6 +60,16 @@ class Profile(BaseModel):
     age: int
     objective: str
     coaching_style: str
+    primary_objective: str = ""
+    weekly_structure_notes: str = ""
+    coach_name: str = "FitMAS"
+    coach_style: str = "direct"
+    coach_relationship: str = ""
+    coach_do: str = ""
+    coach_dont: str = ""
+    coach_soul: str = ""
+    onboarding_status: str = "not_started"
+    sports: list[str] = Field(default_factory=list)
     constraints: list[str]
     preferences: list[str]
     integrations: list[str]
@@ -61,8 +77,12 @@ class Profile(BaseModel):
 
 class TodayView(BaseModel):
     day: DayId
+    sport_type: str = "running"
+    session_type: str = "easy"
     session_title: str
     session_goal: str
+    duration_min: int | None = None
+    intensity: str = "easy"
     priority: str
     nutrition_focus: str
     change_notes: list[ChangeNote]
@@ -87,3 +107,39 @@ class MessageReply(BaseModel):
     extraction: Extraction
     assistant_message: Message
     day_updated: DayId | None = None
+
+
+class UserFact(BaseModel):
+    category: str
+    key: str
+    value: str
+    source: str
+    confidence: float
+    confirmed: bool
+    active: bool
+
+
+class Activity(BaseModel):
+    id: int
+    source: str
+    sport_type: str
+    title: str
+    duration_min: int | None = None
+    distance_m: float | None = None
+    elevation_m: float | None = None
+    perceived_load: int | None = None
+    note: str = ""
+    started_at: str | None = None
+    matched_day: str | None = None
+    match_reason: str = ""
+
+
+class OnboardPreview(BaseModel):
+    normalized_sports: list[str]
+    coach_preview: list[str]
+    recap: str
+
+
+class OnboardResult(BaseModel):
+    recap: str
+    week_plan: WeeklyPlan
