@@ -115,10 +115,11 @@ def import_recent_activities(
     connection: s.StravaConnection,
     week_days: list,
     plan_id: int | None = None,
+    plan_created_at: datetime | None = None,
 ) -> int:
     access_token = refresh_token_if_needed(db, connection)
     imported = 0
-    for raw_activity in fetch_recent_activities(access_token):
+    for raw_activity in fetch_recent_activities(access_token, per_page=30):
         if repo.get_activity_by_external_id(db, user_id, str(raw_activity["id"])):
             continue
 
@@ -130,6 +131,7 @@ def import_recent_activities(
             started_at=started_at,
             duration_min=duration_min,
             week_days=week_days,
+            plan_created_at=plan_created_at,
         )
 
         repo.add_activity(
@@ -149,8 +151,8 @@ def import_recent_activities(
             external_id=str(raw_activity["id"]),
         )
 
-        # Mark matched day as done
-        if matched_day and plan_id:
+        # Only mark day done for activities from this week
+        if matched_day and match_reason != "activite hors semaine courante" and plan_id:
             repo.mark_day_completed(db, plan_id, matched_day)
 
         imported += 1

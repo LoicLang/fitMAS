@@ -45,6 +45,19 @@ Chaque utilisateur crée son coach à l'onboarding :
 
 Ces champs sont injectés dans le system prompt de chaque appel LLM.
 
+## Ancrage temporel
+
+Chaque appel LLM doit aussi recevoir un contexte temporel exact :
+- timezone user
+- date locale
+- heure locale
+- jour local
+
+Règle :
+- le coach ne doit jamais raisonner "dans le vide"
+- `aujourd'hui`, `demain`, `hier`, `ce soir`, `demain matin` doivent toujours être interprétés depuis ce contexte exact
+- si l'utilisateur demande directement la date, l'heure ou le jour, le coach doit répondre clairement et sans halluciner
+
 ## Heartbeat
 
 ### 3 sources de réveil
@@ -55,7 +68,7 @@ Ces champs sont injectés dans le system prompt de chaque appel LLM.
 
 ### Garde-fous déterministes (implémentés)
 
-- **Cooldown** : minimum 4h entre deux messages proactifs
+- **Cooldown** : minimum 4h entre deux messages `proactive`, pas entre une réponse normale et un heartbeat
 - **Échange récent** : skip le rappel pré-séance si user a parlé dans les 2h
 - **Fenêtre active** : heures locales user uniquement
 - **No-op valide** : ne rien envoyer est un résultat fréquent et acceptable
@@ -70,6 +83,16 @@ Le LLM ne bypass pas ces règles. Les garde-fous sont évalués avant tout appel
 | Rappel pré-séance | 18h | Cooldown OK + pas d'échange récent + séance clé demain |
 | Revue hebdo | Dimanche 20h | Toujours (bilan + régénération plan) |
 | Synchro Strava | Toutes les 2h | Strava connecté |
+
+### Debug live
+
+- `POST /api/v0/debug/heartbeat/morning`
+- `POST /api/v0/debug/heartbeat/pre_session`
+
+But:
+- tester le rendu réel
+- confirmer l'envoi Telegram
+- débugger sans lancer de process SSH lourd sur Fly
 
 ### Ce qui n'est pas encore implémenté
 

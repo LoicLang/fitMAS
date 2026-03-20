@@ -6,6 +6,7 @@ from contextlib import asynccontextmanager
 from datetime import datetime
 from pathlib import Path
 
+import httpx
 from dotenv import load_dotenv
 from fastapi import Depends, FastAPI, HTTPException, Request
 
@@ -44,6 +45,7 @@ from fitmas.nlp import extract_reply, generate_reply
 from fitmas.planner import build_week_plan, normalize_sports
 from fitmas.seed import seed_if_empty
 from fitmas import strava
+from fitmas.time_context import build_time_context
 
 logger = logging.getLogger(__name__)
 
@@ -121,6 +123,24 @@ def manifest() -> FileResponse:
 @app.get("/health")
 def health() -> dict[str, str]:
     return {"status": "ok"}
+
+
+def _send_telegram_message(*, chat_id: int, text: str, parse_mode: str = "Markdown") -> bool:
+    token = os.getenv("TELEGRAM_BOT_TOKEN")
+    if not token:
+        return False
+    response = httpx.post(
+        f"https://api.telegram.org/bot{token}/sendMessage",
+        json={
+            "chat_id": chat_id,
+            "text": text,
+            "parse_mode": parse_mode,
+        },
+        timeout=20,
+    )
+    response.raise_for_status()
+    payload = response.json()
+    return bool(payload.get("ok"))
 
 
 # ── Read ────────────────────────────────────────────────────────────────────
@@ -208,6 +228,52 @@ def get_strava_status(db: Session = Depends(get_db)) -> dict:
     }
 
 
+@app.post("/api/v0/debug/heartbeat/{kind}")
+def trigger_debug_heartbeat(kind: str, send: bool = True, db: Session = Depends(get_db)) -> dict:
+    user = repo.get_user_optional(db)
+    if user is None:
+        raise HTTPException(status_code=404, detail="No onboarded user yet")
+
+    from fitmas.heartbeat import morning_briefing, pre_session_reminder
+
+    handlers = {
+        "morning": morning_briefing,
+        "pre_session": pre_session_reminder,
+    }
+    handler = handlers.get(kind)
+    if handler is None:
+        raise HTTPException(status_code=400, detail="Unsupported heartbeat kind")
+
+    text = handler()
+    if not text:
+        return {
+            "kind": kind,
+            "triggered": False,
+            "sent": False,
+            "reason": "no_op",
+        }
+
+    sent = False
+    delivery_error = None
+    if send:
+        if not user.telegram_chat_id:
+            delivery_error = "missing_telegram_chat_id"
+        else:
+            try:
+                sent = _send_telegram_message(chat_id=user.telegram_chat_id, text=text)
+            except Exception as exc:
+                logger.exception("Failed to send debug heartbeat to Telegram")
+                delivery_error = str(exc)
+
+    return {
+        "kind": kind,
+        "triggered": True,
+        "sent": sent,
+        "delivery_error": delivery_error,
+        "message": text,
+    }
+
+
 @app.get("/api/v0/strava/auth")
 def start_strava_auth(request: Request, db: Session = Depends(get_db)) -> RedirectResponse:
     user = repo.get_user_optional(db)
@@ -234,7 +300,7 @@ def finish_strava_auth(code: str, state: str, db: Session = Depends(get_db)) -> 
     connection = strava.store_connection_from_token_payload(db, user_id=user.id, payload=token_payload)
     plan = repo.get_active_plan(db, user.id)
     week_days = repo.to_pydantic_plan(plan).days
-    imported = strava.import_recent_activities(db, user_id=user.id, connection=connection, week_days=week_days, plan_id=plan.id)
+    imported = strava.import_recent_activities(db, user_id=user.id, connection=connection, week_days=week_days, plan_id=plan.id, plan_created_at=plan.created_at)
     return {
         "connected": True,
         "imported": imported,
@@ -288,8 +354,9 @@ def create_manual_activity(payload: ManualActivityPayload, db: Session = Depends
 @app.post("/api/v0/onboard/preview", response_model=OnboardPreview)
 def preview_onboarding(payload: OnboardPreviewPayload) -> OnboardPreview:
     normalized_payload = _normalized_onboarding_payload(payload)
-    recap = formulate_onboarding_recap(normalized_payload)
-    preview = preview_coach_voice(normalized_payload)
+    time_context = build_time_context(normalized_payload.get("timezone"))
+    recap = formulate_onboarding_recap(normalized_payload, time_context=time_context)
+    preview = preview_coach_voice(normalized_payload, time_context=time_context)
     return OnboardPreview(
         normalized_sports=normalized_payload["sports"],
         coach_preview=preview,
@@ -300,7 +367,8 @@ def preview_onboarding(payload: OnboardPreviewPayload) -> OnboardPreview:
 @app.post("/api/v0/onboard", response_model=OnboardResult)
 def onboard(payload: OnboardPayload, db: Session = Depends(get_db)) -> OnboardResult:
     normalized_payload = _normalized_onboarding_payload(payload)
-    recap = formulate_onboarding_recap(normalized_payload)
+    time_context = build_time_context(normalized_payload.get("timezone"))
+    recap = formulate_onboarding_recap(normalized_payload, time_context=time_context)
     planner_output = build_week_plan(
         sports=normalized_payload["sports"],
         weekly_structure_notes=normalized_payload["weekly_structure_notes"],
@@ -311,6 +379,7 @@ def onboard(payload: OnboardPayload, db: Session = Depends(get_db)) -> OnboardRe
         planner_output,
         user_profile=normalized_payload,
         coach_profile=normalized_payload,
+        time_context=time_context,
     )
 
     user = repo.get_user_optional(db)
@@ -378,6 +447,7 @@ def regenerate_week(db: Session = Depends(get_db)) -> WeeklyPlan:
         "weekly_structure_notes": user.weekly_structure_notes,
         "constraints": constraints,
         "preferences": [p.text for p in user.preferences],
+        "timezone": user.timezone,
         **coach_profile,
     }
 
@@ -387,7 +457,12 @@ def regenerate_week(db: Session = Depends(get_db)) -> WeeklyPlan:
         constraints=constraints,
         coach_name=user.coach_name,
     )
-    enriched_week = formulate_week_plan(planner_output, user_profile=user_profile, coach_profile=user_profile)
+    enriched_week = formulate_week_plan(
+        planner_output,
+        user_profile=user_profile,
+        coach_profile=user_profile,
+        time_context=build_time_context(user.timezone),
+    )
 
     plan = repo.replace_plan(
         db,
@@ -419,7 +494,7 @@ def sync_strava(db: Session = Depends(get_db)) -> dict:
     plan = repo.get_active_plan(db, user.id)
     week_days = repo.to_pydantic_plan(plan).days
     imported = strava.import_recent_activities(
-        db, user_id=user.id, connection=connection, week_days=week_days, plan_id=plan.id,
+        db, user_id=user.id, connection=connection, week_days=week_days, plan_id=plan.id, plan_created_at=plan.created_at,
     )
     logger.info("Strava sync: %d new activities imported", imported)
     return {"synced": True, "imported": imported}
@@ -455,9 +530,11 @@ def post_message(payload: IncomingMessage, db: Session = Depends(get_db)) -> Mes
             "coach_do": user.coach_do,
             "coach_dont": user.coach_dont,
             "coach_soul": user.coach_soul,
+            "timezone": user.timezone,
             "selected_facts": select_prompt_facts(active_facts),
         },
         remembered_facts=active_facts,
+        time_context=build_time_context(user.timezone),
     )
 
     if decision:
@@ -521,6 +598,7 @@ def _normalized_onboarding_payload(payload: OnboardPayload | OnboardPreviewPaylo
         "coach_do": payload.coach_do.strip(),
         "coach_dont": payload.coach_dont.strip(),
         "coach_soul": payload.coach_soul.strip(),
+        "timezone": os.getenv("TZ", "Europe/Paris"),
         "telegram_chat_id": payload.telegram_chat_id,
     }
 
@@ -548,6 +626,7 @@ def _apply_onboarding_to_user(user: s.User, payload: dict) -> None:
     user.coach_dont = payload["coach_dont"]
     user.coach_soul = payload["coach_soul"]
     user.telegram_chat_id = payload["telegram_chat_id"]
+    user.timezone = payload.get("timezone") or user.timezone or os.getenv("TZ", "Europe/Paris")
     user.onboarding_status = "completed"
 
 

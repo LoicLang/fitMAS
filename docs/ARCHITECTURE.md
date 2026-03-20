@@ -15,7 +15,7 @@ read_when:
 Déterminisme avant LLM. Le LLM propose, formule et adapte le ton.
 Les garde-fous, la planification, les permissions, les cooldowns et la persistance sont déterministes.
 
-## État réel du code — Mars 2026
+## État réel du code — 20 mars 2026
 
 **Déployé sur Fly.io : https://the deployed app/**
 
@@ -29,6 +29,7 @@ Les garde-fous, la planification, les permissions, les cooldowns et la persistan
 - Mémoire utile via UserFact (extraction + upsert + sélection pour prompt)
 - Activités manuelles + Strava OAuth + import + synchro automatique
 - Heartbeat proactif : briefing matin 7h30, rappel pré-séance 18h, revue dimanche 20h
+- Distinction `CoachMessage.proactive` : cooldown appliqué seulement aux messages proactifs
 - Cooldowns : 4h entre messages proactifs, skip si échange récent (<2h)
 - Revue hebdomadaire avec régénération automatique du plan
 - Seed intelligent si pas d'utilisateur (profil multisport complet)
@@ -140,6 +141,7 @@ WatchItem
 
 CoachMessage
   id, user_id (FK), role (user/agent), text, created_at
+  proactive (bool)
 
 UserFact
   id, user_id (FK), category, key, value
@@ -181,24 +183,47 @@ StravaConnection
 ### Flux message entrant
 1. User envoie un message (Telegram ou webapp)
 2. Backend persiste CoachMessage(role=user)
-3. Prompt assemblé : âme du coach + plan courant + derniers messages + facts
+3. Prompt assemblé : âme du coach + plan courant + derniers messages + facts + contexte temporel exact
 4. LLM (Haiku) propose une MutationDecision ou no-op
 5. `mutations.py` applique le changement si besoin
 6. Backend persiste CoachMessage(role=agent)
 7. LLM extrait des facts stables à mémoriser
 
+### Contexte temporel partagé
+
+Module: `time_context.py`
+
+Il centralise:
+- timezone user
+- date/heure locale
+- jour local
+- interprétation de `aujourd'hui`, `demain`, `hier`, `ce soir`
+
+Ce module doit être utilisé par:
+- prompts LLM
+- heartbeat
+- commandes Telegram qui dépendent du jour courant
+
 ### Flux activité
 1. Import Strava (toutes les 2h) ou log manuel (webapp/Telegram)
 2. Normalisation sport + titre
 3. `activities.py` matche vers un jour du plan (heuristique : sport +4, jour +3, durée +1-2)
-4. Persist Activity + marque le jour comme "done" si match
+4. Filtre : seules les activités des 7 derniers jours matchent le plan courant
+5. Persist Activity + marque le jour comme "done" si match cette semaine
 
 ### Flux heartbeat
 1. APScheduler déclenche le trigger (matin 7h30, soir 18h, dimanche 20h)
-2. Garde-fous déterministes : cooldown 4h, échange récent <2h
+2. Garde-fous déterministes : cooldown 4h sur dernier message `proactive=true`, échange récent <2h
 3. Si OK → LLM génère le message avec contexte (plan, veille, coach soul)
 4. Envoi via Telegram
 5. Persist CoachMessage(role=agent)
+
+### Debug heartbeat
+
+- Endpoint: `POST /api/v0/debug/heartbeat/{kind}`
+- `kind` supportés: `morning`, `pre_session`
+- Usage: test prod réel sans SSH lourd
+- Option `send=true|false` pour envoyer ou non sur Telegram
 
 ### Flux revue hebdomadaire (dimanche 20h)
 1. Heartbeat weekly_review() : bilan de la semaine (fait/prévu/sauté)

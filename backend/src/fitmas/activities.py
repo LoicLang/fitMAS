@@ -29,15 +29,30 @@ def infer_activity_title(sport_type: str, duration_min: int | None, note: str) -
     return label
 
 
+def is_activity_this_week(started_at: datetime | None, plan_created_at: datetime | None) -> bool:
+    """Only match activities from the current plan week."""
+    if not started_at:
+        return False
+    now = datetime.now()
+    # Activity must be within the last 7 days
+    age_days = (now - started_at.replace(tzinfo=None)).days
+    return 0 <= age_days <= 7
+
+
 def match_activity_to_day(
     *,
     sport_type: str,
     started_at: datetime | None,
     duration_min: int | None,
     week_days: list[DayPlan],
+    plan_created_at: datetime | None = None,
 ) -> tuple[str | None, str]:
     if not week_days:
         return None, ""
+
+    # Don't match old activities to current plan
+    if not is_activity_this_week(started_at, plan_created_at):
+        return None, "activite hors semaine courante"
 
     candidate_scores: list[tuple[int, DayPlan, str]] = []
     started_day = started_at.strftime("%A").lower() if started_at else None

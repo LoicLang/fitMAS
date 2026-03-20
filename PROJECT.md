@@ -2,7 +2,7 @@
 
 Coach IA multisport proactif qui ajuste ton entraînement selon ta vraie vie.
 
-## Statut — 19 mars 2026
+## Statut — 20 mars 2026
 
 **Déployé et fonctionnel sur https://the deployed app/**
 
