@@ -120,7 +120,16 @@ def import_recent_activities(
     access_token = refresh_token_if_needed(db, connection)
     imported = 0
     for raw_activity in fetch_recent_activities(access_token, per_page=30):
-        if repo.get_activity_by_external_id(db, user_id, str(raw_activity["id"])):
+        existing = repo.get_activity_by_external_id(db, user_id, str(raw_activity["id"]))
+        if existing:
+            # Backfill map data for activities imported before polyline support
+            if not existing.map_polyline:
+                polyline = (raw_activity.get("map") or {}).get("summary_polyline")
+                latlng = ",".join(str(c) for c in raw_activity["start_latlng"]) if raw_activity.get("start_latlng") else None
+                if polyline or latlng:
+                    existing.map_polyline = polyline
+                    existing.start_latlng = latlng
+                    db.commit()
             continue
 
         sport_type = normalize_activity_sport(raw_activity.get("sport_type") or raw_activity.get("type", "running"))
