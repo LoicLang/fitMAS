@@ -163,6 +163,7 @@ class WeeklyPlan(Base):
     intention: Mapped[str] = mapped_column(Text)
     summary: Mapped[str] = mapped_column(Text)
     status: Mapped[str] = mapped_column(String(16), default="active")  # active | archived
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
     user: Mapped[User] = relationship(back_populates="weekly_plans")
     days: Mapped[list[DayPlan]] = relationship(
