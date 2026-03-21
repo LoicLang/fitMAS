@@ -52,7 +52,7 @@ def _ensure_sqlite_columns() -> None:
             ("onboarding_status", "ALTER TABLE users ADD COLUMN onboarding_status VARCHAR(32) DEFAULT 'not_started'"),
         ],
         "weekly_plans": [
-            ("created_at", "ALTER TABLE weekly_plans ADD COLUMN created_at DATETIME DEFAULT CURRENT_TIMESTAMP"),
+            ("created_at", "ALTER TABLE weekly_plans ADD COLUMN created_at DATETIME"),
         ],
         "day_plans": [
             ("sport_type", "ALTER TABLE day_plans ADD COLUMN sport_type VARCHAR(32) DEFAULT 'running'"),
