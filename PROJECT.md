@@ -45,9 +45,9 @@ Ce qui manque encore → voir `docs/BUILD-ORDER.md`
 AGENTS.md            — règles agentiques
 PROJECT.md           — point d'entrée
 docs/                — 4 docs essentiels + README
-backend/src/fitmas/  — API FastAPI (17 modules, ~4100 lignes)
+backend/src/fitmas/  — API + bot + domaines partagés (34 modules, ~5200 lignes)
 frontend/index.html  — webapp mobile-first
-scripts/             — dev, start-prod
+scripts/             — dev, start-prod, docs:list
 Dockerfile           — image Docker multi-stage
 fly.toml             — config Fly.io
 ```
@@ -69,3 +69,4 @@ Variables : `ANTHROPIC_API_KEY`, `TELEGRAM_BOT_TOKEN`, `STRAVA_CLIENT_ID`, `STRA
 - Heuristiques d'entraînement en dur, LLM pour personnaliser et formuler
 - Telegram pour valider la proactivité, WhatsApp quand prouvé
 - Build perso d'abord : single-user, multisport, usage quotidien réel
+- Hotspots splittés par domaine : `api_*`, `telegram_*`, modules partagés transverses

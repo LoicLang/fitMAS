@@ -21,7 +21,7 @@ Les garde-fous, la planification, les permissions, les cooldowns et la persistan
 
 ### Ce qui existe et tourne
 
-- API FastAPI (17 modules, ~4100 lignes Python)
+- API FastAPI + bot splittés par domaine (34 modules, ~5200 lignes Python)
 - Webapp HTML/CSS/JS mobile-first (single-file, ~530 lignes)
 - Bot Telegram avec onboarding conversationnel + commandes + crons
 - Planner hebdo multisport déterministe
@@ -30,6 +30,7 @@ Les garde-fous, la planification, les permissions, les cooldowns et la persistan
 - Activités manuelles + Strava OAuth + import + synchro automatique
 - Heartbeat proactif : briefing matin 7h30, rappel pré-séance 18h, revue dimanche 20h
 - Distinction `CoachMessage.proactive` : cooldown appliqué seulement aux messages proactifs
+- Heartbeat découplé : génération de draft, livraison, puis persistance après succès
 - Cooldowns : 4h entre messages proactifs, skip si échange récent (<2h)
 - Revue hebdomadaire avec régénération automatique du plan
 - Seed intelligent si pas d'utilisateur (profil multisport complet)
@@ -82,28 +83,43 @@ Les garde-fous, la planification, les permissions, les cooldowns et la persistan
 
 ```
 backend/src/fitmas/
-├── api.py            (611 lignes) — FastAPI, endpoints, lifespan
-├── llm.py            (542 lignes) — Anthropic client, decisions, extraction, formulation
-├── telegram_bot.py   (529 lignes) — Bot, onboarding, commandes, crons
-├── repository.py     (437 lignes) — CRUD + convertisseurs Pydantic
-├── planner.py        (359 lignes) — Planner multisport déterministe
-├── heartbeat.py      (326 lignes) — Messages proactifs, cooldowns
-├── seed.py           (235 lignes) — Seed profil multisport si vide
-├── schema.py         (229 lignes) — SQLAlchemy ORM (13 tables)
-├── strava.py         (169 lignes) — OAuth + import activités
-├── state.py          (151 lignes) — État global app
-├── models.py         (145 lignes) — Pydantic API models
-├── mutations.py      (113 lignes) — Mutations plan (move, lighten, swap, update)
-├── db.py              (87 lignes) — Engine SQLite, SessionLocal, init_db
-├── nlp.py             (81 lignes) — Fallback NLP rule-based (sans API key)
-├── activities.py      (78 lignes) — Normalisation + matching activités
-├── signals.py        (~230 lignes) — Signaux dérivés (missed, silence, load, big session, streak)
-├── time_context.py    (90 lignes) — Timezone, jour/date/heure locale
-├── main.py             (3 lignes) — Re-export app
-└── __init__.py         (2 lignes)
+├── api.py                 (46 lignes) — bootstrap FastAPI + lifespan
+├── api_static.py          (23 lignes) — health + fichiers statiques
+├── api_read.py            (105 lignes) — profile, week, today, messages, facts, activities
+├── api_onboarding.py      (134 lignes) — preview, onboard, regenerate
+├── api_messages.py        (74 lignes) — boucle message → decision → facts
+├── api_activities.py      (121 lignes) — activités manuelles + Strava OAuth/sync
+├── api_debug.py           (97 lignes) — debug protégé, heartbeat manuel, reset
+├── api_support.py         (137 lignes) — normalisation onboarding + garde-fous debug
+├── api_payloads.py        (38 lignes) — payloads Pydantic
+├── telegram_bot.py        (48 lignes) — bootstrap bot
+├── telegram_onboarding.py (274 lignes) — ConversationHandler onboarding
+├── telegram_commands.py   (151 lignes) — commandes et free text
+├── telegram_scheduler.py  (159 lignes) — jobs APScheduler du bot
+├── telegram_api.py        (41 lignes) — client backend partagé pour le bot
+├── telegram_shared.py     (67 lignes) — constantes + persistance drafts + helpers rendu
+├── telegram_channel.py    (44 lignes) — résolution chat_id + envoi Telegram partagé
+├── llm.py                 (595 lignes) — Anthropic client, decisions, extraction, formulation
+├── repository.py          (469 lignes) — CRUD + convertisseurs Pydantic
+├── planner.py             (359 lignes) — planner multisport déterministe
+├── heartbeat.py           (403 lignes) — génération des drafts proactifs
+├── signals.py             (312 lignes) — signaux dérivés
+├── time_context.py        (122 lignes) — timezone + helpers UTC
+├── coach_messages.py      (31 lignes) — draft coach + persistance centralisée
+├── strava.py              (187 lignes) — OAuth + import activités
+├── activities.py          (93 lignes) — normalisation + matching activités
+├── mutations.py           (113 lignes) — mutations plan
+├── schema.py              (239 lignes) — SQLAlchemy ORM
+├── models.py              (155 lignes) — modèles Pydantic
+├── db.py                  (101 lignes) — engine, sessions, migrations légères
+├── seed.py                (235 lignes) — seed si vide
+├── state.py               (151 lignes) — état global app
+├── nlp.py                 (88 lignes) — fallback rule-based
+├── main.py                (3 lignes) — re-export app
+└── __init__.py            (2 lignes)
 
 frontend/
-└── index.html        (~530 lignes) — Webapp complète
+└── index.html             (~530 lignes) — webapp complète
 ```
 
 ## Modèle de données
@@ -180,8 +196,8 @@ StravaConnection
 
 ### Flux onboarding (Telegram → API)
 1. User fait `/start` sur Telegram
-2. ConversationHandler guide à travers les étapes
-3. Bot appelle `POST /api/v0/onboard` avec le payload complet
+2. `telegram_onboarding.py` guide à travers les étapes
+3. Le bot appelle `POST /api/v0/onboard` avec le payload complet
 4. Backend normalise sports, contraintes, préférences, âme du coach
 5. `planner.py` génère un squelette hebdo multisport déterministe
 6. `llm.py` formule le récap et l'habillage du plan (Sonnet)
@@ -206,11 +222,13 @@ Il centralise:
 - date/heure locale
 - jour local
 - interprétation de `aujourd'hui`, `demain`, `hier`, `ce soir`
+- helpers UTC partagés pour les cooldowns et fenêtres temporelles
 
 Ce module doit être utilisé par:
 - prompts LLM
 - heartbeat
 - commandes Telegram qui dépendent du jour courant
+- signaux et calculs de récence
 
 ### Flux activité
 1. Import Strava (toutes les 2h) ou log manuel (webapp/Telegram)
@@ -222,9 +240,9 @@ Ce module doit être utilisé par:
 ### Flux heartbeat
 1. APScheduler déclenche le trigger (matin 7h30, soir 18h, dimanche 20h)
 2. Garde-fous déterministes : cooldown 4h sur dernier message `proactive=true`, échange récent <2h
-3. Si OK → LLM génère le message avec contexte (plan, veille, coach soul)
-4. Envoi via Telegram
-5. Persist CoachMessage(role=agent)
+3. Si OK → le coeur heartbeat génère un **draft** avec contexte (plan, veille, coach soul)
+4. L'orchestrateur (bot ou endpoint debug) envoie via Telegram
+5. Persist `CoachMessage(role=agent)` seulement après succès de livraison
 
 ### Flux signaux proactifs
 1. `signals.py` collecte les signaux : missed_key_session, silence_3_days, high_cumulative_load, big_session_done, streak
@@ -238,14 +256,17 @@ Ce module doit être utilisé par:
 - Endpoint: `POST /api/v0/debug/heartbeat/{kind}`
 - `kind` supportés: `morning`, `pre_session`, `signal_check`
 - Endpoint: `GET /api/v0/signals` — voir les signaux actifs
+- Endpoint: `POST /api/v0/reset` — reset admin local/debug
 - Usage: test prod réel sans SSH lourd
 - Option `send=true|false` pour envoyer ou non sur Telegram
+- Par défaut: désactivé sur Fly / prod, activable explicitement via `FITMAS_ENABLE_DEBUG_ENDPOINTS`
 
 ### Flux revue hebdomadaire (dimanche 20h)
-1. Heartbeat weekly_review() : bilan de la semaine (fait/prévu/sauté)
-2. LLM génère le récap avec la voix du coach
-3. `_regenerate_next_week()` : planner + LLM → nouveau plan
-4. Persist nouveau WeeklyPlan + message
+1. `telegram_scheduler.weekly_review_cron()` déclenche
+2. `heartbeat.weekly_review()` génère un draft bilan
+3. Le draft est livré sur Telegram puis persisté
+4. Le scheduler appelle `POST /api/v0/week/regenerate`
+5. Le nouveau plan est livré puis persisté comme message proactif
 
 ## Stratégie mémoire
 

@@ -1,0 +1,74 @@
+from __future__ import annotations
+
+import logging
+
+from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy.orm import Session
+
+from fitmas import mutations, repository as repo
+from fitmas.api_payloads import IncomingMessage
+from fitmas.db import get_db
+from fitmas.llm import decide, extract_facts, make_plan_summary, select_prompt_facts
+from fitmas.models import Extraction, Message, MessageReply, MessageRole
+from fitmas.nlp import extract_reply, generate_reply
+from fitmas.time_context import build_time_context
+
+logger = logging.getLogger(__name__)
+
+router = APIRouter()
+
+
+@router.post("/api/v0/messages", response_model=MessageReply)
+def post_message(payload: IncomingMessage, db: Session = Depends(get_db)) -> MessageReply:
+    user = repo.get_user_optional(db)
+    if user is None:
+        raise HTTPException(status_code=404, detail="No onboarded user yet")
+    plan = repo.get_active_plan(db, user.id)
+
+    repo.add_message(db, user.id, "user", payload.text)
+    logger.info("User message: %s", payload.text[:120])
+
+    msgs = repo.get_messages(db, user.id)
+    conversation_history = [{"role": m.role, "text": m.text} for m in msgs]
+    active_facts = [repo.to_pydantic_fact(fact).model_dump() for fact in repo.get_active_facts(db, user.id)]
+    pydantic_plan = repo.to_pydantic_plan(plan)
+
+    decision = decide(
+        payload.text,
+        make_plan_summary(pydantic_plan.days),
+        conversation_history=conversation_history,
+        coach_context={
+            "coach_name": user.coach_name,
+            "coach_style": user.coach_style,
+            "coach_relationship": user.coach_relationship,
+            "coach_do": user.coach_do,
+            "coach_dont": user.coach_dont,
+            "coach_soul": user.coach_soul,
+            "timezone": user.timezone,
+            "selected_facts": select_prompt_facts(active_facts),
+        },
+        remembered_facts=active_facts,
+        time_context=build_time_context(user.timezone),
+    )
+
+    if decision:
+        mutations.apply(db, plan.id, decision)
+        reply_text = decision.fitmas_message
+        extraction = Extraction(confidence=0.85)
+        logger.info("LLM reply (%s): %s", decision.mutation_type, reply_text[:120])
+    else:
+        extraction = extract_reply(payload.text)
+        fallback = generate_reply(payload.text, extraction)
+        reply_text = fallback.assistant_message.text
+        logger.info("Fallback reply: %s", reply_text[:120])
+
+    repo.add_message(db, user.id, "agent", reply_text)
+    extracted_facts = extract_facts(payload.text, reply_text, active_facts)
+    if extracted_facts:
+        repo.upsert_facts(db, user.id, extracted_facts)
+
+    return MessageReply(
+        user_message=Message(role=MessageRole.USER, text=payload.text),
+        extraction=extraction,
+        assistant_message=Message(role=MessageRole.AGENT, text=reply_text),
+    )

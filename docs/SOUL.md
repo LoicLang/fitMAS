@@ -83,6 +83,7 @@ Le LLM ne bypass pas ces règles. Les garde-fous sont évalués avant tout appel
 | Rappel pré-séance | 18h | Cooldown OK + pas d'échange récent + séance clé demain |
 | Revue hebdo | Dimanche 20h | Toujours (bilan + régénération plan) |
 | Synchro Strava | Toutes les 2h | Strava connecté |
+| Signal check | 14h + post-sync | Signal actionable détecté |
 
 ### Debug live
 
@@ -94,12 +95,28 @@ But:
 - confirmer l'envoi Telegram
 - débugger sans lancer de process SSH lourd sur Fly
 
+Règle:
+- désactivé par défaut sur Fly / prod
+- activable explicitement via `FITMAS_ENABLE_DEBUG_ENDPOINTS`
+
 ### Ce qui n'est pas encore implémenté
 
-- Signal après activité notable
-- Détection de silence prolongé
 - Trigger météo
-- Signal de fatigue cumulée
+- Mutation automatique de la voix (`coach_soul`) avec validation user
+- Historique versionné de l'âme du coach
+
+### Signaux déjà implémentés
+
+- séance clé manquée
+- 3 jours de silence
+- charge cumulée haute
+- grosse séance récente
+- streak simple
+
+Ces signaux servent :
+- à enrichir le briefing matin
+- à déclencher `signal_check()`
+- à alimenter un message proactif seulement si la valeur est réelle
 
 ## Doctrine de messagerie
 

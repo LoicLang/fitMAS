@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 DEFAULT_TIMEZONE = "Europe/Paris"
@@ -54,6 +54,36 @@ def get_local_now(timezone_name: str | None, *, now: datetime | None = None) -> 
     if current.tzinfo is None:
         current = current.replace(tzinfo=timezone.utc)
     return current.astimezone(get_timezone(timezone_name))
+
+
+def utc_now(*, naive: bool = False) -> datetime:
+    current = datetime.now(timezone.utc)
+    if naive:
+        return current.replace(tzinfo=None)
+    return current
+
+
+def normalize_utc_timestamp(value: datetime | None) -> datetime | None:
+    if value is None:
+        return None
+    if value.tzinfo is None:
+        return value.replace(tzinfo=timezone.utc)
+    return value.astimezone(timezone.utc)
+
+
+def hours_since(value: datetime | None, *, now: datetime | None = None) -> float | None:
+    timestamp = normalize_utc_timestamp(value)
+    if timestamp is None:
+        return None
+    current = normalize_utc_timestamp(now) or utc_now()
+    return (current - timestamp).total_seconds() / 3600
+
+
+def utc_cutoff(*, hours: int = 0, days: int = 0, naive: bool = True) -> datetime:
+    cutoff = utc_now() - timedelta(hours=hours, days=days)
+    if naive:
+        return cutoff.replace(tzinfo=None)
+    return cutoff
 
 
 def build_time_context(timezone_name: str | None, *, now: datetime | None = None) -> dict[str, str]:

@@ -9,13 +9,12 @@ Each signal function returns a dict (or None) with:
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timedelta
 from typing import Any
 
 from sqlalchemy.orm import Session
 
 from fitmas import repository as repo, schema as s
-from fitmas.time_context import DAY_KEYS, DAY_LABELS_FR, build_time_context
+from fitmas.time_context import DAY_KEYS, DAY_LABELS_FR, build_time_context, hours_since, utc_cutoff
 
 logger = logging.getLogger(__name__)
 
@@ -123,8 +122,8 @@ def _detect_silence(
         .first()
     )
     if last_msg and last_msg.created_at:
-        hours_since = (datetime.now() - last_msg.created_at).total_seconds() / 3600
-        if hours_since < 48:
+        elapsed = hours_since(last_msg.created_at)
+        if elapsed is not None and elapsed < 48:
             return None  # user is active in conversation, just not logging
 
     return {
@@ -161,7 +160,7 @@ def _detect_high_cumulative_load(
         .filter(
             s.Activity.user_id == user.id,
             s.Activity.started_at.isnot(None),
-            s.Activity.started_at >= datetime.now() - timedelta(days=7),
+            s.Activity.started_at >= utc_cutoff(days=7),
         )
         .all()
     )
@@ -210,7 +209,7 @@ def _detect_big_session_done(
     db: Session, user: s.User, plan: s.WeeklyPlan, today_key: str,
 ) -> Signal | None:
     """Fire if a significant session was logged in the last 6 hours."""
-    cutoff = datetime.now() - timedelta(hours=6)
+    cutoff = utc_cutoff(hours=6)
 
     recent = (
         db.query(s.Activity)

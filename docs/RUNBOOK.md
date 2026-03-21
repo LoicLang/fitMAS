@@ -1,0 +1,259 @@
+---
+summary: guide opératoire pour lancer, tester, débugger et modifier FitMAS sans perdre de temps
+read_when:
+  - démarrer localement
+  - tester un flux réel
+  - débugger la prod
+  - préparer un deploy
+  - reprendre le projet après une pause
+---
+
+# FitMAS Runbook
+
+## Objectif
+
+Permettre à un nouvel agent de :
+- lancer le système vite
+- savoir quels flux tester vraiment
+- débugger sans casser la prod
+- trouver vite le bon module à modifier
+
+## Topologie actuelle
+
+- un seul service Fly.io
+- une seule machine
+- API FastAPI sur `:8000`
+- bot Telegram lancé dans le même conteneur
+- SQLite sur volume Fly monté dans `/data`
+
+Entrypoints :
+- local API : `./scripts/dev`
+- local bot : `./scripts/bot`
+- prod entrypoint : [`scripts/start-prod`](/Users/loiclang/Documents/Projects/FitMAS/scripts/start-prod)
+
+## Variables d'environnement
+
+Minimum local utile :
+- `ANTHROPIC_API_KEY`
+- `TELEGRAM_BOT_TOKEN`
+
+Pour Strava :
+- `STRAVA_CLIENT_ID`
+- `STRAVA_CLIENT_SECRET`
+
+Pour prod / déploiement :
+- `FITMAS_DB_PATH`
+- `FITMAS_PUBLIC_URL`
+- `TZ`
+- `FLY_APP_NAME`
+- `FITMAS_ENABLE_DEBUG_ENDPOINTS`
+
+Notes :
+- `.env` est chargé par l'API et le bot
+- en local, DB par défaut : `fitmas.db` à la racine
+- en prod, DB : `/data/fitmas.db`
+
+## Commandes de base
+
+Installer :
+
+```bash
+python3 -m venv .venv
+.venv/bin/python -m pip install -e .
+```
+
+Lister la doc :
+
+```bash
+./scripts/docs:list
+```
+
+Lancer l'API locale :
+
+```bash
+./scripts/dev
+```
+
+Lancer le bot local :
+
+```bash
+./scripts/bot
+```
+
+Compiler les modules Python :
+
+```bash
+.venv/bin/python -m compileall backend/src/fitmas
+```
+
+Smoke API minimal :
+
+```bash
+PORT=8033 .venv/bin/uvicorn fitmas.api:app --host 127.0.0.1 --port 8033
+curl http://127.0.0.1:8033/health
+```
+
+## Parcours réels à tester
+
+### 1. Parcours onboarding
+
+À tester si on touche :
+- `telegram_onboarding.py`
+- `api_onboarding.py`
+- `planner.py`
+- `llm.py`
+
+Scénario :
+1. `/start`
+2. sports
+3. objectif
+4. semaine réelle
+5. contraintes
+6. création du coach
+7. preview de voix
+8. validation
+9. vérifier plan, profil, facts
+
+Checks :
+- pas de sortie de ConversationHandler
+- preview cohérente
+- `telegram_chat_id` bien stocké
+- plan créé
+- facts onboarding présents
+
+### 2. Parcours message → mutation
+
+À tester si on touche :
+- `api_messages.py`
+- `llm.py`
+- `mutations.py`
+- `repository.py`
+
+Scénario :
+1. envoyer un message naturel
+2. vérifier la réponse coach
+3. vérifier l'effet sur le plan si mutation
+4. vérifier que les facts utiles montent en DB
+
+Checks :
+- `CoachMessage(user)` puis `CoachMessage(agent)`
+- pas d'hallucination temporelle
+- mutation cohérente ou no-op propre
+
+### 3. Parcours activité réelle
+
+À tester si on touche :
+- `api_activities.py`
+- `activities.py`
+- `strava.py`
+- `signals.py`
+
+Scénario :
+1. log manuel via webapp
+2. vérifier activité créée
+3. vérifier matching vers le bon jour
+4. vérifier passage à `done`
+
+Checks :
+- sport normalisé
+- titre raisonnable
+- `matched_day` et `match_reason` cohérents
+- activité hors fenêtre ne matche pas le plan courant
+
+### 4. Parcours heartbeat
+
+À tester si on touche :
+- `heartbeat.py`
+- `telegram_scheduler.py`
+- `telegram_channel.py`
+- `time_context.py`
+
+Scénario :
+1. générer un draft heartbeat
+2. vérifier cooldown
+3. vérifier qu'on persiste seulement après envoi réussi
+4. vérifier le rendu Telegram
+
+Checks :
+- `proactive=true` seulement pour les vrais messages proactifs
+- pas de faux positif sur cooldown
+- timezone user bien respectée
+
+## Débugger sans casser la prod
+
+Règle :
+- éviter les scripts SSH lourds en prod
+- préférer les endpoints debug si explicitement activés
+
+Endpoints debug disponibles seulement si autorisés :
+- `GET /api/v0/signals`
+- `POST /api/v0/debug/heartbeat/{kind}`
+- `POST /api/v0/reset`
+
+Comportement voulu :
+- debug OFF par défaut quand `FLY_APP_NAME` est présent
+- override explicite via `FITMAS_ENABLE_DEBUG_ENDPOINTS=true`
+
+## Mapping rapide : où modifier quoi
+
+Si la demande concerne :
+
+- endpoints API → `api_*.py`
+- boot FastAPI → `api.py`
+- onboarding Telegram → `telegram_onboarding.py`
+- commandes Telegram → `telegram_commands.py`
+- jobs / heartbeat Telegram → `telegram_scheduler.py`
+- envoi Telegram pur → `telegram_channel.py`
+- client backend du bot → `telegram_api.py`
+- planning déterministe → `planner.py`
+- décisions LLM / prompting / facts → `llm.py`
+- mutations de plan → `mutations.py`
+- heuristiques activité → `activities.py`
+- signaux proactifs → `signals.py`
+- temps / timezone / récence → `time_context.py`
+- persistance centrale → `repository.py`, `schema.py`, `db.py`
+- style / ton coach → `SOUL.md` + `llm.py` + `heartbeat.py`
+- app mobile/web → `frontend/index.html`
+
+## Réalité des hotspots
+
+Les fichiers encore lourds :
+- `llm.py`
+- `repository.py`
+- `frontend/index.html`
+- `heartbeat.py`
+
+Avant d'ajouter de la logique dedans, se poser la question :
+- est-ce un nouveau sous-domaine ?
+- est-ce réutilisable ailleurs ?
+- est-ce un signe qu'il faut sortir un module ?
+
+## Vérification minimale avant fin de tâche
+
+Toujours faire :
+1. `.venv/bin/python -m compileall backend/src/fitmas`
+2. au moins un smoke réel du flux touché
+3. mise à jour doc si comportement modifié
+
+Dire explicitement :
+- ce qui a été testé concrètement
+- ce qui reste non vérifié
+
+## Pièges déjà rencontrés
+
+- heartbeat marqué comme "envoyé" alors que Telegram avait échoué
+- cooldown calculé sur tous les messages agent au lieu de `proactive=true`
+- `telegram_chat_id` absent en DB
+- heartbeat local impossible sans chat id
+- variables lues trop tôt au moment des imports
+- docs qui dérivent du code réel
+
+## Quand déployer
+
+Déployer seulement si :
+- le flux touché a été smoké en local
+- la doc a été réalignée si besoin
+- le changement ne laisse pas un endpoint debug ouvert par accident
+
+Si le changement touche heartbeat, onboarding, ou persistance :
+- test réel recommandé après deploy

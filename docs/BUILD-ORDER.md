@@ -58,7 +58,7 @@ read_when:
 
 **Statut : TERMINÉ**
 
-- Logging manuel (webapp + Telegram `/log`)
+- Logging manuel (webapp)
 - Strava OAuth + import + synchro auto (2h)
 - Matching activité → jour plan (heuristique sport+jour+durée)
 - Marquage automatique "done"
@@ -76,6 +76,7 @@ read_when:
 - Skip si échange récent (<2h)
 - Voix du coach dans tous les messages (system prompt = coach soul)
 - Debug endpoint live : `POST /api/v0/debug/heartbeat/{kind}`
+- Debug endpoint protégé : désactivé par défaut sur Fly / prod, activable explicitement
 
 ### ✅ Phase 6 — Mémoire utile
 
@@ -111,9 +112,9 @@ read_when:
 | A2 | Créer app Strava (callback → the deployed app) | strava.com/settings/api | ✅ fait (ID 214266) |
 | A3 | Tester flow complet : /start → semaine → activité → revue | Tous | 🔄 en cours |
 | A4 | Fixer bugs trouvés en dogfood | Variable | 🔄 en cours |
-| A5 | Vérifier heartbeat en prod (briefing 7h30, rappel 18h, signal 14h) | heartbeat.py, telegram_bot.py | ⏳ observer demain |
+| A5 | Vérifier heartbeat en prod (briefing 7h30, rappel 18h, signal 14h) | heartbeat.py, telegram_scheduler.py | ⏳ observer demain |
 | A6 | Callback Strava OAuth → redirect webapp (pas JSON) | api.py | ✅ fait |
-| A7 | Ajouter /help sur le bot Telegram | telegram_bot.py | ✅ fait |
+| A7 | Ajouter /help sur le bot Telegram | telegram_commands.py | ✅ fait |
 | A8 | Stocker plus de données Strava (avg_hr, avg_speed, calories) | strava.py, schema.py | ✅ fait |
 
 **Bugs connus :**
@@ -123,7 +124,7 @@ read_when:
 - ~~Thursday marqué "done" à tort par vieille activité~~ → fixé (plan régénéré)
 - ~~Cooldown heartbeat bloquait après réponse normale~~ → fixé (flag `proactive`)
 - ~~Rappel pré-séance 18h non planifié~~ → fixé
-- Onboarding preview "1" tombe dans handle_message au lieu du step suivant → à investiguer
+- Vérifier que la preview onboarding reste stable après plusieurs restarts bot
 
 ### ✅ Sprint B — Signaux et intelligence
 
@@ -136,7 +137,7 @@ read_when:
 | B3 | Signal "3 jours sans activité" → check-in | signals.py, heartbeat.py | ✅ fait |
 | B4 | Signal "charge cumulée haute" → suggestion repos | signals.py, heartbeat.py | ✅ fait |
 | B5 | Post-activité : feedback contextuel après grosse séance | signals.py, heartbeat.py | ✅ fait |
-| B6 | Signal check cron (14h) + après Strava sync | telegram_bot.py | ✅ fait |
+| B6 | Signal check cron (14h) + après Strava sync | telegram_scheduler.py | ✅ fait |
 
 **Architecture signaux :**
 - `signals.py` : 5 détecteurs (missed_key, silence_3d, high_load, big_session, streak)

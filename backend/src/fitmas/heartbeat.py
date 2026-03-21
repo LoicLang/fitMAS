@@ -8,17 +8,16 @@ Three trigger types:
 """
 from __future__ import annotations
 
-import json
 import logging
 import os
-from datetime import datetime
 
 from sqlalchemy.orm import Session
 
 from fitmas import repository as repo, schema as s
+from fitmas.coach_messages import CoachDraft
 from fitmas.db import SessionLocal
 from fitmas.signals import collect_signals, format_signals_for_prompt
-from fitmas.time_context import DAY_LABELS_FR, build_time_context, render_time_context
+from fitmas.time_context import DAY_LABELS_FR, build_time_context, hours_since, render_time_context
 
 logger = logging.getLogger(__name__)
 
@@ -59,7 +58,9 @@ def _check_cooldown(db: Session, user_id: int, cooldown_hours: float = PROACTIVE
     )
     if not last_agent_msg or not last_agent_msg.created_at:
         return True  # no previous message, ok to send
-    elapsed = (datetime.now() - last_agent_msg.created_at).total_seconds() / 3600
+    elapsed = hours_since(last_agent_msg.created_at)
+    if elapsed is None:
+        return True
     if elapsed < cooldown_hours:
         logger.info("Cooldown active: last agent msg %.1fh ago (need %.1fh)", elapsed, cooldown_hours)
         return False
@@ -76,7 +77,9 @@ def _had_recent_exchange(db: Session, user_id: int, hours: float = RECENT_EXCHAN
     )
     if not last_user_msg or not last_user_msg.created_at:
         return False
-    elapsed = (datetime.now() - last_user_msg.created_at).total_seconds() / 3600
+    elapsed = hours_since(last_user_msg.created_at)
+    if elapsed is None:
+        return False
     return elapsed < hours
 
 
@@ -137,7 +140,7 @@ def _llm_generate(system: str, prompt: str, *, allow_no_send: bool = True) -> st
         return None
 
 
-def morning_briefing() -> str | None:
+def morning_briefing() -> CoachDraft | None:
     """Generate the morning briefing message for today, aware of yesterday's status."""
     db = SessionLocal()
     try:
@@ -205,20 +208,18 @@ def morning_briefing() -> str | None:
         )
         llm_msg = _llm_generate(system, prompt)
         if llm_msg:
-            repo.add_message(db, user.id, "agent", llm_msg, proactive=True)
-            return llm_msg
+            return CoachDraft(text=llm_msg, proactive=True)
 
         # Fallback: structured message
         msg = f"Bonjour. {label} — {day.session_title}.\n{day.session_goal}. Priorite: {day.priority}."
         if yesterday_context:
             msg += f"\n{yesterday_context.strip()}"
-        repo.add_message(db, user.id, "agent", msg, proactive=True)
-        return msg
+        return CoachDraft(text=msg, proactive=True)
     finally:
         db.close()
 
 
-def pre_session_reminder() -> str | None:
+def pre_session_reminder() -> CoachDraft | None:
     """Generate a reminder the evening before a key session."""
     db = SessionLocal()
     try:
@@ -267,18 +268,16 @@ def pre_session_reminder() -> str | None:
         )
         llm_msg = _llm_generate(system, prompt)
         if llm_msg:
-            repo.add_message(db, user.id, "agent", llm_msg, proactive=True)
-            return llm_msg
+            return CoachDraft(text=llm_msg, proactive=True)
 
         msg = f"Demain c'est {day.session_title}. Tu te sens comment pour {label.lower()} ?"
-        repo.add_message(db, user.id, "agent", msg, proactive=True)
-        return msg
+        return CoachDraft(text=msg, proactive=True)
     finally:
         db.close()
 
 
-def weekly_review(*, regenerate: bool = True) -> str | None:
-    """Generate a Sunday evening weekly review. Optionally regenerate next week's plan."""
+def weekly_review() -> CoachDraft | None:
+    """Generate a Sunday evening weekly review draft without side effects."""
     db = SessionLocal()
     try:
         user = repo.get_user(db)
@@ -323,23 +322,15 @@ def weekly_review(*, regenerate: bool = True) -> str | None:
         )
         llm_msg = _llm_generate(system, prompt, allow_no_send=False)
         if llm_msg:
-            repo.add_message(db, user.id, "agent", llm_msg, proactive=True)
-            return llm_msg
+            return CoachDraft(text=llm_msg, proactive=True)
 
         msg = "Fin de semaine. Le plan a tenu ses reperes. On prend de la marge pour la suite."
-        repo.add_message(db, user.id, "agent", msg, proactive=True)
-        return msg
+        return CoachDraft(text=msg, proactive=True)
     finally:
-        # Regenerate next week after review
-        if regenerate:
-            try:
-                _regenerate_next_week(db, user)
-            except Exception:
-                logger.exception("Failed to regenerate week after review")
         db.close()
 
 
-def signal_check() -> str | None:
+def signal_check() -> CoachDraft | None:
     """Check signals and generate a proactive message if anything actionable is found.
 
     This is meant to run a few times per day (e.g. after Strava sync) to catch
@@ -392,8 +383,7 @@ def signal_check() -> str | None:
         prompt = f"{render_time_context(time_context)}\nGenere un message proactif."
         llm_msg = _llm_generate(system, prompt)
         if llm_msg:
-            repo.add_message(db, user.id, "agent", llm_msg, proactive=True)
-            return llm_msg
+            return CoachDraft(text=llm_msg, proactive=True)
 
         # Fallback
         first = actionable[0]
@@ -408,53 +398,6 @@ def signal_check() -> str | None:
         else:
             msg = "Je garde un oeil sur ta semaine. On en reparle."
 
-        repo.add_message(db, user.id, "agent", msg, proactive=True)
-        return msg
+        return CoachDraft(text=msg, proactive=True)
     finally:
         db.close()
-
-
-def _regenerate_next_week(db: Session, user: s.User) -> None:
-    """Regenerate a fresh weekly plan after review."""
-    from fitmas.planner import build_week_plan
-    from fitmas.llm import formulate_week_plan
-
-    sports = [sport.sport_type for sport in user.sports if sport.active]
-    constraints = [c.text for c in user.constraints]
-    coach_profile = {
-        "coach_name": user.coach_name,
-        "coach_style": user.coach_style,
-        "coach_relationship": user.coach_relationship,
-        "coach_do": user.coach_do,
-        "coach_dont": user.coach_dont,
-        "coach_soul": user.coach_soul,
-    }
-    user_profile = {
-        "primary_objective": user.primary_objective,
-        "sports": sports,
-        "weekly_structure_notes": user.weekly_structure_notes,
-        "constraints": constraints,
-        "preferences": [p.text for p in user.preferences],
-        **coach_profile,
-    }
-
-    planner_output = build_week_plan(
-        sports=sports,
-        weekly_structure_notes=user.weekly_structure_notes,
-        constraints=constraints,
-        coach_name=user.coach_name,
-    )
-    enriched = formulate_week_plan(
-        planner_output,
-        user_profile=user_profile,
-        coach_profile=user_profile,
-        time_context=build_time_context(user.timezone),
-    )
-    repo.replace_plan(
-        db, user.id,
-        intention=enriched["intention"],
-        summary=enriched["summary"],
-        days=[dict(day) for day in enriched["days"]],
-    )
-    repo.add_message(db, user.id, "agent", f"Nouvelle semaine posee. {enriched['intention']}", proactive=True)
-    logger.info("Next week regenerated for user %s", user.id)

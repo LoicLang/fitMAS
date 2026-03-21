@@ -36,7 +36,7 @@ Use the repository for durable knowledge.
 Before coding:
 
 1. read the latest messages in the conversation
-2. run `docs:list`
+2. run `./scripts/docs:list`
 3. read relevant docs
 4. inspect related code
 
@@ -47,6 +47,23 @@ During implementation:
 - follow existing patterns
 - keep files readable
 - avoid unnecessary abstractions
+
+
+# Architecture Guardrails
+
+For long-term evolvability:
+
+- keep **domain modules** pure when possible
+- a domain function should preferably **return a draft / decision / payload**, not send network calls directly
+- **delivery and persistence happen in orchestrators** (`api.py`, bot schedulers, command handlers) after success
+- do not hide cross-boundary side effects inside scoring / planning / heartbeat logic
+- avoid growing hotspot files forever; when a file becomes multi-purpose, split by bounded context
+- shared concerns must live in shared modules:
+  - time / timezone / recency
+  - channel delivery
+  - message persistence
+  - signal derivation
+- debug endpoints and admin surfaces must be **disabled by default in production** unless explicitly enabled
 
 
 # Tool / Skill Thinking (mandatory)

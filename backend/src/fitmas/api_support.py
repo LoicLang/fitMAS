@@ -1,0 +1,137 @@
+from __future__ import annotations
+
+import os
+from datetime import datetime
+from pathlib import Path
+
+from fastapi import HTTPException, Request
+
+from fitmas import schema as s
+from fitmas.api_payloads import OnboardPayload, OnboardPreviewPayload
+from fitmas.planner import normalize_sports
+
+ROOT_DIR = Path(__file__).resolve().parents[3]
+FRONTEND_DIR = ROOT_DIR / "frontend"
+FRONTEND_INDEX = FRONTEND_DIR / "index.html"
+
+
+def normalized_onboarding_payload(payload: OnboardPayload | OnboardPreviewPayload) -> dict:
+    coach_name = (payload.coach_name or "FitMAS").strip() or "FitMAS"
+    sports = normalize_sports(payload.sports)
+    constraints = normalize_lines(payload.constraints)
+    preferences = normalize_lines(payload.preferences)
+    return {
+        "name": payload.name.strip() or "Loic",
+        "primary_objective": payload.primary_objective.strip(),
+        "sports": sports,
+        "weekly_structure_notes": payload.weekly_structure_notes.strip(),
+        "constraints": constraints,
+        "preferences": preferences,
+        "coach_name": coach_name,
+        "coach_style": payload.coach_style.strip() or "direct",
+        "coach_relationship": payload.coach_relationship.strip(),
+        "coach_do": payload.coach_do.strip(),
+        "coach_dont": payload.coach_dont.strip(),
+        "coach_soul": payload.coach_soul.strip(),
+        "timezone": os.getenv("TZ", "Europe/Paris"),
+        "telegram_chat_id": payload.telegram_chat_id,
+    }
+
+
+def normalize_lines(items: list[str]) -> list[str]:
+    values: list[str] = []
+    for item in items:
+        for chunk in item.split("\n"):
+            clean = chunk.strip(" -•\t")
+            if clean:
+                values.append(clean)
+    return values
+
+
+def apply_onboarding_to_user(user: s.User, payload: dict) -> None:
+    user.name = payload["name"]
+    user.objective = payload["primary_objective"]
+    user.primary_objective = payload["primary_objective"]
+    user.weekly_structure_notes = payload["weekly_structure_notes"]
+    user.coaching_style = payload["coach_style"]
+    user.coach_name = payload["coach_name"]
+    user.coach_style = payload["coach_style"]
+    user.coach_relationship = payload["coach_relationship"]
+    user.coach_do = payload["coach_do"]
+    user.coach_dont = payload["coach_dont"]
+    user.coach_soul = payload["coach_soul"]
+    user.telegram_chat_id = payload["telegram_chat_id"]
+    user.timezone = payload.get("timezone") or user.timezone or os.getenv("TZ", "Europe/Paris")
+    user.onboarding_status = "completed"
+
+
+def build_onboarding_facts(payload: dict) -> list[dict]:
+    facts: list[dict] = []
+
+    for index, constraint in enumerate(payload["constraints"]):
+        facts.append(
+            {
+                "category": "constraint",
+                "key": f"constraint_{index}",
+                "value": constraint,
+                "source": "onboarding",
+                "confidence": 1.0,
+                "confirmed": True,
+                "active": True,
+            }
+        )
+
+    for index, preference in enumerate(payload["preferences"]):
+        facts.append(
+            {
+                "category": "preference",
+                "key": f"preference_{index}",
+                "value": preference,
+                "source": "onboarding",
+                "confidence": 1.0,
+                "confirmed": True,
+                "active": True,
+            }
+        )
+
+    facts.append(
+        {
+            "category": "coaching",
+            "key": "coach_style_preference",
+            "value": f"Coach voulu: {payload['coach_style']} / {payload['coach_relationship']}",
+            "source": "onboarding",
+            "confidence": 1.0,
+            "confirmed": True,
+            "active": True,
+        }
+    )
+
+    return facts
+
+
+def parse_optional_datetime(raw_value: str | None) -> datetime | None:
+    if not raw_value:
+        return None
+    try:
+        return datetime.fromisoformat(raw_value)
+    except ValueError:
+        return None
+
+
+def public_base_url(request: Request) -> str:
+    explicit = os.getenv("FITMAS_PUBLIC_URL")
+    if explicit:
+        return explicit.rstrip("/")
+    return str(request.base_url).rstrip("/")
+
+
+def debug_endpoints_enabled() -> bool:
+    explicit = os.getenv("FITMAS_ENABLE_DEBUG_ENDPOINTS")
+    if explicit is not None:
+        return explicit.strip().lower() in {"1", "true", "yes", "on"}
+    return not bool(os.getenv("FLY_APP_NAME"))
+
+
+def ensure_debug_enabled() -> None:
+    if not debug_endpoints_enabled():
+        raise HTTPException(status_code=404, detail="Debug endpoints disabled")
