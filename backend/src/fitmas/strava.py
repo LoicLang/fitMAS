@@ -149,6 +149,11 @@ def import_recent_activities(
             matched_day=matched_day,
             match_reason=match_reason,
             external_id=str(raw_activity["id"]),
+            avg_hr=raw_activity.get("average_heartrate"),
+            max_hr=raw_activity.get("max_heartrate"),
+            avg_speed=raw_activity.get("average_speed"),
+            calories=raw_activity.get("calories") or raw_activity.get("kilojoules"),
+            suffer_score=raw_activity.get("suffer_score"),
         )
 
         # Only mark day done for activities from this week

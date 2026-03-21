@@ -132,6 +132,11 @@ class Activity(BaseModel):
     started_at: str | None = None
     matched_day: str | None = None
     match_reason: str = ""
+    avg_hr: float | None = None
+    max_hr: float | None = None
+    avg_speed: float | None = None
+    calories: float | None = None
+    suffer_score: int | None = None
 
 
 class OnboardPreview(BaseModel):

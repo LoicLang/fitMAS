@@ -423,6 +423,22 @@ async def cmd_sync(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         await update.message.reply_text("Probleme de sync Strava.")
 
 
+async def cmd_help(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Show available commands."""
+    text = (
+        "*FitMAS — Commandes disponibles*\n\n"
+        "/start — Relancer l'onboarding\n"
+        "/today — Seance du jour\n"
+        "/plan — Voir la semaine\n"
+        "/newweek — Regenerer le plan\n"
+        "/sync — Synchroniser Strava\n"
+        "/help — Ce message\n\n"
+        "Tu peux aussi ecrire librement : je comprends les demandes "
+        "de decalage, d'allegement, les retours d'activite, etc."
+    )
+    await update.message.reply_text(text, parse_mode="Markdown")
+
+
 async def cmd_heartbeat(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Force a lightweight heartbeat run for debugging."""
     try:
@@ -439,7 +455,7 @@ async def cmd_heartbeat(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 
 
 async def _strava_sync_cron(context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Background Strava sync every 2 hours."""
+    """Background Strava sync every 2 hours, followed by signal check."""
     try:
         result = await _api_post("/api/v0/strava/sync", {})
         imported = result.get("imported", 0)
@@ -450,6 +466,8 @@ async def _strava_sync_cron(context: ContextTypes.DEFAULT_TYPE) -> None:
                     chat_id=chat_id,
                     text=f"Strava sync automatique : {imported} activite(s) importee(s).",
                 )
+            # Run signal check after importing new activities
+            await _signal_check_cron(context)
         logger.info("Strava cron sync: %d imported", imported)
     except Exception:
         logger.exception("Strava cron sync failed")
@@ -495,6 +513,25 @@ async def send_morning_briefing(context: ContextTypes.DEFAULT_TYPE) -> None:
             logger.info("Morning briefing returned None (cooldown or no session)")
     except Exception:
         logger.exception("Failed to send morning briefing")
+
+
+async def _signal_check_cron(context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Check signals and send proactive message if needed."""
+    chat_id = _resolve_chat_id()
+    if not chat_id:
+        return
+
+    try:
+        from fitmas.heartbeat import signal_check
+
+        msg = signal_check()
+        if msg:
+            await context.bot.send_message(chat_id=chat_id, text=msg, parse_mode="Markdown")
+            logger.info("Signal check sent a message")
+        else:
+            logger.info("Signal check: no actionable signals")
+    except Exception:
+        logger.exception("Signal check cron failed")
 
 
 async def send_pre_session_reminder(context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -563,6 +600,7 @@ def main() -> None:
     app.add_handler(CommandHandler("sync", cmd_sync))
     app.add_handler(CommandHandler("newweek", cmd_newweek))
     app.add_handler(CommandHandler("heartbeat", cmd_heartbeat))
+    app.add_handler(CommandHandler("help", cmd_help))
 
     # Free-text messages → coach
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
@@ -581,6 +619,14 @@ def main() -> None:
             name="morning_briefing",
         )
         logger.info("Morning briefing scheduled at 07:30 %s", tz)
+
+        # Signal check (14:00) — detect missed sessions, silence, post-activity
+        job_queue.run_daily(
+            _signal_check_cron,
+            time=dt_time(hour=14, minute=0, tzinfo=tz),
+            name="signal_check",
+        )
+        logger.info("Signal check scheduled at 14:00 %s", tz)
 
         job_queue.run_daily(
             send_pre_session_reminder,

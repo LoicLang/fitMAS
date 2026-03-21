@@ -17,6 +17,7 @@ from sqlalchemy.orm import Session
 
 from fitmas import repository as repo, schema as s
 from fitmas.db import SessionLocal
+from fitmas.signals import collect_signals, format_signals_for_prompt
 from fitmas.time_context import DAY_LABELS_FR, build_time_context, render_time_context
 
 logger = logging.getLogger(__name__)
@@ -79,21 +80,58 @@ def _had_recent_exchange(db: Session, user_id: int, hours: float = RECENT_EXCHAN
     return elapsed < hours
 
 
-def _llm_generate(system: str, prompt: str) -> str | None:
-    """Call the LLM for heartbeat messages. Returns None on failure."""
+NO_SEND_TOKEN = "NO_SEND"
+
+# Instruction injected into every heartbeat prompt so the LLM can opt out
+NO_SEND_INSTRUCTION = (
+    "\n\nSi tu estimes qu'il n'y a rien d'utile ou de pertinent a dire "
+    "en ce moment, reponds exactement NO_SEND (rien d'autre). "
+    "Mieux vaut se taire que parler pour rien."
+)
+
+
+def _llm_generate(system: str, prompt: str, *, allow_no_send: bool = True) -> str | None:
+    """Call the LLM for heartbeat messages.
+
+    Returns None on failure or if the LLM responds with NO_SEND.
+    """
     api_key = os.getenv("ANTHROPIC_API_KEY")
     if not api_key:
         return None
+
+    final_system = system
+    if allow_no_send:
+        final_system += NO_SEND_INSTRUCTION
+
     try:
         import anthropic
         client = anthropic.Anthropic(api_key=api_key)
         response = client.messages.create(
             model="claude-haiku-4-5-20251001",
             max_tokens=256,
-            system=system,
+            system=final_system,
             messages=[{"role": "user", "content": prompt}],
         )
-        return response.content[0].text.strip()
+        text = response.content[0].text.strip()
+
+        # Check for NO_SEND token (exact match or wrapped in markup)
+        cleaned = text.replace("*", "").replace("`", "").replace("#", "").strip()
+        if cleaned.upper() == NO_SEND_TOKEN:
+            logger.info("LLM opted out with NO_SEND")
+            return None
+
+        # NO_SEND + short ack (<100 chars) → also suppress
+        if NO_SEND_TOKEN in text.upper() and len(text) < 100:
+            logger.info("LLM opted out with NO_SEND + short ack")
+            return None
+
+        # NO_SEND + real content → strip token, deliver content
+        if NO_SEND_TOKEN in text.upper():
+            text = text.replace(NO_SEND_TOKEN, "").replace("no_send", "").strip()
+            if not text:
+                return None
+
+        return text
     except Exception:
         logger.exception("Heartbeat LLM call failed")
         return None
@@ -136,6 +174,10 @@ def morning_briefing() -> str | None:
             elif yesterday_status in ("skipped", "adapted"):
                 yesterday_context = f"\nHier ({yesterday_label}): adapte/saute. On avance."
 
+        # Collect signals for richer context
+        signals = collect_signals(db, user)
+        signals_block = format_signals_for_prompt(signals)
+
         # Try LLM-generated briefing
         system = (
             f"Tu es {user.coach_name}, coach multisport IA. "
@@ -145,6 +187,12 @@ def morning_briefing() -> str | None:
         )
         if user.coach_soul:
             system += f"\nAme du coach: {user.coach_soul}"
+        if signals_block:
+            system += (
+                f"\n\n{signals_block}\n"
+                "Integre les signaux dans ton message de maniere naturelle. "
+                "Si un signal est un warning ou action, adapte ton ton en consequence."
+            )
 
         prompt = (
             f"{render_time_context(time_context)}\n"
@@ -273,7 +321,7 @@ def weekly_review(*, regenerate: bool = True) -> str | None:
             f"Intention: {plan.intention}\n"
             f"Seances faites: {done_count}. Seances prevues non faites: {planned_count}."
         )
-        llm_msg = _llm_generate(system, prompt)
+        llm_msg = _llm_generate(system, prompt, allow_no_send=False)
         if llm_msg:
             repo.add_message(db, user.id, "agent", llm_msg, proactive=True)
             return llm_msg
@@ -288,6 +336,81 @@ def weekly_review(*, regenerate: bool = True) -> str | None:
                 _regenerate_next_week(db, user)
             except Exception:
                 logger.exception("Failed to regenerate week after review")
+        db.close()
+
+
+def signal_check() -> str | None:
+    """Check signals and generate a proactive message if anything actionable is found.
+
+    This is meant to run a few times per day (e.g. after Strava sync) to catch
+    post-activity feedback and silence detection outside of the morning briefing.
+    """
+    db = SessionLocal()
+    try:
+        user = repo.get_user(db)
+
+        if not _check_cooldown(db, user.id, cooldown_hours=PROACTIVE_COOLDOWN_HOURS):
+            logger.info("Signal check skipped — cooldown active")
+            return None
+
+        if _had_recent_exchange(db, user.id, hours=RECENT_EXCHANGE_HOURS):
+            logger.info("Signal check skipped — recent exchange")
+            return None
+
+        signals = collect_signals(db, user)
+        if not signals:
+            return None
+
+        # Only act on warning/action severity signals
+        actionable = [s for s in signals if s["severity"] in ("warning", "action")]
+        if not actionable:
+            # Info signals (streak, big session) — only send if big_session_done
+            big_session = next((s for s in signals if s["kind"] == "big_session_done"), None)
+            if not big_session:
+                return None
+            actionable = [big_session]
+
+        signals_block = format_signals_for_prompt(actionable)
+        time_context = build_time_context(user.timezone)
+
+        system = (
+            f"Tu es {user.coach_name}, coach multisport IA. "
+            f"Style: {user.coach_style}. "
+            f"Ton ton: clair, court, direct. Tu tutoies. Reponds en francais. Max 2-3 phrases.\n"
+        )
+        if user.coach_soul:
+            system += f"Ame du coach: {user.coach_soul}\n"
+        system += (
+            f"\n{signals_block}\n\n"
+            "Genere un message proactif base sur ces signaux. "
+            "Si grosse seance: felicite brievement et donne un conseil recuperation. "
+            "Si seance manquee: checke sans culpabiliser. "
+            "Si silence prolonge: prends des nouvelles simplement. "
+            "Si charge elevee: suggere d'alleger."
+        )
+
+        prompt = f"{render_time_context(time_context)}\nGenere un message proactif."
+        llm_msg = _llm_generate(system, prompt)
+        if llm_msg:
+            repo.add_message(db, user.id, "agent", llm_msg, proactive=True)
+            return llm_msg
+
+        # Fallback
+        first = actionable[0]
+        if first["kind"] == "big_session_done":
+            msg = f"Belle seance. {first['data'].get('title', 'Beau travail')}. Pense a bien recuperer."
+        elif first["kind"] == "silence_3_days":
+            msg = "Ca fait quelques jours. Comment ca va de ton cote ?"
+        elif first["kind"] == "missed_key_session":
+            msg = f"La seance de {first['data'].get('day', 'hier')} n'a pas ete faite. On ajuste ou on la replace ?"
+        elif first["kind"] == "high_cumulative_load":
+            msg = "Semaine chargee. Pense a lever le pied sur les prochaines seances."
+        else:
+            msg = "Je garde un oeil sur ta semaine. On en reparle."
+
+        repo.add_message(db, user.id, "agent", msg, proactive=True)
+        return msg
+    finally:
         db.close()
 
 

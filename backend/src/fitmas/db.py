@@ -67,6 +67,11 @@ def _ensure_sqlite_columns() -> None:
             ("started_at", "ALTER TABLE activities ADD COLUMN started_at DATETIME"),
             ("matched_day", "ALTER TABLE activities ADD COLUMN matched_day VARCHAR(16)"),
             ("match_reason", "ALTER TABLE activities ADD COLUMN match_reason TEXT DEFAULT ''"),
+            ("avg_hr", "ALTER TABLE activities ADD COLUMN avg_hr FLOAT"),
+            ("max_hr", "ALTER TABLE activities ADD COLUMN max_hr FLOAT"),
+            ("avg_speed", "ALTER TABLE activities ADD COLUMN avg_speed FLOAT"),
+            ("calories", "ALTER TABLE activities ADD COLUMN calories FLOAT"),
+            ("suffer_score", "ALTER TABLE activities ADD COLUMN suffer_score INTEGER"),
         ],
         "coach_messages": [
             ("proactive", "ALTER TABLE coach_messages ADD COLUMN proactive BOOLEAN DEFAULT 0"),

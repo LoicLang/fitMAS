@@ -228,17 +228,29 @@ def get_strava_status(db: Session = Depends(get_db)) -> dict:
     }
 
 
+@app.get("/api/v0/signals")
+def get_signals(db: Session = Depends(get_db)) -> dict:
+    """Return current active signals for the user."""
+    user = repo.get_user_optional(db)
+    if user is None:
+        return {"signals": []}
+    from fitmas.signals import collect_signals
+    signals = collect_signals(db, user)
+    return {"signals": signals}
+
+
 @app.post("/api/v0/debug/heartbeat/{kind}")
 def trigger_debug_heartbeat(kind: str, send: bool = True, db: Session = Depends(get_db)) -> dict:
     user = repo.get_user_optional(db)
     if user is None:
         raise HTTPException(status_code=404, detail="No onboarded user yet")
 
-    from fitmas.heartbeat import morning_briefing, pre_session_reminder
+    from fitmas.heartbeat import morning_briefing, pre_session_reminder, signal_check
 
     handlers = {
         "morning": morning_briefing,
         "pre_session": pre_session_reminder,
+        "signal_check": signal_check,
     }
     handler = handlers.get(kind)
     if handler is None:
@@ -287,7 +299,7 @@ def start_strava_auth(request: Request, db: Session = Depends(get_db)) -> Redire
 
 
 @app.get("/api/v0/strava/callback")
-def finish_strava_auth(code: str, state: str, db: Session = Depends(get_db)) -> dict:
+def finish_strava_auth(code: str, state: str, request: Request, db: Session = Depends(get_db)):
     user = repo.get_user_optional(db)
     if user is None:
         raise HTTPException(status_code=404, detail="No onboarded user yet")
@@ -301,12 +313,10 @@ def finish_strava_auth(code: str, state: str, db: Session = Depends(get_db)) -> 
     plan = repo.get_active_plan(db, user.id)
     week_days = repo.to_pydantic_plan(plan).days
     imported = strava.import_recent_activities(db, user_id=user.id, connection=connection, week_days=week_days, plan_id=plan.id, plan_created_at=plan.created_at)
-    return {
-        "connected": True,
-        "imported": imported,
-        "athlete_id": connection.athlete_id,
-        "last_sync_at": connection.last_sync_at.isoformat() if connection.last_sync_at else None,
-    }
+    logger.info("Strava OAuth done: %d activities imported for user %s", imported, user.id)
+    # Redirect to webapp with success status
+    base = _public_base_url(request)
+    return RedirectResponse(url=f"{base}/?strava=connected&imported={imported}", status_code=302)
 
 
 @app.post("/api/v0/activities/manual", response_model=Activity)

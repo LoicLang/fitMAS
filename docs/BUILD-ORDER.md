@@ -101,7 +101,7 @@ read_when:
 
 ## Ce qui reste — Plan de priorités
 
-### Sprint A — Dogfooding & Strava (EN COURS)
+### ✅ Sprint A — Dogfooding & Strava
 
 **Objectif : utiliser FitMAS chaque jour pendant 2 semaines sans friction.**
 
@@ -111,10 +111,10 @@ read_when:
 | A2 | Créer app Strava (callback → the deployed app) | strava.com/settings/api | ✅ fait (ID 214266) |
 | A3 | Tester flow complet : /start → semaine → activité → revue | Tous | 🔄 en cours |
 | A4 | Fixer bugs trouvés en dogfood | Variable | 🔄 en cours |
-| A5 | Vérifier heartbeat en prod (briefing 7h30, rappel 18h) | heartbeat.py, telegram_bot.py | ⏳ observer demain matin |
-| A6 | Callback Strava OAuth → redirect webapp (pas JSON) | api.py | ⏳ |
-| A7 | Ajouter /help sur le bot Telegram | telegram_bot.py | ⏳ |
-| A8 | Stocker plus de données Strava (avg_hr, avg_speed, calories) | strava.py, schema.py | ⏳ |
+| A5 | Vérifier heartbeat en prod (briefing 7h30, rappel 18h, signal 14h) | heartbeat.py, telegram_bot.py | ⏳ observer demain |
+| A6 | Callback Strava OAuth → redirect webapp (pas JSON) | api.py | ✅ fait |
+| A7 | Ajouter /help sur le bot Telegram | telegram_bot.py | ✅ fait |
+| A8 | Stocker plus de données Strava (avg_hr, avg_speed, calories) | strava.py, schema.py | ✅ fait |
 
 **Bugs connus :**
 - ~~Bot perd le ConversationHandler state au restart~~ → fixé (PicklePersistence)
@@ -125,18 +125,49 @@ read_when:
 - ~~Rappel pré-séance 18h non planifié~~ → fixé
 - Onboarding preview "1" tombe dans handle_message au lieu du step suivant → à investiguer
 
-### Sprint B — Signaux et intelligence
+### ✅ Sprint B — Signaux et intelligence
 
 **Objectif : le coach réagit au réel, pas juste au plan.**
 
-| # | Tâche | Fichiers | Impact |
+| # | Tâche | Fichiers | Statut |
 |---|-------|----------|--------|
-| B1 | Créer `signals.py` : dériver signaux utiles | Nouveau fichier | Base intelligence |
-| B2 | Signal "séance clé manquée" → message proactif | signals.py, heartbeat.py | Relance juste |
-| B3 | Signal "3 jours sans activité" → check-in | signals.py, heartbeat.py | Détection décrochage |
-| B4 | Signal "charge cumulée haute" → suggestion repos | signals.py, mutations.py | Protection |
-| B5 | Post-activité : feedback contextuel après grosse séance | heartbeat.py, strava.py | Boucle utile |
-| B6 | Ajustement next-day basé sur activité réelle | signals.py, heartbeat.py | Adaptation réelle |
+| B1 | Créer `signals.py` : dériver signaux utiles | signals.py | ✅ fait |
+| B2 | Signal "séance clé manquée" → message proactif | signals.py, heartbeat.py | ✅ fait |
+| B3 | Signal "3 jours sans activité" → check-in | signals.py, heartbeat.py | ✅ fait |
+| B4 | Signal "charge cumulée haute" → suggestion repos | signals.py, heartbeat.py | ✅ fait |
+| B5 | Post-activité : feedback contextuel après grosse séance | signals.py, heartbeat.py | ✅ fait |
+| B6 | Signal check cron (14h) + après Strava sync | telegram_bot.py | ✅ fait |
+
+**Architecture signaux :**
+- `signals.py` : 5 détecteurs (missed_key, silence_3d, high_load, big_session, streak)
+- `heartbeat.signal_check()` : évalue les signaux, génère un message LLM si actionable
+- Intégré dans : morning briefing (enrichi), cron 14h, post-Strava sync
+- Debug : `GET /api/v0/signals` + `POST /api/v0/debug/heartbeat/signal_check`
+
+### Sprint B+ — Emprunts OpenClaw (EN COURS)
+
+**Objectif : rendre le coach plus intelligent dans ses silences et plus vivant dans sa personnalité.**
+
+Inspiré de [OpenClaw](https://github.com/openclaw/openclaw) — deux patterns clés.
+
+| # | Tâche | Fichiers | Statut |
+|---|-------|----------|--------|
+| B+1 | Pattern NO_SEND : LLM peut décider de ne pas envoyer | heartbeat.py | ✅ fait |
+| B+2 | Soul mutation : coach affine sa voix au fil des échanges | llm.py, schema.py, api.py | ⏳ |
+| B+3 | Soul version tracking (historique des évolutions) | schema.py, repository.py | ⏳ |
+| B+4 | Prompt "soul refinement" après échanges marquants | llm.py | ⏳ |
+
+**Pattern NO_SEND (implémenté) :**
+- Chaque prompt heartbeat inclut : "Si tu estimes qu'il n'y a rien d'utile, reponds NO_SEND"
+- `_llm_generate()` détecte NO_SEND (exact, avec markup, ou avec ack court <100 chars)
+- NO_SEND + contenu substantiel → le token est strippé, le contenu est envoyé
+- Weekly review = `allow_no_send=False` (toujours un bilan)
+
+**Soul mutation (à faire) :**
+- Après N échanges, le LLM peut proposer un affinement de `coach_soul`
+- L'utilisateur valide ou refuse via Telegram
+- Historique des versions de soul tracé
+- Inspiré du SOUL.md mutable d'OpenClaw, mais contrôlé par l'utilisateur
 
 ### Sprint C — Enrichissement plan
 
@@ -156,9 +187,9 @@ read_when:
 
 | # | Tâche | Fichiers | Impact |
 |---|-------|----------|--------|
-| D1 | Tests unitaires : planner, mutations, activities | tests/ | Confiance |
+| D1 | Tests unitaires : planner, mutations, activities, signals | tests/ | Confiance |
 | D2 | Tests d'intégration : flux message → mutation → réponse | tests/ | Régression |
-| D3 | Test heartbeat : cooldowns, triggers, edge cases | tests/ | Fiabilité proactive |
+| D3 | Test heartbeat : cooldowns, NO_SEND, triggers | tests/ | Fiabilité proactive |
 | D4 | CI/CD : tests automatiques avant deploy | .github/workflows/ | Qualité continue |
 | D5 | Decision log : tracer chaque décision LLM | Nouveau module | Debugging |
 
@@ -179,25 +210,31 @@ read_when:
 ## Ordre d'exécution recommandé
 
 ```
-Sprint A  ← MAINTENANT : dogfood, Strava config, bugs
-Sprint B  ← Semaine prochaine : signaux, intelligence
-Sprint C  ← Ensuite : planner V2, périodisation
-Sprint D  ← En parallèle : tests, CI
-Sprint E  ← Quand le produit est prouvé : scale, WhatsApp, natif
+Sprint A   ✅ FAIT : dogfood, Strava config, bugs, /help, données enrichies
+Sprint B   ✅ FAIT : signaux, intelligence proactive (5 détecteurs)
+Sprint B+  🔄 EN COURS : NO_SEND ✅, soul mutation ⏳
+                → 2 semaines de dogfood pour valider signaux + NO_SEND en conditions réelles
+Sprint C   ← APRÈS DOGFOOD : planner V2, périodisation, lineage
+Sprint D   ← En parallèle : tests, CI (commencer pendant dogfood)
+Sprint E   ← Quand le produit est prouvé : scale, WhatsApp, natif
 ```
 
-Le Sprint A est le plus important. Pas de nouvelles features tant que la boucle quotidienne n'est pas rodée.
+**Séquence immédiate :**
+1. Deploy Sprint A+B+B+(NO_SEND) sur Fly.io
+2. Dogfood 2 semaines : utiliser FitMAS chaque jour, observer les signaux/NO_SEND
+3. Implémenter soul mutation (B+2-4) quand le coach aura assez d'historique
+4. Sprint C une fois que la boucle quotidienne est rodée
 
 ---
 
 ## Risques principaux
 
 ### 1. Le coach sonne faux
-- **Mitigation** : preview de voix + coach_do/coach_dont + exemples concrets
+- **Mitigation** : preview de voix + coach_do/coach_dont + exemples concrets + soul mutation
 - **Test** : est-ce que le message ressemble à "ton" coach ?
 
 ### 2. Le heartbeat spam
-- **Mitigation** : cooldowns déterministes, no-op fréquent, pas de message sans signal
+- **Mitigation** : cooldowns déterministes + NO_SEND LLM + pas de message sans signal
 - **Test** : jamais plus de 2-3 messages proactifs par jour
 
 ### 3. L'escalade disparaît du système
@@ -231,8 +268,10 @@ Le Sprint A est le plus important. Pas de nouvelles features tant que la boucle 
 - [ ] Revue dimanche → nouveau plan
 - [ ] Pas de message proactif quand on vient de parler au coach
 
-### Signaux (Sprint B)
+### Signaux + NO_SEND (Sprint B/B+)
 - [ ] Séance clé manquée → message de relance approprié
 - [ ] 3 jours silence → check-in contextuel
 - [ ] Grosse séance Strava → feedback coach
 - [ ] Charge haute cumulée → suggestion repos automatique
+- [ ] NO_SEND activé au moins 1x sur un heartbeat sans rien à dire
+- [ ] Morning briefing jour de repos → NO_SEND (le coach se tait)

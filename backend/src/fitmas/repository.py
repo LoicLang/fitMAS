@@ -100,6 +100,11 @@ def to_pydantic_activity(activity: s.Activity) -> Activity:
         started_at=activity.started_at.isoformat() if activity.started_at else None,
         matched_day=activity.matched_day,
         match_reason=activity.match_reason,
+        avg_hr=activity.avg_hr,
+        max_hr=activity.max_hr,
+        avg_speed=activity.avg_speed,
+        calories=activity.calories,
+        suffer_score=activity.suffer_score,
     )
 
 
@@ -214,6 +219,11 @@ def add_activity(
     started_at,
     matched_day: str | None,
     match_reason: str,
+    avg_hr: float | None = None,
+    max_hr: float | None = None,
+    avg_speed: float | None = None,
+    calories: float | None = None,
+    suffer_score: int | None = None,
 ) -> s.Activity:
     activity = s.Activity(
         user_id=user_id,
@@ -229,6 +239,11 @@ def add_activity(
         started_at=started_at,
         matched_day=matched_day,
         match_reason=match_reason,
+        avg_hr=avg_hr,
+        max_hr=max_hr,
+        avg_speed=avg_speed,
+        calories=calories,
+        suffer_score=suffer_score,
     )
     db.add(activity)
     db.commit()

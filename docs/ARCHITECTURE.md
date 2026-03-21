@@ -34,10 +34,15 @@ Les garde-fous, la planification, les permissions, les cooldowns et la persistan
 - Revue hebdomadaire avec régénération automatique du plan
 - Seed intelligent si pas d'utilisateur (profil multisport complet)
 
+- Signaux proactifs : `signals.py` détecte séance manquée, silence, charge haute, grosse séance, streak
+- Signal check cron 14h + post-Strava sync pour feedback temps réel
+- Données Strava enrichies : avg_hr, max_hr, avg_speed, calories, suffer_score
+- Strava callback redirige vers webapp (plus de JSON brut)
+- `/help` Telegram
+
 ### Ce qui n'existe pas encore
 
 - Webhook Strava (actuellement polling toutes les 2h)
-- Module `signals.py` pour signaux dérivés
 - Lineage de plans (historique des plans passés)
 - Decision log explicite
 - Tests automatisés
@@ -92,6 +97,8 @@ backend/src/fitmas/
 ├── db.py              (87 lignes) — Engine SQLite, SessionLocal, init_db
 ├── nlp.py             (81 lignes) — Fallback NLP rule-based (sans API key)
 ├── activities.py      (78 lignes) — Normalisation + matching activités
+├── signals.py        (~230 lignes) — Signaux dérivés (missed, silence, load, big session, streak)
+├── time_context.py    (90 lignes) — Timezone, jour/date/heure locale
 ├── main.py             (3 lignes) — Re-export app
 └── __init__.py         (2 lignes)
 
@@ -153,6 +160,7 @@ Activity
   external_id, sport_type, title
   duration_min, distance_m, elevation_m
   perceived_load, note, started_at
+  avg_hr, max_hr, avg_speed, calories, suffer_score
   matched_day, match_reason, created_at
 
 StravaConnection
@@ -218,10 +226,18 @@ Ce module doit être utilisé par:
 4. Envoi via Telegram
 5. Persist CoachMessage(role=agent)
 
+### Flux signaux proactifs
+1. `signals.py` collecte les signaux : missed_key_session, silence_3_days, high_cumulative_load, big_session_done, streak
+2. Chaque signal a un `severity` : info, warning, action
+3. Le morning briefing injecte les signaux dans le prompt LLM pour un message contextualisé
+4. Le signal check (cron 14h + post-Strava sync) génère un message proactif si signal actionable
+5. Garde-fous identiques au heartbeat : cooldown 4h, skip si échange récent
+
 ### Debug heartbeat
 
 - Endpoint: `POST /api/v0/debug/heartbeat/{kind}`
-- `kind` supportés: `morning`, `pre_session`
+- `kind` supportés: `morning`, `pre_session`, `signal_check`
+- Endpoint: `GET /api/v0/signals` — voir les signaux actifs
 - Usage: test prod réel sans SSH lourd
 - Option `send=true|false` pour envoyer ou non sur Telegram
 
