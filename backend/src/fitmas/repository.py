@@ -50,6 +50,7 @@ def to_pydantic_day(day: s.DayPlan) -> DayPlan:
         session_title=day.session_title,
         session_goal=day.session_goal,
         session_note=day.session_note,
+        session_description=day.session_description or "",
         duration_min=day.duration_min,
         intensity=day.intensity,
         load_score=day.load_score,
@@ -426,6 +427,7 @@ def move_session(db: Session, plan_id: int, from_day: str, to_day: str) -> None:
     dst.session_title = src.session_title
     dst.session_goal = src.session_goal
     dst.session_note = src.session_note
+    dst.session_description = src.session_description
     dst.duration_min = src.duration_min
     dst.intensity = src.intensity
     dst.load_score = src.load_score
@@ -440,6 +442,7 @@ def move_session(db: Session, plan_id: int, from_day: str, to_day: str) -> None:
     src.session_title = "Journee flexible"
     src.session_goal = "Creneau libere — repos ou sortie tres legere selon ressenti"
     src.session_note = "Seance deplacee. Profites-en pour recuperer ou faire un footing facile."
+    src.session_description = ""
     src.duration_min = None
     src.intensity = "easy"
     src.load_score = 0

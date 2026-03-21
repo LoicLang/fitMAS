@@ -576,6 +576,11 @@
             <h2 id="today-title" style="margin-top: 8px;">Chargement…</h2>
             <p class="muted" id="today-goal" style="margin-top: 8px; line-height: 1.5;"></p>
 
+            <div id="today-description-wrap" class="card" style="margin-top: 12px; display: none; background: var(--accent-soft); border: 1px solid var(--border);">
+              <h3 style="font-size: 0.82rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--accent); margin-bottom: 8px;">Déroulé de la séance</h3>
+              <pre id="today-description" style="font-family: inherit; font-size: 0.88rem; line-height: 1.6; white-space: pre-wrap; color: var(--text); margin: 0;"></pre>
+            </div>
+
             <div class="quick-actions" id="today-actions">
               <button class="quick-btn" data-action="done">✅ Fait</button>
               <button class="quick-btn" data-action="skip">😴 Trop fatigué</button>
@@ -886,6 +891,16 @@
         document.getElementById("today-title").textContent =
           `${SPORT_EMOJI[t.sport_type] || ""} ${t.session_title}`;
         document.getElementById("today-goal").textContent = t.session_goal;
+
+        const descWrap = document.getElementById("today-description-wrap");
+        const descEl = document.getElementById("today-description");
+        if (t.session_description && t.session_description.trim() && t.sport_type !== "rest") {
+          descEl.textContent = t.session_description;
+          descWrap.style.display = "block";
+        } else {
+          descWrap.style.display = "none";
+        }
+
         document.getElementById("today-priority").textContent = t.priority;
         document.getElementById("today-sport").textContent =
           SPORT_LABEL[t.sport_type] || t.sport_type;
@@ -970,6 +985,7 @@
                 </div>
               </div>
               <p class="muted" style="margin-top: 8px; font-size: 0.84rem; line-height: 1.45;">${day.session_goal}</p>
+              ${day.session_description && day.sport_type !== "rest" ? `<p style="margin-top: 6px; font-size: 0.8rem; line-height: 1.4; color: var(--accent); white-space: pre-wrap; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical;">${day.session_description}</p>` : ""}
               ${day.session_note ? `<p class="muted" style="margin-top: 6px; font-size: 0.8rem; font-style: italic;">${day.session_note}</p>` : ""}
             </article>
           `;

@@ -285,7 +285,7 @@ def formulate_week_plan(
 ) -> dict:
     resolved_time_context = time_context or build_time_context(user_profile.get("timezone") or coach_profile.get("timezone"))
     prompt = f"""{render_time_context(resolved_time_context)}
-Tu dois enrichir un squelette de semaine multisport sans changer sa structure.
+Tu dois enrichir un squelette de semaine multisport pour que chaque seance soit directement utilisable en situation reelle.
 
 User:
 - objectif: {user_profile['primary_objective']}
@@ -310,19 +310,42 @@ Retourne un JSON avec:
 - summary
 - days: liste de 7 objets dans le meme ordre
 
-Chaque day doit contenir uniquement:
+Chaque day doit contenir:
 - day
-- session_note
+- session_title: titre court et precis (ex: "Footing endurance 45min zone 2", "Fractionne 8x400m R1min", "Natation technique 4x200m")
+- session_goal: objectif clair en 1 phrase actionnable
+- session_description: le deroulement complet de la seance, structure en blocs. C'est le champ le plus important.
+- session_note: note de contexte sur la place de la seance dans la semaine (1-2 phrases)
 - watch_title
 - watch_detail
+
+REGLE CRITIQUE — session_description:
+Chaque session_description doit etre un plan de seance concret que l'utilisateur peut suivre tel quel.
+Format: blocs separes par des retours a la ligne, avec durees/distances/intensites.
+
+Exemples par sport:
+- Running easy: "Echauffement 10min marche/trot\\n30min footing zone 2 (allure confortable, on peut parler)\\n5min retour au calme marche"
+- Running quality: "Echauffement 15min footing progressif\\n8x400m a allure 10k, recup 1min trot\\n10min retour au calme footing lent"
+- Running long: "10min trot lent\\n55min footing endurance zone 2 (regulier, pas d'acceleration)\\n5min marche retour calme\\nObjectif: finir frais, pas vide"
+- Natation technique: "200m echauffement nage libre souple\\n4x100m crawl technique (rattrapé, poings fermés, amplitude) R20s\\n4x50m sprint 80% R30s\\n200m retour calme dos/brasse"
+- Natation easy: "200m echauffement varié (crawl/dos)\\n8x50m crawl allure reguliere R15s\\n4x25m au choix\\n100m souple retour calme"
+- Velo endurance: "15min echauffement progressif\\n50min zone 2 cadence 85-95rpm\\n10min retour calme moulinette"
+- Escalade bloc: "15min echauffement articulaire + dalle facile\\n45min blocs projet (3-4 essais par bloc, repos complet entre)\\n20min volume facile\\n10min etirements"
+- Renfo/strength: "Echauffement 5min mobilite\\n3x12 squats + 3x10 pompes + 3x30s gainage\\n2x15 fentes + 2x10 rowing\\nEtirements 5min"
+- Repos: pas de session_description (laisser vide)
+
+Adapte les distances, allures et series au niveau de l'utilisateur et a la duree prevue dans le squelette.
+Ne mets JAMAIS de description vague comme "Fais ta seance normalement" ou "Seance de natation classique".
 
 Regles:
 - ne change jamais sport_type, session_type, duration_min, intensity, load_score, priority, flexibility
 - ancre la voix dans le coach
 - pas de phrases generiques
-- chaque note doit aider a comprendre la place de la seance dans la semaine"""
+- session_title doit etre plus precis que le squelette (ajouter volume, allure, format)
+- session_goal doit dire ce que la seance construit concretement
+- session_description est le coeur: plan de seance structuré, blocs clairs, actionnable immediatement"""
 
-    data = _request_json(system=_COACH_SOUL, prompt=prompt, model="claude-sonnet-4-20250514", max_tokens=1500)
+    data = _request_json(system=_COACH_SOUL, prompt=prompt, model="claude-sonnet-4-20250514", max_tokens=3000)
     if data:
         try:
             return _merge_week_enrichment(planner_output, data)
@@ -341,10 +364,17 @@ def _merge_week_enrichment(planner_output: dict, enrichment: dict) -> dict:
         payload = by_day.get(day["day"], {})
         watch_title = payload.get("watch_title")
         watch_detail = payload.get("watch_detail")
+        # Enrich title and goal only if LLM provided more specific versions
+        enriched_title = str(payload.get("session_title") or "").strip()
+        enriched_goal = str(payload.get("session_goal") or "").strip()
+        enriched_description = str(payload.get("session_description") or "").strip()
         merged_days.append(
             {
                 **day,
+                "session_title": enriched_title if enriched_title else day["session_title"],
+                "session_goal": enriched_goal if enriched_goal else day["session_goal"],
                 "session_note": str(payload.get("session_note") or day["session_note"]).strip(),
+                "session_description": enriched_description,
                 "watch_items": [
                     (
                         str(watch_title).strip() if watch_title else day["watch_items"][0][0],
@@ -388,6 +418,7 @@ def _fallback_week_plan(planner_output: dict, coach_profile: dict) -> dict:
             {
                 **day,
                 "session_note": _fallback_day_note(day, coach_profile),
+                "session_description": "",
                 "watch_items": day["watch_items"],
             }
         )

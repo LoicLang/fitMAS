@@ -178,6 +178,7 @@ def get_today(day: DayId, db: Session = Depends(get_db)) -> TodayView:
         session_type=d.session_type,
         session_title=d.session_title,
         session_goal=d.session_goal,
+        session_description=d.session_description,
         duration_min=d.duration_min,
         intensity=d.intensity,
         priority=d.priority,

@@ -183,6 +183,7 @@ class DayPlan(Base):
     session_title: Mapped[str] = mapped_column(Text)
     session_goal: Mapped[str] = mapped_column(Text)
     session_note: Mapped[str] = mapped_column(Text)
+    session_description: Mapped[str] = mapped_column(Text, default="")
     duration_min: Mapped[int | None] = mapped_column(nullable=True, default=None)
     intensity: Mapped[str] = mapped_column(String(16), default="easy")
     load_score: Mapped[int] = mapped_column(default=1)

@@ -58,6 +58,7 @@ def _ensure_sqlite_columns() -> None:
             ("intensity", "ALTER TABLE day_plans ADD COLUMN intensity VARCHAR(16) DEFAULT 'easy'"),
             ("load_score", "ALTER TABLE day_plans ADD COLUMN load_score INTEGER DEFAULT 1"),
             ("completion_status", "ALTER TABLE day_plans ADD COLUMN completion_status VARCHAR(16) DEFAULT 'planned'"),
+            ("session_description", "ALTER TABLE day_plans ADD COLUMN session_description TEXT DEFAULT ''"),
         ],
         "activities": [
             ("external_id", "ALTER TABLE activities ADD COLUMN external_id VARCHAR(64)"),

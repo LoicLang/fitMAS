@@ -38,6 +38,7 @@ class DayPlan(BaseModel):
     session_title: str
     session_goal: str
     session_note: str
+    session_description: str = ""
     duration_min: int | None = None
     intensity: str = "easy"
     load_score: int = 1
@@ -81,6 +82,7 @@ class TodayView(BaseModel):
     session_type: str = "easy"
     session_title: str
     session_goal: str
+    session_description: str = ""
     duration_min: int | None = None
     intensity: str = "easy"
     priority: str
