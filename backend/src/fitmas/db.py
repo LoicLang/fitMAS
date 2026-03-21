@@ -73,6 +73,8 @@ def _ensure_sqlite_columns() -> None:
             ("avg_speed", "ALTER TABLE activities ADD COLUMN avg_speed FLOAT"),
             ("calories", "ALTER TABLE activities ADD COLUMN calories FLOAT"),
             ("suffer_score", "ALTER TABLE activities ADD COLUMN suffer_score INTEGER"),
+            ("map_polyline", "ALTER TABLE activities ADD COLUMN map_polyline TEXT"),
+            ("start_latlng", "ALTER TABLE activities ADD COLUMN start_latlng VARCHAR(64)"),
         ],
         "coach_messages": [
             ("proactive", "ALTER TABLE coach_messages ADD COLUMN proactive BOOLEAN DEFAULT 0"),

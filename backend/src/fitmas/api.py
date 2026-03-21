@@ -215,6 +215,18 @@ def get_activities(db: Session = Depends(get_db)) -> list[Activity]:
     return [repo.to_pydantic_activity(activity) for activity in activities]
 
 
+@app.get("/api/v0/activities/{activity_id}", response_model=Activity)
+def get_activity(activity_id: int, db: Session = Depends(get_db)) -> Activity:
+    user = repo.get_user_optional(db)
+    if user is None:
+        raise HTTPException(status_code=404, detail="No user")
+    from fitmas import schema as s
+    activity = db.query(s.Activity).filter(s.Activity.id == activity_id, s.Activity.user_id == user.id).first()
+    if activity is None:
+        raise HTTPException(status_code=404, detail="Activity not found")
+    return repo.to_pydantic_activity(activity)
+
+
 @app.get("/api/v0/strava/status")
 def get_strava_status(db: Session = Depends(get_db)) -> dict:
     user = repo.get_user_optional(db)

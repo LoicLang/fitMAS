@@ -154,6 +154,8 @@ def import_recent_activities(
             avg_speed=raw_activity.get("average_speed"),
             calories=raw_activity.get("calories") or raw_activity.get("kilojoules"),
             suffer_score=raw_activity.get("suffer_score"),
+            map_polyline=(raw_activity.get("map") or {}).get("summary_polyline"),
+            start_latlng=",".join(str(c) for c in raw_activity["start_latlng"]) if raw_activity.get("start_latlng") else None,
         )
 
         # Only mark day done for activities from this week

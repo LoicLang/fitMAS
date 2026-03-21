@@ -91,6 +91,7 @@ def to_pydantic_activity(activity: s.Activity) -> Activity:
     return Activity(
         id=activity.id,
         source=activity.source,
+        external_id=activity.external_id,
         sport_type=activity.sport_type,
         title=activity.title,
         duration_min=activity.duration_min,
@@ -106,6 +107,8 @@ def to_pydantic_activity(activity: s.Activity) -> Activity:
         avg_speed=activity.avg_speed,
         calories=activity.calories,
         suffer_score=activity.suffer_score,
+        map_polyline=activity.map_polyline,
+        start_latlng=activity.start_latlng,
     )
 
 
@@ -225,6 +228,8 @@ def add_activity(
     avg_speed: float | None = None,
     calories: float | None = None,
     suffer_score: int | None = None,
+    map_polyline: str | None = None,
+    start_latlng: str | None = None,
 ) -> s.Activity:
     activity = s.Activity(
         user_id=user_id,
@@ -245,6 +250,8 @@ def add_activity(
         avg_speed=avg_speed,
         calories=calories,
         suffer_score=suffer_score,
+        map_polyline=map_polyline,
+        start_latlng=start_latlng,
     )
     db.add(activity)
     db.commit()

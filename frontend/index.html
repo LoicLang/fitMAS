@@ -9,6 +9,8 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="apple-mobile-web-app-title" content="FitMAS">
     <title>FitMAS</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <style>
       @import url('https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap');
 
@@ -541,6 +543,126 @@
         .tabs { display: none; }
         .bottom-nav { display: block; }
       }
+
+      /* ── Activity detail modal ── */
+      .modal-overlay {
+        position: fixed; inset: 0; z-index: 200;
+        background: rgba(0, 0, 0, 0.4);
+        backdrop-filter: blur(4px);
+        display: none; align-items: flex-end; justify-content: center;
+        padding: 0;
+      }
+      .modal-overlay.open { display: flex; }
+
+      .modal-sheet {
+        width: 100%; max-width: 560px;
+        max-height: 92vh; overflow-y: auto;
+        background: var(--bg);
+        border-radius: var(--radius-xl) var(--radius-xl) 0 0;
+        padding: 0;
+        box-shadow: var(--shadow-lg);
+        animation: slideUp 250ms cubic-bezier(0.4, 0, 0.2, 1);
+      }
+
+      @keyframes slideUp {
+        from { transform: translateY(40px); opacity: 0.8; }
+        to { transform: translateY(0); opacity: 1; }
+      }
+
+      .modal-map {
+        width: 100%; height: 220px;
+        border-radius: var(--radius-xl) var(--radius-xl) 0 0;
+        overflow: hidden;
+        background: #e8e0d5;
+      }
+
+      .modal-map .leaflet-container { height: 100%; }
+
+      .modal-body { padding: 20px; }
+
+      .modal-header {
+        display: flex; align-items: flex-start;
+        justify-content: space-between; gap: 12px;
+      }
+
+      .modal-close {
+        border: 0; background: rgba(0,0,0,0.06);
+        width: 36px; height: 36px; border-radius: 50%;
+        font-size: 1.1rem; cursor: pointer;
+        display: grid; place-items: center;
+        flex-shrink: 0; color: var(--muted);
+        transition: background var(--transition);
+      }
+      .modal-close:hover { background: rgba(0,0,0,0.12); }
+
+      .stat-grid {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 8px; margin-top: 16px;
+      }
+
+      .stat-card {
+        padding: 14px 12px; border-radius: var(--radius-md);
+        background: white; border: 1px solid var(--border);
+        text-align: center;
+      }
+
+      .stat-value {
+        font-size: 1.2rem; font-weight: 800;
+        color: var(--text); line-height: 1.2;
+      }
+
+      .stat-label {
+        font-size: 0.68rem; font-weight: 600;
+        text-transform: uppercase; letter-spacing: 0.06em;
+        color: var(--muted); margin-top: 4px;
+      }
+
+      .stat-card.accent {
+        background: var(--accent-soft);
+        border-color: rgba(15, 118, 110, 0.12);
+      }
+      .stat-card.accent .stat-value { color: var(--accent); }
+
+      .stat-card.warm {
+        background: var(--warm-soft);
+        border-color: rgba(194, 107, 59, 0.12);
+      }
+      .stat-card.warm .stat-value { color: var(--warm); }
+
+      .modal-match {
+        margin-top: 16px; padding: 14px;
+        border-radius: var(--radius-md);
+        background: var(--green-soft);
+        border: 1px solid rgba(22, 163, 74, 0.12);
+      }
+
+      .modal-strava-link {
+        display: inline-flex; align-items: center; gap: 6px;
+        margin-top: 16px; padding: 10px 16px;
+        border-radius: 999px; font-size: 0.84rem; font-weight: 700;
+        color: var(--strava); background: var(--strava-soft);
+        border: 1px solid rgba(252, 76, 2, 0.12);
+        text-decoration: none;
+        transition: all var(--transition);
+      }
+      .modal-strava-link:hover { transform: translateY(-1px); }
+
+      .no-map-placeholder {
+        width: 100%; height: 120px;
+        background: linear-gradient(135deg, rgba(15, 118, 110, 0.08), rgba(194, 107, 59, 0.06));
+        border-radius: var(--radius-xl) var(--radius-xl) 0 0;
+        display: grid; place-items: center;
+        font-size: 2.5rem;
+      }
+
+      @media (min-width: 641px) {
+        .modal-overlay { align-items: center; padding: 24px; }
+        .modal-sheet { border-radius: var(--radius-xl); max-height: 85vh; }
+        .modal-map, .no-map-placeholder {
+          border-radius: var(--radius-xl) var(--radius-xl) 0 0;
+        }
+      }
     </style>
   </head>
   <body>
@@ -761,6 +883,26 @@
           </div>
         </section>
       </main>
+    </div>
+
+    <!-- Activity detail modal -->
+    <div class="modal-overlay" id="activity-modal">
+      <div class="modal-sheet">
+        <div id="activity-modal-map"></div>
+        <div class="modal-body">
+          <div class="modal-header">
+            <div>
+              <p class="eyebrow" id="amodal-date"></p>
+              <h2 id="amodal-title" style="margin-top: 4px;"></h2>
+              <p class="muted" id="amodal-sport" style="margin-top: 4px; font-size: 0.88rem;"></p>
+            </div>
+            <button class="modal-close" onclick="closeActivityModal()">✕</button>
+          </div>
+          <div class="stat-grid" id="amodal-stats"></div>
+          <div id="amodal-match" style="display:none;"></div>
+          <div id="amodal-links"></div>
+        </div>
+      </div>
     </div>
 
     <!-- Mobile bottom navigation -->
@@ -1076,18 +1218,42 @@
         return d.toLocaleString("fr-FR", { weekday: "short", day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
       }
 
+      function formatDateLong(raw) {
+        if (!raw) return "";
+        const d = new Date(raw);
+        if (isNaN(d)) return "";
+        return d.toLocaleString("fr-FR", { weekday: "long", day: "numeric", month: "long", year: "numeric", hour: "2-digit", minute: "2-digit" });
+      }
+
+      function formatPace(avgSpeed) {
+        if (!avgSpeed || avgSpeed <= 0) return null;
+        const paceSeconds = 1000 / avgSpeed;
+        const mins = Math.floor(paceSeconds / 60);
+        const secs = Math.round(paceSeconds % 60);
+        return `${mins}:${secs.toString().padStart(2, "0")}`;
+      }
+
+      function formatSpeed(avgSpeed) {
+        if (!avgSpeed || avgSpeed <= 0) return null;
+        return (avgSpeed * 3.6).toFixed(1);
+      }
+
       function renderActivities() {
         const el = document.getElementById("activities-list");
         if (!activities?.length) { el.innerHTML = '<div class="empty">Aucune activité enregistrée.</div>'; return; }
         el.innerHTML = activities.map(a => `
-          <div class="list-item">
-            <strong>${SPORT_EMOJI[a.sport_type]||""} ${a.title}</strong>
+          <div class="list-item" style="cursor:pointer;transition:all 180ms;" onclick="openActivityModal(${a.id})" onmouseover="this.style.borderColor='var(--accent)'" onmouseout="this.style.borderColor=''">
+            <div style="display:flex;justify-content:space-between;align-items:flex-start;">
+              <strong>${SPORT_EMOJI[a.sport_type]||""} ${a.title}</strong>
+              ${a.source === "strava" ? '<span style="color:var(--strava);font-size:0.72rem;font-weight:600;">STRAVA</span>' : '<span style="color:var(--muted);font-size:0.72rem;font-weight:600;">MANUEL</span>'}
+            </div>
             <span>${[
               a.duration_min ? `${a.duration_min} min` : null,
-              a.distance_m ? `${Math.round(a.distance_m/100)/10} km` : null,
-              a.perceived_load ? `charge ${a.perceived_load}/5` : null,
+              a.distance_m ? `${(a.distance_m/1000).toFixed(1)} km` : null,
+              a.elevation_m ? `${Math.round(a.elevation_m)}m D+` : null,
               formatDate(a.started_at),
             ].filter(Boolean).join(" · ")}</span>
+            ${a.avg_hr ? `<span style="display:block;margin-top:4px;font-size:0.8rem;">❤️ ${Math.round(a.avg_hr)} bpm moy${a.max_hr ? ` · ${Math.round(a.max_hr)} max` : ""}</span>` : ""}
             <span style="display:block;margin-top:6px;">
               ${a.matched_day
                 ? `<span class="badge badge-done">→ ${a.matched_day}</span> <span class="muted" style="font-size:0.78rem;">${a.match_reason||""}</span>`
@@ -1096,6 +1262,130 @@
           </div>
         `).join("");
       }
+
+      // ── Polyline decoder (Google's encoded polyline algorithm) ──
+      function decodePolyline(encoded) {
+        const points = [];
+        let index = 0, lat = 0, lng = 0;
+        while (index < encoded.length) {
+          let b, shift = 0, result = 0;
+          do { b = encoded.charCodeAt(index++) - 63; result |= (b & 0x1f) << shift; shift += 5; } while (b >= 0x20);
+          lat += (result & 1) ? ~(result >> 1) : (result >> 1);
+          shift = 0; result = 0;
+          do { b = encoded.charCodeAt(index++) - 63; result |= (b & 0x1f) << shift; shift += 5; } while (b >= 0x20);
+          lng += (result & 1) ? ~(result >> 1) : (result >> 1);
+          points.push([lat / 1e5, lng / 1e5]);
+        }
+        return points;
+      }
+
+      // ── Activity detail modal ──
+      let activityMap = null;
+
+      async function openActivityModal(activityId) {
+        const modal = document.getElementById("activity-modal");
+        const a = activities.find(x => x.id === activityId);
+        if (!a) return;
+
+        // Header
+        document.getElementById("amodal-date").textContent = formatDateLong(a.started_at);
+        document.getElementById("amodal-title").textContent = `${SPORT_EMOJI[a.sport_type]||""} ${a.title}`;
+        document.getElementById("amodal-sport").textContent = `${SPORT_LABEL[a.sport_type] || a.sport_type}${a.duration_min ? ` · ${a.duration_min} min` : ""}`;
+
+        // Map
+        const mapContainer = document.getElementById("activity-modal-map");
+        if (activityMap) { activityMap.remove(); activityMap = null; }
+
+        if (a.map_polyline) {
+          mapContainer.innerHTML = '<div id="amodal-leaflet" style="height:220px;"></div>';
+          mapContainer.className = "modal-map";
+          const points = decodePolyline(a.map_polyline);
+          if (points.length > 0) {
+            activityMap = L.map("amodal-leaflet", { zoomControl: false, attributionControl: false, dragging: true, scrollWheelZoom: false });
+            L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 18 }).addTo(activityMap);
+            const polyline = L.polyline(points, { color: "#0f766e", weight: 3.5, opacity: 0.9 }).addTo(activityMap);
+            activityMap.fitBounds(polyline.getBounds(), { padding: [20, 20] });
+            // Start/end markers
+            L.circleMarker(points[0], { radius: 6, color: "#16a34a", fillColor: "#16a34a", fillOpacity: 1, weight: 2 }).addTo(activityMap);
+            L.circleMarker(points[points.length - 1], { radius: 6, color: "#dc2626", fillColor: "#dc2626", fillOpacity: 1, weight: 2 }).addTo(activityMap);
+          }
+        } else {
+          mapContainer.className = "no-map-placeholder";
+          mapContainer.innerHTML = SPORT_EMOJI[a.sport_type] || "🏃";
+        }
+
+        // Stats
+        const stats = [];
+        if (a.distance_m) stats.push({ value: `${(a.distance_m/1000).toFixed(2)}`, label: "km", cls: "accent" });
+        if (a.duration_min) stats.push({ value: `${a.duration_min}`, label: "minutes", cls: "" });
+        if (a.elevation_m) stats.push({ value: `${Math.round(a.elevation_m)}`, label: "m D+", cls: "" });
+        if (a.avg_speed && ["running", "swimming"].includes(a.sport_type)) {
+          const pace = formatPace(a.avg_speed);
+          if (pace) stats.push({ value: pace, label: "min/km", cls: "accent" });
+        } else if (a.avg_speed) {
+          const speed = formatSpeed(a.avg_speed);
+          if (speed) stats.push({ value: speed, label: "km/h", cls: "" });
+        }
+        if (a.avg_hr) stats.push({ value: `${Math.round(a.avg_hr)}`, label: "bpm moy", cls: "warm" });
+        if (a.max_hr) stats.push({ value: `${Math.round(a.max_hr)}`, label: "bpm max", cls: "warm" });
+        if (a.calories) stats.push({ value: `${Math.round(a.calories)}`, label: "kcal", cls: "" });
+        if (a.suffer_score) stats.push({ value: `${a.suffer_score}`, label: "effort", cls: "warm" });
+        if (a.perceived_load) stats.push({ value: `${a.perceived_load}/5`, label: "charge", cls: "" });
+
+        document.getElementById("amodal-stats").innerHTML = stats.map(s =>
+          `<div class="stat-card ${s.cls}"><div class="stat-value">${s.value}</div><div class="stat-label">${s.label}</div></div>`
+        ).join("");
+
+        // Match info
+        const matchEl = document.getElementById("amodal-match");
+        if (a.matched_day) {
+          const dayLabel = weekPlan?.days.find(d => d.day === a.matched_day)?.label || a.matched_day;
+          const dayData = weekPlan?.days.find(d => d.day === a.matched_day);
+          matchEl.style.display = "block";
+          matchEl.innerHTML = `
+            <div class="modal-match">
+              <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
+                <span class="badge badge-done">Liée au plan</span>
+                <strong style="font-size:0.9rem;">${dayLabel}</strong>
+              </div>
+              ${dayData ? `<p class="muted" style="font-size:0.84rem;">${dayData.session_title} — ${dayData.session_goal}</p>` : ""}
+              ${a.match_reason ? `<p class="muted" style="font-size:0.78rem;margin-top:4px;font-style:italic;">${a.match_reason}</p>` : ""}
+            </div>`;
+        } else {
+          matchEl.style.display = "none";
+        }
+
+        // Links
+        const linksEl = document.getElementById("amodal-links");
+        if (a.source === "strava" && a.external_id) {
+          linksEl.innerHTML = `<a class="modal-strava-link" href="https://www.strava.com/activities/${a.external_id}" target="_blank" rel="noopener">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M15.387 17.944l-2.089-4.116h-3.065L15.387 24l5.15-10.172h-3.066m-7.008-5.599l2.836 5.598h4.172L10.463 0l-7 13.828h4.169"/></svg>
+            Voir sur Strava
+          </a>`;
+        } else {
+          linksEl.innerHTML = "";
+        }
+
+        modal.classList.add("open");
+        document.body.style.overflow = "hidden";
+      }
+
+      function closeActivityModal() {
+        const modal = document.getElementById("activity-modal");
+        modal.classList.remove("open");
+        document.body.style.overflow = "";
+        if (activityMap) { activityMap.remove(); activityMap = null; }
+      }
+
+      // Close on overlay click
+      document.getElementById("activity-modal").addEventListener("click", (e) => {
+        if (e.target === e.currentTarget) closeActivityModal();
+      });
+
+      // Close on Escape
+      document.addEventListener("keydown", (e) => {
+        if (e.key === "Escape") closeActivityModal();
+      });
 
       function renderStravaStatus() {
         const el = document.getElementById("strava-status");

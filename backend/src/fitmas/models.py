@@ -124,6 +124,7 @@ class UserFact(BaseModel):
 class Activity(BaseModel):
     id: int
     source: str
+    external_id: str | None = None
     sport_type: str
     title: str
     duration_min: int | None = None
@@ -139,6 +140,8 @@ class Activity(BaseModel):
     avg_speed: float | None = None
     calories: float | None = None
     suffer_score: int | None = None
+    map_polyline: str | None = None
+    start_latlng: str | None = None
 
 
 class OnboardPreview(BaseModel):

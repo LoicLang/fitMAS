@@ -127,6 +127,8 @@ class Activity(Base):
     avg_speed: Mapped[float | None] = mapped_column(nullable=True, default=None)
     calories: Mapped[float | None] = mapped_column(nullable=True, default=None)
     suffer_score: Mapped[int | None] = mapped_column(nullable=True, default=None)
+    map_polyline: Mapped[str | None] = mapped_column(Text, nullable=True, default=None)
+    start_latlng: Mapped[str | None] = mapped_column(String(64), nullable=True, default=None)
     matched_day: Mapped[str | None] = mapped_column(String(16), nullable=True, default=None)
     match_reason: Mapped[str] = mapped_column(Text, default="")
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
