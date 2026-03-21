@@ -1279,6 +1279,23 @@
         return points;
       }
 
+      function parseLatLng(raw) {
+        if (!raw || typeof raw !== "string") return null;
+        const [latRaw, lngRaw] = raw.split(",");
+        const lat = Number(latRaw);
+        const lng = Number(lngRaw);
+        if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+        return [lat, lng];
+      }
+
+      function invalidateActivityMap() {
+        if (!activityMap) return;
+        requestAnimationFrame(() => activityMap.invalidateSize());
+        window.setTimeout(() => {
+          if (activityMap) activityMap.invalidateSize();
+        }, 280);
+      }
+
       // ── Activity detail modal ──
       let activityMap = null;
 
@@ -1292,6 +1309,9 @@
         document.getElementById("amodal-title").textContent = `${SPORT_EMOJI[a.sport_type]||""} ${a.title}`;
         document.getElementById("amodal-sport").textContent = `${SPORT_LABEL[a.sport_type] || a.sport_type}${a.duration_min ? ` · ${a.duration_min} min` : ""}`;
 
+        modal.classList.add("open");
+        document.body.style.overflow = "hidden";
+
         // Map
         const mapContainer = document.getElementById("activity-modal-map");
         if (activityMap) { activityMap.remove(); activityMap = null; }
@@ -1299,15 +1319,36 @@
         if (a.map_polyline) {
           mapContainer.innerHTML = '<div id="amodal-leaflet" style="height:220px;"></div>';
           mapContainer.className = "modal-map";
-          const points = decodePolyline(a.map_polyline);
-          if (points.length > 0) {
+          let points = [];
+          try {
+            points = decodePolyline(a.map_polyline);
+          } catch (error) {
+            console.warn("Impossible de décoder le polyline Strava", error);
+          }
+          if (points.length > 1) {
             activityMap = L.map("amodal-leaflet", { zoomControl: false, attributionControl: false, dragging: true, scrollWheelZoom: false });
             L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 18 }).addTo(activityMap);
             const polyline = L.polyline(points, { color: "#0f766e", weight: 3.5, opacity: 0.9 }).addTo(activityMap);
-            activityMap.fitBounds(polyline.getBounds(), { padding: [20, 20] });
+            invalidateActivityMap();
+            window.setTimeout(() => {
+              if (!activityMap) return;
+              activityMap.fitBounds(polyline.getBounds(), { padding: [20, 20] });
+            }, 40);
             // Start/end markers
             L.circleMarker(points[0], { radius: 6, color: "#16a34a", fillColor: "#16a34a", fillOpacity: 1, weight: 2 }).addTo(activityMap);
             L.circleMarker(points[points.length - 1], { radius: 6, color: "#dc2626", fillColor: "#dc2626", fillOpacity: 1, weight: 2 }).addTo(activityMap);
+          } else {
+            const startLatLng = parseLatLng(a.start_latlng);
+            if (startLatLng) {
+              activityMap = L.map("amodal-leaflet", { zoomControl: false, attributionControl: false, dragging: true, scrollWheelZoom: false });
+              L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 18 }).addTo(activityMap);
+              L.circleMarker(startLatLng, { radius: 7, color: "#0f766e", fillColor: "#0f766e", fillOpacity: 1, weight: 2 }).addTo(activityMap);
+              activityMap.setView(startLatLng, 13);
+              invalidateActivityMap();
+            } else {
+              mapContainer.className = "no-map-placeholder";
+              mapContainer.innerHTML = SPORT_EMOJI[a.sport_type] || "🏃";
+            }
           }
         } else {
           mapContainer.className = "no-map-placeholder";
@@ -1366,8 +1407,6 @@
           linksEl.innerHTML = "";
         }
 
-        modal.classList.add("open");
-        document.body.style.overflow = "hidden";
       }
 
       function closeActivityModal() {
