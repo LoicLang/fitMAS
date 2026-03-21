@@ -17,6 +17,7 @@ from sqlalchemy.orm import Session
 
 from fitmas import repository as repo, schema as s
 from fitmas.db import SessionLocal
+from fitmas.time_context import DAY_LABELS_FR, build_time_context, render_time_context
 
 logger = logging.getLogger(__name__)
 
@@ -30,11 +31,7 @@ DAY_MAP = {
     3: "thursday", 4: "friday", 5: "saturday", 6: "sunday",
 }
 
-DAY_LABELS = {
-    "monday": "Lundi", "tuesday": "Mardi", "wednesday": "Mercredi",
-    "thursday": "Jeudi", "friday": "Vendredi", "saturday": "Samedi",
-    "sunday": "Dimanche",
-}
+DAY_LABELS = {key: label.capitalize() for key, label in DAY_LABELS_FR.items()}
 
 NEXT_DAY = {
     "monday": "tuesday", "tuesday": "wednesday", "wednesday": "thursday",
@@ -43,15 +40,19 @@ NEXT_DAY = {
 }
 
 
-def _get_today_key() -> str:
-    return DAY_MAP[datetime.now().weekday()]
+def _get_today_key(timezone_name: str | None) -> str:
+    return build_time_context(timezone_name)["day_key"]
 
 
 def _check_cooldown(db: Session, user_id: int, cooldown_hours: float = PROACTIVE_COOLDOWN_HOURS) -> bool:
     """Return True if enough time has passed since the last proactive agent message."""
     last_agent_msg = (
         db.query(s.CoachMessage)
-        .filter(s.CoachMessage.user_id == user_id, s.CoachMessage.role == "agent")
+        .filter(
+            s.CoachMessage.user_id == user_id,
+            s.CoachMessage.role == "agent",
+            s.CoachMessage.proactive.is_(True),
+        )
         .order_by(s.CoachMessage.created_at.desc())
         .first()
     )
@@ -110,7 +111,8 @@ def morning_briefing() -> str | None:
             return None
 
         plan = repo.get_active_plan(db, user.id)
-        today_key = _get_today_key()
+        time_context = build_time_context(user.timezone)
+        today_key = time_context["day_key"]
         day = repo.get_day_plan(db, plan.id, today_key)
         if not day:
             return None
@@ -145,6 +147,7 @@ def morning_briefing() -> str | None:
             system += f"\nAme du coach: {user.coach_soul}"
 
         prompt = (
+            f"{render_time_context(time_context)}\n"
             f"Genere un message matinal pour {label}.\n"
             f"Seance: {day.session_title} ({day.sport_type})\n"
             f"Objectif: {day.session_goal}\n"
@@ -154,14 +157,14 @@ def morning_briefing() -> str | None:
         )
         llm_msg = _llm_generate(system, prompt)
         if llm_msg:
-            repo.add_message(db, user.id, "agent", llm_msg)
+            repo.add_message(db, user.id, "agent", llm_msg, proactive=True)
             return llm_msg
 
         # Fallback: structured message
         msg = f"Bonjour. {label} — {day.session_title}.\n{day.session_goal}. Priorite: {day.priority}."
         if yesterday_context:
             msg += f"\n{yesterday_context.strip()}"
-        repo.add_message(db, user.id, "agent", msg)
+        repo.add_message(db, user.id, "agent", msg, proactive=True)
         return msg
     finally:
         db.close()
@@ -184,7 +187,8 @@ def pre_session_reminder() -> str | None:
             return None
 
         plan = repo.get_active_plan(db, user.id)
-        today_key = _get_today_key()
+        time_context = build_time_context(user.timezone)
+        today_key = time_context["day_key"]
         tomorrow_key = NEXT_DAY[today_key]
         day = repo.get_day_plan(db, plan.id, tomorrow_key)
         if not day:
@@ -209,16 +213,17 @@ def pre_session_reminder() -> str | None:
         if user.coach_soul:
             system += f"\nAme du coach: {user.coach_soul}"
         prompt = (
+            f"{render_time_context(time_context)}\n"
             f"Demain {label}: {day.session_title} — {day.session_goal}.\n"
             f"Priorite: {day.priority}."
         )
         llm_msg = _llm_generate(system, prompt)
         if llm_msg:
-            repo.add_message(db, user.id, "agent", llm_msg)
+            repo.add_message(db, user.id, "agent", llm_msg, proactive=True)
             return llm_msg
 
         msg = f"Demain c'est {day.session_title}. Tu te sens comment pour {label.lower()} ?"
-        repo.add_message(db, user.id, "agent", msg)
+        repo.add_message(db, user.id, "agent", msg, proactive=True)
         return msg
     finally:
         db.close()
@@ -263,17 +268,18 @@ def weekly_review(*, regenerate: bool = True) -> str | None:
         if user.coach_soul:
             system += f"\nAme du coach: {user.coach_soul}"
         prompt = (
+            f"{render_time_context(build_time_context(user.timezone))}\n"
             f"Resume de la semaine:\n{week_text}\n"
             f"Intention: {plan.intention}\n"
             f"Seances faites: {done_count}. Seances prevues non faites: {planned_count}."
         )
         llm_msg = _llm_generate(system, prompt)
         if llm_msg:
-            repo.add_message(db, user.id, "agent", llm_msg)
+            repo.add_message(db, user.id, "agent", llm_msg, proactive=True)
             return llm_msg
 
         msg = "Fin de semaine. Le plan a tenu ses reperes. On prend de la marge pour la suite."
-        repo.add_message(db, user.id, "agent", msg)
+        repo.add_message(db, user.id, "agent", msg, proactive=True)
         return msg
     finally:
         # Regenerate next week after review
@@ -315,12 +321,17 @@ def _regenerate_next_week(db: Session, user: s.User) -> None:
         constraints=constraints,
         coach_name=user.coach_name,
     )
-    enriched = formulate_week_plan(planner_output, user_profile=user_profile, coach_profile=user_profile)
+    enriched = formulate_week_plan(
+        planner_output,
+        user_profile=user_profile,
+        coach_profile=user_profile,
+        time_context=build_time_context(user.timezone),
+    )
     repo.replace_plan(
         db, user.id,
         intention=enriched["intention"],
         summary=enriched["summary"],
         days=[dict(day) for day in enriched["days"]],
     )
-    repo.add_message(db, user.id, "agent", f"Nouvelle semaine posee. {enriched['intention']}")
+    repo.add_message(db, user.id, "agent", f"Nouvelle semaine posee. {enriched['intention']}", proactive=True)
     logger.info("Next week regenerated for user %s", user.id)

@@ -224,6 +224,7 @@ class CoachMessage(Base):
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
     role: Mapped[str] = mapped_column(String(16))   # user | agent
     text: Mapped[str] = mapped_column(Text)
+    proactive: Mapped[bool] = mapped_column(default=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
     user: Mapped[User] = relationship(back_populates="messages")

@@ -16,6 +16,9 @@ from telegram.ext import (
     PicklePersistence,
     filters,
 )
+from fitmas import repository as repo
+from fitmas.db import SessionLocal
+from fitmas.time_context import build_time_context
 
 logger = logging.getLogger(__name__)
 
@@ -88,6 +91,24 @@ async def _api_post(path: str, data: dict, *, retries: int = 3) -> dict:
                 raise
 
 
+def _resolve_chat_id() -> int | None:
+    explicit = os.getenv("TELEGRAM_CHAT_ID")
+    if explicit:
+        try:
+            return int(explicit)
+        except ValueError:
+            logger.warning("Invalid TELEGRAM_CHAT_ID env value: %s", explicit)
+
+    db = SessionLocal()
+    try:
+        user = repo.get_user_optional(db)
+        if user and user.telegram_chat_id:
+            return int(user.telegram_chat_id)
+        return None
+    finally:
+        db.close()
+
+
 async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     context.user_data.clear()
     context.user_data["name"] = update.effective_user.first_name or "Loic"
@@ -119,7 +140,8 @@ async def cmd_plan(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
 async def cmd_today(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     try:
-        today_key = DAY_MAP[datetime.now().weekday()]
+        profile = await _api_get("/api/v0/profile")
+        today_key = build_time_context(profile.get("timezone")).get("day_key", DAY_MAP[datetime.now().weekday()])
         today = await _api_get(f"/api/v0/today/{today_key}")
         label = DAY_LABELS.get(today["day"], today["day"])
         emoji = SPORT_EMOJIS.get(today.get("sport_type", "rest"), "⚪")
@@ -401,16 +423,31 @@ async def cmd_sync(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         await update.message.reply_text("Probleme de sync Strava.")
 
 
+async def cmd_heartbeat(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Force a lightweight heartbeat run for debugging."""
+    try:
+        from fitmas.heartbeat import morning_briefing
+
+        msg = morning_briefing()
+        if msg:
+            await update.message.reply_text(msg, parse_mode="Markdown")
+            return
+        await update.message.reply_text("Heartbeat no-op. Cause probable: pas de seance today ou cooldown proactif.")
+    except Exception:
+        logger.exception("Error in /heartbeat")
+        await update.message.reply_text("Impossible de lancer le heartbeat.")
+
+
 async def _strava_sync_cron(context: ContextTypes.DEFAULT_TYPE) -> None:
     """Background Strava sync every 2 hours."""
     try:
         result = await _api_post("/api/v0/strava/sync", {})
         imported = result.get("imported", 0)
         if imported:
-            chat_id = os.getenv("TELEGRAM_CHAT_ID")
+            chat_id = _resolve_chat_id()
             if chat_id:
                 await context.bot.send_message(
-                    chat_id=int(chat_id),
+                    chat_id=chat_id,
                     text=f"Strava sync automatique : {imported} activite(s) importee(s).",
                 )
         logger.info("Strava cron sync: %d imported", imported)
@@ -420,15 +457,16 @@ async def _strava_sync_cron(context: ContextTypes.DEFAULT_TYPE) -> None:
 
 async def _weekly_review_cron(context: ContextTypes.DEFAULT_TYPE) -> None:
     """Sunday evening: weekly review + regenerate next week's plan."""
-    chat_id = os.getenv("TELEGRAM_CHAT_ID")
+    chat_id = _resolve_chat_id()
     if not chat_id:
+        logger.warning("No Telegram chat id available for weekly review")
         return
 
     try:
         from fitmas.heartbeat import weekly_review
         review_msg = weekly_review(regenerate=True)
         if review_msg:
-            await context.bot.send_message(chat_id=int(chat_id), text=review_msg, parse_mode="Markdown")
+            await context.bot.send_message(chat_id=chat_id, text=review_msg, parse_mode="Markdown")
 
         # Show the new plan
         week = await _api_get("/api/v0/week")
@@ -436,27 +474,46 @@ async def _weekly_review_cron(context: ContextTypes.DEFAULT_TYPE) -> None:
         for d in week["days"]:
             emoji = SPORT_EMOJIS.get(d.get("sport_type", "rest"), "⚪")
             lines.append(f"{emoji} *{d['label']}* — {d['session_title']}")
-        await context.bot.send_message(chat_id=int(chat_id), text="\n".join(lines), parse_mode="Markdown")
+        await context.bot.send_message(chat_id=chat_id, text="\n".join(lines), parse_mode="Markdown")
     except Exception:
         logger.exception("Weekly review cron failed")
 
 
 async def send_morning_briefing(context: ContextTypes.DEFAULT_TYPE) -> None:
     """Send the daily briefing via heartbeat (LLM-generated, cooldown-aware)."""
-    chat_id = os.getenv("TELEGRAM_CHAT_ID")
+    chat_id = _resolve_chat_id()
     if not chat_id:
-        logger.warning("TELEGRAM_CHAT_ID not set, skipping morning briefing")
+        logger.warning("No Telegram chat id available, skipping morning briefing")
         return
 
     try:
         from fitmas.heartbeat import morning_briefing
         msg = morning_briefing()
         if msg:
-            await context.bot.send_message(chat_id=int(chat_id), text=msg, parse_mode="Markdown")
+            await context.bot.send_message(chat_id=chat_id, text=msg, parse_mode="Markdown")
         else:
             logger.info("Morning briefing returned None (cooldown or no session)")
     except Exception:
         logger.exception("Failed to send morning briefing")
+
+
+async def send_pre_session_reminder(context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Send the evening reminder via heartbeat (LLM-generated, cooldown-aware)."""
+    chat_id = _resolve_chat_id()
+    if not chat_id:
+        logger.warning("No Telegram chat id available, skipping pre-session reminder")
+        return
+
+    try:
+        from fitmas.heartbeat import pre_session_reminder
+
+        msg = pre_session_reminder()
+        if msg:
+            await context.bot.send_message(chat_id=chat_id, text=msg, parse_mode="Markdown")
+        else:
+            logger.info("Pre-session reminder returned None (cooldown, recent exchange, or no key session)")
+    except Exception:
+        logger.exception("Failed to send pre-session reminder")
 
 
 def main() -> None:
@@ -505,14 +562,14 @@ def main() -> None:
     app.add_handler(CommandHandler("today", cmd_today))
     app.add_handler(CommandHandler("sync", cmd_sync))
     app.add_handler(CommandHandler("newweek", cmd_newweek))
+    app.add_handler(CommandHandler("heartbeat", cmd_heartbeat))
 
     # Free-text messages → coach
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
 
     # Scheduled jobs
-    chat_id = os.getenv("TELEGRAM_CHAT_ID")
     job_queue = app.job_queue
-    if chat_id and job_queue:
+    if job_queue:
         from datetime import time as dt_time
         import pytz
         tz = pytz.timezone(os.getenv("TZ", "Europe/Paris"))
@@ -524,6 +581,13 @@ def main() -> None:
             name="morning_briefing",
         )
         logger.info("Morning briefing scheduled at 07:30 %s", tz)
+
+        job_queue.run_daily(
+            send_pre_session_reminder,
+            time=dt_time(hour=18, minute=0, tzinfo=tz),
+            name="pre_session_reminder",
+        )
+        logger.info("Pre-session reminder scheduled at 18:00 %s", tz)
 
         # Strava sync every 2 hours
         job_queue.run_repeating(

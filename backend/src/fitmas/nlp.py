@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from fitmas.models import DayId, Extraction, Message, MessageReply, MessageRole
+from fitmas.time_context import build_time_context
 
 
 DAY_KEYWORDS = {
@@ -60,8 +61,14 @@ def generate_reply(user_text: str, extraction: Extraction) -> MessageReply:
     lower = user_text.lower()
     response = "Je garde ca en tete. Si ca change la semaine de maniere utile, je te le montre proprement."
     updated_day: DayId | None = None
+    time_context = build_time_context(None)
 
-    if "mardi" in lower and "jeudi" in lower:
+    if any(token in lower for token in ("quel jour", "quelle date", "quelle heure", "on est quel", "date du jour", "heure du jour")):
+        response = (
+            f"On est {time_context['day_label_fr']} {time_context['date_fr']}. "
+            f"Il est {time_context['time_fr']} en {time_context['timezone']}."
+        )
+    elif "mardi" in lower and "jeudi" in lower:
         response = "Je vois le point. Je bouge la qualite a jeudi et je garde mercredi simple pour que le bloc reste propre."
         updated_day = DayId.THURSDAY
     elif "diner" in lower or "soir" in lower:

@@ -183,8 +183,15 @@ def get_strava_connection(db: Session, user_id: int) -> s.StravaConnection | Non
 
 # ── Writes ─────────────────────────────────────────────────────────────────
 
-def add_message(db: Session, user_id: int, role: str, text: str) -> s.CoachMessage:
-    msg = s.CoachMessage(user_id=user_id, role=role, text=text)
+def add_message(
+    db: Session,
+    user_id: int,
+    role: str,
+    text: str,
+    *,
+    proactive: bool = False,
+) -> s.CoachMessage:
+    msg = s.CoachMessage(user_id=user_id, role=role, text=text, proactive=proactive)
     db.add(msg)
     db.commit()
     db.refresh(msg)

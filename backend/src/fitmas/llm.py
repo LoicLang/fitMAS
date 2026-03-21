@@ -6,6 +6,7 @@ import os
 import re
 
 from pydantic import BaseModel
+from fitmas.time_context import build_time_context, render_time_context
 
 logger = logging.getLogger(__name__)
 
@@ -103,6 +104,7 @@ def decide(
     conversation_history: list[dict] | None = None,
     coach_context: dict | None = None,
     remembered_facts: list[dict] | None = None,
+    time_context: dict | None = None,
 ) -> MutationDecision | None:
     """
     Call the LLM to extract intent and decide a plan mutation.
@@ -111,6 +113,9 @@ def decide(
     if not _client():
         logger.info("No Anthropic client available — falling back to rules")
         return None
+
+    resolved_time_context = time_context or build_time_context((coach_context or {}).get("timezone"))
+    time_block = render_time_context(resolved_time_context)
 
     # Build conversation context
     history_block = ""
@@ -139,7 +144,8 @@ def decide(
     if selected_facts:
         facts_block = "\nMemoire utile:\n" + "\n".join(f"- {fact}" for fact in selected_facts) + "\n"
 
-    prompt = f"""Plan de la semaine:
+    prompt = f"""{time_block}
+Plan de la semaine:
 {plan_summary}
 {coach_block}{facts_block}
 {history_block}
@@ -156,6 +162,8 @@ Actions possibles:
 - "no_change": aucune modification necessaire
 
 Les jours doivent etre en anglais: monday, tuesday, wednesday, thursday, friday, saturday, sunday.
+Si l'utilisateur parle de aujourd'hui, demain, hier, ce soir, demain matin ou demande la date/l'heure/jour exact, tu dois raisonner a partir du contexte temporel exact ci-dessus.
+Si la bonne reponse est purement temporelle ou explicative, garde "mutation_type": "no_change" et reponds clairement dans "fitmas_message".
 
 Exemples:
 - "mardi c'est mort, je bascule sur jeudi" → move_session, from_day: "tuesday", to_day: "thursday"
@@ -163,6 +171,8 @@ Exemples:
 - "echange samedi et dimanche" → swap_sessions, from_day: "saturday", to_day: "sunday"
 - "jeudi je prefere faire du fractionne" → update_session, from_day: "thursday", new_title: "Fractionne 8x400m"
 - "ok ca me va" → no_change
+- "on est quel jour exactement ?" → no_change, fitmas_message explique le jour et la date locale
+- "ce soir c'est quoi deja ?" → no_change ou update utile selon la seance du jour et le contexte temporel
 
 Reponds avec un JSON valide contenant exactement ces champs:
 - "mutation_type": une des valeurs ci-dessus
@@ -208,8 +218,10 @@ def make_plan_summary(days: list) -> str:
     return "\n".join(lines)
 
 
-def preview_coach_voice(context: dict) -> list[str]:
-    prompt = f"""Contexte user:
+def preview_coach_voice(context: dict, *, time_context: dict | None = None) -> list[str]:
+    resolved_time_context = time_context or build_time_context(context.get("timezone"))
+    prompt = f"""{render_time_context(resolved_time_context)}
+Contexte user:
 - objectif: {context['primary_objective']}
 - sports: {", ".join(context['sports'])}
 - style: {context['coach_style']}
@@ -237,8 +249,10 @@ Contraintes:
     return _fallback_voice_preview(context)
 
 
-def formulate_onboarding_recap(context: dict) -> str:
-    prompt = f"""Tu dois rediger le recap final d'un onboarding.
+def formulate_onboarding_recap(context: dict, *, time_context: dict | None = None) -> str:
+    resolved_time_context = time_context or build_time_context(context.get("timezone"))
+    prompt = f"""{render_time_context(resolved_time_context)}
+Tu dois rediger le recap final d'un onboarding.
 
 Contexte:
 - sports: {", ".join(context['sports'])}
@@ -262,8 +276,16 @@ Pas de markdown complexe. Pas de phrase creuse."""
     return _fallback_recap(context)
 
 
-def formulate_week_plan(planner_output: dict, user_profile: dict, coach_profile: dict) -> dict:
-    prompt = f"""Tu dois enrichir un squelette de semaine multisport sans changer sa structure.
+def formulate_week_plan(
+    planner_output: dict,
+    user_profile: dict,
+    coach_profile: dict,
+    *,
+    time_context: dict | None = None,
+) -> dict:
+    resolved_time_context = time_context or build_time_context(user_profile.get("timezone") or coach_profile.get("timezone"))
+    prompt = f"""{render_time_context(resolved_time_context)}
+Tu dois enrichir un squelette de semaine multisport sans changer sa structure.
 
 User:
 - objectif: {user_profile['primary_objective']}

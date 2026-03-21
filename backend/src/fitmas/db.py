@@ -68,6 +68,9 @@ def _ensure_sqlite_columns() -> None:
             ("matched_day", "ALTER TABLE activities ADD COLUMN matched_day VARCHAR(16)"),
             ("match_reason", "ALTER TABLE activities ADD COLUMN match_reason TEXT DEFAULT ''"),
         ],
+        "coach_messages": [
+            ("proactive", "ALTER TABLE coach_messages ADD COLUMN proactive BOOLEAN DEFAULT 0"),
+        ],
     }
 
     with engine.begin() as connection:

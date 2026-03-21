@@ -2,7 +2,7 @@
 <html lang="fr">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <link rel="manifest" href="/manifest.json">
     <meta name="theme-color" content="#0f766e">
     <meta name="apple-mobile-web-app-capable" content="yes">
@@ -10,12 +10,12 @@
     <meta name="apple-mobile-web-app-title" content="FitMAS">
     <title>FitMAS</title>
     <style>
-      @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+      @import url('https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap');
 
       :root {
         color-scheme: light;
-        --bg: #f4efe8;
-        --panel: rgba(255, 252, 247, 0.92);
+        --bg: #f6f0e7;
+        --panel: rgba(255, 252, 247, 0.86);
         --panel-strong: #fffaf2;
         --border: rgba(69, 47, 32, 0.10);
         --text: #24160d;
@@ -44,22 +44,35 @@
 
       * { box-sizing: border-box; margin: 0; padding: 0; }
 
+      html {
+        height: 100%;
+        background: var(--bg);
+      }
+
       body {
         min-height: 100vh;
         min-height: 100dvh;
-        font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        font-family: "Manrope", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
         color: var(--text);
-        background: var(--bg);
+        background:
+          radial-gradient(circle at top left, rgba(15, 118, 110, 0.10), transparent 32%),
+          radial-gradient(circle at top right, rgba(194, 107, 59, 0.10), transparent 24%),
+          linear-gradient(180deg, #f9f4ec 0%, var(--bg) 44%, #efe6da 100%);
         -webkit-font-smoothing: antialiased;
-        padding-bottom: env(safe-area-inset-bottom, 0);
+        -webkit-text-size-adjust: 100%;
+        padding:
+          max(10px, env(safe-area-inset-top, 0))
+          0
+          calc(92px + env(safe-area-inset-bottom, 0));
+        overscroll-behavior-y: none;
       }
 
       .shell {
-        width: min(860px, calc(100% - 20px));
+        width: min(920px, calc(100% - 20px));
         margin: 0 auto;
-        padding: 16px 0 100px;
+        padding: 8px 0 0;
         display: grid;
-        gap: 14px;
+        gap: 16px;
       }
 
       /* ── Header ── */
@@ -68,11 +81,15 @@
         align-items: center;
         justify-content: space-between;
         gap: 14px;
-        padding: 16px 20px;
+        padding: 18px 20px;
         border-radius: var(--radius-xl);
         background: var(--panel);
         border: 1px solid var(--border);
         box-shadow: var(--shadow);
+        backdrop-filter: blur(18px);
+        position: sticky;
+        top: max(8px, env(safe-area-inset-top, 0));
+        z-index: 20;
       }
 
       .brand { display: flex; align-items: center; gap: 12px; min-width: 0; }
@@ -96,17 +113,28 @@
 
       .topbar-copy h1 {
         font-size: clamp(1rem, 2vw, 1.25rem);
-        font-weight: 700; line-height: 1.3;
-        white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+        font-weight: 800; line-height: 1.25;
+        display: -webkit-box;
+        -webkit-line-clamp: 2;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
       }
 
-      .topbar-copy p { margin-top: 2px; color: var(--muted); font-size: 0.82rem; line-height: 1.4; }
+      .topbar-copy p {
+        margin-top: 4px; color: var(--muted); font-size: 0.82rem; line-height: 1.45;
+        display: -webkit-box;
+        -webkit-line-clamp: 2;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
+      }
 
       .pill {
         display: inline-flex; align-items: center; gap: 6px;
-        padding: 7px 12px; border-radius: 999px; flex-shrink: 0;
-        background: var(--accent-soft);
-        color: var(--accent); font-size: 0.78rem; font-weight: 600;
+        padding: 9px 13px; border-radius: 999px; flex-shrink: 0;
+        background: linear-gradient(135deg, rgba(15, 118, 110, 0.12), rgba(15, 118, 110, 0.05));
+        color: var(--accent); font-size: 0.78rem; font-weight: 700;
+        border: 1px solid rgba(15, 118, 110, 0.10);
+        white-space: nowrap;
       }
 
       /* ── Panel / Card ── */
@@ -116,6 +144,7 @@
         border: 1px solid var(--border);
         box-shadow: var(--shadow);
         padding: 16px;
+        backdrop-filter: blur(18px);
       }
 
       .card {
@@ -146,17 +175,20 @@
         box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
       }
 
-      .view { display: none; gap: 14px; }
+      .view { display: none; gap: 14px; align-content: start; }
       .view.active { display: grid; }
 
       /* ── Hero (section header) ── */
       .hero {
         padding: 20px; border-radius: var(--radius-lg);
-        background: linear-gradient(135deg, rgba(15, 118, 110, 0.08), rgba(15, 118, 110, 0.02));
-        border: 1px solid rgba(15, 118, 110, 0.10);
+        background:
+          linear-gradient(135deg, rgba(15, 118, 110, 0.14), rgba(15, 118, 110, 0.03)),
+          linear-gradient(180deg, rgba(255, 255, 255, 0.88), rgba(255, 250, 242, 0.92));
+        border: 1px solid rgba(15, 118, 110, 0.12);
+        box-shadow: inset 0 1px 0 rgba(255,255,255,0.6);
       }
 
-      .hero h2 { font-size: 1.1rem; font-weight: 700; line-height: 1.35; }
+      .hero h2 { font-size: 1.15rem; font-weight: 800; line-height: 1.28; }
 
       .hero-grid {
         margin-top: 14px; display: grid;
@@ -192,16 +224,20 @@
 
       /* ── Quick actions ── */
       .quick-actions {
-        display: flex; gap: 8px; flex-wrap: wrap; margin-top: 14px;
+        display: flex; gap: 8px; flex-wrap: wrap; margin-top: 16px;
       }
 
       .quick-btn {
         border: 1px solid var(--border); border-radius: 999px;
-        padding: 9px 16px; cursor: pointer;
+        padding: 11px 16px; cursor: pointer;
         background: white; color: var(--text);
-        font: inherit; font-size: 0.84rem; font-weight: 500;
+        font: inherit; font-size: 0.86rem; font-weight: 700;
         transition: all var(--transition);
         box-shadow: var(--shadow-sm);
+        min-height: 46px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
       }
 
       .quick-btn:hover { border-color: var(--accent); color: var(--accent); transform: translateY(-1px); }
@@ -251,7 +287,7 @@
         justify-content: space-between; gap: 8px;
       }
 
-      .day-card-head h3 { font-size: 0.9rem; font-weight: 600; }
+      .day-card-head h3 { font-size: 0.94rem; font-weight: 700; }
 
       /* ── Load bar ── */
       .load-bar {
@@ -288,7 +324,7 @@
         padding: 6px 12px; border-radius: 999px;
         background: var(--accent-soft);
         border: 1px solid rgba(15, 118, 110, 0.10);
-        color: var(--accent); font-size: 0.82rem; font-weight: 500;
+        color: var(--accent); font-size: 0.82rem; font-weight: 700;
       }
 
       /* ── Forms ── */
@@ -308,9 +344,12 @@
 
       input, select {
         width: 100%; border: 1px solid var(--border);
-        border-radius: var(--radius-md); padding: 10px 12px;
+        border-radius: var(--radius-md); padding: 12px 13px;
         font: inherit; font-size: 0.88rem; color: var(--text); background: white;
         transition: border-color var(--transition);
+        min-height: 46px;
+        appearance: none;
+        -webkit-appearance: none;
       }
 
       input:focus, select:focus, textarea:focus {
@@ -321,19 +360,22 @@
       textarea {
         width: 100%; min-height: 60px; resize: vertical;
         border: 1px solid var(--border);
-        border-radius: var(--radius-md); padding: 10px 12px;
+        border-radius: var(--radius-md); padding: 12px 13px;
         font: inherit; font-size: 0.88rem; color: var(--text); background: white;
         transition: border-color var(--transition);
+        appearance: none;
+        -webkit-appearance: none;
       }
 
       /* ── Buttons ── */
       button.primary {
         border: 0; border-radius: 999px;
-        padding: 11px 20px; font: inherit; font-size: 0.88rem; font-weight: 600;
+        padding: 12px 20px; font: inherit; font-size: 0.9rem; font-weight: 700;
         cursor: pointer; color: white;
         background: linear-gradient(135deg, var(--accent), #0d5c56);
         box-shadow: 0 4px 12px rgba(15, 118, 110, 0.25);
         transition: all var(--transition);
+        min-height: 48px;
       }
 
       button.primary:hover { transform: translateY(-1px); box-shadow: 0 6px 16px rgba(15, 118, 110, 0.3); }
@@ -342,21 +384,23 @@
 
       button.strava-btn {
         border: 0; border-radius: 999px;
-        padding: 11px 20px; font: inherit; font-size: 0.88rem; font-weight: 600;
+        padding: 12px 20px; font: inherit; font-size: 0.9rem; font-weight: 700;
         cursor: pointer; color: white;
         background: linear-gradient(135deg, var(--strava), #e04400);
         box-shadow: 0 4px 12px rgba(252, 76, 2, 0.25);
         transition: all var(--transition);
         display: inline-flex; align-items: center; gap: 8px;
+        min-height: 48px;
       }
 
       button.strava-btn:hover { transform: translateY(-1px); box-shadow: 0 6px 16px rgba(252, 76, 2, 0.3); }
 
       button.secondary {
         border: 1px solid var(--border); border-radius: 999px;
-        padding: 10px 16px; font: inherit; font-size: 0.84rem; font-weight: 500;
+        padding: 11px 16px; font: inherit; font-size: 0.85rem; font-weight: 700;
         cursor: pointer; color: var(--text); background: white;
         transition: all var(--transition);
+        min-height: 46px;
       }
 
       button.secondary:hover { border-color: var(--accent); color: var(--accent); }
@@ -395,10 +439,11 @@
       .bottom-nav {
         position: fixed; bottom: 0; left: 0; right: 0;
         display: none; /* shown on mobile */
-        background: var(--panel); border-top: 1px solid var(--border);
-        padding: 8px 12px calc(8px + env(safe-area-inset-bottom, 0));
+        background: rgba(255, 252, 247, 0.92); border-top: 1px solid var(--border);
+        padding: 8px 12px calc(10px + env(safe-area-inset-bottom, 0));
         backdrop-filter: blur(20px);
         z-index: 100;
+        box-shadow: 0 -8px 24px rgba(42, 23, 11, 0.08);
       }
 
       .bottom-nav-inner {
@@ -409,22 +454,90 @@
       .bnav {
         border: 0; background: none; cursor: pointer;
         display: flex; flex-direction: column; align-items: center; gap: 2px;
-        padding: 6px 12px; border-radius: var(--radius-sm);
-        color: var(--muted); font: inherit; font-size: 0.68rem; font-weight: 500;
-        transition: color var(--transition);
+        padding: 7px 12px; border-radius: 14px;
+        color: var(--muted); font: inherit; font-size: 0.68rem; font-weight: 700;
+        transition: color var(--transition), background var(--transition);
+        min-width: 64px;
       }
 
       .bnav .bnav-icon { font-size: 1.2rem; }
-      .bnav.active { color: var(--accent); }
+      .bnav.active { color: var(--accent); background: rgba(15, 118, 110, 0.08); }
+
+      .activity-layout {
+        display: grid;
+        grid-template-columns: minmax(0, 1.1fr) minmax(0, 0.9fr);
+        gap: 12px;
+        align-items: start;
+      }
+
+      .activity-layout > div {
+        min-width: 0;
+      }
 
       @media (max-width: 640px) {
-        .shell { width: calc(100% - 12px); padding: 10px 0 90px; gap: 10px; }
-        .topbar { padding: 12px 16px; border-radius: var(--radius-lg); }
-        .panel { padding: 12px; border-radius: var(--radius-lg); }
+        body {
+          padding:
+            max(8px, env(safe-area-inset-top, 0))
+            0
+            calc(96px + env(safe-area-inset-bottom, 0));
+        }
+        .shell { width: calc(100% - 12px); padding: 4px 0 0; gap: 12px; }
+        .topbar {
+          padding: 14px 14px 15px;
+          border-radius: 20px;
+          gap: 12px;
+          flex-direction: column;
+          align-items: stretch;
+        }
+        .pill {
+          align-self: flex-start;
+          max-width: 100%;
+          white-space: normal;
+        }
+        .panel {
+          padding: 0;
+          border: 0;
+          box-shadow: none;
+          background: transparent;
+          backdrop-filter: none;
+        }
+        .view { gap: 12px; }
+        .hero,
+        .card,
+        .strava-card,
+        .coach-card {
+          border-radius: 20px;
+        }
         .hero { padding: 16px; }
         .hero-grid { grid-template-columns: repeat(2, 1fr); }
+        .metric { padding: 11px; }
+        .section-grid,
+        .profile-grid,
+        .activity-layout { grid-template-columns: 1fr; }
         .week-grid { grid-template-columns: 1fr; }
+        .day-card { padding: 14px; }
+        .day-card-head {
+          flex-direction: column;
+          align-items: flex-start;
+        }
+        .day-card-head > div:last-child {
+          width: 100%;
+          flex-direction: row !important;
+          justify-content: space-between;
+          align-items: center !important;
+        }
+        .quick-actions {
+          display: grid;
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+          gap: 8px;
+        }
+        .quick-actions .quick-btn:first-child {
+          grid-column: 1 / -1;
+        }
         .form-grid { grid-template-columns: 1fr; }
+        input, select, textarea, button {
+          font-size: 16px !important;
+        }
         .tabs { display: none; }
         .bottom-nav { display: block; }
       }
@@ -524,7 +637,7 @@
             <h2>Ce que tu as vraiment fait</h2>
           </div>
 
-          <div class="section-grid">
+          <div class="activity-layout">
             <div class="card">
               <h3>Logger une activité</h3>
               <form class="form-grid" id="activity-form">
@@ -695,6 +808,42 @@
 
       function mapDayToApiKey(i) {
         return ["sunday","monday","tuesday","wednesday","thursday","friday","saturday"][i];
+      }
+
+      function getCurrentDayKey(timezone) {
+        try {
+          const weekday = new Intl.DateTimeFormat("en-US", {
+            weekday: "long",
+            timeZone: timezone || undefined,
+          }).format(new Date()).toLowerCase();
+          return {
+            sunday: "sunday",
+            monday: "monday",
+            tuesday: "tuesday",
+            wednesday: "wednesday",
+            thursday: "thursday",
+            friday: "friday",
+            saturday: "saturday",
+          }[weekday] || mapDayToApiKey(new Date().getDay());
+        } catch (err) {
+          return mapDayToApiKey(new Date().getDay());
+        }
+      }
+
+      function getTopbarMeta(userProfile) {
+        try {
+          const dateLabel = new Intl.DateTimeFormat("fr-FR", {
+            weekday: "short",
+            day: "numeric",
+            month: "short",
+            hour: "2-digit",
+            minute: "2-digit",
+            timeZone: userProfile?.timezone || undefined,
+          }).format(new Date()).replace(",", " ·");
+          return `${userProfile?.name || "Toi"} · ${dateLabel}`;
+        } catch (err) {
+          return userProfile?.name || "FitMAS";
+        }
       }
 
       async function fetchJson(url, opts = {}) {
@@ -1040,11 +1189,12 @@
             fetchJson("/api/v0/strava/status"),
           ]);
           profile = p; weekPlan = w; facts = f; activities = a; stravaStatus = st;
+          selectedDay = getCurrentDayKey(profile.timezone);
 
           document.getElementById("topbar-eyebrow").textContent = profile.coach_name || "FitMAS";
           document.getElementById("topbar-headline").textContent = weekPlan.intention;
           document.getElementById("topbar-summary").textContent = weekPlan.summary;
-          document.getElementById("topbar-pill").textContent = `${profile.name} · ${profile.objective || profile.primary_objective || ""}`;
+          document.getElementById("topbar-pill").textContent = getTopbarMeta(profile);
           document.getElementById("plan-intention").textContent = weekPlan.intention;
           document.getElementById("plan-summary").textContent = weekPlan.summary;
 
