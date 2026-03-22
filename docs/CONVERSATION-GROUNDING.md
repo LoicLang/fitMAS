@@ -215,6 +215,7 @@ Etat :
 - teste
 - utilise par `api_messages.py`
 - filtre aussi des signaux conversationnels utiles pour le chat
+- sert aussi maintenant de base a une policy de prompt plus parcimonieuse via `conversation_prompting.py`
 
 Note d'architecture :
 - `execution_context` reste strictement base sur le reel persiste

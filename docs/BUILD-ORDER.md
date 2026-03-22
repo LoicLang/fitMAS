@@ -145,10 +145,12 @@ Socle runtime tools pose :
 - `tool_runtime.py`
 - `tool_metrics.py`
 - `tool_routing.py`
+- `conversation_prompting.py`
 - registry V1 read-only avec metrics/logs structures
 - `llm.py` peut maintenant faire 1 tool call max pour certaines questions de lecture via le chat
 - les traces tools couvrent maintenant aussi `tools offerts mais non utilises`, `tool loop complete` et `fallback de tool loop`
 - les tools offerts au chat sont maintenant routes de facon deterministe par type de requete au lieu d'envoyer tout le registry
+- la reduction du `context dump` a commence pour les requetes de lecture outillees, avec policy de prompt deterministe
 
 ## Roadmap recommandée
 

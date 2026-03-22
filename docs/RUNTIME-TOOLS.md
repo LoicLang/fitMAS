@@ -80,10 +80,24 @@ Etat actuel :
   - rappel memoire/facts
 - si le message est simple (`ok`, retour libre, adaptation simple), aucun tool n'est offert
 
+### `conversation_prompting.py`
+
+Role :
+- choisir une politique de prompt selon le type de requete
+- reduire le `context dump` pour les requetes de lecture outillees
+- garder un comportement full-context pour les cas mutation / conversation libre
+
+Etat actuel :
+- `activity_highlights` et `recent_activities` utilisent un prompt compact
+- `plan_lookup` garde l'ancrage planning mais coupe les blocs inutiles comme les signaux
+- `fact_recall` garde surtout le temps local + la memoire utile
+- la policy choisie remonte maintenant dans les traces tools via `context_policy`
+
 ### `tool_metrics.py`
 
 Trace minimale :
 - `tool_offered`
+- `context_policy`
 - `tool_requested`
 - `tool_called`
 - `tool_name`
@@ -123,6 +137,7 @@ Les tools sont une extension future, pas un remplacement.
 Etat actuel :
 - le chat peut maintenant faire **1 tool call max** sur certaines requetes de lecture evidentes
 - activation bornee par `tool_routing.py`
+- le prompt du chat commence aussi a se compacter via `conversation_prompting.py`
 - puis reponse finale JSON comme avant
 - chaque tour outille produit maintenant une trace session-level exploitable pour mesurer :
   - si les tools ont ete seulement offres
