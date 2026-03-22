@@ -13,6 +13,7 @@ from fitmas.api_activities import router as activities_router
 from fitmas.api_debug import router as debug_router
 from fitmas.api_messages import router as messages_router
 from fitmas.api_onboarding import router as onboarding_router
+from fitmas.api_plan import router as plan_router
 from fitmas.api_read import router as read_router
 from fitmas.api_static import router as static_router
 from fitmas.db import SessionLocal, init_db
@@ -43,4 +44,5 @@ app.include_router(read_router)
 app.include_router(debug_router)
 app.include_router(activities_router)
 app.include_router(onboarding_router)
+app.include_router(plan_router)
 app.include_router(messages_router)

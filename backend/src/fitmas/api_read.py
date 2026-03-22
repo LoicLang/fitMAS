@@ -5,9 +5,42 @@ from sqlalchemy.orm import Session
 
 from fitmas import repository as repo, schema as s, strava
 from fitmas.db import get_db
-from fitmas.models import Activity, DayId, Profile, ScheduledSession, TodayView, UserFact, WeeklyPlan
+from fitmas.models import Activity, ChangeNote, DayId, Profile, ScheduledSession, TodayView, UserFact, WatchItem, WeeklyPlan
 
 router = APIRouter()
+
+
+def _build_today_view(
+    db: Session,
+    *,
+    user: s.User,
+    session: s.ScheduledSession,
+) -> TodayView:
+    _, day_row = repo.get_current_week_day_plan_for_session(db, user=user, session=session)
+    if day_row is not None:
+        change_notes = [ChangeNote(title=note.title, detail=note.detail) for note in day_row.change_notes]
+        watch_items = [WatchItem(title=item.title, detail=item.detail) for item in day_row.watch_items]
+    else:
+        change_notes = []
+        watch_items = []
+    return TodayView(
+        scheduled_session_id=session.id,
+        scheduled_date=session.scheduled_date.date().isoformat(),
+        day=DayId(session.day),
+        label=session.label,
+        sport_type=session.sport_type,
+        session_type=session.session_type,
+        session_title=session.session_title,
+        session_goal=session.session_goal,
+        session_description=session.session_description or "",
+        duration_min=session.duration_min,
+        intensity=session.intensity,
+        priority=session.priority,
+        nutrition_focus=session.nutrition_focus or "",
+        completion_status=session.completion_status,
+        change_notes=change_notes,
+        watch_items=watch_items,
+    )
 
 
 @router.get("/api/v0/profile", response_model=Profile)
@@ -27,8 +60,30 @@ def get_week(db: Session = Depends(get_db)) -> WeeklyPlan:
     return repo.to_pydantic_plan(plan)
 
 
+@router.get("/api/v0/today", response_model=TodayView)
+def get_today(db: Session = Depends(get_db)) -> TodayView:
+    user = repo.get_user_optional(db)
+    if user is None:
+        raise HTTPException(status_code=404, detail="No onboarded user yet")
+    session = repo.get_today_scheduled_session(db, user.id, timezone_name=user.timezone)
+    if session is None:
+        raise HTTPException(status_code=404, detail="No scheduled session for today")
+    return _build_today_view(db, user=user, session=session)
+
+
+@router.get("/api/v0/today/session/{session_id}", response_model=TodayView)
+def get_today_session(session_id: int, db: Session = Depends(get_db)) -> TodayView:
+    user = repo.get_user_optional(db)
+    if user is None:
+        raise HTTPException(status_code=404, detail="No onboarded user yet")
+    session = repo.get_scheduled_session(db, user.id, session_id)
+    if session is None:
+        raise HTTPException(status_code=404, detail="Scheduled session not found")
+    return _build_today_view(db, user=user, session=session)
+
+
 @router.get("/api/v0/today/{day}", response_model=TodayView)
-def get_today(day: DayId, db: Session = Depends(get_db)) -> TodayView:
+def get_today_by_day(day: DayId, db: Session = Depends(get_db)) -> TodayView:
     user = repo.get_user_optional(db)
     if user is None:
         raise HTTPException(status_code=404, detail="No onboarded user yet")
@@ -37,8 +92,19 @@ def get_today(day: DayId, db: Session = Depends(get_db)) -> TodayView:
     if day_row is None:
         raise HTTPException(status_code=404, detail=f"Day {day.value} not found in plan")
     d = repo.to_pydantic_day(day_row)
+    matching_session = next(
+        (
+            session
+            for session in repo.get_scheduled_sessions(db, user.id, limit=21)
+            if session.day == day.value
+        ),
+        None,
+    )
     return TodayView(
+        scheduled_session_id=matching_session.id if matching_session else 0,
+        scheduled_date=matching_session.scheduled_date.date().isoformat() if matching_session else "",
         day=d.day,
+        label=d.label,
         sport_type=d.sport_type,
         session_type=d.session_type,
         session_title=d.session_title,
@@ -48,6 +114,7 @@ def get_today(day: DayId, db: Session = Depends(get_db)) -> TodayView:
         intensity=d.intensity,
         priority=d.priority,
         nutrition_focus=d.nutrition_focus,
+        completion_status=d.completion_status,
         change_notes=d.change_notes,
         watch_items=d.watch_items,
     )
