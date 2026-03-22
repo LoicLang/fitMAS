@@ -88,6 +88,17 @@ Limites actuelles :
 - pas fait pour stocker chaque evenement d'execution a chaud
 - ne doit pas devenir un journal d'activite bis
 
+Etat mis a jour :
+- `UserFact` porte maintenant aussi une sémantique mémoire explicite :
+  - `urgency`
+  - `ttl`
+  - `affects`
+  - `expires_at`
+- le système sait donc mieux distinguer :
+  - info durable
+  - info temporaire
+  - info prioritaire pour la conversation
+
 ### 5. `WeeklyPlan` / `DayPlan`
 
 Source legacy encore utile pour :
@@ -263,6 +274,7 @@ Deja pose :
 - `activity_claims.py` pour extraire et merger les declarations d'activite recentes
 - `api_messages.py` branche maintenant execution + temps + claims dans le prompt LLM
 - `signals.py` et `heartbeat.py` lisent mieux les activites reelles hors plan
+- `fact_memory.py` + `UserFact` enrichi pour distinguer info durable / temporaire / prioritaire
 
 Manque encore :
 - vraie couche shared de grounding conversationnel
