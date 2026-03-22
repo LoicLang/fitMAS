@@ -59,6 +59,9 @@ Les garde-fous, la planification, les permissions, les cooldowns et la persistan
 - Début du split frontend : assets JS servis via `/app-static`
 - Strava callback redirige vers webapp (plus de JSON brut)
 - `/help` Telegram
+- Grounding conversationnel en cours : `execution_context.py`, `temporal_resolver.py`, `activity_claims.py`
+- La boucle coach reçoit maintenant un résumé structuré `prévu vs réel`, une résolution temporelle et les claims d'activité récents
+- `signals.py` et `heartbeat.py` lisent mieux les activités réelles hors plan au lieu de s'appuyer uniquement sur le plan
 
 ### Ce qui n'existe pas encore
 

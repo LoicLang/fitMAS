@@ -150,6 +150,11 @@ Role :
 - resoudre `aujourd'hui`, `demain`, `hier`, `ce soir`, `demain matin`
 - s'appuyer sur timezone user + heure locale exacte
 
+Etat :
+- pose
+- pur
+- teste
+
 Consommateurs cibles :
 - `api_messages.py`
 - `llm.py`
@@ -169,6 +174,11 @@ Exemples :
 - "j'ai fait 30 min"
 - "non c'etait hier"
 - "je n'ai pas nage, j'ai couru"
+
+Etat :
+- pose
+- fusion simple des claims recents supportee
+- teste
 
 ### `conversation_context.py`
 
@@ -249,7 +259,12 @@ Deja pose :
 - `Activity` persistées
 - pipeline planning V2 pour l'etat athlete/fitness/readiness/decision
 - `execution_context.py` pour resumer proprement prevu vs reel sur la journee
+- `temporal_resolver.py` pour resoudre les references relatives
+- `activity_claims.py` pour extraire et merger les declarations d'activite recentes
+- `api_messages.py` branche maintenant execution + temps + claims dans le prompt LLM
+- `signals.py` et `heartbeat.py` lisent mieux les activites reelles hors plan
 
 Manque encore :
 - vraie couche shared de grounding conversationnel
-- branchement de cette couche dans `api_messages.py`, `heartbeat.py`, `signals.py`
+- integration plus fine des corrections conversationnelles
+- persistance eventuelle d'un `user_claimed_activity` si la DB actuelle ne suffit pas

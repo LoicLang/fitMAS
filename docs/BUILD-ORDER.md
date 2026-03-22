@@ -128,6 +128,10 @@ Objectif :
 
 Deja pose :
 - `execution_context.py` pour resumer `prevu vs reel` sur aujourd'hui
+- `temporal_resolver.py` pour ancrer `aujourd'hui / demain / hier`
+- `activity_claims.py` pour lire les declarations d'activite recentes
+- `api_messages.py` branche maintenant execution + temps + claims dans le prompt coach
+- `signals.py` et `heartbeat.py` tiennent mieux compte des activites reelles hors plan
 
 ## Roadmap recommandée
 
