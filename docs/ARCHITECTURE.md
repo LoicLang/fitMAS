@@ -50,6 +50,7 @@ Les garde-fous, la planification, les permissions, les cooldowns et la persistan
 - Fondation charge : `tss` sur les activités + calculs `CTL/ATL/TSB`
 - Calendrier persistant partiel : `ScheduledSession` datées + timeline lecture + lien activité↔séance
 - `Today` et les CTA app passent désormais par des APIs datées déterministes
+- La boucle coach reçoit aussi la timeline datée et peut cibler une séance précise
 - Strava callback redirige vers webapp (plus de JSON brut)
 - `/help` Telegram
 
@@ -115,7 +116,8 @@ Conséquences :
 - adaptation semaine suivante peu propre
 - base faible pour dashboard et périodisation
 
-Le pivot a bien commencé avec `ScheduledSession`, mais il reste encore des zones `day key` dans le coeur hebdo.
+Le pivot a bien commencé avec `ScheduledSession`, et la boucle coach sait maintenant cibler une séance datée.
+Il reste encore des zones `day key`, surtout sur les mutations legacy type `swap_sessions`.
 
 ## Modules
 
@@ -126,7 +128,7 @@ backend/src/fitmas/
 ├── api_read.py            (~150 lignes) — profile, week, today, timeline, messages, facts, activities
 ├── api_onboarding.py      (134 lignes) — preview, onboard, regenerate
 ├── api_plan.py            (~50 lignes) — actions déterministes sur séances datées
-├── api_messages.py        (74 lignes) — boucle message → decision → facts
+├── api_messages.py        (80 lignes) — boucle message -> decision -> facts + timeline datee
 ├── api_activities.py      (121 lignes) — activités manuelles + Strava OAuth/sync
 ├── api_debug.py           (97 lignes) — debug protégé, heartbeat manuel, reset
 ├── api_support.py         (137 lignes) — normalisation onboarding + garde-fous debug
@@ -138,7 +140,7 @@ backend/src/fitmas/
 ├── telegram_api.py        (41 lignes) — client backend partagé pour le bot
 ├── telegram_shared.py     (67 lignes) — constantes + persistance drafts + helpers rendu
 ├── telegram_channel.py    (44 lignes) — résolution chat_id + envoi Telegram partagé
-├── llm.py                 (595 lignes) — Anthropic client, decisions, extraction, formulation
+├── llm.py                 (~630 lignes) — Anthropic client, decisions, extraction, formulation
 ├── repository.py          (469 lignes) — CRUD + convertisseurs Pydantic
 ├── planner.py             (359 lignes) — planner multisport déterministe
 ├── heartbeat.py           (403 lignes) — génération des drafts proactifs
@@ -147,7 +149,7 @@ backend/src/fitmas/
 ├── coach_messages.py      (31 lignes) — draft coach + persistance centralisée
 ├── strava.py              (210 lignes) — OAuth + import activités + enrichissement TSS
 ├── activities.py          (93 lignes) — normalisation + matching activités
-├── mutations.py           (113 lignes) — mutations plan encore centrées semaine courante
+├── mutations.py           (~150 lignes) — mutations hybrides: session ciblee + fallback semaine
 ├── plan_actions.py        (~120 lignes) — actions déterministes séance datée
 ├── schema.py              (239 lignes) — SQLAlchemy ORM
 ├── models.py              (155 lignes) — modèles Pydantic

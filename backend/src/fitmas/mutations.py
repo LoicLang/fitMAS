@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 
 from fitmas import plan_actions, repository as repo
 from fitmas.llm import MutationDecision
+from fitmas.time_context import get_local_now
 
 logger = logging.getLogger(__name__)
 
@@ -26,7 +27,7 @@ def apply(db: Session, plan_id: int, decision: MutationDecision) -> None:
 
     if decision.target_session_id and user is not None:
         if decision.mutation_type == "move_session":
-            target_date = _resolve_target_date(decision)
+            target_date = _resolve_target_date(decision, timezone_name=user.timezone)
             moved = plan_actions.move_session(
                 db,
                 user=user,
@@ -167,7 +168,7 @@ def apply(db: Session, plan_id: int, decision: MutationDecision) -> None:
         logger.info("No change needed: %s", decision.rationale)
 
 
-def _resolve_target_date(decision: MutationDecision) -> date | None:
+def _resolve_target_date(decision: MutationDecision, *, timezone_name: str | None) -> date | None:
     if decision.target_date:
         try:
             return date.fromisoformat(decision.target_date)
@@ -175,7 +176,7 @@ def _resolve_target_date(decision: MutationDecision) -> date | None:
             return None
     if decision.to_day:
         day_index = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"].index(decision.to_day)
-        today = date.today()
+        today = get_local_now(timezone_name).date()
         delta = (day_index - today.weekday()) % 7
         if delta == 0:
             delta = 7

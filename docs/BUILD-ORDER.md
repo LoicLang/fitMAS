@@ -149,6 +149,7 @@ Déjà posé :
 - endpoint `Today` par séance datée
 - CTA app déterministes : `done / skip / move`
 - app branchée sur la timeline persistée pour le calendrier
+- boucle coach enrichie avec timeline datée et mutations par `session_id`
 
 Reste à finir :
 - sortir les dernières mutations `day key` du coeur hebdo
