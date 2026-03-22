@@ -51,6 +51,7 @@ Les garde-fous, la planification, les permissions, les cooldowns et la persistan
 - Calendrier persistant partiel : `ScheduledSession` datées + timeline lecture + lien activité↔séance
 - `Today` et les CTA app passent désormais par des APIs datées déterministes
 - La boucle coach reçoit aussi la timeline datée et peut cibler une séance précise
+- `swap_sessions` sait aussi passer par des ids de séances concrètes
 - Strava callback redirige vers webapp (plus de JSON brut)
 - `/help` Telegram
 
@@ -116,8 +117,8 @@ Conséquences :
 - adaptation semaine suivante peu propre
 - base faible pour dashboard et périodisation
 
-Le pivot a bien commencé avec `ScheduledSession`, et la boucle coach sait maintenant cibler une séance datée.
-Il reste encore des zones `day key`, surtout sur les mutations legacy type `swap_sessions`.
+Le pivot est maintenant bien avancé avec `ScheduledSession`, et la boucle coach sait cibler ou échanger des séances datées.
+Il reste encore quelques chemins legacy `day key`, mais ils sont désormais secondaires et servent surtout de fallback.
 
 ## Modules
 
@@ -149,7 +150,7 @@ backend/src/fitmas/
 ├── coach_messages.py      (31 lignes) — draft coach + persistance centralisée
 ├── strava.py              (210 lignes) — OAuth + import activités + enrichissement TSS
 ├── activities.py          (93 lignes) — normalisation + matching activités
-├── mutations.py           (~150 lignes) — mutations hybrides: session ciblee + fallback semaine
+├── mutations.py           (~170 lignes) — mutations hybrides: session ciblee + fallback semaine
 ├── plan_actions.py        (~120 lignes) — actions déterministes séance datée
 ├── schema.py              (239 lignes) — SQLAlchemy ORM
 ├── models.py              (155 lignes) — modèles Pydantic

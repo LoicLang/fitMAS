@@ -150,9 +150,10 @@ Déjà posé :
 - CTA app déterministes : `done / skip / move`
 - app branchée sur la timeline persistée pour le calendrier
 - boucle coach enrichie avec timeline datée et mutations par `session_id`
+- `swap_sessions` daté supporté aussi
 
 Reste à finir :
-- sortir les dernières mutations `day key` du coeur hebdo
+- réduire encore les fallback `day key`
 - lineage plus propre entre générations de plans
 
 C'est la fondation manquante. Sans ça, le dashboard et la périodisation resteront bancals.
