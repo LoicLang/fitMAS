@@ -1063,6 +1063,7 @@
       let activities = [];
       let stravaStatus = { configured: false, connected: false };
       let selectedDay = mapDayToApiKey(new Date().getDay());
+      let selectedSessionId = null;
 
       const activityForm = document.getElementById("activity-form");
       const activityStatus = document.getElementById("activity-status");
@@ -1216,13 +1217,13 @@
       }
 
       // ── Today ──
-      async function loadToday(dayKey) {
-        const t = await fetchJson(`/api/v0/today/${dayKey}`);
-        const dayLabel = weekPlan?.days.find(d => d.day === dayKey)?.label ?? "Aujourd'hui";
-        const dayData = weekPlan?.days.find(d => d.day === dayKey);
-        const status = dayData?.completion_status || "planned";
+      async function loadToday(sessionId = null) {
+        const t = await fetchJson(sessionId ? `/api/v0/today/session/${sessionId}` : "/api/v0/today");
+        selectedSessionId = t.scheduled_session_id;
+        selectedDay = t.day;
+        const status = t.completion_status || "planned";
 
-        document.getElementById("today-eyebrow").textContent = dayLabel;
+        document.getElementById("today-eyebrow").textContent = t.label || "Aujourd'hui";
         document.getElementById("today-title").textContent =
           `${SPORT_EMOJI[t.sport_type] || ""} ${t.session_title}`;
         document.getElementById("today-goal").textContent = t.session_goal;
@@ -1257,35 +1258,32 @@
       // ── Quick actions ──
       document.getElementById("today-actions").addEventListener("click", async (e) => {
         const btn = e.target.closest("[data-action]");
-        if (!btn) return;
+        if (!btn || !selectedSessionId) return;
         const action = btn.dataset.action;
         const todayStatus = document.getElementById("today-status");
         btn.disabled = true;
 
         try {
           if (action === "done") {
-            await fetchJson("/api/v0/messages", {
+            await fetchJson(`/api/v0/plan/sessions/${selectedSessionId}/complete`, {
               method: "POST",
-              body: JSON.stringify({ text: `Séance du jour faite. Marque ${selectedDay} comme fait.` }),
             });
             todayStatus.textContent = "Séance marquée comme faite.";
           } else if (action === "skip") {
-            await fetchJson("/api/v0/messages", {
+            await fetchJson(`/api/v0/plan/sessions/${selectedSessionId}/skip`, {
               method: "POST",
-              body: JSON.stringify({ text: `Trop fatigué pour aujourd'hui. Allège ${selectedDay}.` }),
             });
             todayStatus.textContent = "Journée allégée.";
           } else if (action === "move") {
-            await fetchJson("/api/v0/messages", {
+            await fetchJson(`/api/v0/plan/sessions/${selectedSessionId}/move`, {
               method: "POST",
-              body: JSON.stringify({ text: `Décale la séance d'aujourd'hui au prochain jour libre.` }),
             });
             todayStatus.textContent = "Séance décalée.";
           }
           weekPlan = await fetchJson("/api/v0/week");
           scheduledTimeline = await fetchJson("/api/v0/timeline");
           renderWeek();
-          await loadToday(selectedDay);
+          await loadToday();
         } catch (err) {
           todayStatus.textContent = "Erreur. Réessaie.";
         } finally {
@@ -1373,7 +1371,7 @@
                     : "";
 
                   return `
-                    <article class="${cls.join(" ")}" data-day="${session.day}" data-date="${session.scheduled_date}" data-current-week="${isCurrentWeekSession ? "1" : "0"}">
+                    <article class="${cls.join(" ")}" data-day="${session.day}" data-session-id="${session.id}" data-date="${session.scheduled_date}" data-current-week="${isCurrentWeekSession ? "1" : "0"}">
                       <div class="timeline-date">
                         <span class="timeline-date-day">${dayDate.day}</span>
                         <span class="timeline-date-num">${dayDate.num}</span>
@@ -1423,8 +1421,9 @@
           card.addEventListener("click", async () => {
             if (card.dataset.currentWeek !== "1") return;
             selectedDay = card.dataset.day;
+            selectedSessionId = Number(card.dataset.sessionId);
             renderWeek();
-            await loadToday(selectedDay);
+            await loadToday(selectedSessionId);
             activateTab("today");
           });
         });
@@ -1477,7 +1476,7 @@
           document.getElementById("plan-intention").textContent = weekPlan.intention;
           document.getElementById("plan-summary").textContent = weekPlan.summary;
           renderWeek();
-          await loadToday(selectedDay);
+          await loadToday();
         } catch (err) {
           alert("Erreur lors de la régénération. Vérifie que l'onboarding a été fait.");
         } finally {
@@ -1818,7 +1817,7 @@
             weekPlan = await fetchJson("/api/v0/week");
             scheduledTimeline = await fetchJson("/api/v0/timeline");
             renderWeek();
-            await loadToday(selectedDay);
+            await loadToday();
             alert(`Synchro OK — ${result.imported} nouvelle(s) activité(s).`);
           }
         } catch (err) {
@@ -1849,7 +1848,7 @@
           weekPlan = await fetchJson("/api/v0/week");
           scheduledTimeline = await fetchJson("/api/v0/timeline");
           renderWeek();
-          await loadToday(selectedDay);
+          await loadToday();
         } catch (err) {
           activityStatus.textContent = "Erreur lors de l'ajout.";
         } finally {
@@ -1893,7 +1892,7 @@
           renderFacts();
           renderActivities();
           renderStravaStatus();
-          await loadToday(selectedDay);
+          await loadToday();
         } catch (err) {
           document.querySelector(".shell").innerHTML = `
             <div class="panel" style="text-align:center;padding:40px 24px;">
