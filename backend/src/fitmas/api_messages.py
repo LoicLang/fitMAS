@@ -20,6 +20,7 @@ from fitmas.llm import decide, extract_facts, make_plan_summary, make_timeline_s
 from fitmas.models import Extraction, Message, MessageReply, MessageRole
 from fitmas.nlp import extract_reply, generate_reply
 from fitmas.signals import collect_signals
+from fitmas.tool_contract import ToolContext
 
 logger = logging.getLogger(__name__)
 
@@ -99,6 +100,14 @@ def post_message(payload: IncomingMessage, db: Session = Depends(get_db)) -> Mes
         },
         remembered_facts=active_facts,
         time_context=conversation_context.time_context,
+        tool_context=ToolContext(
+            pipeline="conversation",
+            user_id=user.id,
+            timezone_name=user.timezone,
+            scheduled_sessions=scheduled_sessions,
+            activities=activities,
+            active_facts=active_facts,
+        ),
     )
 
     if decision:

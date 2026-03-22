@@ -4,11 +4,15 @@ import json
 import logging
 import os
 import re
+from typing import Any
 
 from pydantic import BaseModel
 from fitmas.fact_memory import normalize_fact_payload as normalize_fact_memory_payload
 from fitmas.fact_memory import select_relevant_facts
 from fitmas.time_context import build_time_context, render_time_context
+from fitmas.tool_contract import ToolCall, ToolContext
+from fitmas.tool_registry import list_tools_for_pipeline
+from fitmas.tool_runtime import execute_tool_call
 
 logger = logging.getLogger(__name__)
 
@@ -71,19 +75,41 @@ def _client():
 
 
 def _request_text(*, system: str, prompt: str, model: str = "claude-haiku-4-5-20251001", max_tokens: int = 512) -> str | None:
+    response = _request_message(
+        system=system,
+        messages=[{"role": "user", "content": prompt}],
+        model=model,
+        max_tokens=max_tokens,
+    )
+    return _message_text(response)
+
+
+def _request_message(
+    *,
+    system: str,
+    messages: list[dict[str, Any]],
+    model: str = "claude-haiku-4-5-20251001",
+    max_tokens: int = 512,
+    tools: list[dict[str, Any]] | None = None,
+    tool_choice: dict[str, Any] | None = None,
+):
     client = _client()
     if not client:
         return None
     try:
-        response = client.messages.create(
-            model=model,
-            max_tokens=max_tokens,
-            system=system,
-            messages=[{"role": "user", "content": prompt}],
-        )
-        return response.content[0].text.strip()
+        kwargs: dict[str, Any] = {
+            "model": model,
+            "max_tokens": max_tokens,
+            "system": system,
+            "messages": messages,
+        }
+        if tools:
+            kwargs["tools"] = tools
+        if tool_choice:
+            kwargs["tool_choice"] = tool_choice
+        return client.messages.create(**kwargs)
     except Exception:
-        logger.exception("LLM text call failed")
+        logger.exception("LLM message call failed")
         return None
 
 
@@ -115,6 +141,7 @@ def decide(
     coach_context: dict | None = None,
     remembered_facts: list[dict] | None = None,
     time_context: dict | None = None,
+    tool_context: ToolContext | None = None,
 ) -> MutationDecision | None:
     """
     Call the LLM to extract intent and decide a plan mutation.
@@ -233,7 +260,15 @@ Reponds avec un JSON valide contenant exactement ces champs:
 Reponds UNIQUEMENT avec le JSON, sans markdown, sans texte autour."""
 
     try:
-        data = _request_json(system=_SOUL, prompt=prompt)
+        data = None
+        if tool_context is not None and _should_offer_tools(user_text):
+            data = _request_json_with_tools(
+                system=_SOUL,
+                prompt=prompt,
+                tool_context=tool_context,
+            )
+        if data is None:
+            data = _request_json(system=_SOUL, prompt=prompt)
         if not data:
             return None
 
@@ -254,6 +289,73 @@ Reponds UNIQUEMENT avec le JSON, sans markdown, sans texte autour."""
         return None
 
 
+def _request_json_with_tools(
+    *,
+    system: str,
+    prompt: str,
+    tool_context: ToolContext,
+    model: str = "claude-haiku-4-5-20251001",
+    max_tokens: int = 1024,
+) -> dict | None:
+    tools = list_tools_for_pipeline(tool_context.pipeline)
+    if not tools:
+        return None
+    initial_messages = [{"role": "user", "content": prompt}]
+    response = _request_message(
+        system=system,
+        messages=initial_messages,
+        model=model,
+        max_tokens=max_tokens,
+        tools=tools,
+        tool_choice={"type": "auto", "disable_parallel_tool_use": True},
+    )
+    if response is None:
+        return None
+    if getattr(response, "stop_reason", None) != "tool_use":
+        return _message_json(response)
+
+    tool_use_block = _first_tool_use_block(response)
+    if tool_use_block is None:
+        return _message_json(response)
+
+    tool_result, _ = execute_tool_call(
+        ToolCall(tool_name=str(getattr(tool_use_block, "name", "")), arguments=dict(getattr(tool_use_block, "input", {}) or {})),
+        context=tool_context,
+        llm_round_trips=2,
+        prompt_tokens_estimate=_usage_value(response, "input_tokens"),
+        response_tokens_estimate=_usage_value(response, "output_tokens"),
+    )
+    followup_messages = list(initial_messages)
+    followup_messages.append({"role": "assistant", "content": _serialize_content_blocks(getattr(response, "content", []))})
+    followup_messages.append(
+        {
+            "role": "user",
+            "content": [
+                {
+                    "type": "tool_result",
+                    "tool_use_id": getattr(tool_use_block, "id", ""),
+                    "content": json.dumps(
+                        {
+                            "summary": tool_result.summary,
+                            "payload": tool_result.payload,
+                            "error": tool_result.error,
+                        },
+                        ensure_ascii=False,
+                    ),
+                    "is_error": tool_result.status != "ok",
+                }
+            ],
+        }
+    )
+    final_response = _request_message(
+        system=system,
+        messages=followup_messages,
+        model=model,
+        max_tokens=max_tokens,
+    )
+    return _message_json(final_response)
+
+
 def make_plan_summary(days: list) -> str:
     """Build a compact plan summary to inject into the LLM prompt."""
     lines = []
@@ -263,6 +365,95 @@ def make_plan_summary(days: list) -> str:
             f"(priorite: {d.priority}, flexibilite: {d.flexibility})"
         )
     return "\n".join(lines)
+
+
+def _message_text(response: Any) -> str | None:
+    if response is None:
+        return None
+    texts: list[str] = []
+    for block in getattr(response, "content", []) or []:
+        if getattr(block, "type", None) == "text":
+            text = str(getattr(block, "text", "")).strip()
+            if text:
+                texts.append(text)
+    if not texts:
+        return None
+    return "\n".join(texts).strip()
+
+
+def _message_json(response: Any) -> dict | None:
+    raw = _message_text(response)
+    if not raw:
+        return None
+    if raw.startswith("```"):
+        raw = raw.split("```")[1]
+        if raw.startswith("json"):
+            raw = raw[4:]
+        raw = raw.strip()
+    try:
+        return json.loads(raw)
+    except Exception:
+        logger.exception("Failed to decode LLM JSON: %s", raw[:200])
+        return None
+
+
+def _first_tool_use_block(response: Any) -> Any | None:
+    for block in getattr(response, "content", []) or []:
+        if getattr(block, "type", None) == "tool_use":
+            return block
+    return None
+
+
+def _serialize_content_blocks(blocks: list[Any]) -> list[dict[str, Any]]:
+    serialized: list[dict[str, Any]] = []
+    for block in blocks:
+        block_type = getattr(block, "type", None)
+        if block_type == "text":
+            serialized.append({"type": "text", "text": getattr(block, "text", "")})
+        elif block_type == "tool_use":
+            serialized.append(
+                {
+                    "type": "tool_use",
+                    "id": getattr(block, "id", ""),
+                    "name": getattr(block, "name", ""),
+                    "input": dict(getattr(block, "input", {}) or {}),
+                }
+            )
+    return serialized
+
+
+def _usage_value(response: Any, key: str) -> int | None:
+    usage = getattr(response, "usage", None)
+    if usage is None:
+        return None
+    value = getattr(usage, key, None)
+    try:
+        return int(value) if value is not None else None
+    except (TypeError, ValueError):
+        return None
+
+
+def _should_offer_tools(user_text: str) -> bool:
+    lowered = user_text.lower()
+    question_patterns = (
+        "c'etait quoi",
+        "c'était quoi",
+        "c est quoi",
+        "qu'est-ce que tu sais",
+        "qu est ce que tu sais",
+        "plus longue",
+        "meilleur",
+        "combien",
+        "il me reste quoi",
+        "il reste quoi",
+        "c'est quoi deja",
+        "c est quoi deja",
+        "quel etait",
+        "quelle etait",
+        "rappelle-moi",
+        "rappelle moi",
+    )
+    return "?" in lowered or any(pattern in lowered for pattern in question_patterns)
 
 
 def make_timeline_summary(sessions: list) -> str:

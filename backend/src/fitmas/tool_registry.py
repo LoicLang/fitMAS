@@ -14,35 +14,67 @@ def build_tool_registry() -> dict[str, ToolSpec]:
         ToolSpec(
             name="get_today_context",
             description="Retourne le contexte d'execution du jour: prevu, reel, ecart et activites recentes.",
-            input_schema={},
+            input_schema={"type": "object", "properties": {}, "required": []},
             allowed_pipelines=("conversation",),
             handler=_get_today_context,
         ),
         ToolSpec(
             name="get_plan_window",
             description="Retourne les seances planifiees sur une fenetre de dates.",
-            input_schema={"start_date": "YYYY-MM-DD optional", "end_date": "YYYY-MM-DD optional", "limit": "int optional"},
+            input_schema={
+                "type": "object",
+                "properties": {
+                    "start_date": {"type": "string", "description": "Date debut ISO YYYY-MM-DD."},
+                    "end_date": {"type": "string", "description": "Date fin ISO YYYY-MM-DD."},
+                    "limit": {"type": "integer", "description": "Nombre max de seances a retourner."},
+                },
+                "required": [],
+            },
             allowed_pipelines=("conversation", "planning"),
             handler=_get_plan_window,
         ),
         ToolSpec(
             name="get_recent_activities",
             description="Retourne les activites recentes sur N jours.",
-            input_schema={"days": "int optional", "limit": "int optional"},
+            input_schema={
+                "type": "object",
+                "properties": {
+                    "days": {"type": "integer", "description": "Nombre de jours a couvrir."},
+                    "limit": {"type": "integer", "description": "Nombre max d'activites a retourner."},
+                },
+                "required": [],
+            },
             allowed_pipelines=("conversation", "planning"),
             handler=_get_recent_activities,
         ),
         ToolSpec(
             name="get_activity_highlights",
             description="Retourne quelques highlights activite: plus longue sortie, plus grande distance, plus rapide.",
-            input_schema={"days": "int optional"},
+            input_schema={
+                "type": "object",
+                "properties": {
+                    "days": {"type": "integer", "description": "Fenetre recente en jours pour calculer les highlights."},
+                },
+                "required": [],
+            },
             allowed_pipelines=("conversation",),
             handler=_get_activity_highlights,
         ),
         ToolSpec(
             name="get_relevant_facts",
             description="Retourne la memoire utile la plus pertinente selon un affect.",
-            input_schema={"affects": "list[str] optional", "limit": "int optional"},
+            input_schema={
+                "type": "object",
+                "properties": {
+                    "affects": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "Liste d'affects vises, ex: conversation, planning, heartbeat.",
+                    },
+                    "limit": {"type": "integer", "description": "Nombre max de facts."},
+                },
+                "required": [],
+            },
             allowed_pipelines=("conversation", "planning", "heartbeat"),
             handler=_get_relevant_facts,
         ),

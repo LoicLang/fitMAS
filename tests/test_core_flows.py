@@ -4,12 +4,14 @@ import os
 import tempfile
 import unittest
 from datetime import datetime, timedelta
+from types import SimpleNamespace
 
 os.environ.setdefault("FITMAS_DB_PATH", tempfile.mktemp(prefix="fitmas-tests-", suffix=".db"))
 
 from fastapi.testclient import TestClient
 
 import fitmas.api_messages as api_messages
+import fitmas.llm as llm
 from fitmas.api import app
 from fitmas.db import Base, SessionLocal, engine, init_db
 from fitmas.llm import MutationDecision
@@ -214,6 +216,62 @@ class FitMASCoreFlowsTest(unittest.TestCase):
         self.assertIn("2026-", facts[0]["key"])
         self.assertIn("running", facts[0]["key"])
         self.assertIn("30 min", facts[0]["value"])
+
+    def test_message_flow_can_answer_read_query_via_tool(self) -> None:
+        _, session = self._create_plan_for_today()
+        repo.add_activity(
+            self.db,
+            user_id=self.user.id,
+            source="manual",
+            sport_type="cycling",
+            title="Velo long",
+            duration_min=90,
+            distance_m=36000,
+            elevation_m=0,
+            perceived_load=3,
+            note="",
+            started_at=session.scheduled_date.replace(hour=18),
+            matched_day=None,
+            match_reason="",
+            avg_hr=145,
+            avg_speed=8.2,
+            tss=55.0,
+        )
+        original_client = llm._client
+        original_request_message = llm._request_message
+        original_extract_facts = api_messages.extract_facts
+        calls = {"count": 0}
+        try:
+            def fake_request_message(*, system, messages, model="claude-haiku-4-5-20251001", max_tokens=512, tools=None, tool_choice=None):
+                calls["count"] += 1
+                if calls["count"] == 1:
+                    return SimpleNamespace(
+                        stop_reason="tool_use",
+                        content=[SimpleNamespace(type="tool_use", id="toolu_1", name="get_activity_highlights", input={"days": 30})],
+                        usage=SimpleNamespace(input_tokens=100, output_tokens=20),
+                    )
+                return SimpleNamespace(
+                    stop_reason="end_turn",
+                    content=[
+                        SimpleNamespace(
+                            type="text",
+                            text='{"mutation_type":"no_change","target_session_id":null,"second_session_id":null,"target_date":null,"from_day":null,"to_day":null,"new_title":null,"new_goal":null,"rationale":"lecture outil","fitmas_message":"Ta plus longue sortie recente est Velo long 90 min."}',
+                        )
+                    ],
+                    usage=SimpleNamespace(input_tokens=180, output_tokens=35),
+                )
+
+            llm._client = lambda: object()
+            llm._request_message = fake_request_message
+            api_messages.extract_facts = lambda *args, **kwargs: []
+            result = self.client.post("/api/v0/messages", json={"text": "C'etait quoi ma plus longue sortie recente ?"}).json()
+        finally:
+            llm._client = original_client
+            llm._request_message = original_request_message
+            api_messages.extract_facts = original_extract_facts
+
+        self.assertIn("Velo long 90 min", result["assistant_message"]["text"])
+        self.assertGreaterEqual(calls["count"], 2)
 
     def test_training_load_outputs_are_stable(self) -> None:
         activities = [
