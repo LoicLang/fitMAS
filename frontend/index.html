@@ -1057,6 +1057,7 @@
       const views = document.querySelectorAll(".view");
 
       let weekPlan = null;
+      let scheduledTimeline = [];
       let profile = null;
       let facts = [];
       let activities = [];
@@ -1146,6 +1147,43 @@
         return activities
           .filter(activity => activity.matched_day === dayKey)
           .sort((a, b) => new Date(b.started_at || 0) - new Date(a.started_at || 0))[0] || null;
+      }
+
+      function getActivityById(activityId) {
+        return activities.find(activity => activity.id === activityId) || null;
+      }
+
+      function parseSessionDate(rawDate) {
+        if (!rawDate) return null;
+        return new Date(`${rawDate}T12:00:00Z`);
+      }
+
+      function getLocalIsoDate(timezone, date = new Date()) {
+        try {
+          const parts = new Intl.DateTimeFormat("en-CA", {
+            timeZone: timezone || undefined,
+            year: "numeric",
+            month: "2-digit",
+            day: "2-digit",
+          }).formatToParts(date);
+          const values = Object.fromEntries(parts.map(part => [part.type, part.value]));
+          return `${values.year}-${values.month}-${values.day}`;
+        } catch (err) {
+          const parts = new Intl.DateTimeFormat("en-CA", {
+            year: "numeric",
+            month: "2-digit",
+            day: "2-digit",
+          }).formatToParts(date);
+          const values = Object.fromEntries(parts.map(part => [part.type, part.value]));
+          return `${values.year}-${values.month}-${values.day}`;
+        }
+      }
+
+      function getCurrentWeekIsoMap(timezone) {
+        const weekDateMap = buildWeekDateMap(timezone);
+        return Object.fromEntries(
+          Object.entries(weekDateMap).map(([dayKey, date]) => [dayKey, getLocalIsoDate(timezone, date)])
+        );
       }
 
       async function fetchJson(url, opts = {}) {
@@ -1245,6 +1283,7 @@
             todayStatus.textContent = "Séance décalée.";
           }
           weekPlan = await fetchJson("/api/v0/week");
+          scheduledTimeline = await fetchJson("/api/v0/timeline");
           renderWeek();
           await loadToday(selectedDay);
         } catch (err) {
@@ -1262,9 +1301,15 @@
       function renderWeek() {
         const el = document.getElementById("week-grid");
         const timezone = profile?.timezone;
-        const todayKey = getCurrentDayKey(timezone);
-        const todayIndex = DAY_ORDER.indexOf(todayKey);
-        const weekDateMap = buildWeekDateMap(timezone);
+        const todayIso = getLocalIsoDate(timezone);
+        const currentWeekIsoMap = getCurrentWeekIsoMap(timezone);
+        const sessions = scheduledTimeline?.length
+          ? scheduledTimeline
+          : weekPlan.days.map(day => ({
+              ...day,
+              scheduled_date: currentWeekIsoMap[day.day],
+              linked_activity_id: null,
+            }));
 
         const sections = {
           past: [],
@@ -1272,11 +1317,18 @@
           upcoming: [],
         };
 
-        weekPlan.days.forEach(day => {
-          const dayIndex = DAY_ORDER.indexOf(day.day);
-          const phase = dayIndex < todayIndex ? "past" : dayIndex === todayIndex ? "today" : "upcoming";
-          sections[phase].push(day);
+        sessions.forEach(session => {
+          const phase = session.scheduled_date < todayIso
+            ? "past"
+            : session.scheduled_date === todayIso
+              ? "today"
+              : "upcoming";
+          sections[phase].push(session);
         });
+
+        const currentWeekSessions = sessions.filter(session =>
+          DAY_ORDER.some(dayKey => currentWeekIsoMap[dayKey] === session.scheduled_date)
+        );
 
         const renderSection = (title, items, emptyText) => {
           if (!items.length) {
@@ -1297,15 +1349,21 @@
                 <span>${items.length} séance${items.length > 1 ? "s" : ""}</span>
               </div>
               <div class="timeline-list">
-                ${items.map(day => {
+                ${items.map(session => {
                   const cls = ["card", "day-card", "timeline-item"];
-                  if (day.day === selectedDay) cls.push("active");
-                  if (hasMutations(day)) cls.push("mutated");
-                  const emoji = SPORT_EMOJI[day.sport_type] || "";
-                  const status = day.completion_status || "planned";
-                  const dur = day.duration_min ? `${day.duration_min} min` : "Format libre";
-                  const dayDate = formatTimelineDate(weekDateMap[day.day], timezone);
-                  const linkedActivity = getDayActivity(day.day);
+                  const isCurrentWeekSession = currentWeekIsoMap[session.day] === session.scheduled_date;
+                  if (isCurrentWeekSession && session.day === selectedDay) cls.push("active");
+                  if (isCurrentWeekSession) cls.push("clickable");
+                  const dayData = weekPlan.days.find(day => day.day === session.day);
+                  if (dayData && hasMutations(dayData)) cls.push("mutated");
+                  const emoji = SPORT_EMOJI[session.sport_type] || "";
+                  const status = session.completion_status || "planned";
+                  const dur = session.duration_min ? `${session.duration_min} min` : "Format libre";
+                  const sessionDate = parseSessionDate(session.scheduled_date);
+                  const dayDate = sessionDate ? formatTimelineDate(sessionDate, timezone) : { day: "", num: "", month: "" };
+                  const linkedActivity = session.linked_activity_id
+                    ? getActivityById(session.linked_activity_id)
+                    : getDayActivity(session.day);
                   const linkedActivitySummary = linkedActivity
                     ? [
                         linkedActivity.title,
@@ -1315,7 +1373,7 @@
                     : "";
 
                   return `
-                    <article class="${cls.join(" ")}" data-day="${day.day}">
+                    <article class="${cls.join(" ")}" data-day="${session.day}" data-date="${session.scheduled_date}" data-current-week="${isCurrentWeekSession ? "1" : "0"}">
                       <div class="timeline-date">
                         <span class="timeline-date-day">${dayDate.day}</span>
                         <span class="timeline-date-num">${dayDate.num}</span>
@@ -1324,22 +1382,22 @@
                       <div class="timeline-main">
                         <div class="timeline-title-row">
                           <div>
-                            <p class="eyebrow">${day.label}</p>
-                            <h3>${emoji} ${day.session_title}</h3>
+                            <p class="eyebrow">${session.label}</p>
+                            <h3>${emoji} ${session.session_title}</h3>
                           </div>
                           <div style="display:flex;flex-direction:column;gap:4px;align-items:flex-end;">
                             <span class="badge ${statusBadgeClass(status)}">${statusLabel(status)}</span>
-                            <span class="tag tag-priority">${day.priority}</span>
+                            <span class="tag tag-priority">${session.priority}</span>
                           </div>
                         </div>
                         <div class="timeline-meta">
-                          <span class="badge badge-planned">${SPORT_LABEL[day.sport_type] || day.sport_type}</span>
+                          <span class="badge badge-planned">${SPORT_LABEL[session.sport_type] || session.sport_type}</span>
                           <span class="badge badge-planned">${dur}</span>
-                          <span class="badge badge-planned">${day.intensity || "souple"}</span>
+                          <span class="badge badge-planned">${session.intensity || "souple"}</span>
                         </div>
-                        <p class="muted" style="margin-top: 10px; font-size: 0.84rem; line-height: 1.5;">${day.session_goal}</p>
-                        ${day.session_description && day.sport_type !== "rest" ? `<p style="margin-top: 8px; font-size: 0.81rem; line-height: 1.45; color: var(--accent); white-space: pre-wrap; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical;">${day.session_description}</p>` : ""}
-                        ${day.session_note ? `<p class="muted" style="margin-top: 8px; font-size: 0.8rem; font-style: italic;">${day.session_note}</p>` : ""}
+                        <p class="muted" style="margin-top: 10px; font-size: 0.84rem; line-height: 1.5;">${session.session_goal}</p>
+                        ${session.session_description && session.sport_type !== "rest" ? `<p style="margin-top: 8px; font-size: 0.81rem; line-height: 1.45; color: var(--accent); white-space: pre-wrap; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical;">${session.session_description}</p>` : ""}
+                        ${session.session_note ? `<p class="muted" style="margin-top: 8px; font-size: 0.8rem; font-style: italic;">${session.session_note}</p>` : ""}
                         ${linkedActivity ? `
                           <div class="timeline-actual">
                             <strong>Réel enregistré</strong>
@@ -1363,6 +1421,7 @@
 
         el.querySelectorAll("[data-day]").forEach(card => {
           card.addEventListener("click", async () => {
+            if (card.dataset.currentWeek !== "1") return;
             selectedDay = card.dataset.day;
             renderWeek();
             await loadToday(selectedDay);
@@ -1372,19 +1431,21 @@
 
         // Load bar
         const bar = document.getElementById("plan-load-bar");
-        const maxLoad = Math.max(4, ...weekPlan.days.map(d => d.load_score || 0));
-        bar.innerHTML = weekPlan.days.map(day => {
+        const loadSource = currentWeekSessions.length ? currentWeekSessions : weekPlan.days;
+        const maxLoad = Math.max(4, ...loadSource.map(d => d.load_score || 0));
+        bar.innerHTML = loadSource.map(day => {
           const h = Math.max(4, ((day.load_score || 0) / maxLoad) * 28);
-          const color = day.load_score >= 3 ? "var(--warm)" :
-                        day.load_score >= 2 ? "var(--accent)" :
+          const color = (day.load_score || 0) >= 3 ? "var(--warm)" :
+                        (day.load_score || 0) >= 2 ? "var(--accent)" :
                         "rgba(15, 118, 110, 0.25)";
-          return `<div class="load-segment" style="height:${h}px;background:${color};" title="${day.label} : charge ${day.load_score}"></div>`;
+          return `<div class="load-segment" style="height:${h}px;background:${color};" title="${day.label} : charge ${day.load_score || 0}"></div>`;
         }).join("");
 
-        const doneCount = weekPlan.days.filter(day => day.completion_status === "done").length;
-        const remainingCount = weekPlan.days.filter(day => day.completion_status === "planned" && day.sport_type !== "rest").length;
-        const keyCount = weekPlan.days.filter(day => ["cle", "fort", "qualite", "long"].some(keyword => `${day.priority} ${day.session_title}`.toLowerCase().includes(keyword))).length;
-        const totalMinutes = weekPlan.days.reduce((sum, day) => sum + (day.duration_min || 0), 0);
+        const statSource = currentWeekSessions.length ? currentWeekSessions : weekPlan.days;
+        const doneCount = statSource.filter(day => day.completion_status === "done").length;
+        const remainingCount = statSource.filter(day => day.completion_status === "planned" && day.sport_type !== "rest").length;
+        const keyCount = statSource.filter(day => ["cle", "fort", "qualite", "long"].some(keyword => `${day.priority} ${day.session_title}`.toLowerCase().includes(keyword))).length;
+        const totalMinutes = statSource.reduce((sum, day) => sum + (day.duration_min || 0), 0);
         document.getElementById("plan-stats").innerHTML = `
           <div class="metric">
             <div class="metric-label">Fait</div>
@@ -1412,6 +1473,7 @@
         btn.textContent = "⏳ Génération…";
         try {
           weekPlan = await fetchJson("/api/v0/week/regenerate", { method: "POST" });
+          scheduledTimeline = await fetchJson("/api/v0/timeline");
           document.getElementById("plan-intention").textContent = weekPlan.intention;
           document.getElementById("plan-summary").textContent = weekPlan.summary;
           renderWeek();
@@ -1754,6 +1816,7 @@
             activities = await fetchJson("/api/v0/activities");
             renderActivities();
             weekPlan = await fetchJson("/api/v0/week");
+            scheduledTimeline = await fetchJson("/api/v0/timeline");
             renderWeek();
             await loadToday(selectedDay);
             alert(`Synchro OK — ${result.imported} nouvelle(s) activité(s).`);
@@ -1784,6 +1847,7 @@
           activities = await fetchJson("/api/v0/activities");
           renderActivities();
           weekPlan = await fetchJson("/api/v0/week");
+          scheduledTimeline = await fetchJson("/api/v0/timeline");
           renderWeek();
           await loadToday(selectedDay);
         } catch (err) {
@@ -1806,14 +1870,15 @@
       // ── Boot ──
       async function boot() {
         try {
-          const [p, w, f, a, st] = await Promise.all([
+          const [p, w, f, a, st, tl] = await Promise.all([
             fetchJson("/api/v0/profile"),
             fetchJson("/api/v0/week"),
             fetchJson("/api/v0/facts"),
             fetchJson("/api/v0/activities"),
             fetchJson("/api/v0/strava/status"),
+            fetchJson("/api/v0/timeline"),
           ]);
-          profile = p; weekPlan = w; facts = f; activities = a; stravaStatus = st;
+          profile = p; weekPlan = w; facts = f; activities = a; stravaStatus = st; scheduledTimeline = tl;
           selectedDay = getCurrentDayKey(profile.timezone);
 
           document.getElementById("topbar-eyebrow").textContent = profile.coach_name || "FitMAS";
