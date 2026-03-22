@@ -10,6 +10,13 @@ from fitmas.llm import MutationDecision
 logger = logging.getLogger(__name__)
 
 
+def _resync_plan_sessions(db: Session, plan_id: int) -> None:
+    plan = repo.get_plan_optional(db, plan_id)
+    if plan is None or plan.user is None:
+        return
+    repo.resync_plan_sessions(db, plan_id, timezone_name=plan.user.timezone)
+
+
 def apply(db: Session, plan_id: int, decision: MutationDecision) -> None:
     """Apply a mutation decision to the plan in DB."""
 
@@ -28,6 +35,7 @@ def apply(db: Session, plan_id: int, decision: MutationDecision) -> None:
         if src:
             repo.set_change_notes(db, src.id, [("Seance reportee", decision.rationale)])
 
+        _resync_plan_sessions(db, plan_id)
         logger.info("Applied move_session: %s → %s", decision.from_day, decision.to_day)
 
     elif decision.mutation_type == "swap_sessions":
@@ -63,6 +71,7 @@ def apply(db: Session, plan_id: int, decision: MutationDecision) -> None:
         repo.set_change_notes(db, src.id, [("Seance echangee", decision.rationale)])
         repo.set_change_notes(db, dst.id, [("Seance echangee", decision.rationale)])
 
+        _resync_plan_sessions(db, plan_id)
         logger.info("Applied swap_sessions: %s <-> %s", decision.from_day, decision.to_day)
 
     elif decision.mutation_type == "update_session":
@@ -81,6 +90,7 @@ def apply(db: Session, plan_id: int, decision: MutationDecision) -> None:
         db.commit()
         repo.set_change_notes(db, day.id, [("Seance modifiee", decision.rationale)])
 
+        _resync_plan_sessions(db, plan_id)
         logger.info("Applied update_session on %s: %s", decision.from_day, decision.new_title or "(goal only)")
 
     elif decision.mutation_type == "lighten_day":
@@ -106,6 +116,7 @@ def apply(db: Session, plan_id: int, decision: MutationDecision) -> None:
         db.commit()
         repo.set_change_notes(db, day.id, [("Journee allegee", decision.rationale)])
 
+        _resync_plan_sessions(db, plan_id)
         logger.info("Applied lighten_day on %s", decision.from_day)
 
     # "no_change" → nothing to do

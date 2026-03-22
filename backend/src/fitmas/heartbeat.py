@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import logging
 import os
+from datetime import datetime, timedelta, timezone
 
 from sqlalchemy.orm import Session
 
@@ -17,14 +18,17 @@ from fitmas import repository as repo, schema as s
 from fitmas.coach_messages import CoachDraft
 from fitmas.db import SessionLocal
 from fitmas.signals import collect_signals, format_signals_for_prompt
-from fitmas.time_context import DAY_LABELS_FR, build_time_context, hours_since, render_time_context
+from fitmas.time_context import DAY_LABELS_FR, build_time_context, get_local_now, hours_since, render_time_context
 
 logger = logging.getLogger(__name__)
 
 # Minimum hours between proactive coach messages
-PROACTIVE_COOLDOWN_HOURS = 4
+PROACTIVE_COOLDOWN_HOURS = 6
 # Minimum hours since last user exchange before sending a pre-session reminder
 RECENT_EXCHANGE_HOURS = 2
+MAX_PROACTIVE_MESSAGES_PER_DAY = 2
+MODULE_GUARD_WINDOW = timedelta(minutes=2)
+_LAST_PROACTIVE_GUARD_AT: dict[int, datetime] = {}
 
 DAY_MAP = {
     0: "monday", 1: "tuesday", 2: "wednesday",
@@ -42,6 +46,41 @@ NEXT_DAY = {
 
 def _get_today_key(timezone_name: str | None) -> str:
     return build_time_context(timezone_name)["day_key"]
+
+
+def _check_module_guard(user_id: int, *, now: datetime | None = None) -> bool:
+    current = now or datetime.now(timezone.utc)
+    last_guard_at = _LAST_PROACTIVE_GUARD_AT.get(user_id)
+    if not last_guard_at:
+        return True
+    if current - last_guard_at < MODULE_GUARD_WINDOW:
+        logger.info("Module guard active for user %s", user_id)
+        return False
+    return True
+
+
+def _reserve_module_guard(user_id: int, *, now: datetime | None = None) -> None:
+    _LAST_PROACTIVE_GUARD_AT[user_id] = now or datetime.now(timezone.utc)
+
+
+def _check_daily_cap(db: Session, user: s.User, max_messages: int = MAX_PROACTIVE_MESSAGES_PER_DAY) -> bool:
+    local_now = get_local_now(user.timezone)
+    local_midnight = local_now.replace(hour=0, minute=0, second=0, microsecond=0)
+    utc_midnight = local_midnight.astimezone(timezone.utc).replace(tzinfo=None)
+    sent_today = (
+        db.query(s.CoachMessage)
+        .filter(
+            s.CoachMessage.user_id == user.id,
+            s.CoachMessage.role == "agent",
+            s.CoachMessage.proactive.is_(True),
+            s.CoachMessage.created_at >= utc_midnight,
+        )
+        .count()
+    )
+    if sent_today >= max_messages:
+        logger.info("Daily proactive cap reached for user %s: %d/%d", user.id, sent_today, max_messages)
+        return False
+    return True
 
 
 def _check_cooldown(db: Session, user_id: int, cooldown_hours: float = PROACTIVE_COOLDOWN_HOURS) -> bool:
@@ -147,8 +186,14 @@ def morning_briefing() -> CoachDraft | None:
         user = repo.get_user(db)
 
         # Cooldown: don't spam if we sent something recently
+        if not _check_module_guard(user.id):
+            logger.info("Morning briefing skipped — module guard active")
+            return None
         if not _check_cooldown(db, user.id, cooldown_hours=PROACTIVE_COOLDOWN_HOURS):
             logger.info("Morning briefing skipped — cooldown active")
+            return None
+        if not _check_daily_cap(db, user):
+            logger.info("Morning briefing skipped — daily cap reached")
             return None
 
         plan = repo.get_active_plan(db, user.id)
@@ -208,12 +253,14 @@ def morning_briefing() -> CoachDraft | None:
         )
         llm_msg = _llm_generate(system, prompt)
         if llm_msg:
+            _reserve_module_guard(user.id)
             return CoachDraft(text=llm_msg, proactive=True)
 
         # Fallback: structured message
         msg = f"Bonjour. {label} — {day.session_title}.\n{day.session_goal}. Priorite: {day.priority}."
         if yesterday_context:
             msg += f"\n{yesterday_context.strip()}"
+        _reserve_module_guard(user.id)
         return CoachDraft(text=msg, proactive=True)
     finally:
         db.close()
@@ -226,8 +273,14 @@ def pre_session_reminder() -> CoachDraft | None:
         user = repo.get_user(db)
 
         # Cooldown: don't send if recent proactive message
+        if not _check_module_guard(user.id):
+            logger.info("Pre-session reminder skipped — module guard active")
+            return None
         if not _check_cooldown(db, user.id, cooldown_hours=PROACTIVE_COOLDOWN_HOURS):
             logger.info("Pre-session reminder skipped — cooldown active")
+            return None
+        if not _check_daily_cap(db, user):
+            logger.info("Pre-session reminder skipped — daily cap reached")
             return None
 
         # Skip if user just talked to the coach
@@ -261,6 +314,13 @@ def pre_session_reminder() -> CoachDraft | None:
         )
         if user.coach_soul:
             system += f"\nAme du coach: {user.coach_soul}"
+        signals = collect_signals(db, user)
+        signals_block = format_signals_for_prompt(signals)
+        if signals_block:
+            system += (
+                f"\n\n{signals_block}\n"
+                "Integre les signaux dans ton rappel seulement si ca renforce une action utile."
+            )
         prompt = (
             f"{render_time_context(time_context)}\n"
             f"Demain {label}: {day.session_title} — {day.session_goal}.\n"
@@ -268,9 +328,11 @@ def pre_session_reminder() -> CoachDraft | None:
         )
         llm_msg = _llm_generate(system, prompt)
         if llm_msg:
+            _reserve_module_guard(user.id)
             return CoachDraft(text=llm_msg, proactive=True)
 
         msg = f"Demain c'est {day.session_title}. Tu te sens comment pour {label.lower()} ?"
+        _reserve_module_guard(user.id)
         return CoachDraft(text=msg, proactive=True)
     finally:
         db.close()
@@ -322,9 +384,11 @@ def weekly_review() -> CoachDraft | None:
         )
         llm_msg = _llm_generate(system, prompt, allow_no_send=False)
         if llm_msg:
+            _reserve_module_guard(user.id)
             return CoachDraft(text=llm_msg, proactive=True)
 
         msg = "Fin de semaine. Le plan a tenu ses reperes. On prend de la marge pour la suite."
+        _reserve_module_guard(user.id)
         return CoachDraft(text=msg, proactive=True)
     finally:
         db.close()
@@ -340,8 +404,14 @@ def signal_check() -> CoachDraft | None:
     try:
         user = repo.get_user(db)
 
+        if not _check_module_guard(user.id):
+            logger.info("Signal check skipped — module guard active")
+            return None
         if not _check_cooldown(db, user.id, cooldown_hours=PROACTIVE_COOLDOWN_HOURS):
             logger.info("Signal check skipped — cooldown active")
+            return None
+        if not _check_daily_cap(db, user):
+            logger.info("Signal check skipped — daily cap reached")
             return None
 
         if _had_recent_exchange(db, user.id, hours=RECENT_EXCHANGE_HOURS):
@@ -383,6 +453,7 @@ def signal_check() -> CoachDraft | None:
         prompt = f"{render_time_context(time_context)}\nGenere un message proactif."
         llm_msg = _llm_generate(system, prompt)
         if llm_msg:
+            _reserve_module_guard(user.id)
             return CoachDraft(text=llm_msg, proactive=True)
 
         # Fallback
@@ -398,6 +469,7 @@ def signal_check() -> CoachDraft | None:
         else:
             msg = "Je garde un oeil sur ta semaine. On en reparle."
 
+        _reserve_module_guard(user.id)
         return CoachDraft(text=msg, proactive=True)
     finally:
         db.close()

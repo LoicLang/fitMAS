@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 
 from fitmas import repository as repo, schema as s, strava
 from fitmas.db import get_db
-from fitmas.models import Activity, DayId, Profile, TodayView, UserFact, WeeklyPlan
+from fitmas.models import Activity, DayId, Profile, ScheduledSession, TodayView, UserFact, WeeklyPlan
 
 router = APIRouter()
 
@@ -89,6 +89,15 @@ def get_activity(activity_id: int, db: Session = Depends(get_db)) -> Activity:
     if activity is None:
         raise HTTPException(status_code=404, detail="Activity not found")
     return repo.to_pydantic_activity(activity)
+
+
+@router.get("/api/v0/timeline", response_model=list[ScheduledSession])
+def get_timeline(limit: int = 42, db: Session = Depends(get_db)) -> list[ScheduledSession]:
+    user = repo.get_user_optional(db)
+    if user is None:
+        return []
+    sessions = repo.get_scheduled_sessions(db, user.id, limit=max(1, min(limit, 84)))
+    return [repo.to_pydantic_scheduled_session(session) for session in sessions]
 
 
 @router.get("/api/v0/strava/status")

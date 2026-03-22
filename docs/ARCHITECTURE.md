@@ -39,25 +39,26 @@ Les garde-fous, la planification, les permissions, les cooldowns et la persistan
 - Heartbeat proactif : briefing matin 7h30, rappel pré-séance 18h, revue dimanche 20h, nouvelle semaine lundi 6h
 - Distinction `CoachMessage.proactive` : cooldown appliqué seulement aux messages proactifs
 - Heartbeat découplé : génération de draft, livraison, puis persistance après succès
-- Cooldowns : 4h entre messages proactifs, skip si échange récent (<2h)
+- Cooldowns : 6h entre messages proactifs, skip si échange récent (<2h), max 2 messages/jour
+- Verrou scheduler local + guard mémoire pour réduire les doublons en mono-process
 - Revue hebdomadaire sans écrasement de la semaine en cours, puis régénération automatique le lundi matin
 - Seed intelligent si pas d'utilisateur (profil multisport complet)
 
 - Signaux proactifs : `signals.py` détecte séance manquée, silence, charge haute, grosse séance, streak
-- Signal check cron 14h + post-Strava sync pour feedback temps réel
+- Les signaux enrichissent surtout le briefing matin et le rappel pré-séance
 - Données Strava enrichies : avg_hr, max_hr, avg_speed, calories, suffer_score
+- Fondation charge : `tss` sur les activités + calculs `CTL/ATL/TSB`
+- Calendrier persistant partiel : `ScheduledSession` datées + timeline lecture + lien activité↔séance
 - Strava callback redirige vers webapp (plus de JSON brut)
 - `/help` Telegram
 
 ### Ce qui n'existe pas encore
 
-- Verrou robuste anti-doublon au niveau scheduler heartbeat
-- TSS / CTL / ATL / TSB
-- Calendrier persistant daté
+- Verrou robuste anti-doublon multi-instance
 - Dashboard performance complet
 - Périodisation explicite
 - Webhook Strava (actuellement polling toutes les 2h)
-- Lineage de plans (historique des plans passés)
+- Lineage de plans explicite
 - Decision log explicite
 - Tests automatisés
 - Apple Health / wearable data
@@ -97,7 +98,7 @@ Les garde-fous, la planification, les permissions, les cooldowns et la persistan
 Ordre recommandé :
 1. Fiabiliser Telegram et la fréquence des messages
 2. Introduire le calcul de charge (`tss`, `CTL/ATL/TSB`)
-3. Remplacer la logique hebdo destructrice par un calendrier persistant
+3. Étendre le calendrier persistant jusqu'aux mutations et à l'app
 4. Construire le dashboard performance sur cette base
 5. Ajouter la périodisation
 6. Repousser l'architecture multi-agent après stabilisation
@@ -105,7 +106,7 @@ Ordre recommandé :
 ### Pourquoi le calendrier persistant est prioritaire
 
 Le principal défaut structurel actuel n'est pas le manque de graphes ou de LLM.
-C'est le fait que le modèle de plan reste un `WeeklyPlan` destructif.
+C'est le fait que le modèle principal reste encore piloté par un `WeeklyPlan` destructif.
 
 Conséquences :
 - historique planning fragile
@@ -113,7 +114,7 @@ Conséquences :
 - adaptation semaine suivante peu propre
 - base faible pour dashboard et périodisation
 
-Le prochain vrai pivot de modèle doit être une séance datée persistée, type `ScheduledSession`.
+Le pivot a commencé avec `ScheduledSession`, mais il faut encore finir la propagation côté mutations et UI.
 
 ## Modules
 
@@ -121,7 +122,7 @@ Le prochain vrai pivot de modèle doit être une séance datée persistée, type
 backend/src/fitmas/
 ├── api.py                 (46 lignes) — bootstrap FastAPI + lifespan
 ├── api_static.py          (23 lignes) — health + fichiers statiques
-├── api_read.py            (105 lignes) — profile, week, today, messages, facts, activities
+├── api_read.py            (115 lignes) — profile, week, today, timeline, messages, facts, activities
 ├── api_onboarding.py      (134 lignes) — preview, onboard, regenerate
 ├── api_messages.py        (74 lignes) — boucle message → decision → facts
 ├── api_activities.py      (121 lignes) — activités manuelles + Strava OAuth/sync
@@ -142,12 +143,13 @@ backend/src/fitmas/
 ├── signals.py             (312 lignes) — signaux dérivés
 ├── time_context.py        (122 lignes) — timezone + helpers UTC
 ├── coach_messages.py      (31 lignes) — draft coach + persistance centralisée
-├── strava.py              (187 lignes) — OAuth + import activités
+├── strava.py              (210 lignes) — OAuth + import activités + enrichissement TSS
 ├── activities.py          (93 lignes) — normalisation + matching activités
 ├── mutations.py           (113 lignes) — mutations plan
 ├── schema.py              (239 lignes) — SQLAlchemy ORM
 ├── models.py              (155 lignes) — modèles Pydantic
 ├── db.py                  (101 lignes) — engine, sessions, migrations légères
+├── training_load.py       (132 lignes) — TSS + CTL/ATL/TSB
 ├── seed.py                (235 lignes) — seed si vide
 ├── state.py               (151 lignes) — état global app
 ├── nlp.py                 (88 lignes) — fallback rule-based
@@ -160,7 +162,7 @@ frontend/
 
 ## Modèle de données
 
-### Tables (13)
+### Tables (14)
 
 ```
 User
@@ -213,7 +215,16 @@ Activity
   duration_min, distance_m, elevation_m
   perceived_load, note, started_at
   avg_hr, max_hr, avg_speed, calories, suffer_score, tss
-  matched_day, match_reason, created_at
+  matched_day, match_reason, scheduled_session_id, created_at
+
+ScheduledSession
+  id, user_id (FK), day, label, scheduled_date
+  source_plan_created_at
+  sport_type, session_type, session_title
+  session_goal, session_note, session_description
+  duration_min, intensity, load_score
+  priority, nutrition_focus, flexibility, completion_status
+  created_at, updated_at
 
 StravaConnection
   id, user_id (FK), athlete_id

@@ -110,6 +110,7 @@ def onboard(payload: OnboardPayload, db: Session = Depends(get_db)) -> OnboardRe
         intention=enriched_week["intention"],
         summary=enriched_week["summary"],
         days=[dict(day) for day in enriched_week["days"]],
+        timezone_name=user.timezone,
     )
 
     return OnboardResult(recap=recap, week_plan=repo.to_pydantic_plan(plan))
@@ -128,6 +129,7 @@ def regenerate_week(db: Session = Depends(get_db)) -> WeeklyPlan:
         intention=enriched_week["intention"],
         summary=enriched_week["summary"],
         days=[dict(day) for day in enriched_week["days"]],
+        timezone_name=user.timezone,
     )
 
     logger.info("Week regenerated for user %s", user.id)

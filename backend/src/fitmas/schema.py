@@ -49,6 +49,9 @@ class User(Base):
     weekly_plans: Mapped[list[WeeklyPlan]] = relationship(
         back_populates="user", cascade="all, delete-orphan"
     )
+    scheduled_sessions: Mapped[list[ScheduledSession]] = relationship(
+        back_populates="user", cascade="all, delete-orphan"
+    )
     messages: Mapped[list[CoachMessage]] = relationship(
         back_populates="user", cascade="all, delete-orphan"
     )
@@ -114,6 +117,7 @@ class Activity(Base):
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
     source: Mapped[str] = mapped_column(String(16), default="manual")
     external_id: Mapped[str | None] = mapped_column(String(64), nullable=True, default=None)
+    scheduled_session_id: Mapped[int | None] = mapped_column(ForeignKey("scheduled_sessions.id"), nullable=True, default=None)
     sport_type: Mapped[str] = mapped_column(String(32))
     title: Mapped[str] = mapped_column(Text)
     duration_min: Mapped[int | None] = mapped_column(nullable=True, default=None)
@@ -127,6 +131,7 @@ class Activity(Base):
     avg_speed: Mapped[float | None] = mapped_column(nullable=True, default=None)
     calories: Mapped[float | None] = mapped_column(nullable=True, default=None)
     suffer_score: Mapped[int | None] = mapped_column(nullable=True, default=None)
+    tss: Mapped[float | None] = mapped_column(nullable=True, default=None)
     map_polyline: Mapped[str | None] = mapped_column(Text, nullable=True, default=None)
     start_latlng: Mapped[str | None] = mapped_column(String(64), nullable=True, default=None)
     matched_day: Mapped[str | None] = mapped_column(String(16), nullable=True, default=None)
@@ -134,6 +139,7 @@ class Activity(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
     user: Mapped[User] = relationship(back_populates="activities")
+    scheduled_session: Mapped[ScheduledSession | None] = relationship(back_populates="activities")
 
 
 class StravaConnection(Base):
@@ -171,6 +177,37 @@ class WeeklyPlan(Base):
         cascade="all, delete-orphan",
         order_by="DayPlan.sort_order",
     )
+
+
+class ScheduledSession(Base):
+    __tablename__ = "scheduled_sessions"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
+    day: Mapped[str] = mapped_column(String(16))
+    label: Mapped[str] = mapped_column(String(32))
+    scheduled_date: Mapped[datetime] = mapped_column(DateTime)
+    source_plan_created_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True, default=None)
+    sport_type: Mapped[str] = mapped_column(String(32), default="running")
+    session_type: Mapped[str] = mapped_column(String(32), default="easy")
+    session_title: Mapped[str] = mapped_column(Text)
+    session_goal: Mapped[str] = mapped_column(Text)
+    session_note: Mapped[str] = mapped_column(Text, default="")
+    session_description: Mapped[str] = mapped_column(Text, default="")
+    duration_min: Mapped[int | None] = mapped_column(nullable=True, default=None)
+    intensity: Mapped[str] = mapped_column(String(16), default="easy")
+    load_score: Mapped[int] = mapped_column(default=1)
+    priority: Mapped[str] = mapped_column(String(32), default="Normal")
+    nutrition_focus: Mapped[str] = mapped_column(Text, default="")
+    flexibility: Mapped[str] = mapped_column(String(16), default="stable")
+    completion_status: Mapped[str] = mapped_column(String(16), default="planned")
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(), onupdate=func.now()
+    )
+
+    user: Mapped[User] = relationship(back_populates="scheduled_sessions")
+    activities: Mapped[list[Activity]] = relationship(back_populates="scheduled_session")
 
 
 class DayPlan(Base):

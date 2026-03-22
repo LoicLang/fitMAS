@@ -96,6 +96,27 @@ class Message(BaseModel):
     text: str
 
 
+class ScheduledSession(BaseModel):
+    id: int
+    day: DayId
+    label: str
+    scheduled_date: str
+    sport_type: str = "running"
+    session_type: str = "easy"
+    session_title: str
+    session_goal: str
+    session_note: str = ""
+    session_description: str = ""
+    duration_min: int | None = None
+    intensity: str = "easy"
+    load_score: int = 1
+    priority: str
+    nutrition_focus: str = ""
+    flexibility: str = "stable"
+    completion_status: str = "planned"
+    linked_activity_id: int | None = None
+
+
 class Extraction(BaseModel):
     availability: list[str] = Field(default_factory=list)
     constraints: list[str] = Field(default_factory=list)
@@ -125,6 +146,7 @@ class Activity(BaseModel):
     id: int
     source: str
     external_id: str | None = None
+    scheduled_session_id: int | None = None
     sport_type: str
     title: str
     duration_min: int | None = None
@@ -140,6 +162,7 @@ class Activity(BaseModel):
     avg_speed: float | None = None
     calories: float | None = None
     suffer_score: int | None = None
+    tss: float | None = None
     map_polyline: str | None = None
     start_latlng: str | None = None
 

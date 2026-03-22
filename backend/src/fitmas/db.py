@@ -65,6 +65,7 @@ def _ensure_sqlite_columns() -> None:
         ],
         "activities": [
             ("external_id", "ALTER TABLE activities ADD COLUMN external_id VARCHAR(64)"),
+            ("scheduled_session_id", "ALTER TABLE activities ADD COLUMN scheduled_session_id INTEGER"),
             ("distance_m", "ALTER TABLE activities ADD COLUMN distance_m FLOAT"),
             ("elevation_m", "ALTER TABLE activities ADD COLUMN elevation_m FLOAT"),
             ("perceived_load", "ALTER TABLE activities ADD COLUMN perceived_load INTEGER"),
@@ -76,6 +77,7 @@ def _ensure_sqlite_columns() -> None:
             ("avg_speed", "ALTER TABLE activities ADD COLUMN avg_speed FLOAT"),
             ("calories", "ALTER TABLE activities ADD COLUMN calories FLOAT"),
             ("suffer_score", "ALTER TABLE activities ADD COLUMN suffer_score INTEGER"),
+            ("tss", "ALTER TABLE activities ADD COLUMN tss FLOAT"),
             ("map_polyline", "ALTER TABLE activities ADD COLUMN map_polyline TEXT"),
             ("start_latlng", "ALTER TABLE activities ADD COLUMN start_latlng VARCHAR(64)"),
         ],

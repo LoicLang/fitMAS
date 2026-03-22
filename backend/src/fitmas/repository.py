@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from datetime import date, datetime, time, timedelta
+
 from sqlalchemy.orm import Session
 
 from fitmas import schema as s
@@ -11,10 +13,12 @@ from fitmas.models import (
     Message,
     MessageRole,
     Profile,
+    ScheduledSession,
     UserFact,
     WatchItem,
     WeeklyPlan,
 )
+from fitmas.time_context import DAY_KEYS, get_local_now
 
 
 # ── Converters ─────────────────────────────────────────────────────────────
@@ -75,6 +79,32 @@ def to_pydantic_message(msg: s.CoachMessage) -> Message:
     return Message(role=MessageRole(msg.role), text=msg.text)
 
 
+def to_pydantic_scheduled_session(session: s.ScheduledSession) -> ScheduledSession:
+    linked_activity_id = None
+    if session.activities:
+        linked_activity_id = max((activity.id for activity in session.activities), default=None)
+    return ScheduledSession(
+        id=session.id,
+        day=DayId(session.day),
+        label=session.label,
+        scheduled_date=session.scheduled_date.date().isoformat(),
+        sport_type=session.sport_type,
+        session_type=session.session_type,
+        session_title=session.session_title,
+        session_goal=session.session_goal,
+        session_note=session.session_note or "",
+        session_description=session.session_description or "",
+        duration_min=session.duration_min,
+        intensity=session.intensity,
+        load_score=session.load_score,
+        priority=session.priority,
+        nutrition_focus=session.nutrition_focus or "",
+        flexibility=session.flexibility,
+        completion_status=session.completion_status,
+        linked_activity_id=linked_activity_id,
+    )
+
+
 def to_pydantic_fact(fact: s.UserFact) -> UserFact:
     return UserFact(
         category=fact.category,
@@ -92,6 +122,7 @@ def to_pydantic_activity(activity: s.Activity) -> Activity:
         id=activity.id,
         source=activity.source,
         external_id=activity.external_id,
+        scheduled_session_id=activity.scheduled_session_id,
         sport_type=activity.sport_type,
         title=activity.title,
         duration_min=activity.duration_min,
@@ -107,6 +138,7 @@ def to_pydantic_activity(activity: s.Activity) -> Activity:
         avg_speed=activity.avg_speed,
         calories=activity.calories,
         suffer_score=activity.suffer_score,
+        tss=activity.tss,
         map_polyline=activity.map_polyline,
         start_latlng=activity.start_latlng,
     )
@@ -135,6 +167,10 @@ def get_active_plan(db: Session, user_id: int) -> s.WeeklyPlan:
     if plan is None:
         raise RuntimeError("No active plan in DB")
     return plan
+
+
+def get_plan_optional(db: Session, plan_id: int) -> s.WeeklyPlan | None:
+    return db.query(s.WeeklyPlan).filter(s.WeeklyPlan.id == plan_id).first()
 
 
 def get_day_plan(db: Session, plan_id: int, day: str) -> s.DayPlan | None:
@@ -190,6 +226,88 @@ def get_strava_connection(db: Session, user_id: int) -> s.StravaConnection | Non
     )
 
 
+def get_scheduled_sessions(
+    db: Session,
+    user_id: int,
+    *,
+    date_from: date | None = None,
+    limit: int = 42,
+) -> list[s.ScheduledSession]:
+    query = db.query(s.ScheduledSession).filter(s.ScheduledSession.user_id == user_id)
+    if date_from is not None:
+        return (
+            query
+            .filter(s.ScheduledSession.scheduled_date >= datetime.combine(date_from, time.min))
+            .order_by(s.ScheduledSession.scheduled_date.asc(), s.ScheduledSession.id.asc())
+            .limit(limit)
+            .all()
+        )
+    sessions = (
+        query
+        .order_by(s.ScheduledSession.scheduled_date.desc(), s.ScheduledSession.id.desc())
+        .limit(limit)
+        .all()
+    )
+    return list(reversed(sessions))
+
+
+def get_scheduled_session_for_date(
+    db: Session,
+    user_id: int,
+    *,
+    day: str,
+    scheduled_date: datetime,
+) -> s.ScheduledSession | None:
+    return (
+        db.query(s.ScheduledSession)
+        .filter(
+            s.ScheduledSession.user_id == user_id,
+            s.ScheduledSession.day == day,
+            s.ScheduledSession.scheduled_date == scheduled_date,
+        )
+        .first()
+    )
+
+
+def find_scheduled_session_for_activity(
+    db: Session,
+    *,
+    user_id: int,
+    sport_type: str,
+    started_at: datetime | None,
+    timezone_name: str | None,
+) -> s.ScheduledSession | None:
+    if started_at is None:
+        local_date = get_local_now(timezone_name).date()
+    elif started_at.tzinfo is None:
+        local_date = started_at.date()
+    else:
+        local_date = get_local_now(timezone_name, now=started_at).date()
+
+    day_start = datetime.combine(local_date, time.min)
+    day_end = day_start + timedelta(days=1)
+    sessions = (
+        db.query(s.ScheduledSession)
+        .filter(
+            s.ScheduledSession.user_id == user_id,
+            s.ScheduledSession.scheduled_date >= day_start,
+            s.ScheduledSession.scheduled_date < day_end,
+        )
+        .order_by(s.ScheduledSession.id.asc())
+        .all()
+    )
+    if not sessions:
+        return None
+
+    for session in sessions:
+        if session.sport_type == sport_type:
+            return session
+    for session in sessions:
+        if session.completion_status != "done":
+            return session
+    return sessions[0]
+
+
 # ── Writes ─────────────────────────────────────────────────────────────────
 
 def add_message(
@@ -213,6 +331,7 @@ def add_activity(
     user_id: int,
     source: str,
     external_id: str | None = None,
+    scheduled_session_id: int | None = None,
     sport_type: str,
     title: str,
     duration_min: int | None,
@@ -228,6 +347,7 @@ def add_activity(
     avg_speed: float | None = None,
     calories: float | None = None,
     suffer_score: int | None = None,
+    tss: float | None = None,
     map_polyline: str | None = None,
     start_latlng: str | None = None,
 ) -> s.Activity:
@@ -235,6 +355,7 @@ def add_activity(
         user_id=user_id,
         source=source,
         external_id=external_id,
+        scheduled_session_id=scheduled_session_id,
         sport_type=sport_type,
         title=title,
         duration_min=duration_min,
@@ -250,6 +371,7 @@ def add_activity(
         avg_speed=avg_speed,
         calories=calories,
         suffer_score=suffer_score,
+        tss=tss,
         map_polyline=map_polyline,
         start_latlng=start_latlng,
     )
@@ -358,6 +480,7 @@ def replace_plan(
     intention: str,
     summary: str,
     days: list[dict],
+    timezone_name: str | None = None,
 ) -> s.WeeklyPlan:
     plans = db.query(s.WeeklyPlan).filter(s.WeeklyPlan.user_id == user_id).all()
     plan_ids = [plan.id for plan in plans]
@@ -395,7 +518,62 @@ def replace_plan(
 
     db.commit()
     db.refresh(plan)
+    sync_scheduled_sessions_for_plan(db, user_id=user_id, plan=plan, timezone_name=timezone_name)
     return plan
+
+
+def sync_scheduled_sessions_for_plan(
+    db: Session,
+    *,
+    user_id: int,
+    plan: s.WeeklyPlan,
+    timezone_name: str | None,
+) -> None:
+    local_now = get_local_now(timezone_name)
+    current_date = local_now.date()
+    current_day_index = local_now.weekday()
+
+    for day_row in plan.days:
+        target_day_index = DAY_KEYS.index(day_row.day)
+        scheduled_date = current_date + timedelta(days=target_day_index - current_day_index)
+        if scheduled_date < current_date:
+            continue
+
+        scheduled_dt = datetime.combine(scheduled_date, datetime.min.time())
+        session = get_scheduled_session_for_date(
+            db,
+            user_id,
+            day=day_row.day,
+            scheduled_date=scheduled_dt,
+        )
+        if session is None:
+            session = s.ScheduledSession(
+                user_id=user_id,
+                day=day_row.day,
+                label=day_row.label,
+                scheduled_date=scheduled_dt,
+                source_plan_created_at=plan.created_at,
+            )
+            db.add(session)
+
+        session.label = day_row.label
+        session.source_plan_created_at = plan.created_at
+        session.sport_type = day_row.sport_type
+        session.session_type = day_row.session_type
+        session.session_title = day_row.session_title
+        session.session_goal = day_row.session_goal
+        session.session_note = day_row.session_note
+        session.session_description = day_row.session_description
+        session.duration_min = day_row.duration_min
+        session.intensity = day_row.intensity
+        session.load_score = day_row.load_score
+        session.priority = day_row.priority
+        session.nutrition_focus = day_row.nutrition_focus
+        session.flexibility = day_row.flexibility
+        if session.completion_status != "done":
+            session.completion_status = day_row.completion_status
+
+    db.commit()
 
 
 def mark_day_completed(db: Session, plan_id: int, day: str) -> bool:
@@ -407,6 +585,25 @@ def mark_day_completed(db: Session, plan_id: int, day: str) -> bool:
         return False  # already done
     day_row.completion_status = "done"
     db.commit()
+    return True
+
+
+def mark_scheduled_session_completed(db: Session, session_id: int | None) -> bool:
+    if session_id is None:
+        return False
+    session = db.query(s.ScheduledSession).filter(s.ScheduledSession.id == session_id).first()
+    if not session or session.completion_status == "done":
+        return False
+    session.completion_status = "done"
+    db.commit()
+    return True
+
+
+def resync_plan_sessions(db: Session, plan_id: int, *, timezone_name: str | None) -> bool:
+    plan = get_plan_optional(db, plan_id)
+    if plan is None:
+        return False
+    sync_scheduled_sessions_for_plan(db, user_id=plan.user_id, plan=plan, timezone_name=timezone_name)
     return True
 
 

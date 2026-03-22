@@ -62,14 +62,15 @@ Règle :
 
 ### 3 sources de réveil
 
-1. **Routine planifiée** — briefing matin 7h30, rappel 18h, revue dimanche 20h, nouvelle semaine lundi 6h
+1. **Routine planifiée** — briefing matin, rappel pré-séance, revue dimanche soir, nouvelle semaine lundi matin
 2. **Événement** — nouvelle activité Strava, message user
 3. **Exception** — séance clé manquée, silence prolongé
 
 ### Garde-fous déterministes (implémentés)
 
-- **Cooldown** : minimum 4h entre deux messages `proactive`, pas entre une réponse normale et un heartbeat
+- **Cooldown** : minimum 6h entre deux messages `proactive`, pas entre une réponse normale et un heartbeat
 - **Échange récent** : skip le rappel pré-séance si user a parlé dans les 2h
+- **Cap journalier** : maximum 2 messages proactifs par jour
 - **Fenêtre active** : heures locales user uniquement
 - **No-op valide** : ne rien envoyer est un résultat fréquent et acceptable
 
@@ -79,12 +80,16 @@ Le LLM ne bypass pas ces règles. Les garde-fous sont évalués avant tout appel
 
 | Trigger | Quand | Condition |
 |---------|-------|-----------|
-| Briefing matin | 7h30 | Cooldown OK + séance prévue aujourd'hui |
-| Rappel pré-séance | 18h | Cooldown OK + pas d'échange récent + séance clé demain |
+| Briefing matin | Heure jitterée autour de 7h30 | Cooldown OK + cap journalier OK + séance prévue aujourd'hui |
+| Rappel pré-séance | Heure jitterée autour de 18h | Cooldown OK + cap journalier OK + pas d'échange récent + séance clé demain |
 | Revue hebdo | Dimanche 20h | Toujours (bilan seulement, sans écraser la semaine en cours) |
 | Nouveau plan | Lundi 6h | Génère et envoie la nouvelle semaine |
 | Synchro Strava | Toutes les 2h | Strava connecté |
-| Signal check | 14h + post-sync | Signal actionable détecté |
+
+Règle :
+- les signaux restent disponibles dans le contexte coach
+- ils nourrissent surtout le briefing matin et le rappel pré-séance
+- il n'y a plus de cron autonome à 14h
 
 ### Debug live
 

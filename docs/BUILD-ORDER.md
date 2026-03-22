@@ -139,6 +139,19 @@ read_when:
 
 **Objectif : remplacer le modèle hebdo destructif par une vérité planning persistée et datée.**
 
+**Statut : EN COURS**
+
+Déjà posé :
+- table `ScheduledSession`
+- sync plan actif -> séances datées futures
+- lien activité -> séance datée
+- endpoint lecture `GET /api/v0/timeline`
+
+Reste à finir :
+- mutations explicites pilotées par dates réelles
+- app web branchée sur la timeline persistée
+- lineage plus propre entre générations de plans
+
 C'est la fondation manquante. Sans ça, le dashboard et la périodisation resteront bancals.
 
 | # | Tâche | Fichiers | Impact |
