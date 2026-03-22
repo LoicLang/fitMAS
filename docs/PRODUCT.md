@@ -22,6 +22,13 @@ FitMAS est un coach IA multisport proactif qui ajuste ton entraînement selon ta
 La promesse externe est "mieux performer".
 Le mécanisme interne ressenti est "moins de charge mentale".
 
+## Contrat produit
+
+- **Telegram = le coach** : conversation naturelle, adaptations, questions, proactivité
+- **App = le cockpit** : calendrier, charge, exécution, progression, graphes
+- Le chat ne vit pas dans l'app
+- L'app doit pouvoir être ouverte sans contexte conversationnel et rester immédiatement utile
+
 ## ICP
 
 - sportif engagé multisport (3+ séances/semaine)
@@ -71,7 +78,8 @@ Via `/start` sur le bot Telegram :
 - Généré par un planner déterministe (`planner.py`)
 - Enrichi par le LLM (intention, wording, arbitrages)
 - 7 jours avec : sport, type, durée, intensité, charge, priorité, note coach
-- Régénération à la demande ou automatique le dimanche soir
+- Régénération à la demande ou automatique le lundi matin
+- Limite actuelle : le modèle reste encore hebdomadaire et pas vraiment calendaire
 
 ### 3. App (5 onglets)
 
@@ -87,6 +95,7 @@ Via `/start` sur le bot Telegram :
 - tableau de bord exécution / charge / lecture de la semaine
 - barre de charge visuelle
 - bouton régénérer
+- direction cible : vraie timeline persistée + vue performance
 
 **Activités** — réel vs prévu
 - formulaire activité manuelle
@@ -105,7 +114,10 @@ Via `/start` sur le bot Telegram :
 3 triggers programmés :
 1. **Briefing matin** (7h30) — séance du jour + statut veille
 2. **Rappel pré-séance** (18h) — veille d'une séance clé
-3. **Revue hebdo** (dimanche 20h) — bilan + régénération plan
+3. **Revue hebdo** (dimanche 20h) — bilan
+
+Puis :
+4. **Nouvelle semaine** (lundi matin) — nouveau plan
 
 4 types de messages :
 1. **Adaptation** — ce qui change, pourquoi, impact
@@ -141,6 +153,9 @@ Via message naturel au coach :
 - WhatsApp (prévu après validation Telegram)
 - webhook Strava (actuellement polling)
 - Apple Health
+- vrai calendrier persistant daté
+- dashboard performance complet (CTL/ATL/TSB, volume, PRs)
+- périodisation explicite
 
 ## Boucle produit
 
@@ -149,7 +164,7 @@ Via message naturel au coach :
 3. Briefing proactif sur Telegram
 4. Adaptation si besoin (message ou action rapide)
 5. Activité réelle → import ou log manuel
-6. Revue dimanche → nouveau plan
+6. Revue dimanche → nouveau plan lundi matin
 
 ## Critères de succès
 
@@ -175,3 +190,12 @@ Le marché a déjà : Humango (plans adaptatifs), Runna (exécution running), Ou
 Ce qui manque : une expérience qui combine plan adaptatif + personnalisation durable + voix cohérente + proactivité utile + faible charge mentale + vrai multisport.
 
 FitMAS ne bat personne sur un axe. FitMAS gagne sur l'orchestration, la délégation mentale, et la sensation de suivi premium continu.
+
+## Cap produit maintenant
+
+Ordre recommandé :
+1. Fiabiliser Telegram et réduire le bruit
+2. Introduire un calendrier persistant daté
+3. Transformer l'app en dashboard de performance inspiré Runna
+4. Ajouter la périodisation et l'adaptation data-driven
+5. N'envisager une architecture multi-agent qu'après stabilisation des domaines

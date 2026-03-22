@@ -15,7 +15,7 @@ read_when:
 
 ---
 
-## État actuel — 20 mars 2026
+## État actuel — 22 mars 2026
 
 ### ✅ Phase 1 — Onboarding + création du coach
 
@@ -103,177 +103,228 @@ read_when:
 
 ## Ce qui reste — Plan de priorités
 
-### ✅ Sprint A — Dogfooding & Strava
+## Principes de séquencement
 
-**Objectif : utiliser FitMAS chaque jour pendant 2 semaines sans friction.**
+- Telegram reste le canal coach : conversation naturelle, adaptation, proactivité
+- L'app devient le cockpit performance : calendrier, charge, exécution, graphes
+- On stabilise d'abord la vérité des données avant de sophistiquer l'UI ou le LLM
+- Pas de multi-agent tant que le mono-agent n'est pas un vrai frein produit
 
-| # | Tâche | Fichiers | Statut |
-|---|-------|----------|--------|
-| A1 | Configurer STRAVA_CLIENT_ID/SECRET sur Fly.io | Fly.io secrets | ✅ fait |
-| A2 | Créer app Strava (callback → the deployed app) | strava.com/settings/api | ✅ fait (ID 214266) |
-| A3 | Tester flow complet : /start → semaine → activité → revue | Tous | 🔄 en cours |
-| A4 | Fixer bugs trouvés en dogfood | Variable | 🔄 en cours |
-| A5 | Vérifier heartbeat en prod (briefing 7h30, rappel 18h, signal 14h) | heartbeat.py, telegram_scheduler.py | ⏳ observer demain |
-| A6 | Callback Strava OAuth → redirect webapp (pas JSON) | api.py | ✅ fait |
-| A7 | Ajouter /help sur le bot Telegram | telegram_commands.py | ✅ fait |
-| A8 | Stocker plus de données Strava (avg_hr, avg_speed, calories) | strava.py, schema.py | ✅ fait |
+## Roadmap recommandée
 
-**Bugs connus :**
-- ~~Bot perd le ConversationHandler state au restart~~ → fixé (PicklePersistence)
-- ~~Fly.io auto-stop tuait le bot~~ → fixé (min_machines_running = 1)
-- ~~Activités Strava anciennes (13 mois) matchées sur plan courant~~ → fixé (filtre 7 jours)
-- ~~Thursday marqué "done" à tort par vieille activité~~ → fixé (plan régénéré)
-- ~~Cooldown heartbeat bloquait après réponse normale~~ → fixé (flag `proactive`)
-- ~~Rappel pré-séance 18h non planifié~~ → fixé
-- Vérifier que la preview onboarding reste stable après plusieurs restarts bot
+### Sprint 1 — Telegram Fix + Fondation Charge
 
-### ✅ Sprint B — Signaux et intelligence
-
-**Objectif : le coach réagit au réel, pas juste au plan.**
-
-| # | Tâche | Fichiers | Statut |
-|---|-------|----------|--------|
-| B1 | Créer `signals.py` : dériver signaux utiles | signals.py | ✅ fait |
-| B2 | Signal "séance clé manquée" → message proactif | signals.py, heartbeat.py | ✅ fait |
-| B3 | Signal "3 jours sans activité" → check-in | signals.py, heartbeat.py | ✅ fait |
-| B4 | Signal "charge cumulée haute" → suggestion repos | signals.py, heartbeat.py | ✅ fait |
-| B5 | Post-activité : feedback contextuel après grosse séance | signals.py, heartbeat.py | ✅ fait |
-| B6 | Signal check cron (14h) + après Strava sync | telegram_scheduler.py | ✅ fait |
-
-**Architecture signaux :**
-- `signals.py` : 5 détecteurs (missed_key, silence_3d, high_load, big_session, streak)
-- `heartbeat.signal_check()` : évalue les signaux, génère un message LLM si actionable
-- Intégré dans : morning briefing (enrichi), cron 14h, post-Strava sync
-- Debug : `GET /api/v0/signals` + `POST /api/v0/debug/heartbeat/signal_check`
-
-### Sprint B+ — Emprunts OpenClaw (EN COURS)
-
-**Objectif : rendre le coach plus intelligent dans ses silences et plus vivant dans sa personnalité.**
-
-Inspiré de [OpenClaw](https://github.com/openclaw/openclaw) — deux patterns clés.
-
-| # | Tâche | Fichiers | Statut |
-|---|-------|----------|--------|
-| B+1 | Pattern NO_SEND : LLM peut décider de ne pas envoyer | heartbeat.py | ✅ fait |
-| B+2 | Soul mutation : coach affine sa voix au fil des échanges | llm.py, schema.py, api.py | ⏳ |
-| B+3 | Soul version tracking (historique des évolutions) | schema.py, repository.py | ⏳ |
-| B+4 | Prompt "soul refinement" après échanges marquants | llm.py | ⏳ |
-
-**Pattern NO_SEND (implémenté) :**
-- Chaque prompt heartbeat inclut : "Si tu estimes qu'il n'y a rien d'utile, reponds NO_SEND"
-- `_llm_generate()` détecte NO_SEND (exact, avec markup, ou avec ack court <100 chars)
-- NO_SEND + contenu substantiel → le token est strippé, le contenu est envoyé
-- Weekly review = `allow_no_send=False` (toujours un bilan)
-
-**Soul mutation (à faire) :**
-- Après N échanges, le LLM peut proposer un affinement de `coach_soul`
-- L'utilisateur valide ou refuse via Telegram
-- Historique des versions de soul tracé
-- Inspiré du SOUL.md mutable d'OpenClaw, mais contrôlé par l'utilisateur
-
-### Sprint C — Enrichissement plan
-
-**Objectif : le plan est plus intelligent et plus précis.**
+**Objectif : supprimer les irritants quotidiens et commencer à accumuler une donnée charge exploitable.**
 
 | # | Tâche | Fichiers | Impact |
 |---|-------|----------|--------|
-| C1 | Planner V2 : progression charge semaine sur semaine | planner.py | Volume progressif |
-| C2 | Lineage de plans : garder l'historique des semaines | schema.py, repository.py | Continuité |
-| C3 | Périodisation légère : alternance charge/décharge | planner.py | Récupération |
-| C4 | Nutrition focus plus pertinent par sport | planner.py, llm.py | Valeur ajoutée |
-| C5 | Détail séance : échauffement, corps, retour au calme | llm.py | Précision |
+| 1A1 | Supprimer le déclenchement direct `signal_check_cron()` après sync Strava | `telegram_scheduler.py` | Plus de risque de doublons immédiats |
+| 1A2 | Ajouter un `asyncio.Lock` module-level sur les séquences draft → send → persist | `telegram_scheduler.py` | Sérialisation locale des envois Telegram |
+| 1A3 | Ajouter un guard timestamp module-level en plus du check DB | `heartbeat.py` | Déduplication plus robuste en mono-process |
+| 1B1 | Ajouter un jitter de ±15 min aux jobs au boot | `telegram_scheduler.py` | Messages moins robotisés |
+| 1C1 | Passer `PROACTIVE_COOLDOWN_HOURS` de 4h à 6h | `heartbeat.py` | Moins de spam |
+| 1C2 | Supprimer le cron `signal_check` de 14h | `telegram_scheduler.py` | Moins de bruit |
+| 1C3 | Garder les signaux dans briefing matin + rappel pré-séance seulement | `heartbeat.py`, `signals.py` | Max 2 messages/jour, souvent 1 |
+| 1D1 | Ajouter `Activity.tss` nullable | `schema.py`, `db.py` | Fondation CTL/ATL/TSB |
+| 1D2 | Créer `training_load.py` avec `estimate_tss()` | `training_load.py` | Fonction pure réutilisable |
+| 1D3 | Créer `compute_ctl_atl_tsb()` | `training_load.py` | Base dashboard + planner |
+| 1D4 | Calculer et persister le TSS à l'import Strava et au log manuel | `strava.py`, `api_activities.py` | Donnée exploitable partout |
 
-### Sprint D — Qualité et tests
+**Notes d'architecture :**
+- Le verrou in-memory est acceptable tant que Fly tourne sur une seule machine
+- Documenter explicitement que ce n'est pas une garantie multi-instance
+- `training_load.py` doit rester 100% pur et réutilisable
 
-**Objectif : le code est fiable et maintenable.**
+### Sprint 1.5 — Calendrier Persistant
+
+**Objectif : remplacer le modèle hebdo destructif par une vérité planning persistée et datée.**
+
+C'est la fondation manquante. Sans ça, le dashboard et la périodisation resteront bancals.
 
 | # | Tâche | Fichiers | Impact |
 |---|-------|----------|--------|
-| D1 | Tests unitaires : planner, mutations, activities, signals | tests/ | Confiance |
-| D2 | Tests d'intégration : flux message → mutation → réponse | tests/ | Régression |
-| D3 | Test heartbeat : cooldowns, NO_SEND, triggers | tests/ | Fiabilité proactive |
-| D4 | CI/CD : tests automatiques avant deploy | .github/workflows/ | Qualité continue |
-| D5 | Decision log : tracer chaque décision LLM | Nouveau module | Debugging |
+| 1.5A1 | Introduire `ScheduledSession` datée | `schema.py`, `models.py` | Vérité calendrier |
+| 1.5A2 | Garder l'historique au lieu de `replace_plan()` destructif | `repository.py` | Continuité visible |
+| 1.5A3 | Lier activité ↔ séance de façon stable | `activities.py`, `strava.py`, `repository.py` | Matching fiable |
+| 1.5A4 | Exposer une timeline datée en lecture | `api_read.py` | Base de l'app cockpit |
+| 1.5A5 | Adapter les mutations pour agir sur des dates réelles | `mutations.py`, nouveau router plan si utile | Déplacements fiables |
+| 1.5A6 | Conserver la compatibilité UI/API tant que la migration n'est pas terminée | `api_read.py`, `repository.py` | Migration progressive |
 
-### Sprint E — Polish et scale
+**Règle produit :**
+- une séance passée reste visible
+- une séance future peut être ajustée sans effacer le reste
+- la revue hebdo ne détruit jamais le passé
 
-**Objectif : prêt pour les premiers beta testers.**
+### Sprint 2 — Dashboard Performance
+
+**Objectif : transformer la webapp en vrai tableau de bord d'entraînement inspiré Runna.**
 
 | # | Tâche | Fichiers | Impact |
 |---|-------|----------|--------|
-| E1 | Webhook Strava (vs polling) | strava.py, api.py | Réactivité |
-| E2 | WhatsApp migration (si produit validé) | Nouveau module | Canal principal |
-| E3 | Multi-user : auth simple, isolation données | schema.py, api.py | Scale |
-| E4 | App native iOS (si webapp validée) | Nouveau projet | Expérience premium |
-| E5 | Mémoire sémantique (vector DB, si masse de données) | Nouveau module | Intelligence long-terme |
+| 2A1 | Éclater `frontend/index.html` en shell + CSS + modules JS | `frontend/`, `api_static.py` | Maintenabilité UI |
+| 2A2 | Garder vanilla JS, pas de bundler | `frontend/js/*.js` | Simplicité |
+| 2B1 | Ajouter l'onglet `Performance` | `performance.js`, `charts.js` | Valeur perçue immédiate |
+| 2B2 | Intégrer Chart.js via CDN | `index.html`, `charts.js` | Graphes charge / volume / completion |
+| 2B3 | Créer `GET /api/v0/stats/training-load` | `api_stats.py`, `training_load.py` | CTL / ATL / TSB |
+| 2B4 | Créer `GET /api/v0/stats/volume` | `api_stats.py` | Volume multisport |
+| 2B5 | Créer `GET /api/v0/stats/records` | `api_stats.py` | PRs |
+| 2C1 | Enrichir `Today` avec activité comparable du même sport | `api_read.py`, `today.js` | Exécution guidée |
+| 2C2 | Afficher la forme via `TSB` | `api_read.py`, `today.js` | Lecture fatigue/fraîcheur |
+| 2D1 | Renforcer la vue calendrier semaine/mois | `calendar.js` | Vision claire du plan |
+| 2D2 | Ajouter un endpoint move explicite | nouveau router plan, `mutations.py` | Interactions plus propres |
+| 2E1 | Afficher le TSS estimé au niveau séance | `today.js`, `calendar.js`, planner | Cohérence charge |
+
+**Règle produit :**
+- pas de chat dans l'app
+- l'app montre la performance, l'exécution et la lecture de charge
+- Telegram garde la relation coach
+
+### Sprint 3 — Périodisation
+
+**Objectif : faire passer le planner de “squelette hebdo” à “moteur d'entraînement”.**
+
+| # | Tâche | Fichiers | Impact |
+|---|-------|----------|--------|
+| 3A1 | Ajouter `TrainingCycle` et `Mesocycle` | `schema.py`, `models.py`, `repository.py` | Structure long terme |
+| 3A2 | Étendre les plans/séances avec `target_tss`, `week_number`, `is_deload` | `schema.py`, `models.py` | Pilotage de charge |
+| 3B1 | Créer `periodization.py` | `periodization.py` | Règles de cycle |
+| 3B2 | Réécrire `build_week_plan()` avec type de semaine + TSS cible | `planner.py` | Planner V2 |
+| 3B3 | Enrichir le prompt planner avec contexte de phase et charge | `llm.py` | Sorties plus crédibles |
+| 3C1 | Créer `session_templates.py` | `session_templates.py` | Base de séances robuste |
+| 3C2 | Couvrir running / cycling / swimming / climbing / strength | `session_templates.py` | Multisport réel |
+| 3D1 | Créer `adaptation.py` | `adaptation.py`, `signals.py` | Lecture actual vs planned |
+| 3D2 | Détecter fatigue / progression post-activité | `adaptation.py`, `strava.py` | Ajustement fin |
+| 3E1 | Envoyer un message coach seulement pour les gros changements de plan | `heartbeat.py`, `telegram_scheduler.py` | Telegram sharp |
+
+### Sprint 4 — Tests, Docs, Hardening
+
+**Objectif : fiabiliser avant d'ajouter de la sophistication LLM.**
+
+| # | Tâche | Fichiers | Impact |
+|---|-------|----------|--------|
+| 4A1 | Tests unitaires `training_load.py` | `tests/` | Confiance charge |
+| 4A2 | Tests unitaires `periodization.py` | `tests/` | Confiance planner |
+| 4A3 | Tests unitaires `session_templates.py` | `tests/` | Cohérence templates |
+| 4A4 | Tests unitaires `adaptation.py` | `tests/` | Cohérence signaux |
+| 4A5 | Tests heartbeat doublons / cooldown / fréquence | `tests/` | Fiabilité Telegram |
+| 4B1 | Mettre à jour `ARCHITECTURE.md` | `docs/ARCHITECTURE.md` | Repo auto-explicatif |
+| 4B2 | Mettre à jour `PRODUCT.md` | `docs/PRODUCT.md` | Contrat produit clair |
+| 4B3 | Mettre à jour `BUILD-ORDER.md` | `docs/BUILD-ORDER.md` | Roadmap vivante |
+| 4B4 | Ajouter CI minimale | `.github/workflows/` | Régression moins probable |
+
+### Sprint 5 — Architecture Agents
+
+**Objectif : introduire plusieurs agents seulement si les domaines sont déjà stables.**
+
+Ce sprint est volontairement repoussé. Avant ça, la priorité est d'avoir :
+- un calendrier persistant fiable
+- un planner périodisé stable
+- des messages Telegram bien calibrés
+
+| # | Tâche | Fichiers | Impact |
+|---|-------|----------|--------|
+| 5A1 | Créer `agents/base.py` | `agents/base.py` | Abstraction commune |
+| 5A2 | Créer `PlanningAgent` | `agents/planning.py` | Plans / périodisation |
+| 5A3 | Créer `CoachingAgent` | `agents/coaching.py` | Messages coach |
+| 5A4 | Créer `ExtractionAgent` | `agents/extraction.py` | Facts / mémoire |
+| 5A5 | Créer `AnalysisAgent` | `agents/analysis.py` | Insights perf |
+| 5B1 | Faire de `llm.py` un wrapper de délégation | `llm.py` | Compat backward |
+
+**Décision tranchée :**
+- pas de multi-agent visible tant que le mono-agent n'est pas un goulot prouvé
+
+### Sprint 6 — Stretch
+
+**Objectif : ajouter ce qui devient pertinent une fois le coeur prouvé.**
+
+| # | Tâche | Fichiers | Impact |
+|---|-------|----------|--------|
+| 6A1 | Goal / race targeting | `schema.py`, `periodization.py`, `planner.py` | Préparation orientée objectif |
+| 6A2 | Webhook Strava | `strava.py`, `api.py` | Réactivité |
+| 6A3 | WhatsApp | nouveau module | Canal éventuel |
+| 6A4 | Multi-user | `schema.py`, `api.py` | Scale |
+| 6A5 | Native iOS | nouveau projet | Premium UX |
 
 ---
 
 ## Ordre d'exécution recommandé
 
-```
-Sprint A   ✅ FAIT : dogfood, Strava config, bugs, /help, données enrichies
-Sprint B   ✅ FAIT : signaux, intelligence proactive (5 détecteurs)
-Sprint B+  🔄 EN COURS : NO_SEND ✅, soul mutation ⏳
-                → 2 semaines de dogfood pour valider signaux + NO_SEND en conditions réelles
-Sprint C   ← APRÈS DOGFOOD : planner V2, périodisation, lineage
-Sprint D   ← En parallèle : tests, CI (commencer pendant dogfood)
-Sprint E   ← Quand le produit est prouvé : scale, WhatsApp, natif
+```text
+Sprint 1    Telegram fix + TSS
+Sprint 1.5  Calendrier persistant
+Sprint 2    Dashboard performance
+Sprint 3    Périodisation + adaptation
+Sprint 4    Tests + docs + hardening
+Sprint 5    Agents (seulement si besoin réel)
+Sprint 6    Stretch
 ```
 
-**Séquence immédiate :**
-1. Deploy Sprint A+B+B+(NO_SEND) sur Fly.io
-2. Dogfood 2 semaines : utiliser FitMAS chaque jour, observer les signaux/NO_SEND
-3. Implémenter soul mutation (B+2-4) quand le coach aura assez d'historique
-4. Sprint C une fois que la boucle quotidienne est rodée
+**Pourquoi cet ordre :**
+- Sprint 1 règle la douleur quotidienne
+- Sprint 1.5 pose la vérité planning
+- Sprint 2 habille une base correcte
+- Sprint 3 rend le moteur vraiment intelligent
+- Sprint 5 n'arrive qu'une fois le produit stabilisé
 
 ---
 
 ## Risques principaux
 
-### 1. Le coach sonne faux
-- **Mitigation** : preview de voix + coach_do/coach_dont + exemples concrets + soul mutation
-- **Test** : est-ce que le message ressemble à "ton" coach ?
+### 1. On enrichit le dashboard sur une mauvaise vérité planning
+- **Mitigation** : faire Sprint 1.5 avant Sprint 2 riche
+- **Test** : l'historique reste visible et aucune régénération n'efface le passé
 
-### 2. Le heartbeat spam
-- **Mitigation** : cooldowns déterministes + NO_SEND LLM + pas de message sans signal
-- **Test** : jamais plus de 2-3 messages proactifs par jour
+### 2. Telegram reste trop bavard
+- **Mitigation** : cooldown 6h, suppression du cron 14h, max 2 messages/jour
+- **Test** : une journée normale = 0 à 1 message ; une journée chargée = 2 max
 
-### 3. L'escalade disparaît du système
-- **Mitigation** : logging manuel first-class, matching même sans Strava
-- **Test** : une séance d'escalade loggée manuellement se reflète dans le plan
+### 3. Le TSS est trop approximatif pour être utile
+- **Mitigation** : fallbacks simples assumés, pas de pseudo-précision
+- **Test** : les courbes charge/fatigue suivent grossièrement le ressenti réel
 
-### 4. La mémoire hallucine
-- **Mitigation** : facts simples, confidence, confirmation si sensible
-- **Test** : les facts en DB correspondent à des faits réels
+### 4. Le planner devient plus complexe que lisible
+- **Mitigation** : templates explicites + petites fonctions pures + objectifs TSS visibles
+- **Test** : on peut expliquer une semaine générée sans lire 500 lignes de code
 
-### 5. Le plan devient rigide
-- **Mitigation** : mutations souples, jours flexibles, no-op acceptable
-- **Test** : "décale ma séance" fonctionne proprement
-
-### 6. Le bot Telegram perd l'état
-- **Mitigation** : PicklePersistence, retry sur ConnectError, min_machines_running=1
-- **Test** : un /start complet survit à un restart de la machine
+### 5. Le multi-agent arrive trop tôt
+- **Mitigation** : le repousser après stabilisation domaine
+- **Test** : prouver que le mono-agent limite vraiment qualité ou vitesse avant de le remplacer
 
 ---
 
-## Vérification concrète par phase
+## Vérification concrète par sprint
 
-### Dogfood (Sprint A)
-- [x] `/start` sur Telegram → profil + plan générés
-- [x] Onboarding complet (coach soul, sports, contraintes sauvés)
-- [ ] Webapp affiche le plan correct
-- [ ] Briefing matin reçu sur Telegram à 7h30
-- [ ] "Fait" dans l'app → jour marqué done
-- [x] Strava connecté, 20 activités importées (historique)
-- [ ] Activité Strava récente → jour matché correctement
-- [ ] Revue dimanche → nouveau plan
-- [ ] Pas de message proactif quand on vient de parler au coach
+### Sprint 1
+- [ ] Pas de doublons Telegram lors d'un import Strava suivi d'un heartbeat
+- [ ] Pas de `signal_check` autonome à 14h
+- [ ] Jamais plus de 2 messages proactifs dans une journée
+- [ ] `tss` est calculé sur les nouvelles activités
+- [ ] `compute_ctl_atl_tsb()` retourne des valeurs plausibles
 
-### Signaux + NO_SEND (Sprint B/B+)
-- [ ] Séance clé manquée → message de relance approprié
-- [ ] 3 jours silence → check-in contextuel
-- [ ] Grosse séance Strava → feedback coach
-- [ ] Charge haute cumulée → suggestion repos automatique
-- [ ] NO_SEND activé au moins 1x sur un heartbeat sans rien à dire
-- [ ] Morning briefing jour de repos → NO_SEND (le coach se tait)
+### Sprint 1.5
+- [ ] Une séance passée reste visible après revue hebdo
+- [ ] Une régénération n'efface pas l'historique
+- [ ] Une activité matche une séance datée stable
+- [ ] Un déplacement agit sur une date réelle
+
+### Sprint 2
+- [ ] L'app charge en mobile sans régression
+- [ ] Les graphes s'affichent
+- [ ] `Today` est plus exécutable qu'un simple texte
+- [ ] Le calendrier aide à lire la semaine sans passer par Telegram
+
+### Sprint 3
+- [ ] Une semaine deload est identifiable et justifiable
+- [ ] Le TSS cible semaine est cohérent avec la charge récente
+- [ ] Les templates de séance sont actionnables
+- [ ] Un gros écart actual vs planned produit une adaptation visible
+
+### Sprint 4
+- [ ] Les modules critiques ont des tests
+- [ ] La doc raconte la vraie architecture
+- [ ] Une régression planner/heartbeat est détectée avant deploy
+
+### Sprint 5
+- [ ] Le comportement externe reste identique malgré le refactor interne
+- [ ] Chaque agent a une responsabilité claire
+- [ ] `llm.py` garde une interface stable pour le reste du code

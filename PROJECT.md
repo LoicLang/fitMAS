@@ -2,7 +2,7 @@
 
 Coach IA multisport proactif qui ajuste ton entraînement selon ta vraie vie.
 
-## Statut — 20 mars 2026
+## Statut — 22 mars 2026
 
 **Déployé et fonctionnel sur https://the deployed app/**
 
@@ -10,14 +10,19 @@ Ce qui tourne en prod :
 - Onboarding Telegram conversationnel complet (/start → profil + coach + plan)
 - Planner hebdomadaire multisport déterministe (running, cycling, swimming, climbing, strength)
 - Boucle message → LLM → mutation → réponse coach
-- Webapp mobile-first avec 5 onglets (Aujourd'hui, Semaine, Activités, Profil, Debug)
+- Webapp mobile-first avec 5 onglets (Aujourd'hui, Calendrier, Activités, Profil, Debug)
 - Activités manuelles + Strava OAuth + import + synchro automatique
-- Heartbeat proactif avec cooldowns (briefing matin, rappel pré-séance, revue dimanche)
+- Heartbeat proactif avec cooldowns (briefing matin, rappel pré-séance, revue dimanche, nouveau plan lundi)
 - Mémoire utile via UserFact (extraction LLM + upsert)
-- Revue hebdomadaire + régénération automatique du plan
+- Revue hebdomadaire + régénération automatique du plan le lundi matin
 - Bot Telegram avec commandes (/start, /plan, /today, /newweek, /sync, /log)
 
 Ce qui manque encore → voir `docs/BUILD-ORDER.md`
+
+Cap produit actuel :
+- Telegram = coach conversationnel
+- App = cockpit performance
+- prochaine fondation : Telegram moins bavard, charge d'entraînement, calendrier persistant daté
 
 ## Stack
 
@@ -65,8 +70,9 @@ Variables : `ANTHROPIC_API_KEY`, `TELEGRAM_BOT_TOKEN`, `STRAVA_CLIENT_ID`, `STRA
 ## Principes
 
 - Déterminisme avant LLM
-- Un seul appel LLM bien prompté, pas de multi-agent
+- Un seul appel LLM bien prompté tant que le domaine n'exige pas mieux
 - Heuristiques d'entraînement en dur, LLM pour personnaliser et formuler
 - Telegram pour valider la proactivité, WhatsApp quand prouvé
+- Telegram = relation coach, app = tableau de bord performance
 - Build perso d'abord : single-user, multisport, usage quotidien réel
 - Hotspots splittés par domaine : `api_*`, `telegram_*`, modules partagés transverses

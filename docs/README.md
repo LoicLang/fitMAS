@@ -14,7 +14,7 @@ read_when:
 | `PRODUCT.md` | Vision, wedge multisport, scope, parcours utilisateur, critères de succès |
 | `ARCHITECTURE.md` | Stack, modèle de données, flux techniques, décisions tranchées |
 | `SOUL.md` | Voix FitMAS, heartbeat, messagerie, exemples de ton |
-| `BUILD-ORDER.md` | État actuel, plan de priorités, prochaines phases |
+| `BUILD-ORDER.md` | État actuel, roadmap recommandée, ordre de priorités |
 | `RUNBOOK.md` | Commandes, flux à tester, debug, déploiement, mapping rapide du code |
 
 ## Règles
@@ -32,6 +32,11 @@ Pour un nouvel agent :
 4. `SOUL.md`
 5. `BUILD-ORDER.md`
 6. `RUNBOOK.md`
+
+Raccourci utile :
+- si le sujet est "que faut-il construire maintenant ?", lire `BUILD-ORDER.md`
+- si le sujet est "quel est le bon contrat produit ?", lire `PRODUCT.md`
+- si le sujet est "quelle fondation technique avant d'ajouter de la sophistication ?", lire `ARCHITECTURE.md`
 
 ## Archive
 

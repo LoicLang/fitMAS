@@ -15,14 +15,22 @@ read_when:
 Déterminisme avant LLM. Le LLM propose, formule et adapte le ton.
 Les garde-fous, la planification, les permissions, les cooldowns et la persistance sont déterministes.
 
-## État réel du code — 20 mars 2026
+## Contrat d'architecture produit
+
+- **Telegram = interface coach** : messages, adaptations, relation, proactivité
+- **App = interface performance** : calendrier, charge, exécution, progression
+- Le domaine entraînement doit rester pur autant que possible
+- Les effets de bord vivent dans les orchestrateurs : API, bot, scheduler
+- Les futures briques de sophistication doivent s'appuyer sur une vérité planning stable
+
+## État réel du code — 22 mars 2026
 
 **Déployé sur Fly.io : https://the deployed app/**
 
 ### Ce qui existe et tourne
 
 - API FastAPI + bot splittés par domaine (34 modules, ~5200 lignes Python)
-- Webapp HTML/CSS/JS mobile-first (single-file, ~530 lignes)
+- Webapp HTML/CSS/JS mobile-first (single-file, ~1800 lignes)
 - Bot Telegram avec onboarding conversationnel + commandes + crons
 - Planner hebdo multisport déterministe
 - Mutation loop : message → LLM → decision → update plan → réponse
@@ -43,6 +51,11 @@ Les garde-fous, la planification, les permissions, les cooldowns et la persistan
 
 ### Ce qui n'existe pas encore
 
+- Verrou robuste anti-doublon au niveau scheduler heartbeat
+- TSS / CTL / ATL / TSB
+- Calendrier persistant daté
+- Dashboard performance complet
+- Périodisation explicite
 - Webhook Strava (actuellement polling toutes les 2h)
 - Lineage de plans (historique des plans passés)
 - Decision log explicite
@@ -69,7 +82,7 @@ Les garde-fous, la planification, les permissions, les cooldowns et la persistan
 
 **Pas d'app native.** Webapp mobile-first permet d'itérer sans App Store review.
 
-**Pas de multi-agent.** Un seul appel LLM bien structuré > pipeline multi-agent.
+**Pas de multi-agent pour l'instant.** Un seul appel LLM bien structuré > pipeline multi-agent tant que le domaine n'est pas stabilisé.
 
 **Telegram avant WhatsApp.** WhatsApp Business API = vérification Meta + templates + coût/msg. Telegram est instantané et gratuit.
 
@@ -78,6 +91,29 @@ Les garde-fous, la planification, les permissions, les cooldowns et la persistan
 **SQLite, pas Postgres.** Single-user, un seul process, volume Fly.io. Migration Postgres si multi-user.
 
 **Haiku pour le quotidien, Sonnet pour les plans.** Coût ~$0.05-0.15/user/jour. Viable avec pricing $10-15/mois.
+
+## Prochaine évolution structurante
+
+Ordre recommandé :
+1. Fiabiliser Telegram et la fréquence des messages
+2. Introduire le calcul de charge (`tss`, `CTL/ATL/TSB`)
+3. Remplacer la logique hebdo destructrice par un calendrier persistant
+4. Construire le dashboard performance sur cette base
+5. Ajouter la périodisation
+6. Repousser l'architecture multi-agent après stabilisation
+
+### Pourquoi le calendrier persistant est prioritaire
+
+Le principal défaut structurel actuel n'est pas le manque de graphes ou de LLM.
+C'est le fait que le modèle de plan reste un `WeeklyPlan` destructif.
+
+Conséquences :
+- historique planning fragile
+- lecture calendaire approximative
+- adaptation semaine suivante peu propre
+- base faible pour dashboard et périodisation
+
+Le prochain vrai pivot de modèle doit être une séance datée persistée, type `ScheduledSession`.
 
 ## Modules
 
@@ -119,7 +155,7 @@ backend/src/fitmas/
 └── __init__.py            (2 lignes)
 
 frontend/
-└── index.html             (~530 lignes) — webapp complète
+└── index.html             (~1800 lignes) — webapp complète
 ```
 
 ## Modèle de données
@@ -176,7 +212,7 @@ Activity
   external_id, sport_type, title
   duration_min, distance_m, elevation_m
   perceived_load, note, started_at
-  avg_hr, max_hr, avg_speed, calories, suffer_score
+  avg_hr, max_hr, avg_speed, calories, suffer_score, tss
   matched_day, match_reason, created_at
 
 StravaConnection
@@ -237,6 +273,9 @@ Ce module doit être utilisé par:
 4. Filtre : seules les activités des 7 derniers jours matchent le plan courant
 5. Persist Activity + marque le jour comme "done" si match cette semaine
 
+Limite actuelle :
+- le matching travaille encore sur un plan hebdomadaire, pas sur un vrai calendrier persistant
+
 ### Flux heartbeat
 1. APScheduler déclenche le trigger (matin 7h30, soir 18h, dimanche 20h)
 2. Garde-fous déterministes : cooldown 4h sur dernier message `proactive=true`, échange récent <2h
@@ -250,6 +289,11 @@ Ce module doit être utilisé par:
 3. Le morning briefing injecte les signaux dans le prompt LLM pour un message contextualisé
 4. Le signal check (cron 14h + post-Strava sync) génère un message proactif si signal actionable
 5. Garde-fous identiques au heartbeat : cooldown 4h, skip si échange récent
+
+Cap recommandé :
+- supprimer le cron 14h autonome
+- garder les signaux dans briefing + rappel seulement
+- viser 0 à 2 messages proactifs utiles par jour
 
 ### Debug heartbeat
 
