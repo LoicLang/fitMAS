@@ -11,6 +11,7 @@
     <title>FitMAS</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="/app-static/js/utils.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
     <style>
       @import url('https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap');
@@ -1179,6 +1180,7 @@
       const tabs = document.querySelectorAll(".tab");
       const bnavs = document.querySelectorAll(".bnav");
       const views = document.querySelectorAll(".view");
+      const { formatDistance, formatPace, formatWeekLabel, mapDayToApiKey } = window.FitmasUtils;
 
       let weekPlan = null;
       let scheduledTimeline = [];
@@ -1218,10 +1220,6 @@
       };
 
       const DAY_ORDER = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"];
-
-      function mapDayToApiKey(i) {
-        return ["sunday","monday","tuesday","wednesday","thursday","friday","saturday"][i];
-      }
 
       function getCurrentDayKey(timezone) {
         try {
@@ -1352,12 +1350,6 @@
 
       function statusLabel(s) {
         return { done: "fait ✓", planned: "prévu", skipped: "sauté", adapted: "adapté" }[s] || s;
-      }
-
-      function formatDistance(distanceM) {
-        if (!distanceM || distanceM <= 0) return null;
-        if (distanceM >= 1000) return `${(distanceM / 1000).toFixed(1)} km`;
-        return `${Math.round(distanceM)} m`;
       }
 
       function formatRecentActivityDate(raw) {
@@ -1759,14 +1751,6 @@
         return d.toLocaleString("fr-FR", { weekday: "long", day: "numeric", month: "long", year: "numeric", hour: "2-digit", minute: "2-digit" });
       }
 
-      function formatPace(avgSpeed) {
-        if (!avgSpeed || avgSpeed <= 0) return null;
-        const paceSeconds = 1000 / avgSpeed;
-        const mins = Math.floor(paceSeconds / 60);
-        const secs = Math.round(paceSeconds % 60);
-        return `${mins}:${secs.toString().padStart(2, "0")}`;
-      }
-
       function formatPaceSeconds(seconds) {
         if (!Number.isFinite(seconds) || seconds <= 0) return "—";
         const mins = Math.floor(seconds / 60);
@@ -1777,14 +1761,6 @@
       function formatSpeed(avgSpeed) {
         if (!avgSpeed || avgSpeed <= 0) return null;
         return (avgSpeed * 3.6).toFixed(1);
-      }
-
-      function formatWeekLabel(isoDate) {
-        if (!isoDate) return "";
-        return new Intl.DateTimeFormat("fr-FR", {
-          day: "2-digit",
-          month: "short",
-        }).format(new Date(`${isoDate}T12:00:00Z`)).replace(".", "");
       }
 
       function getCurrentWeekSessions() {

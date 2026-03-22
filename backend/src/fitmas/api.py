@@ -6,6 +6,7 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 from fastapi import FastAPI
+from fastapi.staticfiles import StaticFiles
 
 load_dotenv(Path(__file__).resolve().parents[3] / ".env")
 
@@ -16,6 +17,7 @@ from fitmas.api_onboarding import router as onboarding_router
 from fitmas.api_plan import router as plan_router
 from fitmas.api_read import router as read_router
 from fitmas.api_stats import router as stats_router
+from fitmas.api_support import FRONTEND_DIR
 from fitmas.api_static import router as static_router
 from fitmas.db import SessionLocal, init_db
 from fitmas.seed import seed_if_empty
@@ -48,3 +50,4 @@ app.include_router(activities_router)
 app.include_router(onboarding_router)
 app.include_router(plan_router)
 app.include_router(messages_router)
+app.mount("/app-static", StaticFiles(directory=FRONTEND_DIR), name="app-static")
