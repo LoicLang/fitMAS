@@ -54,6 +54,8 @@ Les garde-fous, la planification, les permissions, les cooldowns et la persistan
 - `swap_sessions` sait aussi passer par des ids de séances concrètes
 - Router stats performance : `training-load`, `volume`, `records`
 - Onglet webapp `Performance` branché sur Chart.js
+- `Today` enrichi : contexte de forme + dernière activité comparable même sport
+- Début du split frontend : assets JS servis via `/app-static`
 - Strava callback redirige vers webapp (plus de JSON brut)
 - `/help` Telegram
 
@@ -167,7 +169,10 @@ backend/src/fitmas/
 └── __init__.py            (2 lignes)
 
 frontend/
-└── index.html             (~2200 lignes) — webapp complète, encore monolithique
+├── index.html             (~2200 lignes) — webapp complète, encore majoritairement monolithique
+└── js/
+    ├── utils.js           (~30 lignes) — helpers purs frontend
+    └── charts.js          (~70 lignes) — construction des graphes Chart.js
 ```
 
 ## Modèle de données

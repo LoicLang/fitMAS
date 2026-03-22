@@ -87,6 +87,8 @@ Via `/start` sur le bot Telegram :
 - séance du jour + objectif + note coach
 - actions rapides : Fait / Trop fatigué / Décaler
 - métriques : sport, durée, intensité, priorité
+- lecture de forme : CTL / ATL / TSB
+- dernier repère du même sport
 - ce qui a changé + ce que le coach regarde
 
 **Calendrier** — vue plan vivant
@@ -102,7 +104,7 @@ Via `/start` sur le bot Telegram :
 - volume multisport hebdo
 - complétion de la semaine en cours
 - records simples par sport
-- première version encore dans le monolithe frontend
+- premier split démarré : `utils.js`, `charts.js`
 
 **Activités** — réel vs prévu
 - formulaire activité manuelle

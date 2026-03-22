@@ -185,10 +185,11 @@ Déjà posé :
 - onglet `Performance` dans la webapp
 - graphes charge / volume / complétion
 - cartes records simples par sport
+- `Today` enrichi avec forme + repère récent du même sport
+- premier split frontend lancé : `utils.js`, `charts.js`
 
 Reste à faire :
-- split du frontend single-file en modules
-- enrichir `Today` avec comparable même sport + forme
+- poursuivre le split du frontend single-file en modules
 - renforcer calendrier semaine/mois et interactions
 
 | # | Tâche | Fichiers | Impact |
