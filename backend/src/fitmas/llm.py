@@ -4,6 +4,7 @@ import json
 import logging
 import os
 import re
+from time import perf_counter
 from typing import Any
 
 from pydantic import BaseModel
@@ -11,6 +12,7 @@ from fitmas.fact_memory import normalize_fact_payload as normalize_fact_memory_p
 from fitmas.fact_memory import select_relevant_facts
 from fitmas.time_context import build_time_context, render_time_context
 from fitmas.tool_contract import ToolCall, ToolContext
+from fitmas.tool_metrics import build_tool_trace, log_tool_trace
 from fitmas.tool_registry import list_tools_for_pipeline
 from fitmas.tool_runtime import execute_tool_call
 
@@ -300,6 +302,7 @@ def _request_json_with_tools(
     tools = list_tools_for_pipeline(tool_context.pipeline)
     if not tools:
         return None
+    started_at = perf_counter()
     initial_messages = [{"role": "user", "content": prompt}]
     response = _request_message(
         system=system,
@@ -310,20 +313,63 @@ def _request_json_with_tools(
         tool_choice={"type": "auto", "disable_parallel_tool_use": True},
     )
     if response is None:
+        _log_tool_session_trace(
+            pipeline=tool_context.pipeline,
+            tool_offered=True,
+            tool_requested=False,
+            tool_called=False,
+            tool_success=False,
+            fallback_used=True,
+            llm_round_trips=1,
+            total_duration_ms=_elapsed_ms(started_at),
+            response_stop_reason="initial_request_failed",
+        )
         return None
-    if getattr(response, "stop_reason", None) != "tool_use":
-        return _message_json(response)
+    initial_stop_reason = str(getattr(response, "stop_reason", "") or "")
+    initial_prompt_tokens = _usage_value(response, "input_tokens")
+    initial_response_tokens = _usage_value(response, "output_tokens")
+    if initial_stop_reason != "tool_use":
+        data = _message_json(response)
+        _log_tool_session_trace(
+            pipeline=tool_context.pipeline,
+            tool_offered=True,
+            tool_requested=False,
+            tool_called=False,
+            tool_success=data is not None,
+            fallback_used=data is None,
+            llm_round_trips=1,
+            prompt_tokens_estimate=initial_prompt_tokens,
+            response_tokens_estimate=initial_response_tokens,
+            total_duration_ms=_elapsed_ms(started_at),
+            response_stop_reason=initial_stop_reason or "end_turn",
+        )
+        return data
 
     tool_use_block = _first_tool_use_block(response)
     if tool_use_block is None:
-        return _message_json(response)
+        data = _message_json(response)
+        _log_tool_session_trace(
+            pipeline=tool_context.pipeline,
+            tool_offered=True,
+            tool_requested=True,
+            tool_called=False,
+            tool_success=data is not None,
+            tool_error="tool_use stop_reason without tool block",
+            fallback_used=True,
+            llm_round_trips=1,
+            prompt_tokens_estimate=initial_prompt_tokens,
+            response_tokens_estimate=initial_response_tokens,
+            total_duration_ms=_elapsed_ms(started_at),
+            response_stop_reason=initial_stop_reason or "tool_use",
+        )
+        return data
 
-    tool_result, _ = execute_tool_call(
+    tool_result, tool_trace = execute_tool_call(
         ToolCall(tool_name=str(getattr(tool_use_block, "name", "")), arguments=dict(getattr(tool_use_block, "input", {}) or {})),
         context=tool_context,
         llm_round_trips=2,
-        prompt_tokens_estimate=_usage_value(response, "input_tokens"),
-        response_tokens_estimate=_usage_value(response, "output_tokens"),
+        prompt_tokens_estimate=initial_prompt_tokens,
+        response_tokens_estimate=initial_response_tokens,
     )
     followup_messages = list(initial_messages)
     followup_messages.append({"role": "assistant", "content": _serialize_content_blocks(getattr(response, "content", []))})
@@ -353,7 +399,45 @@ def _request_json_with_tools(
         model=model,
         max_tokens=max_tokens,
     )
-    return _message_json(final_response)
+    if final_response is None:
+        _log_tool_session_trace(
+            pipeline=tool_context.pipeline,
+            tool_name=tool_result.tool_name,
+            tool_offered=True,
+            tool_requested=True,
+            tool_called=tool_trace.tool_called,
+            tool_latency_ms=tool_trace.tool_latency_ms,
+            tool_success=tool_trace.tool_success,
+            tool_error=tool_result.error or "tool followup request failed",
+            fallback_used=True,
+            llm_round_trips=2,
+            prompt_tokens_estimate=initial_prompt_tokens,
+            response_tokens_estimate=initial_response_tokens,
+            total_duration_ms=_elapsed_ms(started_at),
+            response_stop_reason="followup_request_failed",
+        )
+        return None
+    final_stop_reason = str(getattr(final_response, "stop_reason", "") or "")
+    final_prompt_tokens = _usage_value(final_response, "input_tokens")
+    final_response_tokens = _usage_value(final_response, "output_tokens")
+    data = _message_json(final_response)
+    _log_tool_session_trace(
+        pipeline=tool_context.pipeline,
+        tool_name=tool_result.tool_name,
+        tool_offered=True,
+        tool_requested=True,
+        tool_called=tool_trace.tool_called,
+        tool_latency_ms=tool_trace.tool_latency_ms,
+        tool_success=tool_trace.tool_success and data is not None,
+        tool_error=tool_result.error if data is not None else (tool_result.error or "tool followup response was not valid JSON"),
+        fallback_used=data is None,
+        llm_round_trips=2,
+        prompt_tokens_estimate=_sum_ints(initial_prompt_tokens, final_prompt_tokens),
+        response_tokens_estimate=_sum_ints(initial_response_tokens, final_response_tokens),
+        total_duration_ms=_elapsed_ms(started_at),
+        response_stop_reason=final_stop_reason or "end_turn",
+    )
+    return data
 
 
 def make_plan_summary(days: list) -> str:
@@ -431,6 +515,53 @@ def _usage_value(response: Any, key: str) -> int | None:
         return int(value) if value is not None else None
     except (TypeError, ValueError):
         return None
+
+
+def _sum_ints(*values: int | None) -> int | None:
+    numbers = [value for value in values if value is not None]
+    if not numbers:
+        return None
+    return sum(numbers)
+
+
+def _elapsed_ms(started_at: float) -> int:
+    return int((perf_counter() - started_at) * 1000)
+
+
+def _log_tool_session_trace(
+    *,
+    pipeline: str,
+    tool_offered: bool,
+    tool_requested: bool,
+    tool_called: bool,
+    tool_success: bool,
+    tool_name: str | None = None,
+    tool_latency_ms: int | None = None,
+    tool_error: str | None = None,
+    fallback_used: bool = False,
+    llm_round_trips: int = 1,
+    prompt_tokens_estimate: int | None = None,
+    response_tokens_estimate: int | None = None,
+    total_duration_ms: int | None = None,
+    response_stop_reason: str | None = None,
+) -> None:
+    trace = build_tool_trace(
+        pipeline=pipeline,
+        tool_name=tool_name,
+        tool_offered=tool_offered,
+        tool_requested=tool_requested,
+        tool_called=tool_called,
+        tool_latency_ms=tool_latency_ms,
+        tool_success=tool_success,
+        tool_error=tool_error,
+        fallback_used=fallback_used,
+        llm_round_trips=llm_round_trips,
+        prompt_tokens_estimate=prompt_tokens_estimate,
+        response_tokens_estimate=response_tokens_estimate,
+        total_duration_ms=total_duration_ms,
+        response_stop_reason=response_stop_reason,
+    )
+    log_tool_trace(trace)
 
 
 def _should_offer_tools(user_text: str) -> bool:

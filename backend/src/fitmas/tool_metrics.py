@@ -9,24 +9,27 @@ from datetime import datetime, timezone
 @dataclass(frozen=True, slots=True)
 class ToolTrace:
     pipeline: str
-    tool_name: str
+    tool_name: str | None
     tool_requested: bool
     tool_called: bool
     tool_latency_ms: int | None
     tool_success: bool
+    tool_offered: bool = False
     tool_error: str | None = None
     fallback_used: bool = False
     llm_round_trips: int = 1
     prompt_tokens_estimate: int | None = None
     response_tokens_estimate: int | None = None
     total_duration_ms: int | None = None
+    response_stop_reason: str | None = None
     created_at: str = ""
 
 
 def build_tool_trace(
     *,
     pipeline: str,
-    tool_name: str,
+    tool_name: str | None = None,
+    tool_offered: bool = False,
     tool_requested: bool = True,
     tool_called: bool = True,
     tool_latency_ms: int | None = None,
@@ -37,10 +40,12 @@ def build_tool_trace(
     prompt_tokens_estimate: int | None = None,
     response_tokens_estimate: int | None = None,
     total_duration_ms: int | None = None,
+    response_stop_reason: str | None = None,
 ) -> ToolTrace:
     return ToolTrace(
         pipeline=pipeline,
         tool_name=tool_name,
+        tool_offered=tool_offered,
         tool_requested=tool_requested,
         tool_called=tool_called,
         tool_latency_ms=tool_latency_ms,
@@ -51,6 +56,7 @@ def build_tool_trace(
         prompt_tokens_estimate=prompt_tokens_estimate,
         response_tokens_estimate=response_tokens_estimate,
         total_duration_ms=total_duration_ms,
+        response_stop_reason=response_stop_reason,
         created_at=_utc_now_iso(),
     )
 

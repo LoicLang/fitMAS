@@ -12,7 +12,9 @@ class LLMToolsTest(unittest.TestCase):
         original_client = llm._client
         original_request_message = llm._request_message
         original_execute_tool_call = llm.execute_tool_call
+        original_log_tool_trace = llm.log_tool_trace
         captured: dict[str, object] = {"calls": 0}
+        traces: list[object] = []
 
         def fake_request_message(*, system, messages, model="claude-haiku-4-5-20251001", max_tokens=512, tools=None, tool_choice=None):
             captured["calls"] = int(captured["calls"]) + 1
@@ -52,12 +54,13 @@ class LLMToolsTest(unittest.TestCase):
                     payload={"longest_duration": {"title": "Velo", "duration_min": 90}},
                     summary="1 highlight activite disponible.",
                 ),
-                SimpleNamespace(tool_success=True),
+                SimpleNamespace(tool_success=True, tool_called=True, tool_latency_ms=12),
             )
 
         llm._client = lambda: object()
         llm._request_message = fake_request_message
         llm.execute_tool_call = fake_execute_tool_call
+        llm.log_tool_trace = lambda trace: traces.append(trace)
         try:
             decision = llm.decide(
                 "C'etait quoi ma plus longue sortie recente ?",
@@ -75,10 +78,66 @@ class LLMToolsTest(unittest.TestCase):
             llm._client = original_client
             llm._request_message = original_request_message
             llm.execute_tool_call = original_execute_tool_call
+            llm.log_tool_trace = original_log_tool_trace
 
         self.assertIsNotNone(decision)
         self.assertEqual(decision.mutation_type, "no_change")
         self.assertIn("plus longue sortie", decision.fitmas_message.lower())
+        self.assertEqual(len(traces), 1)
+        self.assertTrue(traces[0].tool_offered)
+        self.assertTrue(traces[0].tool_requested)
+        self.assertTrue(traces[0].tool_called)
+        self.assertEqual(traces[0].tool_name, "get_activity_highlights")
+        self.assertEqual(traces[0].llm_round_trips, 2)
+
+    def test_decide_logs_when_tools_are_offered_but_not_used(self) -> None:
+        original_client = llm._client
+        original_request_message = llm._request_message
+        original_log_tool_trace = llm.log_tool_trace
+        traces: list[object] = []
+
+        def fake_request_message(*, system, messages, model="claude-haiku-4-5-20251001", max_tokens=512, tools=None, tool_choice=None):
+            self.assertIsNotNone(tools)
+            return SimpleNamespace(
+                stop_reason="end_turn",
+                content=[
+                    SimpleNamespace(
+                        type="text",
+                        text='{"mutation_type":"no_change","target_session_id":null,"second_session_id":null,"target_date":null,"from_day":null,"to_day":null,"new_title":null,"new_goal":null,"rationale":"reponse directe","fitmas_message":"Tu as une sortie running jeudi."}',
+                    )
+                ],
+                usage=SimpleNamespace(input_tokens=90, output_tokens=28),
+            )
+
+        llm._client = lambda: object()
+        llm._request_message = fake_request_message
+        llm.log_tool_trace = lambda trace: traces.append(trace)
+        try:
+            decision = llm.decide(
+                "Jeudi c'est quoi deja ?",
+                "Repere",
+                tool_context=ToolContext(
+                    pipeline="conversation",
+                    user_id=1,
+                    timezone_name="Europe/Paris",
+                    scheduled_sessions=[],
+                    activities=[],
+                    active_facts=[],
+                ),
+            )
+        finally:
+            llm._client = original_client
+            llm._request_message = original_request_message
+            llm.log_tool_trace = original_log_tool_trace
+
+        self.assertIsNotNone(decision)
+        self.assertEqual(decision.mutation_type, "no_change")
+        self.assertEqual(len(traces), 1)
+        self.assertTrue(traces[0].tool_offered)
+        self.assertFalse(traces[0].tool_requested)
+        self.assertFalse(traces[0].tool_called)
+        self.assertEqual(traces[0].response_stop_reason, "end_turn")
+        self.assertFalse(traces[0].fallback_used)
 
 
 if __name__ == "__main__":
