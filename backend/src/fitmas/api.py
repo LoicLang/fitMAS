@@ -15,6 +15,7 @@ from fitmas.api_messages import router as messages_router
 from fitmas.api_onboarding import router as onboarding_router
 from fitmas.api_plan import router as plan_router
 from fitmas.api_read import router as read_router
+from fitmas.api_stats import router as stats_router
 from fitmas.api_static import router as static_router
 from fitmas.db import SessionLocal, init_db
 from fitmas.seed import seed_if_empty
@@ -41,6 +42,7 @@ async def lifespan(_: FastAPI):
 app = FastAPI(title="FitMAS V0 API", version="0.1.0", lifespan=lifespan)
 app.include_router(static_router)
 app.include_router(read_router)
+app.include_router(stats_router)
 app.include_router(debug_router)
 app.include_router(activities_router)
 app.include_router(onboarding_router)
