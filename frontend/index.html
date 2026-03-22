@@ -1428,9 +1428,43 @@
         `;
       }
 
+      function renderEmptyToday(message) {
+        selectedSessionId = null;
+        document.getElementById("today-eyebrow").textContent = "Aujourd'hui";
+        document.getElementById("today-title").textContent = "🛌 Aucune séance prévue";
+        document.getElementById("today-goal").textContent = message || "Le cockpit reste disponible même sans séance du jour.";
+        document.getElementById("today-description-wrap").style.display = "none";
+        document.getElementById("today-priority").textContent = "Libre";
+        document.getElementById("today-sport").textContent = "Repos";
+        document.getElementById("today-duration").textContent = "—";
+        document.getElementById("today-intensity").textContent = "souple";
+        const badge = document.getElementById("today-badge");
+        badge.className = "badge badge-planned";
+        badge.textContent = "off";
+        document.getElementById("today-actions").style.display = "none";
+        renderList(document.getElementById("changes-list"), []);
+        renderList(document.getElementById("watch-list"), []);
+        renderTodayFitness(trainingLoadStats ? {
+          ctl: trainingLoadStats.ctl,
+          atl: trainingLoadStats.atl,
+          tsb: trainingLoadStats.tsb,
+          freshness: getTsbTone(Number(trainingLoadStats.tsb || 0)).label === "Frais" ? "fresh" : (getTsbTone(Number(trainingLoadStats.tsb || 0)).label === "Sous fatigue" ? "fatigued" : "stable"),
+        } : null);
+        renderTodayRecentActivity(null, "rest");
+      }
+
       // ── Today ──
       async function loadToday(sessionId = null) {
-        const t = await fetchJson(sessionId ? `/api/v0/today/session/${sessionId}` : "/api/v0/today");
+        let t;
+        try {
+          t = await fetchJson(sessionId ? `/api/v0/today/session/${sessionId}` : "/api/v0/today");
+        } catch (err) {
+          if (`${err.message}` === "404") {
+            renderEmptyToday("Aucune séance planifiée aujourd'hui pour le moment.");
+            return;
+          }
+          throw err;
+        }
         selectedSessionId = t.scheduled_session_id;
         selectedDay = t.day;
         const status = t.completion_status || "planned";
