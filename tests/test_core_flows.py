@@ -117,6 +117,52 @@ class FitMASCoreFlowsTest(unittest.TestCase):
         self.assertEqual(today["completion_status"], "adapted")
         self.assertEqual(today["sport_type"], "rest")
 
+    def test_message_flow_passes_grounding_context_to_llm(self) -> None:
+        _, session = self._create_plan_for_today()
+        repo.add_activity(
+            self.db,
+            user_id=self.user.id,
+            source="manual",
+            sport_type="cycling",
+            title="Velo off-plan",
+            duration_min=30,
+            distance_m=12000,
+            elevation_m=80,
+            perceived_load=3,
+            note="",
+            started_at=session.scheduled_date.replace(hour=18),
+            matched_day=None,
+            match_reason="",
+            avg_hr=140,
+            avg_speed=6.0,
+            tss=28.0,
+        )
+        captured: dict[str, str] = {}
+        original_decide = api_messages.decide
+        original_extract_facts = api_messages.extract_facts
+        try:
+            def fake_decide(*args, **kwargs):
+                captured["execution_summary"] = kwargs.get("execution_summary") or ""
+                captured["temporal_summary"] = kwargs.get("temporal_summary") or ""
+                captured["activity_claim_summary"] = kwargs.get("activity_claim_summary") or ""
+                return MutationDecision(
+                    mutation_type="no_change",
+                    rationale="ok",
+                    fitmas_message="Bien recu.",
+                )
+
+            api_messages.decide = fake_decide
+            api_messages.extract_facts = lambda *args, **kwargs: []
+            self.client.post("/api/v0/messages", json={"text": "J'ai couru aujourd'hui 30 min"})
+        finally:
+            api_messages.decide = original_decide
+            api_messages.extract_facts = original_extract_facts
+
+        self.assertIn("execution_status: off_plan_done", captured["execution_summary"])
+        self.assertIn("reference principale: today", captured["temporal_summary"])
+        self.assertIn("sport: running", captured["activity_claim_summary"])
+        self.assertIn("duree_min: 30", captured["activity_claim_summary"])
+
     def test_training_load_outputs_are_stable(self) -> None:
         activities = [
             {"started_at": "2026-03-15T08:00:00+00:00", "tss": 42.0},

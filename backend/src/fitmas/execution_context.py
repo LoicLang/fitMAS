@@ -87,6 +87,35 @@ def build_today_execution_context(
     )
 
 
+def format_execution_context_for_prompt(context: TodayExecutionContext) -> str:
+    recent_lines = [
+        (
+            f"- {activity.local_date.isoformat()} | {activity.sport_type} | "
+            f"{activity.duration_min if activity.duration_min is not None else 'unknown'} min | "
+            f"{activity.title or 'sans titre'}"
+        )
+        for activity in context.recent_activities[:5]
+    ]
+    recent_block = "\n".join(recent_lines) if recent_lines else "- aucune activite recente"
+    return (
+        "Execution reelle:\n"
+        f"- date locale: {context.local_date.isoformat()}\n"
+        f"- seance prevue id: {context.planned_session_id}\n"
+        f"- sport prevu: {context.planned_sport or 'none'}\n"
+        f"- titre prevu: {context.planned_title or 'none'}\n"
+        f"- duree prevue: {context.planned_duration_min if context.planned_duration_min is not None else 'unknown'}\n"
+        f"- statut seance prevue: {context.planned_completion_status or 'unknown'}\n"
+        f"- nb activites aujourd'hui: {context.activity_count_today}\n"
+        f"- sports reels aujourd'hui: {', '.join(context.actual_sports_today) or 'none'}\n"
+        f"- duree reelle aujourd'hui: {context.actual_duration_min_today} min\n"
+        f"- linked_activity_id: {context.linked_activity_id}\n"
+        f"- execution_status: {context.execution_status}\n"
+        f"- raison: {context.status_reason}\n"
+        "Activites recentes:\n"
+        f"{recent_block}\n"
+    )
+
+
 def _classify_execution(
     *,
     planned_session: Any | None,

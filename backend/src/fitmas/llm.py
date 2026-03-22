@@ -105,6 +105,9 @@ def decide(
     user_text: str,
     plan_summary: str,
     timeline_summary: str | None = None,
+    execution_summary: str | None = None,
+    temporal_summary: str | None = None,
+    activity_claim_summary: str | None = None,
     conversation_history: list[dict] | None = None,
     coach_context: dict | None = None,
     remembered_facts: list[dict] | None = None,
@@ -153,10 +156,23 @@ def decide(
     if timeline_summary:
         timeline_block = f"\nCalendrier date reel:\n{timeline_summary}\n"
 
+    execution_block = ""
+    if execution_summary:
+        execution_block = f"\n{execution_summary}\n"
+
+    temporal_block = ""
+    if temporal_summary:
+        temporal_block = f"\n{temporal_summary}\n"
+
+    claim_block = ""
+    if activity_claim_summary:
+        claim_block = f"\n{activity_claim_summary}\n"
+
     prompt = f"""{time_block}
 Repere legacy semaine courante:
 {plan_summary}
 {timeline_block}
+{execution_block}{temporal_block}{claim_block}
 {coach_block}{facts_block}
 {history_block}
 Nouveau message de l'utilisateur:
@@ -176,6 +192,14 @@ Quand une seance concrete est identifiable dans le calendrier date reel, privile
 Pour un echange concret, renseigne `target_session_id` et `second_session_id`.
 Pour un deplacement concret, renseigne `target_date` au format ISO `YYYY-MM-DD`.
 Si l'utilisateur parle de aujourd'hui, demain, hier, ce soir, demain matin ou demande la date/l'heure/jour exact, tu dois raisonner a partir du contexte temporel exact ci-dessus.
+Tu dois respecter cette hierarchie de verite:
+1. activite reelle persistée
+2. claim activite recent utilisateur
+3. correction utilisateur recente dans l'historique
+4. seance planifiee
+5. inference faible
+N'affirme jamais une duree ou un sport comme un fait si cela vient seulement du plan et qu'un claim utilisateur plus recent dit autre chose.
+Si une activite reelle existe aujourd'hui mais sur un autre sport que le plan, ne dis jamais "tu n'as rien fait". Le bon diagnostic est "hors plan" ou "pas la seance prevue".
 Si la bonne reponse est purement temporelle ou explicative, garde "mutation_type": "no_change" et reponds clairement dans "fitmas_message".
 
 Exemples:
