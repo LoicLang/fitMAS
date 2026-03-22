@@ -52,6 +52,22 @@ def apply(db: Session, plan_id: int, decision: MutationDecision) -> None:
             logger.info("Applied session lighten: session=%s result=%s", decision.target_session_id, session.id if session else None)
             return
 
+        if decision.mutation_type == "swap_sessions" and decision.second_session_id:
+            swapped = plan_actions.swap_sessions(
+                db,
+                user=user,
+                first_session_id=decision.target_session_id,
+                second_session_id=decision.second_session_id,
+                rationale=decision.rationale,
+            )
+            logger.info(
+                "Applied session swap: session=%s session2=%s result=%s",
+                decision.target_session_id,
+                decision.second_session_id,
+                bool(swapped),
+            )
+            return
+
         if decision.mutation_type == "update_session":
             session = plan_actions.update_session_details(
                 db,

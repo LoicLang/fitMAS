@@ -83,6 +83,41 @@ def update_session_details(
     return session
 
 
+def swap_sessions(
+    db: Session,
+    *,
+    user: s.User,
+    first_session_id: int,
+    second_session_id: int,
+    rationale: str | None = None,
+) -> tuple[s.ScheduledSession, s.ScheduledSession] | None:
+    first = repo.get_scheduled_session(db, user.id, first_session_id)
+    second = repo.get_scheduled_session(db, user.id, second_session_id)
+    if first is None or second is None or first.id == second.id:
+        return None
+
+    first_plan, first_day_plan = repo.get_current_week_day_plan_for_session(db, user=user, session=first)
+    _, second_day_plan = repo.get_current_week_day_plan_for_session(db, user=user, session=second)
+    if first_day_plan is not None and second_day_plan is not None and first_plan is not None:
+        _swap_day_plan_content(first_day_plan, second_day_plan)
+        db.commit()
+        repo.set_change_notes(db, first_day_plan.id, [("Seance echangee", rationale or "Seances echangees.")])
+        repo.set_change_notes(db, second_day_plan.id, [("Seance echangee", rationale or "Seances echangees.")])
+        repo.resync_plan_sessions(db, first_plan.id, timezone_name=user.timezone)
+        refreshed_first = repo.get_scheduled_session(db, user.id, first.id) or first
+        refreshed_second = repo.get_scheduled_session(db, user.id, second.id) or second
+        return refreshed_first, refreshed_second
+
+    _swap_session_content(first, second)
+    if rationale:
+        first.session_note = rationale
+        second.session_note = rationale
+    db.commit()
+    db.refresh(first)
+    db.refresh(second)
+    return first, second
+
+
 def move_session(
     db: Session,
     *,
@@ -210,6 +245,52 @@ def _lighten_day_plan(db: Session, day: s.DayPlan) -> None:
     _apply_light_day_fields(day, rationale="Seance deplacee depuis l'app. Garde de la fraicheur pour le nouveau creneau.")
     db.commit()
     repo.set_change_notes(db, day.id, [("Seance reportee", "Deplacement confirme depuis l'app.")])
+
+
+def _swap_session_content(first: s.ScheduledSession, second: s.ScheduledSession) -> None:
+    fields = (
+        "sport_type",
+        "session_type",
+        "session_title",
+        "session_goal",
+        "session_note",
+        "session_description",
+        "duration_min",
+        "intensity",
+        "load_score",
+        "priority",
+        "nutrition_focus",
+        "flexibility",
+        "completion_status",
+    )
+    for field in fields:
+        first_value = getattr(first, field)
+        second_value = getattr(second, field)
+        setattr(first, field, second_value)
+        setattr(second, field, first_value)
+
+
+def _swap_day_plan_content(first: s.DayPlan, second: s.DayPlan) -> None:
+    fields = (
+        "sport_type",
+        "session_type",
+        "session_title",
+        "session_goal",
+        "session_note",
+        "session_description",
+        "duration_min",
+        "intensity",
+        "load_score",
+        "priority",
+        "nutrition_focus",
+        "flexibility",
+        "completion_status",
+    )
+    for field in fields:
+        first_value = getattr(first, field)
+        second_value = getattr(second, field)
+        setattr(first, field, second_value)
+        setattr(second, field, first_value)
 
 
 def _apply_light_session_fields(session: s.ScheduledSession, *, rationale: str | None) -> None:
