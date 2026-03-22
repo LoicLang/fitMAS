@@ -15,6 +15,7 @@ class ToolTrace:
     tool_latency_ms: int | None
     tool_success: bool
     tool_offered: bool = False
+    context_policy: str | None = None
     tool_error: str | None = None
     fallback_used: bool = False
     llm_round_trips: int = 1
@@ -30,6 +31,7 @@ def build_tool_trace(
     pipeline: str,
     tool_name: str | None = None,
     tool_offered: bool = False,
+    context_policy: str | None = None,
     tool_requested: bool = True,
     tool_called: bool = True,
     tool_latency_ms: int | None = None,
@@ -46,6 +48,7 @@ def build_tool_trace(
         pipeline=pipeline,
         tool_name=tool_name,
         tool_offered=tool_offered,
+        context_policy=context_policy,
         tool_requested=tool_requested,
         tool_called=tool_called,
         tool_latency_ms=tool_latency_ms,

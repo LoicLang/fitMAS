@@ -8,6 +8,7 @@ from time import perf_counter
 from typing import Any
 
 from pydantic import BaseModel
+from fitmas.conversation_prompting import select_conversation_prompt_policy
 from fitmas.fact_memory import normalize_fact_payload as normalize_fact_memory_payload
 from fitmas.fact_memory import select_relevant_facts
 from fitmas.time_context import build_time_context, render_time_context
@@ -156,19 +157,22 @@ def decide(
 
     resolved_time_context = time_context or build_time_context((coach_context or {}).get("timezone"))
     time_block = render_time_context(resolved_time_context)
+    routing = route_tools_for_query(user_text, pipeline=tool_context.pipeline) if tool_context is not None else None
+    prompt_policy = select_conversation_prompt_policy(routing_reason=routing.reason if routing is not None else None)
 
     # Build conversation context
     history_block = ""
     if conversation_history:
-        recent = conversation_history[-8:]  # last 8 messages for context
+        recent = conversation_history[-prompt_policy.history_limit :]
         lines = []
         for msg in recent:
             prefix = "Utilisateur" if msg["role"] == "user" else "FitMAS"
             lines.append(f"{prefix}: {msg['text']}")
-        history_block = f"\nHistorique recent:\n" + "\n".join(lines) + "\n"
+        if lines:
+            history_block = f"\nHistorique recent:\n" + "\n".join(lines) + "\n"
 
     coach_block = ""
-    if coach_context:
+    if coach_context and prompt_policy.include_coach_context:
         coach_block = (
             "\nContexte coach:\n"
             f"- nom: {coach_context.get('coach_name', 'FitMAS')}\n"
@@ -182,32 +186,35 @@ def decide(
 
     facts_block = ""
     selected_facts = (coach_context or {}).get("selected_facts") or select_prompt_facts(remembered_facts or [])
-    if selected_facts:
+    if selected_facts and prompt_policy.include_facts:
         facts_block = "\nMemoire utile:\n" + "\n".join(f"- {fact}" for fact in selected_facts) + "\n"
 
     timeline_block = ""
-    if timeline_summary:
+    if timeline_summary and prompt_policy.include_timeline:
         timeline_block = f"\nCalendrier date reel:\n{timeline_summary}\n"
 
     execution_block = ""
-    if execution_summary:
+    if execution_summary and prompt_policy.include_execution:
         execution_block = f"\n{execution_summary}\n"
 
     temporal_block = ""
-    if temporal_summary:
+    if temporal_summary and prompt_policy.include_temporal:
         temporal_block = f"\n{temporal_summary}\n"
 
     claim_block = ""
-    if activity_claim_summary:
+    if activity_claim_summary and prompt_policy.include_claim:
         claim_block = f"\n{activity_claim_summary}\n"
 
     signal_block = ""
-    if signal_summary:
+    if signal_summary and prompt_policy.include_signals:
         signal_block = f"\n{signal_summary}\n"
 
+    plan_anchor = ""
+    if prompt_policy.include_plan_summary:
+        plan_anchor = f"Repere legacy semaine courante:\n{plan_summary}\n"
+
     prompt = f"""{time_block}
-Repere legacy semaine courante:
-{plan_summary}
+{plan_anchor}
 {timeline_block}
 {execution_block}{temporal_block}{claim_block}{signal_block}
 {coach_block}{facts_block}
@@ -264,13 +271,13 @@ Reponds UNIQUEMENT avec le JSON, sans markdown, sans texte autour."""
 
     try:
         data = None
-        routing = route_tools_for_query(user_text, pipeline=tool_context.pipeline) if tool_context is not None else None
         if tool_context is not None and routing and routing.tool_names:
             data = _request_json_with_tools(
                 system=_SOUL,
                 prompt=prompt,
                 tool_context=tool_context,
                 tool_names=routing.tool_names,
+                context_policy=prompt_policy.name,
             )
         if data is None:
             data = _request_json(system=_SOUL, prompt=prompt)
@@ -300,6 +307,7 @@ def _request_json_with_tools(
     prompt: str,
     tool_context: ToolContext,
     tool_names: tuple[str, ...],
+    context_policy: str,
     model: str = "claude-haiku-4-5-20251001",
     max_tokens: int = 1024,
 ) -> dict | None:
@@ -320,6 +328,7 @@ def _request_json_with_tools(
         _log_tool_session_trace(
             pipeline=tool_context.pipeline,
             tool_offered=True,
+            context_policy=context_policy,
             tool_requested=False,
             tool_called=False,
             tool_success=False,
@@ -337,6 +346,7 @@ def _request_json_with_tools(
         _log_tool_session_trace(
             pipeline=tool_context.pipeline,
             tool_offered=True,
+            context_policy=context_policy,
             tool_requested=False,
             tool_called=False,
             tool_success=data is not None,
@@ -355,6 +365,7 @@ def _request_json_with_tools(
         _log_tool_session_trace(
             pipeline=tool_context.pipeline,
             tool_offered=True,
+            context_policy=context_policy,
             tool_requested=True,
             tool_called=False,
             tool_success=data is not None,
@@ -408,6 +419,7 @@ def _request_json_with_tools(
             pipeline=tool_context.pipeline,
             tool_name=tool_result.tool_name,
             tool_offered=True,
+            context_policy=context_policy,
             tool_requested=True,
             tool_called=tool_trace.tool_called,
             tool_latency_ms=tool_trace.tool_latency_ms,
@@ -429,6 +441,7 @@ def _request_json_with_tools(
         pipeline=tool_context.pipeline,
         tool_name=tool_result.tool_name,
         tool_offered=True,
+        context_policy=context_policy,
         tool_requested=True,
         tool_called=tool_trace.tool_called,
         tool_latency_ms=tool_trace.tool_latency_ms,
@@ -539,6 +552,7 @@ def _log_tool_session_trace(
     tool_requested: bool,
     tool_called: bool,
     tool_success: bool,
+    context_policy: str | None = None,
     tool_name: str | None = None,
     tool_latency_ms: int | None = None,
     tool_error: str | None = None,
@@ -553,6 +567,7 @@ def _log_tool_session_trace(
         pipeline=pipeline,
         tool_name=tool_name,
         tool_offered=tool_offered,
+        context_policy=context_policy,
         tool_requested=tool_requested,
         tool_called=tool_called,
         tool_latency_ms=tool_latency_ms,
