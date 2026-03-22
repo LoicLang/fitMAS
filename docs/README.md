@@ -7,7 +7,7 @@ read_when:
 
 # Docs
 
-7 documents essentiels :
+8 documents essentiels :
 
 | Document | Contenu |
 |----------|---------|
@@ -15,6 +15,7 @@ read_when:
 | `ARCHITECTURE.md` | Stack, modèle de données, flux techniques, décisions tranchées |
 | `APP-UX.md` | Contrat UX de la webapp : calendrier, today, performance, journal |
 | `PLANNING-ENGINE-V2.md` | Plan adapte du moteur V2, sequence d'implementation et mapping avec le code actuel |
+| `CONVERSATION-GROUNDING.md` | Verite conversationnelle, grounding Telegram, trous actuels et ordre d'implementation |
 | `SOUL.md` | Voix FitMAS, heartbeat, messagerie, exemples de ton |
 | `BUILD-ORDER.md` | État actuel, roadmap recommandée, ordre de priorités |
 | `RUNBOOK.md` | Commandes, flux à tester, debug, déploiement, mapping rapide du code |
@@ -33,9 +34,10 @@ Pour un nouvel agent :
 3. `ARCHITECTURE.md`
 4. `APP-UX.md`
 5. `PLANNING-ENGINE-V2.md`
-6. `SOUL.md`
-7. `BUILD-ORDER.md`
-8. `RUNBOOK.md`
+6. `CONVERSATION-GROUNDING.md`
+7. `SOUL.md`
+8. `BUILD-ORDER.md`
+9. `RUNBOOK.md`
 
 Raccourci utile :
 - si le sujet est "que faut-il construire maintenant ?", lire `BUILD-ORDER.md`
@@ -43,6 +45,7 @@ Raccourci utile :
 - si le sujet est "quelle fondation technique avant d'ajouter de la sophistication ?", lire `ARCHITECTURE.md`
 - si le sujet est "comment l'app doit se comporter ?", lire `APP-UX.md`
 - si le sujet est "comment faire evoluer le planner ?", lire `PLANNING-ENGINE-V2.md`
+- si le sujet est "pourquoi le coach Telegram se trompe sur le reel ou le temps ?", lire `CONVERSATION-GROUNDING.md`
 
 ## Archive
 

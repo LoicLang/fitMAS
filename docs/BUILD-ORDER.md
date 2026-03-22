@@ -111,6 +111,21 @@ read_when:
 - On stabilise d'abord la vérité des données avant de sophistiquer l'UI ou le LLM
 - Pas de multi-agent tant que le mono-agent n'est pas un vrai frein produit
 
+## Priorité transversale — Conversation Grounding
+
+Le chantier planner V2 continue, mais un sujet remonte avant son branchement complet :
+- le coach Telegram doit mieux lire le reel execute
+- le coach Telegram doit mieux resoudre `aujourd'hui`, `demain`, `hier`
+- le coach Telegram doit mieux gerer une correction utilisateur immediate
+
+Document de reference :
+- `CONVERSATION-GROUNDING.md`
+
+Objectif :
+- eviter les messages factuellement faux
+- ne plus confondre `seance prevue manquee` avec `aucune activite reelle`
+- ne plus reutiliser une duree planifiee comme si c'etait la duree executee
+
 ## Roadmap recommandée
 
 ### Sprint 1 — Telegram Fix + Fondation Charge
