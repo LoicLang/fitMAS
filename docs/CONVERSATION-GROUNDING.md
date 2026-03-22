@@ -195,6 +195,8 @@ Etat :
 Regle :
 - on persiste seulement si le message courant contient bien un claim
 - on persiste la version fusionnee avec le contexte recent pour capter `j'ai fait 30 min` apres `j'ai couru aujourd'hui`
+- une correction explicite du type `non c'etait hier` est traitee comme un claim temporel partiel
+- un claim execution corrige archive le claim precedent contradictoire
 - on ne persiste pas si une vraie `Activity` couvre deja ce claim
 - TTL courte (`immediate`) pour ne pas transformer `UserFact` en faux journal d'activite
 

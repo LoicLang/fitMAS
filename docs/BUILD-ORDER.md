@@ -134,6 +134,7 @@ Deja pose :
 - les claims activite du message courant sont maintenant persistés en `UserFact(category="execution")` avec TTL courte quand aucune vraie `Activity` n'existe encore
 - `signals.py` et `heartbeat.py` tiennent mieux compte des activites reelles hors plan
 - `signals.py` et `heartbeat.py` lisent aussi les activites declarees non loggees pour eviter les faux `rien fait`
+- les corrections explicites (`non c'etait hier`) mettent a jour et archivent le claim execution precedent
 - `UserFact` porte maintenant une vraie sémantique mémoire `urgency / ttl / affects / expires_at`
 
 ## Roadmap recommandée
