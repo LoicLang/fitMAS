@@ -9,12 +9,13 @@ Each signal function returns a dict (or None) with:
 from __future__ import annotations
 
 import logging
+from datetime import date
 from typing import Any
 
 from sqlalchemy.orm import Session
 
 from fitmas import repository as repo, schema as s
-from fitmas.time_context import DAY_KEYS, DAY_LABELS_FR, build_time_context, hours_since, utc_cutoff
+from fitmas.time_context import DAY_KEYS, DAY_LABELS_FR, build_time_context, get_local_now, get_timezone, hours_since, utc_cutoff
 
 logger = logging.getLogger(__name__)
 
@@ -76,19 +77,28 @@ def _detect_missed_key_session(
     if day.completion_status == "done":
         return None
 
+    yesterday_date = get_local_now(user.timezone).date()
+    yesterday_date = yesterday_date.fromordinal(yesterday_date.toordinal() - 1)
+    activities_yesterday = _activities_on_local_date(db, user, target_date=yesterday_date)
+    actual_context = ""
+    if activities_yesterday:
+        sports = ", ".join(sorted({activity.sport_type for activity in activities_yesterday}))
+        actual_context = f" Activite reelle detectee hors seance prevue: {sports}."
+
     label = DAY_LABELS_FR.get(yesterday_key, yesterday_key)
     return {
         "kind": "missed_key_session",
         "severity": "warning",
         "summary": (
             f"Seance cle de {label} ({day.session_title}) non realisee. "
-            f"Sport: {day.sport_type}, priorite: {day.priority}."
+            f"Sport: {day.sport_type}, priorite: {day.priority}.{actual_context}"
         ),
         "data": {
             "day": yesterday_key,
             "session_title": day.session_title,
             "sport_type": day.sport_type,
             "priority": day.priority,
+            "actual_sports": [activity.sport_type for activity in activities_yesterday],
         },
     }
 
@@ -98,15 +108,14 @@ def _detect_missed_key_session(
 def _detect_silence(
     db: Session, user: s.User, plan: s.WeeklyPlan, today_key: str,
 ) -> Signal | None:
-    """Fire if 3+ consecutive days have no activity and no 'done' status."""
-    today_idx = DAY_KEYS.index(today_key)
+    """Fire if 3+ consecutive days have no actual activity."""
+    local_today = get_local_now(user.timezone).date()
 
     silent_days = 0
     for offset in range(1, 4):  # check yesterday, day-before, day-before-that
-        check_idx = (today_idx - offset) % 7
-        check_key = DAY_KEYS[check_idx]
-        day = repo.get_day_plan(db, plan.id, check_key)
-        if day and day.sport_type != "rest" and day.completion_status != "done":
+        target_date = local_today.fromordinal(local_today.toordinal() - offset)
+        activities = _activities_on_local_date(db, user, target_date=target_date)
+        if not activities:
             silent_days += 1
         else:
             break  # streak broken
@@ -271,19 +280,13 @@ def _detect_big_session_done(
 def _detect_streak(
     db: Session, user: s.User, plan: s.WeeklyPlan, today_key: str,
 ) -> Signal | None:
-    """Fire if user has completed 3+ consecutive planned sessions."""
-    today_idx = DAY_KEYS.index(today_key)
+    """Fire if user has 3+ consecutive local days with actual activity."""
+    local_today = get_local_now(user.timezone).date()
     streak = 0
 
     for offset in range(1, 8):  # look back up to 7 days
-        check_idx = (today_idx - offset) % 7
-        check_key = DAY_KEYS[check_idx]
-        day = repo.get_day_plan(db, plan.id, check_key)
-        if not day:
-            break
-        if day.sport_type == "rest":
-            continue  # rest days don't break streaks
-        if day.completion_status == "done":
+        target_date = local_today.fromordinal(local_today.toordinal() - offset)
+        if _activities_on_local_date(db, user, target_date=target_date):
             streak += 1
         else:
             break
@@ -310,3 +313,20 @@ def format_signals_for_prompt(signals: list[Signal]) -> str:
         icon = {"info": "ℹ️", "warning": "⚠️", "action": "🔴"}.get(sig["severity"], "•")
         lines.append(f"{icon} [{sig['kind']}] {sig['summary']}")
     return "\n".join(lines)
+
+
+def _activities_on_local_date(db: Session, user: s.User, *, target_date: date) -> list[s.Activity]:
+    activities = repo.get_activities(db, user.id, limit=120)
+    timezone = get_timezone(user.timezone)
+    matched: list[s.Activity] = []
+    for activity in activities:
+        if activity.started_at is None:
+            continue
+        started_at = activity.started_at
+        if started_at.tzinfo is None:
+            local_date = started_at.date()
+        else:
+            local_date = started_at.astimezone(timezone).date()
+        if local_date == target_date:
+            matched.append(activity)
+    return matched

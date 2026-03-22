@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import logging
 import os
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 
 from sqlalchemy.orm import Session
 
@@ -18,7 +18,7 @@ from fitmas import repository as repo, schema as s
 from fitmas.coach_messages import CoachDraft
 from fitmas.db import SessionLocal
 from fitmas.signals import collect_signals, format_signals_for_prompt
-from fitmas.time_context import DAY_LABELS_FR, build_time_context, get_local_now, hours_since, render_time_context
+from fitmas.time_context import DAY_LABELS_FR, build_time_context, get_local_now, get_timezone, hours_since, render_time_context
 
 logger = logging.getLogger(__name__)
 
@@ -198,6 +198,7 @@ def morning_briefing() -> CoachDraft | None:
 
         plan = repo.get_active_plan(db, user.id)
         time_context = build_time_context(user.timezone)
+        local_now = get_local_now(user.timezone)
         today_key = time_context["day_key"]
         day = repo.get_day_plan(db, plan.id, today_key)
         if not day:
@@ -211,9 +212,17 @@ def morning_briefing() -> CoachDraft | None:
         yesterday_day = repo.get_day_plan(db, plan.id, yesterday_key) if yesterday_key else None
 
         yesterday_context = ""
+        yesterday_activities = _activities_on_local_date(db, user, target_date=local_now.date() - timedelta(days=1))
         if yesterday_day and yesterday_day.sport_type != "rest":
             if yesterday_status == "done":
                 yesterday_context = f"\nHier ({yesterday_label}): {yesterday_day.session_title} — fait. Bien."
+            elif yesterday_activities:
+                sports = ", ".join(sorted({activity.sport_type for activity in yesterday_activities}))
+                total_duration = sum(activity.duration_min or 0 for activity in yesterday_activities)
+                yesterday_context = (
+                    f"\nHier ({yesterday_label}): seance prevue non validee, "
+                    f"mais activite reelle detectee ({sports}, {total_duration} min)."
+                )
             elif yesterday_status == "planned":
                 yesterday_context = (
                     f"\nHier ({yesterday_label}): {yesterday_day.session_title} — "
@@ -349,6 +358,9 @@ def weekly_review() -> CoachDraft | None:
         lines = []
         done_count = 0
         planned_count = 0
+        recent_activities = _activities_last_days(db, user, days=7)
+        actual_activity_count = len(recent_activities)
+        actual_duration_min = sum(activity.duration_min or 0 for activity in recent_activities)
         for day_row in plan.days:
             label = DAY_LABELS.get(day_row.day, day_row.day)
             status_marker = ""
@@ -380,7 +392,8 @@ def weekly_review() -> CoachDraft | None:
             f"{render_time_context(build_time_context(user.timezone))}\n"
             f"Resume de la semaine:\n{week_text}\n"
             f"Intention: {plan.intention}\n"
-            f"Seances faites: {done_count}. Seances prevues non faites: {planned_count}."
+            f"Seances faites dans le plan: {done_count}. Seances prevues non faites: {planned_count}.\n"
+            f"Activites reelles detectees sur 7 jours: {actual_activity_count}. Duree reelle totale: {actual_duration_min} min."
         )
         llm_msg = _llm_generate(system, prompt, allow_no_send=False)
         if llm_msg:
@@ -473,3 +486,36 @@ def signal_check() -> CoachDraft | None:
         return CoachDraft(text=msg, proactive=True)
     finally:
         db.close()
+
+
+def _activities_last_days(db: Session, user: s.User, *, days: int) -> list[s.Activity]:
+    cutoff = get_local_now(user.timezone).date() - timedelta(days=max(0, days - 1))
+    timezone = get_timezone(user.timezone)
+    matched: list[s.Activity] = []
+    for activity in repo.get_activities(db, user.id, limit=160):
+        if activity.started_at is None:
+            continue
+        started_at = activity.started_at
+        if started_at.tzinfo is None:
+            local_date = started_at.date()
+        else:
+            local_date = started_at.astimezone(timezone).date()
+        if local_date >= cutoff:
+            matched.append(activity)
+    return matched
+
+
+def _activities_on_local_date(db: Session, user: s.User, *, target_date: date) -> list[s.Activity]:
+    timezone = get_timezone(user.timezone)
+    matched: list[s.Activity] = []
+    for activity in repo.get_activities(db, user.id, limit=120):
+        if activity.started_at is None:
+            continue
+        started_at = activity.started_at
+        if started_at.tzinfo is None:
+            local_date = started_at.date()
+        else:
+            local_date = started_at.astimezone(timezone).date()
+        if local_date == target_date:
+            matched.append(activity)
+    return matched
