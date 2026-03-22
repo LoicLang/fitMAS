@@ -100,6 +100,9 @@ Trace minimale :
 - `context_policy`
 - `tool_requested`
 - `tool_called`
+- `tool_count_offered`
+- `history_messages_used`
+- `prompt_char_count`
 - `tool_name`
 - `tool_latency_ms`
 - `tool_success`

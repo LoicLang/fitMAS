@@ -67,6 +67,7 @@ Les garde-fous, la planification, les permissions, les cooldowns et la persistan
 - Les tools offerts au chat sont maintenant choisis par routing déterministe selon le type de question
 - Le prompt conversationnel commence aussi a se compacter selon la requete, au lieu d'injecter toujours les memes blocs
 - Les metrics tools couvrent aussi maintenant les branches `tools offerts sans appel`, `tool loop complete` et `fallback de la boucle`
+- Les metrics tools remontent aussi un volume de prompt exploitable (`prompt_char_count`, `history_messages_used`, `tool_count_offered`)
 - La boucle coach reçoit maintenant un résumé structuré `prévu vs réel`, une résolution temporelle, des claims d'activité récents, une mémoire utile sélectionnée et quelques signaux filtrés
 - `signals.py` et `heartbeat.py` lisent mieux les activités réelles hors plan au lieu de s'appuyer uniquement sur le plan
 

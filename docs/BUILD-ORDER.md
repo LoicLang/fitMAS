@@ -151,6 +151,7 @@ Socle runtime tools pose :
 - les traces tools couvrent maintenant aussi `tools offerts mais non utilises`, `tool loop complete` et `fallback de tool loop`
 - les tools offerts au chat sont maintenant routes de facon deterministe par type de requete au lieu d'envoyer tout le registry
 - la reduction du `context dump` a commence pour les requetes de lecture outillees, avec policy de prompt deterministe
+- les traces exposent aussi maintenant le volume de prompt (`prompt_char_count`, `history_messages_used`, `tool_count_offered`)
 
 ## Roadmap recommandée
 
