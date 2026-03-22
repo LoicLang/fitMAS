@@ -1421,13 +1421,21 @@
         return activities.find(activity => activity.id === activityId) || null;
       }
 
-      function getLinkedActivityForSession(session, isCurrentWeekSession = false) {
-        if (session.linked_activity_id) return getActivityById(session.linked_activity_id);
-        return isCurrentWeekSession ? getDayActivity(session.day) : null;
+      function getLinkedActivityForSession(session) {
+        if (!session?.linked_activity_id) return null;
+        return getActivityById(session.linked_activity_id);
       }
 
       function getSessionByLinkedActivity(activityId) {
         return scheduledTimeline.find(session => session.linked_activity_id === activityId) || null;
+      }
+
+      function getSessionDisplayIsoDate(session, timezone) {
+        const linkedActivity = getLinkedActivityForSession(session);
+        if (linkedActivity?.started_at) {
+          return getLocalIsoDate(timezone, new Date(linkedActivity.started_at));
+        }
+        return session.scheduled_date;
       }
 
       function parseSessionDate(rawDate) {
@@ -1714,16 +1722,17 @@
         };
 
         sessions.forEach(session => {
-          const phase = session.scheduled_date < todayIso
+          const displayIsoDate = getSessionDisplayIsoDate(session, timezone);
+          const phase = displayIsoDate < todayIso
             ? "past"
-            : session.scheduled_date === todayIso
+            : displayIsoDate === todayIso
               ? "today"
               : "upcoming";
           sections[phase].push(session);
         });
 
         const currentWeekSessions = sessions.filter(session =>
-          DAY_ORDER.some(dayKey => currentWeekIsoMap[dayKey] === session.scheduled_date)
+          DAY_ORDER.some(dayKey => currentWeekIsoMap[dayKey] === getSessionDisplayIsoDate(session, timezone))
         );
 
         const renderSection = (title, items, emptyText) => {
@@ -1747,29 +1756,26 @@
               <div class="timeline-list">
                 ${items.map(session => {
                   const cls = ["card", "day-card", "timeline-item"];
-                  const isCurrentWeekSession = currentWeekIsoMap[session.day] === session.scheduled_date;
-                  if (isCurrentWeekSession && session.day === selectedDay) cls.push("active");
+                  const displayIsoDate = getSessionDisplayIsoDate(session, timezone);
+                  const isCurrentWeekSession = Object.values(currentWeekIsoMap).includes(displayIsoDate);
+                  if (isCurrentWeekSession && selectedSessionId === session.id) cls.push("active");
                   if (isCurrentWeekSession) cls.push("clickable");
                   const dayData = weekPlan.days.find(day => day.day === session.day);
                   if (dayData && hasMutations(dayData)) cls.push("mutated");
                   const emoji = SPORT_EMOJI[session.sport_type] || "";
                   const status = session.completion_status || "planned";
                   const dur = session.duration_min ? `${session.duration_min} min` : "Format libre";
-                  const sessionDate = parseSessionDate(session.scheduled_date);
+                  const sessionDate = parseSessionDate(displayIsoDate);
                   const dayDate = sessionDate ? formatTimelineDate(sessionDate, timezone) : { day: "", num: "", month: "" };
-                  const linkedActivity = getLinkedActivityForSession(session, isCurrentWeekSession);
-                  const isPastSession = session.scheduled_date < todayIso;
+                  const linkedActivity = getLinkedActivityForSession(session);
+                  const isPastSession = displayIsoDate < todayIso;
                   const plannedSummary = [
                     formatSessionShortDate(session.scheduled_date),
                     dur,
                     session.intensity || "souple",
                     session.session_type || null,
                   ].filter(Boolean).join(" · ");
-                  const actualDateLabel = linkedActivity?.started_at
-                    ? getLocalIsoDate(timezone, new Date(linkedActivity.started_at)) === session.scheduled_date
-                      ? formatRecentActivityDate(linkedActivity.started_at)
-                      : `décalé · ${formatRecentActivityDate(linkedActivity.started_at)}`
-                    : null;
+                  const actualDateLabel = linkedActivity?.started_at ? formatRecentActivityDate(linkedActivity.started_at) : null;
                   const linkedActivitySummary = linkedActivity
                     ? [
                         actualDateLabel,
@@ -1783,7 +1789,7 @@
                     : "";
 
                   return `
-                    <article class="${cls.join(" ")}" data-day="${session.day}" data-session-id="${session.id}" data-date="${session.scheduled_date}" data-current-week="${isCurrentWeekSession ? "1" : "0"}">
+                    <article class="${cls.join(" ")}" data-day="${session.day}" data-session-id="${session.id}" data-date="${displayIsoDate}" data-current-week="${isCurrentWeekSession ? "1" : "0"}">
                       <div class="timeline-date">
                         <span class="timeline-date-day">${dayDate.day}</span>
                         <span class="timeline-date-num">${dayDate.num}</span>
@@ -1882,8 +1888,8 @@
         const remainingCount = statSource.filter(day => day.completion_status === "planned" && day.sport_type !== "rest").length;
         const missingCount = currentWeekSessions.filter(session =>
           session.sport_type !== "rest" &&
-          session.scheduled_date < todayIso &&
-          !getLinkedActivityForSession(session, true)
+          getSessionDisplayIsoDate(session, timezone) < todayIso &&
+          !getLinkedActivityForSession(session)
         ).length;
         const offPlanCount = activities.filter(activity => {
           if (!activity.started_at) return false;

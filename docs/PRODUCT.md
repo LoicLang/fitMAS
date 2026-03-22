@@ -94,6 +94,7 @@ Via `/start` sur le bot Telegram :
 **Calendrier** — vue plan vivant
 - passé récent + aujourd'hui + à venir
 - 7 séances de la semaine avec statut et date lisible
+- une séance terminée se reloge sur son jour réel d'exécution
 - tableau de bord exécution / charge / lecture de la semaine
 - barre de charge visuelle
 - bouton régénérer
