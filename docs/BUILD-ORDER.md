@@ -126,6 +126,9 @@ Objectif :
 - ne plus confondre `seance prevue manquee` avec `aucune activite reelle`
 - ne plus reutiliser une duree planifiee comme si c'etait la duree executee
 
+Deja pose :
+- `execution_context.py` pour resumer `prevu vs reel` sur aujourd'hui
+
 ## Roadmap recommandée
 
 ### Sprint 1 — Telegram Fix + Fondation Charge

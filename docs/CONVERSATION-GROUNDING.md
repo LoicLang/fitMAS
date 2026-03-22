@@ -134,6 +134,11 @@ Role :
 - resumer ce qui etait prevu et ce qui a ete reellement fait
 - distinguer `planned_done_as_expected`, `planned_done_modified`, `off_plan_done`, `planned_pending`, etc.
 
+Etat :
+- pose
+- pur
+- teste
+
 Consommateurs cibles :
 - `api_messages.py`
 - `heartbeat.py`
@@ -243,6 +248,7 @@ Deja pose :
 - `ScheduledSession` datees
 - `Activity` persistées
 - pipeline planning V2 pour l'etat athlete/fitness/readiness/decision
+- `execution_context.py` pour resumer proprement prevu vs reel sur la journee
 
 Manque encore :
 - vraie couche shared de grounding conversationnel
