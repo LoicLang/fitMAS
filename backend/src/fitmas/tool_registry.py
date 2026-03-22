@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from datetime import date, datetime, timedelta
-from typing import Any
+from typing import Any, Sequence
 
 from fitmas.execution_context import build_today_execution_context
 from fitmas.fact_memory import select_relevant_facts
@@ -82,14 +82,29 @@ def build_tool_registry() -> dict[str, ToolSpec]:
     return {spec.name: spec for spec in specs}
 
 
-def list_tools_for_pipeline(pipeline: str) -> list[dict[str, Any]]:
+def list_tools_for_pipeline(pipeline: str, *, tool_names: Sequence[str] | None = None) -> list[dict[str, Any]]:
+    registry = build_tool_registry()
+    if tool_names:
+        ordered: list[dict[str, Any]] = []
+        for name in tool_names:
+            spec = registry.get(name)
+            if spec is None or pipeline not in spec.allowed_pipelines:
+                continue
+            ordered.append(
+                {
+                    "name": spec.name,
+                    "description": spec.description,
+                    "input_schema": dict(spec.input_schema),
+                }
+            )
+        return ordered
     return [
         {
             "name": spec.name,
             "description": spec.description,
             "input_schema": dict(spec.input_schema),
         }
-        for spec in build_tool_registry().values()
+        for spec in registry.values()
         if pipeline in spec.allowed_pipelines
     ]
 

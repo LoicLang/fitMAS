@@ -20,6 +20,7 @@ class LLMToolsTest(unittest.TestCase):
             captured["calls"] = int(captured["calls"]) + 1
             if captured["calls"] == 1:
                 self.assertIsNotNone(tools)
+                self.assertEqual([tool["name"] for tool in tools], ["get_activity_highlights", "get_recent_activities"])
                 return SimpleNamespace(
                     stop_reason="tool_use",
                     content=[
@@ -98,6 +99,7 @@ class LLMToolsTest(unittest.TestCase):
 
         def fake_request_message(*, system, messages, model="claude-haiku-4-5-20251001", max_tokens=512, tools=None, tool_choice=None):
             self.assertIsNotNone(tools)
+            self.assertEqual([tool["name"] for tool in tools], ["get_today_context", "get_plan_window"])
             return SimpleNamespace(
                 stop_reason="end_turn",
                 content=[

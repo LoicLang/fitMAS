@@ -14,6 +14,7 @@ from fitmas.time_context import build_time_context, render_time_context
 from fitmas.tool_contract import ToolCall, ToolContext
 from fitmas.tool_metrics import build_tool_trace, log_tool_trace
 from fitmas.tool_registry import list_tools_for_pipeline
+from fitmas.tool_routing import route_tools_for_query
 from fitmas.tool_runtime import execute_tool_call
 
 logger = logging.getLogger(__name__)
@@ -263,11 +264,13 @@ Reponds UNIQUEMENT avec le JSON, sans markdown, sans texte autour."""
 
     try:
         data = None
-        if tool_context is not None and _should_offer_tools(user_text):
+        routing = route_tools_for_query(user_text, pipeline=tool_context.pipeline) if tool_context is not None else None
+        if tool_context is not None and routing and routing.tool_names:
             data = _request_json_with_tools(
                 system=_SOUL,
                 prompt=prompt,
                 tool_context=tool_context,
+                tool_names=routing.tool_names,
             )
         if data is None:
             data = _request_json(system=_SOUL, prompt=prompt)
@@ -296,10 +299,11 @@ def _request_json_with_tools(
     system: str,
     prompt: str,
     tool_context: ToolContext,
+    tool_names: tuple[str, ...],
     model: str = "claude-haiku-4-5-20251001",
     max_tokens: int = 1024,
 ) -> dict | None:
-    tools = list_tools_for_pipeline(tool_context.pipeline)
+    tools = list_tools_for_pipeline(tool_context.pipeline, tool_names=tool_names)
     if not tools:
         return None
     started_at = perf_counter()
@@ -562,31 +566,6 @@ def _log_tool_session_trace(
         response_stop_reason=response_stop_reason,
     )
     log_tool_trace(trace)
-
-
-def _should_offer_tools(user_text: str) -> bool:
-    lowered = user_text.lower()
-    question_patterns = (
-        "c'etait quoi",
-        "c'était quoi",
-        "c est quoi",
-        "qu'est-ce que tu sais",
-        "qu est ce que tu sais",
-        "plus longue",
-        "meilleur",
-        "combien",
-        "il me reste quoi",
-        "il reste quoi",
-        "c'est quoi deja",
-        "c est quoi deja",
-        "quel etait",
-        "quelle etait",
-        "rappelle-moi",
-        "rappelle moi",
-    )
-    return "?" in lowered or any(pattern in lowered for pattern in question_patterns)
-
-
 def make_timeline_summary(sessions: list) -> str:
     lines = []
     for session in sessions:
