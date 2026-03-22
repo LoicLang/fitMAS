@@ -475,6 +475,69 @@
         color: var(--red);
       }
 
+      .timeline-block-pending {
+        background: rgba(69, 47, 32, 0.03);
+        border-color: rgba(69, 47, 32, 0.08);
+      }
+
+      .timeline-block-pending strong {
+        color: var(--text);
+      }
+
+      .journal-note {
+        margin-top: 10px;
+        font-size: 0.84rem;
+        line-height: 1.5;
+        color: var(--muted);
+      }
+
+      .activity-journal {
+        display: grid;
+        gap: 10px;
+      }
+
+      .activity-journal-item {
+        display: grid;
+        gap: 8px;
+        padding: 14px 15px;
+        border-radius: var(--radius-lg);
+        border: 1px solid rgba(69, 47, 32, 0.08);
+        background: linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(250, 244, 236, 0.96));
+        box-shadow: var(--shadow-sm);
+        cursor: pointer;
+        transition: transform var(--transition), border-color var(--transition);
+      }
+
+      .activity-journal-item:hover {
+        transform: translateY(-1px);
+        border-color: rgba(15, 118, 110, 0.22);
+      }
+
+      .activity-journal-head {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 10px;
+      }
+
+      .activity-journal-head strong {
+        font-size: 0.92rem;
+      }
+
+      .activity-journal-meta,
+      .activity-journal-link {
+        font-size: 0.8rem;
+        line-height: 1.5;
+        color: var(--muted);
+      }
+
+      .activity-journal-link strong {
+        color: var(--accent);
+        font-size: 0.74rem;
+        letter-spacing: 0.05em;
+        text-transform: uppercase;
+      }
+
       /* ── Performance ── */
       .performance-grid {
         display: grid;
@@ -1069,7 +1132,10 @@
         <section class="view" data-view="activities">
           <div class="hero">
             <p class="eyebrow">Activités</p>
-            <h2>Ce que tu as vraiment fait</h2>
+            <h2>Journal réel + import</h2>
+            <p class="muted" style="margin-top: 8px; line-height: 1.5;">
+              Le comparatif <strong>prévu vs fait</strong> se lit dans le calendrier. Ici: log manuel, sync Strava et journal brut.
+            </p>
           </div>
 
           <div class="activity-layout">
@@ -1130,7 +1196,8 @@
               </div>
 
               <div class="card">
-                <h3>Activités récentes</h3>
+                <h3>Journal récent</h3>
+                <p class="journal-note">Chaque activité reste visible ici, mais la lecture coaching se fait dans l'onglet Calendrier.</p>
                 <div class="list" id="activities-list"></div>
               </div>
             </div>
@@ -1354,6 +1421,15 @@
         return activities.find(activity => activity.id === activityId) || null;
       }
 
+      function getLinkedActivityForSession(session, isCurrentWeekSession = false) {
+        if (session.linked_activity_id) return getActivityById(session.linked_activity_id);
+        return isCurrentWeekSession ? getDayActivity(session.day) : null;
+      }
+
+      function getSessionByLinkedActivity(activityId) {
+        return scheduledTimeline.find(session => session.linked_activity_id === activityId) || null;
+      }
+
       function parseSessionDate(rawDate) {
         if (!rawDate) return null;
         return new Date(`${rawDate}T12:00:00Z`);
@@ -1428,6 +1504,17 @@
           minute: "2-digit",
           timeZone: profile?.timezone || undefined,
         }).format(d).replace(",", " ·");
+      }
+
+      function formatSessionShortDate(rawDate) {
+        const date = parseSessionDate(rawDate);
+        if (!date) return "date libre";
+        return new Intl.DateTimeFormat("fr-FR", {
+          weekday: "short",
+          day: "2-digit",
+          month: "short",
+          timeZone: profile?.timezone || undefined,
+        }).format(date).replace(".", "");
       }
 
       function getFreshnessMeta(freshness) {
@@ -1670,18 +1757,22 @@
                   const dur = session.duration_min ? `${session.duration_min} min` : "Format libre";
                   const sessionDate = parseSessionDate(session.scheduled_date);
                   const dayDate = sessionDate ? formatTimelineDate(sessionDate, timezone) : { day: "", num: "", month: "" };
-                  const linkedActivity = session.linked_activity_id
-                    ? getActivityById(session.linked_activity_id)
-                    : (isCurrentWeekSession ? getDayActivity(session.day) : null);
+                  const linkedActivity = getLinkedActivityForSession(session, isCurrentWeekSession);
                   const isPastSession = session.scheduled_date < todayIso;
                   const plannedSummary = [
+                    formatSessionShortDate(session.scheduled_date),
                     dur,
                     session.intensity || "souple",
                     session.session_type || null,
                   ].filter(Boolean).join(" · ");
+                  const actualDateLabel = linkedActivity?.started_at
+                    ? getLocalIsoDate(timezone, new Date(linkedActivity.started_at)) === session.scheduled_date
+                      ? formatRecentActivityDate(linkedActivity.started_at)
+                      : `décalé · ${formatRecentActivityDate(linkedActivity.started_at)}`
+                    : null;
                   const linkedActivitySummary = linkedActivity
                     ? [
-                        formatRecentActivityDate(linkedActivity.started_at),
+                        actualDateLabel,
                         linkedActivity.title,
                         linkedActivity.duration_min ? `${linkedActivity.duration_min} min` : null,
                         formatDistance(linkedActivity.distance_m),
@@ -1725,15 +1816,20 @@
                             </div>
                             ${linkedActivity ? `
                               <button type="button" class="timeline-block timeline-block-actual" data-activity-open="${linkedActivity.id}">
-                                <strong>Fait</strong>
+                                <strong>Réalisé</strong>
                                 <span>${linkedActivitySummary}</span>
                               </button>
                             ` : isPastSession ? `
                               <div class="timeline-block timeline-block-missing">
-                                <strong>Fait</strong>
+                                <strong>Manqué</strong>
                                 <span>Aucune activité enregistrée pour cette séance.</span>
                               </div>
-                            ` : ""}
+                            ` : `
+                              <div class="timeline-block timeline-block-pending">
+                                <strong>À faire</strong>
+                                <span>Pas encore réalisée. Le réel apparaîtra ici après sync ou log manuel.</span>
+                              </div>
+                            `}
                           </div>
                         ` : ""}
                       </div>
@@ -1784,8 +1880,18 @@
         const statSource = currentWeekSessions.length ? currentWeekSessions : weekPlan.days;
         const doneCount = statSource.filter(day => day.completion_status === "done").length;
         const remainingCount = statSource.filter(day => day.completion_status === "planned" && day.sport_type !== "rest").length;
-        const keyCount = statSource.filter(day => ["cle", "fort", "qualite", "long"].some(keyword => `${day.priority} ${day.session_title}`.toLowerCase().includes(keyword))).length;
-        const totalMinutes = statSource.reduce((sum, day) => sum + (day.duration_min || 0), 0);
+        const missingCount = currentWeekSessions.filter(session =>
+          session.sport_type !== "rest" &&
+          session.scheduled_date < todayIso &&
+          !getLinkedActivityForSession(session, true)
+        ).length;
+        const offPlanCount = activities.filter(activity => {
+          if (!activity.started_at) return false;
+          const activityIso = getLocalIsoDate(timezone, new Date(activity.started_at));
+          const isCurrentWeekActivity = Object.values(currentWeekIsoMap).includes(activityIso);
+          if (!isCurrentWeekActivity) return false;
+          return !currentWeekSessions.some(session => session.linked_activity_id === activity.id);
+        }).length;
         document.getElementById("plan-stats").innerHTML = `
           <div class="metric">
             <div class="metric-label">Fait</div>
@@ -1796,12 +1902,12 @@
             <div class="metric-value">${remainingCount}</div>
           </div>
           <div class="metric">
-            <div class="metric-label">Séances clés</div>
-            <div class="metric-value">${keyCount}</div>
+            <div class="metric-label">Manqué</div>
+            <div class="metric-value">${missingCount}</div>
           </div>
           <div class="metric">
-            <div class="metric-label">Volume</div>
-            <div class="metric-value">${totalMinutes ? `${totalMinutes} min` : "Libre"}</div>
+            <div class="metric-label">Hors plan</div>
+            <div class="metric-value">${offPlanCount}</div>
           </div>
         `;
       }
@@ -2010,27 +2116,57 @@
 
       function renderActivities() {
         const el = document.getElementById("activities-list");
-        if (!activities?.length) { el.innerHTML = '<div class="empty">Aucune activité enregistrée.</div>'; return; }
-        el.innerHTML = activities.map(a => `
-          <div class="list-item" style="cursor:pointer;transition:all 180ms;" onclick="openActivityModal(${a.id})" onmouseover="this.style.borderColor='var(--accent)'" onmouseout="this.style.borderColor=''">
-            <div style="display:flex;justify-content:space-between;align-items:flex-start;">
-              <strong>${SPORT_EMOJI[a.sport_type]||""} ${a.title}</strong>
-              ${a.source === "strava" ? '<span style="color:var(--strava);font-size:0.72rem;font-weight:600;">STRAVA</span>' : '<span style="color:var(--muted);font-size:0.72rem;font-weight:600;">MANUEL</span>'}
-            </div>
-            <span>${[
-              a.duration_min ? `${a.duration_min} min` : null,
-              a.distance_m ? `${(a.distance_m/1000).toFixed(1)} km` : null,
-              a.elevation_m ? `${Math.round(a.elevation_m)}m D+` : null,
-              formatDate(a.started_at),
-            ].filter(Boolean).join(" · ")}</span>
-            ${a.avg_hr ? `<span style="display:block;margin-top:4px;font-size:0.8rem;">❤️ ${Math.round(a.avg_hr)} bpm moy${a.max_hr ? ` · ${Math.round(a.max_hr)} max` : ""}</span>` : ""}
-            <span style="display:block;margin-top:6px;">
-              ${a.matched_day
-                ? `<span class="badge badge-done">→ ${a.matched_day}</span> <span class="muted" style="font-size:0.78rem;">${a.match_reason||""}</span>`
-                : '<span class="badge badge-planned">non matché</span>'}
-            </span>
-          </div>
-        `).join("");
+        if (!activities?.length) {
+          el.className = "list";
+          el.innerHTML = '<div class="empty">Aucune activité enregistrée.</div>';
+          return;
+        }
+        const sortedActivities = [...activities].sort((a, b) => new Date(b.started_at || 0) - new Date(a.started_at || 0));
+        el.className = "activity-journal";
+        el.innerHTML = sortedActivities.map(activity => {
+          const linkedSession = getSessionByLinkedActivity(activity.id);
+          const meta = [
+            formatDate(activity.started_at),
+            activity.duration_min ? `${activity.duration_min} min` : null,
+            formatDistance(activity.distance_m),
+            activity.elevation_m ? `${Math.round(activity.elevation_m)}m D+` : null,
+            activity.avg_speed ? `${formatPace(activity.avg_speed)}/km` : null,
+            activity.avg_hr ? `${Math.round(activity.avg_hr)} bpm` : null,
+            activity.tss ? `TSS ${Math.round(activity.tss)}` : null,
+          ].filter(Boolean).join(" · ");
+          const linkLine = linkedSession
+            ? `
+              <div class="activity-journal-link">
+                <strong>rattachée</strong><br>
+                ${formatSessionShortDate(linkedSession.scheduled_date)} · ${linkedSession.label} · ${linkedSession.session_title}
+              </div>
+            `
+            : activity.matched_day
+              ? `
+                <div class="activity-journal-link">
+                  <strong>repérée</strong><br>
+                  ${activity.matched_day} · ${activity.match_reason || "match heuristique semaine courante"}
+                </div>
+              `
+              : `
+                <div class="activity-journal-link">
+                  <strong>hors plan</strong><br>
+                  Activité non rattachée à une séance planifiée.
+                </div>
+              `;
+          return `
+            <article class="activity-journal-item" onclick="openActivityModal(${activity.id})">
+              <div class="activity-journal-head">
+                <strong>${SPORT_EMOJI[activity.sport_type] || ""} ${activity.title}</strong>
+                ${activity.source === "strava"
+                  ? '<span style="color:var(--strava);font-size:0.72rem;font-weight:700;">STRAVA</span>'
+                  : '<span style="color:var(--muted);font-size:0.72rem;font-weight:700;">MANUEL</span>'}
+              </div>
+              <div class="activity-journal-meta">${meta}</div>
+              ${linkLine}
+            </article>
+          `;
+        }).join("");
       }
 
       // ── Polyline decoder (Google's encoded polyline algorithm) ──

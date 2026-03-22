@@ -109,7 +109,8 @@ Via `/start` sur le bot Telegram :
 **Activités** — réel vs prévu
 - formulaire activité manuelle
 - connexion Strava (OAuth + synchro)
-- liste activités avec matching plan
+- journal brut des activités importées / loggées
+- le comparatif prévu vs fait se lit d'abord dans le calendrier
 
 **Profil** — double numérique
 - objectif, sports, contraintes, préférences
