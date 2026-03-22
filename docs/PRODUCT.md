@@ -95,6 +95,7 @@ Via `/start` sur le bot Telegram :
 - passé récent + aujourd'hui + à venir
 - 7 séances de la semaine avec statut et date lisible
 - une séance terminée se reloge sur son jour réel d'exécution
+- tri chrono sur la date réellement affichée
 - tableau de bord exécution / charge / lecture de la semaine
 - barre de charge visuelle
 - bouton régénérer
@@ -112,6 +113,7 @@ Via `/start` sur le bot Telegram :
 - connexion Strava (OAuth + synchro)
 - journal brut des activités importées / loggées
 - le comparatif prévu vs fait se lit d'abord dans le calendrier
+- raccourci depuis une activité rattachée vers sa séance dans le calendrier
 
 **Profil** — double numérique
 - objectif, sports, contraintes, préférences

@@ -538,6 +538,24 @@
         text-transform: uppercase;
       }
 
+      .journal-link-action {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        margin-top: 6px;
+        padding: 0;
+        border: 0;
+        background: transparent;
+        color: var(--accent);
+        font-size: 0.8rem;
+        font-weight: 700;
+        cursor: pointer;
+      }
+
+      .journal-link-action:hover {
+        text-decoration: underline;
+      }
+
       /* ── Performance ── */
       .performance-grid {
         display: grid;
@@ -1087,6 +1105,7 @@
             <p class="eyebrow">Calendrier vivant</p>
             <h2 id="plan-intention">Chargement…</h2>
             <p class="muted" id="plan-summary" style="margin-top: 8px; line-height: 1.5;"></p>
+            <p class="muted" style="margin-top: 8px; font-size: 0.84rem;">Date affichée = jour réel d'exécution si la séance a été faite.</p>
             <div class="hero-grid" id="plan-stats" style="margin-top: 14px;"></div>
             <div class="load-bar" id="plan-load-bar"></div>
           </div>
@@ -1438,6 +1457,33 @@
         return session.scheduled_date;
       }
 
+      function getSessionDisplayTimestamp(session, timezone) {
+        const linkedActivity = getLinkedActivityForSession(session);
+        if (linkedActivity?.started_at) {
+          return new Date(linkedActivity.started_at).getTime();
+        }
+        const displayIsoDate = getSessionDisplayIsoDate(session, timezone);
+        return new Date(`${displayIsoDate}T12:00:00Z`).getTime();
+      }
+
+      function sortSessionsByDisplayDate(items, timezone) {
+        return [...items].sort((a, b) => {
+          const byTimestamp = getSessionDisplayTimestamp(a, timezone) - getSessionDisplayTimestamp(b, timezone);
+          if (byTimestamp !== 0) return byTimestamp;
+          return a.id - b.id;
+        });
+      }
+
+      async function focusSessionInCalendar(sessionId) {
+        const session = scheduledTimeline.find(item => item.id === sessionId);
+        if (!session) return;
+        selectedSessionId = sessionId;
+        selectedDay = session.day;
+        renderWeek();
+        activateTab("plan");
+        await loadToday(sessionId);
+      }
+
       function parseSessionDate(rawDate) {
         if (!rawDate) return null;
         return new Date(`${rawDate}T12:00:00Z`);
@@ -1731,6 +1777,10 @@
           sections[phase].push(session);
         });
 
+        sections.past = sortSessionsByDisplayDate(sections.past, timezone);
+        sections.today = sortSessionsByDisplayDate(sections.today, timezone);
+        sections.upcoming = sortSessionsByDisplayDate(sections.upcoming, timezone);
+
         const currentWeekSessions = sessions.filter(session =>
           DAY_ORDER.some(dayKey => currentWeekIsoMap[dayKey] === getSessionDisplayIsoDate(session, timezone))
         );
@@ -2009,7 +2059,7 @@
         }
         const currentWeekIsoMap = getCurrentWeekIsoMap(profile?.timezone);
         return scheduledTimeline.filter(session =>
-          DAY_ORDER.some(dayKey => currentWeekIsoMap[dayKey] === session.scheduled_date)
+          DAY_ORDER.some(dayKey => currentWeekIsoMap[dayKey] === getSessionDisplayIsoDate(session, profile?.timezone))
         );
       }
 
@@ -2145,6 +2195,8 @@
               <div class="activity-journal-link">
                 <strong>rattachée</strong><br>
                 ${formatSessionShortDate(linkedSession.scheduled_date)} · ${linkedSession.label} · ${linkedSession.session_title}
+                <br>
+                <button type="button" class="journal-link-action" data-focus-session="${linkedSession.id}">Voir dans le calendrier</button>
               </div>
             `
             : activity.matched_day
@@ -2173,6 +2225,13 @@
             </article>
           `;
         }).join("");
+
+        el.querySelectorAll("[data-focus-session]").forEach(button => {
+          button.addEventListener("click", async event => {
+            event.stopPropagation();
+            await focusSessionInCalendar(Number(button.dataset.focusSession));
+          });
+        });
       }
 
       // ── Polyline decoder (Google's encoded polyline algorithm) ──
