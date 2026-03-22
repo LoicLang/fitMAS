@@ -219,6 +219,13 @@ Reste à faire :
 Le plan detaille de ce chantier vit maintenant dans `PLANNING-ENGINE-V2.md`.
 Ce document remplace toute tentative de repartir de zero avec une architecture generique non alignee sur le repo.
 
+**Statut : EN COURS (fondations domaine lancees)**
+
+Deja pose :
+- `planning_config.py` pour centraliser les seuils V2
+- `athlete_profile.py` pour assembler un snapshot athlete depuis la DB actuelle
+- tests unitaires cibles pour ces deux briques
+
 | # | Tâche | Fichiers | Impact |
 |---|-------|----------|--------|
 | 3A1 | Ajouter `TrainingCycle` et `Mesocycle` | `schema.py`, `models.py`, `repository.py` | Structure long terme |

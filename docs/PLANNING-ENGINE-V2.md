@@ -144,6 +144,21 @@ Ordre recommande :
 11. evolution onboarding
 12. integration `heartbeat.py`
 
+## Progression actuelle
+
+### Fait
+
+- `planning_config.py` pose les seuils et overrides V1 centralises par sport et par niveau
+- `athlete_profile.py` assemble un `AthleteProfileSnapshot` deterministe depuis `User`, `UserSport`, `UserConstraint`, `UserPreference` et `UserFact`
+- tests cibles ajoutes pour ces deux briques domaine
+
+### Prochaines briques
+
+- `fitness_snapshot.py`
+- tables de snapshots / decisions en SQL
+- `readiness.py`
+- `planning_decision.py`
+
 ## Details par module
 
 ### `planning_config.py`
