@@ -140,6 +140,7 @@ def decide(
             f"- fait bien: {coach_context.get('coach_do', '')}\n"
             f"- ne fait jamais: {coach_context.get('coach_dont', '')}\n"
             f"- ame: {coach_context.get('coach_soul', '')}\n"
+            f"- session du jour id: {coach_context.get('today_session_id')}\n"
         )
 
     facts_block = ""

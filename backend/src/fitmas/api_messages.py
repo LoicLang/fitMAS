@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 from fitmas import mutations, repository as repo
 from fitmas.api_payloads import IncomingMessage
 from fitmas.db import get_db
-from fitmas.llm import decide, extract_facts, make_plan_summary, select_prompt_facts
+from fitmas.llm import decide, extract_facts, make_plan_summary, make_timeline_summary, select_prompt_facts
 from fitmas.models import Extraction, Message, MessageReply, MessageRole
 from fitmas.nlp import extract_reply, generate_reply
 from fitmas.time_context import build_time_context
@@ -32,10 +32,13 @@ def post_message(payload: IncomingMessage, db: Session = Depends(get_db)) -> Mes
     conversation_history = [{"role": m.role, "text": m.text} for m in msgs]
     active_facts = [repo.to_pydantic_fact(fact).model_dump() for fact in repo.get_active_facts(db, user.id)]
     pydantic_plan = repo.to_pydantic_plan(plan)
+    timeline = [repo.to_pydantic_scheduled_session(session) for session in repo.get_scheduled_sessions(db, user.id, limit=21)]
+    today_session = repo.get_today_scheduled_session(db, user.id, timezone_name=user.timezone)
 
     decision = decide(
         payload.text,
         make_plan_summary(pydantic_plan.days),
+        timeline_summary=make_timeline_summary(timeline),
         conversation_history=conversation_history,
         coach_context={
             "coach_name": user.coach_name,
@@ -45,6 +48,7 @@ def post_message(payload: IncomingMessage, db: Session = Depends(get_db)) -> Mes
             "coach_dont": user.coach_dont,
             "coach_soul": user.coach_soul,
             "timezone": user.timezone,
+            "today_session_id": today_session.id if today_session else None,
             "selected_facts": select_prompt_facts(active_facts),
         },
         remembered_facts=active_facts,
