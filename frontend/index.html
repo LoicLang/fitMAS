@@ -413,6 +413,68 @@
         color: var(--muted);
       }
 
+      .timeline-compare {
+        display: grid;
+        gap: 8px;
+        margin-top: 12px;
+      }
+
+      .timeline-block {
+        display: grid;
+        gap: 4px;
+        padding: 11px 12px;
+        border-radius: var(--radius-md);
+        border: 1px solid rgba(69, 47, 32, 0.08);
+      }
+
+      .timeline-block strong {
+        font-size: 0.72rem;
+        font-weight: 800;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+
+      .timeline-block span {
+        font-size: 0.82rem;
+        line-height: 1.45;
+        color: var(--muted);
+      }
+
+      .timeline-block-planned {
+        background: rgba(255, 255, 255, 0.78);
+      }
+
+      .timeline-block-planned strong {
+        color: var(--warm);
+      }
+
+      .timeline-block-actual {
+        width: 100%;
+        text-align: left;
+        cursor: pointer;
+        background: rgba(15, 118, 110, 0.06);
+        border-color: rgba(15, 118, 110, 0.12);
+        transition: border-color var(--transition), transform var(--transition);
+      }
+
+      .timeline-block-actual:hover {
+        border-color: rgba(15, 118, 110, 0.28);
+        transform: translateY(-1px);
+      }
+
+      .timeline-block-actual strong {
+        color: var(--accent);
+      }
+
+      .timeline-block-missing {
+        background: rgba(220, 38, 38, 0.04);
+        border-color: rgba(220, 38, 38, 0.10);
+      }
+
+      .timeline-block-missing strong {
+        color: var(--red);
+      }
+
       /* ── Performance ── */
       .performance-grid {
         display: grid;
@@ -1610,12 +1672,22 @@
                   const dayDate = sessionDate ? formatTimelineDate(sessionDate, timezone) : { day: "", num: "", month: "" };
                   const linkedActivity = session.linked_activity_id
                     ? getActivityById(session.linked_activity_id)
-                    : getDayActivity(session.day);
+                    : (isCurrentWeekSession ? getDayActivity(session.day) : null);
+                  const isPastSession = session.scheduled_date < todayIso;
+                  const plannedSummary = [
+                    dur,
+                    session.intensity || "souple",
+                    session.session_type || null,
+                  ].filter(Boolean).join(" · ");
                   const linkedActivitySummary = linkedActivity
                     ? [
+                        formatRecentActivityDate(linkedActivity.started_at),
                         linkedActivity.title,
                         linkedActivity.duration_min ? `${linkedActivity.duration_min} min` : null,
-                        linkedActivity.distance_m ? `${(linkedActivity.distance_m / 1000).toFixed(1)} km` : null,
+                        formatDistance(linkedActivity.distance_m),
+                        linkedActivity.avg_speed ? `${formatPace(linkedActivity.avg_speed)}/km` : null,
+                        linkedActivity.avg_hr ? `${Math.round(linkedActivity.avg_hr)} bpm` : null,
+                        linkedActivity.tss ? `TSS ${Math.round(linkedActivity.tss)}` : null,
                       ].filter(Boolean).join(" · ")
                     : "";
 
@@ -1645,10 +1717,23 @@
                         <p class="muted" style="margin-top: 10px; font-size: 0.84rem; line-height: 1.5;">${session.session_goal}</p>
                         ${session.session_description && session.sport_type !== "rest" ? `<p style="margin-top: 8px; font-size: 0.81rem; line-height: 1.45; color: var(--accent); white-space: pre-wrap; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical;">${session.session_description}</p>` : ""}
                         ${session.session_note ? `<p class="muted" style="margin-top: 8px; font-size: 0.8rem; font-style: italic;">${session.session_note}</p>` : ""}
-                        ${linkedActivity ? `
-                          <div class="timeline-actual">
-                            <strong>Réel enregistré</strong>
-                            <span>${linkedActivitySummary}</span>
+                        ${session.sport_type !== "rest" ? `
+                          <div class="timeline-compare">
+                            <div class="timeline-block timeline-block-planned">
+                              <strong>Prévu</strong>
+                              <span>${plannedSummary}</span>
+                            </div>
+                            ${linkedActivity ? `
+                              <button type="button" class="timeline-block timeline-block-actual" data-activity-open="${linkedActivity.id}">
+                                <strong>Fait</strong>
+                                <span>${linkedActivitySummary}</span>
+                              </button>
+                            ` : isPastSession ? `
+                              <div class="timeline-block timeline-block-missing">
+                                <strong>Fait</strong>
+                                <span>Aucune activité enregistrée pour cette séance.</span>
+                              </div>
+                            ` : ""}
                           </div>
                         ` : ""}
                       </div>
@@ -1674,6 +1759,13 @@
             renderWeek();
             await loadToday(selectedSessionId);
             activateTab("today");
+          });
+        });
+
+        el.querySelectorAll("[data-activity-open]").forEach(button => {
+          button.addEventListener("click", (event) => {
+            event.stopPropagation();
+            openActivityModal(Number(button.dataset.activityOpen));
           });
         });
 
