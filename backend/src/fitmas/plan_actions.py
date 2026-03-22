@@ -72,6 +72,44 @@ def move_session(
 
     if source_day_plan is not None:
         _lighten_day_plan(db, source_day_plan)
+        moved_session = s.ScheduledSession(
+            user_id=user.id,
+            day=destination_day_key,
+            label=day_label_fr(destination_day_key, capitalize=True),
+            scheduled_date=destination_dt,
+            source_plan_created_at=session.source_plan_created_at,
+            sport_type=session.sport_type,
+            session_type=session.session_type,
+            session_title=session.session_title,
+            session_goal=session.session_goal,
+            session_note=session.session_note,
+            session_description=session.session_description,
+            duration_min=session.duration_min,
+            intensity=session.intensity,
+            load_score=session.load_score,
+            priority=session.priority,
+            nutrition_focus=session.nutrition_focus,
+            flexibility=session.flexibility,
+            completion_status="adapted",
+        )
+        db.add(moved_session)
+
+        session.sport_type = "rest"
+        session.session_type = "rest"
+        session.session_title = "Journee flexible"
+        session.session_goal = "Recuperation et disponibilite"
+        session.session_note = "Seance deplacee depuis l'app."
+        session.session_description = ""
+        session.duration_min = None
+        session.intensity = "easy"
+        session.load_score = 0
+        session.priority = "Leger"
+        session.nutrition_focus = "Reste simple. Le but est surtout de recuperer."
+        session.flexibility = "flexible"
+        session.completion_status = "adapted"
+        db.commit()
+        db.refresh(moved_session)
+        return moved_session
 
     session.scheduled_date = destination_dt
     session.day = destination_day_key
