@@ -12,6 +12,7 @@
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script src="/app-static/js/utils.js"></script>
+    <script src="/app-static/js/charts.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
     <style>
       @import url('https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap');
@@ -1180,6 +1181,7 @@
       const tabs = document.querySelectorAll(".tab");
       const bnavs = document.querySelectorAll(".bnav");
       const views = document.querySelectorAll(".view");
+      const { buildCompletionChart, buildTrainingLoadChart, buildVolumeChart, destroyChart } = window.FitmasCharts;
       const { formatDistance, formatPace, formatWeekLabel, mapDayToApiKey } = window.FitmasUtils;
 
       let weekPlan = null;
@@ -1780,9 +1782,7 @@
       }
 
       function destroyCharts() {
-        [trainingLoadChart, volumeChart, completionChart].forEach(chart => {
-          if (chart) chart.destroy();
-        });
+        [trainingLoadChart, volumeChart, completionChart].forEach(destroyChart);
         trainingLoadChart = null;
         volumeChart = null;
         completionChart = null;
@@ -1869,69 +1869,16 @@
 
         if (trainingLoadCanvas && trainingSeries.length) {
           const labels = trainingSeries.map(point => formatWeekLabel(point.date));
-          trainingLoadChart = new Chart(trainingLoadCanvas, {
-            type: "line",
-            data: {
-              labels,
-              datasets: [
-                { label: "CTL", data: trainingSeries.map(point => point.ctl), borderColor: SPORT_COLORS.running, backgroundColor: "rgba(15,118,110,0.12)", tension: 0.28, pointRadius: 0, borderWidth: 2.5 },
-                { label: "ATL", data: trainingSeries.map(point => point.atl), borderColor: SPORT_COLORS.cycling, backgroundColor: "rgba(194,107,59,0.10)", tension: 0.28, pointRadius: 0, borderWidth: 2.5 },
-                { label: "TSB", data: trainingSeries.map(point => point.tsb), borderColor: SPORT_COLORS.swimming, backgroundColor: "rgba(37,99,235,0.10)", tension: 0.28, pointRadius: 0, borderWidth: 2 },
-              ],
-            },
-            options: {
-              maintainAspectRatio: false,
-              plugins: { legend: { position: "bottom" } },
-              scales: {
-                x: { ticks: { maxTicksLimit: 8, color: "#6c584a" }, grid: { display: false } },
-                y: { ticks: { color: "#6c584a" }, grid: { color: "rgba(69,47,32,0.08)" } },
-              },
-            },
-          });
+          trainingLoadChart = buildTrainingLoadChart(trainingLoadCanvas, trainingSeries, labels, SPORT_COLORS);
         }
 
         if (volumeCanvas && weeklyVolume.length) {
           const labels = weeklyVolume.map(week => formatWeekLabel(week.week_start));
-          volumeChart = new Chart(volumeCanvas, {
-            type: "bar",
-            data: {
-              labels,
-              datasets: Object.entries(SPORT_COLORS).map(([sport, color]) => ({
-                label: SPORT_LABEL[sport],
-                data: weeklyVolume.map(week => week.sports?.[sport]?.duration_min || 0),
-                backgroundColor: color,
-                borderRadius: 6,
-                stack: "volume",
-              })),
-            },
-            options: {
-              maintainAspectRatio: false,
-              plugins: { legend: { position: "bottom" } },
-              scales: {
-                x: { stacked: true, ticks: { color: "#6c584a" }, grid: { display: false } },
-                y: { stacked: true, ticks: { color: "#6c584a" }, grid: { color: "rgba(69,47,32,0.08)" } },
-              },
-            },
-          });
+          volumeChart = buildVolumeChart(volumeCanvas, weeklyVolume, labels, SPORT_COLORS, SPORT_LABEL);
         }
 
         if (completionCanvas) {
-          completionChart = new Chart(completionCanvas, {
-            type: "doughnut",
-            data: {
-              labels: ["Fait", "À faire", "Sauté"],
-              datasets: [{
-                data: [doneCount, plannedCount, skippedCount],
-                backgroundColor: ["#16a34a", "#0f766e", "#dc2626"],
-                borderWidth: 0,
-              }],
-            },
-            options: {
-              maintainAspectRatio: false,
-              cutout: "68%",
-              plugins: { legend: { position: "bottom" } },
-            },
-          });
+          completionChart = buildCompletionChart(completionCanvas, doneCount, plannedCount, skippedCount);
         }
       }
 
