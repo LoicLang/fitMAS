@@ -277,6 +277,7 @@ Possibles ajouts :
 En place :
 - `api_messages.py` persiste maintenant un claim d'activite fusionne en `UserFact` de categorie `execution`
 - cette memoire courte alimente les prochains tours de conversation et le heartbeat
+- `signals.py` et `heartbeat.py` lisent aussi ces claims pour ne plus confondre `non loggue` avec `rien`
 - les claims ne doublonnent pas une `Activity` deja loggee le meme jour
 
 ## Regles non negociables
