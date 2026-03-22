@@ -130,6 +130,7 @@ Deja pose :
 - `execution_context.py` pour resumer `prevu vs reel` sur aujourd'hui
 - `temporal_resolver.py` pour ancrer `aujourd'hui / demain / hier`
 - `activity_claims.py` pour lire les declarations d'activite recentes
+- `conversation_context.py` pour assembler temps + execution + claims + memoire de conversation
 - `api_messages.py` branche maintenant execution + temps + claims dans le prompt coach
 - les claims activite du message courant sont maintenant persistés en `UserFact(category="execution")` avec TTL courte quand aucune vraie `Activity` n'existe encore
 - `signals.py` et `heartbeat.py` tiennent mieux compte des activites reelles hors plan

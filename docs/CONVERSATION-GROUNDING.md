@@ -209,6 +209,18 @@ Role :
   - delta prevu vs reel
   - dernieres corrections explicites
 
+Etat :
+- pose
+- pur
+- teste
+- utilise par `api_messages.py`
+
+Note d'architecture :
+- `execution_context` reste strictement base sur le reel persiste
+- un claim utilisateur non logge n'est pas transforme en `Activity`
+- il remonte dans un bloc separe (`activity_claim_summary`) + memoire courte `execution`
+- cette separation evite de presenter une declaration user comme une activite reellement loggee
+
 ## Trous actuels
 
 ### Trou 1 — lecture trop faible du reel execute
@@ -281,6 +293,7 @@ En place :
 - cette memoire courte alimente les prochains tours de conversation et le heartbeat
 - `signals.py` et `heartbeat.py` lisent aussi ces claims pour ne plus confondre `non loggue` avec `rien`
 - les claims ne doublonnent pas une `Activity` deja loggee le meme jour
+- `conversation_context.py` assemble maintenant temps + execution + claims + memoire utile dans un tool partage
 
 ## Regles non negociables
 
