@@ -19,6 +19,9 @@ class ToolTrace:
     tool_error: str | None = None
     fallback_used: bool = False
     llm_round_trips: int = 1
+    tool_count_offered: int | None = None
+    history_messages_used: int | None = None
+    prompt_char_count: int | None = None
     prompt_tokens_estimate: int | None = None
     response_tokens_estimate: int | None = None
     total_duration_ms: int | None = None
@@ -39,6 +42,9 @@ def build_tool_trace(
     tool_error: str | None = None,
     fallback_used: bool = False,
     llm_round_trips: int = 1,
+    tool_count_offered: int | None = None,
+    history_messages_used: int | None = None,
+    prompt_char_count: int | None = None,
     prompt_tokens_estimate: int | None = None,
     response_tokens_estimate: int | None = None,
     total_duration_ms: int | None = None,
@@ -56,6 +62,9 @@ def build_tool_trace(
         tool_error=tool_error,
         fallback_used=fallback_used,
         llm_round_trips=llm_round_trips,
+        tool_count_offered=tool_count_offered,
+        history_messages_used=history_messages_used,
+        prompt_char_count=prompt_char_count,
         prompt_tokens_estimate=prompt_tokens_estimate,
         response_tokens_estimate=response_tokens_estimate,
         total_duration_ms=total_duration_ms,

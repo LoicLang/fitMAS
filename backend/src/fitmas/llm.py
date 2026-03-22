@@ -162,8 +162,10 @@ def decide(
 
     # Build conversation context
     history_block = ""
+    history_messages_used = 0
     if conversation_history:
         recent = conversation_history[-prompt_policy.history_limit :]
+        history_messages_used = len(recent)
         lines = []
         for msg in recent:
             prefix = "Utilisateur" if msg["role"] == "user" else "FitMAS"
@@ -278,6 +280,7 @@ Reponds UNIQUEMENT avec le JSON, sans markdown, sans texte autour."""
                 tool_context=tool_context,
                 tool_names=routing.tool_names,
                 context_policy=prompt_policy.name,
+                history_messages_used=history_messages_used,
             )
         if data is None:
             data = _request_json(system=_SOUL, prompt=prompt)
@@ -308,6 +311,7 @@ def _request_json_with_tools(
     tool_context: ToolContext,
     tool_names: tuple[str, ...],
     context_policy: str,
+    history_messages_used: int,
     model: str = "claude-haiku-4-5-20251001",
     max_tokens: int = 1024,
 ) -> dict | None:
@@ -315,6 +319,8 @@ def _request_json_with_tools(
     if not tools:
         return None
     started_at = perf_counter()
+    prompt_char_count = len(prompt)
+    tool_count_offered = len(tools)
     initial_messages = [{"role": "user", "content": prompt}]
     response = _request_message(
         system=system,
@@ -334,6 +340,9 @@ def _request_json_with_tools(
             tool_success=False,
             fallback_used=True,
             llm_round_trips=1,
+            tool_count_offered=tool_count_offered,
+            history_messages_used=history_messages_used,
+            prompt_char_count=prompt_char_count,
             total_duration_ms=_elapsed_ms(started_at),
             response_stop_reason="initial_request_failed",
         )
@@ -352,6 +361,9 @@ def _request_json_with_tools(
             tool_success=data is not None,
             fallback_used=data is None,
             llm_round_trips=1,
+            tool_count_offered=tool_count_offered,
+            history_messages_used=history_messages_used,
+            prompt_char_count=prompt_char_count,
             prompt_tokens_estimate=initial_prompt_tokens,
             response_tokens_estimate=initial_response_tokens,
             total_duration_ms=_elapsed_ms(started_at),
@@ -372,6 +384,9 @@ def _request_json_with_tools(
             tool_error="tool_use stop_reason without tool block",
             fallback_used=True,
             llm_round_trips=1,
+            tool_count_offered=tool_count_offered,
+            history_messages_used=history_messages_used,
+            prompt_char_count=prompt_char_count,
             prompt_tokens_estimate=initial_prompt_tokens,
             response_tokens_estimate=initial_response_tokens,
             total_duration_ms=_elapsed_ms(started_at),
@@ -427,6 +442,9 @@ def _request_json_with_tools(
             tool_error=tool_result.error or "tool followup request failed",
             fallback_used=True,
             llm_round_trips=2,
+            tool_count_offered=tool_count_offered,
+            history_messages_used=history_messages_used,
+            prompt_char_count=prompt_char_count,
             prompt_tokens_estimate=initial_prompt_tokens,
             response_tokens_estimate=initial_response_tokens,
             total_duration_ms=_elapsed_ms(started_at),
@@ -449,6 +467,9 @@ def _request_json_with_tools(
         tool_error=tool_result.error if data is not None else (tool_result.error or "tool followup response was not valid JSON"),
         fallback_used=data is None,
         llm_round_trips=2,
+        tool_count_offered=tool_count_offered,
+        history_messages_used=history_messages_used,
+        prompt_char_count=prompt_char_count,
         prompt_tokens_estimate=_sum_ints(initial_prompt_tokens, final_prompt_tokens),
         response_tokens_estimate=_sum_ints(initial_response_tokens, final_response_tokens),
         total_duration_ms=_elapsed_ms(started_at),
@@ -558,6 +579,9 @@ def _log_tool_session_trace(
     tool_error: str | None = None,
     fallback_used: bool = False,
     llm_round_trips: int = 1,
+    tool_count_offered: int | None = None,
+    history_messages_used: int | None = None,
+    prompt_char_count: int | None = None,
     prompt_tokens_estimate: int | None = None,
     response_tokens_estimate: int | None = None,
     total_duration_ms: int | None = None,
@@ -575,6 +599,9 @@ def _log_tool_session_trace(
         tool_error=tool_error,
         fallback_used=fallback_used,
         llm_round_trips=llm_round_trips,
+        tool_count_offered=tool_count_offered,
+        history_messages_used=history_messages_used,
+        prompt_char_count=prompt_char_count,
         prompt_tokens_estimate=prompt_tokens_estimate,
         response_tokens_estimate=response_tokens_estimate,
         total_duration_ms=total_duration_ms,

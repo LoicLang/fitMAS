@@ -93,6 +93,8 @@ class LLMToolsTest(unittest.TestCase):
         self.assertEqual(traces[0].tool_name, "get_activity_highlights")
         self.assertEqual(traces[0].llm_round_trips, 2)
         self.assertEqual(traces[0].context_policy, "activity_highlights_compact")
+        self.assertEqual(traces[0].tool_count_offered, 2)
+        self.assertGreaterEqual(traces[0].prompt_char_count, 1)
         self.assertNotIn("Repere legacy semaine courante", prompts[0])
         self.assertNotIn("Calendrier date reel", prompts[0])
 
@@ -148,6 +150,8 @@ class LLMToolsTest(unittest.TestCase):
         self.assertEqual(traces[0].response_stop_reason, "end_turn")
         self.assertFalse(traces[0].fallback_used)
         self.assertEqual(traces[0].context_policy, "plan_lookup_compact")
+        self.assertEqual(traces[0].tool_count_offered, 2)
+        self.assertGreaterEqual(traces[0].prompt_char_count, 1)
         self.assertIn("Repere legacy semaine courante", prompts[0])
 
 
