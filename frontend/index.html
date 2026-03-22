@@ -933,6 +933,17 @@
 
           <div class="section-grid">
             <div class="card">
+              <h3>Forme du jour</h3>
+              <div id="today-fitness"></div>
+            </div>
+            <div class="card">
+              <h3>Dernier repère même sport</h3>
+              <div id="today-recent-activity"></div>
+            </div>
+          </div>
+
+          <div class="section-grid">
+            <div class="card">
               <h3>Ce qui a changé</h3>
               <div class="list" id="changes-list"></div>
             </div>
@@ -1343,6 +1354,86 @@
         return { done: "fait ✓", planned: "prévu", skipped: "sauté", adapted: "adapté" }[s] || s;
       }
 
+      function formatDistance(distanceM) {
+        if (!distanceM || distanceM <= 0) return null;
+        if (distanceM >= 1000) return `${(distanceM / 1000).toFixed(1)} km`;
+        return `${Math.round(distanceM)} m`;
+      }
+
+      function formatRecentActivityDate(raw) {
+        if (!raw) return "sans date";
+        const d = new Date(raw);
+        if (isNaN(d)) return "sans date";
+        return new Intl.DateTimeFormat("fr-FR", {
+          weekday: "short",
+          day: "2-digit",
+          month: "short",
+          hour: "2-digit",
+          minute: "2-digit",
+          timeZone: profile?.timezone || undefined,
+        }).format(d).replace(",", " ·");
+      }
+
+      function getFreshnessMeta(freshness) {
+        return {
+          fresh: { label: "Frais", className: "tsb-good" },
+          stable: { label: "Sous contrôle", className: "tsb-warn" },
+          fatigued: { label: "Fatigue haute", className: "tsb-alert" },
+        }[freshness] || { label: "Stable", className: "badge-planned" };
+      }
+
+      function renderTodayFitness(fitness) {
+        const el = document.getElementById("today-fitness");
+        if (!fitness) {
+          el.innerHTML = '<div class="empty">La lecture de forme arrivera avec plus d\'activités.</div>';
+          return;
+        }
+        const freshness = getFreshnessMeta(fitness.freshness);
+        el.innerHTML = `
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:12px;">
+            <span class="badge ${freshness.className}">${freshness.label}</span>
+            <span class="muted" style="font-size:0.8rem;">TSB ${fitness.tsb}</span>
+          </div>
+          <div class="hero-grid" style="margin-top:0;">
+            <div class="metric">
+              <div class="metric-label">CTL</div>
+              <div class="metric-value">${fitness.ctl}</div>
+            </div>
+            <div class="metric">
+              <div class="metric-label">ATL</div>
+              <div class="metric-value">${fitness.atl}</div>
+            </div>
+            <div class="metric">
+              <div class="metric-label">TSB</div>
+              <div class="metric-value">${fitness.tsb}</div>
+            </div>
+          </div>
+        `;
+      }
+
+      function renderTodayRecentActivity(recentActivity, sportType) {
+        const el = document.getElementById("today-recent-activity");
+        if (!recentActivity) {
+          const sportLabel = SPORT_LABEL[sportType] || "ce sport";
+          el.innerHTML = `<div class="empty">Pas encore de repère récent en ${sportLabel.toLowerCase()}.</div>`;
+          return;
+        }
+        const details = [
+          formatRecentActivityDate(recentActivity.started_at),
+          recentActivity.duration_min ? `${recentActivity.duration_min} min` : null,
+          formatDistance(recentActivity.distance_m),
+          recentActivity.avg_hr ? `❤️ ${Math.round(recentActivity.avg_hr)} bpm` : null,
+          recentActivity.avg_speed ? `${formatPace(recentActivity.avg_speed)}/km` : null,
+          recentActivity.tss ? `TSS ${Math.round(recentActivity.tss)}` : null,
+        ].filter(Boolean);
+        el.innerHTML = `
+          <div class="list-item" style="cursor:pointer;" onclick="openActivityModal(${recentActivity.id})">
+            <strong>${SPORT_EMOJI[sportType] || ""} ${recentActivity.title}</strong>
+            <span>${details.join(" · ")}</span>
+          </div>
+        `;
+      }
+
       // ── Today ──
       async function loadToday(sessionId = null) {
         const t = await fetchJson(sessionId ? `/api/v0/today/session/${sessionId}` : "/api/v0/today");
@@ -1380,6 +1471,8 @@
 
         renderList(document.getElementById("changes-list"), t.change_notes);
         renderList(document.getElementById("watch-list"), t.watch_items);
+        renderTodayFitness(t.fitness);
+        renderTodayRecentActivity(t.recent_activity, t.sport_type);
       }
 
       // ── Quick actions ──
