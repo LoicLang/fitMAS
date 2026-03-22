@@ -92,8 +92,10 @@ Via `/start` sur le bot Telegram :
 - ce qui a changé + ce que le coach regarde
 
 **Calendrier** — vue plan vivant
-- passé récent + aujourd'hui + à venir
-- 7 séances de la semaine avec statut et date lisible
+- séance du jour mise en avant en haut
+- navigation semaine par semaine
+- liste hebdo inversée : plus récent en haut, plus ancien en bas
+- semaine lisible avec statut et date réelle affichée
 - une séance terminée se reloge sur son jour réel d'exécution
 - tri chrono sur la date réellement affichée
 - une activité du mauvais sport apparaît comme entrée distincte `hors plan` et ne valide pas la séance prévue

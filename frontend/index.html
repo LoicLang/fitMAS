@@ -300,6 +300,78 @@
         gap: 14px;
       }
 
+      .calendar-nav {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+        padding: 14px 16px;
+        border-radius: var(--radius-lg);
+        border: 1px solid rgba(69, 47, 32, 0.08);
+        background: rgba(255, 255, 255, 0.92);
+        box-shadow: var(--shadow-sm);
+      }
+
+      .calendar-nav-center {
+        display: grid;
+        gap: 2px;
+        text-align: center;
+      }
+
+      .calendar-nav-center strong {
+        font-size: 0.92rem;
+      }
+
+      .calendar-nav-center span {
+        font-size: 0.78rem;
+        color: var(--muted);
+      }
+
+      .calendar-nav-actions {
+        display: flex;
+        gap: 8px;
+      }
+
+      .calendar-nav-btn {
+        min-width: 44px;
+        min-height: 44px;
+        border-radius: 999px;
+        border: 1px solid var(--border);
+        background: white;
+        color: var(--text);
+        font: inherit;
+        font-weight: 700;
+        cursor: pointer;
+      }
+
+      .calendar-nav-btn.current {
+        padding: 0 14px;
+      }
+
+      .today-spotlight {
+        display: grid;
+        gap: 10px;
+        padding: 16px;
+        border-radius: var(--radius-lg);
+        border: 1px solid rgba(15, 118, 110, 0.12);
+        background:
+          linear-gradient(180deg, rgba(15, 118, 110, 0.10), rgba(255, 255, 255, 0.98));
+        box-shadow: var(--shadow-sm);
+      }
+
+      .today-spotlight-head {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 10px;
+      }
+
+      .today-spotlight-meta {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+      }
+
       .calendar-section {
         display: grid;
         gap: 10px;
@@ -1126,6 +1198,20 @@
             <div class="hero-grid" id="plan-stats" style="margin-top: 14px;"></div>
             <div class="load-bar" id="plan-load-bar"></div>
           </div>
+          <div class="today-spotlight" id="plan-today-spotlight"></div>
+          <div class="calendar-nav">
+            <div class="calendar-nav-actions">
+              <button class="calendar-nav-btn" id="plan-week-prev" type="button">←</button>
+            </div>
+            <div class="calendar-nav-center">
+              <strong id="plan-week-label">Cette semaine</strong>
+              <span id="plan-week-range">—</span>
+            </div>
+            <div class="calendar-nav-actions">
+              <button class="calendar-nav-btn current" id="plan-week-current" type="button">Cette semaine</button>
+              <button class="calendar-nav-btn" id="plan-week-next" type="button">→</button>
+            </div>
+          </div>
           <div class="calendar-stack" id="week-grid"></div>
           <div style="display: flex; justify-content: flex-end; margin-top: 4px;">
             <button class="secondary" id="btn-regen" onclick="regenerateWeek()">🔄 Régénérer la semaine</button>
@@ -1360,6 +1446,7 @@
       let recordsStats = null;
       let selectedDay = mapDayToApiKey(new Date().getDay());
       let selectedSessionId = null;
+      let selectedWeekOffset = 0;
       let trainingLoadChart = null;
       let volumeChart = null;
       let completionChart = null;
@@ -1430,8 +1517,8 @@
         return next;
       }
 
-      function buildWeekDateMap(timezone) {
-        const today = new Date();
+      function buildWeekDateMap(timezone, weekOffset = 0) {
+        const today = addDays(new Date(), weekOffset * 7);
         const todayKey = getCurrentDayKey(timezone);
         const todayIndex = DAY_ORDER.indexOf(todayKey);
         return Object.fromEntries(
@@ -1509,15 +1596,16 @@
           const bTime = b.kind === "session"
             ? getSessionDisplayTimestamp(b.session, timezone)
             : new Date(b.activity.started_at || `${b.displayIsoDate}T12:00:00Z`).getTime();
-          if (aTime !== bTime) return aTime - bTime;
+          if (aTime !== bTime) return bTime - aTime;
           if (a.kind !== b.kind) return a.kind === "session" ? -1 : 1;
-          return (a.session?.id || a.activity?.id || 0) - (b.session?.id || b.activity?.id || 0);
+          return (b.session?.id || b.activity?.id || 0) - (a.session?.id || a.activity?.id || 0);
         });
       }
 
       async function focusSessionInCalendar(sessionId) {
         const session = scheduledTimeline.find(item => item.id === sessionId);
         if (!session) return;
+        selectedWeekOffset = getWeekOffsetForIsoDate(getSessionDisplayIsoDate(session, profile?.timezone), profile?.timezone);
         selectedSessionId = sessionId;
         selectedDay = session.day;
         renderWeek();
@@ -1551,11 +1639,43 @@
         }
       }
 
-      function getCurrentWeekIsoMap(timezone) {
-        const weekDateMap = buildWeekDateMap(timezone);
+      function getCurrentWeekIsoMap(timezone, weekOffset = 0) {
+        const weekDateMap = buildWeekDateMap(timezone, weekOffset);
         return Object.fromEntries(
           Object.entries(weekDateMap).map(([dayKey, date]) => [dayKey, getLocalIsoDate(timezone, date)])
         );
+      }
+
+      function formatWeekRange(weekIsoMap, timezone) {
+        const dates = DAY_ORDER.map(dayKey => parseSessionDate(weekIsoMap[dayKey])).filter(Boolean);
+        if (!dates.length) return "—";
+        const start = new Intl.DateTimeFormat("fr-FR", {
+          day: "2-digit",
+          month: "short",
+          timeZone: timezone || undefined,
+        }).format(dates[0]).replace(".", "");
+        const end = new Intl.DateTimeFormat("fr-FR", {
+          day: "2-digit",
+          month: "short",
+          timeZone: timezone || undefined,
+        }).format(dates[dates.length - 1]).replace(".", "");
+        return `${start} → ${end}`;
+      }
+
+      function getWeekOffsetLabel(offset) {
+        if (offset === 0) return "Cette semaine";
+        if (offset === 1) return "Semaine prochaine";
+        if (offset === -1) return "Semaine dernière";
+        return offset > 0 ? `Dans ${offset} semaines` : `Il y a ${Math.abs(offset)} semaines`;
+      }
+
+      function getWeekOffsetForIsoDate(isoDate, timezone) {
+        const currentMonday = parseSessionDate(getCurrentWeekIsoMap(timezone, 0).monday);
+        const targetDate = parseSessionDate(isoDate);
+        if (!currentMonday || !targetDate) return 0;
+        const weekdayIndex = (targetDate.getUTCDay() + 6) % 7;
+        const targetMonday = new Date(targetDate.getTime() - (weekdayIndex * 24 * 60 * 60 * 1000));
+        return Math.round((targetMonday.getTime() - currentMonday.getTime()) / (7 * 24 * 60 * 60 * 1000));
       }
 
       async function fetchJson(url, opts = {}) {
@@ -1789,78 +1909,106 @@
         return day.change_notes?.length > 0 && day.change_notes[0].title !== "Rien n'a bougé";
       }
 
+      function getTodayScheduledSession(sessions, timezone) {
+        const todayIso = getLocalIsoDate(timezone);
+        return sessions.find(session => session.scheduled_date === todayIso) || null;
+      }
+
+      function renderPlanTodaySpotlight(sessions, timezone) {
+        const el = document.getElementById("plan-today-spotlight");
+        const todaySession = getTodayScheduledSession(sessions, timezone);
+        if (!todaySession) {
+          el.innerHTML = `
+            <div class="today-spotlight-head">
+              <div>
+                <p class="eyebrow">Aujourd'hui</p>
+                <h3 style="margin-top:4px;">Aucune séance planifiée</h3>
+              </div>
+              <span class="badge badge-planned">off</span>
+            </div>
+            <p class="muted" style="font-size:0.84rem;line-height:1.5;">La semaine reste visible ci-dessous. Tu peux toujours logger une activité hors plan.</p>
+          `;
+          return;
+        }
+
+        const status = getEffectiveSessionStatus(todaySession);
+        const dur = todaySession.duration_min ? `${todaySession.duration_min} min` : "Libre";
+        el.innerHTML = `
+          <div class="today-spotlight-head">
+            <div>
+              <p class="eyebrow">Aujourd'hui</p>
+              <h3 style="margin-top:4px;">${SPORT_EMOJI[todaySession.sport_type] || ""} ${todaySession.session_title}</h3>
+            </div>
+            <span class="badge ${statusBadgeClass(status)}">${statusLabel(status)}</span>
+          </div>
+          <div class="today-spotlight-meta">
+            <span class="badge badge-planned">${SPORT_LABEL[todaySession.sport_type] || todaySession.sport_type}</span>
+            <span class="badge badge-planned">${dur}</span>
+            <span class="badge badge-planned">${todaySession.intensity || "souple"}</span>
+          </div>
+          <p class="muted" style="font-size:0.84rem;line-height:1.5;">${todaySession.session_goal}</p>
+          <div>
+            <button class="secondary" type="button" data-open-today-session="${todaySession.id}">Ouvrir la séance du jour</button>
+          </div>
+        `;
+
+        el.querySelector("[data-open-today-session]")?.addEventListener("click", async () => {
+          selectedSessionId = todaySession.id;
+          selectedDay = todaySession.day;
+          activateTab("today");
+          await loadToday(todaySession.id);
+        });
+      }
+
       function renderWeek() {
         const el = document.getElementById("week-grid");
         const timezone = profile?.timezone;
         const todayIso = getLocalIsoDate(timezone);
-        const currentWeekIsoMap = getCurrentWeekIsoMap(timezone);
+        const displayedWeekIsoMap = getCurrentWeekIsoMap(timezone, selectedWeekOffset);
         const sessions = scheduledTimeline?.length
           ? scheduledTimeline
           : weekPlan.days.map(day => ({
               ...day,
-              scheduled_date: currentWeekIsoMap[day.day],
+              scheduled_date: displayedWeekIsoMap[day.day],
               linked_activity_id: null,
             }));
-        const currentWeekSessions = sessions.filter(session =>
-          DAY_ORDER.some(dayKey => currentWeekIsoMap[dayKey] === getSessionDisplayIsoDate(session, timezone))
+        renderPlanTodaySpotlight(sessions, timezone);
+        document.getElementById("plan-week-label").textContent = getWeekOffsetLabel(selectedWeekOffset);
+        document.getElementById("plan-week-range").textContent = formatWeekRange(displayedWeekIsoMap, timezone);
+
+        const displayedWeekSessions = sessions.filter(session =>
+          DAY_ORDER.some(dayKey => displayedWeekIsoMap[dayKey] === getSessionDisplayIsoDate(session, timezone))
         );
-        const currentWeekIsoDates = Object.values(currentWeekIsoMap);
+        const displayedWeekIsoDates = Object.values(displayedWeekIsoMap);
         const offPlanActivities = activities.filter(activity => {
           if (!activity?.started_at || !isOffPlanActivity(activity)) return false;
           const activityIso = getLocalIsoDate(timezone, new Date(activity.started_at));
-          return currentWeekIsoDates.includes(activityIso);
+          return displayedWeekIsoDates.includes(activityIso);
         });
+        const weekEntries = sortCalendarItems([
+          ...displayedWeekSessions.map(session => ({
+            kind: "session",
+            session,
+            displayIsoDate: getSessionDisplayIsoDate(session, timezone),
+          })),
+          ...offPlanActivities.map(activity => ({
+            kind: "activity",
+            activity,
+            displayIsoDate: getLocalIsoDate(timezone, new Date(activity.started_at)),
+          })),
+        ], timezone);
 
-        const sections = {
-          past: [],
-          today: [],
-          upcoming: [],
-        };
-
-        sessions.forEach(session => {
-          const displayIsoDate = getSessionDisplayIsoDate(session, timezone);
-          const phase = displayIsoDate < todayIso
-            ? "past"
-            : displayIsoDate === todayIso
-              ? "today"
-              : "upcoming";
-          sections[phase].push({ kind: "session", session, displayIsoDate });
-        });
-
-        offPlanActivities.forEach(activity => {
-          const displayIsoDate = getLocalIsoDate(timezone, new Date(activity.started_at));
-          const phase = displayIsoDate < todayIso
-            ? "past"
-            : displayIsoDate === todayIso
-              ? "today"
-              : "upcoming";
-          sections[phase].push({ kind: "activity", activity, displayIsoDate });
-        });
-
-        sections.past = sortCalendarItems(sections.past, timezone);
-        sections.today = sortCalendarItems(sections.today, timezone);
-        sections.upcoming = sortCalendarItems(sections.upcoming, timezone);
-
-        const renderSection = (title, items, emptyText) => {
-          if (!items.length) {
-            return `
-              <section class="calendar-section">
-                <div class="calendar-section-head">
-                  <h3>${title}</h3>
-                </div>
-                <div class="empty">${emptyText}</div>
-              </section>
-            `;
-          }
-
-          return `
+        if (!weekEntries.length) {
+          el.innerHTML = '<div class="empty">Aucune entrée sur cette semaine.</div>';
+        } else {
+          el.innerHTML = `
             <section class="calendar-section">
               <div class="calendar-section-head">
-                <h3>${title}</h3>
-                <span>${items.length} entrée${items.length > 1 ? "s" : ""}</span>
+                <h3>${getWeekOffsetLabel(selectedWeekOffset)}</h3>
+                <span>${weekEntries.length} entrée${weekEntries.length > 1 ? "s" : ""}</span>
               </div>
               <div class="timeline-list">
-                ${items.map(item => {
+                ${weekEntries.map(item => {
                   if (item.kind === "activity") {
                     const activity = item.activity;
                     const linkedSession = getScheduledSessionForActivity(activity);
@@ -1918,7 +2066,7 @@
                   const session = item.session;
                   const cls = ["card", "day-card", "timeline-item"];
                   const displayIsoDate = item.displayIsoDate;
-                  const isCurrentWeekSession = Object.values(currentWeekIsoMap).includes(displayIsoDate);
+                  const isCurrentWeekSession = Object.values(displayedWeekIsoMap).includes(displayIsoDate);
                   if (isCurrentWeekSession && selectedSessionId === session.id) cls.push("active");
                   if (isCurrentWeekSession) cls.push("clickable");
                   const dayData = weekPlan.days.find(day => day.day === session.day);
@@ -2006,13 +2154,7 @@
               </div>
             </section>
           `;
-        };
-
-        el.innerHTML = [
-          renderSection("Passé récent", sections.past, "Le passé proche apparaîtra ici au fil de la semaine."),
-          renderSection("Aujourd'hui", sections.today, "Aucune séance prévue aujourd'hui."),
-          renderSection("À venir", sections.upcoming, "La suite de la semaine apparaîtra ici."),
-        ].join("");
+        }
 
         el.querySelectorAll("[data-day]").forEach(card => {
           card.addEventListener("click", async () => {
@@ -2034,8 +2176,10 @@
 
         // Load bar
         const bar = document.getElementById("plan-load-bar");
-        const loadSource = currentWeekSessions.length ? currentWeekSessions : weekPlan.days;
-        const maxLoad = Math.max(4, ...loadSource.map(d => d.load_score || 0));
+        const loadSource = displayedWeekSessions.length
+          ? displayedWeekSessions
+          : (selectedWeekOffset === 0 ? weekPlan.days : []);
+        const maxLoad = Math.max(4, ...(loadSource.length ? loadSource.map(d => d.load_score || 0) : [0]));
         bar.innerHTML = loadSource.map(day => {
           const h = Math.max(4, ((day.load_score || 0) / maxLoad) * 28);
           const color = (day.load_score || 0) >= 3 ? "var(--warm)" :
@@ -2044,10 +2188,12 @@
           return `<div class="load-segment" style="height:${h}px;background:${color};" title="${day.label} : charge ${day.load_score || 0}"></div>`;
         }).join("");
 
-        const statSource = currentWeekSessions.length ? currentWeekSessions : weekPlan.days;
+        const statSource = displayedWeekSessions.length
+          ? displayedWeekSessions
+          : (selectedWeekOffset === 0 ? weekPlan.days : []);
         const doneCount = statSource.filter(day => getEffectiveSessionStatus(day) === "done").length;
         const remainingCount = statSource.filter(day => getEffectiveSessionStatus(day) === "planned" && day.sport_type !== "rest").length;
-        const missingCount = currentWeekSessions.filter(session =>
+        const missingCount = displayedWeekSessions.filter(session =>
           session.sport_type !== "rest" &&
           getSessionDisplayIsoDate(session, timezone) < todayIso &&
           !getLinkedActivityForSession(session)
@@ -2630,6 +2776,21 @@
         } finally {
           activitySendBtn.disabled = false;
         }
+      });
+
+      document.getElementById("plan-week-prev").addEventListener("click", () => {
+        selectedWeekOffset -= 1;
+        renderWeek();
+      });
+
+      document.getElementById("plan-week-next").addEventListener("click", () => {
+        selectedWeekOffset += 1;
+        renderWeek();
+      });
+
+      document.getElementById("plan-week-current").addEventListener("click", () => {
+        selectedWeekOffset = 0;
+        renderWeek();
       });
 
       // ── Tabs ──
