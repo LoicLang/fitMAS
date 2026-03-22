@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 DEFAULT_TIMEZONE = "Europe/Paris"
@@ -98,6 +98,22 @@ def build_time_context(timezone_name: str | None, *, now: datetime | None = None
         "day_label_fr": DAY_LABELS_FR[day_key],
         "part_of_day": _part_of_day(local_now.hour),
     }
+
+
+def current_week_dates(timezone_name: str | None, *, now: datetime | None = None) -> dict[str, date]:
+    local_now = get_local_now(timezone_name, now=now)
+    monday = local_now.date() - timedelta(days=local_now.weekday())
+    return {
+        day_key: monday + timedelta(days=index)
+        for index, day_key in enumerate(DAY_KEYS)
+    }
+
+
+def day_label_fr(day_key: str, *, capitalize: bool = False) -> str:
+    label = DAY_LABELS_FR.get(day_key, day_key)
+    if capitalize:
+        return label.capitalize()
+    return label
 
 
 def render_time_context(time_context: dict[str, str]) -> str:

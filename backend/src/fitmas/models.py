@@ -77,7 +77,10 @@ class Profile(BaseModel):
 
 
 class TodayView(BaseModel):
+    scheduled_session_id: int
+    scheduled_date: str
     day: DayId
+    label: str
     sport_type: str = "running"
     session_type: str = "easy"
     session_title: str
@@ -87,8 +90,13 @@ class TodayView(BaseModel):
     intensity: str = "easy"
     priority: str
     nutrition_focus: str
+    completion_status: str = "planned"
     change_notes: list[ChangeNote]
     watch_items: list[WatchItem]
+
+
+class MoveSessionPayload(BaseModel):
+    target_date: str | None = None
 
 
 class Message(BaseModel):

@@ -18,7 +18,7 @@ from fitmas.models import (
     WatchItem,
     WeeklyPlan,
 )
-from fitmas.time_context import DAY_KEYS, get_local_now
+from fitmas.time_context import DAY_KEYS, current_week_dates, get_local_now
 
 
 # ── Converters ─────────────────────────────────────────────────────────────
@@ -265,6 +265,35 @@ def get_scheduled_session_for_date(
             s.ScheduledSession.day == day,
             s.ScheduledSession.scheduled_date == scheduled_date,
         )
+        .first()
+    )
+
+
+def get_scheduled_session(db: Session, user_id: int, session_id: int) -> s.ScheduledSession | None:
+    return (
+        db.query(s.ScheduledSession)
+        .filter(s.ScheduledSession.user_id == user_id, s.ScheduledSession.id == session_id)
+        .first()
+    )
+
+
+def get_today_scheduled_session(
+    db: Session,
+    user_id: int,
+    *,
+    timezone_name: str | None,
+) -> s.ScheduledSession | None:
+    local_date = get_local_now(timezone_name).date()
+    day_start = datetime.combine(local_date, time.min)
+    day_end = day_start + timedelta(days=1)
+    return (
+        db.query(s.ScheduledSession)
+        .filter(
+            s.ScheduledSession.user_id == user_id,
+            s.ScheduledSession.scheduled_date >= day_start,
+            s.ScheduledSession.scheduled_date < day_end,
+        )
+        .order_by(s.ScheduledSession.id.asc())
         .first()
     )
 
@@ -597,6 +626,29 @@ def mark_scheduled_session_completed(db: Session, session_id: int | None) -> boo
     session.completion_status = "done"
     db.commit()
     return True
+
+
+def set_scheduled_session_status(db: Session, session_id: int, status: str) -> s.ScheduledSession | None:
+    session = db.query(s.ScheduledSession).filter(s.ScheduledSession.id == session_id).first()
+    if session is None:
+        return None
+    session.completion_status = status
+    db.commit()
+    db.refresh(session)
+    return session
+
+
+def get_current_week_day_plan_for_session(
+    db: Session,
+    *,
+    user: s.User,
+    session: s.ScheduledSession,
+) -> tuple[s.WeeklyPlan | None, s.DayPlan | None]:
+    week_dates = current_week_dates(user.timezone)
+    if week_dates.get(session.day) != session.scheduled_date.date():
+        return None, None
+    plan = get_active_plan(db, user.id)
+    return plan, get_day_plan(db, plan.id, session.day)
 
 
 def resync_plan_sessions(db: Session, plan_id: int, *, timezone_name: str | None) -> bool:
