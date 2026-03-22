@@ -260,6 +260,7 @@
       .badge-planned { color: var(--muted); background: rgba(108, 88, 74, 0.06); }
       .badge-skipped { color: var(--red); background: var(--red-soft); }
       .badge-adapted { color: var(--yellow); background: var(--yellow-soft); }
+      .badge-offplan { color: var(--warm); background: var(--warm-soft); }
 
       .tag {
         display: inline-flex; align-items: center;
@@ -482,6 +483,22 @@
 
       .timeline-block-pending strong {
         color: var(--text);
+      }
+
+      .timeline-item-offplan {
+        border-style: dashed;
+        border-color: rgba(217, 119, 6, 0.18);
+        background:
+          linear-gradient(180deg, rgba(255, 248, 237, 0.96), rgba(255, 252, 247, 0.98));
+      }
+
+      .timeline-block-offplan {
+        background: rgba(217, 119, 6, 0.06);
+        border-color: rgba(217, 119, 6, 0.16);
+      }
+
+      .timeline-block-offplan strong {
+        color: var(--warm);
       }
 
       .journal-note {
@@ -1430,23 +1447,41 @@
         };
       }
 
-      function getDayActivity(dayKey) {
-        return activities
-          .filter(activity => activity.matched_day === dayKey)
-          .sort((a, b) => new Date(b.started_at || 0) - new Date(a.started_at || 0))[0] || null;
-      }
-
       function getActivityById(activityId) {
         return activities.find(activity => activity.id === activityId) || null;
       }
 
-      function getLinkedActivityForSession(session) {
+      function getAnyLinkedActivityForSession(session) {
         if (!session?.linked_activity_id) return null;
         return getActivityById(session.linked_activity_id);
       }
 
+      function getScheduledSessionForActivity(activity) {
+        if (!activity?.id) return null;
+        return getSessionByLinkedActivity(activity.id);
+      }
+
+      function getLinkedActivityForSession(session) {
+        const activity = getAnyLinkedActivityForSession(session);
+        if (!activity || activity.sport_type !== session.sport_type) return null;
+        return activity;
+      }
+
       function getSessionByLinkedActivity(activityId) {
         return scheduledTimeline.find(session => session.linked_activity_id === activityId) || null;
+      }
+
+      function isOffPlanActivity(activity) {
+        const linkedSession = getScheduledSessionForActivity(activity);
+        return !linkedSession || linkedSession.sport_type !== activity.sport_type;
+      }
+
+      function getEffectiveSessionStatus(session) {
+        const status = session.completion_status || "planned";
+        if (status === "done" && getAnyLinkedActivityForSession(session) && !getLinkedActivityForSession(session)) {
+          return "planned";
+        }
+        return status;
       }
 
       function getSessionDisplayIsoDate(session, timezone) {
@@ -1466,11 +1501,17 @@
         return new Date(`${displayIsoDate}T12:00:00Z`).getTime();
       }
 
-      function sortSessionsByDisplayDate(items, timezone) {
+      function sortCalendarItems(items, timezone) {
         return [...items].sort((a, b) => {
-          const byTimestamp = getSessionDisplayTimestamp(a, timezone) - getSessionDisplayTimestamp(b, timezone);
-          if (byTimestamp !== 0) return byTimestamp;
-          return a.id - b.id;
+          const aTime = a.kind === "session"
+            ? getSessionDisplayTimestamp(a.session, timezone)
+            : new Date(a.activity.started_at || `${a.displayIsoDate}T12:00:00Z`).getTime();
+          const bTime = b.kind === "session"
+            ? getSessionDisplayTimestamp(b.session, timezone)
+            : new Date(b.activity.started_at || `${b.displayIsoDate}T12:00:00Z`).getTime();
+          if (aTime !== bTime) return aTime - bTime;
+          if (a.kind !== b.kind) return a.kind === "session" ? -1 : 1;
+          return (a.session?.id || a.activity?.id || 0) - (b.session?.id || b.activity?.id || 0);
         });
       }
 
@@ -1760,6 +1801,15 @@
               scheduled_date: currentWeekIsoMap[day.day],
               linked_activity_id: null,
             }));
+        const currentWeekSessions = sessions.filter(session =>
+          DAY_ORDER.some(dayKey => currentWeekIsoMap[dayKey] === getSessionDisplayIsoDate(session, timezone))
+        );
+        const currentWeekIsoDates = Object.values(currentWeekIsoMap);
+        const offPlanActivities = activities.filter(activity => {
+          if (!activity?.started_at || !isOffPlanActivity(activity)) return false;
+          const activityIso = getLocalIsoDate(timezone, new Date(activity.started_at));
+          return currentWeekIsoDates.includes(activityIso);
+        });
 
         const sections = {
           past: [],
@@ -1774,16 +1824,22 @@
             : displayIsoDate === todayIso
               ? "today"
               : "upcoming";
-          sections[phase].push(session);
+          sections[phase].push({ kind: "session", session, displayIsoDate });
         });
 
-        sections.past = sortSessionsByDisplayDate(sections.past, timezone);
-        sections.today = sortSessionsByDisplayDate(sections.today, timezone);
-        sections.upcoming = sortSessionsByDisplayDate(sections.upcoming, timezone);
+        offPlanActivities.forEach(activity => {
+          const displayIsoDate = getLocalIsoDate(timezone, new Date(activity.started_at));
+          const phase = displayIsoDate < todayIso
+            ? "past"
+            : displayIsoDate === todayIso
+              ? "today"
+              : "upcoming";
+          sections[phase].push({ kind: "activity", activity, displayIsoDate });
+        });
 
-        const currentWeekSessions = sessions.filter(session =>
-          DAY_ORDER.some(dayKey => currentWeekIsoMap[dayKey] === getSessionDisplayIsoDate(session, timezone))
-        );
+        sections.past = sortCalendarItems(sections.past, timezone);
+        sections.today = sortCalendarItems(sections.today, timezone);
+        sections.upcoming = sortCalendarItems(sections.upcoming, timezone);
 
         const renderSection = (title, items, emptyText) => {
           if (!items.length) {
@@ -1801,19 +1857,74 @@
             <section class="calendar-section">
               <div class="calendar-section-head">
                 <h3>${title}</h3>
-                <span>${items.length} séance${items.length > 1 ? "s" : ""}</span>
+                <span>${items.length} entrée${items.length > 1 ? "s" : ""}</span>
               </div>
               <div class="timeline-list">
-                ${items.map(session => {
+                ${items.map(item => {
+                  if (item.kind === "activity") {
+                    const activity = item.activity;
+                    const linkedSession = getScheduledSessionForActivity(activity);
+                    const dayDate = formatTimelineDate(parseSessionDate(item.displayIsoDate), timezone);
+                    const activitySummary = [
+                      formatRecentActivityDate(activity.started_at),
+                      activity.duration_min ? `${activity.duration_min} min` : null,
+                      formatDistance(activity.distance_m),
+                      activity.avg_speed ? `${formatPace(activity.avg_speed)}/km` : null,
+                      activity.avg_hr ? `${Math.round(activity.avg_hr)} bpm` : null,
+                      activity.tss ? `TSS ${Math.round(activity.tss)}` : null,
+                    ].filter(Boolean).join(" · ");
+                    const plannedMismatch = linkedSession
+                      ? `${SPORT_LABEL[linkedSession.sport_type] || linkedSession.sport_type} prévu · ${linkedSession.session_title}`
+                      : "Aucune séance planifiée liée ce jour-là.";
+                    return `
+                      <article class="card day-card timeline-item timeline-item-offplan" data-activity-open="${activity.id}">
+                        <div class="timeline-date">
+                          <span class="timeline-date-day">${dayDate.day}</span>
+                          <span class="timeline-date-num">${dayDate.num}</span>
+                          <span class="timeline-date-month">${dayDate.month}</span>
+                        </div>
+                        <div class="timeline-main">
+                          <div class="timeline-title-row">
+                            <div>
+                              <p class="eyebrow">Hors plan</p>
+                              <h3>${SPORT_EMOJI[activity.sport_type] || ""} ${activity.title}</h3>
+                            </div>
+                            <div style="display:flex;flex-direction:column;gap:4px;align-items:flex-end;">
+                              <span class="badge badge-offplan">hors plan</span>
+                              <span class="tag tag-priority">${activity.source === "strava" ? "strava" : "manuel"}</span>
+                            </div>
+                          </div>
+                          <div class="timeline-meta">
+                            <span class="badge badge-planned">${SPORT_LABEL[activity.sport_type] || activity.sport_type}</span>
+                            ${activity.duration_min ? `<span class="badge badge-planned">${activity.duration_min} min</span>` : ""}
+                            ${activity.distance_m ? `<span class="badge badge-planned">${formatDistance(activity.distance_m)}</span>` : ""}
+                          </div>
+                          <p class="muted" style="margin-top: 10px; font-size: 0.84rem; line-height: 1.5;">Activité réalisée en dehors du plan prévu.</p>
+                          <div class="timeline-compare">
+                            <div class="timeline-block timeline-block-offplan">
+                              <strong>Réalisé</strong>
+                              <span>${activitySummary}</span>
+                            </div>
+                            <div class="timeline-block timeline-block-planned">
+                              <strong>Prévu</strong>
+                              <span>${plannedMismatch}</span>
+                            </div>
+                          </div>
+                        </div>
+                      </article>
+                    `;
+                  }
+
+                  const session = item.session;
                   const cls = ["card", "day-card", "timeline-item"];
-                  const displayIsoDate = getSessionDisplayIsoDate(session, timezone);
+                  const displayIsoDate = item.displayIsoDate;
                   const isCurrentWeekSession = Object.values(currentWeekIsoMap).includes(displayIsoDate);
                   if (isCurrentWeekSession && selectedSessionId === session.id) cls.push("active");
                   if (isCurrentWeekSession) cls.push("clickable");
                   const dayData = weekPlan.days.find(day => day.day === session.day);
                   if (dayData && hasMutations(dayData)) cls.push("mutated");
                   const emoji = SPORT_EMOJI[session.sport_type] || "";
-                  const status = session.completion_status || "planned";
+                  const status = getEffectiveSessionStatus(session);
                   const dur = session.duration_min ? `${session.duration_min} min` : "Format libre";
                   const sessionDate = parseSessionDate(displayIsoDate);
                   const dayDate = sessionDate ? formatTimelineDate(sessionDate, timezone) : { day: "", num: "", month: "" };
@@ -1934,20 +2045,14 @@
         }).join("");
 
         const statSource = currentWeekSessions.length ? currentWeekSessions : weekPlan.days;
-        const doneCount = statSource.filter(day => day.completion_status === "done").length;
-        const remainingCount = statSource.filter(day => day.completion_status === "planned" && day.sport_type !== "rest").length;
+        const doneCount = statSource.filter(day => getEffectiveSessionStatus(day) === "done").length;
+        const remainingCount = statSource.filter(day => getEffectiveSessionStatus(day) === "planned" && day.sport_type !== "rest").length;
         const missingCount = currentWeekSessions.filter(session =>
           session.sport_type !== "rest" &&
           getSessionDisplayIsoDate(session, timezone) < todayIso &&
           !getLinkedActivityForSession(session)
         ).length;
-        const offPlanCount = activities.filter(activity => {
-          if (!activity.started_at) return false;
-          const activityIso = getLocalIsoDate(timezone, new Date(activity.started_at));
-          const isCurrentWeekActivity = Object.values(currentWeekIsoMap).includes(activityIso);
-          if (!isCurrentWeekActivity) return false;
-          return !currentWeekSessions.some(session => session.linked_activity_id === activity.id);
-        }).length;
+        const offPlanCount = offPlanActivities.length;
         document.getElementById("plan-stats").innerHTML = `
           <div class="metric">
             <div class="metric-label">Fait</div>
@@ -2083,9 +2188,9 @@
 
         const currentWeekSessions = getCurrentWeekSessions();
         const actionableSessions = currentWeekSessions.filter(session => session.sport_type !== "rest");
-        const doneCount = actionableSessions.filter(session => session.completion_status === "done").length;
+        const doneCount = actionableSessions.filter(session => getEffectiveSessionStatus(session) === "done").length;
         const skippedCount = actionableSessions.filter(session => session.completion_status === "skipped").length;
-        const plannedCount = actionableSessions.filter(session => (session.completion_status || "planned") === "planned").length;
+        const plannedCount = actionableSessions.filter(session => getEffectiveSessionStatus(session) === "planned").length;
         const completionRate = actionableSessions.length
           ? Math.round((doneCount / actionableSessions.length) * 100)
           : 0;

@@ -96,6 +96,7 @@ Via `/start` sur le bot Telegram :
 - 7 séances de la semaine avec statut et date lisible
 - une séance terminée se reloge sur son jour réel d'exécution
 - tri chrono sur la date réellement affichée
+- une activité du mauvais sport apparaît comme entrée distincte `hors plan` et ne valide pas la séance prévue
 - tableau de bord exécution / charge / lecture de la semaine
 - barre de charge visuelle
 - bouton régénérer
