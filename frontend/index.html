@@ -291,6 +291,125 @@
 
       .day-card-head h3 { font-size: 0.94rem; font-weight: 700; }
 
+      .calendar-stack {
+        display: grid;
+        gap: 14px;
+      }
+
+      .calendar-section {
+        display: grid;
+        gap: 10px;
+      }
+
+      .calendar-section-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+      }
+
+      .calendar-section-head h3 {
+        margin: 0;
+        font-size: 0.98rem;
+        font-weight: 800;
+      }
+
+      .calendar-section-head span {
+        color: var(--muted);
+        font-size: 0.78rem;
+        font-weight: 600;
+      }
+
+      .timeline-list {
+        display: grid;
+        gap: 10px;
+      }
+
+      .timeline-item {
+        display: grid;
+        grid-template-columns: 72px minmax(0, 1fr);
+        gap: 14px;
+        align-items: start;
+      }
+
+      .timeline-date {
+        padding: 12px 8px;
+        border-radius: 18px;
+        background: linear-gradient(180deg, rgba(15, 118, 110, 0.1), rgba(15, 118, 110, 0.02));
+        border: 1px solid rgba(15, 118, 110, 0.10);
+        text-align: center;
+        box-shadow: inset 0 1px 0 rgba(255,255,255,0.5);
+      }
+
+      .timeline-date-day {
+        display: block;
+        font-size: 0.68rem;
+        font-weight: 700;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: var(--accent);
+      }
+
+      .timeline-date-num {
+        display: block;
+        margin-top: 3px;
+        font-size: 1.2rem;
+        font-weight: 800;
+        color: var(--text);
+      }
+
+      .timeline-date-month {
+        display: block;
+        margin-top: 2px;
+        font-size: 0.72rem;
+        color: var(--muted);
+      }
+
+      .timeline-main {
+        min-width: 0;
+      }
+
+      .timeline-title-row {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 10px;
+      }
+
+      .timeline-title-row h3 {
+        margin: 0;
+        font-size: 0.96rem;
+        font-weight: 800;
+      }
+
+      .timeline-meta {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+        margin-top: 8px;
+      }
+
+      .timeline-actual {
+        margin-top: 10px;
+        padding: 10px 12px;
+        border-radius: var(--radius-md);
+        background: rgba(15, 118, 110, 0.06);
+        border: 1px solid rgba(15, 118, 110, 0.10);
+      }
+
+      .timeline-actual strong {
+        display: block;
+        margin-bottom: 3px;
+        font-size: 0.82rem;
+        color: var(--accent);
+      }
+
+      .timeline-actual span {
+        font-size: 0.82rem;
+        line-height: 1.45;
+        color: var(--muted);
+      }
+
       /* ── Load bar ── */
       .load-bar {
         display: flex; gap: 3px; align-items: flex-end;
@@ -537,6 +656,10 @@
           grid-column: 1 / -1;
         }
         .form-grid { grid-template-columns: 1fr; }
+        .timeline-item {
+          grid-template-columns: 60px minmax(0, 1fr);
+          gap: 10px;
+        }
         input, select, textarea, button {
           font-size: 16px !important;
         }
@@ -682,7 +805,7 @@
       <main class="panel">
         <nav class="tabs" aria-label="Navigation">
           <button class="tab active" data-tab="today">Aujourd'hui</button>
-          <button class="tab" data-tab="plan">Semaine</button>
+          <button class="tab" data-tab="plan">Calendrier</button>
           <button class="tab" data-tab="activities">Activités</button>
           <button class="tab" data-tab="profile">Profil</button>
           <button class="tab" data-tab="debug">Debug</button>
@@ -746,12 +869,13 @@
         <!-- PLAN -->
         <section class="view" data-view="plan">
           <div class="hero">
-            <p class="eyebrow">Plan hebdomadaire</p>
+            <p class="eyebrow">Calendrier vivant</p>
             <h2 id="plan-intention">Chargement…</h2>
             <p class="muted" id="plan-summary" style="margin-top: 8px; line-height: 1.5;"></p>
+            <div class="hero-grid" id="plan-stats" style="margin-top: 14px;"></div>
             <div class="load-bar" id="plan-load-bar"></div>
           </div>
-          <div class="week-grid" id="week-grid"></div>
+          <div class="calendar-stack" id="week-grid"></div>
           <div style="display: flex; justify-content: flex-end; margin-top: 4px;">
             <button class="secondary" id="btn-regen" onclick="regenerateWeek()">🔄 Régénérer la semaine</button>
           </div>
@@ -914,7 +1038,7 @@
         </button>
         <button class="bnav" data-tab="plan">
           <span class="bnav-icon">📅</span>
-          Semaine
+          Calendrier
         </button>
         <button class="bnav" data-tab="activities">
           <span class="bnav-icon">🏃</span>
@@ -952,6 +1076,8 @@
         running: "Course", cycling: "Vélo", swimming: "Natation",
         climbing: "Escalade", strength: "Renfo", rest: "Repos",
       };
+
+      const DAY_ORDER = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"];
 
       function mapDayToApiKey(i) {
         return ["sunday","monday","tuesday","wednesday","thursday","friday","saturday"][i];
@@ -991,6 +1117,35 @@
         } catch (err) {
           return userProfile?.name || "FitMAS";
         }
+      }
+
+      function addDays(baseDate, offset) {
+        const next = new Date(baseDate);
+        next.setDate(next.getDate() + offset);
+        return next;
+      }
+
+      function buildWeekDateMap(timezone) {
+        const today = new Date();
+        const todayKey = getCurrentDayKey(timezone);
+        const todayIndex = DAY_ORDER.indexOf(todayKey);
+        return Object.fromEntries(
+          DAY_ORDER.map((dayKey, index) => [dayKey, addDays(today, index - todayIndex)])
+        );
+      }
+
+      function formatTimelineDate(date, timezone) {
+        return {
+          day: new Intl.DateTimeFormat("fr-FR", { weekday: "short", timeZone: timezone || undefined }).format(date).replace(".", ""),
+          num: new Intl.DateTimeFormat("fr-FR", { day: "2-digit", timeZone: timezone || undefined }).format(date),
+          month: new Intl.DateTimeFormat("fr-FR", { month: "short", timeZone: timezone || undefined }).format(date).replace(".", ""),
+        };
+      }
+
+      function getDayActivity(dayKey) {
+        return activities
+          .filter(activity => activity.matched_day === dayKey)
+          .sort((a, b) => new Date(b.started_at || 0) - new Date(a.started_at || 0))[0] || null;
       }
 
       async function fetchJson(url, opts = {}) {
@@ -1106,32 +1261,105 @@
 
       function renderWeek() {
         const el = document.getElementById("week-grid");
-        el.innerHTML = weekPlan.days.map(day => {
-          const cls = ["card", "day-card"];
-          if (day.day === selectedDay) cls.push("active");
-          if (hasMutations(day)) cls.push("mutated");
-          const emoji = SPORT_EMOJI[day.sport_type] || "";
-          const status = day.completion_status || "planned";
-          const dur = day.duration_min ? `${day.duration_min} min` : "";
+        const timezone = profile?.timezone;
+        const todayKey = getCurrentDayKey(timezone);
+        const todayIndex = DAY_ORDER.indexOf(todayKey);
+        const weekDateMap = buildWeekDateMap(timezone);
+
+        const sections = {
+          past: [],
+          today: [],
+          upcoming: [],
+        };
+
+        weekPlan.days.forEach(day => {
+          const dayIndex = DAY_ORDER.indexOf(day.day);
+          const phase = dayIndex < todayIndex ? "past" : dayIndex === todayIndex ? "today" : "upcoming";
+          sections[phase].push(day);
+        });
+
+        const renderSection = (title, items, emptyText) => {
+          if (!items.length) {
+            return `
+              <section class="calendar-section">
+                <div class="calendar-section-head">
+                  <h3>${title}</h3>
+                </div>
+                <div class="empty">${emptyText}</div>
+              </section>
+            `;
+          }
+
           return `
-            <article class="${cls.join(" ")}" data-day="${day.day}">
-              <div class="day-card-head">
-                <div>
-                  <p class="eyebrow">${day.label}</p>
-                  <h3>${emoji} ${day.session_title}</h3>
-                  ${dur ? `<p class="muted" style="font-size:0.78rem;margin-top:2px;">${dur} · ${day.intensity || ""}</p>` : ""}
-                </div>
-                <div style="display: flex; flex-direction: column; gap: 4px; align-items: flex-end;">
-                  <span class="badge ${statusBadgeClass(status)}">${statusLabel(status)}</span>
-                  <span class="tag tag-priority">${day.priority}</span>
-                </div>
+            <section class="calendar-section">
+              <div class="calendar-section-head">
+                <h3>${title}</h3>
+                <span>${items.length} séance${items.length > 1 ? "s" : ""}</span>
               </div>
-              <p class="muted" style="margin-top: 8px; font-size: 0.84rem; line-height: 1.45;">${day.session_goal}</p>
-              ${day.session_description && day.sport_type !== "rest" ? `<p style="margin-top: 6px; font-size: 0.8rem; line-height: 1.4; color: var(--accent); white-space: pre-wrap; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical;">${day.session_description}</p>` : ""}
-              ${day.session_note ? `<p class="muted" style="margin-top: 6px; font-size: 0.8rem; font-style: italic;">${day.session_note}</p>` : ""}
-            </article>
+              <div class="timeline-list">
+                ${items.map(day => {
+                  const cls = ["card", "day-card", "timeline-item"];
+                  if (day.day === selectedDay) cls.push("active");
+                  if (hasMutations(day)) cls.push("mutated");
+                  const emoji = SPORT_EMOJI[day.sport_type] || "";
+                  const status = day.completion_status || "planned";
+                  const dur = day.duration_min ? `${day.duration_min} min` : "Format libre";
+                  const dayDate = formatTimelineDate(weekDateMap[day.day], timezone);
+                  const linkedActivity = getDayActivity(day.day);
+                  const linkedActivitySummary = linkedActivity
+                    ? [
+                        linkedActivity.title,
+                        linkedActivity.duration_min ? `${linkedActivity.duration_min} min` : null,
+                        linkedActivity.distance_m ? `${(linkedActivity.distance_m / 1000).toFixed(1)} km` : null,
+                      ].filter(Boolean).join(" · ")
+                    : "";
+
+                  return `
+                    <article class="${cls.join(" ")}" data-day="${day.day}">
+                      <div class="timeline-date">
+                        <span class="timeline-date-day">${dayDate.day}</span>
+                        <span class="timeline-date-num">${dayDate.num}</span>
+                        <span class="timeline-date-month">${dayDate.month}</span>
+                      </div>
+                      <div class="timeline-main">
+                        <div class="timeline-title-row">
+                          <div>
+                            <p class="eyebrow">${day.label}</p>
+                            <h3>${emoji} ${day.session_title}</h3>
+                          </div>
+                          <div style="display:flex;flex-direction:column;gap:4px;align-items:flex-end;">
+                            <span class="badge ${statusBadgeClass(status)}">${statusLabel(status)}</span>
+                            <span class="tag tag-priority">${day.priority}</span>
+                          </div>
+                        </div>
+                        <div class="timeline-meta">
+                          <span class="badge badge-planned">${SPORT_LABEL[day.sport_type] || day.sport_type}</span>
+                          <span class="badge badge-planned">${dur}</span>
+                          <span class="badge badge-planned">${day.intensity || "souple"}</span>
+                        </div>
+                        <p class="muted" style="margin-top: 10px; font-size: 0.84rem; line-height: 1.5;">${day.session_goal}</p>
+                        ${day.session_description && day.sport_type !== "rest" ? `<p style="margin-top: 8px; font-size: 0.81rem; line-height: 1.45; color: var(--accent); white-space: pre-wrap; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical;">${day.session_description}</p>` : ""}
+                        ${day.session_note ? `<p class="muted" style="margin-top: 8px; font-size: 0.8rem; font-style: italic;">${day.session_note}</p>` : ""}
+                        ${linkedActivity ? `
+                          <div class="timeline-actual">
+                            <strong>Réel enregistré</strong>
+                            <span>${linkedActivitySummary}</span>
+                          </div>
+                        ` : ""}
+                      </div>
+                    </article>
+                  `;
+                }).join("")}
+              </div>
+            </section>
           `;
-        }).join("");
+        };
+
+        el.innerHTML = [
+          renderSection("Passé récent", sections.past, "Le passé proche apparaîtra ici au fil de la semaine."),
+          renderSection("Aujourd'hui", sections.today, "Aucune séance prévue aujourd'hui."),
+          renderSection("À venir", sections.upcoming, "La suite de la semaine apparaîtra ici."),
+        ].join("");
 
         el.querySelectorAll("[data-day]").forEach(card => {
           card.addEventListener("click", async () => {
@@ -1152,6 +1380,29 @@
                         "rgba(15, 118, 110, 0.25)";
           return `<div class="load-segment" style="height:${h}px;background:${color};" title="${day.label} : charge ${day.load_score}"></div>`;
         }).join("");
+
+        const doneCount = weekPlan.days.filter(day => day.completion_status === "done").length;
+        const remainingCount = weekPlan.days.filter(day => day.completion_status === "planned" && day.sport_type !== "rest").length;
+        const keyCount = weekPlan.days.filter(day => ["cle", "fort", "qualite", "long"].some(keyword => `${day.priority} ${day.session_title}`.toLowerCase().includes(keyword))).length;
+        const totalMinutes = weekPlan.days.reduce((sum, day) => sum + (day.duration_min || 0), 0);
+        document.getElementById("plan-stats").innerHTML = `
+          <div class="metric">
+            <div class="metric-label">Fait</div>
+            <div class="metric-value">${doneCount}</div>
+          </div>
+          <div class="metric">
+            <div class="metric-label">À jouer</div>
+            <div class="metric-value">${remainingCount}</div>
+          </div>
+          <div class="metric">
+            <div class="metric-label">Séances clés</div>
+            <div class="metric-value">${keyCount}</div>
+          </div>
+          <div class="metric">
+            <div class="metric-label">Volume</div>
+            <div class="metric-value">${totalMinutes ? `${totalMinutes} min` : "Libre"}</div>
+          </div>
+        `;
       }
 
       // ── Regenerate week ──

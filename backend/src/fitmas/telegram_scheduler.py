@@ -9,7 +9,6 @@ from telegram.ext import Application, ContextTypes
 
 from fitmas.telegram_api import api_post
 from fitmas.telegram_shared import (
-    format_week_overview,
     persist_draft_for_owner,
     persistable_plan_draft,
     resolve_owner_chat_id,
@@ -23,12 +22,6 @@ async def strava_sync_cron(context: ContextTypes.DEFAULT_TYPE) -> None:
         result = await api_post("/api/v0/strava/sync", {})
         imported = result.get("imported", 0)
         if imported:
-            chat_id = resolve_owner_chat_id()
-            if chat_id:
-                await context.bot.send_message(
-                    chat_id=chat_id,
-                    text=f"Strava sync automatique : {imported} activite(s) importee(s).",
-                )
             await signal_check_cron(context)
         logger.info("Strava cron sync: %d imported", imported)
     except Exception:
@@ -48,13 +41,23 @@ async def weekly_review_cron(context: ContextTypes.DEFAULT_TYPE) -> None:
         if review_draft:
             await context.bot.send_message(chat_id=chat_id, text=review_draft.text, parse_mode=review_draft.parse_mode)
             persist_draft_for_owner(review_draft)
-
-        week = await api_post("/api/v0/week/regenerate", {})
-        plan_text = format_week_overview(week, heading="*Nouvelle semaine:*")
-        await context.bot.send_message(chat_id=chat_id, text=plan_text, parse_mode="Markdown")
-        persist_draft_for_owner(persistable_plan_draft(week))
     except Exception:
         logger.exception("Weekly review cron failed")
+
+
+async def send_new_week_plan(context: ContextTypes.DEFAULT_TYPE) -> None:
+    chat_id = resolve_owner_chat_id()
+    if not chat_id:
+        logger.warning("No Telegram chat id available for new week plan")
+        return
+
+    try:
+        week = await api_post("/api/v0/week/regenerate", {})
+        draft = persistable_plan_draft(week)
+        await context.bot.send_message(chat_id=chat_id, text=draft.text, parse_mode=draft.parse_mode)
+        persist_draft_for_owner(draft)
+    except Exception:
+        logger.exception("New week plan cron failed")
 
 
 async def send_morning_briefing(context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -153,7 +156,17 @@ def register_jobs(app: Application) -> None:
     job_queue.run_daily(
         weekly_review_cron,
         time=dt_time(hour=20, minute=0, tzinfo=timezone),
-        days=(6,),
+        # python-telegram-bot v20+ uses 0=Sunday ... 6=Saturday.
+        days=(0,),
         name="weekly_review",
     )
     logger.info("Weekly review scheduled Sunday 20:00 %s", timezone)
+
+    job_queue.run_daily(
+        send_new_week_plan,
+        time=dt_time(hour=6, minute=0, tzinfo=timezone),
+        # python-telegram-bot v20+ uses 0=Sunday ... 6=Saturday.
+        days=(1,),
+        name="new_week_plan",
+    )
+    logger.info("New week plan scheduled Monday 06:00 %s", timezone)

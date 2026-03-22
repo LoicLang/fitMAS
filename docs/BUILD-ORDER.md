@@ -42,12 +42,13 @@ read_when:
 
 **Statut : TERMINÉ**
 
-- 5 onglets : Aujourd'hui, Semaine, Activités, Profil, Debug
+- 5 onglets : Aujourd'hui, Calendrier, Activités, Profil, Debug
 - Navigation mobile bottom bar
 - Passe mobile iPhone-proof : safe areas, touch targets, hiérarchie resserrée
 - Actions rapides : Fait / Trop fatigué / Décaler
 - Badges statut : fait ✓ / prévu / sauté / adapté
 - Barre de charge semaine
+- Calendrier vivant : passé récent, aujourd'hui, à venir
 - Contexte temps local visible dans le top bar
 - Strava connect button + synchro
 - Formulaire activité manuelle

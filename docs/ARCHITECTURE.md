@@ -28,11 +28,11 @@ Les garde-fous, la planification, les permissions, les cooldowns et la persistan
 - Mutation loop : message → LLM → decision → update plan → réponse
 - Mémoire utile via UserFact (extraction + upsert + sélection pour prompt)
 - Activités manuelles + Strava OAuth + import + synchro automatique
-- Heartbeat proactif : briefing matin 7h30, rappel pré-séance 18h, revue dimanche 20h
+- Heartbeat proactif : briefing matin 7h30, rappel pré-séance 18h, revue dimanche 20h, nouvelle semaine lundi 6h
 - Distinction `CoachMessage.proactive` : cooldown appliqué seulement aux messages proactifs
 - Heartbeat découplé : génération de draft, livraison, puis persistance après succès
 - Cooldowns : 4h entre messages proactifs, skip si échange récent (<2h)
-- Revue hebdomadaire avec régénération automatique du plan
+- Revue hebdomadaire sans écrasement de la semaine en cours, puis régénération automatique le lundi matin
 - Seed intelligent si pas d'utilisateur (profil multisport complet)
 
 - Signaux proactifs : `signals.py` détecte séance manquée, silence, charge haute, grosse séance, streak

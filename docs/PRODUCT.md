@@ -81,8 +81,10 @@ Via `/start` sur le bot Telegram :
 - métriques : sport, durée, intensité, priorité
 - ce qui a changé + ce que le coach regarde
 
-**Semaine** — vue plan
-- 7 cartes jour avec badge statut (fait/prévu/sauté/adapté)
+**Calendrier** — vue plan vivant
+- passé récent + aujourd'hui + à venir
+- 7 séances de la semaine avec statut et date lisible
+- tableau de bord exécution / charge / lecture de la semaine
 - barre de charge visuelle
 - bouton régénérer
 
@@ -143,7 +145,7 @@ Via message naturel au coach :
 ## Boucle produit
 
 1. `/start` → onboarding → récap → plan
-2. Vue Today chaque matin
+2. Vue Today + calendrier vivant chaque matin
 3. Briefing proactif sur Telegram
 4. Adaptation si besoin (message ou action rapide)
 5. Activité réelle → import ou log manuel

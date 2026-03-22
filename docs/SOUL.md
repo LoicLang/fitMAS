@@ -62,7 +62,7 @@ Règle :
 
 ### 3 sources de réveil
 
-1. **Routine planifiée** — briefing matin 7h30, rappel 18h, revue dimanche 20h
+1. **Routine planifiée** — briefing matin 7h30, rappel 18h, revue dimanche 20h, nouvelle semaine lundi 6h
 2. **Événement** — nouvelle activité Strava, message user
 3. **Exception** — séance clé manquée, silence prolongé
 
@@ -81,7 +81,8 @@ Le LLM ne bypass pas ces règles. Les garde-fous sont évalués avant tout appel
 |---------|-------|-----------|
 | Briefing matin | 7h30 | Cooldown OK + séance prévue aujourd'hui |
 | Rappel pré-séance | 18h | Cooldown OK + pas d'échange récent + séance clé demain |
-| Revue hebdo | Dimanche 20h | Toujours (bilan + régénération plan) |
+| Revue hebdo | Dimanche 20h | Toujours (bilan seulement, sans écraser la semaine en cours) |
+| Nouveau plan | Lundi 6h | Génère et envoie la nouvelle semaine |
 | Synchro Strava | Toutes les 2h | Strava connecté |
 | Signal check | 14h + post-sync | Signal actionable détecté |
 
