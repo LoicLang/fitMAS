@@ -168,6 +168,10 @@ class UserFact(BaseModel):
     confidence: float
     confirmed: bool
     active: bool
+    urgency: str = "medium"
+    ttl: str = "medium"
+    affects: list[str] = Field(default_factory=list)
+    expires_at: str | None = None
 
 
 class Activity(BaseModel):

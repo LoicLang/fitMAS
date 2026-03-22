@@ -6,6 +6,8 @@ import os
 import re
 
 from pydantic import BaseModel
+from fitmas.fact_memory import normalize_fact_payload as normalize_fact_memory_payload
+from fitmas.fact_memory import select_relevant_facts
 from fitmas.time_context import build_time_context, render_time_context
 
 logger = logging.getLogger(__name__)
@@ -527,7 +529,7 @@ Ne memorise PAS:
 Retourne un JSON: {{"facts": [...]}}
 
 Chaque fact:
-- category: "preference" | "constraint" | "pattern" | "coaching" | "fatigue"
+- category: "preference" | "constraint" | "pattern" | "coaching" | "fatigue" | "availability" | "health" | "goal" | "objective"
 - key: slug court
 - value: phrase courte utile
 - confidence: float 0..1
@@ -544,36 +546,7 @@ Si rien d'utile: {{"facts": []}}"""
 
 
 def select_prompt_facts(facts: list[dict]) -> list[str]:
-    if not facts:
-        return []
-
-    category_priority = {
-        "constraint": 0,
-        "pattern": 1,
-        "preference": 2,
-        "coaching": 3,
-        "fatigue": 4,
-    }
-    active = [fact for fact in facts if fact.get("active", True)]
-    active.sort(
-        key=lambda fact: (
-            0 if fact.get("confirmed") else 1,
-            category_priority.get(fact.get("category", ""), 9),
-            -float(fact.get("confidence", 0.0)),
-        )
-    )
-
-    selected: list[str] = []
-    seen = set()
-    for fact in active:
-        key = (fact.get("category"), fact.get("key"))
-        if key in seen:
-            continue
-        seen.add(key)
-        selected.append(f"[{fact.get('category')}] {fact.get('value')}")
-        if len(selected) >= 6:
-            break
-    return selected
+    return select_relevant_facts([normalize_fact_memory_payload(fact) for fact in facts], affects=["conversation"], limit=6)
 
 
 def _fallback_extract_facts(user_text: str) -> list[dict]:
@@ -630,7 +603,7 @@ def _normalize_fact_payload(fact: dict) -> dict:
     key = str(fact.get("key") or _slugify(value[:48])).strip() or "fact"
     category = str(fact.get("category", "preference")).strip() or "preference"
     action = str(fact.get("action", "upsert")).strip() or "upsert"
-    return {
+    normalized = {
         "category": category,
         "key": key,
         "value": value,
@@ -640,6 +613,7 @@ def _normalize_fact_payload(fact: dict) -> dict:
         "action": action,
         "active": action != "archive",
     }
+    return normalize_fact_memory_payload(normalized)
 
 
 def _slugify(value: str) -> str:

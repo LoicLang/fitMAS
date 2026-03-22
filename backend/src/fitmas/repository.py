@@ -6,6 +6,7 @@ from datetime import date, datetime, time, timedelta
 from sqlalchemy.orm import Session
 
 from fitmas import schema as s
+from fitmas.fact_memory import fact_is_current, normalize_fact_payload
 from fitmas.fitness_snapshot import FitnessSnapshot
 from fitmas.models import (
     Activity,
@@ -118,6 +119,10 @@ def to_pydantic_fact(fact: s.UserFact) -> UserFact:
         confidence=fact.confidence,
         confirmed=fact.confirmed,
         active=fact.active,
+        urgency=fact.urgency,
+        ttl=fact.ttl,
+        affects=_json_loads_list(fact.affects_json),
+        expires_at=fact.expires_at.isoformat() if fact.expires_at else None,
     )
 
 
@@ -245,13 +250,14 @@ def get_messages(db: Session, user_id: int) -> list[s.CoachMessage]:
 
 
 def get_active_facts(db: Session, user_id: int, limit: int = 12) -> list[s.UserFact]:
-    return (
+    rows = (
         db.query(s.UserFact)
         .filter(s.UserFact.user_id == user_id, s.UserFact.active.is_(True))
         .order_by(s.UserFact.confirmed.desc(), s.UserFact.confidence.desc(), s.UserFact.updated_at.desc())
-        .limit(limit)
+        .limit(max(limit * 4, 24))
         .all()
     )
+    return [row for row in rows if fact_is_current(row)][:limit]
 
 
 def get_latest_fitness_snapshot_record(db: Session, user_id: int) -> s.FitnessSnapshotRecord | None:
@@ -536,16 +542,21 @@ def replace_user_lists(
 def replace_user_facts(db: Session, user_id: int, facts: list[dict]) -> None:
     db.query(s.UserFact).filter(s.UserFact.user_id == user_id).delete()
     for fact in facts:
+        normalized = normalize_fact_payload(fact)
         db.add(
             s.UserFact(
                 user_id=user_id,
-                category=fact["category"],
-                key=fact["key"],
-                value=fact["value"],
-                source=fact.get("source", "onboarding"),
-                confidence=fact.get("confidence", 1.0),
-                confirmed=fact.get("confirmed", True),
-                active=fact.get("active", True),
+                category=normalized["category"],
+                key=normalized["key"],
+                value=normalized["value"],
+                source=normalized.get("source", "onboarding"),
+                confidence=normalized.get("confidence", 1.0),
+                confirmed=normalized.get("confirmed", True),
+                active=normalized.get("active", True),
+                urgency=normalized.get("urgency", "medium"),
+                ttl=normalized.get("ttl", "medium"),
+                affects_json=_json_dumps(normalized.get("affects", [])),
+                expires_at=normalized.get("expires_at"),
             )
         )
     db.commit()
@@ -554,9 +565,10 @@ def replace_user_facts(db: Session, user_id: int, facts: list[dict]) -> None:
 def upsert_facts(db: Session, user_id: int, facts: list[dict]) -> list[s.UserFact]:
     saved: list[s.UserFact] = []
     for fact in facts:
-        category = fact.get("category", "").strip()
-        key = fact.get("key", "").strip()
-        value = fact.get("value", "").strip()
+        normalized = normalize_fact_payload(fact)
+        category = normalized.get("category", "").strip()
+        key = normalized.get("key", "").strip()
+        value = normalized.get("value", "").strip()
         if not category or not key:
             continue
 
@@ -584,18 +596,26 @@ def upsert_facts(db: Session, user_id: int, facts: list[dict]) -> list[s.UserFac
                 category=category,
                 key=key,
                 value=value,
-                source=fact.get("source", "conversation"),
-                confidence=float(fact.get("confidence", 0.7)),
-                confirmed=bool(fact.get("confirmed", False)),
+                source=normalized.get("source", "conversation"),
+                confidence=float(normalized.get("confidence", 0.7)),
+                confirmed=bool(normalized.get("confirmed", False)),
                 active=True,
+                urgency=normalized.get("urgency", "medium"),
+                ttl=normalized.get("ttl", "medium"),
+                affects_json=_json_dumps(normalized.get("affects", [])),
+                expires_at=normalized.get("expires_at"),
             )
             db.add(row)
         else:
             row.value = value
-            row.source = fact.get("source", row.source)
-            row.confidence = max(row.confidence, float(fact.get("confidence", row.confidence)))
-            row.confirmed = row.confirmed or bool(fact.get("confirmed", False))
+            row.source = normalized.get("source", row.source)
+            row.confidence = max(row.confidence, float(normalized.get("confidence", row.confidence)))
+            row.confirmed = row.confirmed or bool(normalized.get("confirmed", False))
             row.active = True
+            row.urgency = normalized.get("urgency", row.urgency)
+            row.ttl = normalized.get("ttl", row.ttl)
+            row.affects_json = _json_dumps(normalized.get("affects", _json_loads_list(row.affects_json)))
+            row.expires_at = normalized.get("expires_at")
 
         saved.append(row)
 

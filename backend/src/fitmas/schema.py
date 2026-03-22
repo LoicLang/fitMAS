@@ -111,6 +111,10 @@ class UserFact(Base):
     confidence: Mapped[float] = mapped_column(default=0.7)
     confirmed: Mapped[bool] = mapped_column(default=False)
     active: Mapped[bool] = mapped_column(default=True)
+    urgency: Mapped[str] = mapped_column(String(16), default="medium")
+    ttl: Mapped[str] = mapped_column(String(16), default="medium")
+    affects_json: Mapped[str] = mapped_column(Text, default="[]")
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True, default=None)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
         DateTime, server_default=func.now(), onupdate=func.now()

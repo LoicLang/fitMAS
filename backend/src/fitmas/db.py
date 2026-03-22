@@ -81,6 +81,12 @@ def _ensure_sqlite_columns() -> None:
             ("map_polyline", "ALTER TABLE activities ADD COLUMN map_polyline TEXT"),
             ("start_latlng", "ALTER TABLE activities ADD COLUMN start_latlng VARCHAR(64)"),
         ],
+        "user_facts": [
+            ("urgency", "ALTER TABLE user_facts ADD COLUMN urgency VARCHAR(16) DEFAULT 'medium'"),
+            ("ttl", "ALTER TABLE user_facts ADD COLUMN ttl VARCHAR(16) DEFAULT 'medium'"),
+            ("affects_json", "ALTER TABLE user_facts ADD COLUMN affects_json TEXT DEFAULT '[]'"),
+            ("expires_at", "ALTER TABLE user_facts ADD COLUMN expires_at DATETIME"),
+        ],
         "coach_messages": [
             ("proactive", "ALTER TABLE coach_messages ADD COLUMN proactive BOOLEAN DEFAULT 0"),
         ],
