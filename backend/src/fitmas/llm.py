@@ -31,6 +31,8 @@ Tu aides a construire une relation de coaching credible des la premiere interact
 
 class MutationDecision(BaseModel):
     mutation_type: str        # "move_session" | "lighten_day" | "swap_sessions" | "update_session" | "no_change"
+    target_session_id: int | None = None
+    target_date: str | None = None
     from_day: str | None = None
     to_day: str | None = None
     new_title: str | None = None
@@ -101,6 +103,7 @@ def _request_json(*, system: str, prompt: str, model: str = "claude-haiku-4-5-20
 def decide(
     user_text: str,
     plan_summary: str,
+    timeline_summary: str | None = None,
     conversation_history: list[dict] | None = None,
     coach_context: dict | None = None,
     remembered_facts: list[dict] | None = None,
@@ -144,9 +147,14 @@ def decide(
     if selected_facts:
         facts_block = "\nMemoire utile:\n" + "\n".join(f"- {fact}" for fact in selected_facts) + "\n"
 
+    timeline_block = ""
+    if timeline_summary:
+        timeline_block = f"\nCalendrier date reel:\n{timeline_summary}\n"
+
     prompt = f"""{time_block}
 Plan de la semaine:
 {plan_summary}
+{timeline_block}
 {coach_block}{facts_block}
 {history_block}
 Nouveau message de l'utilisateur:
@@ -155,27 +163,31 @@ Nouveau message de l'utilisateur:
 Analyse ce message et decide quelle action prendre sur le plan de la semaine.
 
 Actions possibles:
-- "move_session": deplacer une seance d'un jour a un autre (from_day + to_day)
+- "move_session": deplacer une seance concrete a une date cible
 - "swap_sessions": echanger les seances de deux jours (from_day + to_day)
-- "lighten_day": alleger un jour (from_day seul)
-- "update_session": modifier le titre ou l'objectif d'un jour (from_day + new_title et/ou new_goal)
+- "lighten_day": alleger une seance concrete ou un jour
+- "update_session": modifier le titre ou l'objectif d'une seance concrete
 - "no_change": aucune modification necessaire
 
 Les jours doivent etre en anglais: monday, tuesday, wednesday, thursday, friday, saturday, sunday.
+Quand une seance concrete est identifiable dans le calendrier date reel, privilegie toujours `target_session_id`.
+Pour un deplacement concret, renseigne `target_date` au format ISO `YYYY-MM-DD`.
 Si l'utilisateur parle de aujourd'hui, demain, hier, ce soir, demain matin ou demande la date/l'heure/jour exact, tu dois raisonner a partir du contexte temporel exact ci-dessus.
 Si la bonne reponse est purement temporelle ou explicative, garde "mutation_type": "no_change" et reponds clairement dans "fitmas_message".
 
 Exemples:
-- "mardi c'est mort, je bascule sur jeudi" → move_session, from_day: "tuesday", to_day: "thursday"
-- "mercredi j'ai une grosse journee" → lighten_day, from_day: "wednesday"
+- "mardi c'est mort, je bascule sur jeudi" → move_session, target_session_id: 12, target_date: "2026-03-26"
+- "mercredi j'ai une grosse journee" → lighten_day, target_session_id: 12
 - "echange samedi et dimanche" → swap_sessions, from_day: "saturday", to_day: "sunday"
-- "jeudi je prefere faire du fractionne" → update_session, from_day: "thursday", new_title: "Fractionne 8x400m"
+- "jeudi je prefere faire du fractionne" → update_session, target_session_id: 12, new_title: "Fractionne 8x400m"
 - "ok ca me va" → no_change
 - "on est quel jour exactement ?" → no_change, fitmas_message explique le jour et la date locale
 - "ce soir c'est quoi deja ?" → no_change ou update utile selon la seance du jour et le contexte temporel
 
 Reponds avec un JSON valide contenant exactement ces champs:
 - "mutation_type": une des valeurs ci-dessus
+- "target_session_id": id de la seance cible ou null
+- "target_date": date cible ISO `YYYY-MM-DD` ou null
 - "from_day": jour source (anglais) ou null
 - "to_day": jour destination (anglais) ou null
 - "new_title": nouveau titre de seance si update_session, null sinon
@@ -196,8 +208,8 @@ Reponds UNIQUEMENT avec le JSON, sans markdown, sans texte autour."""
 
         decision = MutationDecision(**data)
         logger.info(
-            "LLM decision: %s (from=%s, to=%s) — %s",
-            decision.mutation_type, decision.from_day, decision.to_day,
+            "LLM decision: %s (session=%s, from=%s, to=%s, date=%s) — %s",
+            decision.mutation_type, decision.target_session_id, decision.from_day, decision.to_day, decision.target_date,
             decision.rationale,
         )
         return decision
@@ -214,6 +226,19 @@ def make_plan_summary(days: list) -> str:
         lines.append(
             f"- {d.label} ({d.day}): [{getattr(d, 'sport_type', 'running')}] {d.session_title} — {d.session_goal} "
             f"(priorite: {d.priority}, flexibilite: {d.flexibility})"
+        )
+    return "\n".join(lines)
+
+
+def make_timeline_summary(sessions: list) -> str:
+    lines = []
+    for session in sessions:
+        day = getattr(session, "day", "")
+        date_value = getattr(session, "scheduled_date", "")
+        lines.append(
+            f"- id={getattr(session, 'id', '?')} | date={date_value} | day={day} | "
+            f"[{getattr(session, 'sport_type', 'running')}] {getattr(session, 'session_title', '')} "
+            f"| goal={getattr(session, 'session_goal', '')} | status={getattr(session, 'completion_status', 'planned')}"
         )
     return "\n".join(lines)
 
