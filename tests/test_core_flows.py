@@ -145,6 +145,7 @@ class FitMASCoreFlowsTest(unittest.TestCase):
                 captured["execution_summary"] = kwargs.get("execution_summary") or ""
                 captured["temporal_summary"] = kwargs.get("temporal_summary") or ""
                 captured["activity_claim_summary"] = kwargs.get("activity_claim_summary") or ""
+                captured["selected_facts"] = "\n".join(kwargs.get("coach_context", {}).get("selected_facts", []))
                 return MutationDecision(
                     mutation_type="no_change",
                     rationale="ok",
@@ -162,6 +163,30 @@ class FitMASCoreFlowsTest(unittest.TestCase):
         self.assertIn("reference principale: today", captured["temporal_summary"])
         self.assertIn("sport: running", captured["activity_claim_summary"])
         self.assertIn("duree_min: 30", captured["activity_claim_summary"])
+        self.assertIn("Activite declaree par l'utilisateur", captured["selected_facts"])
+
+    def test_message_flow_persists_unlogged_activity_claim_fact(self) -> None:
+        self._create_plan_for_today()
+        original_decide = api_messages.decide
+        original_extract_facts = api_messages.extract_facts
+        try:
+            api_messages.decide = lambda *args, **kwargs: MutationDecision(
+                mutation_type="no_change",
+                rationale="ok",
+                fitmas_message="Bien recu.",
+            )
+            api_messages.extract_facts = lambda *args, **kwargs: []
+            self.client.post("/api/v0/messages", json={"text": "J'ai couru aujourd'hui 30 min"})
+        finally:
+            api_messages.decide = original_decide
+            api_messages.extract_facts = original_extract_facts
+
+        facts = self.client.get("/api/v0/facts").json()
+
+        self.assertEqual(len(facts), 1)
+        self.assertEqual(facts[0]["category"], "execution")
+        self.assertEqual(facts[0]["ttl"], "immediate")
+        self.assertIn("30 min", facts[0]["value"])
 
     def test_training_load_outputs_are_stable(self) -> None:
         activities = [

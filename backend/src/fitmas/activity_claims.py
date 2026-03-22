@@ -3,9 +3,10 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Sequence
+from typing import Any, Sequence
 
 from fitmas.temporal_resolver import resolve_temporal_context
+from fitmas.time_context import get_timezone
 
 SPORT_KEYWORDS = {
     "running": ("couru", "courir", "course", "footing", "run", "running"),
@@ -106,6 +107,32 @@ def format_activity_claim_for_prompt(claim: ActivityClaim | None) -> str:
     )
 
 
+def build_claim_fact_payloads(
+    claim: ActivityClaim | None,
+    *,
+    activities: Sequence[Any],
+    timezone_name: str | None,
+) -> list[dict[str, Any]]:
+    if claim is None:
+        return []
+    if claim.resolved_date_iso is None:
+        return []
+    if _claim_is_backed_by_activity(claim, activities=activities, timezone_name=timezone_name):
+        return []
+    return [
+        {
+            "category": "execution",
+            "key": _claim_key(claim),
+            "value": _claim_value(claim),
+            "confidence": claim.confidence,
+            "confirmed": True,
+            "source": "conversation",
+            "affects": ["conversation", "heartbeat"],
+            "action": "upsert",
+        }
+    ]
+
+
 def extract_recent_activity_claim(
     conversation_history: Sequence[dict],
     *,
@@ -124,6 +151,50 @@ def extract_recent_activity_claim(
     if current_claim is not None:
         claims.append(current_claim)
     return merge_activity_claims(claims)
+
+
+def _claim_is_backed_by_activity(
+    claim: ActivityClaim,
+    *,
+    activities: Sequence[Any],
+    timezone_name: str | None,
+) -> bool:
+    for activity in activities:
+        if _activity_local_date(activity, timezone_name=timezone_name) != claim.resolved_date_iso:
+            continue
+        activity_sport = _activity_value(activity, "sport_type")
+        activity_duration = _activity_value(activity, "duration_min")
+        if claim.sport_type and activity_sport == claim.sport_type:
+            return True
+        if claim.sport_type is None and claim.duration_min is not None and activity_duration == claim.duration_min:
+            return True
+    return False
+
+
+def _claim_key(claim: ActivityClaim) -> str:
+    sport = claim.sport_type or "unknown"
+    return f"claimed_activity_{claim.resolved_date_iso}_{sport}"
+
+
+def _claim_value(claim: ActivityClaim) -> str:
+    sport = claim.sport_type or "sport inconnu"
+    duration = f"{claim.duration_min} min" if claim.duration_min is not None else "duree inconnue"
+    return f"Activite declaree par l'utilisateur: {sport}, {duration}, date {claim.resolved_date_iso}, non loggee."
+
+
+def _activity_local_date(activity: Any, *, timezone_name: str | None) -> str | None:
+    started_at = _activity_value(activity, "started_at") or _activity_value(activity, "created_at")
+    if not isinstance(started_at, datetime):
+        return None
+    if started_at.tzinfo is None:
+        started_at = started_at.replace(tzinfo=get_timezone(timezone_name))
+    return started_at.astimezone(get_timezone(timezone_name)).date().isoformat()
+
+
+def _activity_value(activity: Any, key: str) -> Any:
+    if isinstance(activity, dict):
+        return activity.get(key)
+    return getattr(activity, key, None)
 
 
 def _extract_sport(lowered: str) -> str | None:

@@ -6,7 +6,12 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from fitmas import mutations, repository as repo
-from fitmas.activity_claims import extract_recent_activity_claim, format_activity_claim_for_prompt
+from fitmas.activity_claims import (
+    build_claim_fact_payloads,
+    extract_activity_claim,
+    extract_recent_activity_claim,
+    format_activity_claim_for_prompt,
+)
 from fitmas.api_payloads import IncomingMessage
 from fitmas.db import get_db
 from fitmas.execution_context import build_today_execution_context, format_execution_context_for_prompt
@@ -33,7 +38,6 @@ def post_message(payload: IncomingMessage, db: Session = Depends(get_db)) -> Mes
 
     msgs = repo.get_messages(db, user.id)
     conversation_history = [{"role": m.role, "text": m.text} for m in msgs]
-    active_facts = [repo.to_pydantic_fact(fact).model_dump() for fact in repo.get_active_facts(db, user.id)]
     pydantic_plan = repo.to_pydantic_plan(plan)
     scheduled_sessions = repo.get_scheduled_sessions(db, user.id, limit=21)
     timeline = [repo.to_pydantic_scheduled_session(session) for session in scheduled_sessions]
@@ -44,11 +48,25 @@ def post_message(payload: IncomingMessage, db: Session = Depends(get_db)) -> Mes
         payload.text,
         timezone_name=user.timezone,
     )
+    current_activity_claim = extract_activity_claim(
+        payload.text,
+        timezone_name=user.timezone,
+    )
     recent_activity_claim = extract_recent_activity_claim(
         conversation_history[:-1],
         current_text=payload.text,
         timezone_name=user.timezone,
     )
+    if current_activity_claim is not None:
+        claim_facts = build_claim_fact_payloads(
+            recent_activity_claim,
+            activities=activities,
+            timezone_name=user.timezone,
+        )
+        if claim_facts:
+            repo.upsert_facts(db, user.id, claim_facts)
+
+    active_facts = [repo.to_pydantic_fact(fact).model_dump() for fact in repo.get_active_facts(db, user.id)]
     execution_context = build_today_execution_context(
         timezone_name=user.timezone,
         scheduled_sessions=scheduled_sessions,
