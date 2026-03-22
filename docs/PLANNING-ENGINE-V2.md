@@ -155,6 +155,7 @@ Ordre recommande :
 - `planning_decision.py` introduit la decision explicite avant generation de semaine
 - tables SQL `fitness_snapshots`, `readiness_snapshots`, `planning_decisions` posees pour l'audit trail V2
 - `repository.py` sait maintenant persister et relire ces objets domaine V2
+- `planning_state.py` assemble et persiste la pipeline V2 complete depuis la DB actuelle
 - tests cibles ajoutes pour ces cinq briques domaine
 
 ### Prochaines briques

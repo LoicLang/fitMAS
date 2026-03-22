@@ -229,6 +229,7 @@ Deja pose :
 - `planning_decision.py` pour choisir explicitement le mode de semaine avant le planner
 - tables SQL d'audit V2 pour `fitness_snapshots`, `readiness_snapshots`, `planning_decisions`
 - helpers repository pour persister / relire les objets domaine V2
+- `planning_state.py` comme pipeline partagee build + persist
 - tests unitaires cibles pour ces cinq briques
 
 | # | Tâche | Fichiers | Impact |
