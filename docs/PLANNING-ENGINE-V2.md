@@ -154,12 +154,13 @@ Ordre recommande :
 - `readiness.py` derive un `ReadinessState` explicite avec flags auditables
 - `planning_decision.py` introduit la decision explicite avant generation de semaine
 - tables SQL `fitness_snapshots`, `readiness_snapshots`, `planning_decisions` posees pour l'audit trail V2
+- `repository.py` sait maintenant persister et relire ces objets domaine V2
 - tests cibles ajoutes pour ces cinq briques domaine
 
 ### Prochaines briques
 
-- helpers repository pour persister / relire ces snapshots et decisions
 - branchement du planner sur `PlanningDecision`
+- branchement de l'onboarding et du scheduler hebdo sur cette pipeline
 
 ## Details par module
 

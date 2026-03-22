@@ -228,6 +228,7 @@ Deja pose :
 - `readiness.py` pour transformer charge + contraintes + facts en etat lisible
 - `planning_decision.py` pour choisir explicitement le mode de semaine avant le planner
 - tables SQL d'audit V2 pour `fitness_snapshots`, `readiness_snapshots`, `planning_decisions`
+- helpers repository pour persister / relire les objets domaine V2
 - tests unitaires cibles pour ces cinq briques
 
 | # | Tâche | Fichiers | Impact |
