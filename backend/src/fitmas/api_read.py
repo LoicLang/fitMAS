@@ -1,11 +1,27 @@
 from __future__ import annotations
 
+from datetime import time, timedelta
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from fitmas import repository as repo, schema as s, strava
 from fitmas.db import get_db
-from fitmas.models import Activity, ChangeNote, DayId, Profile, ScheduledSession, TodayView, UserFact, WatchItem, WeeklyPlan
+from fitmas.models import (
+    Activity,
+    ChangeNote,
+    DayId,
+    Profile,
+    RecentSportActivity,
+    ScheduledSession,
+    TodayFitness,
+    TodayView,
+    UserFact,
+    WatchItem,
+    WeeklyPlan,
+)
+from fitmas.training_load import compute_ctl_atl_tsb
+from fitmas.time_context import get_local_now
 
 router = APIRouter()
 
@@ -23,6 +39,8 @@ def _build_today_view(
     else:
         change_notes = []
         watch_items = []
+    fitness = _build_today_fitness(db, user=user)
+    recent_activity = _build_recent_activity(db, user=user, session=session)
     return TodayView(
         scheduled_session_id=session.id,
         scheduled_date=session.scheduled_date.date().isoformat(),
@@ -40,6 +58,55 @@ def _build_today_view(
         completion_status=session.completion_status,
         change_notes=change_notes,
         watch_items=watch_items,
+        fitness=fitness,
+        recent_activity=recent_activity,
+    )
+
+
+def _build_today_fitness(db: Session, *, user: s.User) -> TodayFitness:
+    activities = repo.get_activities(db, user.id, limit=500)
+    local_today = get_local_now(user.timezone).date()
+    load = compute_ctl_atl_tsb(activities, as_of_date=local_today)
+    tsb = float(load["tsb"])
+    freshness = "stable"
+    if tsb >= 5:
+        freshness = "fresh"
+    elif tsb < -10:
+        freshness = "fatigued"
+    return TodayFitness(
+        ctl=float(load["ctl"]),
+        atl=float(load["atl"]),
+        tsb=tsb,
+        freshness=freshness,
+    )
+
+
+def _build_recent_activity(
+    db: Session,
+    *,
+    user: s.User,
+    session: s.ScheduledSession,
+) -> RecentSportActivity | None:
+    if session.sport_type == "rest":
+        return None
+    session_day_end = datetime.combine(session.scheduled_date.date(), time.min) + timedelta(days=1)
+    activity = repo.get_recent_activity_for_sport(
+        db,
+        user.id,
+        sport_type=session.sport_type,
+        before=session_day_end,
+    )
+    if activity is None:
+        return None
+    return RecentSportActivity(
+        id=activity.id,
+        title=activity.title,
+        started_at=activity.started_at.isoformat() if activity.started_at else None,
+        duration_min=activity.duration_min,
+        distance_m=activity.distance_m,
+        avg_hr=activity.avg_hr,
+        avg_speed=activity.avg_speed,
+        tss=activity.tss,
     )
 
 
@@ -100,6 +167,8 @@ def get_today_by_day(day: DayId, db: Session = Depends(get_db)) -> TodayView:
         ),
         None,
     )
+    if matching_session is not None:
+        return _build_today_view(db, user=user, session=matching_session)
     return TodayView(
         scheduled_session_id=matching_session.id if matching_session else 0,
         scheduled_date=matching_session.scheduled_date.date().isoformat() if matching_session else "",

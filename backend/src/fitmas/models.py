@@ -76,6 +76,24 @@ class Profile(BaseModel):
     integrations: list[str]
 
 
+class TodayFitness(BaseModel):
+    ctl: float = 0.0
+    atl: float = 0.0
+    tsb: float = 0.0
+    freshness: str = "stable"
+
+
+class RecentSportActivity(BaseModel):
+    id: int
+    title: str
+    started_at: str | None = None
+    duration_min: int | None = None
+    distance_m: float | None = None
+    avg_hr: float | None = None
+    avg_speed: float | None = None
+    tss: float | None = None
+
+
 class TodayView(BaseModel):
     scheduled_session_id: int
     scheduled_date: str
@@ -93,6 +111,8 @@ class TodayView(BaseModel):
     completion_status: str = "planned"
     change_notes: list[ChangeNote]
     watch_items: list[WatchItem]
+    fitness: TodayFitness | None = None
+    recent_activity: RecentSportActivity | None = None
 
 
 class MoveSessionPayload(BaseModel):

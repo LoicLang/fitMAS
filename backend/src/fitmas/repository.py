@@ -210,6 +210,26 @@ def get_activities(db: Session, user_id: int, limit: int = 30) -> list[s.Activit
     )
 
 
+def get_recent_activity_for_sport(
+    db: Session,
+    user_id: int,
+    *,
+    sport_type: str,
+    before: datetime | None = None,
+) -> s.Activity | None:
+    query = (
+        db.query(s.Activity)
+        .filter(s.Activity.user_id == user_id, s.Activity.sport_type == sport_type)
+    )
+    if before is not None:
+        query = query.filter(s.Activity.started_at.is_not(None), s.Activity.started_at < before)
+    return (
+        query
+        .order_by(s.Activity.started_at.is_(None), s.Activity.started_at.desc(), s.Activity.created_at.desc())
+        .first()
+    )
+
+
 def get_activity_by_external_id(db: Session, user_id: int, external_id: str) -> s.Activity | None:
     return (
         db.query(s.Activity)

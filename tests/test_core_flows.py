@@ -134,6 +134,34 @@ class FitMASCoreFlowsTest(unittest.TestCase):
         self.assertIn("series", load)
         self.assertGreater(len(load["series"]), 0)
 
+    def test_today_view_exposes_fitness_and_recent_same_sport_activity(self) -> None:
+        _, session = self._create_plan_for_today()
+        repo.add_activity(
+            self.db,
+            user_id=self.user.id,
+            source="manual",
+            sport_type="running",
+            title="Footing repere",
+            duration_min=48,
+            distance_m=9200,
+            elevation_m=80,
+            perceived_load=3,
+            note="propre",
+            started_at=session.scheduled_date - timedelta(days=3),
+            matched_day=None,
+            match_reason="",
+            avg_hr=148,
+            avg_speed=3.35,
+            tss=44.0,
+        )
+
+        today = self.client.get("/api/v0/today").json()
+
+        self.assertIn("fitness", today)
+        self.assertIn("recent_activity", today)
+        self.assertEqual(today["recent_activity"]["title"], "Footing repere")
+        self.assertGreaterEqual(today["fitness"]["ctl"], 0)
+
 
 if __name__ == "__main__":
     unittest.main()
