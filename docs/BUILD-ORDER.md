@@ -226,7 +226,8 @@ Deja pose :
 - `athlete_profile.py` pour assembler un snapshot athlete depuis la DB actuelle
 - `fitness_snapshot.py` pour produire un etat de charge exploitable par le futur decision engine
 - `readiness.py` pour transformer charge + contraintes + facts en etat lisible
-- tests unitaires cibles pour ces quatre briques
+- `planning_decision.py` pour choisir explicitement le mode de semaine avant le planner
+- tests unitaires cibles pour ces cinq briques
 
 | # | Tâche | Fichiers | Impact |
 |---|-------|----------|--------|

@@ -152,12 +152,13 @@ Ordre recommande :
 - `athlete_profile.py` assemble un `AthleteProfileSnapshot` deterministe depuis `User`, `UserSport`, `UserConstraint`, `UserPreference` et `UserFact`
 - `fitness_snapshot.py` produit un `FitnessSnapshot` pur depuis activites + seances datees
 - `readiness.py` derive un `ReadinessState` explicite avec flags auditables
-- tests cibles ajoutes pour ces quatre briques domaine
+- `planning_decision.py` introduit la decision explicite avant generation de semaine
+- tests cibles ajoutes pour ces cinq briques domaine
 
 ### Prochaines briques
 
 - tables de snapshots / decisions en SQL
-- `planning_decision.py`
+- branchement du planner sur `PlanningDecision`
 
 ## Details par module
 
