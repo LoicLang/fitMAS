@@ -153,11 +153,12 @@ Ordre recommande :
 - `fitness_snapshot.py` produit un `FitnessSnapshot` pur depuis activites + seances datees
 - `readiness.py` derive un `ReadinessState` explicite avec flags auditables
 - `planning_decision.py` introduit la decision explicite avant generation de semaine
+- tables SQL `fitness_snapshots`, `readiness_snapshots`, `planning_decisions` posees pour l'audit trail V2
 - tests cibles ajoutes pour ces cinq briques domaine
 
 ### Prochaines briques
 
-- tables de snapshots / decisions en SQL
+- helpers repository pour persister / relire ces snapshots et decisions
 - branchement du planner sur `PlanningDecision`
 
 ## Details par module

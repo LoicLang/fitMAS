@@ -227,6 +227,7 @@ Deja pose :
 - `fitness_snapshot.py` pour produire un etat de charge exploitable par le futur decision engine
 - `readiness.py` pour transformer charge + contraintes + facts en etat lisible
 - `planning_decision.py` pour choisir explicitement le mode de semaine avant le planner
+- tables SQL d'audit V2 pour `fitness_snapshots`, `readiness_snapshots`, `planning_decisions`
 - tests unitaires cibles pour ces cinq briques
 
 | # | Tâche | Fichiers | Impact |
