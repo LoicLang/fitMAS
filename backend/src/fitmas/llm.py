@@ -32,6 +32,7 @@ Tu aides a construire une relation de coaching credible des la premiere interact
 class MutationDecision(BaseModel):
     mutation_type: str        # "move_session" | "lighten_day" | "swap_sessions" | "update_session" | "no_change"
     target_session_id: int | None = None
+    second_session_id: int | None = None
     target_date: str | None = None
     from_day: str | None = None
     to_day: str | None = None
@@ -153,7 +154,7 @@ def decide(
         timeline_block = f"\nCalendrier date reel:\n{timeline_summary}\n"
 
     prompt = f"""{time_block}
-Plan de la semaine:
+Repere legacy semaine courante:
 {plan_summary}
 {timeline_block}
 {coach_block}{facts_block}
@@ -161,17 +162,18 @@ Plan de la semaine:
 Nouveau message de l'utilisateur:
 {user_text}
 
-Analyse ce message et decide quelle action prendre sur le plan de la semaine.
+Analyse ce message et decide quelle action prendre sur le calendrier d'entrainement reel.
 
 Actions possibles:
 - "move_session": deplacer une seance concrete a une date cible
-- "swap_sessions": echanger les seances de deux jours (from_day + to_day)
+- "swap_sessions": echanger deux seances concretes
 - "lighten_day": alleger une seance concrete ou un jour
 - "update_session": modifier le titre ou l'objectif d'une seance concrete
 - "no_change": aucune modification necessaire
 
 Les jours doivent etre en anglais: monday, tuesday, wednesday, thursday, friday, saturday, sunday.
 Quand une seance concrete est identifiable dans le calendrier date reel, privilegie toujours `target_session_id`.
+Pour un echange concret, renseigne `target_session_id` et `second_session_id`.
 Pour un deplacement concret, renseigne `target_date` au format ISO `YYYY-MM-DD`.
 Si l'utilisateur parle de aujourd'hui, demain, hier, ce soir, demain matin ou demande la date/l'heure/jour exact, tu dois raisonner a partir du contexte temporel exact ci-dessus.
 Si la bonne reponse est purement temporelle ou explicative, garde "mutation_type": "no_change" et reponds clairement dans "fitmas_message".
@@ -179,7 +181,7 @@ Si la bonne reponse est purement temporelle ou explicative, garde "mutation_type
 Exemples:
 - "mardi c'est mort, je bascule sur jeudi" → move_session, target_session_id: 12, target_date: "2026-03-26"
 - "mercredi j'ai une grosse journee" → lighten_day, target_session_id: 12
-- "echange samedi et dimanche" → swap_sessions, from_day: "saturday", to_day: "sunday"
+- "echange samedi et dimanche" → swap_sessions, target_session_id: 12, second_session_id: 13
 - "jeudi je prefere faire du fractionne" → update_session, target_session_id: 12, new_title: "Fractionne 8x400m"
 - "ok ca me va" → no_change
 - "on est quel jour exactement ?" → no_change, fitmas_message explique le jour et la date locale
@@ -188,6 +190,7 @@ Exemples:
 Reponds avec un JSON valide contenant exactement ces champs:
 - "mutation_type": une des valeurs ci-dessus
 - "target_session_id": id de la seance cible ou null
+- "second_session_id": id de la 2e seance si swap, sinon null
 - "target_date": date cible ISO `YYYY-MM-DD` ou null
 - "from_day": jour source (anglais) ou null
 - "to_day": jour destination (anglais) ou null
@@ -209,8 +212,8 @@ Reponds UNIQUEMENT avec le JSON, sans markdown, sans texte autour."""
 
         decision = MutationDecision(**data)
         logger.info(
-            "LLM decision: %s (session=%s, from=%s, to=%s, date=%s) — %s",
-            decision.mutation_type, decision.target_session_id, decision.from_day, decision.to_day, decision.target_date,
+            "LLM decision: %s (session=%s, session2=%s, from=%s, to=%s, date=%s) — %s",
+            decision.mutation_type, decision.target_session_id, decision.second_session_id, decision.from_day, decision.to_day, decision.target_date,
             decision.rationale,
         )
         return decision
