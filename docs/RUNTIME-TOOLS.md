@@ -67,6 +67,7 @@ Role :
 ### `tool_metrics.py`
 
 Trace minimale :
+- `tool_offered`
 - `tool_requested`
 - `tool_called`
 - `tool_name`
@@ -78,10 +79,17 @@ Trace minimale :
 - `prompt_tokens_estimate`
 - `response_tokens_estimate`
 - `total_duration_ms`
+- `response_stop_reason`
 
 V1 :
 - logs structures uniquement
 - pas de table SQL dediee pour l'instant
+- `tool_runtime.py` logge toujours l'execution d'un tool concret
+- `llm.py` logge maintenant aussi la session tool-use du chat :
+  - tools offerts mais non utilises
+  - boucle tool complete
+  - fallback JSON apres tool loop casse
+  - erreur de premier ou second round-trip
 
 ## Pipelines
 
@@ -100,6 +108,11 @@ Etat actuel :
 - le chat peut maintenant faire **1 tool call max** sur certaines requetes de lecture evidentes
 - activation bornee par heuristique simple (`question/recherche`) dans `llm.py`
 - puis reponse finale JSON comme avant
+- chaque tour outille produit maintenant une trace session-level exploitable pour mesurer :
+  - si les tools ont ete seulement offres
+  - si le modele les a effectivement demandes
+  - si le 2e round-trip a abouti
+  - combien de tokens ont ete consommes sur la boucle
 
 Cas typiques :
 - "c'etait quoi ma plus longue sortie ?"

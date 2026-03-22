@@ -64,6 +64,7 @@ Les garde-fous, la planification, les permissions, les cooldowns et la persistan
 - Tool mémoire partagé : `fact_memory.py`
 - Socle runtime tools posé : `tool_contract.py`, `tool_registry.py`, `tool_runtime.py`, `tool_metrics.py`
 - Le chat peut maintenant faire un unique tool call read-only borne pour certaines questions de lecture
+- Les metrics tools couvrent aussi maintenant les branches `tools offerts sans appel`, `tool loop complete` et `fallback de la boucle`
 - La boucle coach reçoit maintenant un résumé structuré `prévu vs réel`, une résolution temporelle, des claims d'activité récents, une mémoire utile sélectionnée et quelques signaux filtrés
 - `signals.py` et `heartbeat.py` lisent mieux les activités réelles hors plan au lieu de s'appuyer uniquement sur le plan
 
