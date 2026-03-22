@@ -225,7 +225,8 @@ Deja pose :
 - `planning_config.py` pour centraliser les seuils V2
 - `athlete_profile.py` pour assembler un snapshot athlete depuis la DB actuelle
 - `fitness_snapshot.py` pour produire un etat de charge exploitable par le futur decision engine
-- tests unitaires cibles pour ces trois briques
+- `readiness.py` pour transformer charge + contraintes + facts en etat lisible
+- tests unitaires cibles pour ces quatre briques
 
 | # | Tâche | Fichiers | Impact |
 |---|-------|----------|--------|

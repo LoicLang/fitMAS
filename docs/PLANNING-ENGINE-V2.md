@@ -151,12 +151,12 @@ Ordre recommande :
 - `planning_config.py` pose les seuils et overrides V1 centralises par sport et par niveau
 - `athlete_profile.py` assemble un `AthleteProfileSnapshot` deterministe depuis `User`, `UserSport`, `UserConstraint`, `UserPreference` et `UserFact`
 - `fitness_snapshot.py` produit un `FitnessSnapshot` pur depuis activites + seances datees
-- tests cibles ajoutes pour ces trois briques domaine
+- `readiness.py` derive un `ReadinessState` explicite avec flags auditables
+- tests cibles ajoutes pour ces quatre briques domaine
 
 ### Prochaines briques
 
 - tables de snapshots / decisions en SQL
-- `readiness.py`
 - `planning_decision.py`
 
 ## Details par module
