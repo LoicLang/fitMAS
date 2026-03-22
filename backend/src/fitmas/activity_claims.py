@@ -16,6 +16,9 @@ SPORT_KEYWORDS = {
     "climbing": ("escalade", "grimpe", "bloc", "voie", "climbing"),
 }
 
+CLAIM_VERBS = ("j'ai", "je fais", "je viens de", "fait", "couru", "nag", "roul", "grimp", "renfo", "muscu")
+CORRECTION_MARKERS = ("non", "plutot", "plutôt", "en fait", "finalement", "c'etait", "c'était")
+
 
 @dataclass(frozen=True, slots=True)
 class ActivityClaim:
@@ -34,12 +37,14 @@ def extract_activity_claim(
     now: datetime | None = None,
 ) -> ActivityClaim | None:
     lowered = text.lower()
-    if not any(token in lowered for token in ("j'ai", "je fais", "je viens de", "fait", "couru", "nag", "roul", "grimp", "renfo", "muscu")):
+    temporal = resolve_temporal_context(text, timezone_name=timezone_name, now=now)
+    has_claim_verb = any(token in lowered for token in CLAIM_VERBS)
+    has_correction_marker = any(token in lowered for token in CORRECTION_MARKERS)
+    if not has_claim_verb and not (has_correction_marker and temporal.primary_reference != "unspecified"):
         return None
 
     sport_type = _extract_sport(lowered)
     duration_min = _extract_duration_min(lowered)
-    temporal = resolve_temporal_context(text, timezone_name=timezone_name, now=now)
     if sport_type is None and duration_min is None and temporal.primary_reference == "unspecified":
         return None
 
@@ -133,6 +138,27 @@ def build_claim_fact_payloads(
     ]
 
 
+def build_claim_correction_payloads(
+    previous_claim: ActivityClaim | None,
+    updated_claim: ActivityClaim | None,
+) -> list[dict[str, Any]]:
+    if previous_claim is None or updated_claim is None:
+        return []
+    previous_key = _claim_key(previous_claim) if previous_claim.resolved_date_iso else None
+    updated_key = _claim_key(updated_claim) if updated_claim.resolved_date_iso else None
+    if not previous_key or not updated_key or previous_key == updated_key:
+        return []
+    return [
+        {
+            "category": "execution",
+            "key": previous_key,
+            "value": previous_claim.source_text,
+            "source": "conversation",
+            "action": "archive",
+        }
+    ]
+
+
 def extract_claims_from_facts(
     facts: Sequence[Any],
     *,
@@ -167,6 +193,14 @@ def extract_recent_activity_claim(
     if current_claim is not None:
         claims.append(current_claim)
     return merge_activity_claims(claims)
+
+
+def is_activity_claim_correction(text: str, *, timezone_name: str | None) -> bool:
+    lowered = text.lower()
+    return any(token in lowered for token in CORRECTION_MARKERS) and resolve_temporal_context(
+        text,
+        timezone_name=timezone_name,
+    ).primary_reference != "unspecified"
 
 
 def _claim_is_backed_by_activity(

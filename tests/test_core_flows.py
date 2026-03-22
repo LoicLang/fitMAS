@@ -188,6 +188,31 @@ class FitMASCoreFlowsTest(unittest.TestCase):
         self.assertEqual(facts[0]["ttl"], "immediate")
         self.assertIn("30 min", facts[0]["value"])
 
+    def test_message_flow_archives_superseded_claim_after_temporal_correction(self) -> None:
+        self._create_plan_for_today()
+        original_decide = api_messages.decide
+        original_extract_facts = api_messages.extract_facts
+        try:
+            api_messages.decide = lambda *args, **kwargs: MutationDecision(
+                mutation_type="no_change",
+                rationale="ok",
+                fitmas_message="Bien recu.",
+            )
+            api_messages.extract_facts = lambda *args, **kwargs: []
+            self.client.post("/api/v0/messages", json={"text": "J'ai couru aujourd'hui 30 min"})
+            self.client.post("/api/v0/messages", json={"text": "Non c'etait hier"})
+        finally:
+            api_messages.decide = original_decide
+            api_messages.extract_facts = original_extract_facts
+
+        facts = self.client.get("/api/v0/facts").json()
+
+        self.assertEqual(len(facts), 1)
+        self.assertEqual(facts[0]["category"], "execution")
+        self.assertIn("2026-", facts[0]["key"])
+        self.assertIn("running", facts[0]["key"])
+        self.assertIn("30 min", facts[0]["value"])
+
     def test_training_load_outputs_are_stable(self) -> None:
         activities = [
             {"started_at": "2026-03-15T08:00:00+00:00", "tss": 42.0},

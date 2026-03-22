@@ -4,10 +4,12 @@ import unittest
 from datetime import datetime
 
 from fitmas.activity_claims import (
+    build_claim_correction_payloads,
     build_claim_fact_payloads,
     extract_claims_from_facts,
     extract_activity_claim,
     extract_recent_activity_claim,
+    is_activity_claim_correction,
 )
 
 
@@ -105,6 +107,36 @@ class ActivityClaimsTest(unittest.TestCase):
         self.assertEqual(claims[0].sport_type, "running")
         self.assertEqual(claims[0].duration_min, 30)
         self.assertEqual(claims[0].resolved_date_iso, "2026-03-22")
+
+    def test_extracts_temporal_correction_claim(self) -> None:
+        claim = extract_activity_claim(
+            "Non c'etait hier",
+            timezone_name="Europe/Paris",
+            now=datetime.fromisoformat("2026-03-22T19:56:00+01:00"),
+        )
+
+        self.assertIsNotNone(claim)
+        self.assertEqual(claim.resolved_date_iso, "2026-03-21")
+        self.assertTrue(is_activity_claim_correction("Non c'etait hier", timezone_name="Europe/Paris"))
+
+    def test_builds_archive_payload_for_corrected_claim(self) -> None:
+        previous_claim = extract_activity_claim(
+            "J'ai couru aujourd'hui 30 min",
+            timezone_name="Europe/Paris",
+            now=datetime.fromisoformat("2026-03-22T19:55:00+01:00"),
+        )
+        updated_claim = extract_recent_activity_claim(
+            [{"role": "user", "text": "J'ai couru aujourd'hui 30 min"}],
+            current_text="Non c'etait hier",
+            timezone_name="Europe/Paris",
+            now=datetime.fromisoformat("2026-03-22T19:56:00+01:00"),
+        )
+
+        payloads = build_claim_correction_payloads(previous_claim, updated_claim)
+
+        self.assertEqual(len(payloads), 1)
+        self.assertEqual(payloads[0]["action"], "archive")
+        self.assertIn("2026-03-22", payloads[0]["key"])
 
 
 if __name__ == "__main__":

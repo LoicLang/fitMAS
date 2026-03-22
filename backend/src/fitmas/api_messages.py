@@ -7,10 +7,12 @@ from sqlalchemy.orm import Session
 
 from fitmas import mutations, repository as repo
 from fitmas.activity_claims import (
+    build_claim_correction_payloads,
     build_claim_fact_payloads,
     extract_activity_claim,
     extract_recent_activity_claim,
     format_activity_claim_for_prompt,
+    is_activity_claim_correction,
 )
 from fitmas.api_payloads import IncomingMessage
 from fitmas.db import get_db
@@ -48,6 +50,11 @@ def post_message(payload: IncomingMessage, db: Session = Depends(get_db)) -> Mes
         payload.text,
         timezone_name=user.timezone,
     )
+    previous_activity_claim = extract_recent_activity_claim(
+        conversation_history[:-1],
+        current_text="",
+        timezone_name=user.timezone,
+    )
     current_activity_claim = extract_activity_claim(
         payload.text,
         timezone_name=user.timezone,
@@ -63,6 +70,13 @@ def post_message(payload: IncomingMessage, db: Session = Depends(get_db)) -> Mes
             activities=activities,
             timezone_name=user.timezone,
         )
+        if is_activity_claim_correction(payload.text, timezone_name=user.timezone):
+            claim_facts.extend(
+                build_claim_correction_payloads(
+                    previous_activity_claim,
+                    recent_activity_claim,
+                )
+            )
         if claim_facts:
             repo.upsert_facts(db, user.id, claim_facts)
 
