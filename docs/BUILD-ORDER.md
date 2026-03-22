@@ -216,6 +216,9 @@ Reste à faire :
 
 **Objectif : faire passer le planner de “squelette hebdo” à “moteur d'entraînement”.**
 
+Le plan detaille de ce chantier vit maintenant dans `PLANNING-ENGINE-V2.md`.
+Ce document remplace toute tentative de repartir de zero avec une architecture generique non alignee sur le repo.
+
 | # | Tâche | Fichiers | Impact |
 |---|-------|----------|--------|
 | 3A1 | Ajouter `TrainingCycle` et `Mesocycle` | `schema.py`, `models.py`, `repository.py` | Structure long terme |

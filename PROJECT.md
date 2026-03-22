@@ -41,8 +41,10 @@ Cap produit actuel :
 2. `PROJECT.md` — ce fichier
 3. `docs/PRODUCT.md` — vision, scope, parcours utilisateur
 4. `docs/ARCHITECTURE.md` — stack, modèle de données, flux
-5. `docs/SOUL.md` — voix, heartbeat, messagerie
-6. `docs/BUILD-ORDER.md` — ce qui est fait, ce qui reste, dans quel ordre
+5. `docs/APP-UX.md` — contrat UX de l'app
+6. `docs/PLANNING-ENGINE-V2.md` — roadmap moteur adaptee au code actuel
+7. `docs/SOUL.md` — voix, heartbeat, messagerie
+8. `docs/BUILD-ORDER.md` — ce qui est fait, ce qui reste, dans quel ordre
 
 ## Structure du repo
 

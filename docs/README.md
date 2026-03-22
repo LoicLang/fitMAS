@@ -7,13 +7,14 @@ read_when:
 
 # Docs
 
-6 documents essentiels :
+7 documents essentiels :
 
 | Document | Contenu |
 |----------|---------|
 | `PRODUCT.md` | Vision, wedge multisport, scope, parcours utilisateur, critères de succès |
 | `ARCHITECTURE.md` | Stack, modèle de données, flux techniques, décisions tranchées |
 | `APP-UX.md` | Contrat UX de la webapp : calendrier, today, performance, journal |
+| `PLANNING-ENGINE-V2.md` | Plan adapte du moteur V2, sequence d'implementation et mapping avec le code actuel |
 | `SOUL.md` | Voix FitMAS, heartbeat, messagerie, exemples de ton |
 | `BUILD-ORDER.md` | État actuel, roadmap recommandée, ordre de priorités |
 | `RUNBOOK.md` | Commandes, flux à tester, debug, déploiement, mapping rapide du code |
@@ -31,15 +32,17 @@ Pour un nouvel agent :
 2. `PRODUCT.md`
 3. `ARCHITECTURE.md`
 4. `APP-UX.md`
-5. `SOUL.md`
-6. `BUILD-ORDER.md`
-7. `RUNBOOK.md`
+5. `PLANNING-ENGINE-V2.md`
+6. `SOUL.md`
+7. `BUILD-ORDER.md`
+8. `RUNBOOK.md`
 
 Raccourci utile :
 - si le sujet est "que faut-il construire maintenant ?", lire `BUILD-ORDER.md`
 - si le sujet est "quel est le bon contrat produit ?", lire `PRODUCT.md`
 - si le sujet est "quelle fondation technique avant d'ajouter de la sophistication ?", lire `ARCHITECTURE.md`
 - si le sujet est "comment l'app doit se comporter ?", lire `APP-UX.md`
+- si le sujet est "comment faire evoluer le planner ?", lire `PLANNING-ENGINE-V2.md`
 
 ## Archive
 
