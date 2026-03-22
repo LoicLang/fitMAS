@@ -19,6 +19,7 @@ Les garde-fous, la planification, les permissions, les cooldowns et la persistan
 
 - **Telegram = interface coach** : messages, adaptations, relation, proactivité
 - **App = interface performance** : calendrier, charge, exécution, progression
+- le contrat UX détaillé de l'app vit dans `APP-UX.md`
 - Le domaine entraînement doit rester pur autant que possible
 - Les effets de bord vivent dans les orchestrateurs : API, bot, scheduler
 - Les futures briques de sophistication doivent s'appuyer sur une vérité planning stable
