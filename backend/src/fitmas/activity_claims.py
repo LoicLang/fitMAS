@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import date, datetime
 from typing import Any, Sequence
 
 from fitmas.temporal_resolver import resolve_temporal_context
@@ -133,6 +133,22 @@ def build_claim_fact_payloads(
     ]
 
 
+def extract_claims_from_facts(
+    facts: Sequence[Any],
+    *,
+    target_date: date | None = None,
+) -> list[ActivityClaim]:
+    extracted: list[ActivityClaim] = []
+    for fact in facts:
+        claim = _claim_from_fact(fact)
+        if claim is None:
+            continue
+        if target_date is not None and claim.resolved_date_iso != target_date.isoformat():
+            continue
+        extracted.append(claim)
+    return extracted
+
+
 def extract_recent_activity_claim(
     conversation_history: Sequence[dict],
     *,
@@ -180,6 +196,30 @@ def _claim_value(claim: ActivityClaim) -> str:
     sport = claim.sport_type or "sport inconnu"
     duration = f"{claim.duration_min} min" if claim.duration_min is not None else "duree inconnue"
     return f"Activite declaree par l'utilisateur: {sport}, {duration}, date {claim.resolved_date_iso}, non loggee."
+
+
+def _claim_from_fact(fact: Any) -> ActivityClaim | None:
+    if _activity_value(fact, "category") != "execution":
+        return None
+    key = str(_activity_value(fact, "key") or "")
+    match = re.match(r"claimed_activity_(\d{4}-\d{2}-\d{2})_(.+)$", key)
+    if not match:
+        return None
+    resolved_date_iso = match.group(1)
+    sport_type = match.group(2)
+    if sport_type == "unknown":
+        sport_type = None
+    value = str(_activity_value(fact, "value") or "")
+    duration_match = re.search(r"(\d+)\s*min", value)
+    duration_min = int(duration_match.group(1)) if duration_match else None
+    return ActivityClaim(
+        sport_type=sport_type,
+        duration_min=duration_min,
+        resolved_date_iso=resolved_date_iso,
+        temporal_reference="persisted_claim",
+        confidence=float(_activity_value(fact, "confidence") or 0.7),
+        source_text=value,
+    )
 
 
 def _activity_local_date(activity: Any, *, timezone_name: str | None) -> str | None:

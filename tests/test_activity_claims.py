@@ -5,6 +5,7 @@ from datetime import datetime
 
 from fitmas.activity_claims import (
     build_claim_fact_payloads,
+    extract_claims_from_facts,
     extract_activity_claim,
     extract_recent_activity_claim,
 )
@@ -87,6 +88,23 @@ class ActivityClaimsTest(unittest.TestCase):
         )
 
         self.assertEqual(payloads, [])
+
+    def test_extracts_claim_back_from_execution_fact(self) -> None:
+        claims = extract_claims_from_facts(
+            [
+                {
+                    "category": "execution",
+                    "key": "claimed_activity_2026-03-22_running",
+                    "value": "Activite declaree par l'utilisateur: running, 30 min, date 2026-03-22, non loggee.",
+                    "confidence": 0.95,
+                }
+            ]
+        )
+
+        self.assertEqual(len(claims), 1)
+        self.assertEqual(claims[0].sport_type, "running")
+        self.assertEqual(claims[0].duration_min, 30)
+        self.assertEqual(claims[0].resolved_date_iso, "2026-03-22")
 
 
 if __name__ == "__main__":

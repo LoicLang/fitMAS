@@ -15,6 +15,7 @@ from datetime import date, datetime, timedelta, timezone
 from sqlalchemy.orm import Session
 
 from fitmas import repository as repo, schema as s
+from fitmas.activity_claims import extract_claims_from_facts
 from fitmas.coach_messages import CoachDraft
 from fitmas.db import SessionLocal
 from fitmas.signals import collect_signals, format_signals_for_prompt
@@ -213,6 +214,7 @@ def morning_briefing() -> CoachDraft | None:
 
         yesterday_context = ""
         yesterday_activities = _activities_on_local_date(db, user, target_date=local_now.date() - timedelta(days=1))
+        yesterday_claims = _claimed_activities_on_local_date(db, user, target_date=local_now.date() - timedelta(days=1))
         if yesterday_day and yesterday_day.sport_type != "rest":
             if yesterday_status == "done":
                 yesterday_context = f"\nHier ({yesterday_label}): {yesterday_day.session_title} — fait. Bien."
@@ -222,6 +224,13 @@ def morning_briefing() -> CoachDraft | None:
                 yesterday_context = (
                     f"\nHier ({yesterday_label}): seance prevue non validee, "
                     f"mais activite reelle detectee ({sports}, {total_duration} min)."
+                )
+            elif yesterday_claims:
+                sports = ", ".join(sorted({claim.sport_type or 'sport inconnu' for claim in yesterday_claims}))
+                total_duration = sum(claim.duration_min or 0 for claim in yesterday_claims)
+                yesterday_context = (
+                    f"\nHier ({yesterday_label}): seance prevue non validee, "
+                    f"mais activite declaree non loggee detectee ({sports}, {total_duration} min)."
                 )
             elif yesterday_status == "planned":
                 yesterday_context = (
@@ -361,6 +370,9 @@ def weekly_review() -> CoachDraft | None:
         recent_activities = _activities_last_days(db, user, days=7)
         actual_activity_count = len(recent_activities)
         actual_duration_min = sum(activity.duration_min or 0 for activity in recent_activities)
+        recent_claims = _claimed_activities_last_days(db, user, days=7)
+        claimed_activity_count = len(recent_claims)
+        claimed_duration_min = sum(claim.duration_min or 0 for claim in recent_claims)
         for day_row in plan.days:
             label = DAY_LABELS.get(day_row.day, day_row.day)
             status_marker = ""
@@ -393,7 +405,8 @@ def weekly_review() -> CoachDraft | None:
             f"Resume de la semaine:\n{week_text}\n"
             f"Intention: {plan.intention}\n"
             f"Seances faites dans le plan: {done_count}. Seances prevues non faites: {planned_count}.\n"
-            f"Activites reelles detectees sur 7 jours: {actual_activity_count}. Duree reelle totale: {actual_duration_min} min."
+            f"Activites reelles detectees sur 7 jours: {actual_activity_count}. Duree reelle totale: {actual_duration_min} min.\n"
+            f"Activites declarees non loggees sur 7 jours: {claimed_activity_count}. Duree declaree totale: {claimed_duration_min} min."
         )
         llm_msg = _llm_generate(system, prompt, allow_no_send=False)
         if llm_msg:
@@ -519,3 +532,14 @@ def _activities_on_local_date(db: Session, user: s.User, *, target_date: date) -
         if local_date == target_date:
             matched.append(activity)
     return matched
+
+
+def _claimed_activities_on_local_date(db: Session, user: s.User, *, target_date: date):
+    facts = repo.get_active_facts(db, user.id, limit=48)
+    return extract_claims_from_facts(facts, target_date=target_date)
+
+
+def _claimed_activities_last_days(db: Session, user: s.User, *, days: int):
+    cutoff = get_local_now(user.timezone).date() - timedelta(days=max(0, days - 1))
+    facts = repo.get_active_facts(db, user.id, limit=64)
+    return [claim for claim in extract_claims_from_facts(facts) if claim.resolved_date_iso and date.fromisoformat(claim.resolved_date_iso) >= cutoff]

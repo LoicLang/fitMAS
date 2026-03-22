@@ -176,6 +176,144 @@ class HeartbeatGroundingTest(unittest.TestCase):
         self.assertIn("activite reelle detectee", captured["prompt"].lower())
         self.assertIn("30 min", captured["prompt"])
 
+    def test_morning_briefing_mentions_yesterday_claimed_activity(self) -> None:
+        now = get_local_now(self.user.timezone)
+        today_key = DAY_KEYS[now.weekday()]
+        yesterday_key = DAY_KEYS[(now.weekday() - 1) % 7]
+        repo.replace_plan(
+            self.db,
+            self.user.id,
+            intention="test",
+            summary="test",
+            timezone_name=self.user.timezone,
+            days=[
+                {
+                    "day": yesterday_key,
+                    "label": day_label_fr(yesterday_key, capitalize=True),
+                    "sport_type": "swimming",
+                    "session_type": "technique",
+                    "session_title": "Natation",
+                    "session_goal": "Precision",
+                    "session_note": "",
+                    "session_description": "",
+                    "duration_min": 60,
+                    "intensity": "moderate",
+                    "load_score": 3,
+                    "priority": "Seance cle",
+                    "nutrition_focus": "",
+                    "flexibility": "stable",
+                    "completion_status": "planned",
+                },
+                {
+                    "day": today_key,
+                    "label": day_label_fr(today_key, capitalize=True),
+                    "sport_type": "running",
+                    "session_type": "easy",
+                    "session_title": "Footing",
+                    "session_goal": "Bouger",
+                    "session_note": "",
+                    "session_description": "",
+                    "duration_min": 45,
+                    "intensity": "easy",
+                    "load_score": 1,
+                    "priority": "Normal",
+                    "nutrition_focus": "",
+                    "flexibility": "stable",
+                    "completion_status": "planned",
+                },
+            ],
+        )
+        yesterday_iso = (now.date() - timedelta(days=1)).isoformat()
+        repo.upsert_facts(
+            self.db,
+            self.user.id,
+            [
+                {
+                    "category": "execution",
+                    "key": f"claimed_activity_{yesterday_iso}_running",
+                    "value": f"Activite declaree par l'utilisateur: running, 30 min, date {yesterday_iso}, non loggee.",
+                    "confidence": 0.9,
+                    "confirmed": True,
+                    "source": "conversation",
+                }
+            ],
+        )
+        captured: dict[str, str] = {}
+        original_llm = heartbeat._llm_generate
+        try:
+            def fake_llm(system: str, prompt: str, *, allow_no_send: bool = True):
+                captured["prompt"] = prompt
+                return "ok"
+
+            heartbeat._llm_generate = fake_llm
+            draft = heartbeat.morning_briefing()
+        finally:
+            heartbeat._llm_generate = original_llm
+
+        self.assertEqual(draft.text, "ok")
+        self.assertIn("activite declaree non loggee", captured["prompt"].lower())
+        self.assertIn("30 min", captured["prompt"])
+
+    def test_weekly_review_prompt_mentions_claimed_activities(self) -> None:
+        now = get_local_now(self.user.timezone)
+        today_key = DAY_KEYS[now.weekday()]
+        repo.replace_plan(
+            self.db,
+            self.user.id,
+            intention="test",
+            summary="test",
+            timezone_name=self.user.timezone,
+            days=[
+                {
+                    "day": today_key,
+                    "label": day_label_fr(today_key, capitalize=True),
+                    "sport_type": "running",
+                    "session_type": "easy",
+                    "session_title": "Footing",
+                    "session_goal": "Bouger",
+                    "session_note": "",
+                    "session_description": "",
+                    "duration_min": 45,
+                    "intensity": "easy",
+                    "load_score": 1,
+                    "priority": "Normal",
+                    "nutrition_focus": "",
+                    "flexibility": "stable",
+                    "completion_status": "planned",
+                }
+            ],
+        )
+        today_iso = now.date().isoformat()
+        repo.upsert_facts(
+            self.db,
+            self.user.id,
+            [
+                {
+                    "category": "execution",
+                    "key": f"claimed_activity_{today_iso}_running",
+                    "value": f"Activite declaree par l'utilisateur: running, 30 min, date {today_iso}, non loggee.",
+                    "confidence": 0.9,
+                    "confirmed": True,
+                    "source": "conversation",
+                }
+            ],
+        )
+        captured: dict[str, str] = {}
+        original_llm = heartbeat._llm_generate
+        try:
+            def fake_llm(system: str, prompt: str, *, allow_no_send: bool = True):
+                captured["prompt"] = prompt
+                return "ok"
+
+            heartbeat._llm_generate = fake_llm
+            draft = heartbeat.weekly_review()
+        finally:
+            heartbeat._llm_generate = original_llm
+
+        self.assertEqual(draft.text, "ok")
+        self.assertIn("Activites declarees non loggees sur 7 jours: 1", captured["prompt"])
+        self.assertIn("Duree declaree totale: 30 min", captured["prompt"])
+
 
 if __name__ == "__main__":
     unittest.main()

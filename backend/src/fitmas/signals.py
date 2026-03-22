@@ -15,6 +15,7 @@ from typing import Any
 from sqlalchemy.orm import Session
 
 from fitmas import repository as repo, schema as s
+from fitmas.activity_claims import extract_claims_from_facts
 from fitmas.time_context import DAY_KEYS, DAY_LABELS_FR, build_time_context, get_local_now, get_timezone, hours_since, utc_cutoff
 
 logger = logging.getLogger(__name__)
@@ -80,10 +81,14 @@ def _detect_missed_key_session(
     yesterday_date = get_local_now(user.timezone).date()
     yesterday_date = yesterday_date.fromordinal(yesterday_date.toordinal() - 1)
     activities_yesterday = _activities_on_local_date(db, user, target_date=yesterday_date)
+    claimed_yesterday = _claimed_activities_on_local_date(db, user, target_date=yesterday_date)
     actual_context = ""
     if activities_yesterday:
         sports = ", ".join(sorted({activity.sport_type for activity in activities_yesterday}))
         actual_context = f" Activite reelle detectee hors seance prevue: {sports}."
+    elif claimed_yesterday:
+        sports = ", ".join(sorted({claim.sport_type or "sport inconnu" for claim in claimed_yesterday}))
+        actual_context = f" Activite declaree non loggee detectee: {sports}."
 
     label = DAY_LABELS_FR.get(yesterday_key, yesterday_key)
     return {
@@ -99,6 +104,7 @@ def _detect_missed_key_session(
             "sport_type": day.sport_type,
             "priority": day.priority,
             "actual_sports": [activity.sport_type for activity in activities_yesterday],
+            "claimed_sports": [claim.sport_type for claim in claimed_yesterday if claim.sport_type],
         },
     }
 
@@ -115,7 +121,8 @@ def _detect_silence(
     for offset in range(1, 4):  # check yesterday, day-before, day-before-that
         target_date = local_today.fromordinal(local_today.toordinal() - offset)
         activities = _activities_on_local_date(db, user, target_date=target_date)
-        if not activities:
+        claimed = _claimed_activities_on_local_date(db, user, target_date=target_date)
+        if not activities and not claimed:
             silent_days += 1
         else:
             break  # streak broken
@@ -286,7 +293,7 @@ def _detect_streak(
 
     for offset in range(1, 8):  # look back up to 7 days
         target_date = local_today.fromordinal(local_today.toordinal() - offset)
-        if _activities_on_local_date(db, user, target_date=target_date):
+        if _activities_on_local_date(db, user, target_date=target_date) or _claimed_activities_on_local_date(db, user, target_date=target_date):
             streak += 1
         else:
             break
@@ -330,3 +337,8 @@ def _activities_on_local_date(db: Session, user: s.User, *, target_date: date) -
         if local_date == target_date:
             matched.append(activity)
     return matched
+
+
+def _claimed_activities_on_local_date(db: Session, user: s.User, *, target_date: date):
+    facts = repo.get_active_facts(db, user.id, limit=48)
+    return extract_claims_from_facts(facts, target_date=target_date)

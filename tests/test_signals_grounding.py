@@ -157,6 +157,57 @@ class SignalsGroundingTest(unittest.TestCase):
         self.assertIn("running", missed["data"]["actual_sports"])
         self.assertIn("hors seance prevue", missed["summary"])
 
+    def test_silence_signal_ignores_claimed_activity(self) -> None:
+        now = get_local_now(self.user.timezone)
+        days = []
+        for offset in range(3):
+            day_key = DAY_KEYS[(now.weekday() - offset) % 7]
+            days.append(
+                {
+                    "day": day_key,
+                    "label": day_label_fr(day_key, capitalize=True),
+                    "sport_type": "running",
+                    "session_type": "easy",
+                    "session_title": "Footing",
+                    "session_goal": "Bouger",
+                    "session_note": "",
+                    "session_description": "",
+                    "duration_min": 40,
+                    "intensity": "easy",
+                    "load_score": 1,
+                    "priority": "Normal",
+                    "nutrition_focus": "",
+                    "flexibility": "stable",
+                    "completion_status": "planned",
+                }
+            )
+        repo.replace_plan(
+            self.db,
+            self.user.id,
+            intention="test",
+            summary="test",
+            timezone_name=self.user.timezone,
+            days=days,
+        )
+        repo.upsert_facts(
+            self.db,
+            self.user.id,
+            [
+                {
+                    "category": "execution",
+                    "key": f"claimed_activity_{(now.date() - timedelta(days=1)).isoformat()}_running",
+                    "value": f"Activite declaree par l'utilisateur: running, 30 min, date {(now.date() - timedelta(days=1)).isoformat()}, non loggee.",
+                    "confidence": 0.9,
+                    "confirmed": True,
+                    "source": "conversation",
+                }
+            ],
+        )
+
+        kinds = {signal["kind"] for signal in collect_signals(self.db, self.user)}
+
+        self.assertNotIn("silence_3_days", kinds)
+
 
 if __name__ == "__main__":
     unittest.main()
