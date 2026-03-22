@@ -81,7 +81,7 @@ Via `/start` sur le bot Telegram :
 - Régénération à la demande ou automatique le lundi matin
 - Limite actuelle : le modèle reste encore hebdomadaire et pas vraiment calendaire
 
-### 3. App (5 onglets)
+### 3. App (6 onglets)
 
 **Aujourd'hui** — écran quotidien
 - séance du jour + objectif + note coach
@@ -96,6 +96,13 @@ Via `/start` sur le bot Telegram :
 - barre de charge visuelle
 - bouton régénérer
 - direction cible : vraie timeline persistée + vue performance
+
+**Performance** — cockpit charge
+- CTL / ATL / TSB sur 12 semaines
+- volume multisport hebdo
+- complétion de la semaine en cours
+- records simples par sport
+- première version encore dans le monolithe frontend
 
 **Activités** — réel vs prévu
 - formulaire activité manuelle
@@ -154,7 +161,7 @@ Via message naturel au coach :
 - webhook Strava (actuellement polling)
 - Apple Health
 - vrai calendrier persistant daté
-- dashboard performance complet (CTL/ATL/TSB, volume, PRs)
+- dashboard performance avancé dans `Today`, split frontend modulaire, drag & drop calendrier
 - périodisation explicite
 
 ## Boucle produit

@@ -52,18 +52,20 @@ Les garde-fous, la planification, les permissions, les cooldowns et la persistan
 - `Today` et les CTA app passent désormais par des APIs datées déterministes
 - La boucle coach reçoit aussi la timeline datée et peut cibler une séance précise
 - `swap_sessions` sait aussi passer par des ids de séances concrètes
+- Router stats performance : `training-load`, `volume`, `records`
+- Onglet webapp `Performance` branché sur Chart.js
 - Strava callback redirige vers webapp (plus de JSON brut)
 - `/help` Telegram
 
 ### Ce qui n'existe pas encore
 
 - Verrou robuste anti-doublon multi-instance
-- Dashboard performance complet
+- Dashboard performance avancé dans `Today` + split frontend modulaire
 - Périodisation explicite
 - Webhook Strava (actuellement polling toutes les 2h)
 - Lineage de plans explicite
 - Decision log explicite
-- Tests automatisés
+- Couverture tests encore légère
 - Apple Health / wearable data
 - WhatsApp
 
@@ -129,6 +131,7 @@ backend/src/fitmas/
 ├── api_read.py            (~150 lignes) — profile, week, today, timeline, messages, facts, activities
 ├── api_onboarding.py      (134 lignes) — preview, onboard, regenerate
 ├── api_plan.py            (~50 lignes) — actions déterministes sur séances datées
+├── api_stats.py           (~30 lignes) — endpoints stats performance
 ├── api_messages.py        (80 lignes) — boucle message -> decision -> facts + timeline datee
 ├── api_activities.py      (121 lignes) — activités manuelles + Strava OAuth/sync
 ├── api_debug.py           (97 lignes) — debug protégé, heartbeat manuel, reset
@@ -156,6 +159,7 @@ backend/src/fitmas/
 ├── models.py              (155 lignes) — modèles Pydantic
 ├── db.py                  (101 lignes) — engine, sessions, migrations légères
 ├── training_load.py       (132 lignes) — TSS + CTL/ATL/TSB
+├── performance_stats.py   (~110 lignes) — agrégations volume / charge / records
 ├── seed.py                (235 lignes) — seed si vide
 ├── state.py               (151 lignes) — état global app
 ├── nlp.py                 (88 lignes) — fallback rule-based
@@ -163,7 +167,7 @@ backend/src/fitmas/
 └── __init__.py            (2 lignes)
 
 frontend/
-└── index.html             (~1800 lignes) — webapp complète
+└── index.html             (~2200 lignes) — webapp complète, encore monolithique
 ```
 
 ## Modèle de données

@@ -42,13 +42,14 @@ read_when:
 
 **Statut : TERMINÉ**
 
-- 5 onglets : Aujourd'hui, Calendrier, Activités, Profil, Debug
+- 6 onglets : Aujourd'hui, Calendrier, Performance, Activités, Profil, Debug
 - Navigation mobile bottom bar
 - Passe mobile iPhone-proof : safe areas, touch targets, hiérarchie resserrée
 - Actions rapides : Fait / Trop fatigué / Décaler
 - Badges statut : fait ✓ / prévu / sauté / adapté
 - Barre de charge semaine
 - Calendrier vivant : passé récent, aujourd'hui, à venir
+- Onglet Performance initial : CTL / ATL / TSB, volume, complétion, records
 - Contexte temps local visible dans le top bar
 - Strava connect button + synchro
 - Formulaire activité manuelle
@@ -176,15 +177,29 @@ C'est la fondation manquante. Sans ça, le dashboard et la périodisation rester
 
 **Objectif : transformer la webapp en vrai tableau de bord d'entraînement inspiré Runna.**
 
+**Statut : EN COURS**
+
+Déjà posé :
+- endpoints stats `training-load`, `volume`, `records`
+- Chart.js via CDN
+- onglet `Performance` dans la webapp
+- graphes charge / volume / complétion
+- cartes records simples par sport
+
+Reste à faire :
+- split du frontend single-file en modules
+- enrichir `Today` avec comparable même sport + forme
+- renforcer calendrier semaine/mois et interactions
+
 | # | Tâche | Fichiers | Impact |
 |---|-------|----------|--------|
 | 2A1 | Éclater `frontend/index.html` en shell + CSS + modules JS | `frontend/`, `api_static.py` | Maintenabilité UI |
 | 2A2 | Garder vanilla JS, pas de bundler | `frontend/js/*.js` | Simplicité |
-| 2B1 | Ajouter l'onglet `Performance` | `performance.js`, `charts.js` | Valeur perçue immédiate |
-| 2B2 | Intégrer Chart.js via CDN | `index.html`, `charts.js` | Graphes charge / volume / completion |
+| 2B1 | Ajouter l'onglet `Performance` | `frontend/index.html` | Valeur perçue immédiate |
+| 2B2 | Intégrer Chart.js via CDN | `frontend/index.html` | Graphes charge / volume / completion |
 | 2B3 | Créer `GET /api/v0/stats/training-load` | `api_stats.py`, `training_load.py` | CTL / ATL / TSB |
-| 2B4 | Créer `GET /api/v0/stats/volume` | `api_stats.py` | Volume multisport |
-| 2B5 | Créer `GET /api/v0/stats/records` | `api_stats.py` | PRs |
+| 2B4 | Créer `GET /api/v0/stats/volume` | `api_stats.py`, `performance_stats.py` | Volume multisport |
+| 2B5 | Créer `GET /api/v0/stats/records` | `api_stats.py`, `performance_stats.py` | PRs |
 | 2C1 | Enrichir `Today` avec activité comparable du même sport | `api_read.py`, `today.js` | Exécution guidée |
 | 2C2 | Afficher la forme via `TSB` | `api_read.py`, `today.js` | Lecture fatigue/fraîcheur |
 | 2D1 | Renforcer la vue calendrier semaine/mois | `calendar.js` | Vision claire du plan |
