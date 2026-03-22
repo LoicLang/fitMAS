@@ -214,12 +214,14 @@ Etat :
 - pur
 - teste
 - utilise par `api_messages.py`
+- filtre aussi des signaux conversationnels utiles pour le chat
 
 Note d'architecture :
 - `execution_context` reste strictement base sur le reel persiste
 - un claim utilisateur non logge n'est pas transforme en `Activity`
 - il remonte dans un bloc separe (`activity_claim_summary`) + memoire courte `execution`
 - cette separation evite de presenter une declaration user comme une activite reellement loggee
+- les signaux injectes dans le chat sont filtres et limites, pour eviter de recreer un context dump
 
 ## Trous actuels
 

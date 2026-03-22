@@ -62,7 +62,8 @@ Les garde-fous, la planification, les permissions, les cooldowns et la persistan
 - `/help` Telegram
 - Grounding conversationnel en cours : `execution_context.py`, `temporal_resolver.py`, `activity_claims.py`, `conversation_context.py`
 - Tool mémoire partagé : `fact_memory.py`
-- La boucle coach reçoit maintenant un résumé structuré `prévu vs réel`, une résolution temporelle, les claims d'activité récents et une mémoire utile sélectionnée
+- Socle runtime tools posé : `tool_contract.py`, `tool_registry.py`, `tool_runtime.py`, `tool_metrics.py`
+- La boucle coach reçoit maintenant un résumé structuré `prévu vs réel`, une résolution temporelle, des claims d'activité récents, une mémoire utile sélectionnée et quelques signaux filtrés
 - `signals.py` et `heartbeat.py` lisent mieux les activités réelles hors plan au lieu de s'appuyer uniquement sur le plan
 
 ### Ce qui n'existe pas encore

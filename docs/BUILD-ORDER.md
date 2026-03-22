@@ -131,12 +131,20 @@ Deja pose :
 - `temporal_resolver.py` pour ancrer `aujourd'hui / demain / hier`
 - `activity_claims.py` pour lire les declarations d'activite recentes
 - `conversation_context.py` pour assembler temps + execution + claims + memoire de conversation
+- `conversation_context.py` filtre aussi maintenant quelques signaux utiles au chat
 - `api_messages.py` branche maintenant execution + temps + claims dans le prompt coach
 - les claims activite du message courant sont maintenant persistés en `UserFact(category="execution")` avec TTL courte quand aucune vraie `Activity` n'existe encore
 - `signals.py` et `heartbeat.py` tiennent mieux compte des activites reelles hors plan
 - `signals.py` et `heartbeat.py` lisent aussi les activites declarees non loggees pour eviter les faux `rien fait`
 - les corrections explicites (`non c'etait hier`) mettent a jour et archivent le claim execution precedent
 - `UserFact` porte maintenant une vraie sémantique mémoire `urgency / ttl / affects / expires_at`
+
+Socle runtime tools pose :
+- `tool_contract.py`
+- `tool_registry.py`
+- `tool_runtime.py`
+- `tool_metrics.py`
+- registry V1 read-only avec metrics/logs structures
 
 ## Roadmap recommandée
 
