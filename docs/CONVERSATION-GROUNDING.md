@@ -189,7 +189,14 @@ Exemples :
 Etat :
 - pose
 - fusion simple des claims recents supportee
+- persistance deterministe d'un claim fusionne en `UserFact(category="execution")` quand le message courant porte une declaration d'activite
 - teste
+
+Regle :
+- on persiste seulement si le message courant contient bien un claim
+- on persiste la version fusionnee avec le contexte recent pour capter `j'ai fait 30 min` apres `j'ai couru aujourd'hui`
+- on ne persiste pas si une vraie `Activity` couvre deja ce claim
+- TTL courte (`immediate`) pour ne pas transformer `UserFact` en faux journal d'activite
 
 ### `conversation_context.py`
 
@@ -231,6 +238,16 @@ Le LLM recoit un prompt, pas une boite a outils de lecture.
 Effet :
 - il comble avec le plan au lieu de verifier le reel
 
+### Trou 5 — declaration user non durable
+
+Sans persistance courte, le systeme oublie trop vite :
+- une activite declaree dans le chat mais pas encore loggee
+- une correction de duree immediate
+
+Etat :
+- corrige pour les claims activite recentes
+- reste a voir si d'autres claims temporels meritent la meme approche
+
 ## Plan recommande
 
 ### Etape A — grounding sur la DB actuelle
@@ -254,6 +271,13 @@ Possibles ajouts :
 - `user_claimed_activity`
 - `execution_event`
 - statut persistant `off_plan_done`
+
+### Etat courant
+
+En place :
+- `api_messages.py` persiste maintenant un claim d'activite fusionne en `UserFact` de categorie `execution`
+- cette memoire courte alimente les prochains tours de conversation et le heartbeat
+- les claims ne doublonnent pas une `Activity` deja loggee le meme jour
 
 ## Regles non negociables
 

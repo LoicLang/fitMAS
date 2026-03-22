@@ -131,6 +131,7 @@ Deja pose :
 - `temporal_resolver.py` pour ancrer `aujourd'hui / demain / hier`
 - `activity_claims.py` pour lire les declarations d'activite recentes
 - `api_messages.py` branche maintenant execution + temps + claims dans le prompt coach
+- les claims activite du message courant sont maintenant persistés en `UserFact(category="execution")` avec TTL courte quand aucune vraie `Activity` n'existe encore
 - `signals.py` et `heartbeat.py` tiennent mieux compte des activites reelles hors plan
 - `UserFact` porte maintenant une vraie sémantique mémoire `urgency / ttl / affects / expires_at`
 
