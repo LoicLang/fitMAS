@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+import json
 from datetime import date, datetime, time, timedelta
 
 from sqlalchemy.orm import Session
 
 from fitmas import schema as s
+from fitmas.fitness_snapshot import FitnessSnapshot
 from fitmas.models import (
     Activity,
     ChangeNote,
@@ -18,6 +20,8 @@ from fitmas.models import (
     WatchItem,
     WeeklyPlan,
 )
+from fitmas.planning_decision import PlanningDecision
+from fitmas.readiness import ReadinessState
 from fitmas.time_context import DAY_KEYS, current_week_dates, get_local_now
 
 
@@ -144,6 +148,56 @@ def to_pydantic_activity(activity: s.Activity) -> Activity:
     )
 
 
+def to_domain_fitness_snapshot(row: s.FitnessSnapshotRecord) -> FitnessSnapshot:
+    return FitnessSnapshot(
+        user_id=row.user_id,
+        date=row.snapshot_date,
+        ctl=row.ctl,
+        atl=row.atl,
+        tsb=row.tsb,
+        ramp_rate=row.ramp_rate,
+        weekly_target_tss=row.weekly_target_tss,
+        weekly_actual_tss=row.weekly_actual_tss,
+        completion_rate_14d=row.completion_rate_14d,
+        key_sessions_done_14d=row.key_sessions_done_14d,
+        volume_sessions_done_14d=row.volume_sessions_done_14d,
+        sport_ctl=_json_loads_dict(row.sport_ctl_json),
+        sport_volume_hours=_json_loads_dict(row.sport_volume_hours_json),
+    )
+
+
+def to_domain_readiness_snapshot(row: s.ReadinessSnapshotRecord) -> ReadinessState:
+    return ReadinessState(
+        user_id=row.user_id,
+        date=row.snapshot_date,
+        physical=row.physical,
+        mental=row.mental,
+        logistical=row.logistical,
+        injury_risk=row.injury_risk,
+        risk_flags=tuple(_json_loads_list(row.risk_flags_json)),
+        summary=row.summary,
+    )
+
+
+def to_domain_planning_decision(row: s.PlanningDecisionRecord) -> PlanningDecision:
+    return PlanningDecision(
+        user_id=row.user_id,
+        week_start=row.week_start,
+        decision_version=row.decision_version,
+        planning_mode=row.planning_mode,
+        adaptation_level=row.adaptation_level,
+        adaptation_scope=row.adaptation_scope,
+        weekly_target_tss=row.weekly_target_tss,
+        intensity_distribution=row.intensity_distribution,
+        key_session_count=row.key_session_count,
+        strength_session_count=row.strength_session_count,
+        long_session=row.long_session,
+        rationale=tuple(_json_loads_list(row.rationale_json)),
+        adaptations=tuple(_json_loads_list(row.adaptations_json)),
+        risk_flags=tuple(_json_loads_list(row.risk_flags_json)),
+    )
+
+
 # ── Queries ────────────────────────────────────────────────────────────────
 
 def get_user(db: Session) -> s.User:
@@ -197,6 +251,33 @@ def get_active_facts(db: Session, user_id: int, limit: int = 12) -> list[s.UserF
         .order_by(s.UserFact.confirmed.desc(), s.UserFact.confidence.desc(), s.UserFact.updated_at.desc())
         .limit(limit)
         .all()
+    )
+
+
+def get_latest_fitness_snapshot_record(db: Session, user_id: int) -> s.FitnessSnapshotRecord | None:
+    return (
+        db.query(s.FitnessSnapshotRecord)
+        .filter(s.FitnessSnapshotRecord.user_id == user_id)
+        .order_by(s.FitnessSnapshotRecord.snapshot_date.desc(), s.FitnessSnapshotRecord.id.desc())
+        .first()
+    )
+
+
+def get_latest_readiness_snapshot_record(db: Session, user_id: int) -> s.ReadinessSnapshotRecord | None:
+    return (
+        db.query(s.ReadinessSnapshotRecord)
+        .filter(s.ReadinessSnapshotRecord.user_id == user_id)
+        .order_by(s.ReadinessSnapshotRecord.snapshot_date.desc(), s.ReadinessSnapshotRecord.id.desc())
+        .first()
+    )
+
+
+def get_latest_planning_decision_record(db: Session, user_id: int) -> s.PlanningDecisionRecord | None:
+    return (
+        db.query(s.PlanningDecisionRecord)
+        .filter(s.PlanningDecisionRecord.user_id == user_id)
+        .order_by(s.PlanningDecisionRecord.week_start.desc(), s.PlanningDecisionRecord.id.desc())
+        .first()
     )
 
 
@@ -522,6 +603,89 @@ def upsert_facts(db: Session, user_id: int, facts: list[dict]) -> list[s.UserFac
     return saved
 
 
+def save_fitness_snapshot(db: Session, snapshot: FitnessSnapshot) -> s.FitnessSnapshotRecord:
+    row = (
+        db.query(s.FitnessSnapshotRecord)
+        .filter(
+            s.FitnessSnapshotRecord.user_id == snapshot.user_id,
+            s.FitnessSnapshotRecord.snapshot_date == snapshot.date,
+        )
+        .first()
+    )
+    if row is None:
+        row = s.FitnessSnapshotRecord(user_id=snapshot.user_id, snapshot_date=snapshot.date)
+        db.add(row)
+
+    row.ctl = snapshot.ctl
+    row.atl = snapshot.atl
+    row.tsb = snapshot.tsb
+    row.ramp_rate = snapshot.ramp_rate
+    row.weekly_target_tss = snapshot.weekly_target_tss
+    row.weekly_actual_tss = snapshot.weekly_actual_tss
+    row.completion_rate_14d = snapshot.completion_rate_14d
+    row.key_sessions_done_14d = snapshot.key_sessions_done_14d
+    row.volume_sessions_done_14d = snapshot.volume_sessions_done_14d
+    row.sport_ctl_json = _json_dumps(snapshot.sport_ctl)
+    row.sport_volume_hours_json = _json_dumps(snapshot.sport_volume_hours)
+    db.commit()
+    db.refresh(row)
+    return row
+
+
+def save_readiness_snapshot(db: Session, readiness: ReadinessState) -> s.ReadinessSnapshotRecord:
+    row = (
+        db.query(s.ReadinessSnapshotRecord)
+        .filter(
+            s.ReadinessSnapshotRecord.user_id == readiness.user_id,
+            s.ReadinessSnapshotRecord.snapshot_date == readiness.date,
+        )
+        .first()
+    )
+    if row is None:
+        row = s.ReadinessSnapshotRecord(user_id=readiness.user_id, snapshot_date=readiness.date)
+        db.add(row)
+
+    row.physical = readiness.physical
+    row.mental = readiness.mental
+    row.logistical = readiness.logistical
+    row.injury_risk = readiness.injury_risk
+    row.risk_flags_json = _json_dumps(list(readiness.risk_flags))
+    row.summary = readiness.summary
+    db.commit()
+    db.refresh(row)
+    return row
+
+
+def save_planning_decision(db: Session, decision: PlanningDecision) -> s.PlanningDecisionRecord:
+    row = (
+        db.query(s.PlanningDecisionRecord)
+        .filter(
+            s.PlanningDecisionRecord.user_id == decision.user_id,
+            s.PlanningDecisionRecord.week_start == decision.week_start,
+        )
+        .first()
+    )
+    if row is None:
+        row = s.PlanningDecisionRecord(user_id=decision.user_id, week_start=decision.week_start)
+        db.add(row)
+
+    row.decision_version = decision.decision_version
+    row.planning_mode = decision.planning_mode
+    row.adaptation_level = decision.adaptation_level
+    row.adaptation_scope = decision.adaptation_scope
+    row.weekly_target_tss = decision.weekly_target_tss
+    row.intensity_distribution = decision.intensity_distribution
+    row.key_session_count = decision.key_session_count
+    row.strength_session_count = decision.strength_session_count
+    row.long_session = decision.long_session
+    row.rationale_json = _json_dumps(list(decision.rationale))
+    row.adaptations_json = _json_dumps(list(decision.adaptations))
+    row.risk_flags_json = _json_dumps(list(decision.risk_flags))
+    db.commit()
+    db.refresh(row)
+    return row
+
+
 def replace_plan(
     db: Session,
     user_id: int,
@@ -736,3 +900,19 @@ def set_change_notes(db: Session, day_plan_id: int, notes: list[tuple[str, str]]
     for title, detail in notes:
         db.add(s.ChangeNote(day_plan_id=day_plan_id, title=title, detail=detail))
     db.commit()
+
+
+def _json_dumps(value: object) -> str:
+    return json.dumps(value, ensure_ascii=True, sort_keys=True)
+
+
+def _json_loads_dict(raw_value: str) -> dict[str, float]:
+    if not raw_value:
+        return {}
+    return {str(key): float(value) for key, value in json.loads(raw_value).items()}
+
+
+def _json_loads_list(raw_value: str) -> list[str]:
+    if not raw_value:
+        return []
+    return [str(value) for value in json.loads(raw_value)]
