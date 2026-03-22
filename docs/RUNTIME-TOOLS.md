@@ -64,6 +64,22 @@ Role :
 - executer
 - produire une trace metrique
 
+### `tool_routing.py`
+
+Role :
+- router de facon deterministe une requete utilisateur vers un petit sous-ensemble de tools
+- eviter d'offrir tout le registry a chaque question
+- garder l'ordre metier des tools presentes au modele
+
+Etat actuel :
+- actif pour le pipeline `conversation`
+- categories V1 :
+  - rappel planning
+  - highlights activite
+  - activites recentes
+  - rappel memoire/facts
+- si le message est simple (`ok`, retour libre, adaptation simple), aucun tool n'est offert
+
 ### `tool_metrics.py`
 
 Trace minimale :
@@ -106,7 +122,7 @@ Les tools sont une extension future, pas un remplacement.
 
 Etat actuel :
 - le chat peut maintenant faire **1 tool call max** sur certaines requetes de lecture evidentes
-- activation bornee par heuristique simple (`question/recherche`) dans `llm.py`
+- activation bornee par `tool_routing.py`
 - puis reponse finale JSON comme avant
 - chaque tour outille produit maintenant une trace session-level exploitable pour mesurer :
   - si les tools ont ete seulement offres
