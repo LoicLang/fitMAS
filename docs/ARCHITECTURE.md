@@ -49,6 +49,7 @@ Les garde-fous, la planification, les permissions, les cooldowns et la persistan
 - Données Strava enrichies : avg_hr, max_hr, avg_speed, calories, suffer_score
 - Fondation charge : `tss` sur les activités + calculs `CTL/ATL/TSB`
 - Calendrier persistant partiel : `ScheduledSession` datées + timeline lecture + lien activité↔séance
+- `Today` et les CTA app passent désormais par des APIs datées déterministes
 - Strava callback redirige vers webapp (plus de JSON brut)
 - `/help` Telegram
 
@@ -98,7 +99,7 @@ Les garde-fous, la planification, les permissions, les cooldowns et la persistan
 Ordre recommandé :
 1. Fiabiliser Telegram et la fréquence des messages
 2. Introduire le calcul de charge (`tss`, `CTL/ATL/TSB`)
-3. Étendre le calendrier persistant jusqu'aux mutations et à l'app
+3. Finir la bascule complète des mutations et vues app vers `scheduled_session_id`
 4. Construire le dashboard performance sur cette base
 5. Ajouter la périodisation
 6. Repousser l'architecture multi-agent après stabilisation
@@ -114,7 +115,7 @@ Conséquences :
 - adaptation semaine suivante peu propre
 - base faible pour dashboard et périodisation
 
-Le pivot a commencé avec `ScheduledSession`, mais il faut encore finir la propagation côté mutations et UI.
+Le pivot a bien commencé avec `ScheduledSession`, mais il reste encore des zones `day key` dans le coeur hebdo.
 
 ## Modules
 
@@ -122,8 +123,9 @@ Le pivot a commencé avec `ScheduledSession`, mais il faut encore finir la propa
 backend/src/fitmas/
 ├── api.py                 (46 lignes) — bootstrap FastAPI + lifespan
 ├── api_static.py          (23 lignes) — health + fichiers statiques
-├── api_read.py            (115 lignes) — profile, week, today, timeline, messages, facts, activities
+├── api_read.py            (~150 lignes) — profile, week, today, timeline, messages, facts, activities
 ├── api_onboarding.py      (134 lignes) — preview, onboard, regenerate
+├── api_plan.py            (~50 lignes) — actions déterministes sur séances datées
 ├── api_messages.py        (74 lignes) — boucle message → decision → facts
 ├── api_activities.py      (121 lignes) — activités manuelles + Strava OAuth/sync
 ├── api_debug.py           (97 lignes) — debug protégé, heartbeat manuel, reset
@@ -145,7 +147,8 @@ backend/src/fitmas/
 ├── coach_messages.py      (31 lignes) — draft coach + persistance centralisée
 ├── strava.py              (210 lignes) — OAuth + import activités + enrichissement TSS
 ├── activities.py          (93 lignes) — normalisation + matching activités
-├── mutations.py           (113 lignes) — mutations plan
+├── mutations.py           (113 lignes) — mutations plan encore centrées semaine courante
+├── plan_actions.py        (~120 lignes) — actions déterministes séance datée
 ├── schema.py              (239 lignes) — SQLAlchemy ORM
 ├── models.py              (155 lignes) — modèles Pydantic
 ├── db.py                  (101 lignes) — engine, sessions, migrations légères

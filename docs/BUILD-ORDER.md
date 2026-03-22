@@ -146,10 +146,12 @@ Déjà posé :
 - sync plan actif -> séances datées futures
 - lien activité -> séance datée
 - endpoint lecture `GET /api/v0/timeline`
+- endpoint `Today` par séance datée
+- CTA app déterministes : `done / skip / move`
+- app branchée sur la timeline persistée pour le calendrier
 
 Reste à finir :
-- mutations explicites pilotées par dates réelles
-- app web branchée sur la timeline persistée
+- sortir les dernières mutations `day key` du coeur hebdo
 - lineage plus propre entre générations de plans
 
 C'est la fondation manquante. Sans ça, le dashboard et la périodisation resteront bancals.
