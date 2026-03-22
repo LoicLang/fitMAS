@@ -96,6 +96,21 @@ Le chat reste sur son pipeline actuel :
 
 Les tools sont une extension future, pas un remplacement.
 
+Etat actuel :
+- le chat peut maintenant faire **1 tool call max** sur certaines requetes de lecture evidentes
+- activation bornee par heuristique simple (`question/recherche`) dans `llm.py`
+- puis reponse finale JSON comme avant
+
+Cas typiques :
+- "c'etait quoi ma plus longue sortie ?"
+- "il me reste quoi cette semaine ?"
+- "qu'est-ce que tu sais de mes contraintes ?"
+
+Ce que le chat ne fait pas encore :
+- pas de tool call pour les mutations simples
+- pas de tool call en boucle
+- pas de write tool
+
 ### Heartbeat
 
 Pas encore branche sur le runtime tools.
@@ -111,7 +126,7 @@ Le planner V2 doit d'abord passer par `planning_state.py` et `PlanningDecision`.
 Le bon ordre :
 1. signaux filtres dans le chat
 2. runtime tools read-only + metrics
-3. eventuel tool use dans `decide()`
+3. tool use borne dans `decide()` pour quelques questions de lecture
 4. reduction du context dump guidee par les metriques
 
 Pas de liberte large du modele avant d'avoir :

@@ -145,6 +145,7 @@ Socle runtime tools pose :
 - `tool_runtime.py`
 - `tool_metrics.py`
 - registry V1 read-only avec metrics/logs structures
+- `llm.py` peut maintenant faire 1 tool call max pour certaines questions de lecture via le chat
 
 ## Roadmap recommandée
 
