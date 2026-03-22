@@ -11,6 +11,7 @@
     <title>FitMAS</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
     <style>
       @import url('https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap');
 
@@ -410,6 +411,78 @@
         color: var(--muted);
       }
 
+      /* ── Performance ── */
+      .performance-grid {
+        display: grid;
+        gap: 12px;
+      }
+
+      .performance-summary {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+        gap: 8px;
+      }
+
+      .performance-card,
+      .chart-card {
+        padding: 18px;
+        border-radius: var(--radius-lg);
+        background: linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(250, 244, 236, 0.96));
+        border: 1px solid rgba(69, 47, 32, 0.08);
+        box-shadow: var(--shadow-sm);
+      }
+
+      .performance-card h3,
+      .chart-card h3 {
+        margin-bottom: 12px;
+      }
+
+      .chart-card canvas {
+        width: 100% !important;
+        height: 250px !important;
+      }
+
+      .records-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+        gap: 10px;
+      }
+
+      .record-row {
+        display: flex;
+        justify-content: space-between;
+        gap: 12px;
+        padding: 9px 0;
+        border-top: 1px solid rgba(69, 47, 32, 0.06);
+        font-size: 0.82rem;
+      }
+
+      .record-row:first-of-type {
+        border-top: 0;
+        padding-top: 0;
+      }
+
+      .record-row span:last-child {
+        text-align: right;
+        color: var(--text);
+        font-weight: 700;
+      }
+
+      .tsb-good {
+        color: var(--green);
+        background: var(--green-soft);
+      }
+
+      .tsb-warn {
+        color: var(--yellow);
+        background: var(--yellow-soft);
+      }
+
+      .tsb-alert {
+        color: var(--red);
+        background: var(--red-soft);
+      }
+
       /* ── Load bar ── */
       .load-bar {
         display: flex; gap: 3px; align-items: flex-end;
@@ -634,7 +707,9 @@
         .metric { padding: 11px; }
         .section-grid,
         .profile-grid,
-        .activity-layout { grid-template-columns: 1fr; }
+        .activity-layout,
+        .performance-summary,
+        .records-grid { grid-template-columns: 1fr; }
         .week-grid { grid-template-columns: 1fr; }
         .day-card { padding: 14px; }
         .day-card-head {
@@ -660,6 +735,7 @@
           grid-template-columns: 60px minmax(0, 1fr);
           gap: 10px;
         }
+        .chart-card canvas { height: 220px !important; }
         input, select, textarea, button {
           font-size: 16px !important;
         }
@@ -806,6 +882,7 @@
         <nav class="tabs" aria-label="Navigation">
           <button class="tab active" data-tab="today">Aujourd'hui</button>
           <button class="tab" data-tab="plan">Calendrier</button>
+          <button class="tab" data-tab="performance">Performance</button>
           <button class="tab" data-tab="activities">Activités</button>
           <button class="tab" data-tab="profile">Profil</button>
           <button class="tab" data-tab="debug">Debug</button>
@@ -878,6 +955,38 @@
           <div class="calendar-stack" id="week-grid"></div>
           <div style="display: flex; justify-content: flex-end; margin-top: 4px;">
             <button class="secondary" id="btn-regen" onclick="regenerateWeek()">🔄 Régénérer la semaine</button>
+          </div>
+        </section>
+
+        <!-- PERFORMANCE -->
+        <section class="view" data-view="performance">
+          <div class="hero">
+            <p class="eyebrow">Performance</p>
+            <h2>Charge, volume, repères</h2>
+            <p class="muted" style="margin-top: 8px; line-height: 1.5;">
+              Le cockpit froid. La vérité de ton entraînement: fraîcheur, charge et progression.
+            </p>
+          </div>
+
+          <div class="performance-grid">
+            <div class="performance-summary" id="performance-summary"></div>
+
+            <div class="chart-card">
+              <h3>Charge d'entraînement</h3>
+              <canvas id="training-load-chart"></canvas>
+            </div>
+
+            <div class="chart-card">
+              <h3>Volume par sport</h3>
+              <canvas id="volume-chart"></canvas>
+            </div>
+
+            <div class="chart-card">
+              <h3>Complétion semaine en cours</h3>
+              <canvas id="completion-chart"></canvas>
+            </div>
+
+            <div class="records-grid" id="records-grid"></div>
           </div>
         </section>
 
@@ -1040,6 +1149,10 @@
           <span class="bnav-icon">📅</span>
           Calendrier
         </button>
+        <button class="bnav" data-tab="performance">
+          <span class="bnav-icon">📈</span>
+          Perf
+        </button>
         <button class="bnav" data-tab="activities">
           <span class="bnav-icon">🏃</span>
           Activités
@@ -1062,8 +1175,14 @@
       let facts = [];
       let activities = [];
       let stravaStatus = { configured: false, connected: false };
+      let trainingLoadStats = null;
+      let volumeStats = null;
+      let recordsStats = null;
       let selectedDay = mapDayToApiKey(new Date().getDay());
       let selectedSessionId = null;
+      let trainingLoadChart = null;
+      let volumeChart = null;
+      let completionChart = null;
 
       const activityForm = document.getElementById("activity-form");
       const activityStatus = document.getElementById("activity-status");
@@ -1077,6 +1196,14 @@
       const SPORT_LABEL = {
         running: "Course", cycling: "Vélo", swimming: "Natation",
         climbing: "Escalade", strength: "Renfo", rest: "Repos",
+      };
+
+      const SPORT_COLORS = {
+        running: "#0f766e",
+        cycling: "#c26b3b",
+        swimming: "#2563eb",
+        climbing: "#dc2626",
+        strength: "#6b7280",
       };
 
       const DAY_ORDER = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"];
@@ -1283,6 +1410,7 @@
           weekPlan = await fetchJson("/api/v0/week");
           scheduledTimeline = await fetchJson("/api/v0/timeline");
           renderWeek();
+          renderPerformance();
           await loadToday();
         } catch (err) {
           todayStatus.textContent = "Erreur. Réessaie.";
@@ -1476,6 +1604,7 @@
           document.getElementById("plan-intention").textContent = weekPlan.intention;
           document.getElementById("plan-summary").textContent = weekPlan.summary;
           renderWeek();
+          renderPerformance();
           await loadToday();
         } catch (err) {
           alert("Erreur lors de la régénération. Vérifie que l'onboarding a été fait.");
@@ -1545,9 +1674,196 @@
         return `${mins}:${secs.toString().padStart(2, "0")}`;
       }
 
+      function formatPaceSeconds(seconds) {
+        if (!Number.isFinite(seconds) || seconds <= 0) return "—";
+        const mins = Math.floor(seconds / 60);
+        const secs = Math.round(seconds % 60);
+        return `${mins}:${secs.toString().padStart(2, "0")}/km`;
+      }
+
       function formatSpeed(avgSpeed) {
         if (!avgSpeed || avgSpeed <= 0) return null;
         return (avgSpeed * 3.6).toFixed(1);
+      }
+
+      function formatWeekLabel(isoDate) {
+        if (!isoDate) return "";
+        return new Intl.DateTimeFormat("fr-FR", {
+          day: "2-digit",
+          month: "short",
+        }).format(new Date(`${isoDate}T12:00:00Z`)).replace(".", "");
+      }
+
+      function getCurrentWeekSessions() {
+        if (!scheduledTimeline?.length) {
+          return weekPlan?.days || [];
+        }
+        const currentWeekIsoMap = getCurrentWeekIsoMap(profile?.timezone);
+        return scheduledTimeline.filter(session =>
+          DAY_ORDER.some(dayKey => currentWeekIsoMap[dayKey] === session.scheduled_date)
+        );
+      }
+
+      function getTsbTone(tsb) {
+        if (tsb >= 5) return { label: "Frais", className: "tsb-good" };
+        if (tsb >= -10) return { label: "Sous contrôle", className: "tsb-warn" };
+        return { label: "Sous fatigue", className: "tsb-alert" };
+      }
+
+      function destroyCharts() {
+        [trainingLoadChart, volumeChart, completionChart].forEach(chart => {
+          if (chart) chart.destroy();
+        });
+        trainingLoadChart = null;
+        volumeChart = null;
+        completionChart = null;
+      }
+
+      function renderPerformance() {
+        const summaryEl = document.getElementById("performance-summary");
+        const recordsEl = document.getElementById("records-grid");
+        if (!summaryEl || !recordsEl) return;
+
+        const currentWeekSessions = getCurrentWeekSessions();
+        const actionableSessions = currentWeekSessions.filter(session => session.sport_type !== "rest");
+        const doneCount = actionableSessions.filter(session => session.completion_status === "done").length;
+        const skippedCount = actionableSessions.filter(session => session.completion_status === "skipped").length;
+        const plannedCount = actionableSessions.filter(session => (session.completion_status || "planned") === "planned").length;
+        const completionRate = actionableSessions.length
+          ? Math.round((doneCount / actionableSessions.length) * 100)
+          : 0;
+        const latestWeek = volumeStats?.weeks?.length
+          ? volumeStats.weeks[volumeStats.weeks.length - 1]
+          : null;
+        const tsb = Number(trainingLoadStats?.tsb || 0);
+        const tsbTone = getTsbTone(tsb);
+
+        summaryEl.innerHTML = `
+          <div class="metric">
+            <div class="metric-label">CTL</div>
+            <div class="metric-value">${trainingLoadStats?.ctl ?? "—"}</div>
+          </div>
+          <div class="metric">
+            <div class="metric-label">ATL</div>
+            <div class="metric-value">${trainingLoadStats?.atl ?? "—"}</div>
+          </div>
+          <div class="metric">
+            <div class="metric-label">TSB</div>
+            <div class="metric-value">${trainingLoadStats?.tsb ?? "—"}</div>
+            <span class="badge ${tsbTone.className}" style="margin-top:8px;">${tsbTone.label}</span>
+          </div>
+          <div class="metric">
+            <div class="metric-label">Complétion</div>
+            <div class="metric-value">${completionRate}%</div>
+          </div>
+          <div class="metric">
+            <div class="metric-label">Volume 7j</div>
+            <div class="metric-value">${latestWeek ? `${latestWeek.total_duration_min} min` : "—"}</div>
+          </div>
+        `;
+
+        const sports = recordsStats?.sports || {};
+        const sportEntries = Object.entries(sports);
+        recordsEl.innerHTML = sportEntries.length
+          ? sportEntries.map(([sport, values]) => `
+              <div class="performance-card">
+                <h3>${SPORT_EMOJI[sport] || ""} ${SPORT_LABEL[sport] || sport}</h3>
+                <div class="record-row">
+                  <span>Plus longue sortie</span>
+                  <span>${values.longest_distance_m ? `${(values.longest_distance_m / 1000).toFixed(1)} km` : "—"}</span>
+                </div>
+                <div class="record-row">
+                  <span>Plus longue durée</span>
+                  <span>${values.longest_duration_min ? `${values.longest_duration_min} min` : "—"}</span>
+                </div>
+                <div class="record-row">
+                  <span>Meilleur rythme</span>
+                  <span>${formatPaceSeconds(values.best_pace_seconds_per_km)}</span>
+                </div>
+                <div class="record-row">
+                  <span>Dénivelé max</span>
+                  <span>${values.max_elevation_m ? `${Math.round(values.max_elevation_m)} m` : "—"}</span>
+                </div>
+              </div>
+            `).join("")
+          : '<div class="empty">Les records apparaîtront après quelques activités.</div>';
+
+        if (!window.Chart) return;
+
+        destroyCharts();
+
+        const trainingLoadCanvas = document.getElementById("training-load-chart");
+        const volumeCanvas = document.getElementById("volume-chart");
+        const completionCanvas = document.getElementById("completion-chart");
+        const trainingSeries = trainingLoadStats?.series || [];
+        const weeklyVolume = volumeStats?.weeks || [];
+
+        if (trainingLoadCanvas && trainingSeries.length) {
+          const labels = trainingSeries.map(point => formatWeekLabel(point.date));
+          trainingLoadChart = new Chart(trainingLoadCanvas, {
+            type: "line",
+            data: {
+              labels,
+              datasets: [
+                { label: "CTL", data: trainingSeries.map(point => point.ctl), borderColor: SPORT_COLORS.running, backgroundColor: "rgba(15,118,110,0.12)", tension: 0.28, pointRadius: 0, borderWidth: 2.5 },
+                { label: "ATL", data: trainingSeries.map(point => point.atl), borderColor: SPORT_COLORS.cycling, backgroundColor: "rgba(194,107,59,0.10)", tension: 0.28, pointRadius: 0, borderWidth: 2.5 },
+                { label: "TSB", data: trainingSeries.map(point => point.tsb), borderColor: SPORT_COLORS.swimming, backgroundColor: "rgba(37,99,235,0.10)", tension: 0.28, pointRadius: 0, borderWidth: 2 },
+              ],
+            },
+            options: {
+              maintainAspectRatio: false,
+              plugins: { legend: { position: "bottom" } },
+              scales: {
+                x: { ticks: { maxTicksLimit: 8, color: "#6c584a" }, grid: { display: false } },
+                y: { ticks: { color: "#6c584a" }, grid: { color: "rgba(69,47,32,0.08)" } },
+              },
+            },
+          });
+        }
+
+        if (volumeCanvas && weeklyVolume.length) {
+          const labels = weeklyVolume.map(week => formatWeekLabel(week.week_start));
+          volumeChart = new Chart(volumeCanvas, {
+            type: "bar",
+            data: {
+              labels,
+              datasets: Object.entries(SPORT_COLORS).map(([sport, color]) => ({
+                label: SPORT_LABEL[sport],
+                data: weeklyVolume.map(week => week.sports?.[sport]?.duration_min || 0),
+                backgroundColor: color,
+                borderRadius: 6,
+                stack: "volume",
+              })),
+            },
+            options: {
+              maintainAspectRatio: false,
+              plugins: { legend: { position: "bottom" } },
+              scales: {
+                x: { stacked: true, ticks: { color: "#6c584a" }, grid: { display: false } },
+                y: { stacked: true, ticks: { color: "#6c584a" }, grid: { color: "rgba(69,47,32,0.08)" } },
+              },
+            },
+          });
+        }
+
+        if (completionCanvas) {
+          completionChart = new Chart(completionCanvas, {
+            type: "doughnut",
+            data: {
+              labels: ["Fait", "À faire", "Sauté"],
+              datasets: [{
+                data: [doneCount, plannedCount, skippedCount],
+                backgroundColor: ["#16a34a", "#0f766e", "#dc2626"],
+                borderWidth: 0,
+              }],
+            },
+            options: {
+              maintainAspectRatio: false,
+              cutout: "68%",
+              plugins: { legend: { position: "bottom" } },
+            },
+          });
+        }
       }
 
       function renderActivities() {
@@ -1816,7 +2132,13 @@
             renderActivities();
             weekPlan = await fetchJson("/api/v0/week");
             scheduledTimeline = await fetchJson("/api/v0/timeline");
+            [trainingLoadStats, volumeStats, recordsStats] = await Promise.all([
+              fetchJson("/api/v0/stats/training-load"),
+              fetchJson("/api/v0/stats/volume"),
+              fetchJson("/api/v0/stats/records"),
+            ]);
             renderWeek();
+            renderPerformance();
             await loadToday();
             alert(`Synchro OK — ${result.imported} nouvelle(s) activité(s).`);
           }
@@ -1847,7 +2169,13 @@
           renderActivities();
           weekPlan = await fetchJson("/api/v0/week");
           scheduledTimeline = await fetchJson("/api/v0/timeline");
+          [trainingLoadStats, volumeStats, recordsStats] = await Promise.all([
+            fetchJson("/api/v0/stats/training-load"),
+            fetchJson("/api/v0/stats/volume"),
+            fetchJson("/api/v0/stats/records"),
+          ]);
           renderWeek();
+          renderPerformance();
           await loadToday();
         } catch (err) {
           activityStatus.textContent = "Erreur lors de l'ajout.";
@@ -1869,15 +2197,19 @@
       // ── Boot ──
       async function boot() {
         try {
-          const [p, w, f, a, st, tl] = await Promise.all([
+          const [p, w, f, a, st, tl, loadStats, volume, records] = await Promise.all([
             fetchJson("/api/v0/profile"),
             fetchJson("/api/v0/week"),
             fetchJson("/api/v0/facts"),
             fetchJson("/api/v0/activities"),
             fetchJson("/api/v0/strava/status"),
             fetchJson("/api/v0/timeline"),
+            fetchJson("/api/v0/stats/training-load"),
+            fetchJson("/api/v0/stats/volume"),
+            fetchJson("/api/v0/stats/records"),
           ]);
           profile = p; weekPlan = w; facts = f; activities = a; stravaStatus = st; scheduledTimeline = tl;
+          trainingLoadStats = loadStats; volumeStats = volume; recordsStats = records;
           selectedDay = getCurrentDayKey(profile.timezone);
 
           document.getElementById("topbar-eyebrow").textContent = profile.coach_name || "FitMAS";
@@ -1892,6 +2224,7 @@
           renderFacts();
           renderActivities();
           renderStravaStatus();
+          renderPerformance();
           await loadToday();
         } catch (err) {
           document.querySelector(".shell").innerHTML = `
