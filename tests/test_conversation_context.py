@@ -40,6 +40,10 @@ class ConversationContextTest(unittest.TestCase):
                     "active": True,
                 }
             ],
+            signals=[
+                {"kind": "big_session_done", "severity": "info", "summary": "Grosse seance recente."},
+                {"kind": "missed_key_session", "severity": "warning", "summary": "Seance cle ratee."},
+            ],
             now=datetime.fromisoformat("2026-03-22T19:56:00+01:00"),
         )
 
@@ -47,6 +51,7 @@ class ConversationContextTest(unittest.TestCase):
         self.assertEqual(context.recent_activity_claim.sport_type, "running")
         self.assertEqual(context.recent_activity_claim.duration_min, 30)
         self.assertIn("Retrouver mon niveau running", "\n".join(context.selected_facts))
+        self.assertEqual(context.selected_signals[0]["kind"], "missed_key_session")
         self.assertIn("execution_status: planned_pending", execution_summary_for_prompt(context))
         self.assertIn("reference principale: yesterday", temporal_summary_for_prompt(context))
         self.assertIn("sport: running", activity_claim_summary_for_prompt(context))

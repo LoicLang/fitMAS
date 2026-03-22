@@ -110,6 +110,7 @@ def decide(
     execution_summary: str | None = None,
     temporal_summary: str | None = None,
     activity_claim_summary: str | None = None,
+    signal_summary: str | None = None,
     conversation_history: list[dict] | None = None,
     coach_context: dict | None = None,
     remembered_facts: list[dict] | None = None,
@@ -170,11 +171,15 @@ def decide(
     if activity_claim_summary:
         claim_block = f"\n{activity_claim_summary}\n"
 
+    signal_block = ""
+    if signal_summary:
+        signal_block = f"\n{signal_summary}\n"
+
     prompt = f"""{time_block}
 Repere legacy semaine courante:
 {plan_summary}
 {timeline_block}
-{execution_block}{temporal_block}{claim_block}
+{execution_block}{temporal_block}{claim_block}{signal_block}
 {coach_block}{facts_block}
 {history_block}
 Nouveau message de l'utilisateur:

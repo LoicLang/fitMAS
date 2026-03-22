@@ -125,15 +125,15 @@ class FitMASCoreFlowsTest(unittest.TestCase):
             source="manual",
             sport_type="cycling",
             title="Velo off-plan",
-            duration_min=30,
-            distance_m=12000,
+            duration_min=75,
+            distance_m=16000,
             elevation_m=80,
             perceived_load=3,
             note="",
             started_at=session.scheduled_date.replace(hour=18),
             matched_day=None,
             match_reason="",
-            avg_hr=140,
+            avg_hr=156,
             avg_speed=6.0,
             tss=28.0,
         )
@@ -145,6 +145,7 @@ class FitMASCoreFlowsTest(unittest.TestCase):
                 captured["execution_summary"] = kwargs.get("execution_summary") or ""
                 captured["temporal_summary"] = kwargs.get("temporal_summary") or ""
                 captured["activity_claim_summary"] = kwargs.get("activity_claim_summary") or ""
+                captured["signal_summary"] = kwargs.get("signal_summary") or ""
                 captured["selected_facts"] = "\n".join(kwargs.get("coach_context", {}).get("selected_facts", []))
                 return MutationDecision(
                     mutation_type="no_change",
@@ -163,6 +164,7 @@ class FitMASCoreFlowsTest(unittest.TestCase):
         self.assertIn("reference principale: today", captured["temporal_summary"])
         self.assertIn("sport: running", captured["activity_claim_summary"])
         self.assertIn("duree_min: 30", captured["activity_claim_summary"])
+        self.assertIn("big_session_done", captured["signal_summary"])
         self.assertIn("Activite declaree par l'utilisateur", captured["selected_facts"])
 
     def test_message_flow_persists_unlogged_activity_claim_fact(self) -> None:

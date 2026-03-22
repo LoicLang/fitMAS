@@ -12,12 +12,14 @@ from fitmas.conversation_context import (
     build_claim_memory_updates,
     build_conversation_context,
     execution_summary_for_prompt,
+    signal_summary_for_prompt,
     temporal_summary_for_prompt,
 )
 from fitmas.db import get_db
 from fitmas.llm import decide, extract_facts, make_plan_summary, make_timeline_summary, select_prompt_facts
 from fitmas.models import Extraction, Message, MessageReply, MessageRole
 from fitmas.nlp import extract_reply, generate_reply
+from fitmas.signals import collect_signals
 
 logger = logging.getLogger(__name__)
 
@@ -42,6 +44,11 @@ def post_message(payload: IncomingMessage, db: Session = Depends(get_db)) -> Mes
     activities = repo.get_activities(db, user.id, limit=120)
     today_session = repo.get_today_scheduled_session(db, user.id, timezone_name=user.timezone)
     active_facts = [repo.to_pydantic_fact(fact).model_dump() for fact in repo.get_active_facts(db, user.id)]
+    try:
+        signals = collect_signals(db, user)
+    except Exception:
+        logger.exception("Failed to collect conversation signals")
+        signals = []
     conversation_context = build_conversation_context(
         user_text=payload.text,
         conversation_history=conversation_history[:-1],
@@ -49,6 +56,7 @@ def post_message(payload: IncomingMessage, db: Session = Depends(get_db)) -> Mes
         scheduled_sessions=scheduled_sessions,
         activities=activities,
         active_facts=active_facts,
+        signals=signals,
     )
     claim_facts = build_claim_memory_updates(
         conversation_context,
@@ -66,6 +74,7 @@ def post_message(payload: IncomingMessage, db: Session = Depends(get_db)) -> Mes
             scheduled_sessions=scheduled_sessions,
             activities=activities,
             active_facts=active_facts,
+            signals=signals,
         )
 
     decision = decide(
@@ -75,6 +84,7 @@ def post_message(payload: IncomingMessage, db: Session = Depends(get_db)) -> Mes
         execution_summary=execution_summary_for_prompt(conversation_context),
         temporal_summary=temporal_summary_for_prompt(conversation_context),
         activity_claim_summary=activity_claim_summary_for_prompt(conversation_context),
+        signal_summary=signal_summary_for_prompt(conversation_context),
         conversation_history=conversation_history,
         coach_context={
             "coach_name": user.coach_name,

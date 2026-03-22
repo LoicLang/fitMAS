@@ -21,6 +21,12 @@ from fitmas.time_context import DAY_KEYS, DAY_LABELS_FR, build_time_context, get
 logger = logging.getLogger(__name__)
 
 Signal = dict[str, Any]
+CONVERSATION_SIGNAL_KINDS = (
+    "missed_key_session",
+    "silence_3_days",
+    "high_cumulative_load",
+    "big_session_done",
+)
 
 PREV_DAY = {
     "monday": "sunday", "tuesday": "monday", "wednesday": "tuesday",
@@ -322,6 +328,16 @@ def format_signals_for_prompt(signals: list[Signal]) -> str:
     return "\n".join(lines)
 
 
+def select_conversation_signals(signals: list[Signal], *, limit: int = 3) -> list[Signal]:
+    ranked = [
+        signal
+        for signal in signals
+        if signal.get("kind") in CONVERSATION_SIGNAL_KINDS
+    ]
+    ranked.sort(key=_conversation_signal_sort_key, reverse=True)
+    return ranked[:limit]
+
+
 def _activities_on_local_date(db: Session, user: s.User, *, target_date: date) -> list[s.Activity]:
     activities = repo.get_activities(db, user.id, limit=120)
     timezone = get_timezone(user.timezone)
@@ -342,3 +358,14 @@ def _activities_on_local_date(db: Session, user: s.User, *, target_date: date) -
 def _claimed_activities_on_local_date(db: Session, user: s.User, *, target_date: date):
     facts = repo.get_active_facts(db, user.id, limit=48)
     return extract_claims_from_facts(facts, target_date=target_date)
+
+
+def _conversation_signal_sort_key(signal: Signal) -> tuple[float, float]:
+    severity_score = {"action": 3.0, "warning": 2.0, "info": 1.0}.get(str(signal.get("severity") or "info"), 0.0)
+    kind_score = {
+        "missed_key_session": 4.0,
+        "high_cumulative_load": 3.0,
+        "silence_3_days": 2.0,
+        "big_session_done": 1.0,
+    }.get(str(signal.get("kind") or ""), 0.0)
+    return (severity_score, kind_score)

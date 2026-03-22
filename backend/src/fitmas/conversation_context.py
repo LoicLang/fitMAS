@@ -19,6 +19,7 @@ from fitmas.execution_context import (
     format_execution_context_for_prompt,
 )
 from fitmas.fact_memory import normalize_fact_payload, select_relevant_facts
+from fitmas.signals import Signal, format_signals_for_prompt, select_conversation_signals
 from fitmas.temporal_resolver import (
     TemporalResolution,
     format_temporal_resolution_for_prompt,
@@ -37,6 +38,7 @@ class ConversationContextBundle:
     recent_activity_claim: ActivityClaim | None
     active_facts: tuple[dict[str, Any], ...]
     selected_facts: tuple[str, ...]
+    selected_signals: tuple[Signal, ...]
 
 
 def build_conversation_context(
@@ -47,9 +49,11 @@ def build_conversation_context(
     scheduled_sessions: Sequence[Any],
     activities: Sequence[Any],
     active_facts: Sequence[dict[str, Any]],
+    signals: Sequence[Signal] | None = None,
     now: datetime | None = None,
 ) -> ConversationContextBundle:
     normalized_facts = tuple(_normalize_facts(active_facts))
+    selected_signals = tuple(select_conversation_signals(list(signals or [])))
     return ConversationContextBundle(
         time_context=build_time_context(timezone_name, now=now),
         temporal_resolution=resolve_temporal_context(
@@ -82,6 +86,7 @@ def build_conversation_context(
         ),
         active_facts=normalized_facts,
         selected_facts=tuple(select_relevant_facts(normalized_facts, affects=["conversation"], limit=6, now=now)),
+        selected_signals=selected_signals,
     )
 
 
@@ -120,6 +125,10 @@ def temporal_summary_for_prompt(context: ConversationContextBundle) -> str:
 
 def activity_claim_summary_for_prompt(context: ConversationContextBundle) -> str:
     return format_activity_claim_for_prompt(context.recent_activity_claim)
+
+
+def signal_summary_for_prompt(context: ConversationContextBundle) -> str:
+    return format_signals_for_prompt(list(context.selected_signals))
 
 
 def _normalize_facts(facts: Sequence[dict[str, Any]]) -> list[dict[str, Any]]:
