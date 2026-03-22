@@ -1,10 +1,11 @@
 from __future__ import annotations
 
+from datetime import date, timedelta
 import logging
 
 from sqlalchemy.orm import Session
 
-from fitmas import repository as repo
+from fitmas import plan_actions, repository as repo
 from fitmas.llm import MutationDecision
 
 logger = logging.getLogger(__name__)
@@ -19,6 +20,48 @@ def _resync_plan_sessions(db: Session, plan_id: int) -> None:
 
 def apply(db: Session, plan_id: int, decision: MutationDecision) -> None:
     """Apply a mutation decision to the plan in DB."""
+
+    plan = repo.get_plan_optional(db, plan_id)
+    user = plan.user if plan is not None else None
+
+    if decision.target_session_id and user is not None:
+        if decision.mutation_type == "move_session":
+            target_date = _resolve_target_date(decision)
+            moved = plan_actions.move_session(
+                db,
+                user=user,
+                session_id=decision.target_session_id,
+                target_date=target_date,
+            )
+            logger.info(
+                "Applied session move: session=%s target_date=%s result=%s",
+                decision.target_session_id,
+                target_date,
+                moved.id if moved else None,
+            )
+            return
+
+        if decision.mutation_type == "lighten_day":
+            session = plan_actions.lighten_session(
+                db,
+                user=user,
+                session_id=decision.target_session_id,
+                rationale=decision.rationale,
+            )
+            logger.info("Applied session lighten: session=%s result=%s", decision.target_session_id, session.id if session else None)
+            return
+
+        if decision.mutation_type == "update_session":
+            session = plan_actions.update_session_details(
+                db,
+                user=user,
+                session_id=decision.target_session_id,
+                new_title=decision.new_title,
+                new_goal=decision.new_goal,
+                rationale=decision.rationale,
+            )
+            logger.info("Applied session update: session=%s result=%s", decision.target_session_id, session.id if session else None)
+            return
 
     if decision.mutation_type == "move_session":
         if not decision.from_day or not decision.to_day:
@@ -122,3 +165,19 @@ def apply(db: Session, plan_id: int, decision: MutationDecision) -> None:
     # "no_change" → nothing to do
     elif decision.mutation_type == "no_change":
         logger.info("No change needed: %s", decision.rationale)
+
+
+def _resolve_target_date(decision: MutationDecision) -> date | None:
+    if decision.target_date:
+        try:
+            return date.fromisoformat(decision.target_date)
+        except ValueError:
+            return None
+    if decision.to_day:
+        day_index = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"].index(decision.to_day)
+        today = date.today()
+        delta = (day_index - today.weekday()) % 7
+        if delta == 0:
+            delta = 7
+        return today + timedelta(days=delta)
+    return None

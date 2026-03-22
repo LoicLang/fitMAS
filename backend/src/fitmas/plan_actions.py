@@ -26,6 +26,63 @@ def skip_session(db: Session, *, user: s.User, session_id: int) -> s.ScheduledSe
     return session
 
 
+def lighten_session(
+    db: Session,
+    *,
+    user: s.User,
+    session_id: int,
+    rationale: str | None = None,
+) -> s.ScheduledSession | None:
+    session = repo.get_scheduled_session(db, user.id, session_id)
+    if session is None:
+        return None
+
+    _apply_light_session_fields(session, rationale=rationale)
+    _, day_plan = repo.get_current_week_day_plan_for_session(db, user=user, session=session)
+    if day_plan is not None:
+        _apply_light_day_fields(day_plan, rationale=rationale)
+        repo.set_change_notes(db, day_plan.id, [("Journee allegee", rationale or "Journee allegee.")])
+
+    db.commit()
+    db.refresh(session)
+    return session
+
+
+def update_session_details(
+    db: Session,
+    *,
+    user: s.User,
+    session_id: int,
+    new_title: str | None = None,
+    new_goal: str | None = None,
+    rationale: str | None = None,
+) -> s.ScheduledSession | None:
+    session = repo.get_scheduled_session(db, user.id, session_id)
+    if session is None:
+        return None
+
+    if new_title:
+        session.session_title = new_title
+    if new_goal:
+        session.session_goal = new_goal
+    if rationale:
+        session.session_note = rationale
+
+    _, day_plan = repo.get_current_week_day_plan_for_session(db, user=user, session=session)
+    if day_plan is not None:
+        if new_title:
+            day_plan.session_title = new_title
+        if new_goal:
+            day_plan.session_goal = new_goal
+        if rationale:
+            day_plan.session_note = rationale
+        repo.set_change_notes(db, day_plan.id, [("Seance modifiee", rationale or "Seance ajustee.")])
+
+    db.commit()
+    db.refresh(session)
+    return session
+
+
 def move_session(
     db: Session,
     *,
@@ -150,11 +207,33 @@ def _sync_current_week_day_status(
 
 
 def _lighten_day_plan(db: Session, day: s.DayPlan) -> None:
+    _apply_light_day_fields(day, rationale="Seance deplacee depuis l'app. Garde de la fraicheur pour le nouveau creneau.")
+    db.commit()
+    repo.set_change_notes(db, day.id, [("Seance reportee", "Deplacement confirme depuis l'app.")])
+
+
+def _apply_light_session_fields(session: s.ScheduledSession, *, rationale: str | None) -> None:
+    session.sport_type = "rest"
+    session.session_type = "rest"
+    session.session_title = "Journee flexible"
+    session.session_goal = "Recuperation et disponibilite"
+    session.session_note = rationale or "Journee allegee."
+    session.session_description = ""
+    session.duration_min = None
+    session.intensity = "easy"
+    session.load_score = 0
+    session.priority = "Leger"
+    session.nutrition_focus = "Reste simple. Le but est surtout de recuperer."
+    session.flexibility = "flexible"
+    session.completion_status = "adapted"
+
+
+def _apply_light_day_fields(day: s.DayPlan, *, rationale: str | None) -> None:
     day.sport_type = "rest"
     day.session_type = "rest"
     day.session_title = "Journee flexible"
     day.session_goal = "Recuperation et disponibilite"
-    day.session_note = "Seance deplacee depuis l'app. Garde de la fraicheur pour le nouveau creneau."
+    day.session_note = rationale or "Journee allegee."
     day.session_description = ""
     day.duration_min = None
     day.intensity = "easy"
@@ -163,5 +242,3 @@ def _lighten_day_plan(db: Session, day: s.DayPlan) -> None:
     day.nutrition_focus = "Reste simple. Le but est surtout de recuperer."
     day.flexibility = "flexible"
     day.completion_status = "adapted"
-    db.commit()
-    repo.set_change_notes(db, day.id, [("Seance reportee", "Deplacement confirme depuis l'app.")])
