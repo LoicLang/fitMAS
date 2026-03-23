@@ -12,6 +12,7 @@ from fitmas.db import get_db
 from fitmas.llm import formulate_onboarding_recap, formulate_week_plan, preview_coach_voice
 from fitmas.models import OnboardPreview, OnboardResult, WeeklyPlan
 from fitmas.planner import build_week_plan
+from fitmas.planning_state import refresh_planning_state
 from fitmas.time_context import build_time_context
 
 logger = logging.getLogger(__name__)
@@ -56,6 +57,25 @@ def _generate_enriched_week(profile: dict) -> dict:
     )
 
 
+def _generate_enriched_week_for_user(db: Session, user: s.User) -> dict:
+    profile = _build_user_profile(user)
+    planning_bundle = refresh_planning_state(db, user=user)
+    planner_output = build_week_plan(
+        sports=profile["sports"],
+        weekly_structure_notes=profile["weekly_structure_notes"],
+        constraints=profile["constraints"],
+        coach_name=profile["coach_name"],
+        planning_decision=planning_bundle.decision,
+        athlete_profile=planning_bundle.profile,
+    )
+    return formulate_week_plan(
+        planner_output,
+        user_profile=profile,
+        coach_profile=profile,
+        time_context=build_time_context(profile.get("timezone")),
+    )
+
+
 @router.post("/api/v0/onboard/preview", response_model=OnboardPreview)
 def preview_onboarding(payload: OnboardPreviewPayload) -> OnboardPreview:
     normalized_payload = normalized_onboarding_payload(payload)
@@ -74,7 +94,6 @@ def onboard(payload: OnboardPayload, db: Session = Depends(get_db)) -> OnboardRe
     normalized_payload = normalized_onboarding_payload(payload)
     time_context = build_time_context(normalized_payload.get("timezone"))
     recap = formulate_onboarding_recap(normalized_payload, time_context=time_context)
-    enriched_week = _generate_enriched_week(normalized_payload)
 
     user = repo.get_user_optional(db)
     if user is None:
@@ -93,6 +112,7 @@ def onboard(payload: OnboardPayload, db: Session = Depends(get_db)) -> OnboardRe
         preferences=normalized_payload["preferences"],
     )
     repo.replace_user_facts(db, user.id, build_onboarding_facts(normalized_payload))
+    enriched_week = _generate_enriched_week_for_user(db, user)
 
     db.query(s.CoachMessage).filter(s.CoachMessage.user_id == user.id).delete()
     db.commit()
@@ -122,7 +142,7 @@ def regenerate_week(db: Session = Depends(get_db)) -> WeeklyPlan:
     if user is None:
         raise HTTPException(status_code=404, detail="No onboarded user yet")
 
-    enriched_week = _generate_enriched_week(_build_user_profile(user))
+    enriched_week = _generate_enriched_week_for_user(db, user)
     plan = repo.replace_plan(
         db,
         user.id,

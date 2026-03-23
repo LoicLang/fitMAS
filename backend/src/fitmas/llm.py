@@ -690,6 +690,19 @@ def formulate_week_plan(
     time_context: dict | None = None,
 ) -> dict:
     resolved_time_context = time_context or build_time_context(user_profile.get("timezone") or coach_profile.get("timezone"))
+    planning_context = planner_output.get("planning_context") or {}
+    planning_context_block = ""
+    if planning_context:
+        planning_context_block = (
+            "\nDecision de planning deja prise hors LLM:\n"
+            f"- planning_mode: {planning_context.get('planning_mode')}\n"
+            f"- weekly_target_tss: {planning_context.get('weekly_target_tss')}\n"
+            f"- key_session_count: {planning_context.get('key_session_count')}\n"
+            f"- strength_session_count: {planning_context.get('strength_session_count')}\n"
+            f"- long_session: {planning_context.get('long_session')}\n"
+            f"- rationale: {' ; '.join(planning_context.get('rationale') or [])}\n"
+            f"- adaptations: {' ; '.join(planning_context.get('adaptations') or [])}\n"
+        )
     prompt = f"""{render_time_context(resolved_time_context)}
 Tu dois enrichir un squelette de semaine multisport pour que chaque seance soit directement utilisable en situation reelle.
 
@@ -707,6 +720,7 @@ Coach:
 - fait: {coach_profile['coach_do']}
 - ne fait jamais: {coach_profile['coach_dont']}
 - ame: {coach_profile['coach_soul']}
+{planning_context_block}
 
 Squelette:
 {json.dumps(planner_output, ensure_ascii=False)}
@@ -780,7 +794,7 @@ def _merge_week_enrichment(planner_output: dict, enrichment: dict) -> dict:
                 "session_title": enriched_title if enriched_title else day["session_title"],
                 "session_goal": enriched_goal if enriched_goal else day["session_goal"],
                 "session_note": str(payload.get("session_note") or day["session_note"]).strip(),
-                "session_description": enriched_description,
+                "session_description": enriched_description if enriched_description else day.get("session_description", ""),
                 "watch_items": [
                     (
                         str(watch_title).strip() if watch_title else day["watch_items"][0][0],
@@ -824,7 +838,7 @@ def _fallback_week_plan(planner_output: dict, coach_profile: dict) -> dict:
             {
                 **day,
                 "session_note": _fallback_day_note(day, coach_profile),
-                "session_description": "",
+                "session_description": day.get("session_description", ""),
                 "watch_items": day["watch_items"],
             }
         )

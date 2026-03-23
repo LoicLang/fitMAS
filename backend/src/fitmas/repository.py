@@ -771,6 +771,9 @@ def replace_plan(
             db.query(s.DayPlan).filter(s.DayPlan.id.in_(day_ids)).delete(synchronize_session=False)
         db.query(s.WeeklyPlan).filter(s.WeeklyPlan.id.in_(plan_ids)).delete(synchronize_session=False)
     db.commit()
+    for stale_plan in plans:
+        if db.object_session(stale_plan) is db:
+            db.expunge(stale_plan)
 
     plan = s.WeeklyPlan(
         user_id=user_id,

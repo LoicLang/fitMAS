@@ -1,7 +1,16 @@
 from __future__ import annotations
 
+import logging
 import re
 from dataclasses import dataclass
+
+from fitmas.athlete_profile import AthleteProfileSnapshot
+from fitmas.plan_validator import validate_week_plan
+from fitmas.planning_config import get_sport_planning_config
+from fitmas.planning_decision import PlanningDecision
+from fitmas.session_templates import render_session_description, select_session_template
+
+logger = logging.getLogger(__name__)
 
 DAY_KEYS = [
     "monday",
@@ -71,7 +80,6 @@ def normalize_sports(raw_values: list[str] | str) -> list[str]:
                 if sport not in normalized:
                     normalized.append(sport)
                 break
-
     return normalized or ["running"]
 
 
@@ -81,24 +89,153 @@ def build_week_plan(
     weekly_structure_notes: str,
     constraints: list[str],
     coach_name: str,
+    planning_decision: PlanningDecision | None = None,
+    athlete_profile: AthleteProfileSnapshot | None = None,
 ) -> dict:
-    normalized_sports = normalize_sports(sports)
-    notes_blob = " ".join([weekly_structure_notes, *constraints]).lower()
+    normalized_sports = normalize_sports(list(athlete_profile.primary_sports) if athlete_profile is not None else sports)
+    notes_blob = " ".join(
+        [
+            weekly_structure_notes,
+            *constraints,
+            *(athlete_profile.constraints if athlete_profile is not None else ()),
+            *(athlete_profile.preferences if athlete_profile is not None else ()),
+        ]
+    ).lower()
 
     blocked_days = _extract_days(notes_blob, ("bloque", "bloqué", "indispo", "pas dispo", "jamais"))
     fragile_days = _extract_days(notes_blob, ("fragile", "leger", "léger", "light", "souple", "doux"))
     long_day = _extract_long_day(notes_blob, blocked_days)
     key_day = _pick_key_day(blocked_days, fragile_days, long_day)
 
-    sessions = _build_sessions(normalized_sports, key_day, long_day)
+    sessions = _build_sessions(
+        normalized_sports=normalized_sports,
+        key_day=key_day,
+        long_day=long_day,
+        planning_decision=planning_decision,
+        athlete_profile=athlete_profile,
+    )
+    days = _schedule_sessions(
+        sessions=sessions,
+        blocked_days=blocked_days,
+        fragile_days=fragile_days,
+        long_day=long_day,
+        key_day=key_day,
+        planning_decision=planning_decision,
+    )
+
+    validation = validate_week_plan(
+        days,
+        primary_sport=normalized_sports[0],
+        planning_decision=planning_decision,
+    )
+    if not validation.is_valid:
+        logger.warning("Planner validation fallback triggered: %s", ", ".join(issue.code for issue in validation.issues))
+        safe_sessions = _build_safe_sessions(normalized_sports=normalized_sports, long_day=long_day, athlete_profile=athlete_profile)
+        days = _schedule_sessions(
+            sessions=safe_sessions,
+            blocked_days=blocked_days,
+            fragile_days=fragile_days,
+            long_day=long_day,
+            key_day=key_day,
+            planning_decision=None,
+        )
+
+    return {
+        "intention_seed": _build_intention_seed(
+            sports=normalized_sports,
+            long_day=long_day,
+            key_day=key_day,
+            coach_name=coach_name,
+            planning_decision=planning_decision,
+        ),
+        "planning_context": _planning_context_payload(planning_decision),
+        "days": days,
+    }
+
+
+def _build_sessions(
+    *,
+    normalized_sports: list[str],
+    key_day: str,
+    long_day: str,
+    planning_decision: PlanningDecision | None,
+    athlete_profile: AthleteProfileSnapshot | None,
+) -> list[PlannedSession]:
+    primary_sport = normalized_sports[0]
+    support_sports = [sport for sport in normalized_sports[1:] if sport != "rest"]
+    mode = planning_decision.planning_mode if planning_decision is not None else "maintain_load"
+    key_budget = planning_decision.key_session_count if planning_decision is not None else 2
+    long_enabled = planning_decision.long_session if planning_decision is not None else True
+    strength_budget = planning_decision.strength_session_count if planning_decision is not None else (1 if "strength" in normalized_sports else 0)
+    sessions: list[PlannedSession] = []
+
+    if mode == "injury_protection":
+        sessions.append(_session_from_type(primary_sport, _recovery_type(primary_sport), preferred_day=key_day, mode=mode))
+        if strength_budget > 0:
+            sessions.append(_session_from_type("strength", "mobility", preferred_day=None, mode=mode))
+        return sessions
+
+    key_types = _key_types_for_mode(primary_sport, mode)
+    quality_budget = min(key_budget, len(key_types))
+    if long_enabled and get_sport_planning_config(primary_sport).supports_long_session:
+        quality_budget = max(1, quality_budget - 1)
+    secondary_key_day = _secondary_key_day(key_day=key_day, long_day=long_day)
+    for index in range(quality_budget):
+        preferred_day = key_day if index == 0 else secondary_key_day
+        sessions.append(_session_from_type(primary_sport, key_types[index], preferred_day=preferred_day, mode=mode))
+
+    if long_enabled and get_sport_planning_config(primary_sport).supports_long_session:
+        sessions.append(_session_from_type(primary_sport, "long", preferred_day=long_day, mode=mode))
+
+    sessions.append(_session_from_type(primary_sport, _easy_type(primary_sport), preferred_day=None, mode=mode))
+
+    support_limit = 2 if mode in {"increase_load", "maintain_load"} else 1
+    for sport in support_sports[:support_limit]:
+        sessions.append(_session_from_type(sport, _support_type(sport, mode), preferred_day=None, mode=mode))
+
+    if "strength" not in normalized_sports and strength_budget > 0:
+        for index in range(strength_budget):
+            sessions.append(_session_from_type("strength", "general" if index == 0 and mode != "deload" else "core", preferred_day=None, mode=mode))
+    elif "strength" in normalized_sports:
+        for index in range(max(0, strength_budget - 1)):
+            sessions.append(_session_from_type("strength", "core" if index == 0 else "mobility", preferred_day=None, mode=mode))
+
+    if athlete_profile is not None and "pool_access" in athlete_profile.equipment and "swimming" not in normalized_sports and mode in {"increase_load", "maintain_load"}:
+        sessions.append(_session_from_type("swimming", "technique", preferred_day=None, mode="tactical_adjustment"))
+
+    return sessions[:6]
+
+
+def _build_safe_sessions(
+    *,
+    normalized_sports: list[str],
+    long_day: str,
+    athlete_profile: AthleteProfileSnapshot | None,
+) -> list[PlannedSession]:
+    primary_sport = normalized_sports[0]
+    sessions = [
+        _session_from_type(primary_sport, _easy_type(primary_sport), preferred_day="wednesday", mode="maintain_load"),
+        _session_from_type(primary_sport, "long" if get_sport_planning_config(primary_sport).supports_long_session else _easy_type(primary_sport), preferred_day=long_day, mode="reduce_load"),
+    ]
+    if athlete_profile is not None and "strength" in athlete_profile.primary_sports:
+        sessions.append(_session_from_type("strength", "core", preferred_day="monday", mode="maintain_load"))
+    return sessions
+
+
+def _schedule_sessions(
+    *,
+    sessions: list[PlannedSession],
+    blocked_days: set[str],
+    fragile_days: set[str],
+    long_day: str,
+    key_day: str,
+    planning_decision: PlanningDecision | None,
+) -> list[dict]:
     days: dict[str, dict] = {
         day: _rest_day(day, flexible=day in fragile_days or day in blocked_days)
         for day in DAY_KEYS
     }
-
-    occupied_days = {day for day in blocked_days}
-    for day in blocked_days:
-        days[day] = _rest_day(day, flexible=True)
+    occupied_days = set(blocked_days)
 
     for session in sessions:
         target_day = _pick_day_for_session(
@@ -110,11 +247,9 @@ def build_week_plan(
             key_day=key_day,
         )
         occupied_days.add(target_day)
-        days[target_day] = _session_day(target_day, session)
+        days[target_day] = _session_day(target_day, session, planning_decision=planning_decision)
 
-    ordered_days = [days[day] for day in DAY_KEYS]
-    intention_seed = _build_intention_seed(normalized_sports, long_day, key_day, coach_name)
-    return {"intention_seed": intention_seed, "days": ordered_days}
+    return [days[day] for day in DAY_KEYS]
 
 
 def _extract_days(text: str, keywords: tuple[str, ...]) -> set[str]:
@@ -158,68 +293,16 @@ def _pick_key_day(blocked_days: set[str], fragile_days: set[str], long_day: str)
     return "wednesday"
 
 
-def _build_sessions(sports: list[str], key_day: str, long_day: str) -> list[PlannedSession]:
-    main_sport = sports[0]
-    support_sports = [sport for sport in sports[1:] if sport != "rest"]
-    sessions = [
-        PlannedSession(
-            sport_type=main_sport,
-            session_type="quality" if main_sport != "climbing" else "project",
-            duration_min=60 if main_sport in {"running", "cycling"} else 50,
-            intensity="hard",
-            load_score=3,
-            priority="Seance cle",
-            preferred_day=key_day,
-        ),
-        PlannedSession(
-            sport_type=main_sport,
-            session_type="long",
-            duration_min=90 if main_sport == "cycling" else 75 if main_sport == "running" else 60,
-            intensity="moderate",
-            load_score=3,
-            priority="Repere fort",
-            preferred_day=long_day,
-        ),
-    ]
-
-    for sport in support_sports:
-        sessions.append(_support_session(sport))
-
-    if main_sport != "swimming":
-        sessions.append(
-            PlannedSession(
-                sport_type="swimming" if "swimming" in sports else main_sport,
-                session_type="easy" if "swimming" not in sports else "technique",
-                duration_min=40,
-                intensity="easy",
-                load_score=1,
-                priority="Recuperation active",
-            )
-        )
-    else:
-        sessions.append(
-            PlannedSession(
-                sport_type=main_sport,
-                session_type="easy",
-                duration_min=35,
-                intensity="easy",
-                load_score=1,
-                priority="Clarte",
-            )
-        )
-
-    return sessions[:6]
-
-
-def _support_session(sport: str) -> PlannedSession:
-    defaults = {
-        "cycling": PlannedSession("cycling", "endurance", 75, "moderate", 2, "Endurance"),
-        "swimming": PlannedSession("swimming", "technique", 45, "easy", 1, "Technique"),
-        "climbing": PlannedSession("climbing", "volume", 90, "moderate", 2, "Charge utile"),
-        "strength": PlannedSession("strength", "support", 35, "easy", 1, "Support"),
-        "running": PlannedSession("running", "easy", 45, "easy", 1, "Clarte"),
-    }
-    return defaults.get(sport, PlannedSession(sport, "easy", 45, "easy", 1, "Clarte"))
+def _secondary_key_day(*, key_day: str, long_day: str) -> str | None:
+    for candidate in ("tuesday", "thursday", "wednesday", "friday", "monday"):
+        if candidate in {key_day, long_day}:
+            continue
+        if abs(DAY_KEYS.index(candidate) - DAY_KEYS.index(key_day)) <= 1:
+            continue
+        if abs(DAY_KEYS.index(candidate) - DAY_KEYS.index(long_day)) <= 1:
+            continue
+        return candidate
+    return None
 
 
 def _pick_day_for_session(
@@ -231,11 +314,11 @@ def _pick_day_for_session(
     long_day: str,
     key_day: str,
 ) -> str:
-    if session.preferred_day and session.preferred_day not in occupied_days:
+    if session.preferred_day and session.preferred_day not in occupied_days and session.preferred_day not in blocked_days:
         return session.preferred_day
 
     if session.intensity == "easy":
-        preferred_order = list(fragile_days) + ["monday", "wednesday", "friday", "saturday", "sunday"]
+        preferred_order = list(fragile_days) + ["monday", "wednesday", "friday", "saturday", "sunday", "tuesday", "thursday"]
     else:
         preferred_order = ["tuesday", "wednesday", "thursday", "friday", "saturday", "sunday", "monday"]
 
@@ -261,12 +344,164 @@ def _is_adjacent(day: str, long_day: str, key_day: str, occupied_days: set[str])
     return False
 
 
-def _build_intention_seed(sports: list[str], long_day: str, key_day: str, coach_name: str) -> str:
+def _session_from_type(
+    sport_type: str,
+    session_type: str,
+    *,
+    preferred_day: str | None,
+    mode: str,
+) -> PlannedSession:
+    template = select_session_template(sport_type=sport_type, session_type=session_type)
+    sport_config = get_sport_planning_config(sport_type)
+    duration = int(round(template.default_duration_min * _duration_multiplier(mode, session_type=session_type)))
+    duration = max(sport_config.min_session_duration_min, min(sport_config.max_session_duration_min, duration))
+    intensity = template.intensity
+    load_score = template.load_score
+    priority = _priority_for_template(template.session_type, template.load_score)
+
+    if mode in {"reduce_load", "deload"} and intensity == "hard":
+        intensity = "moderate"
+        load_score = max(2, load_score - 1)
+    if mode == "injury_protection":
+        intensity = "easy"
+        load_score = 1
+        priority = "Protection"
+    if mode == "tactical_adjustment" and intensity == "hard":
+        priority = "Ajustable"
+
+    return PlannedSession(
+        sport_type=sport_type,
+        session_type=session_type,
+        duration_min=duration,
+        intensity=intensity,
+        load_score=load_score,
+        priority=priority,
+        preferred_day=preferred_day,
+    )
+
+
+def _duration_multiplier(mode: str, *, session_type: str) -> float:
+    if mode == "increase_load":
+        return 1.1 if session_type != "recovery" else 1.0
+    if mode == "maintain_load":
+        return 1.0
+    if mode == "reduce_load":
+        return 0.85
+    if mode == "deload":
+        return 0.75
+    if mode == "tactical_adjustment":
+        return 0.9
+    if mode == "injury_protection":
+        return 0.65
+    return 1.0
+
+
+def _key_types_for_mode(primary_sport: str, mode: str) -> list[str]:
+    progressive = {
+        "running": ["intervals", "tempo", "fartlek"],
+        "cycling": ["intervals", "sweet_spot"],
+        "swimming": ["css", "endurance_sets"],
+        "climbing": ["bouldering", "technique"],
+        "strength": ["general", "core"],
+    }
+    conservative = {
+        "running": ["fartlek", "tempo"],
+        "cycling": ["sweet_spot", "endurance"],
+        "swimming": ["endurance_sets", "technique"],
+        "climbing": ["technique"],
+        "strength": ["general"],
+    }
+    protected = {
+        "running": ["easy"],
+        "cycling": ["endurance"],
+        "swimming": ["technique"],
+        "climbing": ["technique"],
+        "strength": ["mobility"],
+    }
+    if mode in {"injury_protection", "tactical_adjustment"}:
+        return protected.get(primary_sport, ["easy"])
+    if mode in {"reduce_load", "deload"}:
+        return conservative.get(primary_sport, ["easy"])
+    return progressive.get(primary_sport, ["easy"])
+
+
+def _easy_type(sport_type: str) -> str:
+    mapping = {
+        "running": "easy",
+        "cycling": "recovery",
+        "swimming": "technique",
+        "climbing": "technique",
+        "strength": "core",
+    }
+    return mapping.get(sport_type, "easy")
+
+
+def _recovery_type(sport_type: str) -> str:
+    mapping = {
+        "running": "recovery",
+        "cycling": "recovery",
+        "swimming": "recovery",
+        "climbing": "technique",
+        "strength": "mobility",
+    }
+    return mapping.get(sport_type, "recovery")
+
+
+def _support_type(sport_type: str, mode: str) -> str:
+    if sport_type == "cycling":
+        return "recovery" if mode in {"deload", "reduce_load"} else "endurance"
+    if sport_type == "swimming":
+        return "technique"
+    if sport_type == "strength":
+        return "core"
+    if sport_type == "climbing":
+        return "technique"
+    return _easy_type(sport_type)
+
+
+def _priority_for_template(session_type: str, load_score: int) -> str:
+    if session_type == "long":
+        return "Repere fort"
+    if load_score >= 3:
+        return "Seance cle"
+    if session_type in {"recovery", "mobility"}:
+        return "Recuperation active"
+    return "Support"
+
+
+def _planning_context_payload(planning_decision: PlanningDecision | None) -> dict | None:
+    if planning_decision is None:
+        return None
+    return {
+        "planning_mode": planning_decision.planning_mode,
+        "weekly_target_tss": planning_decision.weekly_target_tss,
+        "key_session_count": planning_decision.key_session_count,
+        "strength_session_count": planning_decision.strength_session_count,
+        "long_session": planning_decision.long_session,
+        "rationale": list(planning_decision.rationale),
+        "adaptations": list(planning_decision.adaptations),
+    }
+
+
+def _build_intention_seed(
+    *,
+    sports: list[str],
+    long_day: str,
+    key_day: str,
+    coach_name: str,
+    planning_decision: PlanningDecision | None,
+) -> str:
     sports_text = ", ".join(_sport_label(sport) for sport in sports[:3])
+    if planning_decision is None:
+        return (
+            f"{coach_name} doit poser une semaine multisport lisible: bloc cle vers "
+            f"{DAY_LABELS[key_day].lower()}, repere long vers {DAY_LABELS[long_day].lower()}, "
+            f"et assez d'air pour tenir {sports_text} sans rigidifier la semaine."
+        )
     return (
-        f"{coach_name} doit poser une semaine multisport lisible: bloc cle vers "
-        f"{DAY_LABELS[key_day].lower()}, repere long vers {DAY_LABELS[long_day].lower()}, "
-        f"et assez d'air pour tenir {sports_text} sans rigidifier la semaine."
+        f"{coach_name} pose une semaine {planning_decision.planning_mode} avec cible {int(planning_decision.weekly_target_tss)} TSS. "
+        f"Bloc cle vers {DAY_LABELS[key_day].lower()}, repere long vers {DAY_LABELS[long_day].lower()} si pertinent, "
+        f"et assez d'air pour tenir {sports_text}. Raisons: {'; '.join(planning_decision.rationale[:2])}."
     )
 
 
@@ -279,6 +514,7 @@ def _rest_day(day: str, *, flexible: bool) -> dict:
         "session_title": "Journee flexible",
         "session_goal": "Laisser de l'air a la semaine et garder de la marge.",
         "session_note": "On ne force rien ici. La semaine doit rester respirable.",
+        "session_description": "",
         "duration_min": None,
         "intensity": "easy",
         "load_score": 0,
@@ -291,16 +527,17 @@ def _rest_day(day: str, *, flexible: bool) -> dict:
     }
 
 
-def _session_day(day: str, session: PlannedSession) -> dict:
-    title, goal = _session_copy(session)
+def _session_day(day: str, session: PlannedSession, *, planning_decision: PlanningDecision | None) -> dict:
+    template = select_session_template(sport_type=session.sport_type, session_type=session.session_type)
     return {
         "day": day,
         "label": DAY_LABELS[day],
         "sport_type": session.sport_type,
         "session_type": session.session_type,
-        "session_title": title,
-        "session_goal": goal,
-        "session_note": "",
+        "session_title": f"{template.title} {session.duration_min}min",
+        "session_goal": template.goal,
+        "session_note": _session_note(session, planning_decision=planning_decision),
+        "session_description": render_session_description(template, duration_min=session.duration_min),
         "duration_min": session.duration_min,
         "intensity": session.intensity,
         "load_score": session.load_score,
@@ -309,42 +546,32 @@ def _session_day(day: str, session: PlannedSession) -> dict:
         "flexibility": "flexible" if session.intensity == "easy" else "stable",
         "completion_status": "planned",
         "change_notes": [],
-        "watch_items": [_watch_copy(session)],
+        "watch_items": [(template.watch_title, template.watch_detail)],
     }
 
 
-def _session_copy(session: PlannedSession) -> tuple[str, str]:
-    sport = _sport_label(session.sport_type)
-    templates = {
-        ("running", "quality"): ("Course qualite", "Poser un vrai stimulus sans casser le reste de la semaine."),
-        ("running", "long"): ("Sortie longue course", "Construire un repere durable et propre."),
-        ("running", "easy"): ("Footing facile", "Faire du volume simple sans bruit."),
-        ("cycling", "quality"): ("Velo avec bloc soutenu", "Travailler la puissance utile sans eparpiller la semaine."),
-        ("cycling", "long"): ("Sortie longue velo", "Mettre une vraie base d'endurance dans la semaine."),
-        ("cycling", "endurance"): ("Sortie velo endurance", "Ajouter du volume propre et lisible."),
-        ("swimming", "technique"): ("Natation technique", "Garder de la precision sans ajouter trop de charge."),
-        ("swimming", "easy"): ("Natation fluide", "Bouger et recuperer sans alourdir la semaine."),
-        ("climbing", "project"): ("Escalade bloc fort", "Mettre un vrai effort de grimpe sans tout durcir autour."),
-        ("climbing", "volume"): ("Escalade volume", "Prendre de la grimpe utile et lire la fatigue ensuite."),
-        ("strength", "support"): ("Renfo support", "Stabiliser sans prendre toute la place."),
-    }
-    return templates.get((session.sport_type, session.session_type), (f"Seance {sport}", f"Poser une seance {sport} propre et tenable."))
+def _session_note(session: PlannedSession, *, planning_decision: PlanningDecision | None) -> str:
+    if planning_decision is None:
+        if session.priority == "Seance cle":
+            return "Bloc principal de la semaine. Il doit compter sans casser le reste."
+        if session.priority == "Repere fort":
+            return "Repere utile pour lire l'endurance et la regularite."
+        return "Seance utile mais deplacable si la vraie vie bouge."
+    if planning_decision.planning_mode == "deload":
+        return "Semaine allegee. On garde le geste sans chercher la performance."
+    if planning_decision.planning_mode == "injury_protection":
+        return "Protection prioritaire. Tout doit rester propre et tenable."
+    if session.priority == "Seance cle":
+        return f"Semaine {planning_decision.planning_mode}. Ce bloc porte le stimulus principal."
+    return f"Semaine {planning_decision.planning_mode}. On garde de la marge autour."
 
 
 def _nutrition_copy(session: PlannedSession) -> str:
     if session.intensity == "hard":
         return "Prevois quelque chose avant la seance, puis une recup simple derriere."
-    if session.sport_type in {"cycling", "running"} and session.duration_min and session.duration_min >= 70:
+    if session.sport_type in {"cycling", "running"} and session.duration_min >= 70:
         return "Ne pars pas a vide. Anticipe un peu avant puis remets quelque chose apres."
     return "Rester simple. Le but est surtout de soutenir la regularite."
-
-
-def _watch_copy(session: PlannedSession) -> tuple[str, str]:
-    if session.sport_type == "climbing":
-        return ("Avant-bras et fraicheur", "La grimpe peut charger plus que ce qu'elle raconte au planning.")
-    if session.intensity == "hard":
-        return ("Recuperation", "Le lendemain dira si la dose etait juste.")
-    return ("Regulier", "FitMAS lit surtout si la semaine reste tenable.")
 
 
 def _sport_label(sport: str) -> str:
