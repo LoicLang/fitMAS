@@ -29,6 +29,12 @@ def route_tools_for_query(user_text: str, *, pipeline: str) -> ToolRoutingDecisi
             tool_names=("get_activity_highlights", "get_recent_activities"),
             reason="activity_highlights",
         )
+    if _matches_any(lowered, _PLAN_DISPUTE_PATTERNS):
+        return ToolRoutingDecision(
+            pipeline=pipeline,
+            tool_names=("get_today_context", "get_plan_window"),
+            reason="plan_dispute",
+        )
     if _matches_any(lowered, _RECENT_ACTIVITY_PATTERNS):
         return ToolRoutingDecision(
             pipeline=pipeline,
@@ -101,6 +107,24 @@ _PLAN_PATTERNS = (
     "aujourd'hui c'est quoi",
     "aujourd hui c est quoi",
     "on fait quoi",
+)
+
+_PLAN_DISPUTE_PATTERNS = (
+    "c'est pas ce qui est sur mon planning",
+    "c est pas ce qui est sur mon planning",
+    "ce n'est pas ce qui est sur mon planning",
+    "ce n est pas ce qui est sur mon planning",
+    "pas ce qui est sur mon planning",
+    "planning dans l'app",
+    "planning dans l app",
+    "planning de l'app",
+    "planning de l app",
+    "planning sur l'app",
+    "planning sur l app",
+    "l'app est bien",
+    "l app est bien",
+    "sur mon planning dans l'app",
+    "sur mon planning dans l app",
 )
 
 _GENERIC_LOOKUP_PATTERNS = (

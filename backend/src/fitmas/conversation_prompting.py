@@ -18,7 +18,7 @@ class ConversationPromptPolicy:
 
 
 def select_conversation_prompt_policy(*, routing_reason: str | None) -> ConversationPromptPolicy:
-    if routing_reason == "plan_lookup":
+    if routing_reason in ("plan_lookup", "plan_dispute"):
         return ConversationPromptPolicy(
             name="plan_lookup_compact",
             history_limit=4,

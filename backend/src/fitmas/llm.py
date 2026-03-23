@@ -258,6 +258,7 @@ Exemples:
 - "ok ca me va" → no_change
 - "on est quel jour exactement ?" → no_change, fitmas_message explique le jour et la date locale
 - "ce soir c'est quoi deja ?" → no_change ou update utile selon la seance du jour et le contexte temporel
+- "c'est pas ce qui est sur mon planning dans l'app" → no_change, tu reconnais que l'app / calendrier date est la source de verite et tu repars de cette seance-la
 
 Reponds avec un JSON valide contenant exactement ces champs:
 - "mutation_type": une des valeurs ci-dessus

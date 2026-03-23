@@ -190,6 +190,55 @@ class LLMToolsTest(unittest.TestCase):
         self.assertIn("Source de vérité planning conversationnelle", prompts[0])
         self.assertIn("Natation app truth", prompts[0])
 
+    def test_decide_offers_plan_tools_for_app_plan_dispute(self) -> None:
+        original_client = llm._client
+        original_request_message = llm._request_message
+        original_log_tool_trace = llm.log_tool_trace
+        traces: list[object] = []
+
+        def fake_request_message(*, system, messages, model="claude-haiku-4-5-20251001", max_tokens=512, tools=None, tool_choice=None):
+            self.assertIsNotNone(tools)
+            self.assertEqual([tool["name"] for tool in tools], ["get_today_context", "get_plan_window"])
+            return SimpleNamespace(
+                stop_reason="end_turn",
+                content=[
+                    SimpleNamespace(
+                        type="text",
+                        text='{"mutation_type":"no_change","target_session_id":null,"second_session_id":null,"target_date":null,"from_day":null,"to_day":null,"new_title":null,"new_goal":null,"rationale":"app truth","fitmas_message":"Je repars du calendrier daté de l app."}',
+                    )
+                ],
+                usage=SimpleNamespace(input_tokens=110, output_tokens=30),
+            )
+
+        llm._client = lambda: object()
+        llm._request_message = fake_request_message
+        llm.log_tool_trace = lambda trace: traces.append(trace)
+        try:
+            decision = llm.decide(
+                "C'est pas ce qui est sur mon planning dans l'app",
+                "Legacy semaine: footing lundi",
+                timeline_summary="- id=12 | date=2026-03-23 | [swimming] Natation app truth | status=planned",
+                tool_context=ToolContext(
+                    pipeline="conversation",
+                    user_id=1,
+                    timezone_name="Europe/Paris",
+                    scheduled_sessions=[],
+                    activities=[],
+                    active_facts=[],
+                ),
+            )
+        finally:
+            llm._client = original_client
+            llm._request_message = original_request_message
+            llm.log_tool_trace = original_log_tool_trace
+
+        self.assertIsNotNone(decision)
+        self.assertEqual(decision.mutation_type, "no_change")
+        self.assertEqual(len(traces), 1)
+        self.assertTrue(traces[0].tool_offered)
+        self.assertEqual(traces[0].context_policy, "plan_lookup_compact")
+        self.assertEqual(traces[0].tool_count_offered, 2)
+
 
 if __name__ == "__main__":
     unittest.main()

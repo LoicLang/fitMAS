@@ -18,6 +18,12 @@ class ToolRoutingTest(unittest.TestCase):
         self.assertEqual(decision.reason, "plan_lookup")
         self.assertEqual(decision.tool_names, ("get_today_context", "get_plan_window"))
 
+    def test_routes_plan_dispute_queries_to_plan_tools(self) -> None:
+        decision = route_tools_for_query("C'est pas ce qui est sur mon planning dans l'app", pipeline="conversation")
+
+        self.assertEqual(decision.reason, "plan_dispute")
+        self.assertEqual(decision.tool_names, ("get_today_context", "get_plan_window"))
+
     def test_routes_fact_queries_to_memory_tool(self) -> None:
         decision = route_tools_for_query("Qu'est-ce que tu sais de mes contraintes ?", pipeline="conversation")
 
