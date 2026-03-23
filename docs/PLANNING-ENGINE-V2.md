@@ -156,12 +156,18 @@ Ordre recommande :
 - tables SQL `fitness_snapshots`, `readiness_snapshots`, `planning_decisions` posees pour l'audit trail V2
 - `repository.py` sait maintenant persister et relire ces objets domaine V2
 - `planning_state.py` assemble et persiste la pipeline V2 complete depuis la DB actuelle
-- tests cibles ajoutes pour ces cinq briques domaine
+- `session_templates.py` fournit maintenant une librairie V1 running / cycling / swimming / strength / climbing
+- `plan_validator.py` pose les garde-fous V1 charge / structure / profil
+- `planner.py` consomme maintenant `PlanningDecision` et produit des descriptions de seances actionnables meme sans LLM
+- `llm.py` preserve maintenant les descriptions deterministes du planner si le detailing ne les enrichit pas
+- `api_onboarding.py` et `regenerate_week` passent maintenant par `planning_state.py` avant generation
+- tests cibles ajoutes pour les snapshots, templates, validator, planner V2 et le flow onboarding/regeneration
 
 ### Prochaines briques
 
-- branchement du planner sur `PlanningDecision`
-- branchement de l'onboarding et du scheduler hebdo sur cette pipeline
+- `periodization.py` pour regler explicitement le type de semaine / deload au niveau cycle
+- enrichir encore `planner.py` avec une distribution de charge plus fine par sport
+- faire porter plus proprement l'explication de `PlanningDecision` jusque dans `heartbeat.py`
 
 ## Details par module
 
@@ -385,6 +391,9 @@ Definition of done :
 - fallback full deterministic possible
 - guardrails V1 centralises
 
+Etat :
+- fait
+
 ### Phase 4 — Planner V2
 
 Livrables :
@@ -395,6 +404,12 @@ Livrables :
 Definition of done :
 - `build_week_plan()` garde une interface compatible
 - la structure de semaine ne depend pas du LLM
+
+Etat :
+- bien avance
+- `build_week_plan()` accepte deja `PlanningDecision` + `AthleteProfileSnapshot`
+- la structure de semaine est maintenant decidee hors LLM
+- `periodization.py` reste a faire pour fermer la boucle cycle/deload
 
 ### Phase 5 — LLM session detailing
 
@@ -417,6 +432,11 @@ Livrables :
 Definition of done :
 - un user incomplet ne recoit pas un "vrai" plan V2
 - reprise d'onboarding possible
+
+Etat :
+- partiellement lance
+- l'onboarding et la regeneration passent deja par `planning_state.py`
+- l'enrichissement du questionnaire sportif reste a faire
 
 ### Phase 7 — Conversation + Heartbeat
 

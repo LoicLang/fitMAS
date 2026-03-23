@@ -71,6 +71,9 @@ Les garde-fous, la planification, les permissions, les cooldowns et la persistan
 - La boucle coach reçoit maintenant un résumé structuré `prévu vs réel`, une résolution temporelle, des claims d'activité récents, une mémoire utile sélectionnée et quelques signaux filtrés
 - `signals.py` et `heartbeat.py` lisent mieux les activités réelles hors plan au lieu de s'appuyer uniquement sur le plan
 - le chat et le heartbeat traitent maintenant le calendrier daté / app comme source de vérité planning avant le `WeeklyPlan`
+- le moteur planner V2 a maintenant `session_templates.py` + `plan_validator.py`
+- `planner.py` consomme déjà `PlanningDecision` pour structurer la semaine avant le LLM
+- l'onboarding et la régénération hebdo passent maintenant par `planning_state.py`
 
 ### Ce qui n'existe pas encore
 

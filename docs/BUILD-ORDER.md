@@ -274,7 +274,11 @@ Deja pose :
 - tables SQL d'audit V2 pour `fitness_snapshots`, `readiness_snapshots`, `planning_decisions`
 - helpers repository pour persister / relire les objets domaine V2
 - `planning_state.py` comme pipeline partagee build + persist
-- tests unitaires cibles pour ces cinq briques
+- `session_templates.py` pour la librairie V1 multisport
+- `plan_validator.py` pour les garde-fous structure / charge
+- `planner.py` consomme maintenant `PlanningDecision` et produit des seances deterministes deja actionnables
+- `api_onboarding.py` et `regenerate_week` passent maintenant par `planning_state.py`
+- tests unitaires et integration pour les briques moteur V2 et le flow onboarding/regeneration
 
 | # | Tâche | Fichiers | Impact |
 |---|-------|----------|--------|
