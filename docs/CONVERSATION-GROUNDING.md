@@ -332,6 +332,7 @@ Deja pose :
 - le prompt conversationnel rappelle explicitement que la source de verite planning est le calendrier date / app
 - `heartbeat.py` parle maintenant de la seance du jour et de la revue hebdo depuis `ScheduledSession` d'abord
 - `heartbeat.py` ne retombe sur `DayPlan` que comme fallback transitoire limite
+- les messages du type `ce n'est pas ce qu'il y a dans l'app` sont maintenant routes comme un `plan_dispute` vers les tools de lecture planning
 
 Concretement :
 - si l'app dit `Natation technique 35 min` et que le vieux `WeeklyPlan` dit autre chose, Telegram doit suivre l'app
