@@ -70,6 +70,7 @@ Les garde-fous, la planification, les permissions, les cooldowns et la persistan
 - Les metrics tools remontent aussi un volume de prompt exploitable (`prompt_char_count`, `history_messages_used`, `tool_count_offered`)
 - La boucle coach reçoit maintenant un résumé structuré `prévu vs réel`, une résolution temporelle, des claims d'activité récents, une mémoire utile sélectionnée et quelques signaux filtrés
 - `signals.py` et `heartbeat.py` lisent mieux les activités réelles hors plan au lieu de s'appuyer uniquement sur le plan
+- le chat et le heartbeat traitent maintenant le calendrier daté / app comme source de vérité planning avant le `WeeklyPlan`
 
 ### Ce qui n'existe pas encore
 
@@ -135,6 +136,10 @@ Conséquences :
 
 Le pivot est maintenant bien avancé avec `ScheduledSession`, et la boucle coach sait cibler ou échanger des séances datées.
 Il reste encore quelques chemins legacy `day key`, mais ils sont désormais secondaires et servent surtout de fallback.
+
+Conséquence récente importante :
+- Telegram ne doit plus parler d'un planning stale quand l'app et la timeline datée disent autre chose
+- `WeeklyPlan` / `DayPlan` restent encore utiles pour quelques notes coach legacy, mais plus comme ancre principale de vérité conversationnelle
 
 ## Modules
 

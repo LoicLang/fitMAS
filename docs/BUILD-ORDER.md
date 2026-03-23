@@ -138,6 +138,7 @@ Deja pose :
 - `signals.py` et `heartbeat.py` lisent aussi les activites declarees non loggees pour eviter les faux `rien fait`
 - les corrections explicites (`non c'etait hier`) mettent a jour et archivent le claim execution precedent
 - `UserFact` porte maintenant une vraie sémantique mémoire `urgency / ttl / affects / expires_at`
+- le chat et le heartbeat privilegient maintenant le calendrier date / app comme source de verite planning, avec `WeeklyPlan` seulement en fallback transitoire
 
 Socle runtime tools pose :
 - `tool_contract.py`

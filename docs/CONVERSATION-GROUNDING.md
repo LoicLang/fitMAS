@@ -265,6 +265,16 @@ Etat :
 - corrige pour les claims activite recentes
 - reste a voir si d'autres claims temporels meritent la meme approche
 
+### Trou 6 — source de verite planning encore trop legacy dans le coach
+
+Risque :
+- le chat ou le heartbeat peuvent encore s'ancrer sur `WeeklyPlan` / `DayPlan`
+- donc parler d'une seance stale alors que l'app et la timeline datee montrent autre chose
+
+Regle produit :
+- pour Telegram, la source de verite planning doit etre d'abord `ScheduledSession`
+- `WeeklyPlan` reste seulement un fallback transitoire pour quelques notes legacy
+
 ## Plan recommande
 
 ### Etape A — grounding sur la DB actuelle
@@ -318,8 +328,17 @@ Deja pose :
 - `api_messages.py` branche maintenant execution + temps + claims dans le prompt LLM
 - `signals.py` et `heartbeat.py` lisent mieux les activites reelles hors plan
 - `fact_memory.py` + `UserFact` enrichi pour distinguer info durable / temporaire / prioritaire
+- le prompt `decide()` n'ancre plus par defaut la conversation sur le `WeeklyPlan`
+- le prompt conversationnel rappelle explicitement que la source de verite planning est le calendrier date / app
+- `heartbeat.py` parle maintenant de la seance du jour et de la revue hebdo depuis `ScheduledSession` d'abord
+- `heartbeat.py` ne retombe sur `DayPlan` que comme fallback transitoire limite
+
+Concretement :
+- si l'app dit `Natation technique 35 min` et que le vieux `WeeklyPlan` dit autre chose, Telegram doit suivre l'app
+- si une activite hors plan a eu lieu hier, le briefing ne doit plus parler comme si rien n'avait ete fait
+- si le user corrige un detail de duree ou de jour, cette correction prime sur le plan
 
 Manque encore :
-- vraie couche shared de grounding conversationnel
-- integration plus fine des corrections conversationnelles
+- reduire encore les chemins legacy dans quelques flows secondaires
+- mieux gerer les messages qui contestent explicitement le plan sans tomber trop vite en mode "clarification"
 - persistance eventuelle d'un `user_claimed_activity` si la DB actuelle ne suffit pas
