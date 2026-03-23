@@ -358,6 +358,49 @@ def get_scheduled_sessions(
     return list(reversed(sessions))
 
 
+def get_scheduled_sessions_for_date(
+    db: Session,
+    user_id: int,
+    *,
+    target_date: date,
+) -> list[s.ScheduledSession]:
+    day_start = datetime.combine(target_date, time.min)
+    day_end = day_start + timedelta(days=1)
+    return (
+        db.query(s.ScheduledSession)
+        .filter(
+            s.ScheduledSession.user_id == user_id,
+            s.ScheduledSession.scheduled_date >= day_start,
+            s.ScheduledSession.scheduled_date < day_end,
+        )
+        .order_by(s.ScheduledSession.scheduled_date.asc(), s.ScheduledSession.id.asc())
+        .all()
+    )
+
+
+def get_scheduled_sessions_between_dates(
+    db: Session,
+    user_id: int,
+    *,
+    start_date: date,
+    end_date: date,
+    limit: int = 42,
+) -> list[s.ScheduledSession]:
+    day_start = datetime.combine(start_date, time.min)
+    day_end = datetime.combine(end_date + timedelta(days=1), time.min)
+    return (
+        db.query(s.ScheduledSession)
+        .filter(
+            s.ScheduledSession.user_id == user_id,
+            s.ScheduledSession.scheduled_date >= day_start,
+            s.ScheduledSession.scheduled_date < day_end,
+        )
+        .order_by(s.ScheduledSession.scheduled_date.asc(), s.ScheduledSession.id.asc())
+        .limit(limit)
+        .all()
+    )
+
+
 def get_scheduled_session_for_date(
     db: Session,
     user_id: int,

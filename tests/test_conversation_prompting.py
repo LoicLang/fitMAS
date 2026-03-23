@@ -19,7 +19,7 @@ class ConversationPromptingTest(unittest.TestCase):
         policy = select_conversation_prompt_policy(routing_reason="plan_lookup")
 
         self.assertEqual(policy.name, "plan_lookup_compact")
-        self.assertTrue(policy.include_plan_summary)
+        self.assertFalse(policy.include_plan_summary)
         self.assertTrue(policy.include_timeline)
         self.assertTrue(policy.include_execution)
         self.assertFalse(policy.include_signals)
@@ -28,7 +28,7 @@ class ConversationPromptingTest(unittest.TestCase):
         policy = select_conversation_prompt_policy(routing_reason=None)
 
         self.assertEqual(policy.name, "default_full")
-        self.assertTrue(policy.include_plan_summary)
+        self.assertFalse(policy.include_plan_summary)
         self.assertTrue(policy.include_signals)
         self.assertEqual(policy.history_limit, 8)
 

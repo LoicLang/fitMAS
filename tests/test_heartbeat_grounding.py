@@ -314,6 +314,94 @@ class HeartbeatGroundingTest(unittest.TestCase):
         self.assertIn("Activites declarees non loggees sur 7 jours: 1", captured["prompt"])
         self.assertIn("Duree declaree totale: 30 min", captured["prompt"])
 
+    def test_morning_briefing_prefers_scheduled_session_over_legacy_day_plan(self) -> None:
+        _, today_session = self._create_plan_with_today_session()
+        plan = repo.get_active_plan(self.db, self.user.id)
+        day_row = repo.get_day_plan(self.db, plan.id, today_session.day)
+        day_row.session_title = "Legacy footing plan"
+        day_row.session_goal = "Legacy goal"
+        today_session.session_title = "Natation app truth"
+        today_session.session_goal = "Souplesse et sensations"
+        today_session.sport_type = "swimming"
+        today_session.priority = "Repere fort"
+        self.db.commit()
+
+        captured: dict[str, str] = {}
+        original_llm = heartbeat._llm_generate
+        try:
+            def fake_llm(system: str, prompt: str, *, allow_no_send: bool = True):
+                captured["prompt"] = prompt
+                return "ok"
+
+            heartbeat._llm_generate = fake_llm
+            draft = heartbeat.morning_briefing()
+        finally:
+            heartbeat._llm_generate = original_llm
+
+        self.assertEqual(draft.text, "ok")
+        self.assertIn("Source de verite planning: calendrier date reel / app.", captured["prompt"])
+        self.assertIn("Natation app truth", captured["prompt"])
+        self.assertNotIn("Legacy footing plan", captured["prompt"])
+
+    def test_weekly_review_prefers_scheduled_sessions_over_legacy_plan(self) -> None:
+        _, today_session = self._create_plan_with_today_session()
+        plan = repo.get_active_plan(self.db, self.user.id)
+        day_row = repo.get_day_plan(self.db, plan.id, today_session.day)
+        day_row.session_title = "Legacy footing plan"
+        today_session.session_title = "Natation app truth"
+        today_session.sport_type = "swimming"
+        self.db.commit()
+
+        captured: dict[str, str] = {}
+        original_llm = heartbeat._llm_generate
+        try:
+            def fake_llm(system: str, prompt: str, *, allow_no_send: bool = True):
+                captured["prompt"] = prompt
+                return "ok"
+
+            heartbeat._llm_generate = fake_llm
+            draft = heartbeat.weekly_review()
+        finally:
+            heartbeat._llm_generate = original_llm
+
+        self.assertEqual(draft.text, "ok")
+        self.assertIn("Source de verite planning: calendrier date reel / app.", captured["prompt"])
+        self.assertIn("Natation app truth", captured["prompt"])
+        self.assertNotIn("Legacy footing plan", captured["prompt"])
+
+    def _create_plan_with_today_session(self) -> tuple[s.WeeklyPlan, s.ScheduledSession]:
+        now = get_local_now(self.user.timezone)
+        today_key = DAY_KEYS[now.weekday()]
+        plan = repo.replace_plan(
+            self.db,
+            self.user.id,
+            intention="test",
+            summary="test",
+            timezone_name=self.user.timezone,
+            days=[
+                {
+                    "day": today_key,
+                    "label": day_label_fr(today_key, capitalize=True),
+                    "sport_type": "running",
+                    "session_type": "easy",
+                    "session_title": "Footing",
+                    "session_goal": "Bouger",
+                    "session_note": "",
+                    "session_description": "",
+                    "duration_min": 45,
+                    "intensity": "easy",
+                    "load_score": 1,
+                    "priority": "Normal",
+                    "nutrition_focus": "",
+                    "flexibility": "stable",
+                    "completion_status": "planned",
+                }
+            ],
+        )
+        session = repo.get_today_scheduled_session(self.db, self.user.id, timezone_name=self.user.timezone)
+        self.assertIsNotNone(session)
+        return plan, session
+
 
 if __name__ == "__main__":
     unittest.main()

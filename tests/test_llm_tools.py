@@ -152,7 +152,43 @@ class LLMToolsTest(unittest.TestCase):
         self.assertEqual(traces[0].context_policy, "plan_lookup_compact")
         self.assertEqual(traces[0].tool_count_offered, 2)
         self.assertGreaterEqual(traces[0].prompt_char_count, 1)
-        self.assertIn("Repere legacy semaine courante", prompts[0])
+        self.assertNotIn("Repere legacy semaine courante", prompts[0])
+        self.assertIn("Source de vérité planning conversationnelle", prompts[0])
+
+    def test_decide_default_prompt_does_not_anchor_on_legacy_week_plan(self) -> None:
+        original_client = llm._client
+        original_request_message = llm._request_message
+        prompts: list[str] = []
+
+        def fake_request_message(*, system, messages, model="claude-haiku-4-5-20251001", max_tokens=512, tools=None, tool_choice=None):
+            prompts.append(messages[0]["content"] if isinstance(messages[0]["content"], str) else "")
+            return SimpleNamespace(
+                stop_reason="end_turn",
+                content=[
+                    SimpleNamespace(
+                        type="text",
+                        text='{"mutation_type":"no_change","target_session_id":null,"second_session_id":null,"target_date":null,"from_day":null,"to_day":null,"new_title":null,"new_goal":null,"rationale":"ok","fitmas_message":"Je me cale sur le calendrier daté."}',
+                    )
+                ],
+                usage=SimpleNamespace(input_tokens=90, output_tokens=28),
+            )
+
+        llm._client = lambda: object()
+        llm._request_message = fake_request_message
+        try:
+            decision = llm.decide(
+                "C'est pas ce qui est sur mon planning dans l'app",
+                "Legacy semaine: footing lundi",
+                timeline_summary="- id=12 | date=2026-03-23 | [swimming] Natation app truth | status=planned",
+            )
+        finally:
+            llm._client = original_client
+            llm._request_message = original_request_message
+
+        self.assertIsNotNone(decision)
+        self.assertNotIn("Repere legacy semaine courante", prompts[0])
+        self.assertIn("Source de vérité planning conversationnelle", prompts[0])
+        self.assertIn("Natation app truth", prompts[0])
 
 
 if __name__ == "__main__":

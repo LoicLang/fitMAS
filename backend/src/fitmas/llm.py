@@ -216,6 +216,8 @@ def decide(
         plan_anchor = f"Repere legacy semaine courante:\n{plan_summary}\n"
 
     prompt = f"""{time_block}
+Source de vérité planning conversationnelle: calendrier daté / app.
+Ignore tout repère hebdo legacy si le calendrier daté dit autre chose.
 {plan_anchor}
 {timeline_block}
 {execution_block}{temporal_block}{claim_block}{signal_block}

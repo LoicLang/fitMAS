@@ -22,7 +22,7 @@ def select_conversation_prompt_policy(*, routing_reason: str | None) -> Conversa
         return ConversationPromptPolicy(
             name="plan_lookup_compact",
             history_limit=4,
-            include_plan_summary=True,
+            include_plan_summary=False,
             include_timeline=True,
             include_execution=True,
             include_temporal=True,
@@ -78,4 +78,4 @@ def select_conversation_prompt_policy(*, routing_reason: str | None) -> Conversa
             include_signals=False,
             include_facts=False,
         )
-    return ConversationPromptPolicy(name="default_full", history_limit=8)
+    return ConversationPromptPolicy(name="default_full", history_limit=8, include_plan_summary=False)

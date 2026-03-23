@@ -44,6 +44,12 @@ NEXT_DAY = {
     "sunday": "monday",
 }
 
+PREV_DAY = {
+    "monday": "sunday", "tuesday": "monday", "wednesday": "tuesday",
+    "thursday": "wednesday", "friday": "thursday", "saturday": "friday",
+    "sunday": "saturday",
+}
+
 
 def _get_today_key(timezone_name: str | None) -> str:
     return build_time_context(timezone_name)["day_key"]
@@ -197,27 +203,37 @@ def morning_briefing() -> CoachDraft | None:
             logger.info("Morning briefing skipped — daily cap reached")
             return None
 
-        plan = repo.get_active_plan(db, user.id)
         time_context = build_time_context(user.timezone)
         local_now = get_local_now(user.timezone)
-        today_key = time_context["day_key"]
-        day = repo.get_day_plan(db, plan.id, today_key)
-        if not day:
+        today_session = repo.get_today_scheduled_session(db, user.id, timezone_name=user.timezone)
+        if not today_session:
             return None
+        _, day = repo.get_current_week_day_plan_for_session(db, user=user, session=today_session)
+        plan = repo.get_active_plan(db, user.id)
 
-        label = DAY_LABELS[today_key]
+        label = today_session.label or DAY_LABELS[time_context["day_key"]]
 
         # Check yesterday's completion
-        yesterday_key, yesterday_status = repo.get_yesterday_status(db, plan.id, today_key)
-        yesterday_label = DAY_LABELS.get(yesterday_key or "", "")
-        yesterday_day = repo.get_day_plan(db, plan.id, yesterday_key) if yesterday_key else None
+        yesterday_date = local_now.date() - timedelta(days=1)
+        yesterday_sessions = repo.get_scheduled_sessions_for_date(db, user.id, target_date=yesterday_date)
+        yesterday_key = PREV_DAY[time_context["day_key"]]
+        yesterday_day = repo.get_day_plan(db, plan.id, yesterday_key) if plan else None
 
         yesterday_context = ""
-        yesterday_activities = _activities_on_local_date(db, user, target_date=local_now.date() - timedelta(days=1))
-        yesterday_claims = _claimed_activities_on_local_date(db, user, target_date=local_now.date() - timedelta(days=1))
-        if yesterday_day and yesterday_day.sport_type != "rest":
-            if yesterday_status == "done":
-                yesterday_context = f"\nHier ({yesterday_label}): {yesterday_day.session_title} — fait. Bien."
+        yesterday_activities = _activities_on_local_date(db, user, target_date=yesterday_date)
+        yesterday_claims = _claimed_activities_on_local_date(db, user, target_date=yesterday_date)
+        if yesterday_sessions:
+            yesterday_label = yesterday_sessions[0].label or yesterday_date.isoformat()
+            non_rest_sessions = [session for session in yesterday_sessions if session.sport_type != "rest"]
+            done_sessions = [session for session in non_rest_sessions if session.completion_status == "done"]
+            pending_sessions = [session for session in non_rest_sessions if session.completion_status == "planned"]
+            adapted_sessions = [
+                session for session in non_rest_sessions if session.completion_status in ("skipped", "adapted")
+            ]
+            titles = ", ".join(session.session_title for session in non_rest_sessions[:2])
+
+            if done_sessions:
+                yesterday_context = f"\nHier ({yesterday_label}): {titles} — fait. Bien."
             elif yesterday_activities:
                 sports = ", ".join(sorted({activity.sport_type for activity in yesterday_activities}))
                 total_duration = sum(activity.duration_min or 0 for activity in yesterday_activities)
@@ -232,12 +248,35 @@ def morning_briefing() -> CoachDraft | None:
                     f"\nHier ({yesterday_label}): seance prevue non validee, "
                     f"mais activite declaree non loggee detectee ({sports}, {total_duration} min)."
                 )
-            elif yesterday_status == "planned":
+            elif pending_sessions:
+                yesterday_context = (
+                    f"\nHier ({yesterday_label}): {titles} — "
+                    f"pas marque comme fait. A noter."
+                )
+            elif adapted_sessions:
+                yesterday_context = f"\nHier ({yesterday_label}): adapte/saute. On avance."
+        elif yesterday_day and yesterday_day.sport_type != "rest":
+            yesterday_label = yesterday_day.label or DAY_LABELS.get(yesterday_key, yesterday_key)
+            if yesterday_activities:
+                sports = ", ".join(sorted({activity.sport_type for activity in yesterday_activities}))
+                total_duration = sum(activity.duration_min or 0 for activity in yesterday_activities)
+                yesterday_context = (
+                    f"\nHier ({yesterday_label}): seance prevue non validee, "
+                    f"mais activite reelle detectee ({sports}, {total_duration} min)."
+                )
+            elif yesterday_claims:
+                sports = ", ".join(sorted({claim.sport_type or 'sport inconnu' for claim in yesterday_claims}))
+                total_duration = sum(claim.duration_min or 0 for claim in yesterday_claims)
+                yesterday_context = (
+                    f"\nHier ({yesterday_label}): seance prevue non validee, "
+                    f"mais activite declaree non loggee detectee ({sports}, {total_duration} min)."
+                )
+            elif yesterday_day.completion_status == "planned":
                 yesterday_context = (
                     f"\nHier ({yesterday_label}): {yesterday_day.session_title} — "
                     f"pas marque comme fait. A noter."
                 )
-            elif yesterday_status in ("skipped", "adapted"):
+            elif yesterday_day.completion_status in ("skipped", "adapted"):
                 yesterday_context = f"\nHier ({yesterday_label}): adapte/saute. On avance."
 
         # Collect signals for richer context
@@ -263,10 +302,11 @@ def morning_briefing() -> CoachDraft | None:
         prompt = (
             f"{render_time_context(time_context)}\n"
             f"Genere un message matinal pour {label}.\n"
-            f"Seance: {day.session_title} ({day.sport_type})\n"
-            f"Objectif: {day.session_goal}\n"
-            f"Priorite: {day.priority}\n"
-            f"Note: {day.session_note}"
+            f"Source de verite planning: calendrier date reel / app.\n"
+            f"Seance: {today_session.session_title} ({today_session.sport_type})\n"
+            f"Objectif: {today_session.session_goal}\n"
+            f"Priorite: {today_session.priority}\n"
+            f"Note: {(day.session_note if day else today_session.session_note) or ''}"
             f"{yesterday_context}"
         )
         llm_msg = _llm_generate(system, prompt)
@@ -275,7 +315,10 @@ def morning_briefing() -> CoachDraft | None:
             return CoachDraft(text=llm_msg, proactive=True)
 
         # Fallback: structured message
-        msg = f"Bonjour. {label} — {day.session_title}.\n{day.session_goal}. Priorite: {day.priority}."
+        msg = (
+            f"Bonjour. {label} — {today_session.session_title}.\n"
+            f"{today_session.session_goal}. Priorite: {today_session.priority}."
+        )
         if yesterday_context:
             msg += f"\n{yesterday_context.strip()}"
         _reserve_module_guard(user.id)
@@ -306,22 +349,33 @@ def pre_session_reminder() -> CoachDraft | None:
             logger.info("Pre-session reminder skipped — recent exchange")
             return None
 
-        plan = repo.get_active_plan(db, user.id)
         time_context = build_time_context(user.timezone)
         today_key = time_context["day_key"]
         tomorrow_key = NEXT_DAY[today_key]
-        day = repo.get_day_plan(db, plan.id, tomorrow_key)
-        if not day:
+        tomorrow_date = get_local_now(user.timezone).date() + timedelta(days=1)
+        tomorrow_sessions = [
+            session
+            for session in repo.get_scheduled_sessions_for_date(db, user.id, target_date=tomorrow_date)
+            if session.sport_type != "rest"
+        ]
+        if not tomorrow_sessions:
             return None
 
         # Only remind before key/important sessions
         key_words = ("cle", "fort", "qualite", "bloc", "longue", "long")
-        is_key = any(w in (day.priority + day.session_title).lower() for w in key_words)
-        if not is_key:
+        key_session = next(
+            (
+                session
+                for session in tomorrow_sessions
+                if any(w in (f"{session.priority} {session.session_title} {session.session_type}").lower() for w in key_words)
+            ),
+            None,
+        )
+        if key_session is None:
             logger.info("Tomorrow (%s) is not a key session — skipping reminder", tomorrow_key)
             return None
 
-        label = DAY_LABELS[tomorrow_key]
+        label = key_session.label or DAY_LABELS[NEXT_DAY[today_key]]
 
         system = (
             f"Tu es {user.coach_name}, coach multisport IA. "
@@ -341,15 +395,16 @@ def pre_session_reminder() -> CoachDraft | None:
             )
         prompt = (
             f"{render_time_context(time_context)}\n"
-            f"Demain {label}: {day.session_title} — {day.session_goal}.\n"
-            f"Priorite: {day.priority}."
+            f"Source de verite planning: calendrier date reel / app.\n"
+            f"Demain {label}: {key_session.session_title} — {key_session.session_goal}.\n"
+            f"Priorite: {key_session.priority}."
         )
         llm_msg = _llm_generate(system, prompt)
         if llm_msg:
             _reserve_module_guard(user.id)
             return CoachDraft(text=llm_msg, proactive=True)
 
-        msg = f"Demain c'est {day.session_title}. Tu te sens comment pour {label.lower()} ?"
+        msg = f"Demain c'est {key_session.session_title}. Tu te sens comment pour {label.lower()} ?"
         _reserve_module_guard(user.id)
         return CoachDraft(text=msg, proactive=True)
     finally:
@@ -361,7 +416,15 @@ def weekly_review() -> CoachDraft | None:
     db = SessionLocal()
     try:
         user = repo.get_user(db)
-        plan = repo.get_active_plan(db, user.id)
+        local_today = get_local_now(user.timezone).date()
+        start_date = local_today - timedelta(days=6)
+        week_sessions = repo.get_scheduled_sessions_between_dates(
+            db,
+            user.id,
+            start_date=start_date,
+            end_date=local_today,
+            limit=42,
+        )
 
         # Build week summary with completion statuses
         lines = []
@@ -373,22 +436,19 @@ def weekly_review() -> CoachDraft | None:
         recent_claims = _claimed_activities_last_days(db, user, days=7)
         claimed_activity_count = len(recent_claims)
         claimed_duration_min = sum(claim.duration_min or 0 for claim in recent_claims)
-        for day_row in plan.days:
-            label = DAY_LABELS.get(day_row.day, day_row.day)
+        for session in week_sessions:
+            label = session.label or DAY_LABELS.get(session.day, session.day)
             status_marker = ""
-            if day_row.sport_type != "rest":
-                if day_row.completion_status == "done":
+            if session.sport_type != "rest":
+                if session.completion_status == "done":
                     status_marker = " ✅"
                     done_count += 1
-                elif day_row.completion_status == "planned":
+                elif session.completion_status == "planned":
                     status_marker = " (pas fait)"
                     planned_count += 1
-                elif day_row.completion_status in ("skipped", "adapted"):
-                    status_marker = f" ({day_row.completion_status})"
-            changed = len(day_row.change_notes) > 0
-            if changed:
-                status_marker += " (modifie)"
-            lines.append(f"- {label}: {day_row.session_title}{status_marker}")
+                elif session.completion_status in ("skipped", "adapted"):
+                    status_marker = f" ({session.completion_status})"
+            lines.append(f"- {label}: {session.session_title}{status_marker}")
         week_text = "\n".join(lines)
 
         system = (
@@ -402,8 +462,9 @@ def weekly_review() -> CoachDraft | None:
             system += f"\nAme du coach: {user.coach_soul}"
         prompt = (
             f"{render_time_context(build_time_context(user.timezone))}\n"
+            f"Source de verite planning: calendrier date reel / app.\n"
             f"Resume de la semaine:\n{week_text}\n"
-            f"Intention: {plan.intention}\n"
+            f"Nombre de seances planifiees datees sur 7 jours: {len(week_sessions)}.\n"
             f"Seances faites dans le plan: {done_count}. Seances prevues non faites: {planned_count}.\n"
             f"Activites reelles detectees sur 7 jours: {actual_activity_count}. Duree reelle totale: {actual_duration_min} min.\n"
             f"Activites declarees non loggees sur 7 jours: {claimed_activity_count}. Duree declaree totale: {claimed_duration_min} min."
