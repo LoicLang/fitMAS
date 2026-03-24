@@ -154,11 +154,7 @@ def get_today_by_day(day: DayId, db: Session = Depends(get_db)) -> TodayView:
     user = repo.get_user_optional(db)
     if user is None:
         raise HTTPException(status_code=404, detail="No onboarded user yet")
-    plan = repo.get_active_plan(db, user.id)
-    day_row = repo.get_day_plan(db, plan.id, day.value)
-    if day_row is None:
-        raise HTTPException(status_code=404, detail=f"Day {day.value} not found in plan")
-    d = repo.to_pydantic_day(day_row)
+    # Prefer ScheduledSession (source of truth for dated planning)
     matching_session = next(
         (
             session
@@ -169,9 +165,15 @@ def get_today_by_day(day: DayId, db: Session = Depends(get_db)) -> TodayView:
     )
     if matching_session is not None:
         return _build_today_view(db, user=user, session=matching_session)
+    # Fall back to legacy DayPlan
+    plan = repo.get_active_plan(db, user.id)
+    day_row = repo.get_day_plan(db, plan.id, day.value)
+    if day_row is None:
+        raise HTTPException(status_code=404, detail=f"Day {day.value} not found in plan")
+    d = repo.to_pydantic_day(day_row)
     return TodayView(
-        scheduled_session_id=matching_session.id if matching_session else 0,
-        scheduled_date=matching_session.scheduled_date.date().isoformat() if matching_session else "",
+        scheduled_session_id=0,
+        scheduled_date="",
         day=d.day,
         label=d.label,
         sport_type=d.sport_type,

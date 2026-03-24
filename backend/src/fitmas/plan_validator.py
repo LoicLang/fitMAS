@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from typing import Any, Sequence
 
 from fitmas.fitness_snapshot import estimate_scheduled_session_tss
+from fitmas.intensity_distribution import check_distribution
 from fitmas.planning_config import get_global_planning_config, get_sport_planning_config
 
 REST_SPORTS = {"rest", "off"}
@@ -105,6 +106,12 @@ def validate_week_plan(
         issues.append(ValidationIssue("too_many_key_sessions", f"{key_sessions} seances cle alors que {allowed_key_sessions} max sont attendues."))
     if _has_adjacent_hard_sessions(hard_indexes):
         issues.append(ValidationIssue("adjacent_hard_sessions", "Deux seances dures consecutives ont ete placees."))
+
+    # Intensity distribution check (soft warnings)
+    mode = getattr(planning_decision, "planning_mode", "maintain_load") if planning_decision else "maintain_load"
+    dist_warnings = check_distribution(ordered_days, mode)
+    for warning in dist_warnings:
+        issues.append(ValidationIssue("intensity_distribution", warning, severity="warning"))
 
     blocking_issues = [issue for issue in issues if issue.severity == "error"]
     return ValidationResult(is_valid=not blocking_issues, issues=tuple(issues))

@@ -7,7 +7,7 @@ from fitmas.fact_memory import derive_fact_memory_policy, fact_is_current, norma
 
 
 class FactMemoryTest(unittest.TestCase):
-    def test_derive_short_ttl_for_fatigue(self) -> None:
+    def test_derive_immediate_ttl_for_fatigue(self) -> None:
         policy = derive_fact_memory_policy(
             category="fatigue",
             value="Fatigue residuelle aujourd'hui",
@@ -15,7 +15,7 @@ class FactMemoryTest(unittest.TestCase):
             now=datetime(2026, 3, 22, 12, 0, tzinfo=timezone.utc),
         )
 
-        self.assertEqual(policy.ttl, "short")
+        self.assertEqual(policy.ttl, "immediate")
         self.assertEqual(policy.urgency, "high")
         self.assertIsNotNone(policy.expires_at)
 

@@ -16,8 +16,8 @@ from fitmas.conversation_context import (
     temporal_summary_for_prompt,
 )
 from fitmas.db import get_db
-from fitmas.llm import decide, extract_facts, make_plan_summary, make_timeline_summary, select_prompt_facts
-from fitmas.models import Extraction, Message, MessageReply, MessageRole
+from fitmas.llm import MutationDecision, decide, extract_facts, make_plan_summary, make_timeline_summary, select_prompt_facts
+from fitmas.models import DayId, Extraction, Message, MessageReply, MessageRole
 from fitmas.nlp import extract_reply, generate_reply
 from fitmas.signals import collect_signals
 from fitmas.tool_contract import ToolContext
@@ -25,6 +25,16 @@ from fitmas.tool_contract import ToolContext
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+_DAY_VALUES = {d.value for d in DayId}
+
+
+def _resolve_day_updated(decision: MutationDecision) -> DayId | None:
+    """Extract the affected day from a mutation decision."""
+    target = decision.to_day or decision.from_day
+    if target and target in _DAY_VALUES:
+        return DayId(target)
+    return None
 
 
 @router.post("/api/v0/messages", response_model=MessageReply)
@@ -110,10 +120,12 @@ def post_message(payload: IncomingMessage, db: Session = Depends(get_db)) -> Mes
         ),
     )
 
+    day_updated = None
     if decision:
         mutations.apply(db, plan.id, decision)
         reply_text = decision.fitmas_message
         extraction = Extraction(confidence=0.85)
+        day_updated = _resolve_day_updated(decision)
         logger.info("LLM reply (%s): %s", decision.mutation_type, reply_text[:120])
     else:
         extraction = extract_reply(payload.text)
@@ -126,8 +138,18 @@ def post_message(payload: IncomingMessage, db: Session = Depends(get_db)) -> Mes
     if extracted_facts:
         repo.upsert_facts(db, user.id, extracted_facts)
 
+        # Adaptive plan: check health facts for automatic adaptation
+        try:
+            from fitmas.adaptation import check_and_adapt_health_facts
+            health_result = check_and_adapt_health_facts(db, user, extracted_facts)
+            if health_result and health_result.applied and health_result.message:
+                repo.add_message(db, user.id, "agent", health_result.message)
+        except Exception:
+            logger.exception("Adaptation health_fact check failed (non-blocking)")
+
     return MessageReply(
         user_message=Message(role=MessageRole.USER, text=payload.text),
         extraction=extraction,
         assistant_message=Message(role=MessageRole.AGENT, text=reply_text),
+        day_updated=day_updated,
     )

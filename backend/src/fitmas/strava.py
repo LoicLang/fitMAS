@@ -218,6 +218,20 @@ def import_recent_activities(
 
         imported += 1
 
+        # Adaptive plan: estimate thresholds + check if activity triggers adaptation
+        try:
+            from fitmas.threshold_estimation import update_threshold_facts
+            update_threshold_facts(db, user, activity)
+        except Exception:
+            import logging
+            logging.getLogger(__name__).exception("Threshold estimation failed (non-blocking)")
+        try:
+            from fitmas.adaptation import check_and_adapt_post_activity
+            check_and_adapt_post_activity(db, user, activity)
+        except Exception:
+            import logging
+            logging.getLogger(__name__).exception("Adaptation post_activity check failed (non-blocking)")
+
     connection.last_sync_at = datetime.now(tz=timezone.utc)
     db.commit()
     return imported

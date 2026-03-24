@@ -48,7 +48,7 @@ class FactRepositoryTest(unittest.TestCase):
         self.assertEqual(len(saved), 1)
         row = saved[0]
         self.assertEqual(row.urgency, "high")
-        self.assertEqual(row.ttl, "short")
+        self.assertEqual(row.ttl, "immediate")
         self.assertIn("conversation", row.affects_json)
         self.assertIsNotNone(row.expires_at)
 

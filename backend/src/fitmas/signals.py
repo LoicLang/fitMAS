@@ -16,6 +16,7 @@ from sqlalchemy.orm import Session
 
 from fitmas import repository as repo, schema as s
 from fitmas.activity_claims import extract_claims_from_facts
+from fitmas.activity_helpers import activities_on_local_date, claimed_activities_on_local_date
 from fitmas.time_context import DAY_KEYS, DAY_LABELS_FR, build_time_context, get_local_now, get_timezone, hours_since, utc_cutoff
 
 logger = logging.getLogger(__name__)
@@ -338,26 +339,8 @@ def select_conversation_signals(signals: list[Signal], *, limit: int = 3) -> lis
     return ranked[:limit]
 
 
-def _activities_on_local_date(db: Session, user: s.User, *, target_date: date) -> list[s.Activity]:
-    activities = repo.get_activities(db, user.id, limit=120)
-    timezone = get_timezone(user.timezone)
-    matched: list[s.Activity] = []
-    for activity in activities:
-        if activity.started_at is None:
-            continue
-        started_at = activity.started_at
-        if started_at.tzinfo is None:
-            local_date = started_at.date()
-        else:
-            local_date = started_at.astimezone(timezone).date()
-        if local_date == target_date:
-            matched.append(activity)
-    return matched
-
-
-def _claimed_activities_on_local_date(db: Session, user: s.User, *, target_date: date):
-    facts = repo.get_active_facts(db, user.id, limit=48)
-    return extract_claims_from_facts(facts, target_date=target_date)
+_activities_on_local_date = activities_on_local_date
+_claimed_activities_on_local_date = claimed_activities_on_local_date
 
 
 def _conversation_signal_sort_key(signal: Signal) -> tuple[float, float]:

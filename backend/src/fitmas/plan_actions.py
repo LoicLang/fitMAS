@@ -83,6 +83,56 @@ def update_session_details(
     return session
 
 
+def replace_session(
+    db: Session,
+    *,
+    user: s.User,
+    session_id: int,
+    new_sport_type: str | None = None,
+    new_session_type: str | None = None,
+    new_duration_min: int | None = None,
+    new_intensity: str | None = None,
+    new_description: str | None = None,
+    new_title: str | None = None,
+    new_goal: str | None = None,
+    rationale: str | None = None,
+) -> s.ScheduledSession | None:
+    session = repo.get_scheduled_session(db, user.id, session_id)
+    if session is None:
+        return None
+
+    _apply_replacement_fields(
+        session,
+        new_sport_type=new_sport_type,
+        new_session_type=new_session_type,
+        new_duration_min=new_duration_min,
+        new_intensity=new_intensity,
+        new_description=new_description,
+        new_title=new_title,
+        new_goal=new_goal,
+        rationale=rationale,
+    )
+
+    _, day_plan = repo.get_current_week_day_plan_for_session(db, user=user, session=session)
+    if day_plan is not None:
+        _apply_replacement_fields(
+            day_plan,
+            new_sport_type=new_sport_type,
+            new_session_type=new_session_type,
+            new_duration_min=new_duration_min,
+            new_intensity=new_intensity,
+            new_description=new_description,
+            new_title=new_title,
+            new_goal=new_goal,
+            rationale=rationale,
+        )
+        repo.set_change_notes(db, day_plan.id, [("Seance remplacee", rationale or "Seance adaptee.")])
+
+    db.commit()
+    db.refresh(session)
+    return session
+
+
 def swap_sessions(
     db: Session,
     *,
@@ -307,6 +357,54 @@ def _apply_light_session_fields(session: s.ScheduledSession, *, rationale: str |
     session.nutrition_focus = "Reste simple. Le but est surtout de recuperer."
     session.flexibility = "flexible"
     session.completion_status = "adapted"
+
+
+def _estimate_load_score(intensity: str | None, duration_min: int | None) -> int:
+    """Rough load score: points per 30min based on intensity."""
+    if not duration_min or duration_min <= 0:
+        return 0
+    per_30 = {"easy": 1, "moderate": 2, "hard": 3}
+    base = per_30.get(intensity or "moderate", 2)
+    return max(1, round(base * duration_min / 30))
+
+
+def _apply_replacement_fields(
+    target,  # ScheduledSession or DayPlan
+    *,
+    new_sport_type: str | None,
+    new_session_type: str | None,
+    new_duration_min: int | None,
+    new_intensity: str | None,
+    new_description: str | None,
+    new_title: str | None,
+    new_goal: str | None,
+    rationale: str | None,
+) -> None:
+    if new_sport_type is not None:
+        target.sport_type = new_sport_type
+    if new_session_type is not None:
+        target.session_type = new_session_type
+    if new_duration_min is not None:
+        target.duration_min = new_duration_min
+    if new_intensity is not None:
+        target.intensity = new_intensity
+    if new_description is not None:
+        desc_attr = "session_description" if hasattr(target, "session_description") else "session_description"
+        setattr(target, desc_attr, new_description)
+    if new_title is not None:
+        target.session_title = new_title
+    if new_goal is not None:
+        target.session_goal = new_goal
+    if rationale is not None:
+        target.session_note = rationale
+
+    # Recalculate load_score if intensity or duration changed
+    if new_intensity is not None or new_duration_min is not None:
+        eff_intensity = new_intensity or getattr(target, "intensity", "moderate")
+        eff_duration = new_duration_min or getattr(target, "duration_min", None)
+        target.load_score = _estimate_load_score(eff_intensity, eff_duration)
+
+    target.completion_status = "adapted"
 
 
 def _apply_light_day_fields(day: s.DayPlan, *, rationale: str | None) -> None:

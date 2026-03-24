@@ -80,6 +80,23 @@ def apply(db: Session, plan_id: int, decision: MutationDecision) -> None:
             logger.info("Applied session update: session=%s result=%s", decision.target_session_id, session.id if session else None)
             return
 
+        if decision.mutation_type == "replace_session":
+            session = plan_actions.replace_session(
+                db,
+                user=user,
+                session_id=decision.target_session_id,
+                new_sport_type=decision.new_sport_type,
+                new_session_type=decision.new_session_type,
+                new_duration_min=decision.new_duration_min,
+                new_intensity=decision.new_intensity,
+                new_description=decision.new_description,
+                new_title=decision.new_title,
+                new_goal=decision.new_goal,
+                rationale=decision.rationale,
+            )
+            logger.info("Applied session replace: session=%s result=%s", decision.target_session_id, session.id if session else None)
+            return
+
     if decision.mutation_type == "move_session":
         if not decision.from_day or not decision.to_day:
             return
@@ -178,6 +195,36 @@ def apply(db: Session, plan_id: int, decision: MutationDecision) -> None:
 
         _resync_plan_sessions(db, plan_id)
         logger.info("Applied lighten_day on %s", decision.from_day)
+
+    elif decision.mutation_type == "replace_session":
+        if not decision.from_day:
+            return
+
+        day = repo.get_day_plan(db, plan_id, decision.from_day)
+        if not day:
+            return
+
+        if decision.new_sport_type:
+            day.sport_type = decision.new_sport_type
+        if decision.new_session_type:
+            day.session_type = decision.new_session_type
+        if decision.new_title:
+            day.session_title = decision.new_title
+        if decision.new_goal:
+            day.session_goal = decision.new_goal
+        if decision.new_description:
+            day.session_description = decision.new_description
+        if decision.new_duration_min:
+            day.duration_min = decision.new_duration_min
+        if decision.new_intensity:
+            day.intensity = decision.new_intensity
+        day.session_note = decision.rationale
+        day.completion_status = "adapted"
+        db.commit()
+        repo.set_change_notes(db, day.id, [("Seance remplacee", decision.rationale)])
+
+        _resync_plan_sessions(db, plan_id)
+        logger.info("Applied replace_session on %s: %s → %s", decision.from_day, decision.new_sport_type, decision.new_title)
 
     # "no_change" → nothing to do
     elif decision.mutation_type == "no_change":

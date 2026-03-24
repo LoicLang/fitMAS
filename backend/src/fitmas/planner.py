@@ -5,6 +5,7 @@ import re
 from dataclasses import dataclass
 
 from fitmas.athlete_profile import AthleteProfileSnapshot
+from fitmas.athlete_zones import AthleteZones
 from fitmas.plan_validator import validate_week_plan
 from fitmas.planning_config import get_sport_planning_config
 from fitmas.planning_decision import PlanningDecision
@@ -91,6 +92,8 @@ def build_week_plan(
     coach_name: str,
     planning_decision: PlanningDecision | None = None,
     athlete_profile: AthleteProfileSnapshot | None = None,
+    zones: AthleteZones | None = None,
+    cycle_week: int = 1,
 ) -> dict:
     normalized_sports = normalize_sports(list(athlete_profile.primary_sports) if athlete_profile is not None else sports)
     notes_blob = " ".join(
@@ -114,6 +117,7 @@ def build_week_plan(
         planning_decision=planning_decision,
         athlete_profile=athlete_profile,
     )
+    athlete_level = _resolve_athlete_level(athlete_profile, normalized_sports[0])
     days = _schedule_sessions(
         sessions=sessions,
         blocked_days=blocked_days,
@@ -121,6 +125,9 @@ def build_week_plan(
         long_day=long_day,
         key_day=key_day,
         planning_decision=planning_decision,
+        zones=zones,
+        athlete_level=athlete_level,
+        cycle_week=cycle_week,
     )
 
     validation = validate_week_plan(
@@ -138,6 +145,9 @@ def build_week_plan(
             long_day=long_day,
             key_day=key_day,
             planning_decision=None,
+            zones=zones,
+            athlete_level=athlete_level,
+            cycle_week=cycle_week,
         )
 
     return {
@@ -230,6 +240,9 @@ def _schedule_sessions(
     long_day: str,
     key_day: str,
     planning_decision: PlanningDecision | None,
+    zones: AthleteZones | None = None,
+    athlete_level: str = "intermediate",
+    cycle_week: int = 1,
 ) -> list[dict]:
     days: dict[str, dict] = {
         day: _rest_day(day, flexible=day in fragile_days or day in blocked_days)
@@ -247,9 +260,48 @@ def _schedule_sessions(
             key_day=key_day,
         )
         occupied_days.add(target_day)
-        days[target_day] = _session_day(target_day, session, planning_decision=planning_decision)
+        days[target_day] = _session_day(
+            target_day, session,
+            planning_decision=planning_decision,
+            zones=zones,
+            athlete_level=athlete_level,
+            cycle_week=cycle_week,
+        )
 
-    return [days[day] for day in DAY_KEYS]
+    # Check for multisport interference and swap if needed
+    day_list = [days[day] for day in DAY_KEYS]
+    _resolve_interference(day_list)
+
+    return day_list
+
+
+def _resolve_interference(day_list: list[dict]) -> None:
+    """Swap sessions to resolve adjacent-day interference conflicts."""
+    from fitmas.interference import check_adjacent_conflicts
+
+    conflicts = check_adjacent_conflicts(day_list)
+    if not conflicts:
+        return
+
+    for session_a, session_b, rule in conflicts:
+        if rule.level != "avoid":
+            continue
+        # Try to find a rest/easy day to swap session_b with
+        for i, day in enumerate(day_list):
+            if day.get("sport_type") == "rest" or day.get("intensity") == "easy":
+                # Don't swap if it creates a new conflict
+                idx_b = day_list.index(session_b)
+                if idx_b == i:
+                    continue
+                # Swap content
+                for field in ("sport_type", "session_type", "session_title", "session_goal",
+                              "session_description", "duration_min", "intensity", "load_score",
+                              "priority", "nutrition_focus", "flexibility"):
+                    val_b = session_b.get(field)
+                    val_rest = day.get(field)
+                    day[field] = val_b
+                    session_b[field] = val_rest
+                break  # one swap per conflict
 
 
 def _extract_days(text: str, keywords: tuple[str, ...]) -> set[str]:
@@ -527,7 +579,15 @@ def _rest_day(day: str, *, flexible: bool) -> dict:
     }
 
 
-def _session_day(day: str, session: PlannedSession, *, planning_decision: PlanningDecision | None) -> dict:
+def _session_day(
+    day: str,
+    session: PlannedSession,
+    *,
+    planning_decision: PlanningDecision | None,
+    zones: AthleteZones | None = None,
+    athlete_level: str = "intermediate",
+    cycle_week: int = 1,
+) -> dict:
     template = select_session_template(sport_type=session.sport_type, session_type=session.session_type)
     return {
         "day": day,
@@ -537,7 +597,13 @@ def _session_day(day: str, session: PlannedSession, *, planning_decision: Planni
         "session_title": f"{template.title} {session.duration_min}min",
         "session_goal": template.goal,
         "session_note": _session_note(session, planning_decision=planning_decision),
-        "session_description": render_session_description(template, duration_min=session.duration_min),
+        "session_description": render_session_description(
+            template,
+            duration_min=session.duration_min,
+            zones=zones,
+            athlete_level=athlete_level,
+            cycle_week=cycle_week,
+        ),
         "duration_min": session.duration_min,
         "intensity": session.intensity,
         "load_score": session.load_score,
@@ -572,6 +638,12 @@ def _nutrition_copy(session: PlannedSession) -> str:
     if session.sport_type in {"cycling", "running"} and session.duration_min >= 70:
         return "Ne pars pas a vide. Anticipe un peu avant puis remets quelque chose apres."
     return "Rester simple. Le but est surtout de soutenir la regularite."
+
+
+def _resolve_athlete_level(profile: AthleteProfileSnapshot | None, primary_sport: str) -> str:
+    if profile is None:
+        return "intermediate"
+    return profile.level_by_sport.get(primary_sport, "intermediate")
 
 
 def _sport_label(sport: str) -> str:

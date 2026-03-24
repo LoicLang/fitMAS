@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 
 from fitmas import repository as repo, schema as s
 from fitmas.athlete_profile import AthleteProfileSnapshot, build_athlete_profile
+from fitmas.athlete_zones import AthleteZones, build_athlete_zones
 from fitmas.fitness_snapshot import FitnessSnapshot, build_fitness_snapshot
 from fitmas.planning_decision import PlanningDecision, build_planning_decision
 from fitmas.readiness import ReadinessState, build_readiness_state
@@ -19,6 +20,7 @@ class PlanningStateBundle:
     fitness: FitnessSnapshot
     readiness: ReadinessState
     decision: PlanningDecision
+    zones: AthleteZones
 
 
 def assemble_planning_state(
@@ -31,6 +33,7 @@ def assemble_planning_state(
     mesocycle_week: int = 1,
 ) -> PlanningStateBundle:
     profile = build_athlete_profile(user, facts=facts)
+    zones = build_athlete_zones(profile, facts)
     fitness = build_fitness_snapshot(
         user_id=user.id,
         activities=activities,
@@ -49,6 +52,7 @@ def assemble_planning_state(
         fitness=fitness,
         readiness=readiness,
         decision=decision,
+        zones=zones,
     )
 
 

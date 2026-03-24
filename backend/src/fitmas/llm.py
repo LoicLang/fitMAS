@@ -2,15 +2,16 @@ from __future__ import annotations
 
 import json
 import logging
-import os
 import re
 from time import perf_counter
 from typing import Any
 
 from pydantic import BaseModel
+from fitmas import llm_gateway as gw
 from fitmas.conversation_prompting import select_conversation_prompt_policy
 from fitmas.fact_memory import normalize_fact_payload as normalize_fact_memory_payload
 from fitmas.fact_memory import select_relevant_facts
+from fitmas.knowledge import load_sport_knowledge
 from fitmas.time_context import build_time_context, render_time_context
 from fitmas.tool_contract import ToolCall, ToolContext
 from fitmas.tool_metrics import build_tool_trace, log_tool_trace
@@ -40,7 +41,7 @@ Tu aides a construire une relation de coaching credible des la premiere interact
 
 
 class MutationDecision(BaseModel):
-    mutation_type: str        # "move_session" | "lighten_day" | "swap_sessions" | "update_session" | "no_change"
+    mutation_type: str        # "move_session" | "lighten_day" | "swap_sessions" | "update_session" | "replace_session" | "no_change"
     target_session_id: int | None = None
     second_session_id: int | None = None
     target_date: str | None = None
@@ -48,6 +49,11 @@ class MutationDecision(BaseModel):
     to_day: str | None = None
     new_title: str | None = None
     new_goal: str | None = None
+    new_sport_type: str | None = None
+    new_session_type: str | None = None
+    new_duration_min: int | None = None
+    new_intensity: str | None = None
+    new_description: str | None = None
     rationale: str            # 1 phrase, pour les change notes
     fitmas_message: str       # message envoye a l'utilisateur
 
@@ -68,17 +74,11 @@ def _normalize_day(raw: str | None) -> str | None:
 
 
 def _client():
-    api_key = os.getenv("ANTHROPIC_API_KEY")
-    if not api_key:
-        return None
-    try:
-        import anthropic
-        return anthropic.Anthropic(api_key=api_key)
-    except ImportError:
-        return None
+    return gw.client()
 
 
 def _request_text(*, system: str, prompt: str, model: str = "claude-haiku-4-5-20251001", max_tokens: int = 512) -> str | None:
+    """Request text — routes through module-level _request_message (patchable by tests)."""
     response = _request_message(
         system=system,
         messages=[{"role": "user", "content": prompt}],
@@ -97,27 +97,15 @@ def _request_message(
     tools: list[dict[str, Any]] | None = None,
     tool_choice: dict[str, Any] | None = None,
 ):
-    client = _client()
-    if not client:
-        return None
-    try:
-        kwargs: dict[str, Any] = {
-            "model": model,
-            "max_tokens": max_tokens,
-            "system": system,
-            "messages": messages,
-        }
-        if tools:
-            kwargs["tools"] = tools
-        if tool_choice:
-            kwargs["tool_choice"] = tool_choice
-        return client.messages.create(**kwargs)
-    except Exception:
-        logger.exception("LLM message call failed")
-        return None
+    """Send message — delegates to gateway. Tests monkey-patch this function."""
+    return gw.request_message(
+        system=system, messages=messages, model=model, max_tokens=max_tokens,
+        tools=tools, tool_choice=tool_choice,
+    )
 
 
 def _request_json(*, system: str, prompt: str, model: str = "claude-haiku-4-5-20251001", max_tokens: int = 1024) -> dict | None:
+    """Request JSON — routes through module-level _request_text (patchable chain)."""
     raw = _request_text(system=system, prompt=prompt, model=model, max_tokens=max_tokens)
     if not raw:
         return None
@@ -189,7 +177,7 @@ def decide(
     facts_block = ""
     selected_facts = (coach_context or {}).get("selected_facts") or select_prompt_facts(remembered_facts or [])
     if selected_facts and prompt_policy.include_facts:
-        facts_block = "\nMemoire utile:\n" + "\n".join(f"- {fact}" for fact in selected_facts) + "\n"
+        facts_block = "\nMemoire utile (elements high/medium a prendre en compte dans tes decisions):\n" + "\n".join(f"- {fact}" for fact in selected_facts) + "\n"
 
     timeline_block = ""
     if timeline_summary and prompt_policy.include_timeline:
@@ -231,7 +219,8 @@ Analyse ce message et decide quelle action prendre sur le calendrier d'entrainem
 Actions possibles:
 - "move_session": deplacer une seance concrete a une date cible
 - "swap_sessions": echanger deux seances concretes
-- "lighten_day": alleger une seance concrete ou un jour
+- "lighten_day": alleger une seance concrete ou un jour (convertit en repos)
+- "replace_session": transformer une seance (changer sport, type, duree, intensite, description) — utilise ca quand l'utilisateur a besoin d'une adaptation (douleur, fatigue, envie differente) plutot qu'une suppression
 - "update_session": modifier le titre ou l'objectif d'une seance concrete
 - "no_change": aucune modification necessaire
 
@@ -255,6 +244,8 @@ Exemples:
 - "mercredi j'ai une grosse journee" → lighten_day, target_session_id: 12
 - "echange samedi et dimanche" → swap_sessions, target_session_id: 12, second_session_id: 13
 - "jeudi je prefere faire du fractionne" → update_session, target_session_id: 12, new_title: "Fractionne 8x400m"
+- "j'ai mal a l'epaule droite" → replace_session, target_session_id: 15, new_sport_type: "strength", new_session_type: "mobility", new_duration_min: 25, new_intensity: "easy", new_description: "Mobilite epaule + renfo rotateurs externes"
+- "je suis claque, pas envie de fractionne" → replace_session, target_session_id: 12, new_session_type: "endurance", new_intensity: "easy", new_description: "Footing souple en endurance fondamentale"
 - "ok ca me va" → no_change
 - "on est quel jour exactement ?" → no_change, fitmas_message explique le jour et la date locale
 - "ce soir c'est quoi deja ?" → no_change ou update utile selon la seance du jour et le contexte temporel
@@ -267,8 +258,13 @@ Reponds avec un JSON valide contenant exactement ces champs:
 - "target_date": date cible ISO `YYYY-MM-DD` ou null
 - "from_day": jour source (anglais) ou null
 - "to_day": jour destination (anglais) ou null
-- "new_title": nouveau titre de seance si update_session, null sinon
-- "new_goal": nouvel objectif si update_session, null sinon
+- "new_title": nouveau titre de seance si update_session ou replace_session, null sinon
+- "new_goal": nouvel objectif si update_session ou replace_session, null sinon
+- "new_sport_type": nouveau sport si replace_session (ex: "strength", "running"), null sinon
+- "new_session_type": nouveau type si replace_session (ex: "mobility", "endurance"), null sinon
+- "new_duration_min": nouvelle duree en minutes si replace_session, null sinon
+- "new_intensity": nouvelle intensite si replace_session ("easy", "moderate", "hard"), null sinon
+- "new_description": nouvelle description si replace_session, null sinon
 - "rationale": explication courte (1 phrase, pour les notes de changement)
 - "fitmas_message": message a envoyer a l'utilisateur — court, direct, ancre dans le contexte
 
@@ -492,81 +488,13 @@ def make_plan_summary(days: list) -> str:
     return "\n".join(lines)
 
 
-def _message_text(response: Any) -> str | None:
-    if response is None:
-        return None
-    texts: list[str] = []
-    for block in getattr(response, "content", []) or []:
-        if getattr(block, "type", None) == "text":
-            text = str(getattr(block, "text", "")).strip()
-            if text:
-                texts.append(text)
-    if not texts:
-        return None
-    return "\n".join(texts).strip()
-
-
-def _message_json(response: Any) -> dict | None:
-    raw = _message_text(response)
-    if not raw:
-        return None
-    if raw.startswith("```"):
-        raw = raw.split("```")[1]
-        if raw.startswith("json"):
-            raw = raw[4:]
-        raw = raw.strip()
-    try:
-        return json.loads(raw)
-    except Exception:
-        logger.exception("Failed to decode LLM JSON: %s", raw[:200])
-        return None
-
-
-def _first_tool_use_block(response: Any) -> Any | None:
-    for block in getattr(response, "content", []) or []:
-        if getattr(block, "type", None) == "tool_use":
-            return block
-    return None
-
-
-def _serialize_content_blocks(blocks: list[Any]) -> list[dict[str, Any]]:
-    serialized: list[dict[str, Any]] = []
-    for block in blocks:
-        block_type = getattr(block, "type", None)
-        if block_type == "text":
-            serialized.append({"type": "text", "text": getattr(block, "text", "")})
-        elif block_type == "tool_use":
-            serialized.append(
-                {
-                    "type": "tool_use",
-                    "id": getattr(block, "id", ""),
-                    "name": getattr(block, "name", ""),
-                    "input": dict(getattr(block, "input", {}) or {}),
-                }
-            )
-    return serialized
-
-
-def _usage_value(response: Any, key: str) -> int | None:
-    usage = getattr(response, "usage", None)
-    if usage is None:
-        return None
-    value = getattr(usage, key, None)
-    try:
-        return int(value) if value is not None else None
-    except (TypeError, ValueError):
-        return None
-
-
-def _sum_ints(*values: int | None) -> int | None:
-    numbers = [value for value in values if value is not None]
-    if not numbers:
-        return None
-    return sum(numbers)
-
-
-def _elapsed_ms(started_at: float) -> int:
-    return int((perf_counter() - started_at) * 1000)
+_message_text = gw.message_text
+_message_json = gw.message_json
+_first_tool_use_block = gw.first_tool_use_block
+_serialize_content_blocks = gw.serialize_content_blocks
+_usage_value = gw.usage_value
+_sum_ints = gw.sum_ints
+_elapsed_ms = gw.elapsed_ms
 
 
 def _log_tool_session_trace(
@@ -690,6 +618,8 @@ def formulate_week_plan(
     time_context: dict | None = None,
 ) -> dict:
     resolved_time_context = time_context or build_time_context(user_profile.get("timezone") or coach_profile.get("timezone"))
+    sports_set = set(user_profile.get("sports", []))
+    knowledge_block = load_sport_knowledge(sports_set, max_tokens=1500)
     planning_context = planner_output.get("planning_context") or {}
     planning_context_block = ""
     if planning_context:
@@ -721,6 +651,9 @@ Coach:
 - ne fait jamais: {coach_profile['coach_dont']}
 - ame: {coach_profile['coach_soul']}
 {planning_context_block}
+
+Connaissances sport (utilise comme reference pour formuler les seances):
+{knowledge_block}
 
 Squelette:
 {json.dumps(planner_output, ensure_ascii=False)}
@@ -891,11 +824,21 @@ Ne memorise PAS:
 - details jetables
 - diagnostics
 
+Pour chaque fait, evalue sa duree de vie selon la categorie:
+- Une douleur/blessure/gene = category "health", persiste plusieurs semaines
+- Une fatigue passagere = category "fatigue", dure 1-2 jours seulement
+- Une indispo ponctuelle = category "availability", dure 1-3 jours
+- Un objectif ou preference = category "goal"/"preference", persiste longtemps
+- Un claim d'activite = category "execution", ne persiste que la journee
+Ne confonds pas une blessure (long terme, affecte le plan) avec une fatigue (court terme, signal du jour).
+
+IMPORTANT: Si un fait existant couvre deja le meme sujet (meme category + meme key ou sujet proche), utilise le MEME key avec action "upsert" pour le mettre a jour. Ne cree PAS de nouveau fait avec un key different pour le meme sujet.
+
 Retourne un JSON: {{"facts": [...]}}
 
 Chaque fact:
-- category: "preference" | "constraint" | "pattern" | "coaching" | "fatigue" | "availability" | "health" | "goal" | "objective"
-- key: slug court
+- category: "preference" | "constraint" | "pattern" | "coaching" | "fatigue" | "availability" | "health" | "goal" | "objective" | "execution"
+- key: slug court (reutilise le key existant si c'est une mise a jour)
 - value: phrase courte utile
 - confidence: float 0..1
 - confirmed: bool

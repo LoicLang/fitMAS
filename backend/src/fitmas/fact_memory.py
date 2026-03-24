@@ -52,6 +52,25 @@ CHRONIC_KEYWORDS = (
     "recurrent",
     "récurrent",
 )
+INJURY_KEYWORDS = (
+    "blessure",
+    "blessé",
+    "tendon",
+    "tendinite",
+    "fracture",
+    "entorse",
+    "déchirure",
+    "rupture",
+)
+PAIN_KEYWORDS = (
+    "douleur",
+    "mal ",
+    "gêne",
+    "gene",
+    "gène",
+    "coinc",
+    "bloqu",
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -85,11 +104,21 @@ def derive_fact_memory_policy(
     elif normalized_category in {"availability", "schedule", "constraint"}:
         ttl = "short" if any(token in text for token in TEMPORAL_KEYWORDS) else "medium"
         urgency = "medium"
-    elif normalized_category in {"fatigue", "execution"}:
-        ttl = "immediate" if normalized_category == "execution" else "short"
+    elif normalized_category == "execution":
+        ttl = "immediate"    # 18h — activity claim, same-day only
+        urgency = "high"
+    elif normalized_category == "fatigue":
+        ttl = "immediate"    # 18h — fatigue is a signal of the day, not 3 days
         urgency = "high"
     elif normalized_category == "health":
-        ttl = "medium" if any(token in text for token in CHRONIC_KEYWORDS) else "short"
+        if any(token in text for token in CHRONIC_KEYWORDS):
+            ttl = "long"     # 180j — chronic/recurring condition
+        elif any(token in text for token in INJURY_KEYWORDS):
+            ttl = "medium"   # 21j — identified injury
+        elif any(token in text for token in PAIN_KEYWORDS):
+            ttl = "medium"   # 21j — pain/discomfort (affects planning for weeks)
+        else:
+            ttl = "short"    # 3j — general health (sick, poor sleep)
         urgency = "high" if any(token in text for token in ACUTE_HEALTH_KEYWORDS) else "medium"
 
     if source == "onboarding" and normalized_category in {"goal", "objective", "coaching", "preference"}:

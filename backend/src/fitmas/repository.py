@@ -757,6 +757,8 @@ def replace_plan(
     summary: str,
     days: list[dict],
     timezone_name: str | None = None,
+    mesocycle_week: int = 1,
+    mesocycle_number: int = 1,
 ) -> s.WeeklyPlan:
     plans = db.query(s.WeeklyPlan).filter(s.WeeklyPlan.user_id == user_id).all()
     plan_ids = [plan.id for plan in plans]
@@ -780,6 +782,8 @@ def replace_plan(
         intention=intention,
         summary=summary,
         status="active",
+        mesocycle_week=mesocycle_week,
+        mesocycle_number=mesocycle_number,
     )
     db.add(plan)
     db.flush()

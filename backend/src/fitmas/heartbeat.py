@@ -9,17 +9,24 @@ Three trigger types:
 from __future__ import annotations
 
 import logging
-import os
 from datetime import date, datetime, timedelta, timezone
 
 from sqlalchemy.orm import Session
 
 from fitmas import repository as repo, schema as s
-from fitmas.activity_claims import extract_claims_from_facts
+from fitmas.activity_helpers import (
+    activities_last_days as _activities_last_days,
+    activities_on_local_date as _activities_on_local_date,
+    claimed_activities_last_days as _claimed_activities_last_days,
+    claimed_activities_on_local_date as _claimed_activities_on_local_date,
+)
 from fitmas.coach_messages import CoachDraft
 from fitmas.db import SessionLocal
+from fitmas.fact_memory import fact_is_current
+from fitmas.knowledge import load_sport_knowledge
+from fitmas.llm_gateway import generate_heartbeat_text
 from fitmas.signals import collect_signals, format_signals_for_prompt
-from fitmas.time_context import DAY_LABELS_FR, build_time_context, get_local_now, get_timezone, hours_since, render_time_context
+from fitmas.time_context import DAY_LABELS_FR, build_time_context, get_local_now, hours_since, render_time_context
 
 logger = logging.getLogger(__name__)
 
@@ -129,61 +136,30 @@ def _had_recent_exchange(db: Session, user_id: int, hours: float = RECENT_EXCHAN
     return elapsed < hours
 
 
-NO_SEND_TOKEN = "NO_SEND"
-
-# Instruction injected into every heartbeat prompt so the LLM can opt out
-NO_SEND_INSTRUCTION = (
-    "\n\nSi tu estimes qu'il n'y a rien d'utile ou de pertinent a dire "
-    "en ce moment, reponds exactement NO_SEND (rien d'autre). "
-    "Mieux vaut se taire que parler pour rien."
-)
-
-
 def _llm_generate(system: str, prompt: str, *, allow_no_send: bool = True) -> str | None:
-    """Call the LLM for heartbeat messages.
+    """Call the LLM for heartbeat messages via llm_gateway."""
+    return generate_heartbeat_text(system, prompt, allow_no_send=allow_no_send)
 
-    Returns None on failure or if the LLM responds with NO_SEND.
-    """
-    api_key = os.getenv("ANTHROPIC_API_KEY")
-    if not api_key:
-        return None
 
-    final_system = system
-    if allow_no_send:
-        final_system += NO_SEND_INSTRUCTION
+HEARTBEAT_FACT_CATEGORIES = ("health", "fatigue", "constraint")
 
-    try:
-        import anthropic
-        client = anthropic.Anthropic(api_key=api_key)
-        response = client.messages.create(
-            model="claude-haiku-4-5-20251001",
-            max_tokens=256,
-            system=final_system,
-            messages=[{"role": "user", "content": prompt}],
-        )
-        text = response.content[0].text.strip()
 
-        # Check for NO_SEND token (exact match or wrapped in markup)
-        cleaned = text.replace("*", "").replace("`", "").replace("#", "").strip()
-        if cleaned.upper() == NO_SEND_TOKEN:
-            logger.info("LLM opted out with NO_SEND")
-            return None
+def _get_active_fact_lines(db: Session, user: s.User) -> list[str]:
+    """Return short fact lines for active health/fatigue/constraint facts."""
+    facts = repo.get_active_facts(db, user.id, limit=48)
+    relevant = [
+        f for f in facts
+        if f.category in HEARTBEAT_FACT_CATEGORIES and fact_is_current(f)
+    ]
+    return [f"- [{f.category}] {f.value}" for f in relevant[:5]]
 
-        # NO_SEND + short ack (<100 chars) → also suppress
-        if NO_SEND_TOKEN in text.upper() and len(text) < 100:
-            logger.info("LLM opted out with NO_SEND + short ack")
-            return None
 
-        # NO_SEND + real content → strip token, deliver content
-        if NO_SEND_TOKEN in text.upper():
-            text = text.replace(NO_SEND_TOKEN, "").replace("no_send", "").strip()
-            if not text:
-                return None
-
-        return text
-    except Exception:
-        logger.exception("Heartbeat LLM call failed")
-        return None
+def _format_active_facts_for_prompt(db: Session, user: s.User) -> str:
+    """Return a prompt block with active health/fatigue/constraint facts, or empty string."""
+    lines = _get_active_fact_lines(db, user)
+    if not lines:
+        return ""
+    return "\n\nFaits actifs a prendre en compte:\n" + "\n".join(lines)
 
 
 def morning_briefing() -> CoachDraft | None:
@@ -298,6 +274,10 @@ def morning_briefing() -> CoachDraft | None:
                 "Integre les signaux dans ton message de maniere naturelle. "
                 "Si un signal est un warning ou action, adapte ton ton en consequence."
             )
+        system += _format_active_facts_for_prompt(db, user)
+        sport_knowledge = load_sport_knowledge({today_session.sport_type}, max_tokens=500)
+        if sport_knowledge:
+            system += f"\n\nConnaissances sport (reference):\n{sport_knowledge}"
 
         prompt = (
             f"{render_time_context(time_context)}\n"
@@ -321,6 +301,9 @@ def morning_briefing() -> CoachDraft | None:
         )
         if yesterday_context:
             msg += f"\n{yesterday_context.strip()}"
+        fact_lines = _get_active_fact_lines(db, user)
+        if fact_lines:
+            msg += "\nA noter: " + "; ".join(line.lstrip("- ") for line in fact_lines[:2]) + "."
         _reserve_module_guard(user.id)
         return CoachDraft(text=msg, proactive=True)
     finally:
@@ -393,6 +376,7 @@ def pre_session_reminder() -> CoachDraft | None:
                 f"\n\n{signals_block}\n"
                 "Integre les signaux dans ton rappel seulement si ca renforce une action utile."
             )
+        system += _format_active_facts_for_prompt(db, user)
         prompt = (
             f"{render_time_context(time_context)}\n"
             f"Source de verite planning: calendrier date reel / app.\n"
@@ -405,6 +389,9 @@ def pre_session_reminder() -> CoachDraft | None:
             return CoachDraft(text=llm_msg, proactive=True)
 
         msg = f"Demain c'est {key_session.session_title}. Tu te sens comment pour {label.lower()} ?"
+        fact_lines = _get_active_fact_lines(db, user)
+        if fact_lines:
+            msg += "\nA noter: " + "; ".join(line.lstrip("- ") for line in fact_lines[:2]) + "."
         _reserve_module_guard(user.id)
         return CoachDraft(text=msg, proactive=True)
     finally:
@@ -505,6 +492,20 @@ def signal_check() -> CoachDraft | None:
             logger.info("Signal check skipped — recent exchange")
             return None
 
+        # Adaptive plan: check TSB and missed cascade triggers
+        try:
+            from fitmas.adaptation import check_and_adapt_tsb, check_and_adapt_missed
+            tsb_result = check_and_adapt_tsb(db, user)
+            if tsb_result and tsb_result.applied and tsb_result.message:
+                _reserve_module_guard(user.id)
+                return CoachDraft(text=tsb_result.message, proactive=True)
+            missed_result = check_and_adapt_missed(db, user)
+            if missed_result and missed_result.applied and missed_result.message:
+                _reserve_module_guard(user.id)
+                return CoachDraft(text=missed_result.message, proactive=True)
+        except Exception:
+            logger.exception("Adaptation trigger check failed (non-blocking)")
+
         signals = collect_signals(db, user)
         if not signals:
             return None
@@ -536,6 +537,7 @@ def signal_check() -> CoachDraft | None:
             "Si silence prolonge: prends des nouvelles simplement. "
             "Si charge elevee: suggere d'alleger."
         )
+        system += _format_active_facts_for_prompt(db, user)
 
         prompt = f"{render_time_context(time_context)}\nGenere un message proactif."
         llm_msg = _llm_generate(system, prompt)
@@ -556,51 +558,13 @@ def signal_check() -> CoachDraft | None:
         else:
             msg = "Je garde un oeil sur ta semaine. On en reparle."
 
+        fact_lines = _get_active_fact_lines(db, user)
+        if fact_lines:
+            msg += "\nA noter: " + "; ".join(line.lstrip("- ") for line in fact_lines[:2]) + "."
+
         _reserve_module_guard(user.id)
         return CoachDraft(text=msg, proactive=True)
     finally:
         db.close()
 
 
-def _activities_last_days(db: Session, user: s.User, *, days: int) -> list[s.Activity]:
-    cutoff = get_local_now(user.timezone).date() - timedelta(days=max(0, days - 1))
-    timezone = get_timezone(user.timezone)
-    matched: list[s.Activity] = []
-    for activity in repo.get_activities(db, user.id, limit=160):
-        if activity.started_at is None:
-            continue
-        started_at = activity.started_at
-        if started_at.tzinfo is None:
-            local_date = started_at.date()
-        else:
-            local_date = started_at.astimezone(timezone).date()
-        if local_date >= cutoff:
-            matched.append(activity)
-    return matched
-
-
-def _activities_on_local_date(db: Session, user: s.User, *, target_date: date) -> list[s.Activity]:
-    timezone = get_timezone(user.timezone)
-    matched: list[s.Activity] = []
-    for activity in repo.get_activities(db, user.id, limit=120):
-        if activity.started_at is None:
-            continue
-        started_at = activity.started_at
-        if started_at.tzinfo is None:
-            local_date = started_at.date()
-        else:
-            local_date = started_at.astimezone(timezone).date()
-        if local_date == target_date:
-            matched.append(activity)
-    return matched
-
-
-def _claimed_activities_on_local_date(db: Session, user: s.User, *, target_date: date):
-    facts = repo.get_active_facts(db, user.id, limit=48)
-    return extract_claims_from_facts(facts, target_date=target_date)
-
-
-def _claimed_activities_last_days(db: Session, user: s.User, *, days: int):
-    cutoff = get_local_now(user.timezone).date() - timedelta(days=max(0, days - 1))
-    facts = repo.get_active_facts(db, user.id, limit=64)
-    return [claim for claim in extract_claims_from_facts(facts) if claim.resolved_date_iso and date.fromisoformat(claim.resolved_date_iso) >= cutoff]
