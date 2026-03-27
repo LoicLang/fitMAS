@@ -12,7 +12,9 @@ from fitmas.planner import normalize_sports
 
 ROOT_DIR = Path(__file__).resolve().parents[3]
 FRONTEND_DIR = ROOT_DIR / "frontend"
-FRONTEND_INDEX = FRONTEND_DIR / "index.html"
+FRONTEND_PUBLIC_DIR = FRONTEND_DIR / "public"
+FRONTEND_BUILD_DIR = FRONTEND_DIR / "dist"
+FRONTEND_INDEX = FRONTEND_BUILD_DIR / "index.html"
 
 
 def normalized_onboarding_payload(payload: OnboardPayload | OnboardPreviewPayload) -> dict:

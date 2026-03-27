@@ -81,15 +81,14 @@ Via `/start` sur le bot Telegram :
 - Régénération à la demande ou automatique le lundi matin
 - Limite actuelle : le modèle reste encore hebdomadaire et pas vraiment calendaire
 
-### 3. App (6 onglets)
+### 3. App (5 onglets)
 
-**Aujourd'hui** — écran quotidien
-- séance du jour + objectif + note coach
+**Aperçu** — écran quotidien
+- prochaine séance + objectif + note coach
 - actions rapides : Fait / Trop fatigué / Décaler
-- métriques : sport, durée, intensité, priorité
-- lecture de forme : CTL / ATL / TSB
-- dernier repère du même sport
-- ce qui a changé + ce que le coach regarde
+- métriques bloc actif : volume, charge cible, semaine
+- hero éditorial type "prochaine séance"
+- programme semaine en cartes visuelles
 
 **Calendrier** — vue plan vivant
 - séance du jour mise en avant en haut
@@ -104,12 +103,12 @@ Via `/start` sur le bot Telegram :
 - bouton régénérer
 - direction cible : vraie timeline persistée + vue performance
 
-**Performance** — cockpit charge
+**Évolution** — cockpit charge + montée en charge
 - CTL / ATL / TSB sur 12 semaines
 - volume multisport hebdo
 - complétion de la semaine en cours
 - records simples par sport
-- premier split démarré : `utils.js`, `charts.js`
+- dashboard visuel orienté bloc actif + charge cible + lecture coach
 
 **Activités** — réel vs prévu
 - formulaire activité manuelle

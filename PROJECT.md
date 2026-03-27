@@ -2,7 +2,7 @@
 
 Coach IA multisport proactif qui ajuste ton entraînement selon ta vraie vie.
 
-## Statut — 22 mars 2026
+## Statut — 27 mars 2026
 
 **Déployé et fonctionnel sur https://the deployed app/**
 
@@ -10,7 +10,7 @@ Ce qui tourne en prod :
 - Onboarding Telegram conversationnel complet (/start → profil + coach + plan)
 - Planner hebdomadaire multisport déterministe (running, cycling, swimming, climbing, strength)
 - Boucle message → LLM → mutation → réponse coach
-- Webapp mobile-first avec 5 onglets (Aujourd'hui, Calendrier, Activités, Profil, Debug)
+- Webapp mobile-first React/Vite avec 5 onglets (Aperçu, Calendrier, Évolution, Activités, Profil)
 - Activités manuelles + Strava OAuth + import + synchro automatique
 - Heartbeat proactif avec cooldowns (briefing matin, rappel pré-séance, revue dimanche, nouveau plan lundi)
 - Mémoire utile via UserFact (extraction LLM + upsert)
@@ -29,7 +29,7 @@ Cap produit actuel :
 | Composant | Choix |
 |-----------|-------|
 | Backend | Python 3.13 + FastAPI + SQLAlchemy 2.0 + SQLite |
-| Front | Webapp mobile-first (HTML/CSS/JS single-file) |
+| Front | React 18 + Vite + React Router + motion + Embla + Recharts |
 | Messagerie | Telegram bot (python-telegram-bot 21) |
 | IA | Anthropic Claude — Haiku quotidien, Sonnet pour plans |
 | Cron | APScheduler (briefing 7h30, synchro Strava 2h, revue dimanche 20h) |
@@ -53,8 +53,8 @@ AGENTS.md            — règles agentiques
 PROJECT.md           — point d'entrée
 docs/                — 4 docs essentiels + README
 backend/src/fitmas/  — API + bot + domaines partagés (34 modules, ~5200 lignes)
-frontend/index.html  — webapp mobile-first
-scripts/             — dev, start-prod, docs:list
+frontend/            — webapp React/Vite
+scripts/             — dev, dev-web, start-prod, docs:list
 Dockerfile           — image Docker multi-stage
 fly.toml             — config Fly.io
 ```
@@ -64,10 +64,12 @@ fly.toml             — config Fly.io
 ```bash
 rm -rf .venv && python3 -m venv .venv && .venv/bin/python -m pip install -e .
 ./scripts/dev
+./scripts/dev-web
 ```
 
 Local API via `./scripts/dev` démarre sur `127.0.0.1:8033` par défaut pour éviter les faux conflits avec un autre service en `:8000`.
 Override possible : `PORT=8040 ./scripts/dev`
+Frontend Vite via `./scripts/dev-web` sur `127.0.0.1:5173`, avec proxy API vers `:8033`.
 
 DB : `fitmas.db` à la racine. Supprimer pour re-seeder.
 Variables : `ANTHROPIC_API_KEY`, `TELEGRAM_BOT_TOKEN`, `STRAVA_CLIENT_ID`, `STRAVA_CLIENT_SECRET`

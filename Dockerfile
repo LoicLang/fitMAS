@@ -1,3 +1,14 @@
+FROM node:22-slim AS frontend-build
+
+WORKDIR /frontend
+
+COPY frontend/package.json frontend/package-lock.json* ./
+RUN if [ -f package-lock.json ]; then npm ci; else npm install; fi
+
+COPY frontend/ ./
+RUN npm run build
+
+
 FROM python:3.13-slim
 
 WORKDIR /app
@@ -7,8 +18,8 @@ COPY pyproject.toml .
 COPY backend/ backend/
 RUN pip install --no-cache-dir -e .
 
-# Copy frontend
-COPY frontend/ frontend/
+# Copy built frontend
+COPY --from=frontend-build /frontend/dist frontend/dist
 
 # Copy scripts
 COPY scripts/ scripts/

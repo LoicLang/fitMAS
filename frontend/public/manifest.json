@@ -1,0 +1,10 @@
+{
+  "name": "FitMAS",
+  "short_name": "FitMAS",
+  "description": "Ton equipe IA de coaching multisport",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#020202",
+  "theme_color": "#020202"
+}

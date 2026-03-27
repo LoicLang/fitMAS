@@ -24,14 +24,14 @@ Les garde-fous, la planification, les permissions, les cooldowns et la persistan
 - Les effets de bord vivent dans les orchestrateurs : API, bot, scheduler
 - Les futures briques de sophistication doivent s'appuyer sur une vérité planning stable
 
-## État réel du code — 22 mars 2026
+## État réel du code — 27 mars 2026
 
 **Déployé sur Fly.io : https://the deployed app/**
 
 ### Ce qui existe et tourne
 
 - API FastAPI + bot splittés par domaine (34 modules, ~5200 lignes Python)
-- Webapp HTML/CSS/JS mobile-first (single-file, ~1800 lignes)
+- Webapp React/Vite mobile-first servie par FastAPI après build
 - Bot Telegram avec onboarding conversationnel + commandes + crons
 - Planner hebdo multisport déterministe
 - Mutation loop : message → LLM → decision → update plan → réponse
@@ -57,9 +57,9 @@ Les garde-fous, la planification, les permissions, les cooldowns et la persistan
 - La boucle coach reçoit aussi la timeline datée et peut cibler une séance précise
 - `swap_sessions` sait aussi passer par des ids de séances concrètes
 - Router stats performance : `training-load`, `volume`, `records`
-- Onglet webapp `Performance` branché sur Chart.js
+- Webapp React structurée par routes `Aperçu / Calendrier / Évolution / Activités / Profil`
+- Motion, Embla et Recharts branchés pour la fidélité visuelle + les interactions
 - `Today` enrichi : contexte de forme + dernière activité comparable même sport
-- Début du split frontend : assets JS servis via `/app-static`
 - Strava callback redirige vers webapp (plus de JSON brut)
 - `/help` Telegram
 - Grounding conversationnel en cours : `execution_context.py`, `temporal_resolver.py`, `activity_claims.py`, `conversation_context.py`
@@ -80,7 +80,7 @@ Les garde-fous, la planification, les permissions, les cooldowns et la persistan
 ### Ce qui n'existe pas encore
 
 - Verrou robuste anti-doublon multi-instance
-- Dashboard performance avancé dans `Today` + split frontend modulaire
+- Polish visuel écran par écran pour rapprocher l'app du Figma
 - Périodisation explicite
 - Webhook Strava (actuellement polling toutes les 2h)
 - Lineage de plans explicite
@@ -96,7 +96,7 @@ Les garde-fous, la planification, les permissions, les cooldowns et la persistan
 | Backend API | Python 3.13 + FastAPI | Cohérent, itération rapide, bon fit IA |
 | Base de données | SQLite (Fly.io volume persistant) | Suffit pour single-user. Postgres quand multi-users. |
 | ORM | SQLAlchemy 2.0 + Pydantic | Types stricts, structured outputs LLM |
-| Front | Webapp mobile-first HTML/CSS/JS | Aller vite. Single-file. Pas de framework. |
+| Front | React 18 + Vite + React Router + motion + Embla + Recharts | Fidélité UI, maintenance, animations, écrans modulaires |
 | Cron | APScheduler (in-process) | Pas de Temporal en V0. Suffisant pour 1 user. |
 | Messagerie | Telegram bot (python-telegram-bot 21) | Gratuit, instantané, proactivité validée |
 | IA | Anthropic Claude (Haiku quotidien, Sonnet plans) | Structured outputs + bonne qualité français |
@@ -151,7 +151,7 @@ Conséquence récente importante :
 ```
 backend/src/fitmas/
 ├── api.py                 (46 lignes) — bootstrap FastAPI + lifespan
-├── api_static.py          (23 lignes) — health + fichiers statiques
+├── api_static.py          (~50 lignes) — health + shell SPA React + assets buildés
 ├── api_read.py            (~150 lignes) — profile, week, today, timeline, messages, facts, activities
 ├── api_onboarding.py      (134 lignes) — preview, onboard, regenerate
 ├── api_plan.py            (~50 lignes) — actions déterministes sur séances datées
@@ -191,10 +191,17 @@ backend/src/fitmas/
 └── __init__.py            (2 lignes)
 
 frontend/
-├── index.html             (~2200 lignes) — webapp complète, encore majoritairement monolithique
-└── js/
-    ├── utils.js           (~30 lignes) — helpers purs frontend
-    └── charts.js          (~70 lignes) — construction des graphes Chart.js
+├── index.html             — entrée Vite
+├── package.json           — stack frontend + scripts build/dev
+├── public/
+│   └── manifest.json      — manifest PWA
+└── src/
+    ├── app/App.tsx        — shell + routing
+    ├── state/app-state.tsx — bootstrap API + actions UI
+    ├── pages/             — Overview, Calendar, Evolution, Activities, Profile
+    ├── components/        — modal séance
+    ├── lib/               — API, planning, format, visuals
+    └── styles/app.css     — thème visuel global
 ```
 
 ## Modèle de données

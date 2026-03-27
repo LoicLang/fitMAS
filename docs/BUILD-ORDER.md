@@ -42,14 +42,14 @@ read_when:
 
 **Statut : TERMINÉ**
 
-- 6 onglets : Aujourd'hui, Calendrier, Performance, Activités, Profil, Debug
+- 5 onglets : Aperçu, Calendrier, Évolution, Activités, Profil
 - Navigation mobile bottom bar
 - Passe mobile iPhone-proof : safe areas, touch targets, hiérarchie resserrée
 - Actions rapides : Fait / Trop fatigué / Décaler
 - Badges statut : fait ✓ / prévu / sauté / adapté
 - Barre de charge semaine
 - Calendrier vivant : passé récent, aujourd'hui, à venir
-- Onglet Performance initial : CTL / ATL / TSB, volume, complétion, records
+- Onglet Évolution : lecture charge + projection bloc
 - Contexte temps local visible dans le top bar
 - Strava connect button + synchro
 - Formulaire activité manuelle
@@ -224,24 +224,23 @@ C'est la fondation manquante. Sans ça, le dashboard et la périodisation rester
 **Statut : EN COURS**
 
 Déjà posé :
-- endpoints stats `training-load`, `volume`, `records`
-- Chart.js via CDN
-- onglet `Performance` dans la webapp
-- graphes charge / volume / complétion
-- cartes records simples par sport
+- endpoints stats `training-load`, `volume`, `records`, `performance-overview`
+- migration frontend vers React/Vite
+- shell app routé `Aperçu / Calendrier / Évolution / Activités / Profil`
+- motion + Embla + Recharts branchés
 - `Today` enrichi avec forme + repère récent du même sport
-- premier split frontend lancé : `utils.js`, `charts.js`
 
 Reste à faire :
-- poursuivre le split du frontend single-file en modules
+- polish visuel écran par écran pour coller au Figma
 - renforcer calendrier semaine/mois et interactions
+- compléter la vision dashboard `Évolution`
 
 | # | Tâche | Fichiers | Impact |
 |---|-------|----------|--------|
-| 2A1 | Éclater `frontend/index.html` en shell + CSS + modules JS | `frontend/`, `api_static.py` | Maintenabilité UI |
-| 2A2 | Garder vanilla JS, pas de bundler | `frontend/js/*.js` | Simplicité |
-| 2B1 | Ajouter l'onglet `Performance` | `frontend/index.html` | Valeur perçue immédiate |
-| 2B2 | Intégrer Chart.js via CDN | `frontend/index.html` | Graphes charge / volume / completion |
+| 2A1 | Migrer la webapp vers React/Vite | `frontend/`, `api_static.py`, `Dockerfile` | Maintenabilité UI |
+| 2A2 | Servir le build frontend via FastAPI/Fly | `api_static.py`, `Dockerfile` | Déploiement simple |
+| 2B1 | Renommer `Performance` en `Évolution` | `frontend/src/` | Contrat produit |
+| 2B2 | Intégrer Recharts + motion | `frontend/src/` | Graphes + animations |
 | 2B3 | Créer `GET /api/v0/stats/training-load` | `api_stats.py`, `training_load.py` | CTL / ATL / TSB |
 | 2B4 | Créer `GET /api/v0/stats/volume` | `api_stats.py`, `performance_stats.py` | Volume multisport |
 | 2B5 | Créer `GET /api/v0/stats/records` | `api_stats.py`, `performance_stats.py` | PRs |

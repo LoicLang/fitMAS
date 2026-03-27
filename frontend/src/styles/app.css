@@ -1,0 +1,1077 @@
+@import url("https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@500;600&family=Manrope:wght@300;400;500;700;800&display=swap");
+
+:root {
+  color-scheme: dark;
+  font-family: "Manrope", sans-serif;
+  background: #020202;
+  color: #f5f7fb;
+  --bg: #020202;
+  --panel: rgba(9, 11, 14, 0.76);
+  --panel-strong: rgba(11, 13, 17, 0.94);
+  --border: rgba(255, 255, 255, 0.07);
+  --muted: #8a909e;
+  --muted-strong: #b8bfca;
+  --cyan: #18c9e8;
+  --cyan-soft: rgba(24, 201, 232, 0.14);
+  --blue-soft: rgba(31, 82, 180, 0.2);
+  --mono: "IBM Plex Mono", monospace;
+  --shadow: 0 34px 120px rgba(0, 0, 0, 0.48);
+  --radius: 2rem;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  min-height: 100%;
+}
+
+body {
+  margin: 0;
+  background:
+    radial-gradient(circle at top, rgba(11, 74, 90, 0.32), transparent 28%),
+    linear-gradient(180deg, #020202 0%, #030507 34%, #020202 100%);
+  color: white;
+  overflow-x: hidden;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+.app-shell {
+  position: relative;
+  min-height: 100vh;
+  padding: 1.75rem 2rem 6rem;
+}
+
+.ambient {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+}
+
+.ambient-grid {
+  background:
+    linear-gradient(to right, rgba(255, 255, 255, 0.03) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(255, 255, 255, 0.03) 1px, transparent 1px);
+  background-size: 4rem 4rem;
+  mask-image: radial-gradient(circle at center, black 6%, transparent 70%);
+  opacity: 0.28;
+}
+
+.ambient-glow {
+  filter: blur(120px);
+  mix-blend-mode: screen;
+  opacity: 0.75;
+}
+
+.ambient-glow-cyan {
+  top: 10%;
+  left: 18%;
+  width: 40rem;
+  height: 40rem;
+  background: rgba(24, 201, 232, 0.16);
+}
+
+.ambient-glow-blue {
+  top: 18%;
+  right: 10%;
+  width: 34rem;
+  height: 34rem;
+  background: rgba(43, 100, 212, 0.16);
+}
+
+.ambient-glow-teal {
+  bottom: -6rem;
+  left: 34%;
+  width: 28rem;
+  height: 28rem;
+  background: rgba(38, 132, 124, 0.14);
+}
+
+.ambient-vignette {
+  background: radial-gradient(circle at center, transparent 0%, rgba(2, 2, 2, 0.94) 80%);
+}
+
+.site-header,
+.page-shell {
+  position: relative;
+  z-index: 1;
+}
+
+.site-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 2rem;
+}
+
+.brand-mark {
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  font-size: 1.05rem;
+}
+
+.site-nav,
+.mobile-nav {
+  display: flex;
+  align-items: center;
+  gap: 1.2rem;
+}
+
+.site-link,
+.mobile-link {
+  color: rgba(255, 255, 255, 0.4);
+  font-size: 0.92rem;
+  font-weight: 700;
+  transition: color 180ms ease;
+}
+
+.site-link.active,
+.mobile-link.active {
+  color: white;
+}
+
+.page-shell {
+  width: min(1320px, 100%);
+  margin: 0 auto;
+  display: grid;
+  gap: 2rem;
+}
+
+.loading-screen {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 2rem;
+}
+
+.empty-state-panel,
+.glass-card,
+.workout-modal,
+.calendar-grid,
+.calendar-feed-card,
+.workout-card {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.02), transparent 30%), var(--panel);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow);
+  backdrop-filter: blur(26px);
+  -webkit-backdrop-filter: blur(26px);
+}
+
+.glass-card,
+.empty-state-panel {
+  border-radius: var(--radius);
+  padding: 1.6rem;
+}
+
+.hero-stage {
+  min-height: 82vh;
+  border-radius: 2.6rem;
+  position: relative;
+  overflow: hidden;
+  background:
+    linear-gradient(180deg, rgba(3, 5, 8, 0.14), rgba(2, 2, 2, 0.7)),
+    radial-gradient(circle at 50% 48%, rgba(24, 201, 232, 0.26), transparent 20%),
+    linear-gradient(90deg, rgba(2, 2, 2, 0.92), rgba(2, 2, 2, 0.36), rgba(2, 2, 2, 0.88)),
+    var(--hero-image) center/cover;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  box-shadow: 0 40px 120px rgba(0, 0, 0, 0.5);
+}
+
+.hero-image-mask {
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.02), transparent 18%, rgba(2, 2, 2, 0.28) 100%),
+    radial-gradient(circle at 50% 46%, rgba(24, 201, 232, 0.18), transparent 18%),
+    linear-gradient(90deg, rgba(2, 2, 2, 0.88) 0%, rgba(2, 2, 2, 0.44) 48%, rgba(2, 2, 2, 0.9) 100%);
+}
+
+.hero-content {
+  position: relative;
+  z-index: 1;
+  width: min(920px, 100%);
+  padding: 8.5rem 2.2rem 4rem;
+}
+
+.status-pill,
+.card-kicker,
+.card-label,
+.modal-date,
+.site-link,
+.mobile-link {
+  font-family: var(--mono);
+}
+
+.status-pill {
+  width: fit-content;
+  margin-bottom: 1.5rem;
+  padding: 0.75rem 1rem;
+  border-radius: 999px;
+  color: var(--cyan);
+  background: rgba(16, 18, 22, 0.78);
+  border: 1px solid rgba(24, 201, 232, 0.16);
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  font-size: 0.72rem;
+  box-shadow: 0 0 22px rgba(24, 201, 232, 0.18);
+}
+
+.hero-display {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.6rem;
+}
+
+.hero-display h1,
+.page-heading h1,
+.calendar-title {
+  margin: 0;
+  line-height: 0.9;
+  letter-spacing: -0.08em;
+  font-size: clamp(3rem, 12vw, 7.6rem);
+  text-transform: uppercase;
+}
+
+.hero-display span {
+  font-size: clamp(2.4rem, 10vw, 5.4rem);
+  color: rgba(255, 255, 255, 0.45);
+  font-weight: 300;
+}
+
+.hero-copy,
+.page-heading p,
+.muted-copy {
+  max-width: 40rem;
+  margin-top: 1.25rem;
+  color: var(--muted-strong);
+  font-size: 1.35rem;
+  line-height: 1.5;
+}
+
+.hero-actions {
+  margin-top: 2.5rem;
+  display: grid;
+  gap: 1rem;
+}
+
+.hero-metrics {
+  margin-top: 2.25rem;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1rem;
+  width: min(44rem, 100%);
+}
+
+.hero-metric-card {
+  padding: 1rem 1.1rem 1.15rem;
+  border-radius: 1.5rem;
+  background: rgba(12, 14, 18, 0.62);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  backdrop-filter: blur(20px);
+}
+
+.hero-metric-card span {
+  display: block;
+  color: var(--muted);
+  font-family: var(--mono);
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+}
+
+.hero-metric-card strong {
+  display: block;
+  margin-top: 0.55rem;
+  font-size: 1.15rem;
+}
+
+.hero-inline-actions,
+.pill-row,
+.workout-chip-row,
+.carousel-actions,
+.modal-title-row,
+.zone-label-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.primary-cta,
+.ghost-cta,
+.round-button,
+.link-button,
+.calendar-day,
+.calendar-feed-card,
+.activity-card {
+  border: 0;
+  cursor: pointer;
+}
+
+.primary-cta,
+.link-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.6rem;
+  width: fit-content;
+  min-width: 16rem;
+  min-height: 4rem;
+  padding: 0 1.5rem;
+  border-radius: 999px;
+  background: linear-gradient(135deg, rgba(24, 201, 232, 1), rgba(38, 209, 235, 0.92));
+  color: #020202;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  box-shadow: 0 0 28px rgba(24, 201, 232, 0.28);
+  transition: transform 220ms ease, box-shadow 220ms ease;
+}
+
+.ghost-cta {
+  min-height: 2.9rem;
+  padding: 0 1rem;
+  border-radius: 999px;
+  background: rgba(12, 14, 18, 0.72);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  color: white;
+  transition: transform 220ms ease, border-color 220ms ease, background 220ms ease;
+}
+
+.primary-cta:hover,
+.link-button:hover,
+.ghost-cta:hover,
+.round-button:hover,
+.workout-card:hover {
+  transform: translateY(-2px);
+}
+
+.meta-chip {
+  display: inline-flex;
+  align-items: center;
+  min-height: 2rem;
+  padding: 0 0.85rem;
+  border-radius: 999px;
+  font-family: var(--mono);
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  background: rgba(255, 255, 255, 0.08);
+  color: white;
+}
+
+.rail-section,
+.calendar-page,
+.evolution-page,
+.two-col-page {
+  display: grid;
+  gap: 1.5rem;
+}
+
+.section-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  align-items: end;
+}
+
+.section-head h2,
+.glass-card h2,
+.workout-card h3,
+.workout-modal h3 {
+  margin: 0;
+  font-size: clamp(2rem, 4vw, 3rem);
+  line-height: 0.95;
+  letter-spacing: -0.06em;
+}
+
+.section-head p,
+.glass-card p,
+.workout-card p {
+  color: var(--muted);
+  line-height: 1.55;
+}
+
+.round-button {
+  width: 3.5rem;
+  height: 3.5rem;
+  border-radius: 999px;
+  background: rgba(8, 10, 14, 0.86);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  color: white;
+}
+
+.carousel-shell {
+  overflow: hidden;
+}
+
+.carousel-track {
+  display: flex;
+  gap: 1.25rem;
+}
+
+.workout-card {
+  position: relative;
+  flex: 0 0 min(32rem, 86vw);
+  border-radius: 2rem;
+  overflow: hidden;
+  min-height: 22rem;
+  text-align: left;
+  transition: transform 260ms ease, border-color 260ms ease, box-shadow 260ms ease;
+}
+
+.workout-card-media {
+  position: relative;
+  min-height: 17rem;
+  padding: 1.25rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  background:
+    linear-gradient(180deg, rgba(0, 0, 0, 0.08), rgba(0, 0, 0, 0.58)),
+    var(--card-image) center/cover;
+}
+
+.workout-card-gradient {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, rgba(2, 2, 2, 0.1), rgba(2, 2, 2, 0.94));
+}
+
+.card-kicker,
+.card-icon-button {
+  position: relative;
+  z-index: 1;
+}
+
+.card-kicker {
+  display: inline-flex;
+  align-items: center;
+  min-height: 2rem;
+  padding: 0 0.85rem;
+  border-radius: 999px;
+  background: rgba(3, 12, 16, 0.7);
+  border: 1px solid rgba(24, 201, 232, 0.16);
+  color: var(--cyan);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  font-size: 0.68rem;
+}
+
+.card-icon-button {
+  width: 3rem;
+  height: 3rem;
+  border-radius: 999px;
+  display: grid;
+  place-items: center;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  color: var(--cyan);
+}
+
+.workout-card-body {
+  padding: 1.4rem;
+}
+
+.workout-card-body h3 {
+  font-size: 2.4rem;
+}
+
+.workout-card:hover {
+  border-color: rgba(24, 201, 232, 0.22);
+  box-shadow: 0 34px 90px rgba(0, 0, 0, 0.58), 0 0 0 1px rgba(24, 201, 232, 0.08);
+}
+
+.dashboard-row,
+.two-col-page,
+.evolution-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1.5rem;
+}
+
+.stats-panel {
+  min-height: 18rem;
+}
+
+.stats-grid {
+  margin-top: 1rem;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+}
+
+.stats-grid.compact {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+
+.stat-box,
+.modal-stat-card {
+  border-radius: 1.5rem;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  padding: 1.15rem;
+  display: grid;
+  gap: 0.65rem;
+}
+
+.stat-box span,
+.card-label,
+.modal-date,
+.detail-list span {
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  font-size: 0.72rem;
+}
+
+.stat-box strong,
+.detail-list strong,
+.modal-stat-card strong,
+.chart-hero-head strong,
+.side-metric-card strong,
+.image-metric-card strong {
+  font-size: 1.2rem;
+  line-height: 1.05;
+}
+
+.calendar-title {
+  font-size: clamp(2.8rem, 7vw, 5rem);
+}
+
+.calendar-weekdays {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  padding: 0 0.75rem;
+  color: var(--muted);
+  font-family: var(--mono);
+  font-size: 0.78rem;
+  letter-spacing: 0.16em;
+}
+
+.calendar-grid {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  overflow: hidden;
+  border-radius: 2rem;
+}
+
+.calendar-day {
+  min-height: 8rem;
+  background: transparent;
+  border-right: 1px solid rgba(255, 255, 255, 0.04);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+  color: white;
+  display: grid;
+  align-content: start;
+  gap: 1rem;
+  padding: 1rem;
+  text-align: left;
+}
+
+.calendar-day.muted {
+  color: rgba(255, 255, 255, 0.28);
+}
+
+.calendar-day.has-plan {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.025), rgba(255, 255, 255, 0.01));
+}
+
+.calendar-day.week-focus {
+  background: rgba(255, 255, 255, 0.025);
+}
+
+.calendar-day.week-focus.has-plan {
+  background:
+    radial-gradient(circle at 50% 100%, rgba(24, 201, 232, 0.08), transparent 32%),
+    rgba(255, 255, 255, 0.04);
+}
+
+.calendar-day.active {
+  background:
+    radial-gradient(circle at 50% 100%, rgba(24, 201, 232, 0.12), transparent 28%),
+    rgba(255, 255, 255, 0.05);
+}
+
+.calendar-day span {
+  font-size: 2rem;
+  line-height: 1;
+}
+
+.calendar-dots {
+  display: flex;
+  gap: 0.45rem;
+  margin-top: auto;
+}
+
+.dot {
+  width: 0.58rem;
+  height: 0.58rem;
+  border-radius: 999px;
+  display: inline-block;
+}
+
+.dot-cyan { background: #18c9e8; box-shadow: 0 0 12px rgba(24, 201, 232, 0.7); }
+.dot-blue { background: #3b82f6; }
+.dot-orange { background: #f97316; }
+.dot-red { background: #ef4444; }
+.dot-slate { background: #d4d4d8; }
+
+.calendar-feed {
+  display: grid;
+  gap: 0.9rem;
+}
+
+.calendar-feed-card,
+.activity-card {
+  width: 100%;
+  padding: 1rem 1.2rem;
+  border-radius: 1.4rem;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  color: white;
+  text-align: left;
+}
+
+.calendar-feed-card strong,
+.activity-card strong {
+  display: block;
+  margin-top: 0.3rem;
+  font-size: 1rem;
+}
+
+.calendar-feed-card span,
+.activity-card span,
+.activity-card small {
+  color: var(--muted);
+}
+
+.page-heading {
+  display: grid;
+  gap: 0.8rem;
+}
+
+.evolution-side {
+  display: grid;
+  gap: 1.5rem;
+}
+
+.chart-hero-card {
+  min-height: 40rem;
+  padding: 1.8rem;
+}
+
+.chart-hero-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  align-items: start;
+}
+
+.chart-wrap {
+  height: 22rem;
+  margin-top: 2rem;
+}
+
+.trend-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0 1rem;
+  min-height: 2.8rem;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.side-metric-card,
+.image-metric-card {
+  min-height: 19rem;
+}
+
+.side-metric-stack {
+  display: grid;
+  gap: 0.45rem;
+  margin-top: 0.5rem;
+}
+
+.side-metric-stack small {
+  color: var(--muted);
+}
+
+.thin-progress {
+  margin-top: 1rem;
+  height: 0.35rem;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  overflow: hidden;
+}
+
+.thin-progress > div {
+  height: 100%;
+  border-radius: inherit;
+  background: white;
+}
+
+.metric-footer {
+  margin-top: 0.8rem;
+  display: flex;
+  justify-content: space-between;
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+
+.image-metric-card {
+  position: relative;
+  overflow: hidden;
+  background:
+    linear-gradient(180deg, rgba(2, 2, 2, 0.15), rgba(2, 2, 2, 0.85)),
+    url("https://images.unsplash.com/photo-1441974231531-c6227db76b6e?auto=format&fit=crop&w=1200&q=80") center/cover;
+}
+
+.image-scrim {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, rgba(2, 2, 2, 0.22), rgba(2, 2, 2, 0.8));
+}
+
+.image-metric-card > * {
+  position: relative;
+  z-index: 1;
+}
+
+.inline-link {
+  margin-top: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0;
+  background: transparent;
+  border: 0;
+  color: white;
+  font-weight: 700;
+}
+
+.bullet-list {
+  margin: 1rem 0 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 0.75rem;
+  color: var(--muted-strong);
+}
+
+.bullet-list li::before {
+  content: "•";
+  color: var(--cyan);
+  margin-right: 0.6rem;
+}
+
+.stacked-column {
+  display: grid;
+  gap: 1.5rem;
+}
+
+.activity-form {
+  margin-top: 1rem;
+  display: grid;
+  gap: 0.9rem;
+}
+
+.activity-form input,
+.activity-form select,
+.activity-form textarea {
+  width: 100%;
+  min-height: 3.3rem;
+  padding: 0.9rem 1rem;
+  border-radius: 1.1rem;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.03);
+  color: white;
+}
+
+.detail-list {
+  margin-top: 1rem;
+  display: grid;
+  gap: 0.9rem;
+}
+
+.detail-list > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 30;
+  display: grid;
+  place-items: center;
+  padding: 1.25rem;
+  background: rgba(0, 0, 0, 0.72);
+}
+
+.workout-modal {
+  position: relative;
+  width: min(32rem, 100%);
+  border-radius: 2rem;
+  padding: 1.75rem;
+}
+
+.modal-close {
+  position: absolute;
+  top: 1.25rem;
+  right: 1.25rem;
+  width: 2.75rem;
+  height: 2.75rem;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  color: white;
+}
+
+.modal-date {
+  margin-bottom: 0.8rem;
+}
+
+.modal-title-row h3 {
+  font-size: 2.4rem;
+}
+
+.modal-pulse {
+  width: 0.8rem;
+  height: 0.8rem;
+  border-radius: 999px;
+  background: var(--cyan);
+  box-shadow: 0 0 12px rgba(24, 201, 232, 0.8);
+}
+
+.route-card {
+  position: relative;
+  overflow: hidden;
+  height: 12rem;
+  margin-top: 1.2rem;
+  border-radius: 1.5rem;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.04), transparent),
+    linear-gradient(135deg, rgba(255,255,255,0.05) 25%, transparent 25%) 0 0 / 2rem 2rem,
+    linear-gradient(225deg, rgba(255,255,255,0.05) 25%, transparent 25%) 0 0 / 2rem 2rem,
+    linear-gradient(315deg, rgba(255,255,255,0.05) 25%, transparent 25%) 0 0 / 2rem 2rem,
+    linear-gradient(45deg, rgba(255,255,255,0.05) 25%, transparent 25%) 0 0 / 2rem 2rem,
+    #17191d;
+}
+
+.route-card svg {
+  width: 100%;
+  height: 100%;
+}
+
+.route-card-overlay {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(circle at 50% 50%, rgba(255,255,255,0.08), transparent 34%);
+}
+
+.route-line,
+.route-line-shadow {
+  fill: none;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.route-line {
+  stroke: var(--cyan);
+  stroke-width: 1.5;
+}
+
+.route-line-shadow {
+  stroke: rgba(24, 201, 232, 0.2);
+  stroke-width: 2.2;
+  filter: blur(2px);
+}
+
+.route-placeholder {
+  width: 100%;
+  height: 100%;
+  background: radial-gradient(circle at 50% 50%, rgba(24,201,232,0.08), transparent 28%);
+}
+
+.modal-stat-grid {
+  margin-top: 1.4rem;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+}
+
+.modal-stat-card svg {
+  color: var(--cyan);
+}
+
+.zone-card {
+  margin-top: 1.2rem;
+  padding: 1rem;
+  border-radius: 1.5rem;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.zone-label-row {
+  justify-content: space-between;
+  color: var(--muted);
+  font-family: var(--mono);
+  font-size: 0.7rem;
+}
+
+.zone-bar {
+  display: flex;
+  gap: 1px;
+  height: 0.85rem;
+  margin-top: 0.7rem;
+  overflow: hidden;
+  border-radius: 999px;
+}
+
+.zone-segment { height: 100%; }
+.zone-1 { background: #8b8fa0; }
+.zone-2 { background: #18c9e8; }
+.zone-3 { background: #22c55e; }
+.zone-4 { background: #f97316; }
+.zone-5 { background: #ef4444; }
+
+.zone-card p,
+.modal-note {
+  margin: 0.9rem 0 0;
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+.mobile-nav {
+  display: none;
+}
+
+.headline-metric {
+  display: flex;
+  align-items: baseline;
+  gap: 0.6rem;
+  margin-top: 0.4rem;
+}
+
+.headline-metric strong {
+  font-size: clamp(2.2rem, 7vw, 3.1rem);
+}
+
+.headline-metric small {
+  color: var(--muted);
+}
+
+@media (max-width: 960px) {
+  .dashboard-row,
+  .two-col-page,
+  .evolution-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .site-nav {
+    display: none;
+  }
+
+  .mobile-nav {
+    display: flex;
+    position: fixed;
+    left: 50%;
+    bottom: 1rem;
+    transform: translateX(-50%);
+    z-index: 15;
+    width: min(46rem, calc(100% - 1.5rem));
+    justify-content: space-between;
+    padding: 0.9rem 1rem;
+    border-radius: 999px;
+    background: rgba(9, 11, 14, 0.86);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    backdrop-filter: blur(20px);
+  }
+
+  .app-shell {
+    padding: 1rem 1rem 7rem;
+  }
+
+  .hero-stage {
+    min-height: 62vh;
+  }
+
+  .hero-content {
+    padding: 6rem 1.25rem 3rem;
+  }
+
+  .hero-metrics {
+    grid-template-columns: 1fr;
+  }
+
+  .stats-grid.compact {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 640px) {
+  .mobile-nav {
+    gap: 0.7rem;
+    overflow-x: auto;
+  }
+
+  .mobile-link {
+    white-space: nowrap;
+    font-size: 0.82rem;
+  }
+
+  .hero-display h1,
+  .page-heading h1,
+  .calendar-title {
+    font-size: clamp(2.8rem, 16vw, 4.4rem);
+  }
+
+  .hero-display span {
+    font-size: clamp(2.4rem, 14vw, 3.4rem);
+  }
+
+  .hero-copy,
+  .page-heading p {
+    font-size: 1.05rem;
+  }
+
+  .workout-card {
+    flex-basis: 88vw;
+  }
+
+  .stats-grid,
+  .modal-stat-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .calendar-day {
+    min-height: 5.75rem;
+    padding: 0.7rem;
+  }
+
+  .calendar-day span {
+    font-size: 1.3rem;
+  }
+}

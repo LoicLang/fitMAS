@@ -219,14 +219,15 @@ Si la demande concerne :
 - temps / timezone / récence → `time_context.py`
 - persistance centrale → `repository.py`, `schema.py`, `db.py`
 - style / ton coach → `SOUL.md` + `llm.py` + `heartbeat.py`
-- app mobile/web → `frontend/index.html`
+- app mobile/web → `frontend/src/`
 
 ## Réalité des hotspots
 
 Les fichiers encore lourds :
 - `llm.py`
 - `repository.py`
-- `frontend/index.html`
+- `frontend/src/styles/app.css`
+- `frontend/src/state/app-state.tsx`
 - `heartbeat.py`
 
 Avant d'ajouter de la logique dedans, se poser la question :
@@ -253,7 +254,7 @@ Dire explicitement :
 - heartbeat local impossible sans chat id
 - variables lues trop tôt au moment des imports
 - shell web/PWA servi en vieille version côté appareil alors que la prod avait bien bougé
-- une erreur frontend non critique pouvait faire tomber toute l'app dans l'écran de fallback mobile
+- un build frontend manquant peut masquer la SPA derrière la page "Frontend build missing"
 - docs qui dérivent du code réel
 - un autre service local pouvait déjà écouter sur `:8000`, ce qui faisait croire qu'on testait FitMAS alors qu'on lisait une autre app
 
@@ -267,6 +268,6 @@ Déployer seulement si :
 Si le changement touche heartbeat, onboarding, ou persistance :
 - test réel recommandé après deploy
 
-Si le changement touche `frontend/index.html` ou `manifest.json` :
+Si le changement touche `frontend/src/`, `frontend/index.html` ou `manifest.json` :
 - vérifier la prod avec une URL shell versionnée
 - vérifier au moins un rendu desktop et un rendu mobile

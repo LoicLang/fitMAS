@@ -49,19 +49,22 @@ Règles :
 - une activité hors plan apparaît comme une entrée distincte `hors plan`
 - le calendrier doit rester cliquable et mobile-first
 
-### Performance
+### Performance / Évolution
 
 But :
 - montrer la charge et les tendances
 - servir de cockpit froid
+- montrer aussi la vision de montée en charge à venir, pas seulement l'historique
 
 Règles :
 - CTL / ATL / TSB visibles
 - la page doit exposer la cible TSS semaine, le réel, le delta et le ramp rate
 - la page doit montrer le contexte bloc / mésocycle, pas seulement des charts isolés
+- la page doit expliciter si on construit, maintient ou allège la charge sur la semaine / le bloc en cours
 - la répartition de charge prévue vs encaissée doit être lisible sans interprétation longue
 - volume et complétion lisibles sans explication longue
 - la performance lit la semaine courante réelle, pas un artefact UI
+- la page n'est pas un simple historique: c'est le tableau de bord de pilotage de la charge
 
 ### Activités
 

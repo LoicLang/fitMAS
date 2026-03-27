@@ -9,6 +9,7 @@ fitmas.db
 
 # Local frontend / browser tooling
 node_modules/
+frontend/dist/
 
 # Local agent/editor state
 .claude/
