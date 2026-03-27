@@ -22,7 +22,8 @@ Permettre à un nouvel agent de :
 
 - un seul service Fly.io
 - une seule machine
-- API FastAPI sur `:8000`
+- API FastAPI locale via `./scripts/dev` sur `:8033` par défaut
+- API FastAPI prod sur `:8000`
 - bot Telegram lancé dans le même conteneur
 - SQLite sur volume Fly monté dans `/data`
 
@@ -74,6 +75,11 @@ Lancer l'API locale :
 ./scripts/dev
 ```
 
+Comportement :
+- `./scripts/dev` refuse de démarrer si le port demandé est déjà occupé
+- raison : éviter un split-brain local où `127.0.0.1:8000` sert une autre app pendant que FitMAS prend `0.0.0.0:8000`
+- override simple : `PORT=8040 ./scripts/dev`
+
 Lancer le bot local :
 
 ```bash
@@ -89,7 +95,7 @@ Compiler les modules Python :
 Smoke API minimal :
 
 ```bash
-PORT=8033 .venv/bin/uvicorn fitmas.api:app --host 127.0.0.1 --port 8033
+PORT=8033 ./.venv/bin/python -m uvicorn --app-dir backend/src fitmas.api:app --host 127.0.0.1 --port 8033
 curl http://127.0.0.1:8033/health
 ```
 
@@ -246,7 +252,10 @@ Dire explicitement :
 - `telegram_chat_id` absent en DB
 - heartbeat local impossible sans chat id
 - variables lues trop tôt au moment des imports
+- shell web/PWA servi en vieille version côté appareil alors que la prod avait bien bougé
+- une erreur frontend non critique pouvait faire tomber toute l'app dans l'écran de fallback mobile
 - docs qui dérivent du code réel
+- un autre service local pouvait déjà écouter sur `:8000`, ce qui faisait croire qu'on testait FitMAS alors qu'on lisait une autre app
 
 ## Quand déployer
 
@@ -257,3 +266,7 @@ Déployer seulement si :
 
 Si le changement touche heartbeat, onboarding, ou persistance :
 - test réel recommandé après deploy
+
+Si le changement touche `frontend/index.html` ou `manifest.json` :
+- vérifier la prod avec une URL shell versionnée
+- vérifier au moins un rendu desktop et un rendu mobile

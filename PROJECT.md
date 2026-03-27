@@ -66,6 +66,9 @@ rm -rf .venv && python3 -m venv .venv && .venv/bin/python -m pip install -e .
 ./scripts/dev
 ```
 
+Local API via `./scripts/dev` démarre sur `127.0.0.1:8033` par défaut pour éviter les faux conflits avec un autre service en `:8000`.
+Override possible : `PORT=8040 ./scripts/dev`
+
 DB : `fitmas.db` à la racine. Supprimer pour re-seeder.
 Variables : `ANTHROPIC_API_KEY`, `TELEGRAM_BOT_TOKEN`, `STRAVA_CLIENT_ID`, `STRAVA_CLIENT_SECRET`
 
