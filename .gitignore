@@ -6,3 +6,12 @@ __pycache__/
 .env
 fitmas.db
 *.bak
+
+# Local frontend / browser tooling
+node_modules/
+
+# Local agent/editor state
+.claude/
+
+# Generated design scratchpads
+design-system.md
