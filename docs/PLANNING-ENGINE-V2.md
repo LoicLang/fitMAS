@@ -161,11 +161,13 @@ Ordre recommande :
 - `planner.py` consomme maintenant `PlanningDecision` et produit des descriptions de seances actionnables meme sans LLM
 - `llm.py` preserve maintenant les descriptions deterministes du planner si le detailing ne les enrichit pas
 - `api_onboarding.py` et `regenerate_week` passent maintenant par `planning_state.py` avant generation
+- `periodization.py` est maintenant branche dans la regeneration via `WeeklyPlan.total_weeks`, ce qui fait progresser automatiquement le mesocycle d'une semaine a l'autre
+- `/api/v0/week` expose maintenant `mesocycle_week`, `mesocycle_number`, `total_weeks`, `is_deload` et `week_label` pour l'app
 - tests cibles ajoutes pour les snapshots, templates, validator, planner V2 et le flow onboarding/regeneration
 
 ### Prochaines briques
 
-- `periodization.py` pour regler explicitement le type de semaine / deload au niveau cycle
+- enrichir `periodization.py` pour aller au-dela du simple cycle 3+1 et porter des blocs plus riches
 - enrichir encore `planner.py` avec une distribution de charge plus fine par sport
 - faire porter plus proprement l'explication de `PlanningDecision` jusque dans `heartbeat.py`
 

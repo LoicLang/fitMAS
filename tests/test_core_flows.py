@@ -97,6 +97,90 @@ class FitMASCoreFlowsTest(unittest.TestCase):
         self.assertEqual(sessions[1].session_title, "Footing facile")
         self.assertEqual(sessions[1].scheduled_date, (session.scheduled_date.date() + timedelta(days=8)).isoformat())
 
+    def test_read_models_expose_load_band_and_week_meta(self) -> None:
+        now = get_local_now(self.user.timezone)
+        today_key = DAY_KEYS[now.weekday()]
+        repo.replace_plan(
+            self.db,
+            self.user.id,
+            intention="reprendre propre",
+            summary="test",
+            timezone_name=self.user.timezone,
+            mesocycle_week=4,
+            mesocycle_number=2,
+            total_weeks=8,
+            days=[
+                {
+                    "day": today_key,
+                    "label": day_label_fr(today_key, capitalize=True),
+                    "sport_type": "running",
+                    "session_type": "intervals",
+                    "session_title": "Fractionne court",
+                    "session_goal": "Stimulus",
+                    "session_note": "propre",
+                    "session_description": "8 x 400m",
+                    "duration_min": 50,
+                    "intensity": "hard",
+                    "load_score": 4,
+                    "priority": "Seance cle",
+                    "nutrition_focus": "Hydratation",
+                    "flexibility": "stable",
+                    "completion_status": "planned",
+                }
+            ],
+        )
+
+        week = self.client.get("/api/v0/week")
+        today = self.client.get("/api/v0/today")
+        timeline = self.client.get("/api/v0/timeline")
+
+        self.assertEqual(week.status_code, 200)
+        self.assertEqual(week.json()["total_weeks"], 8)
+        self.assertEqual(week.json()["mesocycle_week"], 4)
+        self.assertTrue(week.json()["is_deload"])
+        self.assertEqual(week.json()["days"][0]["load_band"], "hard")
+
+        self.assertEqual(today.status_code, 200)
+        self.assertEqual(today.json()["load_band"], "hard")
+
+        self.assertEqual(timeline.status_code, 200)
+        self.assertEqual(timeline.json()[0]["load_band"], "hard")
+
+    def test_performance_overview_exposes_tss_and_distribution(self) -> None:
+        _, session = self._create_plan_for_today()
+        repo.add_activity(
+            self.db,
+            user_id=self.user.id,
+            source="manual",
+            scheduled_session_id=session.id,
+            sport_type="running",
+            title="Footing du jour",
+            duration_min=38,
+            distance_m=7200,
+            elevation_m=32,
+            perceived_load=2,
+            note="ok",
+            started_at=session.scheduled_date.replace(hour=7, minute=30),
+            matched_day=session.day,
+            match_reason="manual test",
+            avg_hr=141,
+            avg_speed=3.15,
+            tss=28.0,
+        )
+        repo.mark_scheduled_session_completed(self.db, session.id)
+
+        overview = self.client.get("/api/v0/stats/performance-overview")
+
+        self.assertEqual(overview.status_code, 200)
+        payload = overview.json()
+        self.assertIn("tss", payload)
+        self.assertIn("load", payload)
+        self.assertIn("distribution", payload)
+        self.assertGreater(payload["tss"]["target"], 0)
+        self.assertGreater(payload["tss"]["actual"], 0)
+        self.assertEqual(payload["distribution"]["planned"]["easy"]["count"], 1)
+        self.assertEqual(payload["distribution"]["completed"]["easy"]["count"], 1)
+
     def test_message_flow_can_lighten_targeted_session(self) -> None:
         _, session = self._create_plan_for_today()
         original_decide = api_messages.decide

@@ -59,15 +59,37 @@ class OnboardingPlannerFlowTest(unittest.TestCase):
         ):
             onboard = self.client.post("/api/v0/onboard", json=payload)
             self.assertEqual(onboard.status_code, 200)
-            onboard_days = onboard.json()["week_plan"]["days"]
+            onboard_week = onboard.json()["week_plan"]
+            onboard_days = onboard_week["days"]
             self.assertEqual(len(onboard_days), 7)
             self.assertTrue(any(day["session_description"] for day in onboard_days if day["sport_type"] != "rest"))
+            self.assertEqual(onboard_week["total_weeks"], 1)
+            self.assertEqual(onboard_week["mesocycle_week"], 1)
+            self.assertFalse(onboard_week["is_deload"])
+            self.assertIn("Semaine 1/4", onboard_week["week_label"])
 
             regenerate = self.client.post("/api/v0/week/regenerate")
             self.assertEqual(regenerate.status_code, 200)
-            regenerate_days = regenerate.json()["days"]
+            regenerate_week = regenerate.json()
+            regenerate_days = regenerate_week["days"]
             self.assertEqual(len(regenerate_days), 7)
             self.assertTrue(any(day["session_description"] for day in regenerate_days if day["sport_type"] != "rest"))
+            self.assertEqual(regenerate_week["total_weeks"], 2)
+            self.assertEqual(regenerate_week["mesocycle_week"], 2)
+            self.assertFalse(regenerate_week["is_deload"])
+            self.assertEqual(regenerate_week["cycle_length"], 4)
+
+            second_regenerate = self.client.post("/api/v0/week/regenerate")
+            self.assertEqual(second_regenerate.status_code, 200)
+            self.assertEqual(second_regenerate.json()["total_weeks"], 3)
+            self.assertEqual(second_regenerate.json()["mesocycle_week"], 3)
+
+            third_regenerate = self.client.post("/api/v0/week/regenerate")
+            self.assertEqual(third_regenerate.status_code, 200)
+            self.assertEqual(third_regenerate.json()["total_weeks"], 4)
+            self.assertEqual(third_regenerate.json()["mesocycle_week"], 4)
+            self.assertTrue(third_regenerate.json()["is_deload"])
+            self.assertIn("Recuperation", third_regenerate.json()["week_label"])
 
 
 if __name__ == "__main__":

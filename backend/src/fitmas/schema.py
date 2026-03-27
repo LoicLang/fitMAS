@@ -185,6 +185,7 @@ class WeeklyPlan(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
     mesocycle_week: Mapped[int] = mapped_column(default=1)      # 1-4 dans le cycle
     mesocycle_number: Mapped[int] = mapped_column(default=1)    # n-ième cycle
+    total_weeks: Mapped[int] = mapped_column(default=1)
 
     user: Mapped[User] = relationship(back_populates="weekly_plans")
     days: Mapped[list[DayPlan]] = relationship(

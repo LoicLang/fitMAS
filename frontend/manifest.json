@@ -3,6 +3,7 @@
   "short_name": "FitMAS",
   "description": "Ton equipe IA de coaching running",
   "start_url": "/",
+  "scope": "/",
   "display": "standalone",
   "background_color": "#f4efe8",
   "theme_color": "#0f766e",

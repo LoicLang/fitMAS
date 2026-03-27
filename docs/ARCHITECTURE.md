@@ -52,6 +52,8 @@ Les garde-fous, la planification, les permissions, les cooldowns et la persistan
 - Fondation charge : `tss` sur les activités + calculs `CTL/ATL/TSB`
 - Calendrier persistant partiel : `ScheduledSession` datées + timeline lecture + lien activité↔séance
 - `Today` et les CTA app passent désormais par des APIs datées déterministes
+- `/api/v0/week` expose maintenant aussi la méta mésocycle (`mesocycle_week`, `mesocycle_number`, `total_weeks`, `is_deload`, `week_label`)
+- les vues app `week / today / timeline` exposent aussi un `load_band` dérivé pour distinguer plus clairement hard / moderate / easy / recovery / mobility
 - La boucle coach reçoit aussi la timeline datée et peut cibler une séance précise
 - `swap_sessions` sait aussi passer par des ids de séances concrètes
 - Router stats performance : `training-load`, `volume`, `records`

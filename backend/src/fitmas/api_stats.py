@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 
 from fitmas import repository as repo
 from fitmas.db import get_db
+from fitmas.performance_overview import build_performance_overview
 from fitmas.performance_stats import build_records_stats, build_training_load_stats, build_volume_stats
 
 router = APIRouter()
@@ -35,3 +36,22 @@ def get_records_stats(db: Session = Depends(get_db)) -> dict:
         raise HTTPException(status_code=404, detail="No onboarded user yet")
     activities = repo.get_activities(db, user.id, limit=500)
     return build_records_stats(activities)
+
+
+@router.get("/api/v0/stats/performance-overview")
+def get_performance_overview(db: Session = Depends(get_db)) -> dict:
+    user = repo.get_user_optional(db)
+    if user is None:
+        raise HTTPException(status_code=404, detail="No onboarded user yet")
+    activities = repo.get_activities(db, user.id, limit=500)
+    scheduled_sessions = repo.get_scheduled_sessions(db, user.id, limit=84)
+    week_plan = repo.to_pydantic_plan(repo.get_active_plan(db, user.id))
+    planning_decision = repo.get_latest_planning_decision_record(db, user.id)
+    return build_performance_overview(
+        user_id=user.id,
+        timezone_name=user.timezone,
+        activities=activities,
+        scheduled_sessions=scheduled_sessions,
+        week_plan=week_plan,
+        planning_decision=planning_decision,
+    )

@@ -61,6 +61,12 @@ def compute_mesocycle_state(
     )
 
 
+def derive_total_weeks(*, mesocycle_number: int | None, mesocycle_week: int | None, cycle_length: int = 4) -> int:
+    cycle_number = max(1, int(mesocycle_number or 1))
+    week_in_cycle = max(1, int(mesocycle_week or 1))
+    return ((cycle_number - 1) * cycle_length) + week_in_cycle
+
+
 def get_tss_multiplier(week_in_cycle: int) -> float:
     return _WEEK_PROGRESSION.get(week_in_cycle, (1.0, 1.0, 1.0))[0]
 

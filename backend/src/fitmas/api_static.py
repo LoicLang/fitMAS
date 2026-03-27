@@ -10,12 +10,18 @@ router = APIRouter()
 
 @router.get("/", include_in_schema=False)
 def frontend() -> FileResponse:
-    return FileResponse(FRONTEND_INDEX)
+    return FileResponse(
+        FRONTEND_INDEX,
+        headers={"Cache-Control": "no-store, max-age=0", "Pragma": "no-cache"},
+    )
 
 
 @router.get("/manifest.json", include_in_schema=False)
 def manifest() -> FileResponse:
-    return FileResponse(FRONTEND_DIR / "manifest.json")
+    return FileResponse(
+        FRONTEND_DIR / "manifest.json",
+        headers={"Cache-Control": "no-store, max-age=0", "Pragma": "no-cache"},
+    )
 
 
 @router.get("/health")

@@ -11,7 +11,7 @@ from fitmas.api_support import apply_onboarding_to_user, build_onboarding_facts,
 from fitmas.db import get_db
 from fitmas.llm import formulate_onboarding_recap, formulate_week_plan, preview_coach_voice
 from fitmas.models import OnboardPreview, OnboardResult, WeeklyPlan
-from fitmas.periodization import compute_mesocycle_state
+from fitmas.periodization import compute_mesocycle_state, derive_total_weeks
 from fitmas.planner import build_week_plan
 from fitmas.planning_state import refresh_planning_state
 from fitmas.time_context import build_time_context
@@ -59,7 +59,7 @@ def _generate_enriched_week(profile: dict) -> dict:
 
 
 def _compute_mesocycle(db: Session, user_id: int):
-    """Compute mesocycle state by advancing from the previous plan's mesocycle."""
+    """Compute mesocycle state by advancing from the latest persisted total weeks."""
     current_plan = (
         db.query(s.WeeklyPlan)
         .filter(s.WeeklyPlan.user_id == user_id, s.WeeklyPlan.status == "active")
@@ -68,8 +68,12 @@ def _compute_mesocycle(db: Session, user_id: int):
     if current_plan is None:
         return compute_mesocycle_state(total_weeks=1)
 
-    # Advance: current plan's total_weeks = (number - 1) * cycle_length + week
-    prev_total = (current_plan.mesocycle_number - 1) * 4 + current_plan.mesocycle_week
+    prev_total = int(getattr(current_plan, "total_weeks", 0) or 0)
+    if prev_total < 1:
+        prev_total = derive_total_weeks(
+            mesocycle_number=current_plan.mesocycle_number,
+            mesocycle_week=current_plan.mesocycle_week,
+        )
     return compute_mesocycle_state(total_weeks=prev_total + 1)
 
 
@@ -95,6 +99,7 @@ def _generate_enriched_week_for_user(db: Session, user: s.User) -> dict:
     )
     enriched["_mesocycle_week"] = mesocycle.week_in_cycle
     enriched["_mesocycle_number"] = mesocycle.cycle_number
+    enriched["_total_weeks"] = mesocycle.total_weeks
     return enriched
 
 
@@ -155,6 +160,7 @@ def onboard(payload: OnboardPayload, db: Session = Depends(get_db)) -> OnboardRe
         timezone_name=user.timezone,
         mesocycle_week=enriched_week.get("_mesocycle_week", 1),
         mesocycle_number=enriched_week.get("_mesocycle_number", 1),
+        total_weeks=enriched_week.get("_total_weeks", 1),
     )
 
     return OnboardResult(recap=recap, week_plan=repo.to_pydantic_plan(plan))
@@ -176,6 +182,7 @@ def regenerate_week(db: Session = Depends(get_db)) -> WeeklyPlan:
         timezone_name=user.timezone,
         mesocycle_week=enriched_week.get("_mesocycle_week", 1),
         mesocycle_number=enriched_week.get("_mesocycle_number", 1),
+        total_weeks=enriched_week.get("_total_weeks", 1),
     )
 
     logger.info("Week regenerated for user %s (mesocycle %s/%s)", user.id, enriched_week.get("_mesocycle_week", 1), enriched_week.get("_mesocycle_number", 1))

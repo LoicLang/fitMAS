@@ -55,6 +55,7 @@ def _ensure_sqlite_columns() -> None:
             ("created_at", "ALTER TABLE weekly_plans ADD COLUMN created_at DATETIME"),
             ("mesocycle_week", "ALTER TABLE weekly_plans ADD COLUMN mesocycle_week INTEGER DEFAULT 1"),
             ("mesocycle_number", "ALTER TABLE weekly_plans ADD COLUMN mesocycle_number INTEGER DEFAULT 1"),
+            ("total_weeks", "ALTER TABLE weekly_plans ADD COLUMN total_weeks INTEGER DEFAULT 1"),
         ],
         "day_plans": [
             ("sport_type", "ALTER TABLE day_plans ADD COLUMN sport_type VARCHAR(32) DEFAULT 'running'"),

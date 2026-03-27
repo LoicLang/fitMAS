@@ -28,6 +28,7 @@ But :
 Règles :
 - c'est l'écran exécutable
 - pas de surcharge analytics ici
+- le type de séance doit être visible immédiatement, sans lire la description
 - si aucune séance n'est prévue, l'état vide doit rester propre et rassurant
 
 ### Calendrier
@@ -39,8 +40,10 @@ But :
 
 Règles :
 - la séance du jour est mise en avant en haut
+- la semaine courante doit exposer clairement son contexte mésocycle (`week_label`, deload ou non)
 - navigation standard semaine par semaine
 - la liste de la semaine est inversée : plus récent en haut, plus ancien en bas
+- les cartes doivent rendre visibles le `session_type` et la bande de charge (`hard`, `moderate`, `easy`, `recovery`, `mobility`)
 - la date affichée d'une séance suit son jour réel d'exécution si elle a été faite dans le bon sport
 - une activité du mauvais sport ne valide pas la séance prévue
 - une activité hors plan apparaît comme une entrée distincte `hors plan`
@@ -54,6 +57,9 @@ But :
 
 Règles :
 - CTL / ATL / TSB visibles
+- la page doit exposer la cible TSS semaine, le réel, le delta et le ramp rate
+- la page doit montrer le contexte bloc / mésocycle, pas seulement des charts isolés
+- la répartition de charge prévue vs encaissée doit être lisible sans interprétation longue
 - volume et complétion lisibles sans explication longue
 - la performance lit la semaine courante réelle, pas un artefact UI
 
@@ -99,6 +105,8 @@ Affichage :
 - lecture en un coup d'oeil
 - peu de texte décoratif
 - priorité aux dates, statuts, sport, durée, action
+- une même grammaire visuelle doit traverser tous les onglets: même famille de surfaces, même hiérarchie typographique, même logique de badges
+- l'app doit ressembler à un instrument de pilotage, pas à une collection de cartes disparates
 - pas de patterns génériques "AI dashboard"
 
 ## Règles d'implémentation frontend

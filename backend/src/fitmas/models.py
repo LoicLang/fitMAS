@@ -42,6 +42,7 @@ class DayPlan(BaseModel):
     duration_min: int | None = None
     intensity: str = "easy"
     load_score: int = 1
+    load_band: str = "easy"
     priority: str
     nutrition_focus: str
     change_notes: list[ChangeNote] = Field(default_factory=list)
@@ -53,6 +54,12 @@ class DayPlan(BaseModel):
 class WeeklyPlan(BaseModel):
     intention: str
     summary: str
+    mesocycle_week: int = 1
+    mesocycle_number: int = 1
+    cycle_length: int = 4
+    total_weeks: int = 1
+    is_deload: bool = False
+    week_label: str = ""
     days: list[DayPlan]
 
 
@@ -106,6 +113,7 @@ class TodayView(BaseModel):
     session_description: str = ""
     duration_min: int | None = None
     intensity: str = "easy"
+    load_band: str = "easy"
     priority: str
     nutrition_focus: str
     completion_status: str = "planned"
@@ -138,6 +146,7 @@ class ScheduledSession(BaseModel):
     duration_min: int | None = None
     intensity: str = "easy"
     load_score: int = 1
+    load_band: str = "easy"
     priority: str
     nutrition_focus: str = ""
     flexibility: str = "stable"

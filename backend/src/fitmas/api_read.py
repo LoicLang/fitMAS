@@ -20,6 +20,7 @@ from fitmas.models import (
     WatchItem,
     WeeklyPlan,
 )
+from fitmas.session_metadata import compute_load_band
 from fitmas.training_load import compute_ctl_atl_tsb
 from fitmas.time_context import get_local_now
 
@@ -53,6 +54,12 @@ def _build_today_view(
         session_description=session.session_description or "",
         duration_min=session.duration_min,
         intensity=session.intensity,
+        load_band=compute_load_band(
+            sport_type=session.sport_type,
+            session_type=session.session_type,
+            intensity=session.intensity,
+            load_score=session.load_score,
+        ),
         priority=session.priority,
         nutrition_focus=session.nutrition_focus or "",
         completion_status=session.completion_status,
@@ -183,6 +190,7 @@ def get_today_by_day(day: DayId, db: Session = Depends(get_db)) -> TodayView:
         session_description=d.session_description,
         duration_min=d.duration_min,
         intensity=d.intensity,
+        load_band=d.load_band,
         priority=d.priority,
         nutrition_focus=d.nutrition_focus,
         completion_status=d.completion_status,

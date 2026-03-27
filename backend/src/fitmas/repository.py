@@ -22,8 +22,11 @@ from fitmas.models import (
     WeeklyPlan,
 )
 from fitmas.planning_decision import PlanningDecision
+from fitmas.periodization import compute_mesocycle_state, derive_total_weeks
 from fitmas.readiness import ReadinessState
+from fitmas.session_metadata import compute_load_band
 from fitmas.time_context import DAY_KEYS, current_week_dates, get_local_now
+from fitmas.week_metadata import build_week_label
 
 
 # ── Converters ─────────────────────────────────────────────────────────────
@@ -51,6 +54,12 @@ def to_pydantic_profile(user: s.User) -> Profile:
 
 
 def to_pydantic_day(day: s.DayPlan) -> DayPlan:
+    load_band = compute_load_band(
+        sport_type=day.sport_type,
+        session_type=day.session_type,
+        intensity=day.intensity,
+        load_score=day.load_score,
+    )
     return DayPlan(
         day=DayId(day.day),
         label=day.label,
@@ -63,6 +72,7 @@ def to_pydantic_day(day: s.DayPlan) -> DayPlan:
         duration_min=day.duration_min,
         intensity=day.intensity,
         load_score=day.load_score,
+        load_band=load_band,
         priority=day.priority,
         nutrition_focus=day.nutrition_focus,
         flexibility=day.flexibility,
@@ -73,9 +83,22 @@ def to_pydantic_day(day: s.DayPlan) -> DayPlan:
 
 
 def to_pydantic_plan(plan: s.WeeklyPlan) -> WeeklyPlan:
+    total_weeks = int(getattr(plan, "total_weeks", 0) or 0)
+    if total_weeks < 1:
+        total_weeks = derive_total_weeks(
+            mesocycle_number=getattr(plan, "mesocycle_number", 1),
+            mesocycle_week=getattr(plan, "mesocycle_week", 1),
+        )
+    mesocycle = compute_mesocycle_state(total_weeks=total_weeks)
     return WeeklyPlan(
         intention=plan.intention,
         summary=plan.summary,
+        mesocycle_week=mesocycle.week_in_cycle,
+        mesocycle_number=mesocycle.cycle_number,
+        cycle_length=mesocycle.cycle_length,
+        total_weeks=mesocycle.total_weeks,
+        is_deload=mesocycle.is_recovery_week,
+        week_label=build_week_label(mesocycle),
         days=[to_pydantic_day(d) for d in plan.days],
     )
 
@@ -88,6 +111,12 @@ def to_pydantic_scheduled_session(session: s.ScheduledSession) -> ScheduledSessi
     linked_activity_id = None
     if session.activities:
         linked_activity_id = max((activity.id for activity in session.activities), default=None)
+    load_band = compute_load_band(
+        sport_type=session.sport_type,
+        session_type=session.session_type,
+        intensity=session.intensity,
+        load_score=session.load_score,
+    )
     return ScheduledSession(
         id=session.id,
         day=DayId(session.day),
@@ -102,6 +131,7 @@ def to_pydantic_scheduled_session(session: s.ScheduledSession) -> ScheduledSessi
         duration_min=session.duration_min,
         intensity=session.intensity,
         load_score=session.load_score,
+        load_band=load_band,
         priority=session.priority,
         nutrition_focus=session.nutrition_focus or "",
         flexibility=session.flexibility,
@@ -759,6 +789,7 @@ def replace_plan(
     timezone_name: str | None = None,
     mesocycle_week: int = 1,
     mesocycle_number: int = 1,
+    total_weeks: int = 1,
 ) -> s.WeeklyPlan:
     plans = db.query(s.WeeklyPlan).filter(s.WeeklyPlan.user_id == user_id).all()
     plan_ids = [plan.id for plan in plans]
@@ -784,6 +815,7 @@ def replace_plan(
         status="active",
         mesocycle_week=mesocycle_week,
         mesocycle_number=mesocycle_number,
+        total_weeks=max(1, int(total_weeks or 1)),
     )
     db.add(plan)
     db.flush()
