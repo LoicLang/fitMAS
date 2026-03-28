@@ -152,8 +152,16 @@ async def onboarding_coach_soul(update: Update, context: ContextTypes.DEFAULT_TY
 async def onboarding_preview(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     answer = update.message.text.strip()
     previews: list[str] = context.user_data.get("coach_preview", [])
-    if answer in {"1", "2", "3"} and previews:
-        chosen = previews[int(answer) - 1]
+
+    if answer in {"1", "2", "3"}:
+        index = int(answer) - 1
+        if not previews or index >= len(previews):
+            await update.message.reply_text(
+                "Je n'ai pas de preview a ce numero. Reessaie avec 1, 2 ou 3, "
+                "ou ecris un ajustement libre."
+            )
+            return ONBOARD_PREVIEW
+        chosen = previews[index]
         context.user_data["coach_soul"] = (
             f"{context.user_data.get('coach_soul', '').strip()}\n"
             f"Phrase etalon: {chosen}"

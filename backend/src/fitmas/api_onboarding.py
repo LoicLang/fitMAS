@@ -144,12 +144,16 @@ def onboard(payload: OnboardPayload, db: Session = Depends(get_db)) -> OnboardRe
     db.query(s.CoachMessage).filter(s.CoachMessage.user_id == user.id).delete()
     db.commit()
 
-    repo.add_message(
-        db,
-        user.id,
-        "agent",
-        f"{normalized_payload['coach_name']} est en place. Je t'ai pose une premiere semaine qu'on pourra faire bouger intelligemment.",
+    # First coach message — anchor the relationship and show we understood
+    sports_str = ", ".join(normalized_payload["sports"][:3])
+    coach_name = normalized_payload["coach_name"]
+    first_msg = (
+        f"{coach_name} est en place.\n"
+        f"Objectif: {normalized_payload['primary_objective']}.\n"
+        f"Premiere semaine posee autour de {sports_str}.\n"
+        f"Dis-moi si quelque chose ne colle pas, j'ajuste."
     )
+    repo.add_message(db, user.id, "agent", first_msg)
 
     plan = repo.replace_plan(
         db,

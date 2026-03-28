@@ -46,7 +46,19 @@ async def _send_serialized_draft(
             logger.info(empty_log_message)
             return
         await context.bot.send_message(chat_id=chat_id, text=draft.text, parse_mode=draft.parse_mode)
+        # Persist and reserve module guard only AFTER successful Telegram send.
+        # This prevents a failed send from blocking retries or marking a ghost message as sent.
         persist_draft_for_owner(draft)
+        from fitmas.heartbeat import _reserve_module_guard
+        from fitmas.db import SessionLocal
+        from fitmas import repository as repo
+        db = SessionLocal()
+        try:
+            user = repo.get_user_optional(db)
+            if user:
+                _reserve_module_guard(user.id)
+        finally:
+            db.close()
 
 
 async def strava_sync_cron(context: ContextTypes.DEFAULT_TYPE) -> None:

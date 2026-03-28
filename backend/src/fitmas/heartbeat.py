@@ -291,7 +291,6 @@ def morning_briefing() -> CoachDraft | None:
         )
         llm_msg = _llm_generate(system, prompt)
         if llm_msg:
-            _reserve_module_guard(user.id)
             return CoachDraft(text=llm_msg, proactive=True)
 
         # Fallback: structured message
@@ -304,7 +303,6 @@ def morning_briefing() -> CoachDraft | None:
         fact_lines = _get_active_fact_lines(db, user)
         if fact_lines:
             msg += "\nA noter: " + "; ".join(line.lstrip("- ") for line in fact_lines[:2]) + "."
-        _reserve_module_guard(user.id)
         return CoachDraft(text=msg, proactive=True)
     finally:
         db.close()
@@ -385,14 +383,12 @@ def pre_session_reminder() -> CoachDraft | None:
         )
         llm_msg = _llm_generate(system, prompt)
         if llm_msg:
-            _reserve_module_guard(user.id)
             return CoachDraft(text=llm_msg, proactive=True)
 
         msg = f"Demain c'est {key_session.session_title}. Tu te sens comment pour {label.lower()} ?"
         fact_lines = _get_active_fact_lines(db, user)
         if fact_lines:
             msg += "\nA noter: " + "; ".join(line.lstrip("- ") for line in fact_lines[:2]) + "."
-        _reserve_module_guard(user.id)
         return CoachDraft(text=msg, proactive=True)
     finally:
         db.close()
@@ -458,11 +454,9 @@ def weekly_review() -> CoachDraft | None:
         )
         llm_msg = _llm_generate(system, prompt, allow_no_send=False)
         if llm_msg:
-            _reserve_module_guard(user.id)
             return CoachDraft(text=llm_msg, proactive=True)
 
         msg = "Fin de semaine. Le plan a tenu ses reperes. On prend de la marge pour la suite."
-        _reserve_module_guard(user.id)
         return CoachDraft(text=msg, proactive=True)
     finally:
         db.close()
@@ -497,11 +491,9 @@ def signal_check() -> CoachDraft | None:
             from fitmas.adaptation import check_and_adapt_tsb, check_and_adapt_missed
             tsb_result = check_and_adapt_tsb(db, user)
             if tsb_result and tsb_result.applied and tsb_result.message:
-                _reserve_module_guard(user.id)
                 return CoachDraft(text=tsb_result.message, proactive=True)
             missed_result = check_and_adapt_missed(db, user)
             if missed_result and missed_result.applied and missed_result.message:
-                _reserve_module_guard(user.id)
                 return CoachDraft(text=missed_result.message, proactive=True)
         except Exception:
             logger.exception("Adaptation trigger check failed (non-blocking)")
@@ -542,7 +534,6 @@ def signal_check() -> CoachDraft | None:
         prompt = f"{render_time_context(time_context)}\nGenere un message proactif."
         llm_msg = _llm_generate(system, prompt)
         if llm_msg:
-            _reserve_module_guard(user.id)
             return CoachDraft(text=llm_msg, proactive=True)
 
         # Fallback
@@ -562,7 +553,6 @@ def signal_check() -> CoachDraft | None:
         if fact_lines:
             msg += "\nA noter: " + "; ".join(line.lstrip("- ") for line in fact_lines[:2]) + "."
 
-        _reserve_module_guard(user.id)
         return CoachDraft(text=msg, proactive=True)
     finally:
         db.close()
