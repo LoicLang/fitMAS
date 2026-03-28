@@ -1,4 +1,16 @@
 import "@testing-library/jest-dom/vitest";
+import { createElement, type ReactNode } from "react";
+import { vi } from "vitest";
+
+vi.mock("recharts", async () => {
+  const actual = await vi.importActual<typeof import("recharts")>("recharts");
+
+  return {
+    ...actual,
+    ResponsiveContainer: ({ children }: { children: ReactNode }) =>
+      createElement("div", { style: { width: 1280, height: 720 } }, children),
+  };
+});
 
 if (typeof window !== "undefined") {
   globalThis.AbortController = window.AbortController;
@@ -59,6 +71,24 @@ class IntersectionObserverMock {
 globalThis.IntersectionObserver =
   globalThis.IntersectionObserver || (IntersectionObserverMock as unknown as typeof IntersectionObserver);
 
+HTMLCanvasElement.prototype.getContext =
+  HTMLCanvasElement.prototype.getContext ||
+  (() => {
+    return {
+      setTransform: () => undefined,
+      clearRect: () => undefined,
+      createRadialGradient: () => ({ addColorStop: () => undefined }),
+      beginPath: () => undefined,
+      arc: () => undefined,
+      fill: () => undefined,
+      moveTo: () => undefined,
+      lineTo: () => undefined,
+      createLinearGradient: () => ({ addColorStop: () => undefined }),
+      stroke: () => undefined,
+      fillRect: () => undefined,
+    } as unknown as CanvasRenderingContext2D;
+  });
+
 Object.defineProperty(HTMLElement.prototype, "clientWidth", {
   configurable: true,
   get() {
@@ -86,3 +116,18 @@ Object.defineProperty(HTMLElement.prototype, "offsetHeight", {
     return 720;
   },
 });
+
+HTMLElement.prototype.getBoundingClientRect =
+  HTMLElement.prototype.getBoundingClientRect ||
+  (() =>
+    ({
+      x: 0,
+      y: 0,
+      width: 1280,
+      height: 720,
+      top: 0,
+      left: 0,
+      right: 1280,
+      bottom: 720,
+      toJSON: () => undefined,
+    }) as DOMRect);

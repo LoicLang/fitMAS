@@ -1,5 +1,5 @@
 import { addMonths, subMonths } from "date-fns";
-import { CalendarClock, ChevronLeft, ChevronRight } from "lucide-react";
+import { ChevronLeft, ChevronRight } from "lucide-react";
 import { motion } from "motion/react";
 import { useEffect, useMemo, useState } from "react";
 import { Link, type LoaderFunctionArgs, useLoaderData, useNavigate, useSearchParams } from "react-router-dom";
@@ -14,10 +14,10 @@ export async function calendarLoader({ request }: LoaderFunctionArgs) {
 }
 
 const STATUS_STYLES: Record<string, string> = {
-  done: "border-cyan-300/30 bg-cyan-300/12 text-cyan-100",
-  planned: "border-white/10 bg-white/[0.04] text-white/80",
-  missing: "border-rose-300/25 bg-rose-400/10 text-rose-100",
-  offplan: "border-amber-300/25 bg-amber-400/10 text-amber-100",
+  done: "bg-[rgba(157,78,221,0.12)] text-[#9d4edd]",
+  planned: "bg-zinc-100 text-zinc-700",
+  missing: "bg-[rgba(212,24,61,0.10)] text-[#d4183d]",
+  offplan: "bg-[rgba(255,209,102,0.28)] text-[#8a6100]",
 };
 
 export function CalendarPage() {
@@ -45,129 +45,140 @@ export function CalendarPage() {
   }
 
   return (
-    <div className="mx-auto flex w-full max-w-7xl flex-col gap-8 px-5 pb-14 md:px-8">
-      <section className="flex flex-wrap items-start justify-between gap-6 pt-6 md:pt-10">
-        <div>
-          <p className="eyebrow">Calendrier cockpit</p>
-          <h1 className="mt-3 text-[clamp(3rem,10vw,5.8rem)] font-bold uppercase tracking-[-0.08em] text-white">
-            {formatMonthLabel(data.month.key)}
-          </h1>
-          <p className="mt-4 max-w-2xl text-lg font-medium text-white/64">
-            {data.month.week_label} · semaine {data.month.mesocycle_week} du cycle {data.month.mesocycle_number}
-            {data.month.is_deload ? " · récupération active" : ""}
-          </p>
-        </div>
-        <div className="flex gap-3">
-          <button type="button" className="action-button-ghost h-12 w-12 rounded-full p-0" onClick={() => shiftMonth(-1)}>
-            <ChevronLeft className="h-5 w-5" />
-          </button>
-          <button type="button" className="action-button-ghost h-12 w-12 rounded-full p-0" onClick={() => shiftMonth(1)}>
-            <ChevronRight className="h-5 w-5" />
-          </button>
-        </div>
-      </section>
+    <div className="min-h-screen px-6 pb-24 pt-8">
+      <div className="mx-auto max-w-6xl">
+        <div className="mb-12 flex items-center justify-between gap-6">
+          <motion.div initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }}>
+            <p className="eyebrow">Calendrier cockpit</p>
+            <h1 className="mt-6 text-5xl font-black tracking-[-0.08em] text-zinc-950 md:text-7xl">
+              {formatMonthLabel(data.month.key)}
+            </h1>
+            <p className="mt-6 text-xl font-medium text-zinc-500">
+              {data.month.week_label} · semaine {data.month.mesocycle_week} du cycle {data.month.mesocycle_number}
+            </p>
+          </motion.div>
 
-      <section className="surface-panel overflow-hidden p-4 md:p-6">
-        <div className="grid grid-cols-7 gap-2 pb-4 text-center font-mono text-[0.72rem] font-semibold uppercase tracking-[0.22em] text-white/34">
+          <div className="flex gap-4 self-start">
+            <button type="button" onClick={() => shiftMonth(-1)} className="rounded-full border border-black/10 bg-white/60 p-3 text-zinc-900 shadow-sm transition hover:bg-white">
+              <ChevronLeft className="h-5 w-5" />
+            </button>
+            <button type="button" onClick={() => shiftMonth(1)} className="rounded-full border border-black/10 bg-white/60 p-3 text-zinc-900 shadow-sm transition hover:bg-white">
+              <ChevronRight className="h-5 w-5" />
+            </button>
+          </div>
+        </div>
+
+        <div className="mb-4 grid grid-cols-7">
           {["Lun", "Mar", "Mer", "Jeu", "Ven", "Sam", "Dim"].map((dayName) => (
-            <span key={dayName}>{dayName}</span>
+            <div key={dayName} className="text-center text-xs font-bold uppercase tracking-[0.22em] text-zinc-500">
+              {dayName}
+            </div>
           ))}
         </div>
-        <motion.div initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} className="grid grid-cols-7 gap-2">
-          {data.days.map((day) => {
-            const counts = calendarStatusCount(day);
-            return (
-              <button
-                key={day.date}
-                type="button"
-                onClick={() => setSelectedDate(day.date)}
-                className={`min-h-[6.5rem] rounded-[1.5rem] border p-3 text-left transition ${
-                  day.date === selectedDay?.date
-                    ? "border-cyan-300/30 bg-white/[0.08] shadow-[0_0_0_1px_rgba(103,232,249,0.16)]"
-                    : "border-white/8 bg-black/20 hover:bg-white/[0.04]"
-                } ${day.in_month ? "text-white" : "text-white/24"}`}
+
+        <motion.section
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="overflow-hidden rounded-[2rem] border border-black/6 bg-white/55 p-4 shadow-inner backdrop-blur-sm"
+        >
+          <div className="grid grid-cols-7 gap-2">
+            {data.days.map((day) => {
+              const counts = calendarStatusCount(day);
+              return (
+                <button
+                  key={day.date}
+                  type="button"
+                  onClick={() => setSelectedDate(day.date)}
+                  className={`relative min-h-[6.8rem] rounded-[1.5rem] border p-3 text-left transition ${
+                    day.date === selectedDay?.date
+                      ? "border-black/10 bg-white shadow-sm"
+                      : "border-black/5 bg-white/35 hover:bg-white/70"
+                  } ${day.in_month ? "text-zinc-900" : "text-zinc-400"}`}
+                >
+                  <span className={`text-lg font-medium ${day.is_today ? "text-[var(--accent)]" : ""}`}>{day.day_number}</span>
+                  <div className="mt-4 flex flex-wrap gap-1.5">
+                    {counts.done ? <span className="h-2.5 w-2.5 rounded-full bg-[#9d4edd]" /> : null}
+                    {counts.planned ? <span className="h-2.5 w-2.5 rounded-full bg-zinc-400" /> : null}
+                    {counts.missing ? <span className="h-2.5 w-2.5 rounded-full bg-[#d4183d]" /> : null}
+                    {counts.offplan ? <span className="h-2.5 w-2.5 rounded-full bg-[#ffd166]" /> : null}
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        </motion.section>
+
+        <section className="mt-8 grid gap-5 lg:grid-cols-[0.85fr_1.15fr]">
+          <article className="surface-panel p-6">
+            <p className="eyebrow">{formatDateLong(selectedDay?.date)}</p>
+            <h2 className="mt-4 text-3xl font-black tracking-[-0.05em] text-zinc-950">
+              {selectedDay?.items.length ? `${selectedDay.items.length} entrée${selectedDay.items.length > 1 ? "s" : ""}` : "Jour libre"}
+            </h2>
+            <p className="mt-4 text-base font-medium text-zinc-500">
+              Le prévu et le réalisé restent distincts. Une activité hors plan ne valide pas une séance du mauvais sport.
+            </p>
+          </article>
+
+          <div className="grid gap-4">
+            {(selectedDay?.items.length ? selectedDay.items : []).map((item, index) => (
+              <motion.div
+                key={`${item.kind}-${item.id}-${item.display_date}`}
+                initial={{ opacity: 0, y: 18, scale: 0.98 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                transition={{ duration: 0.4, delay: index * 0.06 }}
               >
-                <div className="flex items-start justify-between gap-2">
-                  <span className={`text-lg font-semibold ${day.is_today ? "text-cyan-200" : ""}`}>{day.day_number}</span>
-                  {day.is_current_week ? <span className="h-2.5 w-2.5 rounded-full bg-cyan-300/75" /> : null}
-                </div>
-                <div className="mt-5 flex flex-wrap gap-1.5">
-                  {counts.done ? <span className="h-2 w-2 rounded-full bg-cyan-300" /> : null}
-                  {counts.planned ? <span className="h-2 w-2 rounded-full bg-white/45" /> : null}
-                  {counts.missing ? <span className="h-2 w-2 rounded-full bg-rose-300" /> : null}
-                  {counts.offplan ? <span className="h-2 w-2 rounded-full bg-amber-300" /> : null}
-                </div>
-              </button>
-            );
-          })}
-        </motion.div>
-      </section>
-
-      <section className="grid gap-5 lg:grid-cols-[0.9fr_1.1fr]">
-        <article className="surface-panel p-6">
-          <p className="eyebrow">Jour sélectionné</p>
-          <h2 className="mt-3 text-3xl font-bold tracking-[-0.06em]">{formatDateLong(selectedDay?.date)}</h2>
-          <p className="mt-3 soft-copy">
-            Prévu vs réel. Une activité hors plan reste distincte et ne valide pas une séance du mauvais sport.
-          </p>
-        </article>
-
-        <div className="grid gap-4">
-          {(selectedDay?.items.length ? selectedDay.items : data.feed.slice(0, 5)).map((item, index) => (
-            <motion.div
-              key={`${item.kind}-${item.id}-${item.display_date}`}
-              initial={{ opacity: 0, y: 12 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.32, delay: index * 0.05 }}
-            >
-              {item.kind === "session" ? (
-                <Link to={`/workout/${item.id}`} className="surface-panel block p-5 hover:bg-white/[0.07]">
-                  <div className="flex flex-wrap items-start justify-between gap-4">
-                    <div>
-                      <div className="flex flex-wrap items-center gap-2">
-                        <span className={`meta-chip ${STATUS_STYLES[item.status] || ""}`}>{item.status}</span>
-                        <span className="meta-chip">{item.label}</span>
+                {item.kind === "session" ? (
+                  <Link to={`/workout/${item.id}`} className="surface-panel block overflow-hidden">
+                    <div className="p-6">
+                      <div className="flex items-start justify-between gap-4">
+                        <div>
+                          <span className={`rounded-full px-4 py-2 text-xs font-bold uppercase tracking-[0.14em] ${STATUS_STYLES[item.status] || STATUS_STYLES.planned}`}>
+                            {item.status}
+                          </span>
+                          <h3 className="mt-5 text-3xl font-black uppercase tracking-[-0.06em] text-zinc-950">{item.title}</h3>
+                          <p className="mt-3 text-base font-medium text-zinc-500">{item.goal}</p>
+                        </div>
+                        <div className="flex h-12 w-12 items-center justify-center rounded-full border border-black/6 bg-zinc-50 text-[var(--accent)]">
+                          <ChevronRight className="h-5 w-5" />
+                        </div>
                       </div>
-                      <h3 className="mt-4 text-2xl font-bold tracking-[-0.05em]">{item.title}</h3>
-                      <p className="mt-2 soft-copy">{item.goal}</p>
+                      <div className="mt-5 flex flex-wrap gap-2">
+                        <span className="rounded-xl border border-black/5 bg-zinc-100 px-3 py-1.5 text-xs font-bold text-zinc-700">
+                          {sportLabel(item.sport_type)}
+                        </span>
+                        <span className="rounded-xl border border-black/5 bg-zinc-100 px-3 py-1.5 text-xs font-bold text-zinc-700">
+                          {item.duration_min ? `${item.duration_min} min` : "Libre"}
+                        </span>
+                        <span className="rounded-xl border border-black/5 bg-zinc-100 px-3 py-1.5 text-xs font-bold text-zinc-700">
+                          {loadBandLabel(item.load_band)}
+                        </span>
+                      </div>
                     </div>
-                    <ArrowLink />
-                  </div>
-                  <div className="mt-5 flex flex-wrap gap-2">
-                    <span className="meta-chip">{sportLabel(item.sport_type)}</span>
-                    <span className="meta-chip">{item.duration_min ? `${item.duration_min} min` : "Libre"}</span>
-                    <span className="meta-chip">{loadBandLabel(item.load_band)}</span>
-                    {item.executed_date ? <span className="meta-chip">réalisée {item.executed_date}</span> : null}
-                  </div>
-                </Link>
-              ) : (
-                <div className="surface-panel border-amber-300/15 p-5">
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <span className={`meta-chip ${STATUS_STYLES.offplan}`}>offplan</span>
-                      <h3 className="mt-4 text-2xl font-bold tracking-[-0.05em]">{item.title}</h3>
-                      <p className="mt-2 soft-copy">{sportLabel(item.sport_type)} · {item.display_date}</p>
+                  </Link>
+                ) : (
+                  <div className="surface-panel p-6">
+                    <span className={`rounded-full px-4 py-2 text-xs font-bold uppercase tracking-[0.14em] ${STATUS_STYLES.offplan}`}>offplan</span>
+                    <h3 className="mt-5 text-3xl font-black uppercase tracking-[-0.06em] text-zinc-950">{item.title}</h3>
+                    <p className="mt-3 text-base font-medium text-zinc-500">{sportLabel(item.sport_type)} · {item.display_date}</p>
+                    <div className="mt-5 flex flex-wrap gap-2">
+                      <span className="rounded-xl border border-black/5 bg-zinc-100 px-3 py-1.5 text-xs font-bold text-zinc-700">
+                        {item.duration_min ? `${item.duration_min} min` : "Durée inconnue"}
+                      </span>
+                      <span className="rounded-xl border border-black/5 bg-zinc-100 px-3 py-1.5 text-xs font-bold text-zinc-700">
+                        {loadBandLabel(item.load_band)}
+                      </span>
                     </div>
-                    <CalendarClock className="h-5 w-5 text-amber-200" />
                   </div>
-                  <div className="mt-5 flex flex-wrap gap-2">
-                    <span className="meta-chip">{item.duration_min ? `${item.duration_min} min` : "Durée inconnue"}</span>
-                    <span className="meta-chip">{loadBandLabel(item.load_band)}</span>
-                  </div>
-                </div>
-              )}
-            </motion.div>
-          ))}
-        </div>
-      </section>
-    </div>
-  );
-}
+                )}
+              </motion.div>
+            ))}
 
-function ArrowLink() {
-  return (
-    <span className="inline-flex h-11 w-11 items-center justify-center rounded-full border border-cyan-300/25 bg-cyan-300/10 text-cyan-100">
-      <ChevronRight className="h-5 w-5" />
-    </span>
+            {!selectedDay?.items.length ? (
+              <div className="surface-panel p-6 text-zinc-500">Aucune séance ni activité sur ce jour.</div>
+            ) : null}
+          </div>
+        </section>
+      </div>
+    </div>
   );
 }
