@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test": "vitest run"
   },
   "dependencies": {
     "date-fns": "3.6.0",
@@ -19,10 +20,16 @@
     "recharts": "2.15.2"
   },
   "devDependencies": {
+    "@tailwindcss/vite": "^4.1.4",
+    "@testing-library/jest-dom": "^6.6.3",
+    "@testing-library/react": "^16.3.0",
     "@types/react": "^18.3.12",
     "@types/react-dom": "^18.3.1",
     "@vitejs/plugin-react": "4.7.0",
+    "jsdom": "^26.1.0",
+    "tailwindcss": "^4.1.4",
     "typescript": "^5.6.3",
-    "vite": "6.3.5"
+    "vite": "6.3.5",
+    "vitest": "^3.1.1"
   }
 }

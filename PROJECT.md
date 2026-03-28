@@ -2,7 +2,7 @@
 
 Coach IA multisport proactif qui ajuste ton entraînement selon ta vraie vie.
 
-## Statut — 27 mars 2026
+## Statut — 28 mars 2026
 
 **Déployé et fonctionnel sur https://the deployed app/**
 
@@ -10,7 +10,10 @@ Ce qui tourne en prod :
 - Onboarding Telegram conversationnel complet (/start → profil + coach + plan)
 - Planner hebdomadaire multisport déterministe (running, cycling, swimming, climbing, strength)
 - Boucle message → LLM → mutation → réponse coach
-- Webapp mobile-first React/Vite avec 5 onglets (Aperçu, Calendrier, Évolution, Activités, Profil)
+- Webapp mobile-first React/Vite + Tailwind v4
+- App React Router recentrée sur 3 tabs primaires : `Aperçu`, `Calendrier`, `Évolution`
+- Détail séance en page dédiée : `/workout/:sessionId`
+- Read models backend dédiés aux écrans app : `overview`, `calendar`, `evolution`, `session detail`
 - Activités manuelles + Strava OAuth + import + synchro automatique
 - Heartbeat proactif avec cooldowns (briefing matin, rappel pré-séance, revue dimanche, nouveau plan lundi)
 - Mémoire utile via UserFact (extraction LLM + upsert)
@@ -22,14 +25,14 @@ Ce qui manque encore → voir `docs/BUILD-ORDER.md`
 Cap produit actuel :
 - Telegram = coach conversationnel
 - App = cockpit performance
-- prochaine fondation : Telegram moins bavard, charge d'entraînement, calendrier persistant daté
+- prochaine fondation : polish écran par écran pour coller au Figma, puis durcissement périodisation / charge
 
 ## Stack
 
 | Composant | Choix |
 |-----------|-------|
 | Backend | Python 3.13 + FastAPI + SQLAlchemy 2.0 + SQLite |
-| Front | React 18 + Vite + React Router + motion + Embla + Recharts |
+| Front | React 18 + Vite + React Router + Tailwind CSS v4 + motion + Embla + Recharts |
 | Messagerie | Telegram bot (python-telegram-bot 21) |
 | IA | Anthropic Claude — Haiku quotidien, Sonnet pour plans |
 | Cron | APScheduler (briefing 7h30, synchro Strava 2h, revue dimanche 20h) |
@@ -53,7 +56,7 @@ AGENTS.md            — règles agentiques
 PROJECT.md           — point d'entrée
 docs/                — 4 docs essentiels + README
 backend/src/fitmas/  — API + bot + domaines partagés (34 modules, ~5200 lignes)
-frontend/            — webapp React/Vite
+frontend/            — webapp React/Vite/Tailwind
 scripts/             — dev, dev-web, start-prod, docs:list
 Dockerfile           — image Docker multi-stage
 fly.toml             — config Fly.io
@@ -83,3 +86,4 @@ Variables : `ANTHROPIC_API_KEY`, `TELEGRAM_BOT_TOKEN`, `STRAVA_CLIENT_ID`, `STRA
 - Telegram = relation coach, app = tableau de bord performance
 - Build perso d'abord : single-user, multisport, usage quotidien réel
 - Hotspots splittés par domaine : `api_*`, `telegram_*`, modules partagés transverses
+- Les écrans app lisent des payloads dédiés backend, pas des objets bruts réassemblés côté front

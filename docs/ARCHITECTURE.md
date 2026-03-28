@@ -24,14 +24,14 @@ Les garde-fous, la planification, les permissions, les cooldowns et la persistan
 - Les effets de bord vivent dans les orchestrateurs : API, bot, scheduler
 - Les futures briques de sophistication doivent s'appuyer sur une vérité planning stable
 
-## État réel du code — 27 mars 2026
+## État réel du code — 28 mars 2026
 
 **Déployé sur Fly.io : https://the deployed app/**
 
 ### Ce qui existe et tourne
 
 - API FastAPI + bot splittés par domaine (34 modules, ~5200 lignes Python)
-- Webapp React/Vite mobile-first servie par FastAPI après build
+- Webapp React/Vite/Tailwind v4 mobile-first servie par FastAPI après build
 - Bot Telegram avec onboarding conversationnel + commandes + crons
 - Planner hebdo multisport déterministe
 - Mutation loop : message → LLM → decision → update plan → réponse
@@ -57,9 +57,13 @@ Les garde-fous, la planification, les permissions, les cooldowns et la persistan
 - La boucle coach reçoit aussi la timeline datée et peut cibler une séance précise
 - `swap_sessions` sait aussi passer par des ids de séances concrètes
 - Router stats performance : `training-load`, `volume`, `records`
-- Webapp React structurée par routes `Aperçu / Calendrier / Évolution / Activités / Profil`
+- App React Router structurée autour de 3 surfaces primaires `Aperçu / Calendrier / Évolution`
+- route dédiée `/workout/:sessionId` pour le détail séance
+- read models backend dédiés : `/api/v0/app/overview`, `/api/v0/app/calendar`, `/api/v0/app/evolution`, `/api/v0/sessions/{id}`
+- `calendar_resolution.py` résout `planned / done / missing / offplan` côté backend
+- `load_projection.py` calcule la vision de montée de charge sur 4 semaines
 - Motion, Embla et Recharts branchés pour la fidélité visuelle + les interactions
-- `Today` enrichi : contexte de forme + dernière activité comparable même sport
+- `Aperçu` enrichi : contexte de forme + prochains jours + utilitaires secondaires
 - Strava callback redirige vers webapp (plus de JSON brut)
 - `/help` Telegram
 - Grounding conversationnel en cours : `execution_context.py`, `temporal_resolver.py`, `activity_claims.py`, `conversation_context.py`
@@ -80,7 +84,7 @@ Les garde-fous, la planification, les permissions, les cooldowns et la persistan
 ### Ce qui n'existe pas encore
 
 - Verrou robuste anti-doublon multi-instance
-- Polish visuel écran par écran pour rapprocher l'app du Figma
+- Polish visuel écran par écran pour coller encore davantage au Figma
 - Périodisation explicite
 - Webhook Strava (actuellement polling toutes les 2h)
 - Lineage de plans explicite
@@ -96,7 +100,7 @@ Les garde-fous, la planification, les permissions, les cooldowns et la persistan
 | Backend API | Python 3.13 + FastAPI | Cohérent, itération rapide, bon fit IA |
 | Base de données | SQLite (Fly.io volume persistant) | Suffit pour single-user. Postgres quand multi-users. |
 | ORM | SQLAlchemy 2.0 + Pydantic | Types stricts, structured outputs LLM |
-| Front | React 18 + Vite + React Router + motion + Embla + Recharts | Fidélité UI, maintenance, animations, écrans modulaires |
+| Front | React 18 + Vite + React Router + Tailwind CSS v4 + motion + Embla + Recharts | Fidélité UI, maintenance, animations, écrans modulaires |
 | Cron | APScheduler (in-process) | Pas de Temporal en V0. Suffisant pour 1 user. |
 | Messagerie | Telegram bot (python-telegram-bot 21) | Gratuit, instantané, proactivité validée |
 | IA | Anthropic Claude (Haiku quotidien, Sonnet plans) | Structured outputs + bonne qualité français |
@@ -124,7 +128,7 @@ Ordre recommandé :
 1. Fiabiliser Telegram et la fréquence des messages
 2. Introduire le calcul de charge (`tss`, `CTL/ATL/TSB`)
 3. Finir la bascule complète des mutations et vues app vers `scheduled_session_id`
-4. Construire le dashboard performance sur cette base
+4. Durcir les read models app et finir le dashboard performance sur cette base
 5. Ajouter la périodisation
 6. Repousser l'architecture multi-agent après stabilisation
 
@@ -153,6 +157,7 @@ backend/src/fitmas/
 ├── api.py                 (46 lignes) — bootstrap FastAPI + lifespan
 ├── api_static.py          (~50 lignes) — health + shell SPA React + assets buildés
 ├── api_read.py            (~150 lignes) — profile, week, today, timeline, messages, facts, activities
+├── api_app.py             (~120 lignes) — read endpoints app dedicaces overview/calendar/evolution/session detail
 ├── api_onboarding.py      (134 lignes) — preview, onboard, regenerate
 ├── api_plan.py            (~50 lignes) — actions déterministes sur séances datées
 ├── api_stats.py           (~30 lignes) — endpoints stats performance
@@ -161,6 +166,8 @@ backend/src/fitmas/
 ├── api_debug.py           (97 lignes) — debug protégé, heartbeat manuel, reset
 ├── api_support.py         (137 lignes) — normalisation onboarding + garde-fous debug
 ├── api_payloads.py        (38 lignes) — payloads Pydantic
+├── app_views.py           (~250 lignes) — composition read models app
+├── calendar_resolution.py (~140 lignes) — résolution planning vs réel pour le calendrier
 ├── telegram_bot.py        (48 lignes) — bootstrap bot
 ├── telegram_onboarding.py (274 lignes) — ConversationHandler onboarding
 ├── telegram_commands.py   (151 lignes) — commandes et free text
@@ -169,6 +176,7 @@ backend/src/fitmas/
 ├── telegram_shared.py     (67 lignes) — constantes + persistance drafts + helpers rendu
 ├── telegram_channel.py    (44 lignes) — résolution chat_id + envoi Telegram partagé
 ├── llm.py                 (~630 lignes) — Anthropic client, decisions, extraction, formulation
+├── load_projection.py     (~90 lignes) — projection de charge backend sur 4 semaines
 ├── repository.py          (469 lignes) — CRUD + convertisseurs Pydantic
 ├── planner.py             (359 lignes) — planner multisport déterministe
 ├── heartbeat.py           (403 lignes) — génération des drafts proactifs
@@ -196,13 +204,55 @@ frontend/
 ├── public/
 │   └── manifest.json      — manifest PWA
 └── src/
-    ├── app/App.tsx        — shell + routing
-    ├── state/app-state.tsx — bootstrap API + actions UI
-    ├── pages/             — Overview, Calendar, Evolution, Activities, Profile
-    ├── components/        — modal séance
-    ├── lib/               — API, planning, format, visuals
-    └── styles/app.css     — thème visuel global
+    ├── app/               — router + layout shell
+    ├── features/          — overview, calendar, evolution, workout-detail
+    ├── shared/            — API, format, visuels, primitives UI
+    ├── state/app-actions.tsx — mutations UI + revalidation légère
+    ├── styles/            — index.css, theme.css, héritage CSS legacy
+    └── test/              — Vitest + routes + view models
 ```
+
+## Contrat app React
+
+- les lectures d'écran passent par des loaders par route
+- l'état global React ne porte plus toute la lecture de l'app
+- les mutations (`done / skip / move / add activity / strava sync`) vivent dans un petit provider de revalidation
+- le backend envoie déjà des payloads prêts pour l'UI
+- l'app adapte le rendu au produit, pas l'inverse
+
+## Read models backend app
+
+### `GET /api/v0/app/overview`
+
+- séance du jour si présente
+- séance lead de fallback si aujourd'hui est vide
+- prochains jours
+- snapshot charge / TSS / complétion
+- profil court + statut Strava
+
+### `GET /api/v0/app/calendar?month=YYYY-MM`
+
+- vue mois pré-résolue
+- statut de chaque entrée : `planned`, `done`, `missing`, `offplan`
+- date affichée, date planifiée, date exécutée
+- contexte semaine courante / mésocycle
+
+### `GET /api/v0/app/evolution`
+
+- historique charge réelle
+- semaine courante prévu vs réalisé
+- distribution de charge
+- projection 4 semaines
+- flags de risque + rationale coach
+
+### `GET /api/v0/sessions/{session_id}`
+
+- séance unique riche
+- activité liée si présente
+- métriques utiles
+- bloc coach
+- distribution de zones
+- polyline éventuelle
 
 ## Modèle de données
 

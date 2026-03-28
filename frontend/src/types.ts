@@ -1,21 +1,5 @@
 export type SportType = "running" | "cycling" | "swimming" | "climbing" | "strength" | "rest" | string;
 
-export interface Profile {
-  name: string;
-  age?: number | null;
-  objective?: string;
-  primary_objective?: string;
-  sports: string[];
-  constraints: string[];
-  preferences: string[];
-  coach_name?: string;
-  coach_style?: string;
-  coach_do?: string;
-  coach_dont?: string;
-  coach_soul?: string;
-  timezone?: string;
-}
-
 export interface ChangeNote {
   title: string;
   detail: string;
@@ -24,38 +8,6 @@ export interface ChangeNote {
 export interface WatchItem {
   title: string;
   detail: string;
-}
-
-export interface DayPlan {
-  day: string;
-  label: string;
-  sport_type: SportType;
-  session_type: string;
-  session_title: string;
-  session_goal: string;
-  session_note?: string;
-  session_description?: string;
-  duration_min?: number | null;
-  intensity?: string;
-  load_score?: number;
-  load_band?: string;
-  priority: string;
-  nutrition_focus?: string;
-  completion_status?: string;
-  change_notes: ChangeNote[];
-  watch_items: WatchItem[];
-}
-
-export interface WeeklyPlan {
-  intention: string;
-  summary: string;
-  mesocycle_week: number;
-  mesocycle_number: number;
-  cycle_length: number;
-  total_weeks: number;
-  is_deload: boolean;
-  week_label: string;
-  days: DayPlan[];
 }
 
 export interface Activity {
@@ -83,69 +35,22 @@ export interface Activity {
   start_latlng?: string | null;
 }
 
-export interface ScheduledSession {
-  id: number;
-  day: string;
-  label: string;
-  scheduled_date: string;
-  sport_type: SportType;
-  session_type: string;
-  session_title: string;
-  session_goal: string;
-  session_note?: string;
-  session_description?: string;
-  duration_min?: number | null;
-  intensity?: string;
-  load_score?: number;
-  load_band?: string;
-  priority: string;
-  nutrition_focus?: string;
-  flexibility?: string;
-  completion_status?: string;
-  linked_activity_id?: number | null;
-}
-
-export interface TrainingLoadPoint {
-  date: string;
-  ctl: number;
-  atl: number;
-  tsb: number;
-}
-
-export interface TrainingLoadStats {
-  ctl: number;
-  atl: number;
-  tsb: number;
-  series: TrainingLoadPoint[];
-}
-
-export interface VolumeWeek {
-  week_start: string;
-  total_duration_min: number;
-  sports: Record<string, { duration_min?: number }>;
-}
-
-export interface VolumeStats {
-  weeks: VolumeWeek[];
-}
-
-export interface RecordsStats {
-  sports: Record<
-    string,
-    {
-      longest_distance_m?: number | null;
-      longest_duration_min?: number | null;
-      best_pace_seconds_per_km?: number | null;
-      max_elevation_m?: number | null;
-    }
-  >;
-}
-
 export interface TodayFitness {
   ctl: number;
   atl: number;
   tsb: number;
   freshness?: string;
+}
+
+export interface RecentSportActivity {
+  id: number;
+  title: string;
+  started_at?: string | null;
+  duration_min?: number | null;
+  distance_m?: number | null;
+  avg_hr?: number | null;
+  avg_speed?: number | null;
+  tss?: number | null;
 }
 
 export interface TodayView {
@@ -166,26 +71,131 @@ export interface TodayView {
   completion_status?: string;
   change_notes: ChangeNote[];
   watch_items: WatchItem[];
-  recent_activity?: Activity | null;
+  recent_activity?: RecentSportActivity | null;
   fitness?: TodayFitness | null;
 }
 
-export interface Fact {
-  category: string;
-  source: string;
-  confidence: number;
-  confirmed: boolean;
-  key: string;
-  value: string;
+export interface CalendarItem {
+  kind: "session" | "offplan";
+  id: number;
+  status: "planned" | "done" | "missing" | "offplan" | string;
+  scheduled_date?: string | null;
+  display_date?: string | null;
+  executed_date?: string | null;
+  day?: string;
+  label?: string;
+  title: string;
+  goal?: string;
+  description?: string;
+  sport_type: SportType;
+  session_type: string;
+  duration_min?: number | null;
+  load_band?: string | null;
+  priority?: string | null;
+  linked_activity_id?: number | null;
+  linked_activity_title?: string | null;
+  has_invalid_linked_activity?: boolean;
+  completion_status?: string | null;
 }
 
-export interface StravaStatus {
-  configured: boolean;
-  connected: boolean;
-  last_sync_at?: string | null;
+export interface OverviewView {
+  today: TodayView | null;
+  lead_session: CalendarItem | null;
+  upcoming_sessions: CalendarItem[];
+  week: {
+    week_start: string;
+    week_end: string;
+    label: string;
+    mesocycle_week: number;
+    mesocycle_number: number;
+    is_deload: boolean;
+    planning_mode?: string | null;
+  };
+  load: {
+    ctl: number;
+    atl: number;
+    tsb: number;
+    ramp_rate: number;
+    freshness: string;
+  };
+  tss: {
+    target: number;
+    actual: number;
+    remaining: number;
+    delta: number;
+  };
+  completion: {
+    rate_14d: number;
+    key_sessions_done_14d: number;
+    volume_sessions_done_14d: number;
+    sessions_this_week: number;
+    done_this_week: number;
+  };
+  weekly_hours: number;
+  profile: {
+    name: string;
+    coach_name?: string | null;
+    objective?: string | null;
+    sports: string[];
+    constraints: string[];
+    preferences: string[];
+  };
+  strava: {
+    configured: boolean;
+    connected: boolean;
+    last_sync_at?: string | null;
+  };
 }
 
-export interface PerformanceOverview {
+export interface CalendarDay {
+  date: string;
+  day_number: number;
+  in_month: boolean;
+  is_today: boolean;
+  is_current_week: boolean;
+  items: CalendarItem[];
+}
+
+export interface CalendarView {
+  month: {
+    key: string;
+    label: string;
+    week_label: string;
+    mesocycle_week: number;
+    mesocycle_number: number;
+    is_deload: boolean;
+  };
+  days: CalendarDay[];
+  feed: CalendarItem[];
+}
+
+export interface EvolutionHistoryPoint {
+  date: string;
+  ctl: number;
+  atl: number;
+  tsb: number;
+}
+
+export interface EvolutionDayPoint {
+  date: string;
+  label: string;
+  planned_tss: number;
+  actual_tss: number;
+  planned_duration_min: number;
+  actual_duration_min: number;
+}
+
+export interface ForecastWeek {
+  week_index: number;
+  cycle_week: number;
+  target_tss: number;
+  projected_ctl: number;
+  focus: string;
+  planning_mode: string;
+  is_deload: boolean;
+}
+
+export interface EvolutionView {
   week: {
     week_start: string;
     week_end: string;
@@ -210,8 +220,8 @@ export interface PerformanceOverview {
     actual: number;
     remaining: number;
     delta: number;
-    planned_this_week: number;
-    actual_activities_this_week: number;
+    planned_this_week?: number;
+    actual_activities_this_week?: number;
   };
   completion: {
     rate_14d: number;
@@ -224,20 +234,38 @@ export interface PerformanceOverview {
     planned: Record<string, { count: number; tss: number }>;
     completed: Record<string, { count: number; tss: number }>;
   };
+  sports: {
+    ctl: Record<string, number>;
+    volume_hours_14d: Record<string, number>;
+  };
   rationale: string[];
   risk_flags: string[];
+  history: EvolutionHistoryPoint[];
+  week_daily: EvolutionDayPoint[];
+  forecast: ForecastWeek[];
 }
 
-export interface AppBootstrap {
-  profile: Profile;
-  week: WeeklyPlan;
-  facts: Fact[];
-  activities: Activity[];
-  stravaStatus: StravaStatus;
-  timeline: ScheduledSession[];
-  trainingLoad: TrainingLoadStats;
-  volume: VolumeStats;
-  records: RecordsStats;
-  performanceOverview: PerformanceOverview;
-  today: TodayView | null;
+export interface WorkoutDetailView {
+  session: CalendarItem;
+  metrics: {
+    distance_m?: number | null;
+    duration_min?: number | null;
+    elevation_m?: number | null;
+    avg_hr?: number | null;
+    avg_speed?: number | null;
+    tss?: number | null;
+  };
+  linked_activity?: Activity | null;
+  fitness?: TodayFitness | null;
+  recent_activity?: RecentSportActivity | null;
+  coach: {
+    goal: string;
+    note: string;
+    description: string;
+    nutrition_focus?: string | null;
+    change_notes: ChangeNote[];
+    watch_items: WatchItem[];
+  };
+  zone_distribution: number[];
+  map_polyline?: string | null;
 }

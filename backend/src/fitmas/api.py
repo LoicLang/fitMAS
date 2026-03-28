@@ -10,6 +10,7 @@ from fastapi import FastAPI
 load_dotenv(Path(__file__).resolve().parents[3] / ".env")
 
 from fitmas.api_activities import router as activities_router
+from fitmas.api_app import router as app_router
 from fitmas.api_debug import router as debug_router
 from fitmas.api_messages import router as messages_router
 from fitmas.api_onboarding import router as onboarding_router
@@ -41,6 +42,7 @@ async def lifespan(_: FastAPI):
 
 app = FastAPI(title="FitMAS V0 API", version="0.1.0", lifespan=lifespan)
 app.include_router(read_router)
+app.include_router(app_router)
 app.include_router(stats_router)
 app.include_router(debug_router)
 app.include_router(activities_router)

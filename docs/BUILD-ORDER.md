@@ -15,7 +15,7 @@ read_when:
 
 ---
 
-## État actuel — 22 mars 2026
+## État actuel — 28 mars 2026
 
 ### ✅ Phase 1 — Onboarding + création du coach
 
@@ -42,13 +42,15 @@ read_when:
 
 **Statut : TERMINÉ**
 
-- 5 onglets : Aperçu, Calendrier, Évolution, Activités, Profil
-- Navigation mobile bottom bar
+- migration React/Vite effective
+- 3 tabs primaires : Aperçu, Calendrier, Évolution
+- détail séance en page dédiée `/workout/:sessionId`
+- Activités et Profil sortis de la nav primaire
 - Passe mobile iPhone-proof : safe areas, touch targets, hiérarchie resserrée
 - Actions rapides : Fait / Trop fatigué / Décaler
-- Badges statut : fait ✓ / prévu / sauté / adapté
-- Barre de charge semaine
-- Calendrier vivant : passé récent, aujourd'hui, à venir
+- Read models backend dédiés à l'app
+- Badges statut : `done / planned / missing / offplan`
+- Calendrier vivant : mois, historique, à venir
 - Onglet Évolution : lecture charge + projection bloc
 - Contexte temps local visible dans le top bar
 - Strava connect button + synchro
@@ -232,23 +234,26 @@ Déjà posé :
 
 Reste à faire :
 - polish visuel écran par écran pour coller au Figma
-- renforcer calendrier semaine/mois et interactions
-- compléter la vision dashboard `Évolution`
+- enrichir encore le détail séance avec plus de données réelles et plus de fluidité
+- renforcer calendrier mois et interactions de navigation
+- durcir le dashboard `Évolution` façon TrainingPeaks premium
 
 | # | Tâche | Fichiers | Impact |
 |---|-------|----------|--------|
 | 2A1 | Migrer la webapp vers React/Vite | `frontend/`, `api_static.py`, `Dockerfile` | Maintenabilité UI |
 | 2A2 | Servir le build frontend via FastAPI/Fly | `api_static.py`, `Dockerfile` | Déploiement simple |
+| 2A3 | Adopter React Router loaders + read models app dédiés | `frontend/src/app`, `api_app.py`, `app_views.py` | UI découplée des objets bruts |
+| 2A4 | Adopter Tailwind v4 + shell Figma | `frontend/src/styles`, `frontend/src/features` | Fidélité visuelle |
 | 2B1 | Renommer `Performance` en `Évolution` | `frontend/src/` | Contrat produit |
 | 2B2 | Intégrer Recharts + motion | `frontend/src/` | Graphes + animations |
 | 2B3 | Créer `GET /api/v0/stats/training-load` | `api_stats.py`, `training_load.py` | CTL / ATL / TSB |
 | 2B4 | Créer `GET /api/v0/stats/volume` | `api_stats.py`, `performance_stats.py` | Volume multisport |
 | 2B5 | Créer `GET /api/v0/stats/records` | `api_stats.py`, `performance_stats.py` | PRs |
-| 2C1 | Enrichir `Today` avec activité comparable du même sport | `api_read.py`, `today.js` | Exécution guidée |
-| 2C2 | Afficher la forme via `TSB` | `api_read.py`, `today.js` | Lecture fatigue/fraîcheur |
-| 2D1 | Renforcer la vue calendrier semaine/mois | `calendar.js` | Vision claire du plan |
-| 2D2 | Ajouter un endpoint move explicite | nouveau router plan, `mutations.py` | Interactions plus propres |
-| 2E1 | Afficher le TSS estimé au niveau séance | `today.js`, `calendar.js`, planner | Cohérence charge |
+| 2C1 | Enrichir `Aperçu` avec activité comparable du même sport | `api_app.py`, `app_views.py`, `frontend/src/features/overview` | Exécution guidée |
+| 2C2 | Afficher la forme via `TSB` | `api_app.py`, `frontend/src/features/overview` | Lecture fatigue/fraîcheur |
+| 2D1 | Renforcer la vue calendrier mois | `calendar_resolution.py`, `frontend/src/features/calendar` | Vision claire du plan |
+| 2D2 | Ajouter une page détail séance riche | `api_app.py`, `frontend/src/features/workout-detail` | Exécution claire |
+| 2E1 | Exposer la projection bloc sur 4 semaines | `load_projection.py`, `api_app.py`, `frontend/src/features/evolution` | Vision future crédible |
 
 **Règle produit :**
 - pas de chat dans l'app

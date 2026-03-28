@@ -29,6 +29,7 @@ Permettre à un nouvel agent de :
 
 Entrypoints :
 - local API : `./scripts/dev`
+- local frontend React : `./scripts/dev-web`
 - local bot : `./scripts/bot`
 - prod entrypoint : [`scripts/start-prod`](/Users/loiclang/Documents/Projects/FitMAS/scripts/start-prod)
 
@@ -90,6 +91,24 @@ Compiler les modules Python :
 
 ```bash
 .venv/bin/python -m compileall backend/src/fitmas
+```
+
+Build frontend :
+
+```bash
+cd frontend && npm run build
+```
+
+Tests frontend :
+
+```bash
+cd frontend && npm test -- --run
+```
+
+Tests backend app/read-models :
+
+```bash
+PYTHONPATH=backend/src ./.venv/bin/python -m pytest tests/test_calendar_resolution.py tests/test_load_projection.py tests/test_app_endpoints.py
 ```
 
 Smoke API minimal :
@@ -166,6 +185,29 @@ Checks :
 - `matched_day` et `match_reason` cohérents
 - activité hors fenêtre ne matche pas le plan courant
 
+### 3 bis. Parcours app React
+
+À tester si on touche :
+- `frontend/src/app/`
+- `frontend/src/features/`
+- `backend/src/fitmas/api_app.py`
+- `backend/src/fitmas/app_views.py`
+- `backend/src/fitmas/calendar_resolution.py`
+
+Scénario :
+1. ouvrir `/`
+2. ouvrir un détail séance depuis le hero ou le rail
+3. revenir au calendrier
+4. ouvrir `/evolution`
+5. déclencher une action séance puis vérifier la revalidation
+
+Checks :
+- 3 tabs primaires seulement : `Aperçu`, `Calendrier`, `Évolution`
+- le détail séance fonctionne en accès direct `/workout/:sessionId`
+- le calendrier affiche bien `planned / done / missing / offplan`
+- l'évolution charge même sans historique dense
+- les utilitaires n'écrasent pas la lecture principale
+
 ### 4. Parcours heartbeat
 
 À tester si on touche :
@@ -220,14 +262,15 @@ Si la demande concerne :
 - persistance centrale → `repository.py`, `schema.py`, `db.py`
 - style / ton coach → `SOUL.md` + `llm.py` + `heartbeat.py`
 - app mobile/web → `frontend/src/`
+- read models app → `api_app.py`, `app_views.py`, `calendar_resolution.py`, `load_projection.py`
 
 ## Réalité des hotspots
 
 Les fichiers encore lourds :
 - `llm.py`
 - `repository.py`
-- `frontend/src/styles/app.css`
-- `frontend/src/state/app-state.tsx`
+- `frontend/src/styles/app.css` (héritage, à réduire au profit de `styles/theme.css`)
+- `frontend/src/state/app-state.tsx` (legacy, hors chemin principal)
 - `heartbeat.py`
 
 Avant d'ajouter de la logique dedans, se poser la question :
@@ -239,8 +282,9 @@ Avant d'ajouter de la logique dedans, se poser la question :
 
 Toujours faire :
 1. `.venv/bin/python -m compileall backend/src/fitmas`
-2. au moins un smoke réel du flux touché
-3. mise à jour doc si comportement modifié
+2. `cd frontend && npm run build` si on touche l'app
+3. au moins un smoke réel du flux touché
+4. mise à jour doc si comportement modifié
 
 Dire explicitement :
 - ce qui a été testé concrètement
@@ -248,8 +292,8 @@ Dire explicitement :
 
 ## Pièges déjà rencontrés
 
-- heartbeat marqué comme "envoyé" alors que Telegram avait échoué
-- cooldown calculé sur tous les messages agent au lieu de `proactive=true`
+- ~~heartbeat marqué comme "envoyé" alors que Telegram avait échoué~~ → **fixé** : persist + module guard déplacés après send Telegram réussi
+- ~~cooldown calculé sur tous les messages agent au lieu de `proactive=true`~~ → **fixé** : `_check_cooldown` filtre `proactive.is_(True)`
 - `telegram_chat_id` absent en DB
 - heartbeat local impossible sans chat id
 - variables lues trop tôt au moment des imports
