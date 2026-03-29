@@ -294,6 +294,11 @@ Dire explicitement :
 
 - ~~heartbeat marqué comme "envoyé" alors que Telegram avait échoué~~ → **fixé** : persist + module guard déplacés après send Telegram réussi
 - ~~cooldown calculé sur tous les messages agent au lieu de `proactive=true`~~ → **fixé** : `_check_cooldown` filtre `proactive.is_(True)`
+- ~~`maintain_load` et labels anglais exposés dans l'UI~~ → **fixé** : `planning_mode_label_fr()`, `_freshness()` FR, labels focus FR, jours FR
+- ~~séance du jour montre demain les jours de repos~~ → **fixé** : `build_app_overview` détecte `today_is_rest`
+- ~~accents manquants dans planner/templates~~ → **fixé** : accents dans `planner.py`, `session_templates.py`
+- ~~prompt LLM fuit dans session_note~~ → **fixé** : `_sanitize_coach_text()` dans `llm.py`
+- ~~dénivelé affiché pour natation/renfo~~ → **fixé** : `build_session_detail` filtre `elevation_m` par sport
 - `telegram_chat_id` absent en DB
 - heartbeat local impossible sans chat id
 - variables lues trop tôt au moment des imports

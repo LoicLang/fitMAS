@@ -72,15 +72,28 @@ def _project_next_ctl(*, current_ctl: float, weekly_tss: float) -> float:
     return current_ctl + (daily_target - current_ctl) * adaptation
 
 
+PLANNING_MODE_LABELS_FR = {
+    "maintain_load": "Maintien",
+    "increase_load": "Construction",
+    "reduce_load": "Réduction",
+    "deload": "Assimilation",
+    "injury_protection": "Protection",
+}
+
+
+def planning_mode_label_fr(mode: str) -> str:
+    return PLANNING_MODE_LABELS_FR.get(mode, mode.replace("_", " ").capitalize())
+
+
 def _focus_label(*, cycle_week: int, planning_mode: str, is_deload: bool) -> str:
     if is_deload:
         return "Assimilation"
     if planning_mode == "increase_load":
-        return "Build"
+        return "Construction"
     if planning_mode == "reduce_load":
         return "Réduction"
     if cycle_week == 3:
         return "Pic contrôlé"
     if cycle_week == 1:
-        return "Rebuild"
+        return "Relance"
     return "Consolidation"

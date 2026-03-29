@@ -77,9 +77,9 @@ def _build_today_fitness(db: Session, *, user: s.User) -> TodayFitness:
     tsb = float(load["tsb"])
     freshness = "stable"
     if tsb >= 5:
-        freshness = "fresh"
+        freshness = "frais"
     elif tsb < -10:
-        freshness = "fatigued"
+        freshness = "fatigué"
     return TodayFitness(
         ctl=float(load["ctl"]),
         atl=float(load["atl"]),

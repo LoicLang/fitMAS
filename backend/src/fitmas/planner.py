@@ -513,11 +513,11 @@ def _support_type(sport_type: str, mode: str) -> str:
 
 def _priority_for_template(session_type: str, load_score: int) -> str:
     if session_type == "long":
-        return "Repere fort"
+        return "Repère fort"
     if load_score >= 3:
-        return "Seance cle"
+        return "Séance clé"
     if session_type in {"recovery", "mobility"}:
-        return "Recuperation active"
+        return "Récupération active"
     return "Support"
 
 
@@ -546,13 +546,13 @@ def _build_intention_seed(
     sports_text = ", ".join(_sport_label(sport) for sport in sports[:3])
     if planning_decision is None:
         return (
-            f"{coach_name} doit poser une semaine multisport lisible: bloc cle vers "
-            f"{DAY_LABELS[key_day].lower()}, repere long vers {DAY_LABELS[long_day].lower()}, "
+            f"{coach_name} doit poser une semaine multisport lisible : bloc clé vers "
+            f"{DAY_LABELS[key_day].lower()}, repère long vers {DAY_LABELS[long_day].lower()}, "
             f"et assez d'air pour tenir {sports_text} sans rigidifier la semaine."
         )
     return (
         f"{coach_name} pose une semaine {planning_decision.planning_mode} avec cible {int(planning_decision.weekly_target_tss)} TSS. "
-        f"Bloc cle vers {DAY_LABELS[key_day].lower()}, repere long vers {DAY_LABELS[long_day].lower()} si pertinent, "
+        f"Bloc clé vers {DAY_LABELS[key_day].lower()}, repère long vers {DAY_LABELS[long_day].lower()} si pertinent, "
         f"et assez d'air pour tenir {sports_text}. Raisons: {'; '.join(planning_decision.rationale[:2])}."
     )
 
@@ -563,15 +563,15 @@ def _rest_day(day: str, *, flexible: bool) -> dict:
         "label": DAY_LABELS[day],
         "sport_type": "rest",
         "session_type": "rest",
-        "session_title": "Journee flexible",
-        "session_goal": "Laisser de l'air a la semaine et garder de la marge.",
+        "session_title": "Journée flexible",
+        "session_goal": "Laisser de l'air à la semaine et garder de la marge.",
         "session_note": "On ne force rien ici. La semaine doit rester respirable.",
         "session_description": "",
         "duration_min": None,
         "intensity": "easy",
         "load_score": 0,
         "priority": "Souplesse",
-        "nutrition_focus": "Rester simple et regulier. Pas besoin d'en faire trop.",
+        "nutrition_focus": "Rester simple et régulier. Pas besoin d'en faire trop.",
         "flexibility": "flexible" if flexible else "stable",
         "completion_status": "planned",
         "change_notes": [],
@@ -618,26 +618,28 @@ def _session_day(
 
 def _session_note(session: PlannedSession, *, planning_decision: PlanningDecision | None) -> str:
     if planning_decision is None:
-        if session.priority == "Seance cle":
+        if session.priority == "Séance clé":
             return "Bloc principal de la semaine. Il doit compter sans casser le reste."
-        if session.priority == "Repere fort":
-            return "Repere utile pour lire l'endurance et la regularite."
-        return "Seance utile mais deplacable si la vraie vie bouge."
+        if session.priority == "Repère fort":
+            return "Repère utile pour lire l'endurance et la régularité."
+        return "Séance utile mais déplaçable si la vraie vie bouge."
     if planning_decision.planning_mode == "deload":
-        return "Semaine allegee. On garde le geste sans chercher la performance."
+        return "Semaine allégée. On garde le geste sans chercher la performance."
     if planning_decision.planning_mode == "injury_protection":
         return "Protection prioritaire. Tout doit rester propre et tenable."
-    if session.priority == "Seance cle":
-        return f"Semaine {planning_decision.planning_mode}. Ce bloc porte le stimulus principal."
-    return f"Semaine {planning_decision.planning_mode}. On garde de la marge autour."
+    from fitmas.load_projection import planning_mode_label_fr
+    mode_label = planning_mode_label_fr(planning_decision.planning_mode)
+    if session.priority == "Séance clé":
+        return f"Semaine {mode_label.lower()}. Ce bloc porte le stimulus principal."
+    return f"Semaine {mode_label.lower()}. On garde de la marge autour."
 
 
 def _nutrition_copy(session: PlannedSession) -> str:
     if session.intensity == "hard":
-        return "Prevois quelque chose avant la seance, puis une recup simple derriere."
+        return "Prévois quelque chose avant la séance, puis une récup simple derrière."
     if session.sport_type in {"cycling", "running"} and session.duration_min >= 70:
-        return "Ne pars pas a vide. Anticipe un peu avant puis remets quelque chose apres."
-    return "Rester simple. Le but est surtout de soutenir la regularite."
+        return "Ne pars pas à vide. Anticipe un peu avant puis remets quelque chose après."
+    return "Rester simple. Le but est surtout de soutenir la régularité."
 
 
 def _resolve_athlete_level(profile: AthleteProfileSnapshot | None, primary_sport: str) -> str:
@@ -649,7 +651,7 @@ def _resolve_athlete_level(profile: AthleteProfileSnapshot | None, primary_sport
 def _sport_label(sport: str) -> str:
     labels = {
         "running": "course",
-        "cycling": "velo",
+        "cycling": "vélo",
         "swimming": "natation",
         "climbing": "escalade",
         "strength": "renfo",

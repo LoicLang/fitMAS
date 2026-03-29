@@ -707,6 +707,29 @@ Regles:
     return _fallback_week_plan(planner_output, coach_profile)
 
 
+def _sanitize_coach_text(text: str, fallback: str) -> str:
+    """Reject LLM output that looks like a leaked prompt or instruction."""
+    if not text:
+        return fallback
+    # Detect 3rd-person instruction patterns that shouldn't face the user
+    leak_markers = (
+        "l'utilisateur",
+        "the user",
+        "genere ",
+        "génère ",
+        "transforme ",
+        "reponds en json",
+        "réponds en json",
+        "session_note",
+        "session_title",
+    )
+    lower = text.lower()
+    if any(marker in lower for marker in leak_markers):
+        logger.warning("Prompt leak detected in LLM output, using fallback: %s", text[:80])
+        return fallback
+    return text
+
+
 def _merge_week_enrichment(planner_output: dict, enrichment: dict) -> dict:
     base_days = planner_output["days"]
     enriched_days = enrichment.get("days", [])
@@ -721,13 +744,14 @@ def _merge_week_enrichment(planner_output: dict, enrichment: dict) -> dict:
         enriched_title = str(payload.get("session_title") or "").strip()
         enriched_goal = str(payload.get("session_goal") or "").strip()
         enriched_description = str(payload.get("session_description") or "").strip()
+        raw_note = str(payload.get("session_note") or day["session_note"]).strip()
         merged_days.append(
             {
                 **day,
                 "session_title": enriched_title if enriched_title else day["session_title"],
                 "session_goal": enriched_goal if enriched_goal else day["session_goal"],
-                "session_note": str(payload.get("session_note") or day["session_note"]).strip(),
-                "session_description": enriched_description if enriched_description else day.get("session_description", ""),
+                "session_note": _sanitize_coach_text(raw_note, day["session_note"]),
+                "session_description": _sanitize_coach_text(enriched_description, day.get("session_description", "")) if enriched_description else day.get("session_description", ""),
                 "watch_items": [
                     (
                         str(watch_title).strip() if watch_title else day["watch_items"][0][0],

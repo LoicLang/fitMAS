@@ -6,8 +6,10 @@ from typing import Any
 
 from fitmas.calendar_resolution import build_session_item, resolve_calendar_payload
 from fitmas.fitness_snapshot import estimate_scheduled_session_tss
-from fitmas.load_projection import build_load_forecast
+from fitmas.load_projection import build_load_forecast, planning_mode_label_fr
 from fitmas.time_context import get_local_now
+
+_DAY_LABELS_FR_SHORT = {0: "Lun", 1: "Mar", 2: "Mer", 3: "Jeu", 4: "Ven", 5: "Sam", 6: "Dim"}
 
 REST_SPORTS = {"rest", "off"}
 
@@ -23,26 +25,40 @@ def build_app_overview(
     today_view: dict[str, Any] | None,
 ) -> dict[str, Any]:
     visible_sessions = [session for session in scheduled_sessions if str(_value(session, "sport_type") or "").lower() not in REST_SPORTS]
+
+    # Check if today is a rest/flexible day
+    today_is_rest = any(
+        str(_value(session, "sport_type") or "").lower() in REST_SPORTS
+        and _as_date(_value(session, "scheduled_date")) == today_date
+        for session in scheduled_sessions
+    )
+
     lead_session = None
     if today_view is not None:
         lead_session = next((session for session in visible_sessions if int(_value(session, "id") or 0) == int(today_view.get("scheduled_session_id") or 0)), None)
-    if lead_session is None:
+    if lead_session is None and not today_is_rest:
+        # Only fall through to the next future session if today is NOT a rest day.
+        # On rest days we show no lead session rather than jumping to tomorrow.
         lead_session = next((session for session in visible_sessions if (_as_date(_value(session, "scheduled_date")) or today_date) >= today_date), None)
-    if lead_session is None and visible_sessions:
+    if lead_session is None and visible_sessions and not today_is_rest:
         lead_session = visible_sessions[0]
 
     activity_by_session = _activity_map_by_session(activities)
     lead_card = build_session_item(lead_session, activity_by_session.get(int(_value(lead_session, "id") or 0), []), today=today_date) if lead_session else None
+
+    # On rest days, show upcoming starting from tomorrow
+    upcoming_start = today_date + timedelta(days=1) if today_is_rest else today_date
     upcoming = [
         build_session_item(session, activity_by_session.get(int(_value(session, "id") or 0), []), today=today_date)
         for session in visible_sessions
-        if (_as_date(_value(session, "scheduled_date")) or today_date) >= today_date
+        if (_as_date(_value(session, "scheduled_date")) or today_date) >= upcoming_start
     ][:5]
 
     weekly_hours = round(sum((_float(_value(session, "duration_min")) or 0.0) for session in visible_sessions if _same_week(_value(session, "scheduled_date"), today_date)) / 60.0, 1)
 
     return {
         "today": today_view,
+        "today_is_rest": today_is_rest,
         "lead_session": lead_card,
         "upcoming_sessions": upcoming,
         "week": performance_overview.get("week", {}),
@@ -142,7 +158,7 @@ def build_app_evolution(
             "target_tss": item.target_tss,
             "projected_ctl": item.projected_ctl,
             "focus": item.focus,
-            "planning_mode": item.planning_mode,
+            "planning_mode": planning_mode_label_fr(item.planning_mode),
             "is_deload": item.is_deload,
         }
         for item in build_load_forecast(
@@ -179,15 +195,18 @@ def build_session_detail(
     watch_items: list[dict[str, Any]],
 ) -> dict[str, Any]:
     resolved_session = build_session_item(session, [linked_activity] if linked_activity else [], today=today_date)
+    sport = str(_value(session, "sport_type") or "").lower()
     distance_m = _float(_value(linked_activity, "distance_m"))
     duration_min = _float(_value(linked_activity, "duration_min")) or _float(_value(session, "duration_min"))
     avg_speed = _float(_value(linked_activity, "avg_speed"))
+    # Elevation is irrelevant for swimming and strength
+    elevation_m = _float(_value(linked_activity, "elevation_m")) if sport not in {"swimming", "strength"} else None
     detail = {
         "session": resolved_session,
         "metrics": {
             "distance_m": distance_m,
             "duration_min": duration_min,
-            "elevation_m": _float(_value(linked_activity, "elevation_m")),
+            "elevation_m": elevation_m,
             "avg_hr": _float(_value(linked_activity, "avg_hr")),
             "avg_speed": avg_speed,
             "tss": _float(_value(linked_activity, "tss")) or round(estimate_scheduled_session_tss(session), 1),
@@ -241,7 +260,7 @@ def _build_week_daily(
         rows.append(
             {
                 "date": current.isoformat(),
-                "label": current.strftime("%a").capitalize(),
+                "label": _DAY_LABELS_FR_SHORT.get(current.weekday(), current.strftime("%a")),
                 "planned_tss": round(sum(estimate_scheduled_session_tss(session) for session in planned_sessions), 1),
                 "actual_tss": round(sum(_float(_value(activity, "tss")) or 0.0 for activity in actual_activities), 1),
                 "planned_duration_min": int(sum(_float(_value(session, "duration_min")) or 0.0 for session in planned_sessions)),

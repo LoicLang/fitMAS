@@ -4,6 +4,7 @@ from datetime import date, datetime, timedelta
 from typing import Any
 
 from fitmas.fitness_snapshot import build_fitness_snapshot, estimate_scheduled_session_tss
+from fitmas.load_projection import planning_mode_label_fr
 from fitmas.models import WeeklyPlan
 from fitmas.session_metadata import compute_load_band
 from fitmas.time_context import get_local_now
@@ -58,7 +59,7 @@ def build_performance_overview(
             "mesocycle_week": week_plan.mesocycle_week,
             "mesocycle_number": week_plan.mesocycle_number,
             "is_deload": week_plan.is_deload,
-            "planning_mode": _value(planning_decision, "planning_mode"),
+            "planning_mode": planning_mode_label_fr(str(_value(planning_decision, "planning_mode") or "maintain_load")),
             "adaptation_level": _value(planning_decision, "adaptation_level"),
             "adaptation_scope": _value(planning_decision, "adaptation_scope"),
             "intensity_distribution": _value(planning_decision, "intensity_distribution"),
@@ -150,9 +151,9 @@ def _linked_activity_tss(session: Any) -> float | None:
 
 def _freshness(tsb: float) -> str:
     if tsb >= 5:
-        return "fresh"
+        return "frais"
     if tsb < -10:
-        return "fatigued"
+        return "fatigué"
     return "stable"
 
 

@@ -12,6 +12,12 @@ from fitmas.db import get_db
 from fitmas.performance_overview import build_performance_overview
 from fitmas.performance_stats import build_training_load_stats
 from fitmas.time_context import get_local_now
+from fitmas.week_context import (
+    build_deterministic_coach_reading,
+    build_next_week_cadrage,
+    build_planning_context,
+    build_week_summary,
+)
 
 router = APIRouter()
 
@@ -27,12 +33,14 @@ def get_app_overview(db: Session = Depends(get_db)) -> dict:
     planning_decision = repo.get_latest_planning_decision_record(db, user.id)
     today_session = repo.get_today_scheduled_session(db, user.id, timezone_name=user.timezone)
     today_view = _build_today_view(db, user=user, session=today_session).model_dump() if today_session is not None else None
+    today_date = get_local_now(user.timezone).date()
+    week_plan = repo.to_pydantic_plan(repo.get_active_plan(db, user.id))
     performance_overview = build_performance_overview(
         user_id=user.id,
         timezone_name=user.timezone,
         activities=activities,
         scheduled_sessions=scheduled_sessions,
-        week_plan=repo.to_pydantic_plan(repo.get_active_plan(db, user.id)),
+        week_plan=week_plan,
         planning_decision=planning_decision,
     )
     strava_status = {
@@ -43,9 +51,36 @@ def get_app_overview(db: Session = Depends(get_db)) -> dict:
     connection = repo.get_strava_connection(db, user.id)
     if connection and connection.last_sync_at:
         strava_status["last_sync_at"] = connection.last_sync_at.isoformat()
+    readiness_row = repo.get_latest_readiness_snapshot_record(db, user.id)
+    readiness = repo.to_domain_readiness_snapshot(readiness_row) if readiness_row else None
 
-    return build_app_overview(
-        today_date=get_local_now(user.timezone).date(),
+    week_summary = build_week_summary(
+        today=today_date,
+        scheduled_sessions=scheduled_sessions,
+        activities=activities,
+    )
+    planning_ctx = build_planning_context(
+        planning_decision=planning_decision,
+        mesocycle_week=week_plan.mesocycle_week,
+        mesocycle_number=week_plan.mesocycle_number,
+        is_deload=week_plan.is_deload,
+        total_weeks=week_plan.total_weeks,
+        readiness=readiness,
+    )
+    next_week = build_next_week_cadrage(
+        current_mesocycle_week=week_plan.mesocycle_week,
+        current_planning_mode=str(getattr(planning_decision, "planning_mode", None) or "maintain_load"),
+        current_target_tss=planning_ctx["target_tss"],
+    )
+    coach_reading = build_deterministic_coach_reading(
+        week_summary=week_summary,
+        planning_context=planning_ctx,
+        next_week=next_week,
+        screen="overview",
+    )
+
+    overview = build_app_overview(
+        today_date=today_date,
         profile=repo.to_pydantic_profile(user),
         strava_status=strava_status,
         scheduled_sessions=scheduled_sessions,
@@ -53,6 +88,13 @@ def get_app_overview(db: Session = Depends(get_db)) -> dict:
         performance_overview=performance_overview,
         today_view=today_view,
     )
+    overview["week_context"] = {
+        "summary": week_summary,
+        "planning": planning_ctx,
+        "next_week": next_week,
+        "coach_reading": coach_reading,
+    }
+    return overview
 
 
 @router.get("/api/v0/app/calendar")
@@ -97,22 +139,58 @@ def get_app_evolution(db: Session = Depends(get_db)) -> dict:
     scheduled_sessions = repo.get_scheduled_sessions(db, user.id, limit=120)
     activities = repo.get_activities(db, user.id, limit=500)
     planning_decision = repo.get_latest_planning_decision_record(db, user.id)
+    week_plan = repo.to_pydantic_plan(repo.get_active_plan(db, user.id))
     performance_overview = build_performance_overview(
         user_id=user.id,
         timezone_name=user.timezone,
         activities=activities,
         scheduled_sessions=scheduled_sessions,
-        week_plan=repo.to_pydantic_plan(repo.get_active_plan(db, user.id)),
+        week_plan=week_plan,
         planning_decision=planning_decision,
     )
     training_load = build_training_load_stats(activities, as_of_date=today_date, weeks=16)
-    return build_app_evolution(
+    readiness_row = repo.get_latest_readiness_snapshot_record(db, user.id)
+    readiness = repo.to_domain_readiness_snapshot(readiness_row) if readiness_row else None
+
+    week_summary = build_week_summary(
+        today=today_date,
+        scheduled_sessions=scheduled_sessions,
+        activities=activities,
+    )
+    planning_ctx = build_planning_context(
+        planning_decision=planning_decision,
+        mesocycle_week=week_plan.mesocycle_week,
+        mesocycle_number=week_plan.mesocycle_number,
+        is_deload=week_plan.is_deload,
+        total_weeks=week_plan.total_weeks,
+        readiness=readiness,
+    )
+    next_week = build_next_week_cadrage(
+        current_mesocycle_week=week_plan.mesocycle_week,
+        current_planning_mode=str(getattr(planning_decision, "planning_mode", None) or "maintain_load"),
+        current_target_tss=planning_ctx["target_tss"],
+    )
+    coach_reading = build_deterministic_coach_reading(
+        week_summary=week_summary,
+        planning_context=planning_ctx,
+        next_week=next_week,
+        screen="evolution",
+    )
+
+    evolution = build_app_evolution(
         today_date=today_date,
         scheduled_sessions=scheduled_sessions,
         activities=activities,
         performance_overview=performance_overview,
         training_load=training_load,
     )
+    evolution["week_context"] = {
+        "summary": week_summary,
+        "planning": planning_ctx,
+        "next_week": next_week,
+        "coach_reading": coach_reading,
+    }
+    return evolution
 
 
 @router.get("/api/v0/sessions/{session_id}")
