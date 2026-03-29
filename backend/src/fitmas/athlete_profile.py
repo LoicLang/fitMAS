@@ -59,7 +59,7 @@ class AthleteProfileSnapshot:
 def build_athlete_profile(
     user: s.User,
     *,
-    facts: Sequence[s.UserFact] | None = None,
+    facts: Sequence[object] | None = None,
 ) -> AthleteProfileSnapshot:
     active_facts = [fact for fact in (facts or []) if _is_active(fact)]
     primary_sports = tuple(
@@ -128,7 +128,7 @@ def normalize_sport_level(raw_level: str | None) -> str:
 
 def extract_weekly_availability(
     weekly_structure_notes: str,
-    facts: Sequence[s.UserFact],
+    facts: Sequence[object],
 ) -> dict[str, tuple[str, ...]]:
     snippets: dict[str, list[str]] = {}
     sources = [weekly_structure_notes, *(fact.value for fact in facts if fact.category in {"availability", "schedule"})]
@@ -170,7 +170,7 @@ def summarize_athlete_identity(
     return summary
 
 
-def _collect_goals(user: s.User, facts: Sequence[s.UserFact]) -> list[str]:
+def _collect_goals(user: s.User, facts: Sequence[object]) -> list[str]:
     values = []
     for candidate in (user.primary_objective, user.objective):
         cleaned = candidate.strip()
@@ -186,7 +186,7 @@ def _collect_goals(user: s.User, facts: Sequence[s.UserFact]) -> list[str]:
 
 def _collect_texts(
     rows: Iterable[object],
-    facts: Sequence[s.UserFact],
+    facts: Sequence[object],
     *,
     categories: set[str],
 ) -> list[str]:

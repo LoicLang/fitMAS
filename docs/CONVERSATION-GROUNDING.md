@@ -136,8 +136,51 @@ Oui :
 - `recent_activity_context`
 - `relevant_timeline_context`
 - `recent_user_corrections`
+- `calibration_need` eventuel, mais seulement comme doute interne a lever naturellement
+
+Regle :
+- la conversation visible reste naturelle
+- le contrat systeme de calibration reste cache
+- aucune question formulaire n'est exposee telle quelle au user
 
 ## Outils domaine a ajouter
+
+### `user_indications.py` + `user_indication_llm.py`
+
+Role :
+- interpreter un message utilisateur comme un `event candidate`
+- le classer en petit contrat ferme
+- separer :
+  - interpretation
+  - grounding
+  - mutation
+
+Types MVP :
+- `availability_constraint`
+- `health_signal`
+- `execution_update`
+
+Etat :
+- pose
+- branche sur `api_messages.py`
+
+Regle :
+- le LLM comprend le signal
+- le backend choisit ensuite quel moteur metier appeler
+
+### `planning_window_resolution.py`
+
+Role :
+- resoudre une contrainte future contre le vrai planning date
+- trouver la seance cible ou demander une clarification
+
+Etat :
+- pose
+- expose aussi un tool runtime read-only
+
+Regle :
+- la mutation ne part jamais d'une supposition temporelle libre
+- elle part d'une lecture explicite du planning
 
 ### `execution_context.py`
 
@@ -223,6 +266,25 @@ Note d'architecture :
 - il remonte dans un bloc separe (`activity_claim_summary`) + memoire courte `execution`
 - cette separation evite de presenter une declaration user comme une activite reellement loggee
 - les signaux injectes dans le chat sont filtres et limites, pour eviter de recreer un context dump
+
+### `calibration_needs.py`
+
+Role :
+- detecter un trou d'information qui change vraiment la qualite du plan
+- garder ce trou dans un objet ferme et testable
+- separer :
+  - quand demander
+  - comment le coach le formule
+  - ce qu'on a le droit d'ecrire ensuite
+
+Etat :
+- pose
+- pur
+- branche sur `heartbeat.py` et `api_messages.py`
+
+Regle :
+- FitMAS ne script pas la conversation
+- FitMAS script les etats autorises, les transitions et les ecritures possibles
 
 ## Trous actuels
 

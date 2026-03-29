@@ -6,6 +6,7 @@ from datetime import date, datetime, time, timedelta
 from sqlalchemy.orm import Session
 
 from fitmas import schema as s
+from fitmas.adaptation_log import AdaptationLogEntry
 from fitmas.fact_memory import fact_is_current, normalize_fact_payload
 from fitmas.fitness_snapshot import FitnessSnapshot
 from fitmas.models import (
@@ -18,6 +19,7 @@ from fitmas.models import (
     Profile,
     ScheduledSession,
     UserFact,
+    UserPattern,
     WatchItem,
     WeeklyPlan,
 )
@@ -107,6 +109,35 @@ def to_pydantic_message(msg: s.CoachMessage) -> Message:
     return Message(role=MessageRole(msg.role), text=msg.text)
 
 
+def to_domain_adaptation_event(record: s.AdaptationEventRecord) -> AdaptationLogEntry:
+    from fitmas.adaptation_decision import DecisionReasonCode, TrajectoryImpact, WeekMissionStatus
+    from fitmas.adaptation_log import _impact_label, _mission_label, _reason_label
+
+    reason_code = DecisionReasonCode(str(record.reason_code or DecisionReasonCode.LOGISTICS_CONFLICT.value))
+    week_mission_status = WeekMissionStatus(str(record.week_mission_status or WeekMissionStatus.UNCHANGED.value))
+    trajectory_impact = TrajectoryImpact(str(record.trajectory_impact or TrajectoryImpact.LOW.value))
+    return AdaptationLogEntry(
+        created_at=record.created_at.isoformat() if record.created_at else None,
+        reason_code=record.reason_code,
+        reason_label=_reason_label(reason_code),
+        adaptation_level=record.adaptation_level,
+        week_mission_status=record.week_mission_status,
+        mission_label=_mission_label(week_mission_status),
+        trajectory_impact=record.trajectory_impact,
+        impact_label=_impact_label(trajectory_impact),
+        scenario_type=record.scenario_type,
+        mutation_type=record.mutation_type,
+        summary=record.summary,
+        what_changed=record.what_changed,
+        what_protected=record.what_protected,
+        user_message=record.user_message,
+        source_text=record.source_text,
+        change_cost=int(record.change_cost or 0),
+        stability_penalty=float(record.stability_penalty or 0.0),
+        protected_session_ids=tuple(int(value) for value in _json_loads_list(record.protected_session_ids_json)),
+    )
+
+
 def to_pydantic_scheduled_session(session: s.ScheduledSession) -> ScheduledSession:
     linked_activity_id = None
     if session.activities:
@@ -140,19 +171,38 @@ def to_pydantic_scheduled_session(session: s.ScheduledSession) -> ScheduledSessi
     )
 
 
-def to_pydantic_fact(fact: s.UserFact) -> UserFact:
+def to_pydantic_fact(fact: object) -> UserFact:
     return UserFact(
-        category=fact.category,
-        key=fact.key,
-        value=fact.value,
-        source=fact.source,
-        confidence=fact.confidence,
-        confirmed=fact.confirmed,
-        active=fact.active,
-        urgency=fact.urgency,
-        ttl=fact.ttl,
-        affects=_json_loads_list(fact.affects_json),
-        expires_at=fact.expires_at.isoformat() if fact.expires_at else None,
+        category=str(getattr(fact, "category", "")),
+        key=str(getattr(fact, "key", "")),
+        value=str(getattr(fact, "value", "")),
+        source=str(getattr(fact, "source", "conversation")),
+        confidence=float(getattr(fact, "confidence", 0.0) or 0.0),
+        confirmed=bool(getattr(fact, "confirmed", False)),
+        active=bool(getattr(fact, "active", True)),
+        urgency=str(getattr(fact, "urgency", "medium")),
+        ttl=str(getattr(fact, "ttl", "medium")),
+        affects=_json_loads_list(str(getattr(fact, "affects_json", "[]") or "[]")),
+        expires_at=getattr(fact, "expires_at", None).isoformat() if getattr(fact, "expires_at", None) else None,
+    )
+
+
+def to_pydantic_pattern(pattern: s.UserPattern) -> UserPattern:
+    return UserPattern(
+        category=pattern.category,
+        pattern_type=pattern.pattern_type,
+        key=pattern.key,
+        value=pattern.value,
+        source=pattern.source,
+        confidence=float(pattern.confidence or 0.0),
+        confirmed=bool(pattern.confirmed),
+        active=bool(pattern.active),
+        urgency=pattern.urgency,
+        ttl=pattern.ttl,
+        evidence_count=int(pattern.evidence_count or 0),
+        affects=_json_loads_list(pattern.affects_json),
+        first_seen_at=pattern.first_seen_at.isoformat() if pattern.first_seen_at else None,
+        last_seen_at=pattern.last_seen_at.isoformat() if pattern.last_seen_at else None,
     )
 
 
@@ -288,6 +338,61 @@ def get_active_facts(db: Session, user_id: int, limit: int = 12) -> list[s.UserF
         .all()
     )
     return [row for row in rows if fact_is_current(row)][:limit]
+
+
+def get_active_working_memory(db: Session, user_id: int, limit: int = 12) -> list[s.WorkingMemoryEntry]:
+    rows = (
+        db.query(s.WorkingMemoryEntry)
+        .filter(s.WorkingMemoryEntry.user_id == user_id, s.WorkingMemoryEntry.active.is_(True))
+        .order_by(s.WorkingMemoryEntry.confirmed.desc(), s.WorkingMemoryEntry.confidence.desc(), s.WorkingMemoryEntry.updated_at.desc())
+        .limit(max(limit * 4, 24))
+        .all()
+    )
+    return [row for row in rows if fact_is_current(row)][:limit]
+
+
+def get_active_patterns(db: Session, user_id: int, limit: int = 6) -> list[s.UserPattern]:
+    rows = (
+        db.query(s.UserPattern)
+        .filter(s.UserPattern.user_id == user_id, s.UserPattern.active.is_(True))
+        .order_by(
+            s.UserPattern.confirmed.desc(),
+            s.UserPattern.confidence.desc(),
+            s.UserPattern.evidence_count.desc(),
+            s.UserPattern.updated_at.desc(),
+        )
+        .limit(max(limit * 4, 24))
+        .all()
+    )
+    return [row for row in rows if fact_is_current(row)][:limit]
+
+
+def get_active_memory_items(
+    db: Session,
+    user_id: int,
+    *,
+    profile_limit: int = 12,
+    working_limit: int = 12,
+    include_patterns: bool = False,
+    pattern_limit: int = 6,
+    total_limit: int = 24,
+) -> list[object]:
+    items = [
+        *get_active_facts(db, user_id, limit=profile_limit),
+        *get_active_working_memory(db, user_id, limit=working_limit),
+    ]
+    if include_patterns:
+        items.extend(get_active_patterns(db, user_id, limit=pattern_limit))
+    items.sort(
+        key=lambda row: (
+            bool(getattr(row, "confirmed", False)),
+            float(getattr(row, "confidence", 0.0) or 0.0),
+            float(getattr(row, "evidence_count", 0) or 0),
+            getattr(row, "updated_at", None) or getattr(row, "created_at", None),
+        ),
+        reverse=True,
+    )
+    return items[:total_limit]
 
 
 def get_latest_fitness_snapshot_record(db: Session, user_id: int) -> s.FitnessSnapshotRecord | None:
@@ -534,6 +639,51 @@ def add_message(
     return msg
 
 
+def add_adaptation_event(db: Session, user_id: int, entry: AdaptationLogEntry) -> s.AdaptationEventRecord:
+    row = s.AdaptationEventRecord(
+        user_id=user_id,
+        reason_code=entry.reason_code,
+        adaptation_level=entry.adaptation_level,
+        week_mission_status=entry.week_mission_status,
+        trajectory_impact=entry.trajectory_impact,
+        scenario_type=entry.scenario_type,
+        mutation_type=entry.mutation_type,
+        summary=entry.summary,
+        what_changed=entry.what_changed,
+        what_protected=entry.what_protected,
+        user_message=entry.user_message,
+        source_text=entry.source_text,
+        change_cost=entry.change_cost,
+        stability_penalty=entry.stability_penalty,
+        protected_session_ids_json=_json_dumps(list(entry.protected_session_ids)),
+    )
+    db.add(row)
+    db.commit()
+    db.refresh(row)
+    return row
+
+
+def get_latest_adaptation_event(db: Session, user_id: int) -> AdaptationLogEntry | None:
+    row = (
+        db.query(s.AdaptationEventRecord)
+        .filter(s.AdaptationEventRecord.user_id == user_id)
+        .order_by(s.AdaptationEventRecord.created_at.desc(), s.AdaptationEventRecord.id.desc())
+        .first()
+    )
+    return to_domain_adaptation_event(row) if row else None
+
+
+def get_recent_adaptation_events(db: Session, user_id: int, *, limit: int = 4) -> list[AdaptationLogEntry]:
+    rows = (
+        db.query(s.AdaptationEventRecord)
+        .filter(s.AdaptationEventRecord.user_id == user_id)
+        .order_by(s.AdaptationEventRecord.created_at.desc(), s.AdaptationEventRecord.id.desc())
+        .limit(limit)
+        .all()
+    )
+    return [to_domain_adaptation_event(row) for row in rows]
+
+
 def add_activity(
     db: Session,
     *,
@@ -694,6 +844,162 @@ def upsert_facts(db: Session, user_id: int, facts: list[dict]) -> list[s.UserFac
 
     db.commit()
     return saved
+
+
+def upsert_working_memory(db: Session, user_id: int, entries: list[dict]) -> list[s.WorkingMemoryEntry]:
+    saved: list[s.WorkingMemoryEntry] = []
+    for entry in entries:
+        normalized = normalize_fact_payload(entry)
+        category = normalized.get("category", "").strip()
+        key = normalized.get("key", "").strip()
+        value = normalized.get("value", "").strip()
+        if not category or not key:
+            continue
+
+        row = (
+            db.query(s.WorkingMemoryEntry)
+            .filter(s.WorkingMemoryEntry.user_id == user_id, s.WorkingMemoryEntry.category == category, s.WorkingMemoryEntry.key == key)
+            .first()
+        )
+        action = entry.get("action", "upsert")
+
+        if action == "archive":
+            if row:
+                row.active = False
+                if value:
+                    row.value = value
+                saved.append(row)
+            continue
+
+        if not value:
+            continue
+
+        scope = str(entry.get("scope") or "conversation")
+        if row is None:
+            row = s.WorkingMemoryEntry(
+                user_id=user_id,
+                category=category,
+                key=key,
+                value=value,
+                source=normalized.get("source", "conversation"),
+                confidence=float(normalized.get("confidence", 0.7)),
+                confirmed=bool(normalized.get("confirmed", False)),
+                active=True,
+                urgency=normalized.get("urgency", "medium"),
+                ttl=normalized.get("ttl", "short"),
+                scope=scope,
+                affects_json=_json_dumps(normalized.get("affects", [])),
+                expires_at=normalized.get("expires_at"),
+            )
+            db.add(row)
+        else:
+            row.value = value
+            row.source = normalized.get("source", row.source)
+            row.confidence = max(row.confidence, float(normalized.get("confidence", row.confidence)))
+            row.confirmed = row.confirmed or bool(normalized.get("confirmed", False))
+            row.active = True
+            row.urgency = normalized.get("urgency", row.urgency)
+            row.ttl = normalized.get("ttl", row.ttl)
+            row.scope = scope or row.scope
+            row.affects_json = _json_dumps(normalized.get("affects", _json_loads_list(row.affects_json)))
+            row.expires_at = normalized.get("expires_at")
+
+        saved.append(row)
+
+    db.commit()
+    return saved
+
+
+def purge_expired_working_memory(db: Session, user_id: int | None = None) -> int:
+    query = db.query(s.WorkingMemoryEntry).filter(s.WorkingMemoryEntry.active.is_(True))
+    if user_id is not None:
+        query = query.filter(s.WorkingMemoryEntry.user_id == user_id)
+    rows = query.all()
+    archived = 0
+    for row in rows:
+        if fact_is_current(row):
+            continue
+        row.active = False
+        archived += 1
+    if archived:
+        db.commit()
+    return archived
+
+
+def sync_user_patterns(db: Session, user_id: int, patterns: list[dict]) -> tuple[int, int]:
+    normalized_patterns = [dict(pattern) for pattern in patterns]
+    active_keys = {
+        (str(pattern.get("pattern_type") or "").strip(), str(pattern.get("key") or "").strip())
+        for pattern in normalized_patterns
+        if str(pattern.get("pattern_type") or "").strip() and str(pattern.get("key") or "").strip()
+    }
+    existing_rows = (
+        db.query(s.UserPattern)
+        .filter(s.UserPattern.user_id == user_id)
+        .all()
+    )
+    by_identity = {
+        (row.pattern_type, row.key): row
+        for row in existing_rows
+    }
+    upserted = 0
+    archived = 0
+
+    for pattern in normalized_patterns:
+        category = str(pattern.get("category") or "").strip()
+        pattern_type = str(pattern.get("pattern_type") or "").strip()
+        key = str(pattern.get("key") or "").strip()
+        value = str(pattern.get("value") or "").strip()
+        if not category or not pattern_type or not key or not value:
+            continue
+
+        row = by_identity.get((pattern_type, key))
+        if row is None:
+            row = s.UserPattern(
+                user_id=user_id,
+                category=category,
+                pattern_type=pattern_type,
+                key=key,
+                value=value,
+                source=str(pattern.get("source") or "maintenance"),
+                confidence=float(pattern.get("confidence", 0.7) or 0.7),
+                confirmed=bool(pattern.get("confirmed", True)),
+                active=True,
+                urgency=str(pattern.get("urgency") or "medium"),
+                ttl=str(pattern.get("ttl") or "long"),
+                evidence_count=int(pattern.get("evidence_count", 1) or 1),
+                affects_json=_json_dumps(pattern.get("affects", [])),
+                metadata_json=_json_dumps(pattern.get("metadata", {})),
+                first_seen_at=pattern.get("first_seen_at"),
+                last_seen_at=pattern.get("last_seen_at"),
+            )
+            db.add(row)
+            by_identity[(pattern_type, key)] = row
+        else:
+            row.category = category
+            row.value = value
+            row.source = str(pattern.get("source") or row.source)
+            row.confidence = float(pattern.get("confidence", row.confidence) or row.confidence)
+            row.confirmed = bool(pattern.get("confirmed", row.confirmed))
+            row.active = True
+            row.urgency = str(pattern.get("urgency") or row.urgency)
+            row.ttl = str(pattern.get("ttl") or row.ttl)
+            row.evidence_count = int(pattern.get("evidence_count", row.evidence_count) or row.evidence_count)
+            row.affects_json = _json_dumps(pattern.get("affects", _json_loads_list(row.affects_json)))
+            row.metadata_json = _json_dumps(pattern.get("metadata", _json_loads_json(row.metadata_json)))
+            row.first_seen_at = pattern.get("first_seen_at") or row.first_seen_at
+            row.last_seen_at = pattern.get("last_seen_at") or row.last_seen_at
+        upserted += 1
+
+    for row in existing_rows:
+        identity = (row.pattern_type, row.key)
+        if row.source != "maintenance" or identity in active_keys or not row.active:
+            continue
+        row.active = False
+        archived += 1
+
+    db.commit()
+    return upserted, archived
 
 
 def save_fitness_snapshot(db: Session, snapshot: FitnessSnapshot) -> s.FitnessSnapshotRecord:
@@ -1012,6 +1318,13 @@ def _json_loads_dict(raw_value: str) -> dict[str, float]:
     if not raw_value:
         return {}
     return {str(key): float(value) for key, value in json.loads(raw_value).items()}
+
+
+def _json_loads_json(raw_value: str) -> dict[str, object]:
+    if not raw_value:
+        return {}
+    loaded = json.loads(raw_value)
+    return loaded if isinstance(loaded, dict) else {}
 
 
 def _json_loads_list(raw_value: str) -> list[str]:

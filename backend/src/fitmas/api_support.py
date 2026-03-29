@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import re
 from datetime import datetime
 from pathlib import Path
 
@@ -8,6 +9,7 @@ from fastapi import HTTPException, Request
 
 from fitmas import schema as s
 from fitmas.api_payloads import OnboardPayload, OnboardPreviewPayload
+from fitmas.onboarding_contract import build_coach_profile, build_goal_summary
 from fitmas.planner import normalize_sports
 
 ROOT_DIR = Path(__file__).resolve().parents[3]
@@ -18,32 +20,38 @@ FRONTEND_INDEX = FRONTEND_BUILD_DIR / "index.html"
 
 
 def normalized_onboarding_payload(payload: OnboardPayload | OnboardPreviewPayload) -> dict:
-    coach_name = (payload.coach_name or "FitMAS").strip() or "FitMAS"
     sports = normalize_sports(payload.sports)
     constraints = normalize_lines(payload.constraints)
     preferences = normalize_lines(payload.preferences)
-    return {
+    normalized = {
         "name": payload.name.strip() or "Loic",
         "primary_objective": payload.primary_objective.strip(),
+        "goal_context": payload.goal_context.strip(),
         "sports": sports,
         "weekly_structure_notes": payload.weekly_structure_notes.strip(),
+        "current_state_notes": payload.current_state_notes.strip(),
         "constraints": constraints,
         "preferences": preferences,
-        "coach_name": coach_name,
-        "coach_style": payload.coach_style.strip() or "direct",
+        "coach_name": (payload.coach_name or "FitMAS").strip() or "FitMAS",
+        "coach_preset": payload.coach_preset.strip() or "direct",
+        "coach_style": payload.coach_style.strip(),
         "coach_relationship": payload.coach_relationship.strip(),
         "coach_do": payload.coach_do.strip(),
         "coach_dont": payload.coach_dont.strip(),
         "coach_soul": payload.coach_soul.strip(),
-        "timezone": os.getenv("TZ", "Europe/Paris"),
+        "coach_adjustment_notes": payload.coach_adjustment_notes.strip(),
+        "timezone": payload.timezone.strip() or os.getenv("TZ", "Europe/Paris"),
         "telegram_chat_id": payload.telegram_chat_id,
     }
+    normalized.update(build_coach_profile(normalized))
+    normalized["goal_summary"] = build_goal_summary(normalized)
+    return normalized
 
 
 def normalize_lines(items: list[str]) -> list[str]:
     values: list[str] = []
     for item in items:
-        for chunk in item.split("\n"):
+        for chunk in re.split(r"[\n;,]+", item):
             clean = chunk.strip(" -•\t")
             if clean:
                 values.append(clean)
@@ -69,6 +77,46 @@ def apply_onboarding_to_user(user: s.User, payload: dict) -> None:
 
 def build_onboarding_facts(payload: dict) -> list[dict]:
     facts: list[dict] = []
+
+    goal_summary = payload.get("goal_summary") or build_goal_summary(payload)
+    if goal_summary:
+        facts.append(
+            {
+                "category": "goal",
+                "key": "primary_goal",
+                "value": goal_summary,
+                "source": "onboarding",
+                "confidence": 1.0,
+                "confirmed": True,
+                "active": True,
+            }
+        )
+
+    if payload["weekly_structure_notes"]:
+        facts.append(
+            {
+                "category": "availability",
+                "key": "weekly_structure",
+                "value": payload["weekly_structure_notes"],
+                "source": "onboarding",
+                "confidence": 1.0,
+                "confirmed": True,
+                "active": True,
+            }
+        )
+
+    if payload.get("current_state_notes"):
+        facts.append(
+            {
+                "category": "training_state",
+                "key": "current_state",
+                "value": payload["current_state_notes"],
+                "source": "onboarding",
+                "confidence": 0.9,
+                "confirmed": True,
+                "active": True,
+            }
+        )
 
     for index, constraint in enumerate(payload["constraints"]):
         facts.append(
@@ -100,7 +148,11 @@ def build_onboarding_facts(payload: dict) -> list[dict]:
         {
             "category": "coaching",
             "key": "coach_style_preference",
-            "value": f"Coach voulu: {payload['coach_style']} / {payload['coach_relationship']}",
+            "value": (
+                f"Coach voulu: preset {payload['coach_preset']} / "
+                f"{payload['coach_relationship']} / fait bien: {payload['coach_do']} / "
+                f"evite: {payload['coach_dont']}"
+            ),
             "source": "onboarding",
             "confidence": 1.0,
             "confirmed": True,

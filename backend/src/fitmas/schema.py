@@ -40,6 +40,12 @@ class User(Base):
     facts: Mapped[list[UserFact]] = relationship(
         back_populates="user", cascade="all, delete-orphan"
     )
+    working_memory_entries: Mapped[list[WorkingMemoryEntry]] = relationship(
+        back_populates="user", cascade="all, delete-orphan"
+    )
+    patterns: Mapped[list[UserPattern]] = relationship(
+        back_populates="user", cascade="all, delete-orphan"
+    )
     activities: Mapped[list[Activity]] = relationship(
         back_populates="user", cascade="all, delete-orphan"
     )
@@ -121,6 +127,59 @@ class UserFact(Base):
     )
 
     user: Mapped[User] = relationship(back_populates="facts")
+
+
+class WorkingMemoryEntry(Base):
+    __tablename__ = "working_memory_entries"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
+    category: Mapped[str] = mapped_column(String(32))
+    key: Mapped[str] = mapped_column(String(128))
+    value: Mapped[str] = mapped_column(Text)
+    source: Mapped[str] = mapped_column(String(32), default="conversation")
+    confidence: Mapped[float] = mapped_column(default=0.7)
+    confirmed: Mapped[bool] = mapped_column(default=False)
+    active: Mapped[bool] = mapped_column(default=True)
+    urgency: Mapped[str] = mapped_column(String(16), default="medium")
+    ttl: Mapped[str] = mapped_column(String(16), default="short")
+    scope: Mapped[str] = mapped_column(String(16), default="conversation")
+    affects_json: Mapped[str] = mapped_column(Text, default="[]")
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True, default=None)
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(), onupdate=func.now()
+    )
+
+    user: Mapped[User] = relationship(back_populates="working_memory_entries")
+
+
+class UserPattern(Base):
+    __tablename__ = "user_patterns"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
+    category: Mapped[str] = mapped_column(String(32))
+    pattern_type: Mapped[str] = mapped_column(String(48))
+    key: Mapped[str] = mapped_column(String(128))
+    value: Mapped[str] = mapped_column(Text)
+    source: Mapped[str] = mapped_column(String(32), default="maintenance")
+    confidence: Mapped[float] = mapped_column(default=0.7)
+    confirmed: Mapped[bool] = mapped_column(default=True)
+    active: Mapped[bool] = mapped_column(default=True)
+    urgency: Mapped[str] = mapped_column(String(16), default="medium")
+    ttl: Mapped[str] = mapped_column(String(16), default="long")
+    evidence_count: Mapped[int] = mapped_column(default=1)
+    affects_json: Mapped[str] = mapped_column(Text, default="[]")
+    metadata_json: Mapped[str] = mapped_column(Text, default="{}")
+    first_seen_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True, default=None)
+    last_seen_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True, default=None)
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(), onupdate=func.now()
+    )
+
+    user: Mapped[User] = relationship(back_populates="patterns")
 
 
 class Activity(Base):
@@ -290,6 +349,28 @@ class CoachMessage(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
     user: Mapped[User] = relationship(back_populates="messages")
+
+
+class AdaptationEventRecord(Base):
+    __tablename__ = "adaptation_events"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
+    reason_code: Mapped[str] = mapped_column(String(48), default="logistics_conflict")
+    adaptation_level: Mapped[str] = mapped_column(String(16), default="micro")
+    week_mission_status: Mapped[str] = mapped_column(String(16), default="unchanged")
+    trajectory_impact: Mapped[str] = mapped_column(String(16), default="low")
+    scenario_type: Mapped[str] = mapped_column(String(32), default="move")
+    mutation_type: Mapped[str] = mapped_column(String(32), default="no_change")
+    summary: Mapped[str] = mapped_column(Text, default="")
+    what_changed: Mapped[str] = mapped_column(Text, default="")
+    what_protected: Mapped[str] = mapped_column(Text, default="")
+    user_message: Mapped[str] = mapped_column(Text, default="")
+    source_text: Mapped[str] = mapped_column(Text, default="")
+    change_cost: Mapped[int] = mapped_column(default=0)
+    stability_penalty: Mapped[float] = mapped_column(Float, default=0.0)
+    protected_session_ids_json: Mapped[str] = mapped_column(Text, default="[]")
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
 
 class FitnessSnapshotRecord(Base):

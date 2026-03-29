@@ -70,6 +70,26 @@ async def strava_sync_cron(context: ContextTypes.DEFAULT_TYPE) -> None:
         logger.exception("Strava cron sync failed")
 
 
+async def memory_maintenance_cron(context: ContextTypes.DEFAULT_TYPE) -> None:
+    from fitmas.db import SessionLocal
+    from fitmas.memory_maintenance import run_memory_maintenance
+
+    db = SessionLocal()
+    try:
+        result = run_memory_maintenance(db)
+        logger.info(
+            "Memory maintenance: users=%d working_archived=%d patterns_upserted=%d patterns_archived=%d",
+            result.users_processed,
+            result.working_entries_archived,
+            result.patterns_upserted,
+            result.patterns_archived,
+        )
+    except Exception:
+        logger.exception("Memory maintenance cron failed")
+    finally:
+        db.close()
+
+
 async def weekly_review_cron(context: ContextTypes.DEFAULT_TYPE) -> None:
     chat_id = resolve_owner_chat_id()
     if not chat_id:
@@ -171,6 +191,14 @@ def register_jobs(app: Application) -> None:
         name="strava_sync",
     )
     logger.info("Strava sync scheduled every 2h")
+
+    job_queue.run_repeating(
+        memory_maintenance_cron,
+        interval=21600,
+        first=300,
+        name="memory_maintenance",
+    )
+    logger.info("Memory maintenance scheduled every 6h")
 
     job_queue.run_daily(
         weekly_review_cron,

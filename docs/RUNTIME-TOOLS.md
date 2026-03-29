@@ -50,6 +50,7 @@ Contrat minimal :
 Registry V1 :
 - `get_today_context`
 - `get_plan_window`
+- `resolve_planning_window`
 - `get_recent_activities`
 - `get_activity_highlights`
 - `get_relevant_facts`
@@ -78,6 +79,8 @@ Etat actuel :
   - highlights activite
   - activites recentes
   - rappel memoire/facts
+- nouveaux usages cibles :
+  - grounding d'une contrainte future sur une vraie fenetre planning
 - si le message est simple (`ok`, retour libre, adaptation simple), aucun tool n'est offert
 
 ### `conversation_prompting.py`
@@ -152,6 +155,11 @@ Cas typiques :
 - "c'etait quoi ma plus longue sortie ?"
 - "il me reste quoi cette semaine ?"
 - "qu'est-ce que tu sais de mes contraintes ?"
+
+Cas futur prepare :
+- `je ne suis pas dispo demain soir`
+- le LLM n'a pas a deviner la seance cible
+- il peut s'appuyer sur `resolve_planning_window`
 
 Ce que le chat ne fait pas encore :
 - pas de tool call pour les mutations simples

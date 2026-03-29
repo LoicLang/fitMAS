@@ -55,6 +55,20 @@ _HIGH_URGENCY_KEYWORDS = (
     "fragile", "chronique",
 )
 
+_BODY_ZONE_FR = {
+    "shoulder": "epaule",
+    "knee": "genou",
+    "ankle": "cheville",
+    "back": "dos",
+}
+
+_ACTIVITY_FR = {
+    "swimming": "la natation",
+    "running": "la course",
+    "cycling": "le velo",
+    "strength": "le renfo",
+}
+
 
 def check_health_fact_trigger(
     db: Session,
@@ -81,7 +95,10 @@ def check_health_fact_trigger(
         start_date=local_now.date(),
         end_date=local_now.date() + timedelta(days=7),
     )
-    active_sessions = [s for s in upcoming if s.sport_type != "rest" and s.completion_status == "planned"]
+    active_sessions = [
+        s for s in upcoming
+        if s.sport_type != "rest" and s.completion_status in {"planned", "adapted"}
+    ]
     if not active_sessions:
         return None
 
@@ -106,6 +123,89 @@ def check_health_fact_trigger(
             ],
         },
     )
+
+
+def _build_conservative_health_fallback(trigger: AdaptationTrigger) -> tuple[list[MutationDecision], str]:
+    facts = trigger.context_data.get("health_facts") or []
+    sessions = trigger.context_data.get("sessions") or []
+
+    body_zone, trigger_activity, has_fatigue_signal = _extract_health_signal_details(facts)
+
+    if trigger_activity:
+        matching_sessions = [session for session in sessions if session.get("sport_type") == trigger_activity]
+        if matching_sessions:
+            target = matching_sessions[0]
+            duration = min(int(target.get("duration_min") or 25), 30)
+            activity_label = _ACTIVITY_FR.get(trigger_activity, trigger_activity)
+            title = f"Mobilite {body_zone} — remplace {activity_label}"
+            message = (
+                f"Je coupe {activity_label} telle quelle pour l'instant. "
+                f"Je remplace la prochaine seance par {duration} min de mobilite douce {body_zone}. "
+                "Si ca tire encore ou si la douleur monte, on stoppe net."
+            )
+            decision = MutationDecision(
+                mutation_type="replace_session",
+                target_session_id=int(target["id"]),
+                new_title=title,
+                new_goal=f"Preserver {body_zone} sans forcer",
+                new_sport_type="strength",
+                new_session_type="mobility",
+                new_duration_min=duration,
+                new_intensity="easy",
+                new_description=f"Mobilite douce {body_zone}\\nActivation legere\\nZero intensite, zero douleur provoquee",
+                rationale=f"Signal sante sur {body_zone} pendant {trigger_activity}: on coupe le geste pour l'instant.",
+                fitmas_message=message,
+            )
+            return [decision], message
+
+    if has_fatigue_signal and sessions:
+        target = sessions[0]
+        message = (
+            "Je leve le pied tout de suite. "
+            "La prochaine seance passe en version tres legere pour proteger la recup."
+        )
+        decision = MutationDecision(
+            mutation_type="lighten_day",
+            target_session_id=int(target["id"]),
+            rationale="Signal de fatigue eleve: on protege la recuperation immediate.",
+            fitmas_message=message,
+        )
+        return [decision], message
+
+    return [], ""
+
+
+def _extract_health_signal_details(facts: list[dict]) -> tuple[str, str | None, bool]:
+    body_zone = "zone sensible"
+    trigger_activity = None
+    has_fatigue_signal = False
+
+    for fact in facts:
+        category = str(fact.get("category") or "").strip()
+        key = str(fact.get("key") or "").strip()
+        value = str(fact.get("value") or "").lower()
+        if category == "fatigue" or "fatigue" in value or "rince" in value or "rinc" in value:
+            has_fatigue_signal = True
+        if key.startswith("reported_health_"):
+            suffix = key.removeprefix("reported_health_")
+            parts = suffix.split("_", 1)
+            if parts:
+                body_zone = _BODY_ZONE_FR.get(parts[0], parts[0])
+            if len(parts) == 2 and parts[1]:
+                trigger_activity = parts[1]
+        if trigger_activity is None:
+            if "swimming" in value or "nage" in value:
+                trigger_activity = "swimming"
+            elif "running" in value or "course" in value:
+                trigger_activity = "running"
+
+    return body_zone, trigger_activity, has_fatigue_signal
+
+
+def _should_force_conservative_health_fallback(trigger: AdaptationTrigger) -> bool:
+    facts = trigger.context_data.get("health_facts") or []
+    body_zone, trigger_activity, _ = _extract_health_signal_details(facts)
+    return body_zone == "epaule" and trigger_activity == "swimming"
 
 
 def check_post_activity_trigger(
@@ -456,7 +556,7 @@ def _build_prompt(trigger: AdaptationTrigger) -> str:
 def _model_for_trigger(trigger_type: str) -> str:
     """Sonnet for complex multi-session analysis, Haiku for simpler triggers."""
     if trigger_type == "health_fact":
-        return "claude-sonnet-4-5-20250514"
+        return "claude-sonnet-4-6"
     return "claude-haiku-4-5-20251001"
 
 
@@ -525,6 +625,10 @@ def run_adaptation(
 
     data = _request_json(system=_ADAPTATION_SOUL, prompt=prompt, model=model, max_tokens=1024)
     decisions, message = _parse_adaptation_response(data)
+    if decisions and _should_force_conservative_health_fallback(trigger):
+        decisions, message = _build_conservative_health_fallback(trigger)
+    if not decisions and trigger.trigger_type == "health_fact":
+        decisions, message = _build_conservative_health_fallback(trigger)
 
     if not decisions:
         logger.info("Adaptation %s: no changes needed", trigger.trigger_type)

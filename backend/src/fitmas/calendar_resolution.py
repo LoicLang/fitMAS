@@ -36,6 +36,7 @@ def build_session_item(
     linked_activities: list[Any],
     *,
     today: date,
+    session_policy: Any | None = None,
 ) -> dict[str, Any]:
     sport_type = str(_value(session, "sport_type") or "").lower()
     scheduled_date = _as_date(_value(session, "scheduled_date"))
@@ -46,6 +47,8 @@ def build_session_item(
     status = "planned"
     if raw_status == "done":
         status = "done"
+    elif raw_status == "adapted":
+        status = "adapted"
     elif scheduled_date is not None and scheduled_date < today and sport_type not in REST_SPORTS:
         status = "missing"
 
@@ -69,6 +72,8 @@ def build_session_item(
         "duration_min": _int(_value(session, "duration_min")),
         "load_band": _load_band(session),
         "priority": str(_value(session, "priority") or ""),
+        "role": str(_value(session_policy, "role") or ""),
+        "confidence": str(_value(session_policy, "confidence") or ""),
         "linked_activity_id": _int(_value(valid_activity, "id")),
         "linked_activity_title": str(_value(valid_activity, "title") or "") or None,
         "has_invalid_linked_activity": bool(invalid_linked),

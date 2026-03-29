@@ -14,12 +14,17 @@ class OnboardPayload(BaseModel):
     weekly_structure_notes: str
     constraints: list[str]
     preferences: list[str]
+    goal_context: str = ""
+    current_state_notes: str = ""
     coach_name: str | None = None
-    coach_style: str
-    coach_relationship: str
-    coach_do: str
-    coach_dont: str
-    coach_soul: str
+    coach_preset: str = "direct"
+    coach_style: str = ""
+    coach_relationship: str = ""
+    coach_do: str = ""
+    coach_dont: str = ""
+    coach_soul: str = ""
+    coach_adjustment_notes: str = ""
+    timezone: str = ""
     telegram_chat_id: int | None = None
 
 

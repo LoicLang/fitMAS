@@ -23,7 +23,9 @@ def build_app_overview(
     activities: list[Any],
     performance_overview: dict[str, Any],
     today_view: dict[str, Any] | None,
+    session_policies: list[Any] | tuple[Any, ...] = (),
 ) -> dict[str, Any]:
+    session_policy_by_id = {int(_value(policy, "session_id") or 0): policy for policy in session_policies}
     visible_sessions = [session for session in scheduled_sessions if str(_value(session, "sport_type") or "").lower() not in REST_SPORTS]
 
     # Check if today is a rest/flexible day
@@ -44,12 +46,26 @@ def build_app_overview(
         lead_session = visible_sessions[0]
 
     activity_by_session = _activity_map_by_session(activities)
-    lead_card = build_session_item(lead_session, activity_by_session.get(int(_value(lead_session, "id") or 0), []), today=today_date) if lead_session else None
+    lead_card = (
+        build_session_item(
+            lead_session,
+            activity_by_session.get(int(_value(lead_session, "id") or 0), []),
+            today=today_date,
+            session_policy=session_policy_by_id.get(int(_value(lead_session, "id") or 0)),
+        )
+        if lead_session
+        else None
+    )
 
     # On rest days, show upcoming starting from tomorrow
     upcoming_start = today_date + timedelta(days=1) if today_is_rest else today_date
     upcoming = [
-        build_session_item(session, activity_by_session.get(int(_value(session, "id") or 0), []), today=today_date)
+        build_session_item(
+            session,
+            activity_by_session.get(int(_value(session, "id") or 0), []),
+            today=today_date,
+            session_policy=session_policy_by_id.get(int(_value(session, "id") or 0)),
+        )
         for session in visible_sessions
         if (_as_date(_value(session, "scheduled_date")) or today_date) >= upcoming_start
     ][:5]
@@ -85,10 +101,20 @@ def build_app_calendar(
     scheduled_sessions: list[Any],
     activities: list[Any],
     performance_overview: dict[str, Any],
+    session_policies: list[Any] | tuple[Any, ...] = (),
 ) -> dict[str, Any]:
+    policy_by_id = {int(_value(policy, "session_id") or 0): policy for policy in session_policies}
     resolved = resolve_calendar_payload(scheduled_sessions=scheduled_sessions, activities=activities, today=today_date)
+    enriched_sessions = [
+        {
+            **item,
+            "role": str(_value(policy_by_id.get(int(item.get("id") or 0)), "role") or item.get("role") or ""),
+            "confidence": str(_value(policy_by_id.get(int(item.get("id") or 0)), "confidence") or item.get("confidence") or ""),
+        }
+        for item in resolved["sessions"]
+    ]
     day_items: dict[str, list[dict[str, Any]]] = defaultdict(list)
-    for item in resolved["sessions"] + resolved["offplan"]:
+    for item in enriched_sessions + resolved["offplan"]:
         if item["display_date"]:
             day_items[item["display_date"]].append(item)
 
@@ -112,7 +138,7 @@ def build_app_calendar(
         cursor += timedelta(days=1)
 
     feed = sorted(
-        [item for item in resolved["sessions"] + resolved["offplan"] if item["display_date"] and item["display_date"].startswith(month_start.isoformat()[:7])],
+        [item for item in enriched_sessions + resolved["offplan"] if item["display_date"] and item["display_date"].startswith(month_start.isoformat()[:7])],
         key=lambda item: ((item["display_date"] or ""), item["title"]),
     )
 

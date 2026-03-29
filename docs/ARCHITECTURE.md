@@ -37,6 +37,11 @@ Les garde-fous, la planification, les permissions, les cooldowns et la persistan
 - Mutation loop : message → LLM → decision → update plan → réponse
 - Mémoire utile via UserFact (extraction + upsert + sélection pour prompt)
 - `UserFact` enrichi avec sémantique mémoire : `urgency`, `ttl`, `affects`, `expires_at`
+- mémoire V2 amorcée :
+  - `UserFact` sert maintenant surtout de backing `profile_memory`
+  - `working_memory_entries` porte le court terme
+  - `user_patterns` porte les patterns promus de façon déterministe
+  - une maintenance loop purge et promeut régulièrement ces couches
 - Activités manuelles + Strava OAuth + import + synchro automatique
 - Heartbeat proactif : briefing matin 7h30, rappel pré-séance 18h, revue dimanche 20h, nouvelle semaine lundi 6h
 - Distinction `CoachMessage.proactive` : cooldown appliqué seulement aux messages proactifs
@@ -67,6 +72,7 @@ Les garde-fous, la planification, les permissions, les cooldowns et la persistan
 - Strava callback redirige vers webapp (plus de JSON brut)
 - `/help` Telegram
 - Grounding conversationnel en cours : `execution_context.py`, `temporal_resolver.py`, `activity_claims.py`, `conversation_context.py`
+- Nouveau bounded context `user indications` : interpretation LLM bornee, resolution planning future et routing metier (`user_indications.py`, `user_indication_llm.py`, `planning_window_resolution.py`)
 - Tool mémoire partagé : `fact_memory.py`
 - Socle runtime tools posé : `tool_contract.py`, `tool_registry.py`, `tool_runtime.py`, `tool_metrics.py`, `tool_routing.py`, `conversation_prompting.py`
 - Le chat peut maintenant faire un unique tool call read-only borne pour certaines questions de lecture
@@ -167,6 +173,9 @@ backend/src/fitmas/
 ├── api_support.py         (137 lignes) — normalisation onboarding + garde-fous debug
 ├── api_payloads.py        (38 lignes) — payloads Pydantic
 ├── app_views.py           (~250 lignes) — composition read models app
+├── user_indications.py    (~180 lignes) — contrat ferme des signaux user (dispo, sante, execution)
+├── user_indication_llm.py (~70 lignes) — extraction structuree d'indications utilisateur
+├── planning_window_resolution.py (~120 lignes) — grounding planning date pour contraintes futures
 ├── calendar_resolution.py (~140 lignes) — résolution planning vs réel pour le calendrier
 ├── telegram_bot.py        (48 lignes) — bootstrap bot
 ├── telegram_onboarding.py (274 lignes) — ConversationHandler onboarding
@@ -176,6 +185,10 @@ backend/src/fitmas/
 ├── telegram_shared.py     (67 lignes) — constantes + persistance drafts + helpers rendu
 ├── telegram_channel.py    (44 lignes) — résolution chat_id + envoi Telegram partagé
 ├── llm.py                 (~630 lignes) — Anthropic client, decisions, extraction, formulation
+├── memory_profile.py      (~15 lignes) — facade explicite profile memory au-dessus de UserFact
+├── memory_routing.py      (~40 lignes) — split profile vs working memory selon TTL
+├── memory_patterns.py     (~200 lignes) — promotion deterministe des patterns depuis messages, activites, adaptations
+├── memory_maintenance.py  (~40 lignes) — boucle maintenance memoire : purge working + sync patterns
 ├── load_projection.py     (~90 lignes) — projection de charge backend sur 4 semaines
 ├── repository.py          (469 lignes) — CRUD + convertisseurs Pydantic
 ├── planner.py             (359 lignes) — planner multisport déterministe

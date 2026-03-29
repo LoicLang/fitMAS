@@ -118,6 +118,31 @@ PORT=8033 ./.venv/bin/python -m uvicorn --app-dir backend/src fitmas.api:app --h
 curl http://127.0.0.1:8033/health
 ```
 
+Smoke conversations reelles :
+
+```bash
+./scripts/smoke-real-conversations
+```
+
+Usage :
+- utilise une DB temporaire dediee au smoke
+- charge `.env` si besoin
+- joue une batterie de scenarios conversationnels avec vraie API Anthropic
+- utile si on touche `api_messages.py`, `heartbeat.py`, `llm.py`, `user_indication_llm.py`, `adaptation.py`
+
+Smoke ton sur profil reel :
+
+```bash
+./scripts/smoke-real-profile --source-db .tmp-fitmas-prod-copy.db
+```
+
+Usage :
+- copie la DB source vers une DB temporaire jetable
+- upgrade le schema localement si besoin
+- rejoue une batterie de messages sur le vrai profil, le vrai coach et le vrai historique
+- imprime la reponse, un indicateur simple de verbosite, et les effets memoire / sessions
+- utile pour calibrer le ton, les low-info replies, et les reactions sur de vraies donnees utilisateur
+
 ## Parcours réels à tester
 
 ### 1. Parcours onboarding
@@ -285,6 +310,27 @@ Toujours faire :
 2. `cd frontend && npm run build` si on touche l'app
 3. au moins un smoke réel du flux touché
 4. mise à jour doc si comportement modifié
+
+Si le changement touche :
+- `llm.py`
+- `api_messages.py`
+- `heartbeat.py`
+- `adaptation.py`
+- `user_indication_llm.py`
+- `planning_window_resolution.py`
+
+Et si `ANTHROPIC_API_KEY` est dispo via `.env` ou l'environnement :
+- charger `.env`
+- lancer au moins **un smoke réel LLM-backed** sur le flux touché
+- noter explicitement si le run tape bien l'API ou retombe en fallback
+
+Commande pratique :
+
+```bash
+set -a
+source ./.env >/dev/null 2>&1
+set +a
+```
 
 Dire explicitement :
 - ce qui a été testé concrètement

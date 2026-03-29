@@ -8,13 +8,16 @@ from sqlalchemy.orm import Session
 from fitmas import repository as repo, schema as s
 from fitmas.api_payloads import OnboardPayload, OnboardPreviewPayload
 from fitmas.api_support import apply_onboarding_to_user, build_onboarding_facts, normalized_onboarding_payload
+from fitmas.calibration_status import build_calibration_status, build_initial_calibration_status
 from fitmas.db import get_db
 from fitmas.llm import formulate_onboarding_recap, formulate_week_plan, preview_coach_voice
+from fitmas.memory_profile import replace_profile_memory
 from fitmas.models import OnboardPreview, OnboardResult, WeeklyPlan
+from fitmas.onboarding_contract import build_goal_summary, build_onboarding_setup_preview, build_protected_focus
 from fitmas.periodization import compute_mesocycle_state, derive_total_weeks
 from fitmas.planner import build_week_plan
 from fitmas.planning_state import refresh_planning_state
-from fitmas.time_context import build_time_context
+from fitmas.time_context import build_time_context, get_local_now
 
 logger = logging.getLogger(__name__)
 
@@ -109,10 +112,13 @@ def preview_onboarding(payload: OnboardPreviewPayload) -> OnboardPreview:
     time_context = build_time_context(normalized_payload.get("timezone"))
     recap = formulate_onboarding_recap(normalized_payload, time_context=time_context)
     preview = preview_coach_voice(normalized_payload, time_context=time_context)
+    calibration_status = build_initial_calibration_status(normalized_payload)
     return OnboardPreview(
         normalized_sports=normalized_payload["sports"],
+        setup_preview=build_onboarding_setup_preview(normalized_payload),
         coach_preview=preview,
         recap=recap,
+        calibration_status=calibration_status.as_dict(),
     )
 
 
@@ -138,8 +144,24 @@ def onboard(payload: OnboardPayload, db: Session = Depends(get_db)) -> OnboardRe
         constraints=normalized_payload["constraints"],
         preferences=normalized_payload["preferences"],
     )
-    repo.replace_user_facts(db, user.id, build_onboarding_facts(normalized_payload))
+    replace_profile_memory(db, user.id, build_onboarding_facts(normalized_payload))
     enriched_week = _generate_enriched_week_for_user(db, user)
+    planning_bundle = refresh_planning_state(db, user=user)
+    calibration_status = build_calibration_status(
+        profile=planning_bundle.profile,
+        memory_items=repo.get_active_memory_items(
+            db,
+            user.id,
+            profile_limit=24,
+            working_limit=24,
+            include_patterns=True,
+            pattern_limit=6,
+            total_limit=36,
+        ),
+        activities=repo.get_activities(db, user.id, limit=120),
+        adaptation_events=repo.get_recent_adaptation_events(db, user.id, limit=12),
+        today=get_local_now(user.timezone).date(),
+    )
 
     db.query(s.CoachMessage).filter(s.CoachMessage.user_id == user.id).delete()
     db.commit()
@@ -147,11 +169,14 @@ def onboard(payload: OnboardPayload, db: Session = Depends(get_db)) -> OnboardRe
     # First coach message — anchor the relationship and show we understood
     sports_str = ", ".join(normalized_payload["sports"][:3])
     coach_name = normalized_payload["coach_name"]
+    goal_summary = build_goal_summary(normalized_payload) or normalized_payload["primary_objective"]
+    protected_focus = build_protected_focus(normalized_payload)
     first_msg = (
         f"{coach_name} est en place.\n"
-        f"Objectif: {normalized_payload['primary_objective']}.\n"
-        f"Premiere semaine posee autour de {sports_str}.\n"
-        f"Dis-moi si quelque chose ne colle pas, j'ajuste."
+        f"Cap retenu: {goal_summary}.\n"
+        f"Je pose une premiere semaine autour de {sports_str} en protegeant {protected_focus}.\n"
+        f"Statut: {calibration_status.label}.\n"
+        f"Si un creneau bouge ou si quelque chose sonne faux, tu me l'ecris et j'ajuste."
     )
     repo.add_message(db, user.id, "agent", first_msg)
 
@@ -167,7 +192,11 @@ def onboard(payload: OnboardPayload, db: Session = Depends(get_db)) -> OnboardRe
         total_weeks=enriched_week.get("_total_weeks", 1),
     )
 
-    return OnboardResult(recap=recap, week_plan=repo.to_pydantic_plan(plan))
+    return OnboardResult(
+        recap=recap,
+        week_plan=repo.to_pydantic_plan(plan),
+        calibration_status=calibration_status.as_dict(),
+    )
 
 
 @router.post("/api/v0/week/regenerate", response_model=WeeklyPlan)

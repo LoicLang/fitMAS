@@ -20,11 +20,20 @@ from fitmas.activity_helpers import (
     claimed_activities_last_days as _claimed_activities_last_days,
     claimed_activities_on_local_date as _claimed_activities_on_local_date,
 )
+from fitmas.athlete_profile import build_athlete_profile
+from fitmas.calibration_needs import (
+    CalibrationNeedType,
+    detect_calibration_need,
+    looks_like_clarification_message,
+    render_hidden_need_brief,
+)
+from fitmas.calibration_status import build_calibration_status
 from fitmas.coach_messages import CoachDraft
 from fitmas.db import SessionLocal
 from fitmas.fact_memory import fact_is_current
 from fitmas.knowledge import load_sport_knowledge
 from fitmas.llm_gateway import generate_heartbeat_text
+from fitmas.planning_contract import build_availability_state
 from fitmas.signals import collect_signals, format_signals_for_prompt
 from fitmas.time_context import DAY_LABELS_FR, build_time_context, get_local_now, hours_since, render_time_context
 
@@ -146,7 +155,15 @@ HEARTBEAT_FACT_CATEGORIES = ("health", "fatigue", "constraint")
 
 def _get_active_fact_lines(db: Session, user: s.User) -> list[str]:
     """Return short fact lines for active health/fatigue/constraint facts."""
-    facts = repo.get_active_facts(db, user.id, limit=48)
+    facts = repo.get_active_memory_items(
+        db,
+        user.id,
+        profile_limit=24,
+        working_limit=48,
+        include_patterns=True,
+        pattern_limit=8,
+        total_limit=72,
+    )
     relevant = [
         f for f in facts
         if f.category in HEARTBEAT_FACT_CATEGORIES and fact_is_current(f)
@@ -160,6 +177,48 @@ def _format_active_facts_for_prompt(db: Session, user: s.User) -> str:
     if not lines:
         return ""
     return "\n\nFaits actifs a prendre en compte:\n" + "\n".join(lines)
+
+
+def _select_calibration_need(
+    db: Session,
+    user: s.User,
+    *,
+    preferred_types: tuple[CalibrationNeedType, ...],
+    today: date,
+    source: str,
+) -> object | None:
+    memory_items = repo.get_active_memory_items(
+        db,
+        user.id,
+        profile_limit=24,
+        working_limit=24,
+        include_patterns=True,
+        pattern_limit=8,
+        total_limit=48,
+    )
+    profile = build_athlete_profile(user, facts=memory_items)
+    availability_state = build_availability_state(profile)
+    activities = repo.get_activities(db, user.id, limit=30)
+    adaptation_events = repo.get_recent_adaptation_events(db, user.id, limit=6)
+    scheduled_sessions = repo.get_scheduled_sessions(db, user.id, date_from=today, limit=14)
+    calibration_status = build_calibration_status(
+        profile=profile,
+        memory_items=memory_items,
+        activities=activities,
+        adaptation_events=adaptation_events,
+        today=today,
+    )
+    return detect_calibration_need(
+        profile=profile,
+        calibration_status=calibration_status,
+        availability_state=availability_state,
+        scheduled_sessions=scheduled_sessions,
+        memory_items=memory_items,
+        today=today,
+        source=source,
+        channel_hint="telegram",
+        preferred_types=preferred_types,
+    )
 
 
 def morning_briefing() -> CoachDraft | None:
@@ -186,6 +245,13 @@ def morning_briefing() -> CoachDraft | None:
             return None
         _, day = repo.get_current_week_day_plan_for_session(db, user=user, session=today_session)
         plan = repo.get_active_plan(db, user.id)
+        calibration_need = _select_calibration_need(
+            db,
+            user,
+            preferred_types=(CalibrationNeedType.AVAILABILITY_WINDOW,),
+            today=local_now.date(),
+            source="heartbeat_morning",
+        )
 
         label = today_session.label or DAY_LABELS[time_context["day_key"]]
 
@@ -289,9 +355,14 @@ def morning_briefing() -> CoachDraft | None:
             f"Note: {(day.session_note if day else today_session.session_note) or ''}"
             f"{yesterday_context}"
         )
+        if calibration_need is not None:
+            prompt += f"\n\n{render_hidden_need_brief(calibration_need)}"
         llm_msg = _llm_generate(system, prompt)
         if llm_msg:
-            return CoachDraft(text=llm_msg, proactive=True)
+            memory_updates = []
+            if calibration_need is not None and looks_like_clarification_message(llm_msg):
+                memory_updates.append(calibration_need.as_memory_update())
+            return CoachDraft(text=llm_msg, proactive=True, memory_updates=memory_updates)
 
         # Fallback: structured message
         msg = (
@@ -355,6 +426,13 @@ def pre_session_reminder() -> CoachDraft | None:
         if key_session is None:
             logger.info("Tomorrow (%s) is not a key session — skipping reminder", tomorrow_key)
             return None
+        calibration_need = _select_calibration_need(
+            db,
+            user,
+            preferred_types=(CalibrationNeedType.FATIGUE_STATE,),
+            today=get_local_now(user.timezone).date(),
+            source="heartbeat_pre_session",
+        )
 
         label = key_session.label or DAY_LABELS[NEXT_DAY[today_key]]
 
@@ -381,9 +459,14 @@ def pre_session_reminder() -> CoachDraft | None:
             f"Demain {label}: {key_session.session_title} — {key_session.session_goal}.\n"
             f"Priorite: {key_session.priority}."
         )
+        if calibration_need is not None:
+            prompt += f"\n\n{render_hidden_need_brief(calibration_need)}"
         llm_msg = _llm_generate(system, prompt)
         if llm_msg:
-            return CoachDraft(text=llm_msg, proactive=True)
+            memory_updates = []
+            if calibration_need is not None and looks_like_clarification_message(llm_msg):
+                memory_updates.append(calibration_need.as_memory_update())
+            return CoachDraft(text=llm_msg, proactive=True, memory_updates=memory_updates)
 
         msg = f"Demain c'est {key_session.session_title}. Tu te sens comment pour {label.lower()} ?"
         fact_lines = _get_active_fact_lines(db, user)
@@ -556,5 +639,3 @@ def signal_check() -> CoachDraft | None:
         return CoachDraft(text=msg, proactive=True)
     finally:
         db.close()
-
-

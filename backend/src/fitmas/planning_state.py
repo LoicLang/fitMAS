@@ -26,7 +26,7 @@ class PlanningStateBundle:
 def assemble_planning_state(
     *,
     user: s.User,
-    facts: Sequence[s.UserFact],
+    facts: Sequence[object],
     activities: Sequence[s.Activity],
     scheduled_sessions: Sequence[s.ScheduledSession],
     as_of_date: date | datetime | None = None,
@@ -63,7 +63,15 @@ def refresh_planning_state(
     as_of_date: date | datetime | None = None,
     mesocycle_week: int = 1,
 ) -> PlanningStateBundle:
-    facts = repo.get_active_facts(db, user.id, limit=48)
+    facts = repo.get_active_memory_items(
+        db,
+        user.id,
+        profile_limit=48,
+        working_limit=48,
+        include_patterns=True,
+        pattern_limit=8,
+        total_limit=72,
+    )
     activities = repo.get_activities(db, user.id, limit=500)
     scheduled_sessions = repo.get_scheduled_sessions(db, user.id, limit=84)
     bundle = assemble_planning_state(

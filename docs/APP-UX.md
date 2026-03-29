@@ -22,16 +22,22 @@ read_when:
 
 But :
 - montrer la séance du jour ou, à défaut, la prochaine séance utile
+- servir de `daily brief`
 - permettre `fait / trop fatigué / décaler`
 - donner un contexte de forme court
+- montrer le dernier ajustement de plan quand la semaine a bougé
 - rendre visible les prochains jours sans basculer d'écran
 
 Règles :
 - c'est l'écran exécutable
 - pas de surcharge analytics ici
 - le type de séance doit être visible immédiatement, sans lire la description
+- le top fold doit répondre à `qu'est-ce qui compte maintenant ?`
+- la mission de semaine, le niveau de certitude et le dernier changement doivent être lisibles sans scroll long
+- le statut de calibration global (`draft / calibrating / stable`) doit être visible sans casser le hero
+- si une adaptation récente existe, elle doit exposer `ce qui a changé / ce qui est protégé / impact`
 - l'écran est construit autour d'un hero immersif
-- le rail des prochains jours est visuel, rapide à scanner, et ouvre le détail séance
+- le rail des prochains jours est visuel, rapide à scanner, limité au futur proche utile (`~72h`)
 - si aucune séance n'est prévue, l'état vide doit rester propre et rassurant
 - les surfaces `log manuel` et `sync Strava` restent accessibles, mais secondaires
 
@@ -41,15 +47,19 @@ But :
 - être la source principale de lecture `prévu vs fait`
 - montrer le réel, pas juste le plan
 - permettre de comprendre vite la semaine
+- montrer aussi le degré de certitude du plan
 
 Règles :
 - vue mois d'abord
 - navigation mois par mois
 - la semaine courante doit exposer clairement son contexte mésocycle (`week_label`, deload ou non)
-- les cellules doivent rendre visibles `planned`, `done`, `missing`, `offplan`
+- le statut de calibration global doit rester visible dans l'écran
+- les cellules doivent rendre visibles `planned`, `adapted`, `done`, `missing`, `offplan`
+- les entrées calendrier doivent aussi rendre visibles `committed`, `tentative`, `projected` et le rôle `key / support / recovery / optional`
 - la date affichée d'une séance suit son jour réel d'exécution si elle a été faite dans le bon sport
 - une activité du mauvais sport ne valide pas la séance prévue
 - une activité hors plan apparaît comme une entrée distincte `hors plan`
+- une séance adaptée reste visible comme telle, elle ne doit pas se faire passer pour du `planned`
 - l'ouverture du détail séance se fait dans une page dédiée, pas une modal
 - le calendrier doit rester cliquable et mobile-first
 
@@ -58,11 +68,15 @@ Règles :
 But :
 - montrer la charge et les tendances
 - servir de cockpit froid de pilotage
+- commencer par la preuve lisible avant les graphes
 - montrer aussi la vision de montée en charge à venir, pas seulement l'historique
+- garder trace des adaptations recentes qui expliquent pourquoi la semaine a bouge
 - rapprocher la lecture de TrainingPeaks sans perdre la DA du Figma
 
 Règles :
 - CTL / ATL / TSB visibles sans changer d'écran
+- le haut d'écran doit répondre à `est-ce que je vais dans la bonne direction ?`
+- si le système est encore en calibration, le haut d'écran doit le dire explicitement
 - la page doit exposer la cible TSS semaine, le réel, le delta et le ramp rate
 - la page doit montrer le contexte bloc / mésocycle, pas seulement des charts isolés
 - la page doit expliciter si on construit, maintient ou allège la charge sur la semaine / le bloc en cours

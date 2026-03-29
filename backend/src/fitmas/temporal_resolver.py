@@ -104,4 +104,6 @@ def _resolve_day_key(day_key: str, local_date: date) -> date:
     current_index = DAY_KEYS.index(current_key)
     target_index = DAY_KEYS.index(day_key)
     delta = target_index - current_index
+    if delta < 0:
+        delta += 7
     return local_date + timedelta(days=delta)

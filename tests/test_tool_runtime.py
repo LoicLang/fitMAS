@@ -70,6 +70,7 @@ class ToolRuntimeTest(unittest.TestCase):
         names = {tool["name"] for tool in list_tools_for_pipeline("conversation")}
 
         self.assertIn("get_today_context", names)
+        self.assertIn("resolve_planning_window", names)
         self.assertIn("get_recent_activities", names)
         self.assertIn("get_relevant_facts", names)
 
@@ -119,6 +120,22 @@ class ToolRuntimeTest(unittest.TestCase):
         self.assertEqual(result.payload["longest_duration"]["title"], "Velo")
         self.assertEqual(result.payload["longest_distance"]["title"], "Velo")
         self.assertEqual(result.payload["fastest"]["title"], "Velo")
+
+    def test_resolve_planning_window_matches_single_candidate(self) -> None:
+        registry = build_tool_registry()
+        result = registry["resolve_planning_window"].handler(
+            self.context,
+            {
+                "reference_label": "mardi matin",
+                "resolved_date": "2026-03-24",
+                "window": "morning",
+                "scope": "single_window",
+            },
+        )
+
+        self.assertEqual(result.status, "ok")
+        self.assertEqual(result.payload["matched_session_id"], 13)
+        self.assertTrue(result.payload["exact_match"])
 
 
 if __name__ == "__main__":

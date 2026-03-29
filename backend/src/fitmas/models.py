@@ -183,6 +183,23 @@ class UserFact(BaseModel):
     expires_at: str | None = None
 
 
+class UserPattern(BaseModel):
+    category: str
+    pattern_type: str
+    key: str
+    value: str
+    source: str
+    confidence: float
+    confirmed: bool
+    active: bool
+    urgency: str = "medium"
+    ttl: str = "long"
+    evidence_count: int = 1
+    affects: list[str] = Field(default_factory=list)
+    first_seen_at: str | None = None
+    last_seen_at: str | None = None
+
+
 class Activity(BaseModel):
     id: int
     source: str
@@ -210,10 +227,13 @@ class Activity(BaseModel):
 
 class OnboardPreview(BaseModel):
     normalized_sports: list[str]
+    setup_preview: list[str] = Field(default_factory=list)
     coach_preview: list[str]
     recap: str
+    calibration_status: dict[str, object] | None = None
 
 
 class OnboardResult(BaseModel):
     recap: str
     week_plan: WeeklyPlan
+    calibration_status: dict[str, object] | None = None

@@ -92,6 +92,8 @@ export interface CalendarItem {
   duration_min?: number | null;
   load_band?: string | null;
   priority?: string | null;
+  role?: "key" | "support" | "recovery" | "optional" | string | null;
+  confidence?: "committed" | "tentative" | "projected" | string | null;
   linked_activity_id?: number | null;
   linked_activity_title?: string | null;
   has_invalid_linked_activity?: boolean;
@@ -162,6 +164,98 @@ export interface WeekContext {
   coach_reading: string;
 }
 
+export interface PlanningHorizon {
+  key: string;
+  label: string;
+  confidence: "committed" | "tentative" | "projected" | string;
+  summary: string;
+}
+
+export interface ChangeBudget {
+  total: number;
+  used: number;
+  remaining: number;
+  status: "stable" | "watch" | "exhausted" | string;
+}
+
+export interface PlanningContract {
+  phase_label: string;
+  block_focus: string;
+  cycle_position: string;
+  horizon_summary: string;
+  next_inflexion: string;
+  adaptation_mode: string;
+  horizons: PlanningHorizon[];
+  change_budget: ChangeBudget;
+}
+
+export interface AvailabilityDayWindow {
+  day: string;
+  label: string;
+  windows: string[];
+}
+
+export interface AvailabilityState {
+  confidence: "confirmed" | "inferred" | "sparse" | string;
+  preferred_windows: AvailabilityDayWindow[];
+  constrained_days: string[];
+  equipment: string[];
+  preferred_training_times: string[];
+  summary: string;
+}
+
+export interface MissionSessionRef {
+  session_id: number;
+  title: string;
+  label: string;
+  role: "key" | "support" | "recovery" | "optional" | string;
+  confidence: "committed" | "tentative" | "projected" | string;
+}
+
+export interface WeekMission {
+  objective: string;
+  objective_reason: string;
+  success_criteria: string;
+  minimum_success: string;
+  primary_risk: string;
+  mission_status: string;
+  key_sessions: MissionSessionRef[];
+  support_sessions: MissionSessionRef[];
+}
+
+export interface AdaptationLogEntry {
+  created_at?: string | null;
+  reason_code: string;
+  reason_label: string;
+  adaptation_level: "micro" | "meso" | "macro" | string;
+  week_mission_status: "unchanged" | "softened" | "revised" | string;
+  mission_label: string;
+  trajectory_impact: "none" | "low" | "moderate" | "significant" | string;
+  impact_label: string;
+  scenario_type: string;
+  mutation_type: string;
+  summary: string;
+  what_changed: string;
+  what_protected: string;
+  user_message: string;
+  source_text: string;
+  change_cost: number;
+  stability_penalty: number;
+  protected_session_ids: number[];
+}
+
+export interface CalibrationStatus {
+  phase: "draft" | "calibrating" | "stable" | string;
+  label: string;
+  summary: string;
+  next_step: string;
+  known_unknowns: string[];
+  days_since_start: number;
+  activity_count_14d: number;
+  pattern_count: number;
+  adaptation_count_14d: number;
+}
+
 export interface OverviewView {
   today: TodayView | null;
   lead_session: CalendarItem | null;
@@ -210,6 +304,12 @@ export interface OverviewView {
     last_sync_at?: string | null;
   };
   week_context?: WeekContext;
+  planning_contract?: PlanningContract;
+  availability_state?: AvailabilityState;
+  week_mission?: WeekMission;
+  last_adaptation?: AdaptationLogEntry | null;
+  recent_adaptations?: AdaptationLogEntry[];
+  calibration_status?: CalibrationStatus;
 }
 
 export interface CalendarDay {
@@ -232,6 +332,12 @@ export interface CalendarView {
   };
   days: CalendarDay[];
   feed: CalendarItem[];
+  planning_contract?: PlanningContract;
+  availability_state?: AvailabilityState;
+  week_mission?: WeekMission;
+  last_adaptation?: AdaptationLogEntry | null;
+  recent_adaptations?: AdaptationLogEntry[];
+  calibration_status?: CalibrationStatus;
 }
 
 export interface EvolutionHistoryPoint {
@@ -309,6 +415,12 @@ export interface EvolutionView {
   history: EvolutionHistoryPoint[];
   week_daily: EvolutionDayPoint[];
   forecast: ForecastWeek[];
+  planning_contract?: PlanningContract;
+  availability_state?: AvailabilityState;
+  week_mission?: WeekMission;
+  last_adaptation?: AdaptationLogEntry | null;
+  recent_adaptations?: AdaptationLogEntry[];
+  calibration_status?: CalibrationStatus;
 }
 
 export interface WorkoutDetailView {

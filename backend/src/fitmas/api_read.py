@@ -17,6 +17,7 @@ from fitmas.models import (
     TodayFitness,
     TodayView,
     UserFact,
+    UserPattern,
     WatchItem,
     WeeklyPlan,
 )
@@ -213,8 +214,17 @@ def get_facts(db: Session = Depends(get_db)) -> list[UserFact]:
     user = repo.get_user_optional(db)
     if user is None:
         return []
-    facts = repo.get_active_facts(db, user.id)
+    facts = repo.get_active_memory_items(db, user.id, profile_limit=24, working_limit=24, total_limit=32)
     return [repo.to_pydantic_fact(fact) for fact in facts]
+
+
+@router.get("/api/v0/patterns", response_model=list[UserPattern])
+def get_patterns(db: Session = Depends(get_db)) -> list[UserPattern]:
+    user = repo.get_user_optional(db)
+    if user is None:
+        return []
+    patterns = repo.get_active_patterns(db, user.id, limit=12)
+    return [repo.to_pydantic_pattern(pattern) for pattern in patterns]
 
 
 @router.get("/api/v0/activities", response_model=list[Activity])

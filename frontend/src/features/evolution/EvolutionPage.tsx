@@ -5,7 +5,7 @@ import { motion, useScroll, useTransform } from "motion/react";
 import { type LoaderFunctionArgs, useLoaderData } from "react-router-dom";
 import { loadEvolution } from "../../shared/api";
 import { loadBandLabel, percent } from "../../shared/format";
-import type { EvolutionView } from "../../types";
+import type { AdaptationLogEntry, EvolutionView } from "../../types";
 import { latestCtl, weeklyExecutionRatio } from "./view-model";
 
 export async function evolutionLoader(_: LoaderFunctionArgs) {
@@ -36,11 +36,73 @@ export function EvolutionPage() {
           <p className="mt-4 max-w-3xl text-xl font-medium text-zinc-500">
             Analyse de la montée en charge, du prévu vs réalisé et du bloc à venir.
           </p>
+          {data.calibration_status ? (
+            <div className="mt-5 inline-flex items-center gap-2 rounded-full border border-black/8 bg-white/70 px-4 py-2 shadow-sm backdrop-blur-md">
+              <span className="h-2 w-2 rounded-full bg-[var(--accent)]" />
+              <span className="text-xs font-bold uppercase tracking-[0.16em] text-zinc-700">
+                {phaseLabel(data.calibration_status.phase)} · {data.calibration_status.label}
+              </span>
+            </div>
+          ) : null}
         </motion.div>
+
+        {(data.planning_contract || data.week_mission || data.last_adaptation) ? (
+          <section className="mb-8 grid gap-5 lg:grid-cols-[1.1fr_0.9fr]">
+            <article className="surface-panel p-6 md:p-7">
+              <p className="eyebrow">Proof</p>
+              <div className="mt-4 flex flex-wrap items-center gap-2">
+                {data.planning_contract ? <span className="meta-chip">{data.planning_contract.phase_label}</span> : null}
+                {data.planning_contract ? <span className="meta-chip">{data.planning_contract.block_focus}</span> : null}
+                {data.week_mission ? <span className="meta-chip">{missionLabel(data.week_mission.mission_status)}</span> : null}
+                {data.calibration_status ? <span className="meta-chip">{phaseLabel(data.calibration_status.phase)}</span> : null}
+              </div>
+              <h2 className="mt-4 text-3xl font-black tracking-[-0.05em] text-zinc-950">
+                {data.week_mission?.objective || data.planning_contract?.horizon_summary || "Bloc en cours"}
+              </h2>
+              <p className="mt-3 text-base font-medium leading-relaxed text-zinc-600">
+                {data.week_mission?.objective_reason || data.week_context?.coach_reading || data.planning_contract?.next_inflexion || "Le cockpit explique si tu construis, maintiens, ou allèges la charge."}
+              </p>
+              {data.calibration_status ? (
+                <p className="mt-3 text-sm font-medium leading-relaxed text-zinc-500">
+                  {data.calibration_status.summary} {data.calibration_status.next_step}
+                </p>
+              ) : null}
+
+              <div className="mt-6 grid gap-3 sm:grid-cols-3">
+                <MiniStat label="Cible" value={`${Math.round(data.tss.target)} TSS`} />
+                <MiniStat label="Réel" value={`${Math.round(data.tss.actual)} TSS`} />
+                <MiniStat label="Delta" value={`${Math.round(data.tss.delta)}`} />
+              </div>
+            </article>
+
+            <div className="grid gap-4">
+              {data.last_adaptation ? (
+                <article className="surface-panel p-6">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="meta-chip">{data.last_adaptation.reason_label}</span>
+                    <span className="meta-chip">{data.last_adaptation.impact_label}</span>
+                  </div>
+                  <p className="mt-4 text-lg font-bold text-zinc-950">{data.last_adaptation.summary}</p>
+                  <p className="mt-2 text-sm font-medium leading-relaxed text-zinc-600">{data.last_adaptation.what_changed}</p>
+                  <p className="mt-2 text-sm font-medium leading-relaxed text-zinc-500">Protégé : {data.last_adaptation.what_protected}</p>
+                </article>
+              ) : null}
+
+              <article className="surface-panel p-6">
+                <p className="eyebrow">Semaine</p>
+                <div className="mt-4 grid gap-3 sm:grid-cols-3">
+                  <MiniStat label="Complétion" value={percent(executionRatio)} />
+                  <MiniStat label="Ramp" value={String(data.load.ramp_rate)} />
+                  <MiniStat label="Freshness" value={data.load.freshness} />
+                </div>
+              </article>
+            </div>
+          </section>
+        ) : null}
 
         <div className="mb-8 grid grid-cols-1 gap-4 md:grid-cols-3">
           <StatCard
-            label="Charge d'entraînement"
+            label="Direction"
             value={data.load.freshness}
             icon={Activity}
             iconColor="text-[#9d4edd]"
@@ -107,7 +169,7 @@ export function EvolutionPage() {
           <article className="surface-panel p-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="eyebrow">Prévu vs réalisé</p>
+                <p className="eyebrow">Preuve hebdo</p>
                 <h2 className="mt-3 text-3xl font-black tracking-[-0.05em] text-zinc-950">Semaine en cours</h2>
               </div>
               <span className="meta-chip">{data.week.label}</span>
@@ -129,11 +191,6 @@ export function EvolutionPage() {
                   <Bar dataKey="actual_tss" fill="#ff6b35" radius={[10, 10, 0, 0]} name="Réalisé" />
                 </BarChart>
               </ResponsiveContainer>
-            </div>
-            <div className="mt-6 grid gap-3 sm:grid-cols-3">
-              <MiniStat label="Complétion" value={percent(executionRatio)} />
-              <MiniStat label="Ramp" value={String(data.load.ramp_rate)} />
-              <MiniStat label="Delta" value={`${Math.round(data.tss.delta)}`} />
             </div>
           </article>
 
@@ -232,9 +289,37 @@ export function EvolutionPage() {
             ) : null}
           </article>
         </div>
+
+        {data.recent_adaptations?.length ? (
+          <section className="mt-8">
+            <article className="surface-panel p-6">
+              <p className="eyebrow">Historique adaptation</p>
+              <h2 className="mt-3 text-3xl font-black tracking-[-0.05em] text-zinc-950">Derniers arbitrages</h2>
+              <div className="mt-6 grid gap-4">
+                {data.recent_adaptations.map((adaptation, index) => (
+                  <AdaptationRow key={`${adaptation.created_at || adaptation.summary}-${index}`} adaptation={adaptation} />
+                ))}
+              </div>
+            </article>
+          </section>
+        ) : null}
       </div>
     </div>
   );
+}
+
+function missionLabel(status: string) {
+  if (status === "committed") return "mission ferme";
+  if (status === "softened") return "mission adoucie";
+  if (status === "revised") return "mission révisée";
+  return status;
+}
+
+function phaseLabel(phase: string) {
+  if (phase === "draft") return "first draft";
+  if (phase === "calibrating") return "calibrage";
+  if (phase === "stable") return "stable";
+  return phase;
 }
 
 function StatCard({
@@ -271,5 +356,24 @@ function MiniStat({ label, value }: { label: string; value: string }) {
       <p className="text-xs font-bold uppercase tracking-[0.18em] text-zinc-500">{label}</p>
       <div className="mt-2 text-2xl font-black tracking-[-0.04em] text-zinc-950">{value}</div>
     </div>
+  );
+}
+
+function AdaptationRow({ adaptation }: { adaptation: AdaptationLogEntry }) {
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 10 }}
+      animate={{ opacity: 1, y: 0 }}
+      className="rounded-[1.6rem] border border-black/6 bg-zinc-50/80 p-5"
+    >
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="meta-chip">{adaptation.reason_label}</span>
+        <span className="meta-chip">{adaptation.mission_label}</span>
+        <span className="meta-chip">{adaptation.impact_label}</span>
+      </div>
+      <p className="mt-4 text-lg font-bold text-zinc-950">{adaptation.summary}</p>
+      <p className="mt-2 text-sm font-medium leading-relaxed text-zinc-600">{adaptation.what_changed}</p>
+      <p className="mt-2 text-sm font-medium leading-relaxed text-zinc-500">Protégé : {adaptation.what_protected}</p>
+    </motion.div>
   );
 }

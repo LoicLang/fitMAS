@@ -38,6 +38,16 @@ class TemporalResolverTest(unittest.TestCase):
         self.assertEqual(resolution.primary_reference, "yesterday")
         self.assertEqual(resolution.resolved_date.isoformat(), "2026-03-21")
 
+    def test_explicit_day_resolves_to_next_occurrence(self) -> None:
+        resolution = resolve_temporal_context(
+            "je voyage mercredi",
+            timezone_name="Europe/Paris",
+            now=datetime.fromisoformat("2026-03-29T08:00:00+02:00"),
+        )
+
+        self.assertEqual(resolution.primary_reference, "explicit_wednesday")
+        self.assertEqual(resolution.resolved_date.isoformat(), "2026-04-01")
+
 
 if __name__ == "__main__":
     unittest.main()

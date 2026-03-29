@@ -114,7 +114,7 @@ describe("app routes", () => {
   it("renders overview with today's workout", async () => {
     renderAt("/", { overview: overviewPayload });
     expect(await screen.findByText("LONG RUN")).toBeInTheDocument();
-    expect(screen.getByText("Séance du jour")).toBeInTheDocument();
+    expect(screen.getByText("Daily brief")).toBeInTheDocument();
   });
 
   it("renders overview without quick actions when today is null", async () => {
@@ -126,8 +126,8 @@ describe("app routes", () => {
   it("renders calendar with missing and offplan states", async () => {
     renderAt("/calendar", { calendar: calendarPayload });
     expect(await screen.findByText("Tempo run")).toBeInTheDocument();
-    expect(screen.getByText("missing")).toBeInTheDocument();
-    expect(screen.getByText("offplan")).toBeInTheDocument();
+    expect(screen.getAllByText("manqué").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("hors plan").length).toBeGreaterThan(0);
   });
 
   it("renders workout detail route directly", async () => {

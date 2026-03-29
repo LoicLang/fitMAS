@@ -10,6 +10,7 @@ os.environ.setdefault("FITMAS_DB_PATH", tempfile.mktemp(prefix="fitmas-app-tests
 from fastapi.testclient import TestClient
 
 from fitmas import repository as repo, schema as s
+from fitmas.adaptation_log import AdaptationLogEntry
 from fitmas.api import app
 from fitmas.db import Base, SessionLocal, engine, init_db
 from fitmas.time_context import DAY_KEYS, day_label_fr, get_local_now
@@ -121,6 +122,30 @@ class AppEndpointsTest(unittest.TestCase):
 
     def test_app_routes_expose_overview_calendar_and_evolution(self) -> None:
         session = self._seed_plan()
+        repo.add_adaptation_event(
+            self.db,
+            self.user.id,
+            AdaptationLogEntry(
+                created_at=None,
+                reason_code="logistics_conflict",
+                reason_label="Imprevu logistique",
+                adaptation_level="micro",
+                week_mission_status="unchanged",
+                mission_label="Mission inchangée",
+                trajectory_impact="low",
+                impact_label="Impact faible",
+                scenario_type="move",
+                mutation_type="move_session",
+                summary="Reporter la séance au lendemain.",
+                what_changed="Tempo run passe au lendemain.",
+                what_protected="la mission de semaine",
+                user_message="OK. Je décale.",
+                source_text="je peux pas ce soir",
+                change_cost=1,
+                stability_penalty=5.0,
+                protected_session_ids=(),
+            ),
+        )
 
         overview = self.client.get("/api/v0/app/overview")
         calendar = self.client.get(f"/api/v0/app/calendar?month={session.scheduled_date.date().isoformat()[:7]}")
@@ -128,11 +153,28 @@ class AppEndpointsTest(unittest.TestCase):
 
         self.assertEqual(overview.status_code, 200)
         self.assertEqual(overview.json()["lead_session"]["title"], "Tempo run")
+        self.assertEqual(overview.json()["lead_session"]["confidence"], "committed")
+        self.assertEqual(overview.json()["lead_session"]["role"], "key")
+        self.assertIn("planning_contract", overview.json())
+        self.assertIn("week_mission", overview.json())
+        self.assertIn("calibration_status", overview.json())
+        self.assertEqual(overview.json()["last_adaptation"]["mutation_type"], "move_session")
+        self.assertEqual(len(overview.json()["recent_adaptations"]), 1)
         self.assertEqual(calendar.status_code, 200)
+        self.assertIn("planning_contract", calendar.json())
+        self.assertIn("week_mission", calendar.json())
+        self.assertIn("calibration_status", calendar.json())
         self.assertTrue(any(item["status"] == "offplan" for item in calendar.json()["feed"]))
+        first_session = next(item for item in calendar.json()["feed"] if item["kind"] == "session")
+        self.assertEqual(first_session["confidence"], "committed")
+        self.assertEqual(first_session["role"], "key")
         self.assertEqual(evolution.status_code, 200)
         self.assertEqual(len(evolution.json()["forecast"]), 4)
         self.assertIn("week_daily", evolution.json())
+        self.assertIn("planning_contract", evolution.json())
+        self.assertIn("calibration_status", evolution.json())
+        self.assertEqual(evolution.json()["last_adaptation"]["trajectory_impact"], "low")
+        self.assertEqual(len(evolution.json()["recent_adaptations"]), 1)
 
     def test_session_detail_handles_linked_activity_and_coach_block(self) -> None:
         session = self._seed_plan()

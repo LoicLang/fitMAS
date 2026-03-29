@@ -18,8 +18,10 @@ CATEGORY_AFFECTS = {
     "constraint": ("planning", "conversation", "heartbeat"),
     "health": ("planning", "conversation", "heartbeat"),
     "fatigue": ("planning", "conversation", "heartbeat"),
+    "calibration_need": ("conversation", "heartbeat"),
     "goal": ("planning", "conversation"),
     "objective": ("planning", "conversation"),
+    "training_state": ("planning", "conversation", "heartbeat"),
     "pattern": ("planning", "conversation"),
     "preference": ("planning", "conversation"),
     "coaching": ("conversation",),
@@ -101,6 +103,9 @@ def derive_fact_memory_policy(
     elif normalized_category in {"goal", "objective", "pattern"}:
         ttl = "long"
         urgency = "medium"
+    elif normalized_category == "training_state":
+        ttl = "medium"
+        urgency = "medium"
     elif normalized_category in {"availability", "schedule", "constraint"}:
         ttl = "short" if any(token in text for token in TEMPORAL_KEYWORDS) else "medium"
         urgency = "medium"
@@ -181,6 +186,8 @@ def select_relevant_facts(
     selected: list[str] = []
     seen: set[tuple[str, str]] = set()
     for fact in active:
+        if str(_value(fact, "category") or "") in {"calibration_need", "calibration"}:
+            continue
         key = (str(_value(fact, "category") or ""), str(_value(fact, "key") or ""))
         if key in seen:
             continue

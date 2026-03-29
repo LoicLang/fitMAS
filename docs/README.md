@@ -7,7 +7,7 @@ read_when:
 
 # Docs
 
-9 documents essentiels :
+12 documents essentiels :
 
 | Document | Contenu |
 |----------|---------|
@@ -15,7 +15,10 @@ read_when:
 | `ARCHITECTURE.md` | Stack, modèle de données, flux techniques, décisions tranchées |
 | `APP-UX.md` | Contrat UX de la webapp : calendrier, today, performance, journal |
 | `PLANNING-ENGINE-V2.md` | Plan adapte du moteur V2, sequence d'implementation et mapping avec le code actuel |
+| `PLANNING-CONTRACT.md` | Contrat produit/technique de la planification adaptative, horizons de verite et ordre d'implementation |
+| `MEMORY-V2.md` | Architecture memoire V2 : profile vs working vs patterns, regles d'ecriture/lecture et plan de migration |
 | `CONVERSATION-GROUNDING.md` | Verite conversationnelle, grounding Telegram, trous actuels et ordre d'implementation |
+| `USER-INDICATIONS.md` | Contrat des indications utilisateur: interpretation, grounding planning, mutation et explication |
 | `RUNTIME-TOOLS.md` | Contrat des tools runtime, registre V1 read-only, limites et métriques |
 | `SOUL.md` | Voix FitMAS, heartbeat, messagerie, exemples de ton |
 | `BUILD-ORDER.md` | État actuel, roadmap recommandée, ordre de priorités |
@@ -35,11 +38,14 @@ Pour un nouvel agent :
 3. `ARCHITECTURE.md`
 4. `APP-UX.md`
 5. `PLANNING-ENGINE-V2.md`
-6. `CONVERSATION-GROUNDING.md`
-7. `RUNTIME-TOOLS.md`
-8. `SOUL.md`
-9. `BUILD-ORDER.md`
-10. `RUNBOOK.md`
+6. `PLANNING-CONTRACT.md`
+7. `MEMORY-V2.md`
+8. `CONVERSATION-GROUNDING.md`
+9. `USER-INDICATIONS.md`
+10. `RUNTIME-TOOLS.md`
+11. `SOUL.md`
+12. `BUILD-ORDER.md`
+13. `RUNBOOK.md`
 
 Raccourci utile :
 - si le sujet est "que faut-il construire maintenant ?", lire `BUILD-ORDER.md`
@@ -47,7 +53,10 @@ Raccourci utile :
 - si le sujet est "quelle fondation technique avant d'ajouter de la sophistication ?", lire `ARCHITECTURE.md`
 - si le sujet est "comment l'app doit se comporter ?", lire `APP-UX.md`
 - si le sujet est "comment faire evoluer le planner ?", lire `PLANNING-ENGINE-V2.md`
+- si le sujet est "quel est le contrat exact de la planification adaptative ?", lire `PLANNING-CONTRACT.md`
+- si le sujet est "comment evoluer la memoire utilisateur sans recreer un fourre-tout ?", lire `MEMORY-V2.md`
 - si le sujet est "pourquoi le coach Telegram se trompe sur le reel ou le temps ?", lire `CONVERSATION-GROUNDING.md`
+- si le sujet est "comment transformer un message user en event candidate solide ?", lire `USER-INDICATIONS.md`
 - si le sujet est "comment brancher des tools runtime au LLM sans casser l'architecture ?", lire `RUNTIME-TOOLS.md`
 
 ## Archive

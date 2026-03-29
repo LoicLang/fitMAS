@@ -32,7 +32,7 @@ def claimed_activities_on_local_date(
     db: Session, user: s.User, *, target_date: date,
 ) -> Sequence[ActivityClaim]:
     """Return activity claims from facts for *target_date*."""
-    facts = repo.get_active_facts(db, user.id, limit=48)
+    facts = repo.get_active_memory_items(db, user.id, profile_limit=24, working_limit=48, total_limit=64)
     return extract_claims_from_facts(facts, target_date=target_date)
 
 
@@ -59,7 +59,7 @@ def claimed_activities_last_days(
 ) -> list[ActivityClaim]:
     """Return activity claims from facts for the last *days* days."""
     cutoff = get_local_now(user.timezone).date() - timedelta(days=max(0, days - 1))
-    facts = repo.get_active_facts(db, user.id, limit=64)
+    facts = repo.get_active_memory_items(db, user.id, profile_limit=24, working_limit=64, total_limit=80)
     return [
         claim
         for claim in extract_claims_from_facts(facts)

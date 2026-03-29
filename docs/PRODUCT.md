@@ -34,7 +34,7 @@ Le mécanisme interne ressenti est "moins de charge mentale".
 - sportif engagé multisport (3+ séances/semaine)
 - agenda parfois instable
 - intéressé par la personnalisation
-- à l'aise avec un setup initial de 15-20 minutes
+- accepte un setup initial court puis une calibration progressive
 - tone preference : direct, pas cheerleader
 
 ## Wedge : multisport personnel
@@ -61,17 +61,22 @@ Ce qu'on ne fait pas encore :
 
 ## Ce que FitMAS sait faire aujourd'hui
 
-### 1. Onboarding (Telegram, ~15 min)
+### 1. Onboarding (Telegram, launch court puis calibration)
 
 Via `/start` sur le bot Telegram :
-1. **Sports pratiqués** — sélection multiple
-2. **Objectif principal** — texte libre
-3. **Réalité de semaine** — créneaux, jours forts/fragiles
-4. **Contraintes** — blessures, matériel, horaires
-5. **Préférences** — terrain, style de renfo, etc.
-6. **Création du coach** — nom, style, do/dont, âme
-7. **Preview de voix** — le coach parle avant que tu valides
-8. **Récap final** — ce que FitMAS a compris
+1. **Sports + priorité réelle** — pratique actuelle, sport principal, ordre implicite
+2. **Cap** — objectif principal + horizon/date si elle existe
+3. **Vraie semaine** — créneaux fiables, jours fragiles, moment long
+4. **État actuel** — volume récent, reprise, fatigue, fragilité
+5. **Préférences + contraintes** — terrain, timing, matériel, douleur, logistique
+6. **Coach** — nom + preset + do/dont + preview de voix avant validation
+
+Sortie attendue :
+- `athlete profile seed`
+- `availability seed`
+- `coach dna seed`
+- `first week draft` visible
+- calibration ensuite, sans tout redemander
 
 ### 2. Plan hebdomadaire multisport
 
@@ -86,6 +91,7 @@ Via `/start` sur le bot Telegram :
 **Aperçu** — écran quotidien
 - prochaine séance + objectif + note coach
 - actions rapides : Fait / Trop fatigué / Décaler
+- statut de calibration visible (`draft / calibrating / stable`)
 - métriques bloc actif : volume, charge cible, semaine
 - hero éditorial type "prochaine séance"
 - programme semaine en cartes visuelles
@@ -93,6 +99,7 @@ Via `/start` sur le bot Telegram :
 **Calendrier** — vue plan vivant
 - séance du jour mise en avant en haut
 - navigation semaine par semaine
+- badges certitude + statut de calibration global
 - liste hebdo inversée : plus récent en haut, plus ancien en bas
 - semaine lisible avec statut et date réelle affichée
 - une séance terminée se reloge sur son jour réel d'exécution
@@ -106,6 +113,7 @@ Via `/start` sur le bot Telegram :
 **Évolution** — cockpit charge + montée en charge
 - CTL / ATL / TSB sur 12 semaines
 - volume multisport hebdo
+- preuve lisible + statut de calibration avant la profondeur analytique
 - complétion de la semaine en cours
 - records simples par sport
 - dashboard visuel orienté bloc actif + charge cible + lecture coach

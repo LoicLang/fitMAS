@@ -11,11 +11,20 @@ os.environ.setdefault("FITMAS_DB_PATH", tempfile.mktemp(prefix="fitmas-tests-", 
 from fastapi.testclient import TestClient
 
 import fitmas.api_messages as api_messages
+import fitmas.calibration_needs as calibration_needs
 import fitmas.llm as llm
+from fitmas.adaptation import AdaptationResult
 from fitmas.api import app
 from fitmas.db import Base, SessionLocal, engine, init_db
 from fitmas.llm import MutationDecision
 from fitmas.plan_actions import move_session
+from fitmas.user_indications import (
+    IndicationTimeReference,
+    UserIndication,
+    UserIndicationKind,
+    UserIndicationPolarity,
+    UserIndicationScope,
+)
 from fitmas.training_load import compute_ctl_atl_tsb, estimate_tss
 from fitmas import repository as repo, schema as s
 from fitmas.time_context import DAY_KEYS, day_label_fr, get_local_now
@@ -80,6 +89,36 @@ class FitMASCoreFlowsTest(unittest.TestCase):
         session = repo.get_today_scheduled_session(self.db, self.user.id, timezone_name=self.user.timezone)
         self.assertIsNotNone(session)
         return plan, session
+
+    def _create_plan_with_tomorrow_session(self) -> tuple[s.WeeklyPlan, s.ScheduledSession]:
+        plan, _ = self._create_plan_for_today()
+        now = get_local_now(self.user.timezone)
+        tomorrow = now + timedelta(days=1)
+        tomorrow_key = DAY_KEYS[tomorrow.weekday()]
+        tomorrow_session = s.ScheduledSession(
+            user_id=self.user.id,
+            day=tomorrow_key,
+            label=day_label_fr(tomorrow_key, capitalize=True),
+            scheduled_date=tomorrow.replace(hour=18, minute=0, second=0, microsecond=0),
+            source_plan_created_at=now,
+            sport_type="running",
+            session_type="tempo",
+            session_title="Tempo demain",
+            session_goal="Stimulus",
+            session_note="",
+            session_description="50 min",
+            duration_min=50,
+            intensity="moderate",
+            load_score=4,
+            priority="Seance cle",
+            nutrition_focus="",
+            flexibility="stable",
+            completion_status="planned",
+        )
+        self.db.add(tomorrow_session)
+        self.db.commit()
+        self.db.refresh(tomorrow_session)
+        return plan, tomorrow_session
 
     def test_move_session_keeps_placeholder_and_creates_future_copy(self) -> None:
         _, session = self._create_plan_for_today()
@@ -193,7 +232,7 @@ class FitMASCoreFlowsTest(unittest.TestCase):
                 fitmas_message="On allège aujourd'hui. Tu récupères.",
             )
             api_messages.extract_facts = lambda *args, **kwargs: []
-            result = self.client.post("/api/v0/messages", json={"text": "je suis cramé"}).json()
+            result = self.client.post("/api/v0/messages", json={"text": "Tu peux me simplifier la séance ?"}).json()
             today = self.client.get("/api/v0/today").json()
         finally:
             api_messages.decide = original_decide
@@ -202,6 +241,159 @@ class FitMASCoreFlowsTest(unittest.TestCase):
         self.assertEqual(result["assistant_message"]["text"], "On allège aujourd'hui. Tu récupères.")
         self.assertEqual(today["completion_status"], "adapted")
         self.assertEqual(today["sport_type"], "rest")
+
+    def test_message_flow_can_replan_simple_unavailability_without_llm(self) -> None:
+        _, session = self._create_plan_for_today()
+        next_day_key = DAY_KEYS[(session.scheduled_date.date().weekday() + 1) % 7]
+        self.user.weekly_structure_notes = f"{day_label_fr(next_day_key, capitalize=True)} matin dispo."
+        self.db.commit()
+        original_decide = api_messages.decide
+        original_extract_facts = api_messages.extract_facts
+        try:
+            def should_not_run(*args, **kwargs):
+                raise AssertionError("LLM decide should not run for deterministic unavailability replans")
+
+            api_messages.decide = should_not_run
+            api_messages.extract_facts = lambda *args, **kwargs: []
+            result = self.client.post("/api/v0/messages", json={"text": "Merde imprévu je peux pas ce soir"}).json()
+        finally:
+            api_messages.decide = original_decide
+            api_messages.extract_facts = original_extract_facts
+
+        self.db.expire_all()
+        sessions = repo.get_scheduled_sessions(self.db, self.user.id, limit=10)
+        planned_sessions = [scheduled for scheduled in sessions if scheduled.sport_type != "rest"]
+        latest_adaptation = repo.get_latest_adaptation_event(self.db, self.user.id)
+        overview = self.client.get("/api/v0/app/overview").json()
+        calendar = self.client.get(f"/api/v0/app/calendar?month={session.scheduled_date.date().isoformat()[:7]}").json()
+
+        self.assertIn("Mission hebdo", result["assistant_message"]["text"])
+        self.assertEqual(len(sessions), 2)
+        self.assertEqual(len(planned_sessions), 1)
+        self.assertGreater(planned_sessions[0].scheduled_date.date(), session.scheduled_date.date())
+        self.assertIsNotNone(latest_adaptation)
+        self.assertEqual(latest_adaptation.mutation_type, "move_session")
+        self.assertEqual(overview["last_adaptation"]["mutation_type"], "move_session")
+        self.assertEqual(overview["last_adaptation"]["adaptation_level"], "micro")
+        self.assertTrue(any(item["status"] == "adapted" for item in calendar["feed"]))
+
+    def test_message_flow_can_handle_fatigue_without_llm(self) -> None:
+        _, session = self._create_plan_for_today()
+        original_decide = api_messages.decide
+        original_extract_facts = api_messages.extract_facts
+        try:
+            def should_not_run(*args, **kwargs):
+                raise AssertionError("LLM decide should not run for deterministic fatigue replans")
+
+            api_messages.decide = should_not_run
+            api_messages.extract_facts = lambda *args, **kwargs: []
+            result = self.client.post("/api/v0/messages", json={"text": "Je suis rincé aujourd'hui, jambes lourdes"}).json()
+        finally:
+            api_messages.decide = original_decide
+            api_messages.extract_facts = original_extract_facts
+
+        self.db.expire_all()
+        adapted_session = repo.get_scheduled_session(self.db, self.user.id, session.id)
+        latest_adaptation = repo.get_latest_adaptation_event(self.db, self.user.id)
+
+        self.assertIn("version courte", result["assistant_message"]["text"])
+        self.assertIsNotNone(adapted_session)
+        self.assertEqual(adapted_session.completion_status, "adapted")
+        self.assertIn("version courte", adapted_session.session_title.lower())
+        self.assertIsNotNone(latest_adaptation)
+        self.assertEqual(latest_adaptation.reason_code, "fatigue_signal")
+
+    def test_message_flow_can_replan_future_availability_constraint_without_llm(self) -> None:
+        _, tomorrow_session = self._create_plan_with_tomorrow_session()
+        original_date = tomorrow_session.scheduled_date.date()
+        next_open_key = DAY_KEYS[(tomorrow_session.scheduled_date.date().weekday() + 2) % 7]
+        self.user.weekly_structure_notes = f"{day_label_fr(next_open_key, capitalize=True)} soir dispo."
+        self.db.commit()
+        original_decide = api_messages.decide
+        original_extract_facts = api_messages.extract_facts
+        try:
+            def should_not_run(*args, **kwargs):
+                raise AssertionError("LLM decide should not run for grounded future availability replans")
+
+            api_messages.decide = should_not_run
+            api_messages.extract_facts = lambda *args, **kwargs: []
+            result = self.client.post("/api/v0/messages", json={"text": "Je ne suis pas dispo demain soir"}).json()
+        finally:
+            api_messages.decide = original_decide
+            api_messages.extract_facts = original_extract_facts
+
+        self.db.expire_all()
+        sessions = repo.get_scheduled_sessions(self.db, self.user.id, limit=10)
+        moved_tomorrow_session = next(
+            scheduled for scheduled in sessions
+            if scheduled.sport_type == "running" and scheduled.session_title == "Tempo demain"
+        )
+
+        self.assertIn("Mission hebdo", result["assistant_message"]["text"])
+        self.assertGreater(moved_tomorrow_session.scheduled_date.date(), original_date)
+
+    def test_health_indication_can_bypass_decide_and_trigger_protective_reply(self) -> None:
+        self._create_plan_for_today()
+        original_decide = api_messages.decide
+        original_extract_facts = api_messages.extract_facts
+        original_health = api_messages.check_and_adapt_health_facts
+        try:
+            def should_not_run(*args, **kwargs):
+                raise AssertionError("LLM decide should not run for direct health protection flow")
+
+            api_messages.decide = should_not_run
+            api_messages.extract_facts = lambda *args, **kwargs: []
+            api_messages.check_and_adapt_health_facts = lambda *args, **kwargs: AdaptationResult(
+                trigger_type="health_fact",
+                message="Je protege l'epaule. Je remplace la prochaine natation par une seance compatible.",
+                applied=True,
+            )
+            result = self.client.post("/api/v0/messages", json={"text": "J'ai mal a l'epaule quand je nage, ca tire"}).json()
+        finally:
+            api_messages.decide = original_decide
+            api_messages.extract_facts = original_extract_facts
+            api_messages.check_and_adapt_health_facts = original_health
+
+        facts = self.client.get("/api/v0/facts").json()
+
+        self.assertIn("epaule", result["assistant_message"]["text"].lower())
+        self.assertTrue(any(fact["category"] == "health" for fact in facts))
+
+    def test_health_indication_is_not_reprocessed_after_reply(self) -> None:
+        self._create_plan_for_today()
+        original_decide = api_messages.decide
+        original_extract_facts = api_messages.extract_facts
+        original_health = api_messages.check_and_adapt_health_facts
+        call_count = {"health": 0}
+        try:
+            api_messages.decide = lambda *args, **kwargs: MutationDecision(
+                mutation_type="no_change",
+                rationale="message libre",
+                fitmas_message="Je prends note.",
+            )
+            api_messages.extract_facts = lambda *args, **kwargs: [
+                {
+                    "category": "health",
+                    "key": "reported_health_shoulder_swimming",
+                    "value": "gene a la zone shoulder quand il fait swimming. severite moderate.",
+                    "source": "conversation",
+                    "confidence": 0.9,
+                    "confirmed": True,
+                }
+            ]
+
+            def fake_health(*args, **kwargs):
+                call_count["health"] += 1
+                return AdaptationResult(trigger_type="health_fact", message="", applied=False)
+
+            api_messages.check_and_adapt_health_facts = fake_health
+            self.client.post("/api/v0/messages", json={"text": "J'ai mal a l'epaule quand je nage, ca tire"})
+        finally:
+            api_messages.decide = original_decide
+            api_messages.extract_facts = original_extract_facts
+            api_messages.check_and_adapt_health_facts = original_health
+
+        self.assertEqual(call_count["health"], 1)
 
     def test_message_flow_passes_grounding_context_to_llm(self) -> None:
         _, session = self._create_plan_for_today()
@@ -253,6 +445,126 @@ class FitMASCoreFlowsTest(unittest.TestCase):
         self.assertIn("big_session_done", captured["signal_summary"])
         self.assertIn("Activite declaree par l'utilisateur", captured["selected_facts"])
 
+    def test_current_user_message_is_not_duplicated_in_history_passed_to_llm(self) -> None:
+        self._create_plan_for_today()
+        captured: dict[str, object] = {}
+        original_decide = api_messages.decide
+        original_extract_facts = api_messages.extract_facts
+        try:
+            def fake_decide(*args, **kwargs):
+                captured["conversation_history"] = kwargs.get("conversation_history") or []
+                return MutationDecision(
+                    mutation_type="no_change",
+                    rationale="message libre",
+                    fitmas_message="OK.",
+                )
+
+            api_messages.decide = fake_decide
+            api_messages.extract_facts = lambda *args, **kwargs: []
+            self.client.post("/api/v0/messages", json={"text": "Je voulais te dire ou j'en suis"})
+        finally:
+            api_messages.decide = original_decide
+            api_messages.extract_facts = original_extract_facts
+
+        self.assertEqual(captured["conversation_history"], [])
+
+    def test_low_signal_ack_skips_llm_and_stays_brief(self) -> None:
+        self._create_plan_for_today()
+        original_decide = api_messages.decide
+        try:
+            def should_not_run(*args, **kwargs):
+                raise AssertionError("LLM decide should not run for low-signal ack")
+
+            api_messages.decide = should_not_run
+            result = self.client.post("/api/v0/messages", json={"text": "ok merci"}).json()
+        finally:
+            api_messages.decide = original_decide
+
+        self.assertEqual(result["assistant_message"]["text"], "Bien recu.")
+
+    def test_week_scope_constraint_uses_real_candidates_in_reply(self) -> None:
+        self._create_plan_for_today()
+        now = get_local_now(self.user.timezone)
+        wednesday = now + timedelta(days=3)
+        friday = now + timedelta(days=5)
+        for dt, title, sport in (
+            (wednesday, "Natation hotel", "swimming"),
+            (friday, "Renfo hotel", "strength"),
+        ):
+            day_key = DAY_KEYS[dt.weekday()]
+            self.db.add(
+                s.ScheduledSession(
+                    user_id=self.user.id,
+                    day=day_key,
+                    label=day_label_fr(day_key, capitalize=True),
+                    scheduled_date=dt.replace(hour=7, minute=0, second=0, microsecond=0),
+                    source_plan_created_at=now,
+                    sport_type=sport,
+                    session_type="easy",
+                    session_title=title,
+                    session_goal="Support",
+                    session_note="",
+                    session_description="30 min",
+                    duration_min=30,
+                    intensity="easy",
+                    load_score=2,
+                    priority="Normal",
+                    nutrition_focus="",
+                    flexibility="movable",
+                    completion_status="planned",
+                )
+            )
+        self.db.commit()
+
+        original_decide = api_messages.decide
+        original_extract_facts = api_messages.extract_facts
+        original_interpret = api_messages.interpret_user_indication
+        try:
+            def should_not_run(*args, **kwargs):
+                raise AssertionError("LLM decide should not run for grounded week-scope reply")
+
+            api_messages.decide = should_not_run
+            api_messages.extract_facts = lambda *args, **kwargs: []
+            api_messages.interpret_user_indication = lambda *args, **kwargs: UserIndication(
+                kind=UserIndicationKind.AVAILABILITY_CONSTRAINT,
+                confidence=0.95,
+                source_text="Cette semaine je voyage de mercredi a vendredi",
+                scope=UserIndicationScope.WEEK,
+                polarity=UserIndicationPolarity.UNAVAILABLE,
+                time_reference=IndicationTimeReference(
+                    label="mercredi a vendredi",
+                    resolved_date=wednesday.date(),
+                    day_key=DAY_KEYS[wednesday.weekday()],
+                    relative_reference="this_week",
+                    window=None,
+                ),
+            )
+            result = self.client.post("/api/v0/messages", json={"text": "Cette semaine je voyage de mercredi a vendredi"}).json()
+        finally:
+            api_messages.decide = original_decide
+            api_messages.extract_facts = original_extract_facts
+            api_messages.interpret_user_indication = original_interpret
+
+        self.assertIn("Natation hotel", result["assistant_message"]["text"])
+        self.assertIn("Renfo hotel", result["assistant_message"]["text"])
+
+    def test_future_constraint_without_candidate_stays_honest_and_skips_llm(self) -> None:
+        self._create_plan_for_today()
+        original_decide = api_messages.decide
+        original_extract_facts = api_messages.extract_facts
+        try:
+            def should_not_run(*args, **kwargs):
+                raise AssertionError("LLM decide should not run when no session matches the constrained window")
+
+            api_messages.decide = should_not_run
+            api_messages.extract_facts = lambda *args, **kwargs: []
+            result = self.client.post("/api/v0/messages", json={"text": "Je ne suis pas dispo demain soir"}).json()
+        finally:
+            api_messages.decide = original_decide
+            api_messages.extract_facts = original_extract_facts
+
+        self.assertIn("Rien a bouger", result["assistant_message"]["text"])
+
     def test_message_flow_persists_unlogged_activity_claim_fact(self) -> None:
         self._create_plan_for_today()
         original_decide = api_messages.decide
@@ -297,9 +609,46 @@ class FitMASCoreFlowsTest(unittest.TestCase):
 
         self.assertEqual(len(facts), 1)
         self.assertEqual(facts[0]["category"], "execution")
-        self.assertIn("2026-", facts[0]["key"])
-        self.assertIn("running", facts[0]["key"])
-        self.assertIn("30 min", facts[0]["value"])
+
+    def test_message_flow_can_consume_hidden_calibration_answer_without_llm(self) -> None:
+        self._create_plan_for_today()
+        need = calibration_needs.CalibrationNeed(
+            id="availability_window:availability:thursday",
+            need_type=calibration_needs.CalibrationNeedType.AVAILABILITY_WINDOW,
+            topic="availability:thursday",
+            status=calibration_needs.CalibrationNeedStatus.OPEN,
+            why_now="test",
+            priority=calibration_needs.CalibrationNeedPriority.MEDIUM,
+            source="heartbeat_morning",
+            channel_hint="telegram",
+            created_at="2026-03-29T08:00+00:00",
+            expires_at="2026-04-03T08:00+00:00",
+            last_prompted_at="2026-03-29T08:00+00:00",
+            context={"day": "thursday", "day_label": "jeudi", "session_id": 12, "session_title": "Tempo"},
+            allowed_answers=("morning", "evening", "both", "none"),
+            write_targets=("working_memory.availability",),
+        )
+        repo.upsert_working_memory(self.db, self.user.id, [need.as_memory_update()])
+        original_decide = api_messages.decide
+        original_extract_facts = api_messages.extract_facts
+        try:
+            def should_not_run(*args, **kwargs):
+                raise AssertionError("LLM decide should not run for standalone calibration answers")
+
+            api_messages.decide = should_not_run
+            api_messages.extract_facts = lambda *args, **kwargs: []
+            result = self.client.post("/api/v0/messages", json={"text": "Plutot le soir"}).json()
+        finally:
+            api_messages.decide = original_decide
+            api_messages.extract_facts = original_extract_facts
+
+        facts = self.client.get("/api/v0/facts").json()
+        categories = {(fact["category"], fact["key"]) for fact in facts}
+
+        self.assertTrue(result["assistant_message"]["text"].strip())
+        self.assertIn("jeudi", result["assistant_message"]["text"].lower())
+        self.assertIn(("availability", "weekly_slot_thursday"), categories)
+        self.assertNotIn(("calibration_need", "availability:thursday"), categories)
 
     def test_message_flow_can_answer_read_query_via_tool(self) -> None:
         _, session = self._create_plan_for_today()

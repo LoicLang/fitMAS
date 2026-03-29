@@ -5,6 +5,7 @@ from typing import Any, Sequence
 
 from fitmas.execution_context import build_today_execution_context
 from fitmas.fact_memory import select_relevant_facts
+from fitmas.planning_window_resolution import format_planning_window_summary, resolve_planning_window_inputs
 from fitmas.time_context import get_local_now, get_timezone
 from fitmas.tool_contract import ToolContext, ToolResult, ToolSpec
 
@@ -32,6 +33,24 @@ def build_tool_registry() -> dict[str, ToolSpec]:
             },
             allowed_pipelines=("conversation", "planning"),
             handler=_get_plan_window,
+        ),
+        ToolSpec(
+            name="resolve_planning_window",
+            description="Resout une contrainte temporelle utilisateur contre le vrai planning et retourne les seances candidates.",
+            input_schema={
+                "type": "object",
+                "properties": {
+                    "reference_label": {"type": "string", "description": "Label humain, ex: demain soir."},
+                    "resolved_date": {"type": "string", "description": "Date visee en ISO YYYY-MM-DD."},
+                    "day_key": {"type": "string", "description": "Jour vise si connu, ex: thursday."},
+                    "window": {"type": "string", "description": "Fenetre visee: morning, midday, evening."},
+                    "scope": {"type": "string", "description": "single_window, single_day ou week."},
+                    "limit": {"type": "integer", "description": "Nombre max de seances a retourner."},
+                },
+                "required": [],
+            },
+            allowed_pipelines=("conversation", "planning"),
+            handler=_resolve_planning_window_tool,
         ),
         ToolSpec(
             name="get_recent_activities",
@@ -192,6 +211,48 @@ def _get_recent_activities(context: ToolContext, arguments: dict[str, Any]) -> T
         status="ok",
         payload={"days": days, "activities": items},
         summary=f"{len(items)} activites sur {days} jours.",
+    )
+
+
+def _resolve_planning_window_tool(context: ToolContext, arguments: dict[str, Any]) -> ToolResult:
+    resolved = resolve_planning_window_inputs(
+        reference_label=str(arguments.get("reference_label") or arguments.get("resolved_date") or arguments.get("day_key") or "fenetre"),
+        resolved_date=_parse_date(arguments.get("resolved_date")),
+        day_key=str(arguments.get("day_key") or "").strip() or None,
+        window=str(arguments.get("window") or "").strip() or None,
+        scope=str(arguments.get("scope") or "single_window"),
+        scheduled_sessions=context.scheduled_sessions,
+        timezone_name=context.timezone_name,
+        now=context.now,
+        limit=_coerce_int(arguments.get("limit"), default=8, minimum=1, maximum=20),
+    )
+    return ToolResult(
+        tool_name="resolve_planning_window",
+        status="ok",
+        payload={
+            "reference_label": resolved.reference_label,
+            "scope": resolved.scope,
+            "resolved_date": resolved.resolved_date.isoformat() if resolved.resolved_date else None,
+            "window": resolved.window,
+            "matched_session_id": resolved.matched_session_id,
+            "exact_match": resolved.exact_match,
+            "needs_clarification": resolved.needs_clarification,
+            "clarification_reason": resolved.clarification_reason,
+            "candidate_sessions": [
+                {
+                    "session_id": item.session_id,
+                    "scheduled_date": item.scheduled_date.isoformat(),
+                    "day_key": item.day_key,
+                    "part_of_day": item.part_of_day,
+                    "sport_type": item.sport_type,
+                    "session_title": item.session_title,
+                    "completion_status": item.completion_status,
+                    "priority": item.priority,
+                }
+                for item in resolved.candidate_sessions
+            ],
+        },
+        summary=format_planning_window_summary(resolved),
     )
 
 

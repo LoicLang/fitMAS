@@ -59,6 +59,7 @@ class OnboardingPlannerFlowTest(unittest.TestCase):
         ):
             onboard = self.client.post("/api/v0/onboard", json=payload)
             self.assertEqual(onboard.status_code, 200)
+            self.assertEqual(onboard.json()["calibration_status"]["phase"], "draft")
             onboard_week = onboard.json()["week_plan"]
             onboard_days = onboard_week["days"]
             self.assertEqual(len(onboard_days), 7)

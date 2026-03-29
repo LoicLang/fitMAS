@@ -12,7 +12,8 @@ from datetime import datetime, timezone
 
 from sqlalchemy.orm import Session
 
-from fitmas import repository as repo, schema as s
+from fitmas import schema as s
+from fitmas.memory_profile import get_active_profile_memory, upsert_profile_memory
 
 logger = logging.getLogger(__name__)
 
@@ -89,7 +90,7 @@ def update_threshold_facts(
         if vma < current_vma * 0.90:
             return False
 
-    repo.upsert_facts(db, user.id, [{
+    upsert_profile_memory(db, user.id, [{
         "category": "threshold",
         "key": "vma",
         "value": str(vma),
@@ -105,7 +106,7 @@ def update_threshold_facts(
 
 def _get_threshold_fact_value(db: Session, user_id: int, key: str) -> float | None:
     """Get current threshold fact value."""
-    facts = repo.get_active_facts(db, user_id)
+    facts = get_active_profile_memory(db, user_id)
     for fact in facts:
         if fact.category == "threshold" and fact.key == key:
             try:

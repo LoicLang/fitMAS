@@ -254,6 +254,71 @@ class HeartbeatGroundingTest(unittest.TestCase):
         self.assertIn("activite declaree non loggee", captured["prompt"].lower())
         self.assertIn("30 min", captured["prompt"])
 
+    def test_morning_briefing_can_attach_hidden_calibration_need(self) -> None:
+        now = get_local_now(self.user.timezone)
+        today_key = DAY_KEYS[now.weekday()]
+        tomorrow_key = DAY_KEYS[(now.weekday() + 1) % 7]
+        repo.replace_plan(
+            self.db,
+            self.user.id,
+            intention="test",
+            summary="test",
+            timezone_name=self.user.timezone,
+            days=[
+                {
+                    "day": today_key,
+                    "label": day_label_fr(today_key, capitalize=True),
+                    "sport_type": "running",
+                    "session_type": "easy",
+                    "session_title": "Footing",
+                    "session_goal": "Bouger",
+                    "session_note": "",
+                    "session_description": "",
+                    "duration_min": 45,
+                    "intensity": "easy",
+                    "load_score": 1,
+                    "priority": "Normal",
+                    "nutrition_focus": "",
+                    "flexibility": "stable",
+                    "completion_status": "planned",
+                },
+            ],
+        )
+        self.db.add(
+            s.ScheduledSession(
+                user_id=self.user.id,
+                day=tomorrow_key,
+                label=day_label_fr(tomorrow_key, capitalize=True),
+                scheduled_date=(now + timedelta(days=1)).replace(hour=7, minute=0, second=0, microsecond=0, tzinfo=None),
+                sport_type="running",
+                session_type="tempo",
+                session_title="Tempo",
+                session_goal="Stimulus",
+                session_note="",
+                session_description="",
+                duration_min=55,
+                intensity="hard",
+                load_score=4,
+                priority="Seance cle",
+                nutrition_focus="",
+                flexibility="stable",
+                completion_status="planned",
+            )
+        )
+        self.user.onboarding_status = "completed"
+        self.user.weekly_structure_notes = "mardi matin fiable"
+        self.db.commit()
+        original_llm = heartbeat._llm_generate
+        try:
+            heartbeat._llm_generate = lambda *args, **kwargs: "Bonjour. Aujourd'hui on garde du propre. Je veux juste verrouiller un point pour demain: tu le tiens plutot le matin ou le soir ?"
+            draft = heartbeat.morning_briefing()
+        finally:
+            heartbeat._llm_generate = original_llm
+
+        self.assertIsNotNone(draft)
+        self.assertTrue(draft.memory_updates)
+        self.assertEqual(draft.memory_updates[0]["category"], "calibration_need")
+
     def test_weekly_review_prompt_mentions_claimed_activities(self) -> None:
         now = get_local_now(self.user.timezone)
         today_key = DAY_KEYS[now.weekday()]

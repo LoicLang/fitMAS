@@ -12,6 +12,7 @@ from fitmas.conversation_prompting import select_conversation_prompt_policy
 from fitmas.fact_memory import normalize_fact_payload as normalize_fact_memory_payload
 from fitmas.fact_memory import select_relevant_facts
 from fitmas.knowledge import load_sport_knowledge
+from fitmas.onboarding_contract import build_coach_profile, build_goal_summary
 from fitmas.time_context import build_time_context, render_time_context
 from fitmas.tool_contract import ToolCall, ToolContext
 from fitmas.tool_metrics import build_tool_trace, log_tool_trace
@@ -238,6 +239,7 @@ Tu dois respecter cette hierarchie de verite:
 N'affirme jamais une duree ou un sport comme un fait si cela vient seulement du plan et qu'un claim utilisateur plus recent dit autre chose.
 Si une activite reelle existe aujourd'hui mais sur un autre sport que le plan, ne dis jamais "tu n'as rien fait". Le bon diagnostic est "hors plan" ou "pas la seance prevue".
 Si la bonne reponse est purement temporelle ou explicative, garde "mutation_type": "no_change" et reponds clairement dans "fitmas_message".
+Si l'utilisateur pose une question factuelle sur l'historique, le planning, la date, ou une seance, reponds en 1-2 phrases max, sans jugement, sans micro-analyse de niveau, sans recadrage non demande.
 
 Exemples:
 - "mardi c'est mort, je bascule sur jeudi" → move_session, target_session_id: 12, target_date: "2026-03-26"
@@ -554,15 +556,19 @@ def make_timeline_summary(sessions: list) -> str:
 
 def preview_coach_voice(context: dict, *, time_context: dict | None = None) -> list[str]:
     resolved_time_context = time_context or build_time_context(context.get("timezone"))
+    coach = build_coach_profile(context)
     prompt = f"""{render_time_context(resolved_time_context)}
 Contexte user:
-- objectif: {context['primary_objective']}
+- cap: {build_goal_summary(context)}
 - sports: {", ".join(context['sports'])}
-- style: {context['coach_style']}
-- relation voulue: {context['coach_relationship']}
-- ce que le coach doit faire: {context['coach_do']}
-- ce qu'il ne doit jamais faire: {context['coach_dont']}
-- ame libre: {context['coach_soul']}
+- realite de semaine: {context.get('weekly_structure_notes', '')}
+- etat actuel: {context.get('current_state_notes', '') or 'encore en cours de calibration'}
+- preset: {coach['coach_preset_label']}
+- style: {coach['coach_style']}
+- relation voulue: {coach['coach_relationship']}
+- ce que le coach doit faire: {coach['coach_do']}
+- ce qu'il ne doit jamais faire: {coach['coach_dont']}
+- ame libre: {coach['coach_soul']}
 
 Genere exactement 3 messages courts que ce coach pourrait envoyer.
 Scenario:
@@ -585,21 +591,24 @@ Contraintes:
 
 def formulate_onboarding_recap(context: dict, *, time_context: dict | None = None) -> str:
     resolved_time_context = time_context or build_time_context(context.get("timezone"))
+    coach = build_coach_profile(context)
     prompt = f"""{render_time_context(resolved_time_context)}
 Tu dois rediger le recap final d'un onboarding.
 
 Contexte:
 - sports: {", ".join(context['sports'])}
-- objectif: {context['primary_objective']}
+- cap: {build_goal_summary(context)}
 - realite de semaine: {context['weekly_structure_notes']}
+- etat actuel: {context.get('current_state_notes', '') or 'encore a lire sur les premieres semaines'}
 - contraintes: {" ; ".join(context['constraints']) or "aucune precisee"}
 - preferences: {" ; ".join(context['preferences']) or "aucune precisee"}
-- coach: {context['coach_name']} / style {context['coach_style']}
-- ame: {context['coach_soul']}
+- coach: {coach['coach_name']} / preset {coach['coach_preset_label']} / style {coach['coach_style']}
+- ame: {coach['coach_soul']}
 
 Ecris un recap court en 4 a 6 lignes:
 - ce que FitMAS a compris
-- les arbitrages les plus probables
+- ce que tu protegeras des le debut
+- ce qui reste encore a clarifier si besoin
 - le ton du coach
 
 Pas de markdown complexe. Pas de phrase creuse."""
@@ -698,7 +707,7 @@ Regles:
 - session_goal doit dire ce que la seance construit concretement
 - session_description est le coeur: plan de seance structuré, blocs clairs, actionnable immediatement"""
 
-    data = _request_json(system=_COACH_SOUL, prompt=prompt, model="claude-sonnet-4-20250514", max_tokens=3000)
+    data = _request_json(system=_COACH_SOUL, prompt=prompt, model="claude-sonnet-4-6", max_tokens=3000)
     if data:
         try:
             return _merge_week_enrichment(planner_output, data)
@@ -769,7 +778,8 @@ def _merge_week_enrichment(planner_output: dict, enrichment: dict) -> dict:
 
 
 def _fallback_voice_preview(context: dict) -> list[str]:
-    coach_name = context["coach_name"]
+    coach = build_coach_profile(context)
+    coach_name = coach["coach_name"]
     return [
         f"{coach_name} est la. Mardi a l'air fragile. Je prefere garder de l'air plutot que forcer un faux bloc.",
         f"Je te construis une semaine tenable. Si mardi bouge, je garde la structure et je deplace intelligemment.",
@@ -778,13 +788,18 @@ def _fallback_voice_preview(context: dict) -> list[str]:
 
 
 def _fallback_recap(context: dict) -> str:
+    coach = build_coach_profile(context)
     sports = ", ".join(context["sports"])
     constraints = ", ".join(context["constraints"][:3]) or "pas de contrainte forte explicite"
+    goal_summary = build_goal_summary(context) or context["primary_objective"]
+    current_state = context.get("current_state_notes") or "forme recente encore a affiner"
     return (
         f"Voila ce que j'ai retenu pour commencer.\n"
-        f"Tu veux avancer sur {context['primary_objective']} avec une semaine ou {sports} doivent cohabiter proprement.\n"
+        f"Tu veux avancer sur {goal_summary} avec une semaine ou {sports} doivent cohabiter proprement.\n"
+        f"Etat de depart retenu: {current_state}.\n"
         f"Je garde en tete: {constraints}.\n"
-        f"Le coach va parler en mode {context['coach_style']}, avec une voix plus humaine que robotique, et il evitera {context['coach_dont'] or 'les phrases vides'}."
+        f"Je protegerai d'abord les creneaux tenables et les seances qui comptent vraiment.\n"
+        f"Le coach va parler en mode {coach['coach_preset_label'].lower()}, avec une voix {coach['coach_soul']}, et il evitera {coach['coach_dont'] or 'les phrases vides'}."
     )
 
 

@@ -153,6 +153,12 @@ Un message seulement si au moins une condition est vraie :
 - Contenu : question très courte, effort de réponse minimal
 - Exemple : "Tu peux courir demain matin ou seulement le soir ? J'ajuste la semaine selon ça."
 
+Règle d'implémentation :
+- la phrase visible n'est pas hardcodée
+- le coach la formule librement
+- le systeme ne fixe que le besoin interne, les ecritures possibles et les garde-fous
+- jamais de ton formulaire, jamais de "question courte:" expose au user
+
 **3. Feedback contextuel**
 - Trigger : séance clé, signal fatigue, baisse adhérence
 - Contenu : question simple avec utilité visible
