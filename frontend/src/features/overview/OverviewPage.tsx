@@ -147,6 +147,46 @@ export function OverviewPage() {
         </motion.div>
       </section>
 
+      {data.week_context ? (
+        <motion.section
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.6, delay: 0.15 }}
+          className="relative z-10 px-6 pb-10"
+        >
+          <div className="mx-auto max-w-7xl">
+            <div className="rounded-[2rem] border border-black/5 bg-white p-6 shadow-sm md:p-8">
+              <div className="flex flex-col gap-6 md:flex-row md:items-start md:gap-10">
+                <div className="flex-1">
+                  <p className="eyebrow">Lecture coach</p>
+                  <p className="mt-4 text-lg font-medium text-zinc-700 leading-relaxed">
+                    {data.week_context.coach_reading}
+                  </p>
+                </div>
+                <div className="grid grid-cols-2 gap-3 md:w-72 md:shrink-0">
+                  <div className="rounded-[1.2rem] border border-black/6 bg-zinc-50/80 p-4">
+                    <p className="text-[0.65rem] font-bold uppercase tracking-[0.18em] text-zinc-500">Cycle</p>
+                    <div className="mt-2 text-2xl font-black tracking-[-0.04em] text-zinc-950">{data.week_context.planning.cycle_position}</div>
+                  </div>
+                  <div className="rounded-[1.2rem] border border-black/6 bg-zinc-50/80 p-4">
+                    <p className="text-[0.65rem] font-bold uppercase tracking-[0.18em] text-zinc-500">Mode</p>
+                    <div className="mt-2 text-2xl font-black tracking-[-0.04em] text-zinc-950">{data.week_context.planning.mode}</div>
+                  </div>
+                  <div className="rounded-[1.2rem] border border-black/6 bg-zinc-50/80 p-4">
+                    <p className="text-[0.65rem] font-bold uppercase tracking-[0.18em] text-zinc-500">Séances</p>
+                    <div className="mt-2 text-2xl font-black tracking-[-0.04em] text-zinc-950">{data.week_context.summary.done}/{data.week_context.summary.total_sessions}</div>
+                  </div>
+                  <div className="rounded-[1.2rem] border border-black/6 bg-zinc-50/80 p-4">
+                    <p className="text-[0.65rem] font-bold uppercase tracking-[0.18em] text-zinc-500">S+1</p>
+                    <div className="mt-2 text-2xl font-black tracking-[-0.04em] text-zinc-950">{data.week_context.next_week.focus}</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </motion.section>
+      ) : null}
+
       <motion.section
         style={{ y: sectionsY }}
         initial={{ opacity: 0, y: 24 }}

@@ -98,6 +98,70 @@ export interface CalendarItem {
   completion_status?: string | null;
 }
 
+export interface WeekContextSummary {
+  week_start: string;
+  week_end: string;
+  total_sessions: number;
+  done: number;
+  skipped: number;
+  remaining: number;
+  completion_pct: number;
+  planned_tss: number;
+  actual_tss: number;
+  planned_hours: number;
+  actual_hours: number;
+  sessions: {
+    date: string;
+    sport: string;
+    sport_type: string;
+    title: string;
+    planned_duration_min: number;
+    status: string;
+    actual_duration_min?: number;
+    actual_tss?: number;
+  }[];
+}
+
+export interface WeekContextPlanning {
+  mode: string;
+  mode_key: string;
+  mesocycle_week: number;
+  mesocycle_number: number;
+  cycle_position: string;
+  is_deload: boolean;
+  deload_in_weeks: number;
+  total_weeks: number;
+  target_tss: number;
+  key_sessions: number;
+  strength_sessions: number;
+  long_session: boolean;
+  adaptations: string[];
+  rationale: string[];
+  readiness?: {
+    physical: string;
+    mental: string;
+    logistical: string;
+    injury_risk: string;
+  };
+}
+
+export interface WeekContextNextWeek {
+  cycle_week: number;
+  cycle_position: string;
+  is_deload: boolean;
+  mode: string;
+  mode_key: string;
+  target_tss: number;
+  focus: string;
+}
+
+export interface WeekContext {
+  summary: WeekContextSummary;
+  planning: WeekContextPlanning;
+  next_week: WeekContextNextWeek;
+  coach_reading: string;
+}
+
 export interface OverviewView {
   today: TodayView | null;
   lead_session: CalendarItem | null;
@@ -145,6 +209,7 @@ export interface OverviewView {
     connected: boolean;
     last_sync_at?: string | null;
   };
+  week_context?: WeekContext;
 }
 
 export interface CalendarDay {
@@ -196,6 +261,7 @@ export interface ForecastWeek {
 }
 
 export interface EvolutionView {
+  week_context?: WeekContext;
   week: {
     week_start: string;
     week_end: string;

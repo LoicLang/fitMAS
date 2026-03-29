@@ -189,26 +189,47 @@ export function EvolutionPage() {
 
           <article className="rounded-[2rem] border border-black/5 bg-white p-6 shadow-sm">
             <p className="eyebrow">Lecture coach</p>
-            <div className="mt-6 grid gap-4">
-              {(data.rationale.length ? data.rationale : ["Bloc actif sans alerte majeure."]).map((item) => (
-                <div key={item} className="rounded-[1.4rem] border border-black/6 bg-zinc-50/80 p-4 text-zinc-700">
-                  {item}
-                </div>
-              ))}
-              {data.risk_flags.length ? (
-                <div className="rounded-[1.4rem] border border-[rgba(212,24,61,0.14)] bg-[rgba(212,24,61,0.05)] p-4 text-[#b31333]">
-                  <div className="flex items-center gap-2 text-sm font-semibold uppercase tracking-[0.18em]">
-                    <AlertTriangle className="h-4 w-4" />
-                    Flags
+            {data.week_context ? (
+              <div className="mt-6">
+                <p className="text-lg font-medium text-zinc-700 leading-relaxed">{data.week_context.coach_reading}</p>
+                <div className="mt-6 grid grid-cols-2 gap-3">
+                  <div className="rounded-[1.2rem] border border-black/6 bg-zinc-50/80 p-4">
+                    <p className="text-[0.65rem] font-bold uppercase tracking-[0.18em] text-zinc-500">Cycle</p>
+                    <div className="mt-2 text-xl font-black tracking-[-0.04em] text-zinc-950">{data.week_context.planning.cycle_position}</div>
                   </div>
-                  <div className="mt-3 flex flex-wrap gap-2">
-                    {data.risk_flags.map((flag) => (
-                      <span key={flag} className="rounded-full bg-white px-3 py-1.5 text-xs font-bold uppercase tracking-[0.14em]">{flag}</span>
-                    ))}
+                  <div className="rounded-[1.2rem] border border-black/6 bg-zinc-50/80 p-4">
+                    <p className="text-[0.65rem] font-bold uppercase tracking-[0.18em] text-zinc-500">S+1</p>
+                    <div className="mt-2 text-xl font-black tracking-[-0.04em] text-zinc-950">{data.week_context.next_week.focus}</div>
                   </div>
                 </div>
-              ) : null}
-            </div>
+                {data.week_context.planning.deload_in_weeks > 0 && !data.week_context.planning.is_deload ? (
+                  <p className="mt-4 text-sm font-medium text-zinc-500">
+                    Assimilation dans {data.week_context.planning.deload_in_weeks} semaine{data.week_context.planning.deload_in_weeks > 1 ? "s" : ""}
+                  </p>
+                ) : null}
+              </div>
+            ) : (
+              <div className="mt-6 grid gap-4">
+                {(data.rationale.length ? data.rationale : ["Bloc actif sans alerte majeure."]).map((item) => (
+                  <div key={item} className="rounded-[1.4rem] border border-black/6 bg-zinc-50/80 p-4 text-zinc-700">
+                    {item}
+                  </div>
+                ))}
+              </div>
+            )}
+            {data.risk_flags.length ? (
+              <div className="mt-4 rounded-[1.4rem] border border-[rgba(212,24,61,0.14)] bg-[rgba(212,24,61,0.05)] p-4 text-[#b31333]">
+                <div className="flex items-center gap-2 text-sm font-semibold uppercase tracking-[0.18em]">
+                  <AlertTriangle className="h-4 w-4" />
+                  Flags
+                </div>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {data.risk_flags.map((flag) => (
+                    <span key={flag} className="rounded-full bg-white px-3 py-1.5 text-xs font-bold uppercase tracking-[0.14em]">{flag}</span>
+                  ))}
+                </div>
+              </div>
+            ) : null}
           </article>
         </div>
       </div>
