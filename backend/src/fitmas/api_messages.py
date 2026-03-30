@@ -67,6 +67,43 @@ _MOTIVATION_TEXTS = {
     "je suis chaud",
     "je suis chaud cette semaine",
 }
+_POST_REPLY_HEALTH_TEXT_MARKERS = (
+    "j ai mal",
+    "j'ai mal",
+    "douleur",
+    "gene",
+    "gêne",
+    "ca tire",
+    "ça tire",
+    "fatigue",
+    "crame",
+    "cramé",
+    "rince",
+    "rincé",
+)
+_NO_CHANGE_MUTATION_MARKERS = (
+    "j annule",
+    "j'oublie",
+    "on oublie",
+    "j annule",
+    "on annule",
+    "je deplace",
+    "on decale",
+    "je remplace",
+    "on remplace",
+    "je te mets",
+    "on te met",
+    "on y va sur",
+    "on met pas",
+)
+_LOAD_RECALIBRATION_MARKERS = (
+    "loup",
+    "rate",
+    "raté",
+    "charges",
+    "charge",
+    "semaine derniere",
+)
 
 
 def _resolve_day_updated(decision: MutationDecision) -> DayId | None:
@@ -113,6 +150,20 @@ def _maybe_low_signal_reply(text: str, *, has_open_calibration_need: bool) -> st
     if normalized in _MOTIVATION_TEXTS:
         return "Bien. On garde cette energie, rien a changer pour l'instant."
     return None
+
+
+def _should_run_post_reply_health_adaptation(
+    *,
+    user_text: str,
+    extracted_facts: list[dict],
+    user_indication: UserIndication | None,
+) -> bool:
+    if user_indication is not None and user_indication.kind is UserIndicationKind.HEALTH_SIGNAL:
+        return True
+    if not any(str(fact.get("category") or "") in {"health", "fatigue"} for fact in extracted_facts):
+        return False
+    normalized = _normalize_text(user_text)
+    return any(marker in normalized for marker in _POST_REPLY_HEALTH_TEXT_MARKERS)
 
 
 def _week_scope_reply(indication: UserIndication | None, resolution) -> str | None:
@@ -320,6 +371,24 @@ def _render_applied_decision_reply(
     if decision.rationale:
         parts.append(decision.rationale)
     return " ".join(parts)
+
+
+def _sanitize_no_change_reply(*, user_text: str, reply_text: str, decision: MutationDecision) -> str:
+    if decision.mutation_type != "no_change":
+        return reply_text
+    normalized_reply = _normalize_text(reply_text)
+    if not any(marker in normalized_reply for marker in _NO_CHANGE_MUTATION_MARKERS):
+        return reply_text
+    normalized_user = _normalize_text(user_text)
+    if any(marker in normalized_user for marker in _LOAD_RECALIBRATION_MARKERS):
+        return (
+            "Tu as raison. Vu la semaine reelle, on ne repart pas comme si tout avait ete encaisse. "
+            "On doit recalibrer la suite plus simple avant de recharger."
+        )
+    return (
+        "Je reste propre sur les faits: tant qu'un changement n'est pas applique au planning, "
+        "je n'en parle pas comme si c'etait deja fait."
+    )
 
 
 @router.post("/api/v0/messages", response_model=MessageReply)
@@ -562,6 +631,11 @@ def post_message(payload: IncomingMessage, db: Session = Depends(get_db)) -> Mes
             updated_session=updated_session,
             fallback_text=decision.fitmas_message,
         )
+        reply_text = _sanitize_no_change_reply(
+            user_text=payload.text,
+            reply_text=reply_text,
+            decision=decision,
+        )
         extraction = Extraction(confidence=adaptation.event.confidence if adaptation else 0.85)
         day_updated = _resolve_day_updated(decision)
         logger.info("LLM reply (%s): %s", decision.mutation_type, reply_text[:120])
@@ -592,7 +666,11 @@ def post_message(payload: IncomingMessage, db: Session = Depends(get_db)) -> Mes
     if extracted_facts:
         _persist_memory_updates(db, user.id, extracted_facts)
 
-        if not health_indication_handled:
+        if not health_indication_handled and _should_run_post_reply_health_adaptation(
+            user_text=payload.text,
+            extracted_facts=extracted_facts,
+            user_indication=user_indication,
+        ):
             try:
                 health_result = check_and_adapt_health_facts(db, user, extracted_facts)
                 if health_result and health_result.applied and health_result.message:

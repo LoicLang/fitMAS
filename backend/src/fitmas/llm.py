@@ -110,16 +110,118 @@ def _request_json(*, system: str, prompt: str, model: str = "claude-haiku-4-5-20
     raw = _request_text(system=system, prompt=prompt, model=model, max_tokens=max_tokens)
     if not raw:
         return None
-    if raw.startswith("```"):
-        raw = raw.split("```")[1]
-        if raw.startswith("json"):
-            raw = raw[4:]
-        raw = raw.strip()
-    try:
-        return json.loads(raw)
-    except Exception:
-        logger.exception("Failed to decode LLM JSON: %s", raw[:200])
+    cleaned = _strip_json_fences(raw)
+    for candidate in _json_parse_candidates(cleaned):
+        try:
+            loaded = json.loads(candidate)
+        except Exception:
+            continue
+        if isinstance(loaded, dict):
+            return loaded
+    logger.exception("Failed to decode LLM JSON: %s", cleaned[:200])
+    return None
+
+
+def _strip_json_fences(raw: str) -> str:
+    candidate = raw.strip()
+    if candidate.startswith("```"):
+        parts = candidate.split("```")
+        if len(parts) >= 2:
+            candidate = parts[1]
+    if candidate.startswith("json"):
+        candidate = candidate[4:]
+    return candidate.strip()
+
+
+def _json_parse_candidates(raw: str) -> list[str]:
+    candidates: list[str] = []
+    started = _slice_from_json_start(raw)
+    for candidate in (
+        raw.strip(),
+        started,
+        _balanced_json_prefix(started),
+        _repair_truncated_json(started),
+    ):
+        normalized = str(candidate or "").strip()
+        if not normalized or normalized in candidates:
+            continue
+        candidates.append(normalized)
+    return candidates
+
+
+def _slice_from_json_start(raw: str) -> str:
+    start_positions = [pos for pos in (raw.find("{"), raw.find("[")) if pos >= 0]
+    if not start_positions:
+        return raw
+    return raw[min(start_positions):].strip()
+
+
+def _balanced_json_prefix(raw: str) -> str | None:
+    if not raw:
         return None
+    stack: list[str] = []
+    in_string = False
+    escape = False
+    started = False
+    for idx, char in enumerate(raw):
+        if escape:
+            escape = False
+            continue
+        if char == "\\" and in_string:
+            escape = True
+            continue
+        if char == '"':
+            in_string = not in_string
+            continue
+        if in_string:
+            continue
+        if char in "{[":
+            stack.append(char)
+            started = True
+            continue
+        if char in "}]":
+            if not stack:
+                return None
+            opener = stack.pop()
+            if (opener, char) not in {("{", "}"), ("[", "]")}:
+                return None
+            if started and not stack:
+                return raw[: idx + 1]
+    return None
+
+
+def _repair_truncated_json(raw: str) -> str | None:
+    if not raw:
+        return None
+    buffer: list[str] = []
+    stack: list[str] = []
+    in_string = False
+    escape = False
+    for char in raw:
+        buffer.append(char)
+        if escape:
+            escape = False
+            continue
+        if char == "\\" and in_string:
+            escape = True
+            continue
+        if char == '"':
+            in_string = not in_string
+            continue
+        if in_string:
+            continue
+        if char in "{[":
+            stack.append(char)
+            continue
+        if char in "}]":
+            if stack and (stack[-1], char) in {("{", "}"), ("[", "]")}:
+                stack.pop()
+    repaired = "".join(buffer).rstrip()
+    if in_string:
+        repaired += '"'
+    if stack:
+        repaired += "".join("}" if opener == "{" else "]" for opener in reversed(stack))
+    return repaired.strip()
 
 
 def decide(
@@ -239,6 +341,8 @@ Tu dois respecter cette hierarchie de verite:
 N'affirme jamais une duree ou un sport comme un fait si cela vient seulement du plan et qu'un claim utilisateur plus recent dit autre chose.
 Si une activite reelle existe aujourd'hui mais sur un autre sport que le plan, ne dis jamais "tu n'as rien fait". Le bon diagnostic est "hors plan" ou "pas la seance prevue".
 Si la bonne reponse est purement temporelle ou explicative, garde "mutation_type": "no_change" et reponds clairement dans "fitmas_message".
+Si tu choisis "no_change", tu n'as pas le droit de promettre une annulation, un deplacement, un remplacement, une nouvelle duree ou un nouveau sport comme si c'etait deja applique.
+Avec "no_change", tu peux reconnaitre le probleme, expliquer la logique, ou proposer de recalibrer, mais sans decrire une modification de planning non persistée.
 Si l'utilisateur pose une question factuelle sur l'historique, le planning, la date, ou une seance, reponds en 1-2 phrases max, sans jugement, sans micro-analyse de niveau, sans recadrage non demande.
 
 Exemples:

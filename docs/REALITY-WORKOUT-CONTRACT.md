@@ -47,6 +47,79 @@ Tant que ce contrat n'est pas strict, FitMAS peut :
 - `Consigne coach` qui affiche parfois un bout de langage système ou de prompt interne
 - bloc `Trace et profil` affiché même quand il n'y a pas de trace utile à montrer
 
+## Hardening live smokes du 2026-03-30
+
+Suite aux premiers smoke tests réels sur DB jetable + LLM live, trois correctifs ont été priorisés.
+
+### 1. Contestation explicite d'une séance passée
+
+Cas remonté :
+
+- `Je n'ai pas couru hier`
+- FitMAS répondait encore comme si la séance avait été validée
+
+Correctif appliqué :
+
+- ajout d'une détection déterministe de contestation explicite de non-réalisation
+- si aucune activité réelle fortement liée ne confirme la séance, la réponse saute le LLM
+- si la séance avait été marquée `done` sans preuve forte, elle est redescendue en `skipped`
+- le prompt conversationnel reçoit aussi un bloc explicite de contestation si on laisse malgré tout passer au LLM
+
+But :
+
+- ne plus contredire l'athlète sur un fait contesté mais non observé
+
+### 2. Cohérence texte coach vs mutation appliquée
+
+Cas remonté :
+
+- texte coach disant `40 min`
+- mutation réellement appliquée à `30 min`
+
+Correctif appliqué :
+
+- pour `replace_session`, le texte final rendu à l'utilisateur est reconstruit à partir de l'état réellement appliqué
+- on ne laisse plus un `fitmas_message` libre dériver par rapport à la mutation DB
+- et si le LLM choisit `no_change`, le prompt lui interdit maintenant de parler comme si un move / replace / cancel etait deja appliqué
+
+But :
+
+- le texte final doit toujours refléter la séance réelle en base
+
+### 3. Parsing JSON LLM tronqué
+
+Cas remonté :
+
+- `Failed to decode LLM JSON`
+- réponse JSON tronquée en fin de génération
+
+Correctif appliqué :
+
+- `_request_json()` tente maintenant plusieurs candidats
+- strip code fences
+- extraction d'un préfixe JSON équilibré
+- réparation conservatrice de fin tronquée : fermeture de string / accolades / crochets
+
+But :
+
+- récupérer les troncatures simples sans ajouter de magie opaque
+
+### 4. Garde-fou sur les adaptations santé post-réponse
+
+Cas remonté :
+
+- une conversation sur la charge de la semaine pouvait encore déclencher une adaptation santé/fatigue en post-traitement
+- résultat : séance mutée sans que le texte principal reflète ce changement
+
+Correctif appliqué :
+
+- l'adaptation santé post-réponse ne tourne plus sur simple présence d'un fact `fatigue` extrait
+- il faut aussi un vrai signal santé/fatigue dans le texte utilisateur ou une `UserIndication` santé explicite
+
+But :
+
+- éviter les mutations cachées quand le message est surtout conversationnel / stratégique
+
 ## Diagnostic
 
 Le système mélange encore trop facilement :

@@ -674,6 +674,64 @@ class FitMASCoreFlowsTest(unittest.TestCase):
         self.assertIn("30 min", result["assistant_message"]["text"])
         self.assertNotIn("40 min", result["assistant_message"]["text"])
 
+    def test_post_reply_health_adaptation_stays_off_for_non_health_message(self) -> None:
+        self._create_plan_for_today()
+        original_decide = api_messages.decide
+        original_extract_facts = api_messages.extract_facts
+        original_health = api_messages.check_and_adapt_health_facts
+        called = {"health": False}
+        try:
+            api_messages.decide = lambda *args, **kwargs: MutationDecision(
+                mutation_type="no_change",
+                rationale="question charge",
+                fitmas_message="On repart plus leger.",
+            )
+            api_messages.extract_facts = lambda *args, **kwargs: [
+                {
+                    "category": "fatigue",
+                    "key": "fatigue_week_missed",
+                    "value": "Fatigue percue apres semaine incomplete",
+                    "confidence": 0.7,
+                    "confirmed": True,
+                    "source": "conversation",
+                    "affects": ["conversation"],
+                    "action": "upsert",
+                }
+            ]
+
+            def fake_health(*args, **kwargs):
+                called["health"] = True
+                raise AssertionError("health adaptation should stay off for non-health conversation")
+
+            api_messages.check_and_adapt_health_facts = fake_health
+            result = self.client.post("/api/v0/messages", json={"text": "J'ai loupé presque toute la semaine derniere et la tu charges quand meme autant ?"}).json()
+        finally:
+            api_messages.decide = original_decide
+            api_messages.extract_facts = original_extract_facts
+            api_messages.check_and_adapt_health_facts = original_health
+
+        self.assertFalse(called["health"])
+        self.assertIn("plus leger", result["assistant_message"]["text"])
+
+    def test_no_change_reply_does_not_promise_unapplied_load_recalibration(self) -> None:
+        self._create_plan_for_today()
+        original_decide = api_messages.decide
+        original_extract_facts = api_messages.extract_facts
+        try:
+            api_messages.decide = lambda *args, **kwargs: MutationDecision(
+                mutation_type="no_change",
+                rationale="recalibrage a discuter",
+                fitmas_message="On oublie demain, on y va sur 40min technique et dimanche 30min running.",
+            )
+            api_messages.extract_facts = lambda *args, **kwargs: []
+            result = self.client.post("/api/v0/messages", json={"text": "J'ai loupé presque toute la semaine derniere et la tu charges quand meme autant ?"}).json()
+        finally:
+            api_messages.decide = original_decide
+            api_messages.extract_facts = original_extract_facts
+
+        self.assertNotIn("40min", result["assistant_message"]["text"])
+        self.assertIn("recalibrer", result["assistant_message"]["text"])
+
     def test_message_flow_can_consume_hidden_calibration_answer_without_llm(self) -> None:
         self._create_plan_for_today()
         need = calibration_needs.CalibrationNeed(
