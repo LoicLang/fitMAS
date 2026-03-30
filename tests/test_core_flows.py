@@ -610,6 +610,31 @@ class FitMASCoreFlowsTest(unittest.TestCase):
         self.assertEqual(len(facts), 1)
         self.assertEqual(facts[0]["category"], "execution")
 
+    def test_explicit_non_completion_correction_skips_llm_and_downgrades_unverified_done(self) -> None:
+        _, session = self._create_plan_for_today()
+        session.scheduled_date = session.scheduled_date - timedelta(days=1)
+        session.day = DAY_KEYS[session.scheduled_date.weekday()]
+        session.completion_status = "done"
+        self.db.commit()
+
+        original_decide = api_messages.decide
+        original_extract_facts = api_messages.extract_facts
+        try:
+            def should_not_run(*args, **kwargs):
+                raise AssertionError("LLM decide should not run for explicit non-completion correction")
+
+            api_messages.decide = should_not_run
+            api_messages.extract_facts = lambda *args, **kwargs: []
+            result = self.client.post("/api/v0/messages", json={"text": "Je n'ai pas couru hier"}).json()
+        finally:
+            api_messages.decide = original_decide
+            api_messages.extract_facts = original_extract_facts
+
+        updated = repo.get_scheduled_session(self.db, self.user.id, session.id)
+
+        self.assertIn("Je ne compte pas", result["assistant_message"]["text"])
+        self.assertEqual(updated.completion_status, "skipped")
+
     def test_message_flow_can_consume_hidden_calibration_answer_without_llm(self) -> None:
         self._create_plan_for_today()
         need = calibration_needs.CalibrationNeed(

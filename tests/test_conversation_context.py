@@ -8,6 +8,7 @@ from fitmas.conversation_context import (
     build_claim_memory_updates,
     build_conversation_context,
     execution_summary_for_prompt,
+    non_completion_summary_for_prompt,
     temporal_summary_for_prompt,
 )
 
@@ -77,6 +78,23 @@ class ConversationContextTest(unittest.TestCase):
         self.assertEqual(len(updates), 2)
         actions = {payload["action"] for payload in updates}
         self.assertEqual(actions, {"upsert", "archive"})
+
+    def test_non_completion_summary_is_exposed_for_prompt(self) -> None:
+        context = build_conversation_context(
+            user_text="Je n'ai pas couru hier",
+            conversation_history=[],
+            timezone_name="Europe/Paris",
+            scheduled_sessions=[],
+            activities=[],
+            active_facts=[],
+            now=datetime.fromisoformat("2026-03-30T08:00:00+02:00"),
+        )
+
+        summary = non_completion_summary_for_prompt(context)
+
+        self.assertIn("non realise", summary)
+        self.assertIn("running", summary)
+        self.assertIn("2026-03-29", summary)
 
 
 if __name__ == "__main__":

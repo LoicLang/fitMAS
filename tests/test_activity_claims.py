@@ -6,9 +6,11 @@ from datetime import datetime
 from fitmas.activity_claims import (
     build_claim_correction_payloads,
     build_claim_fact_payloads,
+    extract_non_completion_claim,
     extract_claims_from_facts,
     extract_activity_claim,
     extract_recent_activity_claim,
+    format_non_completion_claim_for_prompt,
     is_activity_claim_correction,
 )
 
@@ -137,6 +139,18 @@ class ActivityClaimsTest(unittest.TestCase):
         self.assertEqual(len(payloads), 1)
         self.assertEqual(payloads[0]["action"], "archive")
         self.assertIn("2026-03-22", payloads[0]["key"])
+
+    def test_extracts_non_completion_claim(self) -> None:
+        claim = extract_non_completion_claim(
+            "Je n'ai pas couru hier",
+            timezone_name="Europe/Paris",
+            now=datetime.fromisoformat("2026-03-30T08:00:00+02:00"),
+        )
+
+        self.assertIsNotNone(claim)
+        self.assertEqual(claim.sport_type, "running")
+        self.assertEqual(claim.resolved_date_iso, "2026-03-29")
+        self.assertIn("non realise", format_non_completion_claim_for_prompt(claim))
 
 
 if __name__ == "__main__":

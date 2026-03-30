@@ -6,11 +6,14 @@ from typing import Any, Sequence
 
 from fitmas.activity_claims import (
     ActivityClaim,
+    NonCompletionClaim,
     build_claim_correction_payloads,
     build_claim_fact_payloads,
     extract_activity_claim,
+    extract_non_completion_claim,
     extract_recent_activity_claim,
     format_activity_claim_for_prompt,
+    format_non_completion_claim_for_prompt,
     is_activity_claim_correction,
 )
 from fitmas.execution_context import (
@@ -36,6 +39,7 @@ class ConversationContextBundle:
     previous_activity_claim: ActivityClaim | None
     current_activity_claim: ActivityClaim | None
     recent_activity_claim: ActivityClaim | None
+    non_completion_claim: NonCompletionClaim | None
     active_facts: tuple[dict[str, Any], ...]
     selected_facts: tuple[str, ...]
     selected_signals: tuple[Signal, ...]
@@ -84,6 +88,11 @@ def build_conversation_context(
             timezone_name=timezone_name,
             now=now,
         ),
+        non_completion_claim=extract_non_completion_claim(
+            user_text,
+            timezone_name=timezone_name,
+            now=now,
+        ),
         active_facts=normalized_facts,
         selected_facts=tuple(select_relevant_facts(normalized_facts, affects=["conversation"], limit=6, now=now)),
         selected_signals=selected_signals,
@@ -125,6 +134,10 @@ def temporal_summary_for_prompt(context: ConversationContextBundle) -> str:
 
 def activity_claim_summary_for_prompt(context: ConversationContextBundle) -> str:
     return format_activity_claim_for_prompt(context.recent_activity_claim)
+
+
+def non_completion_summary_for_prompt(context: ConversationContextBundle) -> str:
+    return format_non_completion_claim_for_prompt(context.non_completion_claim)
 
 
 def signal_summary_for_prompt(context: ConversationContextBundle) -> str:

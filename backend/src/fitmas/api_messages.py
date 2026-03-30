@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 import unicodedata
+from datetime import date, datetime
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
@@ -9,6 +10,7 @@ from sqlalchemy.orm import Session
 from fitmas import mutations, repository as repo
 from fitmas.adaptation import check_and_adapt_health_facts
 from fitmas.adaptation_log import build_adaptation_log_entry
+from fitmas.execution_evidence import classify_execution_evidence
 from fitmas.athlete_profile import build_athlete_profile
 from fitmas.api_payloads import IncomingMessage
 from fitmas.calibration_llm import extract_calibration_resolution, generate_calibration_ack
@@ -23,6 +25,7 @@ from fitmas.conversation_context import (
     build_claim_memory_updates,
     build_conversation_context,
     execution_summary_for_prompt,
+    non_completion_summary_for_prompt,
     signal_summary_for_prompt,
     temporal_summary_for_prompt,
 )
@@ -48,6 +51,7 @@ from fitmas.user_indications import (
     build_health_fact_payloads_from_indication,
     supports_planning_resolution,
 )
+from fitmas.time_context import get_timezone
 
 logger = logging.getLogger(__name__)
 
@@ -193,6 +197,102 @@ def _persist_memory_updates(db: Session, user_id: int, payloads: list[dict]) -> 
         repo.upsert_working_memory(db, user_id, working_payloads)
 
 
+def _value(obj, key: str):
+    if obj is None:
+        return None
+    if isinstance(obj, dict):
+        return obj.get(key)
+    return getattr(obj, key, None)
+
+
+def _coerce_local_date(value, *, timezone_name: str | None) -> date | None:
+    if value is None:
+        return None
+    if isinstance(value, date) and not isinstance(value, datetime):
+        return value
+    if isinstance(value, datetime):
+        if value.tzinfo is None:
+            return value.date()
+        return value.astimezone(get_timezone(timezone_name)).date()
+    if isinstance(value, str):
+        try:
+            parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+        except ValueError:
+            try:
+                return date.fromisoformat(value[:10])
+            except ValueError:
+                return None
+        if parsed.tzinfo is None:
+            return parsed.date()
+        return parsed.astimezone(get_timezone(timezone_name)).date()
+    return None
+
+
+def _execution_contestation_reply(
+    *,
+    db: Session,
+    user,
+    scheduled_sessions,
+    activities,
+    timezone_name: str | None,
+    non_completion_claim,
+) -> str | None:
+    if non_completion_claim is None or non_completion_claim.resolved_date_iso is None:
+        return None
+
+    target_date = date.fromisoformat(non_completion_claim.resolved_date_iso)
+    sessions_on_date = [
+        session
+        for session in scheduled_sessions
+        if _coerce_local_date(_value(session, "scheduled_date"), timezone_name=timezone_name) == target_date
+        and str(_value(session, "sport_type") or "").lower() != "rest"
+    ]
+    target_session = next(
+        (
+            session
+            for session in sessions_on_date
+            if non_completion_claim.sport_type
+            and str(_value(session, "sport_type") or "").lower() == non_completion_claim.sport_type
+        ),
+        sessions_on_date[0] if len(sessions_on_date) == 1 else None,
+    )
+    activities_on_date = [
+        activity
+        for activity in activities
+        if _coerce_local_date(_value(activity, "started_at") or _value(activity, "created_at"), timezone_name=timezone_name) == target_date
+    ]
+    evidence = classify_execution_evidence(
+        planned_session=target_session,
+        activities=activities_on_date,
+    )
+    if evidence.display_status == "confirmed_done":
+        return None
+
+    if target_session is not None and str(_value(target_session, "completion_status") or "").lower() == "done":
+        updated_session = repo.set_scheduled_session_status(db, int(_value(target_session, "id")), "skipped")
+        if updated_session is not None:
+            _, day_plan = repo.get_current_week_day_plan_for_session(db, user=user, session=updated_session)
+            if day_plan is not None and str(day_plan.completion_status or "").lower() == "done":
+                day_plan.completion_status = "skipped"
+                db.commit()
+
+    title = str(_value(target_session, "session_title") or "").strip()
+    if title:
+        subject = title.lower()
+    elif non_completion_claim.sport_type:
+        sport_labels = {
+            "running": "cette sortie running",
+            "swimming": "cette seance natation",
+            "cycling": "cette sortie velo",
+            "strength": "cette seance renfo",
+            "climbing": "cette seance escalade",
+        }
+        subject = sport_labels.get(non_completion_claim.sport_type, "cette seance")
+    else:
+        subject = "cette seance"
+    return f"OK. Je ne compte pas {subject} comme faite. Je repars de ce que tu me dis, pas d'une validation implicite."
+
+
 @router.post("/api/v0/messages", response_model=MessageReply)
 def post_message(payload: IncomingMessage, db: Session = Depends(get_db)) -> MessageReply:
     user = repo.get_user_optional(db)
@@ -257,6 +357,10 @@ def post_message(payload: IncomingMessage, db: Session = Depends(get_db)) -> Mes
         active_facts=active_facts,
         signals=signals,
     )
+    claim_summary = activity_claim_summary_for_prompt(conversation_context)
+    non_completion_summary = non_completion_summary_for_prompt(conversation_context)
+    if non_completion_summary:
+        claim_summary = "\n".join(part for part in (claim_summary, non_completion_summary) if part)
     claim_facts = build_claim_memory_updates(
         conversation_context,
         activities=activities,
@@ -275,6 +379,10 @@ def post_message(payload: IncomingMessage, db: Session = Depends(get_db)) -> Mes
             active_facts=active_facts,
             signals=signals,
         )
+        claim_summary = activity_claim_summary_for_prompt(conversation_context)
+        non_completion_summary = non_completion_summary_for_prompt(conversation_context)
+        if non_completion_summary:
+            claim_summary = "\n".join(part for part in (claim_summary, non_completion_summary) if part)
 
     profile_snapshot = build_athlete_profile(user, facts=active_memory_rows)
     user_indication = interpret_user_indication(
@@ -342,6 +450,14 @@ def post_message(payload: IncomingMessage, db: Session = Depends(get_db)) -> Mes
         week_scope_reply = _week_scope_reply(user_indication, resolution)
 
     calibration_only_reply = None
+    execution_contestation_reply = _execution_contestation_reply(
+        db=db,
+        user=user,
+        scheduled_sessions=scheduled_sessions,
+        activities=activities,
+        timezone_name=user.timezone,
+        non_completion_claim=conversation_context.non_completion_claim,
+    )
     if (
         open_calibration_need is not None
         and should_apply_calibration_resolution(calibration_resolution)
@@ -368,7 +484,7 @@ def post_message(payload: IncomingMessage, db: Session = Depends(get_db)) -> Mes
         timeline_summary=make_timeline_summary(timeline),
         execution_summary=execution_summary_for_prompt(conversation_context),
         temporal_summary=temporal_summary_for_prompt(conversation_context),
-        activity_claim_summary=activity_claim_summary_for_prompt(conversation_context),
+        activity_claim_summary=claim_summary,
         signal_summary=signal_summary_for_prompt(conversation_context),
         conversation_history=conversation_history[:-1],
         coach_context={
@@ -392,7 +508,7 @@ def post_message(payload: IncomingMessage, db: Session = Depends(get_db)) -> Mes
             activities=activities,
             active_facts=active_facts,
         ),
-    ) if adaptation is None and calibration_only_reply is None and week_scope_reply is None and no_candidate_reply is None else (
+    ) if adaptation is None and calibration_only_reply is None and week_scope_reply is None and no_candidate_reply is None and execution_contestation_reply is None else (
         _to_mutation_decision(adaptation.selected_scenario.mutation, fitmas_message=adaptation.user_message)
         if adaptation is not None
         else None
@@ -423,6 +539,10 @@ def post_message(payload: IncomingMessage, db: Session = Depends(get_db)) -> Mes
         extraction = Extraction(confidence=max(float(user_indication.confidence or 0.0), 0.85))
         reply_text = no_candidate_reply
         logger.info("No-candidate constraint reply: %s", reply_text[:120])
+    elif execution_contestation_reply is not None:
+        extraction = Extraction(confidence=max(float(conversation_context.non_completion_claim.confidence or 0.0), 0.88))
+        reply_text = execution_contestation_reply
+        logger.info("Execution contestation reply: %s", reply_text[:120])
     else:
         extraction = extract_reply(payload.text)
         fallback = generate_reply(payload.text, extraction)

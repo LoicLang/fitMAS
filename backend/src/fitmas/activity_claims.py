@@ -18,6 +18,17 @@ SPORT_KEYWORDS = {
 
 CLAIM_VERBS = ("j'ai", "je fais", "je viens de", "fait", "couru", "nag", "roul", "grimp", "renfo", "muscu")
 CORRECTION_MARKERS = ("non", "plutot", "plutôt", "en fait", "finalement", "c'etait", "c'était")
+NON_COMPLETION_MARKERS = (
+    "je n'ai pas",
+    "je nai pas",
+    "j ai pas",
+    "pas couru",
+    "pas nage",
+    "pas nagé",
+    "pas roule",
+    "pas roulé",
+    "pas fait",
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -26,6 +37,14 @@ class ActivityClaim:
     duration_min: int | None
     resolved_date_iso: str | None
     temporal_reference: str
+    confidence: float
+    source_text: str
+
+
+@dataclass(frozen=True, slots=True)
+class NonCompletionClaim:
+    sport_type: str | None
+    resolved_date_iso: str | None
     confidence: float
     source_text: str
 
@@ -107,6 +126,50 @@ def format_activity_claim_for_prompt(claim: ActivityClaim | None) -> str:
         f"- duree_min: {claim.duration_min if claim.duration_min is not None else 'unknown'}\n"
         f"- date_resolue: {claim.resolved_date_iso or 'unknown'}\n"
         f"- reference_temps: {claim.temporal_reference}\n"
+        f"- confiance: {claim.confidence:.2f}\n"
+        f"- source: {claim.source_text}\n"
+    )
+
+
+def extract_non_completion_claim(
+    text: str,
+    *,
+    timezone_name: str | None,
+    now: datetime | None = None,
+) -> NonCompletionClaim | None:
+    lowered = text.lower()
+    temporal = resolve_temporal_context(text, timezone_name=timezone_name, now=now)
+    if temporal.resolved_date is None:
+        return None
+    if not any(marker in lowered for marker in NON_COMPLETION_MARKERS):
+        return None
+
+    sport_type = _extract_sport(lowered)
+    if sport_type is None and "seance" not in lowered and "séance" not in lowered:
+        return None
+
+    confidence = 0.78
+    if sport_type is not None:
+        confidence += 0.1
+    if temporal.primary_reference != "unspecified":
+        confidence += 0.07
+
+    return NonCompletionClaim(
+        sport_type=sport_type,
+        resolved_date_iso=temporal.resolved_date.isoformat(),
+        confidence=min(confidence, 0.95),
+        source_text=text.strip(),
+    )
+
+
+def format_non_completion_claim_for_prompt(claim: NonCompletionClaim | None) -> str:
+    if claim is None:
+        return ""
+    return (
+        "Contestation execution utilisateur:\n"
+        "- statut: non realise selon utilisateur\n"
+        f"- sport: {claim.sport_type or 'unknown'}\n"
+        f"- date_resolue: {claim.resolved_date_iso or 'unknown'}\n"
         f"- confiance: {claim.confidence:.2f}\n"
         f"- source: {claim.source_text}\n"
     )
