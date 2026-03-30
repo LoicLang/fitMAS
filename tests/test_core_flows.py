@@ -630,10 +630,49 @@ class FitMASCoreFlowsTest(unittest.TestCase):
             api_messages.decide = original_decide
             api_messages.extract_facts = original_extract_facts
 
-        updated = repo.get_scheduled_session(self.db, self.user.id, session.id)
+        self.db.expire_all()
+        verify_db = SessionLocal()
+        try:
+            updated = repo.get_scheduled_session(verify_db, self.user.id, session.id)
+        finally:
+            verify_db.close()
 
         self.assertIn("Je ne compte pas", result["assistant_message"]["text"])
         self.assertEqual(updated.completion_status, "skipped")
+
+    def test_replace_session_reply_is_aligned_with_applied_duration(self) -> None:
+        _, session = self._create_plan_for_today()
+        original_decide = api_messages.decide
+        original_extract_facts = api_messages.extract_facts
+        try:
+            api_messages.decide = lambda *args, **kwargs: MutationDecision(
+                mutation_type="replace_session",
+                target_session_id=session.id,
+                new_title="Natation recuperation douce",
+                new_goal="Repartir souple",
+                new_sport_type="swimming",
+                new_session_type="recovery",
+                new_duration_min=30,
+                new_intensity="easy",
+                new_description="30 min tres souple",
+                rationale="Semaine recente incomplete. On relance sans surcharger.",
+                fitmas_message="Je garde la natation mais en recuperation douce 40 min.",
+            )
+            api_messages.extract_facts = lambda *args, **kwargs: []
+            result = self.client.post("/api/v0/messages", json={"text": "J'ai loupé presque toute la semaine derniere"}).json()
+        finally:
+            api_messages.decide = original_decide
+            api_messages.extract_facts = original_extract_facts
+
+        verify_db = SessionLocal()
+        try:
+            updated = repo.get_scheduled_session(verify_db, self.user.id, session.id)
+        finally:
+            verify_db.close()
+
+        self.assertEqual(updated.duration_min, 30)
+        self.assertIn("30 min", result["assistant_message"]["text"])
+        self.assertNotIn("40 min", result["assistant_message"]["text"])
 
     def test_message_flow_can_consume_hidden_calibration_answer_without_llm(self) -> None:
         self._create_plan_for_today()

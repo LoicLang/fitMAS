@@ -293,6 +293,35 @@ def _execution_contestation_reply(
     return f"OK. Je ne compte pas {subject} comme faite. Je repars de ce que tu me dis, pas d'une validation implicite."
 
 
+def _render_applied_decision_reply(
+    *,
+    decision: MutationDecision,
+    updated_session,
+    fallback_text: str,
+) -> str:
+    if decision.mutation_type != "replace_session":
+        return fallback_text
+    title = str(_value(updated_session, "session_title") or decision.new_title or "seance adaptee").strip()
+    duration_min = _value(updated_session, "duration_min") or decision.new_duration_min
+    intensity = str(_value(updated_session, "intensity") or decision.new_intensity or "").strip().lower()
+    parts = [f"OK. Je bascule sur {title.lower()}."]
+    detail_bits: list[str] = []
+    if duration_min:
+        detail_bits.append(f"{int(duration_min)} min")
+    intensity_labels = {
+        "easy": "facile",
+        "moderate": "controle",
+        "hard": "soutenu",
+    }
+    if intensity in intensity_labels:
+        detail_bits.append(intensity_labels[intensity])
+    if detail_bits:
+        parts.append(f"{', '.join(detail_bits).capitalize()}.")
+    if decision.rationale:
+        parts.append(decision.rationale)
+    return " ".join(parts)
+
+
 @router.post("/api/v0/messages", response_model=MessageReply)
 def post_message(payload: IncomingMessage, db: Session = Depends(get_db)) -> MessageReply:
     user = repo.get_user_optional(db)
@@ -517,13 +546,22 @@ def post_message(payload: IncomingMessage, db: Session = Depends(get_db)) -> Mes
     day_updated = None
     if decision:
         mutations.apply(db, plan.id, decision)
+        updated_session = (
+            repo.get_scheduled_session(db, user.id, decision.target_session_id)
+            if decision.target_session_id is not None
+            else None
+        )
         if adaptation is not None:
             repo.add_adaptation_event(
                 db,
                 user.id,
                 build_adaptation_log_entry(decision=adaptation, scheduled_sessions=scheduled_sessions),
             )
-        reply_text = decision.fitmas_message
+        reply_text = _render_applied_decision_reply(
+            decision=decision,
+            updated_session=updated_session,
+            fallback_text=decision.fitmas_message,
+        )
         extraction = Extraction(confidence=adaptation.event.confidence if adaptation else 0.85)
         day_updated = _resolve_day_updated(decision)
         logger.info("LLM reply (%s): %s", decision.mutation_type, reply_text[:120])
