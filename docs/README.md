@@ -7,7 +7,7 @@ read_when:
 
 # Docs
 
-12 documents essentiels :
+13 documents essentiels :
 
 | Document | Contenu |
 |----------|---------|
@@ -18,6 +18,7 @@ read_when:
 | `PLANNING-CONTRACT.md` | Contrat produit/technique de la planification adaptative, horizons de verite et ordre d'implementation |
 | `MEMORY-V2.md` | Architecture memoire V2 : profile vs working vs patterns, regles d'ecriture/lecture et plan de migration |
 | `CONVERSATION-GROUNDING.md` | Verite conversationnelle, grounding Telegram, trous actuels et ordre d'implementation |
+| `REALITY-WORKOUT-CONTRACT.md` | Plan prioritaire pour fiabiliser le réel, recalibrer la semaine sur l'exécution récente et imposer un contrat propre des séances |
 | `USER-INDICATIONS.md` | Contrat des indications utilisateur: interpretation, grounding planning, mutation et explication |
 | `RUNTIME-TOOLS.md` | Contrat des tools runtime, registre V1 read-only, limites et métriques |
 | `SOUL.md` | Voix FitMAS, heartbeat, messagerie, exemples de ton |
@@ -41,11 +42,12 @@ Pour un nouvel agent :
 6. `PLANNING-CONTRACT.md`
 7. `MEMORY-V2.md`
 8. `CONVERSATION-GROUNDING.md`
-9. `USER-INDICATIONS.md`
-10. `RUNTIME-TOOLS.md`
-11. `SOUL.md`
-12. `BUILD-ORDER.md`
-13. `RUNBOOK.md`
+9. `REALITY-WORKOUT-CONTRACT.md`
+10. `USER-INDICATIONS.md`
+11. `RUNTIME-TOOLS.md`
+12. `SOUL.md`
+13. `BUILD-ORDER.md`
+14. `RUNBOOK.md`
 
 Raccourci utile :
 - si le sujet est "que faut-il construire maintenant ?", lire `BUILD-ORDER.md`
@@ -56,6 +58,7 @@ Raccourci utile :
 - si le sujet est "quel est le contrat exact de la planification adaptative ?", lire `PLANNING-CONTRACT.md`
 - si le sujet est "comment evoluer la memoire utilisateur sans recreer un fourre-tout ?", lire `MEMORY-V2.md`
 - si le sujet est "pourquoi le coach Telegram se trompe sur le reel ou le temps ?", lire `CONVERSATION-GROUNDING.md`
+- si le sujet est "comment fiabiliser le vrai/faux done, adapter la semaine au réel et remettre le bon contenu séance dans l'app ?", lire `REALITY-WORKOUT-CONTRACT.md`
 - si le sujet est "comment transformer un message user en event candidate solide ?", lire `USER-INDICATIONS.md`
 - si le sujet est "comment brancher des tools runtime au LLM sans casser l'architecture ?", lire `RUNTIME-TOOLS.md`
 

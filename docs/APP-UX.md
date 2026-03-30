@@ -40,6 +40,8 @@ Règles :
 - le rail des prochains jours est visuel, rapide à scanner, limité au futur proche utile (`~72h`)
 - si aucune séance n'est prévue, l'état vide doit rester propre et rassurant
 - les surfaces `log manuel` et `sync Strava` restent accessibles, mais secondaires
+- le bloc `Pourquoi aujourd'hui` doit expliquer la logique de la séance dans la semaine, pas afficher le protocole brut
+- le protocole détaillé d'une séance n'a pas sa place dans le hero ou le brief aperçu : il vit dans le détail séance
 
 ### Calendrier
 
@@ -123,6 +125,12 @@ Règles :
 - doit fusionner plan + activité liée si présente
 - les métriques utiles doivent être visibles immédiatement : durée, distance, dénivelé, cardio, charge
 - la DA peut être spectaculaire, mais la lisibilité et l'action priment
+- la page doit séparer explicitement `objectif`, `pourquoi aujourd'hui`, `séance`, `consigne coach`, `nutrition`
+- `pourquoi aujourd'hui` = rationale de placement dans la semaine, jamais le déroulé brut
+- `séance` = protocole exécutable, immédiatement actionnable
+- `consigne coach` = texte court athlète-facing, jamais une instruction interne système
+- `trace et profil` ne doit apparaître que si une trace ou un profil a une vraie valeur pour le sport et la séance
+- une séance renfo sans exercices / séries / reps / récup est considérée incomplète côté produit
 
 ## Sémantique calendrier
 

@@ -113,6 +113,40 @@ read_when:
 - On stabilise d'abord la vérité des données avant de sophistiquer l'UI ou le LLM
 - Pas de multi-agent tant que le mono-agent n'est pas un vrai frein produit
 
+## Priorité immédiate — Reality Layer + Workout Contract
+
+Nouveau chantier prioritaire transversal :
+
+- supprimer les validations fantômes
+- ne plus laisser Telegram affirmer une séance "faite" sans preuve forte
+- brancher la semaine suivante sur la réalité récente confirmée
+- imposer un contrat structuré du contenu séance pour l'app
+- rendre le renfo déterministe, exploitable et contextuel
+
+Document de référence :
+
+- `REALITY-WORKOUT-CONTRACT.md`
+
+Problèmes concrets à résoudre :
+
+- FitMAS peut encore supposer qu'une séance a été faite alors que le matching activité -> séance était faible
+- `completion_status` est parfois lu comme une vérité alors qu'il reflète encore une heuristique de liaison
+- l'app mélange encore `rationale`, `execution` et `consigne coach`
+- le renfo reste trop générique alors qu'il doit s'adapter aux symptômes, à la fatigue et au sport protégé
+
+Ordre recommandé :
+
+1. durcir la vérité d'exécution
+2. construire une vue `RecentRealityWindow`
+3. imposer un contrat `WorkoutContent`
+4. introduire un `strength_engine` déterministe
+5. remapper l'app sur ce contrat
+
+Règle :
+
+- ne pas commencer par un redesign UI
+- fiabiliser d'abord les preuves, puis les décisions, puis le rendu
+
 ## Priorité transversale — Conversation Grounding
 
 Le chantier planner V2 continue, mais un sujet remonte avant son branchement complet :
