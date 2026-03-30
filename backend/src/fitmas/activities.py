@@ -58,12 +58,14 @@ def match_activity_to_day(
     started_day = started_at.strftime("%A").lower() if started_at else None
 
     for day in week_days:
+        if day.sport_type != sport_type:
+            continue
+
         score = 0
         reasons: list[str] = []
 
-        if day.sport_type == sport_type:
-            score += 4
-            reasons.append("meme sport")
+        score += 4
+        reasons.append("meme sport")
 
         if started_day and day.day.value == started_day:
             score += 3

@@ -614,12 +614,9 @@ def find_scheduled_session_for_activity(
         return None
 
     for session in sessions:
-        if session.sport_type == sport_type:
+        if session.sport_type == sport_type and session.completion_status != "done":
             return session
-    for session in sessions:
-        if session.completion_status != "done":
-            return session
-    return sessions[0]
+    return None
 
 
 # ── Writes ─────────────────────────────────────────────────────────────────

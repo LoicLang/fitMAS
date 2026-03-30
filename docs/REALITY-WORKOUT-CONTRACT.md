@@ -281,6 +281,14 @@ Objectif :
 - supprimer les validations fantômes
 - empêcher le coach de dire `fait` sans preuve forte
 
+Etat :
+
+- MVP implémenté
+- matching activité -> séance durci sur le même sport
+- matching activité -> jour refusé si sport différent
+- heartbeat rendu plus prudent quand le plan dit `done` sans activité ni claim
+- tests backend dédiés ajoutés pour éviter la régression
+
 Fichiers principaux :
 
 - `backend/src/fitmas/repository.py`

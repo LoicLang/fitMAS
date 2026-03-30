@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from datetime import date, datetime
 from typing import Any, Iterable, Sequence
 
+from fitmas.execution_evidence import classify_execution_evidence
 from fitmas.time_context import get_local_now, get_timezone
 
 REST_SPORTS = {"rest", "off"}
@@ -122,38 +123,32 @@ def _classify_execution(
     activities_today: Sequence[ActivityExecutionSummary],
     linked_activity: ActivityExecutionSummary | None,
 ) -> tuple[str, str]:
-    if planned_session is None:
-        if activities_today:
-            return "off_plan_done", "Activite reelle aujourd'hui sans seance planifiee explicite."
-        return "no_plan_no_activity", "Aucune seance planifiee aujourd'hui et aucune activite reelle."
-
-    planned_sport = str(_value(planned_session, "sport_type") or "").lower()
-    planned_duration = _int(_value(planned_session, "duration_min"))
-    planned_status = str(_value(planned_session, "completion_status") or "").lower()
-    same_sport_activity = next(
-        (activity for activity in activities_today if activity.sport_type == planned_sport),
-        None,
+    evidence = classify_execution_evidence(
+        planned_session=planned_session,
+        activities=activities_today,
     )
 
+    if planned_session is None:
+        if activities_today:
+            return "off_plan_done", evidence.reason
+        return "no_plan_no_activity", "Aucune seance planifiee aujourd'hui et aucune activite reelle."
+
+    planned_duration = _int(_value(planned_session, "duration_min"))
     if linked_activity is not None:
         if _duration_close(linked_activity.duration_min, planned_duration):
-            return "planned_done_as_expected", "Activite du jour liee explicitement a la seance prevue."
-        return "planned_done_modified", "Activite du jour liee a la seance prevue mais execution differente."
+            return "planned_done_as_expected", evidence.reason
+        return "planned_done_modified", "Activite du jour liee explicitement a la seance prevue, mais execution differente."
 
-    if same_sport_activity is not None:
-        if _duration_close(same_sport_activity.duration_min, planned_duration):
-            return "planned_done_as_expected", "Meme sport realise aujourd'hui avec charge proche du plan."
-        return "planned_done_modified", "Meme sport realise aujourd'hui mais execution differente du plan."
+    if evidence.evidence_state == "candidate" and evidence.plan_relation == "same_sport":
+        return "planned_done_candidate", evidence.reason
 
-    if activities_today:
-        if planned_sport in REST_SPORTS:
-            return "off_plan_done", "Jour de repos planifie mais activite reelle detectee."
-        return "off_plan_done", "Activite reelle aujourd'hui mais sur un sport different du plan."
+    if evidence.display_status == "offplan_done":
+        return "off_plan_done", evidence.reason
 
-    if planned_status in {"done", "adapted"}:
-        return "planned_marked_done_without_activity", "Seance marquee done/adapted sans activite persistée du jour."
+    if evidence.display_status == "uncertain":
+        return "planned_marked_done_without_activity", evidence.reason
 
-    return "planned_pending", "Seance planifiee aujourd'hui sans activite reelle persistée."
+    return "planned_pending", evidence.reason
 
 
 def _pick_today_session(

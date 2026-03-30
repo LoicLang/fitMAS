@@ -38,7 +38,7 @@ class ExecutionContextTest(unittest.TestCase):
         self.assertEqual(context.actual_duration_min_today, 30)
         self.assertEqual(context.planned_sport, "swimming")
 
-    def test_marks_planned_done_modified_when_same_sport_done_shorter(self) -> None:
+    def test_marks_same_sport_activity_without_link_as_candidate(self) -> None:
         context = build_today_execution_context(
             timezone_name="Europe/Paris",
             now=datetime.fromisoformat("2026-03-22T19:55:00+01:00"),
@@ -64,8 +64,8 @@ class ExecutionContextTest(unittest.TestCase):
             ],
         )
 
-        self.assertEqual(context.execution_status, "planned_done_modified")
-        self.assertIn("differente", context.status_reason.lower())
+        self.assertEqual(context.execution_status, "planned_done_candidate")
+        self.assertIn("sans lien explicite", context.status_reason.lower())
 
     def test_marks_planned_done_as_expected_when_linked_activity_exists(self) -> None:
         context = build_today_execution_context(

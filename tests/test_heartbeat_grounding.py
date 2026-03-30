@@ -254,6 +254,69 @@ class HeartbeatGroundingTest(unittest.TestCase):
         self.assertIn("activite declaree non loggee", captured["prompt"].lower())
         self.assertIn("30 min", captured["prompt"])
 
+    def test_morning_briefing_does_not_trust_done_without_evidence(self) -> None:
+        now = get_local_now(self.user.timezone)
+        today_key = DAY_KEYS[now.weekday()]
+        yesterday_key = DAY_KEYS[(now.weekday() - 1) % 7]
+        repo.replace_plan(
+            self.db,
+            self.user.id,
+            intention="test",
+            summary="test",
+            timezone_name=self.user.timezone,
+            days=[
+                {
+                    "day": yesterday_key,
+                    "label": day_label_fr(yesterday_key, capitalize=True),
+                    "sport_type": "running",
+                    "session_type": "easy",
+                    "session_title": "Footing",
+                    "session_goal": "Bouger",
+                    "session_note": "",
+                    "session_description": "",
+                    "duration_min": 45,
+                    "intensity": "easy",
+                    "load_score": 1,
+                    "priority": "Normal",
+                    "nutrition_focus": "",
+                    "flexibility": "stable",
+                    "completion_status": "done",
+                },
+                {
+                    "day": today_key,
+                    "label": day_label_fr(today_key, capitalize=True),
+                    "sport_type": "swimming",
+                    "session_type": "technique",
+                    "session_title": "Natation",
+                    "session_goal": "Precision",
+                    "session_note": "",
+                    "session_description": "",
+                    "duration_min": 45,
+                    "intensity": "easy",
+                    "load_score": 1,
+                    "priority": "Normal",
+                    "nutrition_focus": "",
+                    "flexibility": "stable",
+                    "completion_status": "planned",
+                },
+            ],
+        )
+        captured: dict[str, str] = {}
+        original_llm = heartbeat._llm_generate
+        try:
+            def fake_llm(system: str, prompt: str, *, allow_no_send: bool = True):
+                captured["prompt"] = prompt
+                return "ok"
+
+            heartbeat._llm_generate = fake_llm
+            draft = heartbeat.morning_briefing()
+        finally:
+            heartbeat._llm_generate = original_llm
+
+        self.assertEqual(draft.text, "ok")
+        self.assertIn("statut a verifier", captured["prompt"].lower())
+        self.assertNotIn("fait confirme", captured["prompt"].lower())
+
     def test_morning_briefing_can_attach_hidden_calibration_need(self) -> None:
         now = get_local_now(self.user.timezone)
         today_key = DAY_KEYS[now.weekday()]
@@ -308,6 +371,36 @@ class HeartbeatGroundingTest(unittest.TestCase):
         self.user.onboarding_status = "completed"
         self.user.weekly_structure_notes = "mardi matin fiable"
         self.db.commit()
+        repo.upsert_facts(
+            self.db,
+            self.user.id,
+            [
+                {
+                    "category": "calibration_need",
+                    "key": "availability_window",
+                    "value": (
+                        '{"id":"availability_window:tomorrow_window",'
+                        '"need_type":"availability_window",'
+                        '"topic":"availability_window",'
+                        '"status":"open",'
+                        '"why_now":"Demain porte une seance utile.",'
+                        '"priority":"high",'
+                        '"source":"heartbeat_morning",'
+                        '"channel_hint":"telegram",'
+                        '"created_at":"2026-03-28T08:00:00+00:00",'
+                        '"expires_at":"2026-04-20T08:00:00+00:00",'
+                        '"last_prompted_at":"2026-03-28T08:00:00+00:00",'
+                        '"context":{"day":"%s"},'
+                        '"allowed_answers":["morning","evening","both","none"],'
+                        '"write_targets":["weekly_availability"],'
+                        '"followup_policy":"single_followup"}'
+                    ) % tomorrow_key,
+                    "confidence": 0.95,
+                    "confirmed": True,
+                    "source": "heartbeat_morning",
+                }
+            ],
+        )
         original_llm = heartbeat._llm_generate
         try:
             heartbeat._llm_generate = lambda *args, **kwargs: "Bonjour. Aujourd'hui on garde du propre. Je veux juste verrouiller un point pour demain: tu le tiens plutot le matin ou le soir ?"

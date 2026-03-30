@@ -30,6 +30,7 @@ from fitmas.calibration_needs import (
 from fitmas.calibration_status import build_calibration_status
 from fitmas.coach_messages import CoachDraft
 from fitmas.db import SessionLocal
+from fitmas.execution_evidence import classify_execution_evidence
 from fitmas.fact_memory import fact_is_current
 from fitmas.knowledge import load_sport_knowledge
 from fitmas.llm_gateway import generate_heartbeat_text
@@ -267,28 +268,38 @@ def morning_briefing() -> CoachDraft | None:
         if yesterday_sessions:
             yesterday_label = yesterday_sessions[0].label or yesterday_date.isoformat()
             non_rest_sessions = [session for session in yesterday_sessions if session.sport_type != "rest"]
-            done_sessions = [session for session in non_rest_sessions if session.completion_status == "done"]
             pending_sessions = [session for session in non_rest_sessions if session.completion_status == "planned"]
             adapted_sessions = [
                 session for session in non_rest_sessions if session.completion_status in ("skipped", "adapted")
             ]
             titles = ", ".join(session.session_title for session in non_rest_sessions[:2])
+            primary_session = non_rest_sessions[0] if non_rest_sessions else None
+            evidence = classify_execution_evidence(
+                planned_session=primary_session,
+                activities=yesterday_activities,
+                claims=list(yesterday_claims),
+            )
 
-            if done_sessions:
-                yesterday_context = f"\nHier ({yesterday_label}): {titles} — fait. Bien."
-            elif yesterday_activities:
+            if evidence.display_status == "confirmed_done":
+                yesterday_context = f"\nHier ({yesterday_label}): {titles} — fait confirme."
+            elif evidence.display_status == "offplan_done" and yesterday_activities:
                 sports = ", ".join(sorted({activity.sport_type for activity in yesterday_activities}))
                 total_duration = sum(activity.duration_min or 0 for activity in yesterday_activities)
                 yesterday_context = (
                     f"\nHier ({yesterday_label}): seance prevue non validee, "
                     f"mais activite reelle detectee ({sports}, {total_duration} min)."
                 )
-            elif yesterday_claims:
+            elif evidence.display_status == "claimed_done" and yesterday_claims:
                 sports = ", ".join(sorted({claim.sport_type or 'sport inconnu' for claim in yesterday_claims}))
                 total_duration = sum(claim.duration_min or 0 for claim in yesterday_claims)
                 yesterday_context = (
                     f"\nHier ({yesterday_label}): seance prevue non validee, "
                     f"mais activite declaree non loggee detectee ({sports}, {total_duration} min)."
+                )
+            elif evidence.display_status == "uncertain":
+                yesterday_context = (
+                    f"\nHier ({yesterday_label}): {titles} — statut a verifier, "
+                    "pas de trace assez forte pour dire que c'etait fait."
                 )
             elif pending_sessions:
                 yesterday_context = (
@@ -299,19 +310,31 @@ def morning_briefing() -> CoachDraft | None:
                 yesterday_context = f"\nHier ({yesterday_label}): adapte/saute. On avance."
         elif yesterday_day and yesterday_day.sport_type != "rest":
             yesterday_label = yesterday_day.label or DAY_LABELS.get(yesterday_key, yesterday_key)
-            if yesterday_activities:
+            evidence = classify_execution_evidence(
+                planned_session=yesterday_day,
+                activities=yesterday_activities,
+                claims=list(yesterday_claims),
+            )
+            if evidence.display_status == "confirmed_done":
+                yesterday_context = f"\nHier ({yesterday_label}): {yesterday_day.session_title} — fait confirme."
+            elif evidence.display_status == "offplan_done" and yesterday_activities:
                 sports = ", ".join(sorted({activity.sport_type for activity in yesterday_activities}))
                 total_duration = sum(activity.duration_min or 0 for activity in yesterday_activities)
                 yesterday_context = (
                     f"\nHier ({yesterday_label}): seance prevue non validee, "
                     f"mais activite reelle detectee ({sports}, {total_duration} min)."
                 )
-            elif yesterday_claims:
+            elif evidence.display_status == "claimed_done" and yesterday_claims:
                 sports = ", ".join(sorted({claim.sport_type or 'sport inconnu' for claim in yesterday_claims}))
                 total_duration = sum(claim.duration_min or 0 for claim in yesterday_claims)
                 yesterday_context = (
                     f"\nHier ({yesterday_label}): seance prevue non validee, "
                     f"mais activite declaree non loggee detectee ({sports}, {total_duration} min)."
+                )
+            elif evidence.display_status == "uncertain":
+                yesterday_context = (
+                    f"\nHier ({yesterday_label}): {yesterday_day.session_title} — statut a verifier, "
+                    "pas de trace assez forte pour dire que c'etait fait."
                 )
             elif yesterday_day.completion_status == "planned":
                 yesterday_context = (

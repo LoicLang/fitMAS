@@ -198,6 +198,22 @@ Consommateurs cibles :
 - `heartbeat.py`
 - `signals.py`
 
+### `execution_evidence.py`
+
+Role :
+- porter une couche de preuve plus prudente que `completion_status`
+- distinguer `observed`, `claimed`, `candidate`, `none`
+- distinguer aussi `linked`, `same_sport`, `offplan`, `unknown`
+
+Etat :
+- pose
+- utilise deja par le heartbeat pour eviter d'affirmer `fait` sans preuve forte
+- sert aussi a rendre le matching futur testable et reutilisable
+
+Regle :
+- `confirmed_done` seulement avec preuve forte
+- une activite meme sport sans lien explicite reste un `candidate`, pas un `done` affirme
+
 ### `temporal_resolver.py`
 
 Role :
