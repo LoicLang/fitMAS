@@ -19,6 +19,7 @@ from fitmas.planning_contract import (
     build_session_policies,
     build_week_mission,
 )
+from fitmas.recent_reality import build_recent_reality_window
 from fitmas.time_context import get_local_now
 from fitmas.week_context import (
     build_deterministic_coach_reading,
@@ -135,6 +136,11 @@ def get_app_overview(db: Session = Depends(get_db)) -> dict:
         scheduled_sessions=scheduled_sessions,
         activities=activities,
     )
+    recent_reality = build_recent_reality_window(
+        today=today_date,
+        scheduled_sessions=scheduled_sessions,
+        activities=activities,
+    )
     planning_ctx = build_planning_context(
         planning_decision=planning_decision,
         mesocycle_week=week_plan.mesocycle_week,
@@ -142,6 +148,7 @@ def get_app_overview(db: Session = Depends(get_db)) -> dict:
         is_deload=week_plan.is_deload,
         total_weeks=week_plan.total_weeks,
         readiness=readiness,
+        recent_reality=recent_reality.as_dict(),
     )
     next_week = build_next_week_cadrage(
         current_mesocycle_week=week_plan.mesocycle_week,
@@ -269,6 +276,11 @@ def get_app_evolution(db: Session = Depends(get_db)) -> dict:
         scheduled_sessions=scheduled_sessions,
         activities=activities,
     )
+    recent_reality = build_recent_reality_window(
+        today=today_date,
+        scheduled_sessions=scheduled_sessions,
+        activities=activities,
+    )
     planning_ctx = build_planning_context(
         planning_decision=planning_decision,
         mesocycle_week=week_plan.mesocycle_week,
@@ -276,6 +288,7 @@ def get_app_evolution(db: Session = Depends(get_db)) -> dict:
         is_deload=week_plan.is_deload,
         total_weeks=week_plan.total_weeks,
         readiness=readiness,
+        recent_reality=recent_reality.as_dict(),
     )
     next_week = build_next_week_cadrage(
         current_mesocycle_week=week_plan.mesocycle_week,

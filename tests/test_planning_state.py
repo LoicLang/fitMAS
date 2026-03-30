@@ -93,7 +93,10 @@ class PlanningStateTest(unittest.TestCase):
         self.assertIsNotNone(repo.get_latest_fitness_snapshot_record(self.db, self.user.id))
         self.assertIsNotNone(repo.get_latest_readiness_snapshot_record(self.db, self.user.id))
         self.assertIsNotNone(repo.get_latest_planning_decision_record(self.db, self.user.id))
-        self.assertIn(bundle.decision.planning_mode, {"maintain_load", "increase_load", "reduce_load", "tactical_adjustment", "injury_protection", "deload"})
+        self.assertIn(
+            bundle.decision.planning_mode,
+            {"maintain_load", "increase_load", "reduce_load", "restart_consistency", "tactical_adjustment", "injury_protection", "deload"},
+        )
 
 
 if __name__ == "__main__":

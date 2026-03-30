@@ -11,6 +11,7 @@ from fitmas.athlete_profile import AthleteProfileSnapshot, build_athlete_profile
 from fitmas.athlete_zones import AthleteZones, build_athlete_zones
 from fitmas.fitness_snapshot import FitnessSnapshot, build_fitness_snapshot
 from fitmas.planning_decision import PlanningDecision, build_planning_decision
+from fitmas.recent_reality import build_recent_reality_window
 from fitmas.readiness import ReadinessState, build_readiness_state
 
 
@@ -40,11 +41,22 @@ def assemble_planning_state(
         scheduled_sessions=scheduled_sessions,
         as_of_date=as_of_date,
     )
-    readiness = build_readiness_state(profile=profile, fitness=fitness, facts=facts)
+    recent_reality = build_recent_reality_window(
+        today=fitness.date,
+        scheduled_sessions=scheduled_sessions,
+        activities=activities,
+    )
+    readiness = build_readiness_state(
+        profile=profile,
+        fitness=fitness,
+        facts=facts,
+        recent_reality=recent_reality,
+    )
     decision = build_planning_decision(
         profile=profile,
         fitness=fitness,
         readiness=readiness,
+        recent_reality=recent_reality,
         mesocycle_week=mesocycle_week,
     )
     return PlanningStateBundle(

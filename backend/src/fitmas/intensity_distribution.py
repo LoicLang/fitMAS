@@ -27,6 +27,7 @@ _DISTRIBUTION: dict[str, tuple[float, float, float]] = {
     "maintain_load": (0.80, 0.05, 0.15),
     "reduce_load": (0.85, 0.05, 0.10),
     "deload": (0.90, 0.10, 0.00),
+    "restart_consistency": (0.88, 0.07, 0.05),
     "tactical_adjustment": (0.82, 0.08, 0.10),
     "injury_protection": (1.00, 0.00, 0.00),
 }

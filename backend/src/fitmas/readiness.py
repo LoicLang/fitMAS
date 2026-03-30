@@ -7,6 +7,7 @@ from typing import Any, Sequence
 from fitmas.athlete_profile import AthleteProfileSnapshot
 from fitmas.fitness_snapshot import FitnessSnapshot
 from fitmas.planning_config import get_global_planning_config
+from fitmas.recent_reality import RecentRealityWindow
 
 PAIN_KEYWORDS = (
     "douleur",
@@ -55,9 +56,15 @@ def build_readiness_state(
     profile: AthleteProfileSnapshot,
     fitness: FitnessSnapshot,
     facts: Sequence[Any] | None = None,
+    recent_reality: RecentRealityWindow | None = None,
 ) -> ReadinessState:
     active_texts = _collect_active_texts(profile, facts or [])
-    risk_flags = _derive_risk_flags(profile=profile, fitness=fitness, texts=active_texts)
+    risk_flags = _derive_risk_flags(
+        profile=profile,
+        fitness=fitness,
+        texts=active_texts,
+        recent_reality=recent_reality,
+    )
     physical = _physical_state(fitness=fitness, risk_flags=risk_flags)
     mental = _mental_state(fitness=fitness, texts=active_texts)
     logistical = _logistical_state(profile=profile, texts=active_texts)
@@ -86,6 +93,7 @@ def _derive_risk_flags(
     profile: AthleteProfileSnapshot,
     fitness: FitnessSnapshot,
     texts: Sequence[str],
+    recent_reality: RecentRealityWindow | None = None,
 ) -> list[str]:
     config = get_global_planning_config()
     flags: list[str] = []
@@ -103,7 +111,14 @@ def _derive_risk_flags(
         flags.append("high_fatigue_load")
     if fitness.ramp_rate > config.max_weekly_ramp_rate:
         flags.append("ramp_rate_high")
-    if fitness.completion_rate_14d and fitness.completion_rate_14d < 0.5:
+    if recent_reality is not None:
+        if recent_reality.planned_sessions_7d >= 3 and recent_reality.compliance_confirmed < 0.6:
+            flags.append("low_recent_completion")
+        if recent_reality.planned_tss_7d >= 80 and recent_reality.load_ratio < 0.7:
+            flags.append("load_under_target")
+        if recent_reality.missed_streak_days >= 2:
+            flags.append("consistency_streak_broken")
+    elif fitness.completion_rate_14d and fitness.completion_rate_14d < 0.5:
         flags.append("low_recent_completion")
     if not profile.weekly_availability:
         flags.append("low_schedule_clarity")

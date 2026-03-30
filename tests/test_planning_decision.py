@@ -6,6 +6,7 @@ from datetime import date
 from fitmas.athlete_profile import AthleteProfileSnapshot
 from fitmas.fitness_snapshot import FitnessSnapshot
 from fitmas.planning_decision import build_planning_decision
+from fitmas.recent_reality import RecentRealityWindow
 from fitmas.readiness import ReadinessState
 
 
@@ -131,6 +132,58 @@ class PlanningDecisionTest(unittest.TestCase):
         self.assertEqual(decision.planning_mode, "deload")
         self.assertEqual(decision.intensity_distribution, "recovery")
         self.assertLess(decision.weekly_target_tss, fitness.weekly_target_tss)
+        self.assertFalse(decision.long_session)
+
+    def test_build_planning_decision_restarts_when_recent_reality_is_too_low(self) -> None:
+        fitness = FitnessSnapshot(
+            user_id=7,
+            date=date(2026, 3, 30),
+            ctl=40.0,
+            atl=36.0,
+            tsb=4.0,
+            ramp_rate=-0.12,
+            weekly_target_tss=280.0,
+            weekly_actual_tss=110.0,
+            completion_rate_14d=0.45,
+            key_sessions_done_14d=1,
+            volume_sessions_done_14d=1,
+            sport_ctl={"running": 40.0, "cycling": 0.0, "swimming": 8.0, "strength": 0.0, "climbing": 0.0},
+            sport_volume_hours={"running": 2.0, "cycling": 0.0, "swimming": 0.8, "strength": 0.0, "climbing": 0.0},
+        )
+        readiness = ReadinessState(
+            user_id=7,
+            date=date(2026, 3, 30),
+            physical="medium",
+            mental="medium",
+            logistical="clear",
+            injury_risk="low",
+            risk_flags=("low_recent_completion", "load_under_target", "consistency_streak_broken"),
+            summary="Relance necessaire.",
+        )
+        recent_reality = RecentRealityWindow(
+            planned_sessions_7d=4,
+            confirmed_sessions_7d=1,
+            claimed_sessions_7d=0,
+            key_sessions_salvaged_7d=1,
+            planned_tss_7d=250.0,
+            observed_tss_7d=110.0,
+            compliance_confirmed=0.25,
+            load_ratio=0.44,
+            missed_streak_days=2,
+        )
+
+        decision = build_planning_decision(
+            profile=_profile(),
+            fitness=fitness,
+            readiness=readiness,
+            recent_reality=recent_reality,
+            mesocycle_week=2,
+        )
+
+        self.assertEqual(decision.planning_mode, "restart_consistency")
+        self.assertEqual(decision.adaptation_level, "medium")
+        self.assertLess(decision.weekly_target_tss, fitness.weekly_target_tss)
+        self.assertEqual(decision.key_session_count, 1)
         self.assertFalse(decision.long_session)
 
 

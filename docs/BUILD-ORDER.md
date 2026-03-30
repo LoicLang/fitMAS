@@ -145,10 +145,10 @@ Ordre recommandé :
 Progression actuelle :
 
 - Slice 1 livré : vérité d'exécution plus stricte, faux `done` nettement réduits
+- Slice 2 MVP livré : `recent_reality.py` + mode planner `restart_consistency`
 - Slice 3 MVP livré : payload séance structuré pour l'app
 - Slice 5 MVP livré : aperçu + détail séance remappés sur ce payload
-- Prochain commit attendu : Slice 2 `RecentRealityWindow`
-- Puis : Slice 4 `strength_engine`
+- Prochain commit attendu : Slice 4 `strength_engine`
 
 Règle :
 

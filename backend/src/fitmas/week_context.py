@@ -117,6 +117,7 @@ def build_planning_context(
     is_deload: bool,
     total_weeks: int = 0,
     readiness: Any | None = None,
+    recent_reality: Any | None = None,
 ) -> dict[str, Any]:
     """Expose the essential planning context for the current week."""
     mode_raw = str(_value(planning_decision, "planning_mode") or "maintain_load")
@@ -146,6 +147,11 @@ def build_planning_context(
             "logistical": _value(readiness, "logistical") or "clear",
             "injury_risk": _value(readiness, "injury_risk") or "low",
         }
+    if recent_reality is not None:
+        if isinstance(recent_reality, dict):
+            ctx["recent_reality"] = dict(recent_reality)
+        elif hasattr(recent_reality, "as_dict"):
+            ctx["recent_reality"] = recent_reality.as_dict()
 
     return ctx
 
@@ -168,12 +174,12 @@ def build_next_week_cadrage(
     if next_is_deload:
         next_mode = "deload"
         tss_factor = 0.65
-    elif current_planning_mode in ("deload", "injury_protection"):
+    elif current_planning_mode in ("deload", "injury_protection", "restart_consistency"):
         next_mode = "maintain_load"
         tss_factor = 1.0
     else:
         next_mode = current_planning_mode
-        tss_factor = {"increase_load": 1.05, "maintain_load": 1.0, "reduce_load": 0.9}.get(current_planning_mode, 1.0)
+        tss_factor = {"increase_load": 1.05, "maintain_load": 1.0, "reduce_load": 0.9, "restart_consistency": 0.98}.get(current_planning_mode, 1.0)
 
     next_target_tss = round(current_target_tss * tss_factor, 1)
 
@@ -233,6 +239,13 @@ def build_deterministic_coach_reading(
             parts.append(f"{done}/{total} faites, {remaining} restante{'s' if remaining > 1 else ''}.")
         else:
             parts.append(f"Rien encore cette semaine.")
+
+    recent_reality = planning_context.get("recent_reality") or {}
+    if planning_context.get("mode_key") == "restart_consistency" and recent_reality:
+        confirmed = int(recent_reality.get("confirmed_sessions_7d") or 0)
+        planned = int(recent_reality.get("planned_sessions_7d") or 0)
+        if planned > 0:
+            parts.append(f"Relance après {confirmed}/{planned} séances confirmées sur 7 jours.")
 
     # Charge
     if target_tss > 0 and actual_tss > 0:

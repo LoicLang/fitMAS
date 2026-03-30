@@ -82,6 +82,7 @@ def build_app_overview(
         "load": performance_overview.get("load", {}),
         "tss": performance_overview.get("tss", {}),
         "completion": performance_overview.get("completion", {}),
+        "recent_reality": performance_overview.get("recent_reality", {}),
         "weekly_hours": weekly_hours,
         "profile": {
             "name": _value(profile, "name"),
@@ -201,6 +202,7 @@ def build_app_evolution(
         "load": load,
         "tss": performance_overview.get("tss", {}),
         "completion": performance_overview.get("completion", {}),
+        "recent_reality": performance_overview.get("recent_reality", {}),
         "distribution": performance_overview.get("distribution", {}),
         "sports": performance_overview.get("sports", {}),
         "rationale": performance_overview.get("rationale", []),

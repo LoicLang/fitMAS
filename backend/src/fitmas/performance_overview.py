@@ -6,6 +6,7 @@ from typing import Any
 from fitmas.fitness_snapshot import build_fitness_snapshot, estimate_scheduled_session_tss
 from fitmas.load_projection import planning_mode_label_fr
 from fitmas.models import WeeklyPlan
+from fitmas.recent_reality import build_recent_reality_window
 from fitmas.session_metadata import compute_load_band
 from fitmas.time_context import get_local_now
 
@@ -43,6 +44,11 @@ def build_performance_overview(
         activities=activities,
         scheduled_sessions=scheduled_sessions,
         as_of_date=today,
+    )
+    recent_reality = build_recent_reality_window(
+        today=today,
+        scheduled_sessions=scheduled_sessions,
+        activities=activities,
     )
     planned_distribution = _planned_distribution(week_sessions)
     completed_distribution = _completed_distribution(week_sessions)
@@ -86,6 +92,7 @@ def build_performance_overview(
             "sessions_this_week": len([session for session in week_sessions if str(_value(session, "sport_type") or "").lower() not in {"rest", "off"}]),
             "done_this_week": len([session for session in week_sessions if str(_value(session, "completion_status") or "").lower() == "done"]),
         },
+        "recent_reality": recent_reality.as_dict(),
         "distribution": {
             "planned": planned_distribution,
             "completed": completed_distribution,

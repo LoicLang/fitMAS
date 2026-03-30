@@ -472,6 +472,7 @@ def _week_objective(mode_key: str) -> str:
         "maintain_load": "Consolider la regularite utile de la semaine.",
         "reduce_load": "Alleger sans perdre le fil du bloc.",
         "deload": "Assimiler et refaire du jus.",
+        "restart_consistency": "Relancer simple et remettre de la regularite avant de recharger.",
         "tactical_adjustment": "Sauver la semaine avec le moins de friction possible.",
         "injury_protection": "Proteger le corps et garder le minimum efficace.",
     }
@@ -484,6 +485,7 @@ def _primary_risk(mode_key: str) -> str:
         "maintain_load": "Diluer la seance cle dans trop de flexibilite.",
         "reduce_load": "Garder trop de volume par culpabilite.",
         "deload": "Transformer l'assimilation en semaine cachee de charge.",
+        "restart_consistency": "Vouloir reprendre au rythme d'une semaine deja bien encaissee.",
         "tactical_adjustment": "Multiplier les petits changements et perdre la lisibilite.",
         "injury_protection": "Forcer une intensite qui rallume la douleur.",
     }
@@ -497,6 +499,7 @@ def _block_focus_label(*, mode_key: str, primary_sport: str) -> str:
         "maintain_load": f"Consolidation utile en {sport_label}",
         "reduce_load": "Alleger pour repartir propre",
         "deload": "Assimilation du bloc",
+        "restart_consistency": "Relance de la regularite",
         "tactical_adjustment": "Semaine tactique adaptable",
         "injury_protection": "Protection active avant tout",
     }
@@ -522,7 +525,7 @@ def _change_budget(*, today: date, scheduled_sessions: Sequence[Any], planning_m
         and week_start <= session_date <= week_end
         and str(_value(session, "sport_type") or "").lower() not in REST_SPORTS
     ]
-    base_total = 3 if planning_mode in {"tactical_adjustment", "injury_protection"} else 2
+    base_total = 3 if planning_mode in {"tactical_adjustment", "injury_protection", "restart_consistency"} else 2
     total = min(4, max(base_total, len(week_sessions) // 3 + 1))
     used = sum(1 for session in week_sessions if str(_value(session, "completion_status") or "").lower() in {"adapted", "skipped"})
     remaining = max(0, total - used)

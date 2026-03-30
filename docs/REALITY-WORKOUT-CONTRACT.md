@@ -332,6 +332,14 @@ Objectif :
 
 - brancher la planification sur le réel confirmé récent
 
+Etat :
+
+- MVP implémenté
+- nouveau module `recent_reality.py`
+- `planning_decision.py` peut maintenant basculer en `restart_consistency`
+- readiness lit aussi `compliance_confirmed`, `load_ratio` et `missed_streak_days`
+- overview / evolution exposent maintenant `recent_reality`
+
 Fichiers principaux :
 
 - nouveau `backend/src/fitmas/recent_reality.py`
@@ -359,6 +367,7 @@ Critères de succès :
 
 - après une semaine 2/5 confirmées, FitMAS ne repart pas sur une semaine "forte" par défaut
 - le système explique la simplification avec une base factuelle lisible
+- le planner peut réduire `target_tss`, `key_sessions` et retirer la longue quand la régularité récente est trop basse
 
 ### Slice 3 — Workout Content Contract
 

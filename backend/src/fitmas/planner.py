@@ -205,7 +205,14 @@ def _build_sessions(
 
     if "strength" not in normalized_sports and strength_budget > 0:
         for index in range(strength_budget):
-            sessions.append(_session_from_type("strength", "general" if index == 0 and mode != "deload" else "core", preferred_day=None, mode=mode))
+            sessions.append(
+                _session_from_type(
+                    "strength",
+                    "general" if index == 0 and mode not in {"deload", "restart_consistency"} else "core",
+                    preferred_day=None,
+                    mode=mode,
+                )
+            )
     elif "strength" in normalized_sports:
         for index in range(max(0, strength_budget - 1)):
             sessions.append(_session_from_type("strength", "core" if index == 0 else "mobility", preferred_day=None, mode=mode))
@@ -411,7 +418,7 @@ def _session_from_type(
     load_score = template.load_score
     priority = _priority_for_template(template.session_type, template.load_score)
 
-    if mode in {"reduce_load", "deload"} and intensity == "hard":
+    if mode in {"reduce_load", "deload", "restart_consistency"} and intensity == "hard":
         intensity = "moderate"
         load_score = max(2, load_score - 1)
     if mode == "injury_protection":
@@ -420,6 +427,8 @@ def _session_from_type(
         priority = "Protection"
     if mode == "tactical_adjustment" and intensity == "hard":
         priority = "Ajustable"
+    if mode == "restart_consistency":
+        priority = "Reprise cadrée" if intensity != "easy" else "Support"
 
     return PlannedSession(
         sport_type=sport_type,
@@ -441,6 +450,8 @@ def _duration_multiplier(mode: str, *, session_type: str) -> float:
         return 0.85
     if mode == "deload":
         return 0.75
+    if mode == "restart_consistency":
+        return 0.8
     if mode == "tactical_adjustment":
         return 0.9
     if mode == "injury_protection":
@@ -472,6 +483,8 @@ def _key_types_for_mode(primary_sport: str, mode: str) -> list[str]:
     }
     if mode in {"injury_protection", "tactical_adjustment"}:
         return protected.get(primary_sport, ["easy"])
+    if mode == "restart_consistency":
+        return conservative.get(primary_sport, ["easy"])
     if mode in {"reduce_load", "deload"}:
         return conservative.get(primary_sport, ["easy"])
     return progressive.get(primary_sport, ["easy"])
@@ -501,7 +514,7 @@ def _recovery_type(sport_type: str) -> str:
 
 def _support_type(sport_type: str, mode: str) -> str:
     if sport_type == "cycling":
-        return "recovery" if mode in {"deload", "reduce_load"} else "endurance"
+        return "recovery" if mode in {"deload", "reduce_load", "restart_consistency"} else "endurance"
     if sport_type == "swimming":
         return "technique"
     if sport_type == "strength":
@@ -627,6 +640,8 @@ def _session_note(session: PlannedSession, *, planning_decision: PlanningDecisio
         return "Semaine allégée. On garde le geste sans chercher la performance."
     if planning_decision.planning_mode == "injury_protection":
         return "Protection prioritaire. Tout doit rester propre et tenable."
+    if planning_decision.planning_mode == "restart_consistency":
+        return "Relance cadrée. On repart plus simple pour reconstruire de la régularité."
     from fitmas.load_projection import planning_mode_label_fr
     mode_label = planning_mode_label_fr(planning_decision.planning_mode)
     if session.priority == "Séance clé":

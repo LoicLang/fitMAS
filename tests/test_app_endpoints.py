@@ -158,6 +158,7 @@ class AppEndpointsTest(unittest.TestCase):
         self.assertIn("planning_contract", overview.json())
         self.assertIn("week_mission", overview.json())
         self.assertIn("calibration_status", overview.json())
+        self.assertIn("recent_reality", overview.json())
         self.assertEqual(overview.json()["last_adaptation"]["mutation_type"], "move_session")
         self.assertEqual(len(overview.json()["recent_adaptations"]), 1)
         self.assertEqual(calendar.status_code, 200)
@@ -173,6 +174,7 @@ class AppEndpointsTest(unittest.TestCase):
         self.assertIn("week_daily", evolution.json())
         self.assertIn("planning_contract", evolution.json())
         self.assertIn("calibration_status", evolution.json())
+        self.assertIn("recent_reality", evolution.json())
         self.assertEqual(evolution.json()["last_adaptation"]["trajectory_impact"], "low")
         self.assertEqual(len(evolution.json()["recent_adaptations"]), 1)
 

@@ -57,6 +57,7 @@ def _target_for_week(*, previous_target: float, cycle_week: int, planning_mode: 
         "increase_load": 1.09,
         "maintain_load": 1.03,
         "reduce_load": 0.92,
+        "restart_consistency": 0.96,
     }.get(planning_mode, 1.0)
 
     if cycle_week == 1:
@@ -77,6 +78,7 @@ PLANNING_MODE_LABELS_FR = {
     "increase_load": "Construction",
     "reduce_load": "Réduction",
     "deload": "Assimilation",
+    "restart_consistency": "Relance",
     "injury_protection": "Protection",
 }
 
@@ -92,6 +94,8 @@ def _focus_label(*, cycle_week: int, planning_mode: str, is_deload: bool) -> str
         return "Construction"
     if planning_mode == "reduce_load":
         return "Réduction"
+    if planning_mode == "restart_consistency":
+        return "Relance"
     if cycle_week == 3:
         return "Pic contrôlé"
     if cycle_week == 1:
