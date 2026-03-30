@@ -7,6 +7,7 @@ from typing import Any
 from fitmas.calendar_resolution import build_session_item, resolve_calendar_payload
 from fitmas.fitness_snapshot import estimate_scheduled_session_tss
 from fitmas.load_projection import build_load_forecast, planning_mode_label_fr
+from fitmas.workout_content import build_workout_content
 from fitmas.time_context import get_local_now
 
 _DAY_LABELS_FR_SHORT = {0: "Lun", 1: "Mar", 2: "Mer", 3: "Jeu", 4: "Ven", 5: "Sam", 6: "Dim"}
@@ -222,6 +223,7 @@ def build_session_detail(
 ) -> dict[str, Any]:
     resolved_session = build_session_item(session, [linked_activity] if linked_activity else [], today=today_date)
     sport = str(_value(session, "sport_type") or "").lower()
+    content = build_workout_content(session)
     distance_m = _float(_value(linked_activity, "distance_m"))
     duration_min = _float(_value(linked_activity, "duration_min")) or _float(_value(session, "duration_min"))
     avg_speed = _float(_value(linked_activity, "avg_speed"))
@@ -248,6 +250,7 @@ def build_session_detail(
             "change_notes": change_notes,
             "watch_items": watch_items,
         },
+        "content": content.as_dict(),
         "zone_distribution": _zone_distribution(_value(session, "load_band")),
         "map_polyline": _value(linked_activity, "map_polyline"),
     }

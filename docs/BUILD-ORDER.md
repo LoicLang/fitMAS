@@ -142,6 +142,14 @@ Ordre recommandé :
 4. introduire un `strength_engine` déterministe
 5. remapper l'app sur ce contrat
 
+Progression actuelle :
+
+- Slice 1 livré : vérité d'exécution plus stricte, faux `done` nettement réduits
+- Slice 3 MVP livré : payload séance structuré pour l'app
+- Slice 5 MVP livré : aperçu + détail séance remappés sur ce payload
+- Prochain commit attendu : Slice 2 `RecentRealityWindow`
+- Puis : Slice 4 `strength_engine`
+
 Règle :
 
 - ne pas commencer par un redesign UI

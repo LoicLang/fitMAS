@@ -62,6 +62,7 @@ export interface TodayView {
   session_type: string;
   session_title: string;
   session_goal: string;
+  session_note?: string;
   session_description?: string;
   duration_min?: number | null;
   intensity?: string;
@@ -423,6 +424,14 @@ export interface EvolutionView {
   calibration_status?: CalibrationStatus;
 }
 
+export interface WorkoutContentView {
+  objective: string;
+  rationale: string;
+  execution: string[];
+  coach_cue: string;
+  nutrition_note: string;
+}
+
 export interface WorkoutDetailView {
   session: CalendarItem;
   metrics: {
@@ -444,6 +453,7 @@ export interface WorkoutDetailView {
     change_notes: ChangeNote[];
     watch_items: WatchItem[];
   };
+  content: WorkoutContentView;
   zone_distribution: number[];
   map_polyline?: string | null;
 }

@@ -17,6 +17,8 @@ const overviewPayload = {
     session_type: "long_run",
     session_title: "Long run",
     session_goal: "Endurance fondamentale",
+    session_note: "On pose une vraie sortie d'endurance avant la semaine chargée.",
+    session_description: "20 min souple\n80 min endurance\n20 min retour au calme",
     duration_min: 120,
     load_band: "easy",
     priority: "Cle",
@@ -78,7 +80,14 @@ const workoutPayload = {
   linked_activity: { id: 88, title: "Long run du jour", sport_type: "running", source: "manual", started_at: "2026-03-28T07:30:00Z" },
   fitness: { ctl: 48, atl: 52, tsb: -4, freshness: "stable" },
   recent_activity: null,
-  coach: { goal: "Endurance fondamentale", note: "Reste calme au cardio", description: "Sortie longue", nutrition_focus: "Hydrate-toi", change_notes: [], watch_items: [] },
+  coach: { goal: "Endurance fondamentale", note: "ClawCoach garde cette séance lisible.", description: "Sortie longue", nutrition_focus: "Hydrate-toi", change_notes: [], watch_items: [] },
+  content: {
+    objective: "Construire une vraie endurance stable.",
+    rationale: "On pose une sortie longue propre avant de remonter la densité.",
+    execution: ["20 min souple", "80 min endurance régulière", "20 min retour au calme"],
+    coach_cue: "Reste propre et garde du jus jusqu'au bout.",
+    nutrition_note: "Hydrate-toi bien et reste simple aujourd'hui.",
+  },
   zone_distribution: [20, 45, 20, 10, 5],
   map_polyline: null,
 };
@@ -115,6 +124,8 @@ describe("app routes", () => {
     renderAt("/", { overview: overviewPayload });
     expect(await screen.findByText("LONG RUN")).toBeInTheDocument();
     expect(screen.getByText("Daily brief")).toBeInTheDocument();
+    expect(screen.getByText("On pose une vraie sortie d'endurance avant la semaine chargée.")).toBeInTheDocument();
+    expect(screen.queryByText("20 min souple")).not.toBeInTheDocument();
   });
 
   it("renders overview without quick actions when today is null", async () => {
@@ -133,7 +144,10 @@ describe("app routes", () => {
   it("renders workout detail route directly", async () => {
     renderAt("/workout/42", { workout: workoutPayload });
     expect(await screen.findByText("Long run")).toBeInTheDocument();
-    expect(screen.getByText("Consignes coach")).toBeInTheDocument();
+    expect(screen.getByText("Pourquoi aujourd'hui")).toBeInTheDocument();
+    expect(screen.getByText("Séance")).toBeInTheDocument();
+    expect(screen.getByText("Reste propre et garde du jus jusqu'au bout.")).toBeInTheDocument();
+    expect(screen.queryByText("ClawCoach garde cette séance lisible.")).not.toBeInTheDocument();
   });
 
   it("renders evolution with historical data", async () => {

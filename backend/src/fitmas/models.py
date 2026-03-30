@@ -110,6 +110,7 @@ class TodayView(BaseModel):
     session_type: str = "easy"
     session_title: str
     session_goal: str
+    session_note: str = ""
     session_description: str = ""
     duration_min: int | None = None
     intensity: str = "easy"
@@ -152,6 +153,14 @@ class ScheduledSession(BaseModel):
     flexibility: str = "stable"
     completion_status: str = "planned"
     linked_activity_id: int | None = None
+
+
+class WorkoutContentView(BaseModel):
+    objective: str
+    rationale: str
+    execution: list[str]
+    coach_cue: str
+    nutrition_note: str
 
 
 class Extraction(BaseModel):

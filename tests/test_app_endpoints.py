@@ -186,4 +186,8 @@ class AppEndpointsTest(unittest.TestCase):
         self.assertEqual(payload["session"]["status"], "done")
         self.assertEqual(payload["linked_activity"]["title"], "Tempo du jour")
         self.assertEqual(payload["coach"]["goal"], "Tenir l'allure")
+        self.assertEqual(payload["content"]["objective"], "Tenir l'allure")
+        self.assertEqual(payload["content"]["rationale"], "Reste propre")
+        self.assertEqual(payload["content"]["execution"], ["20' tempo"])
+        self.assertTrue(payload["content"]["coach_cue"])
         self.assertEqual(len(payload["zone_distribution"]), 5)

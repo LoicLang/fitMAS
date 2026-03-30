@@ -366,6 +366,14 @@ Objectif :
 
 - séparer clairement contenu interne, contenu structuré, rendu user-facing
 
+Etat :
+
+- MVP implémenté pour l'app
+- nouveau module `workout_content.py`
+- `session_note` branché comme rationale côté aperçu
+- détail séance branché sur `objective / rationale / execution / coach_cue / nutrition_note`
+- filtre simple ajouté contre quelques fuites de prompt système
+
 Fichiers principaux :
 
 - nouveau `backend/src/fitmas/workout_content.py`
@@ -392,6 +400,7 @@ Critères de succès :
 - `Pourquoi aujourd'hui` n'affiche plus le plan brut
 - `Consigne coach` n'affiche plus de texte type prompt interne
 - une natation détaille sa structure dans `Séance`
+- backend `/api/v0/sessions/:id` expose maintenant `content`
 
 ### Slice 4 — Strength Engine MVP
 
@@ -419,6 +428,12 @@ Critères de succès :
 - le rendu varie selon le contexte
 - le rendu reste déterministe et testable
 
+Etat :
+
+- pas encore implémenté
+- fallback actuel : rendu déterministe minimal depuis `session_templates.py`
+- utile pour éviter un renfo vide, insuffisant pour l'adaptation symptômes / fatigue / sport protégé
+
 Exemples attendus :
 
 - jambes rincées + séance course clé demain -> upper/core/mobilité, peu de jambes
@@ -430,6 +445,13 @@ Exemples attendus :
 Objectif :
 
 - remettre le bon contenu au bon endroit
+
+Etat :
+
+- MVP implémenté
+- aperçu lit maintenant `session_note` pour `Pourquoi aujourd'hui`
+- détail séance sépare `Objectif du jour`, `Pourquoi aujourd'hui`, `Séance`, `Consigne coach`, `Nutrition`
+- `Trace et profil` masqué pour natation / renfo et sans donnée utile
 
 Fichiers principaux :
 

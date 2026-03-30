@@ -348,10 +348,10 @@ function DailyBriefPanel({
         {today?.session_goal || leadSession?.goal || weekMission?.objective_reason || "Le système garde le cap et affiche la meilleure prochaine décision utile."}
       </p>
 
-        <div className="mt-6 grid gap-3 sm:grid-cols-2">
-          <MissionBlock label="Mission" value={weekMission?.objective || planningContract?.block_focus || "Bloc actif"} />
-          <MissionBlock label="Pourquoi aujourd'hui" value={today?.session_description || weekContext?.coach_reading || "La séance du jour sert la mission de semaine sans casser la suite."} />
-        </div>
+      <div className="mt-6 grid gap-3 sm:grid-cols-2">
+        <MissionBlock label="Mission" value={weekMission?.objective || planningContract?.block_focus || "Bloc actif"} />
+        <MissionBlock label="Pourquoi aujourd'hui" value={today?.session_note || weekContext?.coach_reading || "La séance du jour sert la mission de semaine sans casser la suite."} />
+      </div>
 
       {calibrationStatus ? (
         <div className="mt-6 rounded-[1.6rem] border border-black/6 bg-zinc-50/80 p-5">

@@ -21,10 +21,16 @@ export function WorkoutDetailPage() {
   const navigate = useNavigate();
   const stats = workoutStats(data);
   const session = data.session;
+  const content = data.content;
   const containerRef = useRef<HTMLDivElement | null>(null);
   const { scrollYProgress } = useScroll({ target: containerRef });
   const y = useTransform(scrollYProgress, [0, 1], ["0%", "50%"]);
   const opacity = useTransform(scrollYProgress, [0, 0.5], [1, 0]);
+  const showRouteProfile = shouldShowRouteProfile({
+    sportType: session.sport_type,
+    polyline: data.map_polyline,
+    elevationM: data.metrics.elevation_m,
+  });
 
   return (
     <div className="min-h-screen overflow-x-hidden bg-[var(--app-bg)] text-zinc-900" ref={containerRef}>
@@ -75,7 +81,7 @@ export function WorkoutDetailPage() {
               <h1 className="mt-3 text-5xl font-black uppercase tracking-[-0.08em] text-zinc-950 md:text-7xl">
                 {session.title} <span className="font-light text-[var(--accent)]">_{(session.session_type || "session").replaceAll("_", " ").toUpperCase()}</span>
               </h1>
-              <p className="mt-4 text-xl font-medium text-zinc-600">{data.coach.goal}</p>
+              <p className="mt-4 max-w-3xl text-xl font-medium text-zinc-600">{content.objective || data.coach.goal}</p>
             </motion.div>
           </div>
         </section>
@@ -110,50 +116,139 @@ export function WorkoutDetailPage() {
             ))}
           </div>
 
-          <motion.div
-            initial={{ opacity: 0, y: 30 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true }}
-            transition={{ duration: 0.7 }}
-            className="mt-12"
-          >
-            <h2 className="mb-6 flex items-center text-2xl font-bold text-zinc-950">
-              <Mountain className="mr-3 h-6 w-6 text-[var(--accent)]" />
-              Trace et profil
-            </h2>
-            <div className="rounded-[2rem] border border-black/5 bg-white p-6 shadow-sm">
-              <RoutePreview polyline={data.map_polyline} />
-              <div className="mt-4 flex flex-wrap gap-2">
-                {formatDistance(data.metrics.distance_m) ? <span className="meta-chip">{formatDistance(data.metrics.distance_m)}</span> : null}
-                {data.metrics.elevation_m ? <span className="meta-chip">+{Math.round(data.metrics.elevation_m)} m</span> : null}
-                {data.metrics.tss ? <span className="meta-chip">{Math.round(data.metrics.tss)} TSS</span> : null}
-                <span className="meta-chip">{sportLabel(session.sport_type)}</span>
-                <span className="meta-chip">{loadBandLabel(session.load_band)}</span>
-              </div>
-            </div>
-          </motion.div>
+          <div className="mt-12 grid gap-5 lg:grid-cols-2">
+            <DetailCard
+              title="Objectif du jour"
+              eyebrow="Objectif"
+              content={content.objective || data.coach.goal}
+            />
+            <DetailCard
+              title="Pourquoi aujourd'hui"
+              eyebrow="Placement"
+              content={content.rationale || content.objective || data.coach.goal}
+            />
+          </div>
 
-          <motion.div
-            initial={{ opacity: 0, y: 30 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true }}
-            transition={{ duration: 0.7 }}
-            className="relative mt-12 overflow-hidden rounded-[2rem] border border-[rgba(255,107,53,0.18)] bg-gradient-to-br from-[rgba(255,107,53,0.10)] to-[rgba(255,209,102,0.12)] p-8"
-          >
-            <div className="absolute right-0 top-0 h-64 w-64 rounded-full bg-white/50 blur-[80px]" />
-            <h3 className="flex items-center text-xl font-bold text-zinc-950">
-              <TrendingUp className="mr-2 h-5 w-5 text-[var(--accent)]" />
-              Consignes coach
-            </h3>
-            <p className="mt-5 text-base font-medium leading-relaxed text-zinc-700">
-              {data.coach.note || data.coach.description || data.coach.goal}
-            </p>
-            {data.coach.nutrition_focus ? <p className="mt-4 text-sm font-medium text-zinc-600">Nutrition: {data.coach.nutrition_focus}</p> : null}
-          </motion.div>
+          <DetailListCard title="Séance" eyebrow="Exécution" items={content.execution} />
+
+          <div className="mt-5 grid gap-5 lg:grid-cols-2">
+            <DetailAccentCard
+              title="Consigne coach"
+              content={content.coach_cue || data.coach.goal}
+            />
+            {content.nutrition_note ? (
+              <DetailCard
+                title="Nutrition"
+                eyebrow="Simple"
+                content={content.nutrition_note}
+              />
+            ) : null}
+          </div>
+
+          {showRouteProfile ? (
+            <motion.div
+              initial={{ opacity: 0, y: 30 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true }}
+              transition={{ duration: 0.7 }}
+              className="mt-12"
+            >
+              <h2 className="mb-6 flex items-center text-2xl font-bold text-zinc-950">
+                <Mountain className="mr-3 h-6 w-6 text-[var(--accent)]" />
+                Trace et profil
+              </h2>
+              <div className="rounded-[2rem] border border-black/5 bg-white p-6 shadow-sm">
+                <RoutePreview polyline={data.map_polyline} />
+                <div className="mt-4 flex flex-wrap gap-2">
+                  {formatDistance(data.metrics.distance_m) ? <span className="meta-chip">{formatDistance(data.metrics.distance_m)}</span> : null}
+                  {data.metrics.elevation_m ? <span className="meta-chip">+{Math.round(data.metrics.elevation_m)} m</span> : null}
+                  {data.metrics.tss ? <span className="meta-chip">{Math.round(data.metrics.tss)} TSS</span> : null}
+                  <span className="meta-chip">{sportLabel(session.sport_type)}</span>
+                  <span className="meta-chip">{loadBandLabel(session.load_band)}</span>
+                </div>
+              </div>
+            </motion.div>
+          ) : null}
         </section>
       </div>
     </div>
   );
+}
+
+function DetailCard({ title, eyebrow, content }: { title: string; eyebrow: string; content: string }) {
+  return (
+    <motion.article
+      initial={{ opacity: 0, y: 24 }}
+      whileInView={{ opacity: 1, y: 0 }}
+      viewport={{ once: true }}
+      transition={{ duration: 0.6 }}
+      className="rounded-[2rem] border border-black/5 bg-white p-7 shadow-sm"
+    >
+      <p className="text-[0.72rem] font-bold uppercase tracking-[0.2em] text-zinc-500">{eyebrow}</p>
+      <h2 className="mt-3 text-2xl font-bold text-zinc-950">{title}</h2>
+      <p className="mt-4 text-base font-medium leading-relaxed text-zinc-700">{content}</p>
+    </motion.article>
+  );
+}
+
+function DetailListCard({ title, eyebrow, items }: { title: string; eyebrow: string; items: string[] }) {
+  return (
+    <motion.article
+      initial={{ opacity: 0, y: 24 }}
+      whileInView={{ opacity: 1, y: 0 }}
+      viewport={{ once: true }}
+      transition={{ duration: 0.6 }}
+      className="mt-5 rounded-[2rem] border border-black/5 bg-white p-7 shadow-sm"
+    >
+      <p className="text-[0.72rem] font-bold uppercase tracking-[0.2em] text-zinc-500">{eyebrow}</p>
+      <h2 className="mt-3 text-2xl font-bold text-zinc-950">{title}</h2>
+      <ol className="mt-5 space-y-3">
+        {items.map((item, index) => (
+          <li key={`${index}-${item}`} className="flex gap-4 rounded-[1.4rem] border border-black/5 bg-zinc-50/80 px-4 py-4">
+            <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-white text-sm font-black text-[var(--accent)] shadow-sm">
+              {index + 1}
+            </span>
+            <p className="pt-1 text-base font-medium leading-relaxed text-zinc-700">{item}</p>
+          </li>
+        ))}
+      </ol>
+    </motion.article>
+  );
+}
+
+function DetailAccentCard({ title, content }: { title: string; content: string }) {
+  return (
+    <motion.article
+      initial={{ opacity: 0, y: 24 }}
+      whileInView={{ opacity: 1, y: 0 }}
+      viewport={{ once: true }}
+      transition={{ duration: 0.6 }}
+      className="relative overflow-hidden rounded-[2rem] border border-[rgba(255,107,53,0.18)] bg-gradient-to-br from-[rgba(255,107,53,0.10)] to-[rgba(255,209,102,0.12)] p-8"
+    >
+      <div className="absolute right-0 top-0 h-64 w-64 rounded-full bg-white/50 blur-[80px]" />
+      <p className="relative text-[0.72rem] font-bold uppercase tracking-[0.2em] text-zinc-500">Coach</p>
+      <h2 className="relative mt-3 flex items-center text-2xl font-bold text-zinc-950">
+        <TrendingUp className="mr-3 h-5 w-5 text-[var(--accent)]" />
+        {title}
+      </h2>
+      <p className="relative mt-5 text-base font-medium leading-relaxed text-zinc-700">{content}</p>
+    </motion.article>
+  );
+}
+
+function shouldShowRouteProfile({
+  sportType,
+  polyline,
+  elevationM,
+}: {
+  sportType: string;
+  polyline?: string | null;
+  elevationM?: number | null;
+}) {
+  if (sportType === "swimming" || sportType === "strength") {
+    return false;
+  }
+  return Boolean(polyline || elevationM);
 }
 
 const STAT_BACKGROUNDS = ["bg-purple-50", "bg-orange-50", "bg-yellow-50", "bg-red-50"];
