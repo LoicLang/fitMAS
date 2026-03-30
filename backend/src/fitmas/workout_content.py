@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from fitmas.session_templates import render_session_description, select_session_template
+from fitmas.strength_engine import build_strength_workout
 
 _SYSTEM_MARKERS = (
     "clawcoach",
@@ -48,11 +49,24 @@ class WorkoutContent:
         }
 
 
-def build_workout_content(session: Any) -> WorkoutContent:
+def build_workout_content(
+    session: Any,
+    *,
+    watch_items: tuple[dict[str, Any], ...] | list[dict[str, Any]] | tuple[Any, ...] | list[Any] = (),
+) -> WorkoutContent:
     template = select_session_template(
         sport_type=str(_value(session, "sport_type") or "running"),
         session_type=str(_value(session, "session_type") or "easy"),
     )
+    if template.sport_type == "strength":
+        strength = build_strength_workout(session=session, watch_items=watch_items)
+        return WorkoutContent(
+            objective=strength.objective,
+            rationale=strength.rationale,
+            execution=strength.execution,
+            coach_cue=strength.coach_cue,
+            nutrition_note=_normalize_nutrition(_clean_text(_value(session, "nutrition_focus"))),
+        )
     objective = _clean_text(_value(session, "session_goal")) or template.goal
     rationale_source = _clean_text(_value(session, "session_note"))
     rationale = rationale_source if rationale_source and not _looks_system_like(rationale_source) else objective

@@ -37,4 +37,4 @@ def test_strength_content_falls_back_to_actionable_execution() -> None:
 
     assert content.rationale == "Support léger pour la semaine."
     assert len(content.execution) >= 3
-    assert any("squats" in step.lower() for step in content.execution)
+    assert any("pont fessier" in step.lower() or "wall slides" in step.lower() for step in content.execution)

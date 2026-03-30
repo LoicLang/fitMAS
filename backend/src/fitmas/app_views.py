@@ -225,7 +225,7 @@ def build_session_detail(
 ) -> dict[str, Any]:
     resolved_session = build_session_item(session, [linked_activity] if linked_activity else [], today=today_date)
     sport = str(_value(session, "sport_type") or "").lower()
-    content = build_workout_content(session)
+    content = build_workout_content(session, watch_items=watch_items)
     distance_m = _float(_value(linked_activity, "distance_m"))
     duration_min = _float(_value(linked_activity, "duration_min")) or _float(_value(session, "duration_min"))
     avg_speed = _float(_value(linked_activity, "avg_speed"))

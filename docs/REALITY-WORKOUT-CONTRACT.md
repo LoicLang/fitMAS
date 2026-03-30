@@ -439,9 +439,17 @@ Critères de succès :
 
 Etat :
 
-- pas encore implémenté
-- fallback actuel : rendu déterministe minimal depuis `session_templates.py`
-- utile pour éviter un renfo vide, insuffisant pour l'adaptation symptômes / fatigue / sport protégé
+- MVP implémenté
+- nouveaux modules `strength_engine.py` et `strength_exercise_bank.py`
+- sélection déterministe de blueprint selon signaux déjà disponibles dans la séance
+- rendu maintenant contextualisé pour au moins :
+  - jambes fatiguées / support course
+  - épaule sensible / support natation
+  - relance simple
+  - mobilité / core / full body support
+- reste encore à faire ensuite :
+  - brancher des signaux plus riches que le texte séance seul
+  - tenir compte explicitement du sport clé voisin et du matériel réel côté app/profil
 
 Exemples attendus :
 

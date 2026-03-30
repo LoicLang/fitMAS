@@ -147,8 +147,9 @@ Progression actuelle :
 - Slice 1 livré : vérité d'exécution plus stricte, faux `done` nettement réduits
 - Slice 2 MVP livré : `recent_reality.py` + mode planner `restart_consistency`
 - Slice 3 MVP livré : payload séance structuré pour l'app
+- Slice 4 MVP livré : moteur strength déterministe + contextuel
 - Slice 5 MVP livré : aperçu + détail séance remappés sur ce payload
-- Prochain commit attendu : Slice 4 `strength_engine`
+- Prochain chantier naturel : enrichir le moteur strength avec plus de signaux réels et pousser `recent_reality` plus loin dans les surfaces app / Telegram
 
 Règle :
 
