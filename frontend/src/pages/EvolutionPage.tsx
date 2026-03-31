@@ -51,6 +51,8 @@ export function EvolutionPage() {
   const chartUnit = hasLoadHistory ? "CTL actuel" : "heures planifiées";
   const chartLabel = hasLoadHistory ? "Charge pilotée" : "Volume semaine";
   const chartBadge = hasLoadHistory ? performanceOverview.load.ramp_rate : `+${plannedSessions} séances`;
+  const recentReality7d = performanceOverview.recent_reality.periods["7d"];
+  const recentReality14d = performanceOverview.recent_reality.periods["14d"];
 
   return (
     <section className="evolution-page">
@@ -128,6 +130,36 @@ export function EvolutionPage() {
             </button>
           </article>
         </div>
+      </div>
+
+      <div className="dashboard-row">
+        <article className="glass-card stats-panel">
+          <span className="card-label">Réalité 7 jours</span>
+          <div className="side-metric-stack">
+            <strong>{recentReality7d.confirmed_sessions} / {recentReality7d.planned_sessions}</strong>
+            <small>séances confirmées sur la fenêtre courte</small>
+          </div>
+          <ul className="bullet-list">
+            <li>Complétion confirmée {Math.round(recentReality7d.confirmed_completion * 100)}%</li>
+            <li>Charge prévue {Math.round(recentReality7d.planned_load)} TSS · observée {Math.round(recentReality7d.observed_load)} TSS</li>
+            <li>{recentReality7d.key_sessions_salvaged} séance(s) clé sauvée(s)</li>
+            <li>{performanceOverview.recent_reality.missed_streak_days} jour(s) manqué(s) d&apos;affilée</li>
+          </ul>
+        </article>
+
+        <article className="glass-card stats-panel">
+          <span className="card-label">Réalité 14 jours</span>
+          <div className="side-metric-stack">
+            <strong>{recentReality14d.confirmed_sessions} / {recentReality14d.planned_sessions}</strong>
+            <small>lecture de constance sur deux semaines</small>
+          </div>
+          <ul className="bullet-list">
+            <li>Complétion confirmée {Math.round(recentReality14d.confirmed_completion * 100)}%</li>
+            <li>Charge prévue {Math.round(recentReality14d.planned_load)} TSS · observée {Math.round(recentReality14d.observed_load)} TSS</li>
+            <li>{recentReality14d.key_sessions_salvaged} séance(s) clé sauvée(s)</li>
+            <li>Ratio de charge {recentReality14d.load_ratio.toFixed(2)}</li>
+          </ul>
+        </article>
       </div>
 
       <div className="dashboard-row">

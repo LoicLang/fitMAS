@@ -149,7 +149,9 @@ Progression actuelle :
 - Slice 3 MVP livré : payload séance structuré pour l'app
 - Slice 4 MVP livré : moteur strength déterministe + contextuel
 - Slice 5 MVP livré : aperçu + détail séance remappés sur ce payload
-- Prochain chantier naturel : enrichir le moteur strength avec plus de signaux réels et pousser `recent_reality` plus loin dans les surfaces app / Telegram
+- Extension livrée ensuite : vue `recent_reality` enrichie en `7j / 14j` pour les surfaces app
+- Clarification ciblée maintenant partagée : heartbeat + chat bloquent conseil/adaptation tant que `hier` reste réellement structurant pour la semaine, sans bloquer une simple indispo future explicite
+- Prochain chantier naturel : enrichir le moteur strength avec des signaux réels hors texte séance seul
 
 Règle :
 

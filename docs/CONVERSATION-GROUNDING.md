@@ -209,6 +209,8 @@ Etat :
 - pose
 - utilise deja par le heartbeat pour eviter d'affirmer `fait` sans preuve forte
 - sert aussi a rendre le matching futur testable et reutilisable
+- prolonge maintenant un module pur de clarification (`execution_clarification.py`) pour demander explicitement `faite ou non ?` seulement quand l'incertitude change vraiment la lecture recente de la semaine
+- cette clarification ciblee est maintenant reutilisee aussi cote `api_messages.py` pour bloquer un conseil ou une adaptation prematuree tant que `hier` reste ambigu et vraiment structurant
 
 Regle :
 - `confirmed_done` seulement avec preuve forte

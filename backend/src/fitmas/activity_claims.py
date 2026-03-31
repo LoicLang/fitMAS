@@ -29,6 +29,38 @@ NON_COMPLETION_MARKERS = (
     "pas roulé",
     "pas fait",
 )
+COMPLETION_FACT_MARKERS = (
+    "completed",
+    "complete",
+    "complété",
+    "completee",
+    "confirm",
+    "fait",
+    "realise",
+    "réalisé",
+    "couru",
+    "nage",
+    "nagé",
+    "roule",
+    "roulé",
+)
+NON_COMPLETION_FACT_MARKERS = (
+    "skipped",
+    "skip",
+    "missed",
+    "loup",
+    "rate",
+    "raté",
+    "non_realise",
+    "non realise",
+    "not_completed",
+    "not completed",
+    "n_a_pas",
+    "n'a pas",
+    "pas_complete",
+)
+DAY_NAMES_EN = ("monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday")
+DAY_NAMES_FR = ("lundi", "mardi", "mercredi", "jeudi", "vendredi", "samedi", "dimanche")
 
 
 @dataclass(frozen=True, slots=True)
@@ -222,6 +254,60 @@ def build_claim_correction_payloads(
     ]
 
 
+def build_execution_conflict_archive_payloads(
+    active_facts: Sequence[Any],
+    *,
+    activity_claim: ActivityClaim | None = None,
+    non_completion_claim: NonCompletionClaim | None = None,
+) -> list[dict[str, Any]]:
+    target_date_iso: str | None = None
+    sport_type: str | None = None
+    target_polarity: str | None = None
+
+    if non_completion_claim is not None and non_completion_claim.resolved_date_iso is not None:
+        target_date_iso = non_completion_claim.resolved_date_iso
+        sport_type = non_completion_claim.sport_type
+        target_polarity = "non_completion"
+    elif activity_claim is not None and activity_claim.resolved_date_iso is not None:
+        target_date_iso = activity_claim.resolved_date_iso
+        sport_type = activity_claim.sport_type
+        target_polarity = "completion"
+
+    if target_date_iso is None or target_polarity is None:
+        return []
+
+    payloads: list[dict[str, Any]] = []
+    seen_keys: set[str] = set()
+    for fact in active_facts:
+        if _activity_value(fact, "category") != "execution":
+            continue
+        if _activity_value(fact, "active") is False:
+            continue
+        key = str(_activity_value(fact, "key") or "").strip()
+        if not key or key in seen_keys:
+            continue
+        if not _execution_fact_matches_target(
+            fact,
+            target_date_iso=target_date_iso,
+            sport_type=sport_type,
+        ):
+            continue
+        fact_polarity = _execution_fact_polarity(fact)
+        if fact_polarity is None or fact_polarity == target_polarity:
+            continue
+        seen_keys.add(key)
+        payloads.append(
+            {
+                "category": "execution",
+                "key": key,
+                "value": str(_activity_value(fact, "value") or ""),
+                "source": str(_activity_value(fact, "source") or "conversation"),
+                "action": "archive",
+            }
+        )
+    return payloads
+
+
 def extract_claims_from_facts(
     facts: Sequence[Any],
     *,
@@ -282,6 +368,59 @@ def _claim_is_backed_by_activity(
         if claim.sport_type is None and claim.duration_min is not None and activity_duration == claim.duration_min:
             return True
     return False
+
+
+def _execution_fact_matches_target(
+    fact: Any,
+    *,
+    target_date_iso: str,
+    sport_type: str | None,
+) -> bool:
+    key = str(_activity_value(fact, "key") or "").strip()
+    if key.startswith("claimed_activity_"):
+        claim = _claim_from_fact(fact)
+        if claim is None or claim.resolved_date_iso != target_date_iso:
+            return False
+        if sport_type is None:
+            return True
+        return claim.sport_type == sport_type
+
+    haystack = f"{key} {str(_activity_value(fact, 'value') or '')}".lower()
+    if sport_type is not None and not _haystack_mentions_sport(haystack, sport_type):
+        return False
+    if target_date_iso in haystack:
+        return True
+    target_date = date.fromisoformat(target_date_iso)
+    return any(token in haystack for token in _day_tokens(target_date))
+
+
+def _execution_fact_polarity(fact: Any) -> str | None:
+    key = str(_activity_value(fact, "key") or "").strip()
+    if key.startswith("claimed_activity_"):
+        return "completion"
+
+    haystack = f"{key} {str(_activity_value(fact, 'value') or '')}".lower()
+    if any(marker in haystack for marker in NON_COMPLETION_FACT_MARKERS):
+        return "non_completion"
+    if any(marker in haystack for marker in COMPLETION_FACT_MARKERS):
+        return "completion"
+    return None
+
+
+def _haystack_mentions_sport(haystack: str, sport_type: str) -> bool:
+    if sport_type in haystack:
+        return True
+    keywords = SPORT_KEYWORDS.get(sport_type, ())
+    return any(keyword in haystack for keyword in keywords)
+
+
+def _day_tokens(target_date: date) -> tuple[str, ...]:
+    weekday = target_date.weekday()
+    return (
+        target_date.isoformat(),
+        DAY_NAMES_EN[weekday],
+        DAY_NAMES_FR[weekday],
+    )
 
 
 def _claim_key(claim: ActivityClaim) -> str:

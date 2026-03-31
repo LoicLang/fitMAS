@@ -257,6 +257,41 @@ export interface CalibrationStatus {
   adaptation_count_14d: number;
 }
 
+export interface RecentRealityPeriod {
+  planned_sessions: number;
+  confirmed_sessions: number;
+  claimed_sessions: number;
+  key_sessions_salvaged: number;
+  planned_load: number;
+  observed_load: number;
+  confirmed_completion: number;
+  load_ratio: number;
+}
+
+export interface RecentRealityView {
+  planned_sessions_7d: number;
+  confirmed_sessions_7d: number;
+  claimed_sessions_7d: number;
+  key_sessions_salvaged_7d: number;
+  planned_tss_7d: number;
+  observed_tss_7d: number;
+  planned_sessions_14d: number;
+  confirmed_sessions_14d: number;
+  claimed_sessions_14d: number;
+  key_sessions_salvaged_14d: number;
+  planned_tss_14d: number;
+  observed_tss_14d: number;
+  compliance_confirmed: number;
+  load_ratio: number;
+  compliance_confirmed_14d: number;
+  load_ratio_14d: number;
+  missed_streak_days: number;
+  periods: {
+    "7d": RecentRealityPeriod;
+    "14d": RecentRealityPeriod;
+  };
+}
+
 export interface OverviewView {
   today: TodayView | null;
   lead_session: CalendarItem | null;
@@ -290,6 +325,7 @@ export interface OverviewView {
     sessions_this_week: number;
     done_this_week: number;
   };
+  recent_reality: RecentRealityView;
   weekly_hours: number;
   profile: {
     name: string;
@@ -403,6 +439,7 @@ export interface EvolutionView {
     sessions_this_week: number;
     done_this_week: number;
   };
+  recent_reality: RecentRealityView;
   distribution: {
     planned: Record<string, { count: number; tss: number }>;
     completed: Record<string, { count: number; tss: number }>;
@@ -456,4 +493,30 @@ export interface WorkoutDetailView {
   content: WorkoutContentView;
   zone_distribution: number[];
   map_polyline?: string | null;
+}
+
+export interface PerformanceOverview {
+  week: EvolutionView["week"];
+  load: EvolutionView["load"];
+  tss: EvolutionView["tss"];
+  completion: EvolutionView["completion"];
+  recent_reality: RecentRealityView;
+  distribution: EvolutionView["distribution"];
+  sports: EvolutionView["sports"];
+  rationale: string[];
+  risk_flags: string[];
+}
+
+export interface AppBootstrap {
+  profile: unknown;
+  week: { days: Array<{ duration_min?: number | null; sport_type: SportType }> } & Record<string, unknown>;
+  facts: unknown[];
+  activities: Activity[];
+  stravaStatus: unknown;
+  timeline: unknown;
+  trainingLoad: { series?: Array<{ date: string; ctl: number; atl: number; tsb?: number }> } & Record<string, unknown>;
+  volume: unknown;
+  records: unknown;
+  performanceOverview: PerformanceOverview;
+  today: TodayView | null;
 }

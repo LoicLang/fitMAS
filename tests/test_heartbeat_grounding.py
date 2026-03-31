@@ -317,6 +317,113 @@ class HeartbeatGroundingTest(unittest.TestCase):
         self.assertIn("statut a verifier", captured["prompt"].lower())
         self.assertNotIn("fait confirme", captured["prompt"].lower())
 
+    def test_morning_briefing_adds_priority_question_when_yesterday_changes_week(self) -> None:
+        now = get_local_now(self.user.timezone)
+        today_key = DAY_KEYS[now.weekday()]
+        yesterday_key = DAY_KEYS[(now.weekday() - 1) % 7]
+        two_days_ago_key = DAY_KEYS[(now.weekday() - 2) % 7]
+        repo.replace_plan(
+            self.db,
+            self.user.id,
+            intention="test",
+            summary="test",
+            timezone_name=self.user.timezone,
+            days=[
+                {
+                    "day": two_days_ago_key,
+                    "label": day_label_fr(two_days_ago_key, capitalize=True),
+                    "sport_type": "swimming",
+                    "session_type": "easy",
+                    "session_title": "Natation",
+                    "session_goal": "Bouger",
+                    "session_note": "",
+                    "session_description": "",
+                    "duration_min": 40,
+                    "intensity": "easy",
+                    "load_score": 1,
+                    "priority": "Support",
+                    "nutrition_focus": "",
+                    "flexibility": "stable",
+                    "completion_status": "planned",
+                },
+                {
+                    "day": today_key,
+                    "label": day_label_fr(today_key, capitalize=True),
+                    "sport_type": "cycling",
+                    "session_type": "easy",
+                    "session_title": "Vélo",
+                    "session_goal": "Bouger",
+                    "session_note": "",
+                    "session_description": "",
+                    "duration_min": 45,
+                    "intensity": "easy",
+                    "load_score": 1,
+                    "priority": "Normal",
+                    "nutrition_focus": "",
+                    "flexibility": "stable",
+                    "completion_status": "planned",
+                },
+            ],
+        )
+        self.db.add_all(
+            [
+                s.ScheduledSession(
+                    user_id=self.user.id,
+                    day=two_days_ago_key,
+                    label=day_label_fr(two_days_ago_key, capitalize=True),
+                    scheduled_date=(now - timedelta(days=2)).replace(hour=7, minute=0, second=0, microsecond=0, tzinfo=None),
+                    sport_type="swimming",
+                    session_type="easy",
+                    session_title="Natation",
+                    session_goal="Bouger",
+                    session_note="",
+                    session_description="",
+                    duration_min=40,
+                    intensity="easy",
+                    load_score=1,
+                    priority="Support",
+                    nutrition_focus="",
+                    flexibility="stable",
+                    completion_status="planned",
+                ),
+                s.ScheduledSession(
+                    user_id=self.user.id,
+                    day=yesterday_key,
+                    label=day_label_fr(yesterday_key, capitalize=True),
+                    scheduled_date=(now - timedelta(days=1)).replace(hour=7, minute=0, second=0, microsecond=0, tzinfo=None),
+                    sport_type="running",
+                    session_type="tempo",
+                    session_title="Course clé",
+                    session_goal="Stimulus",
+                    session_note="",
+                    session_description="",
+                    duration_min=60,
+                    intensity="moderate",
+                    load_score=4,
+                    priority="High",
+                    nutrition_focus="",
+                    flexibility="stable",
+                    completion_status="planned",
+                ),
+            ]
+        )
+        self.db.commit()
+        captured: dict[str, str] = {}
+        original_llm = heartbeat._llm_generate
+        try:
+            def fake_llm(system: str, prompt: str, *, allow_no_send: bool = True):
+                captured["prompt"] = prompt
+                return "ok"
+
+            heartbeat._llm_generate = fake_llm
+            draft = heartbeat.morning_briefing()
+        finally:
+            heartbeat._llm_generate = original_llm
+
+        self.assertEqual(draft.text, "ok")
+        self.assertIn("clarification prioritaire", captured["prompt"].lower())
+        self.assertIn("tu l'as faite ou non", captured["prompt"].lower())
+
     def test_morning_briefing_can_attach_hidden_calibration_need(self) -> None:
         now = get_local_now(self.user.timezone)
         today_key = DAY_KEYS[now.weekday()]
@@ -500,6 +607,27 @@ class HeartbeatGroundingTest(unittest.TestCase):
         self.assertIn("Source de verite planning: calendrier date reel / app.", captured["prompt"])
         self.assertIn("Natation app truth", captured["prompt"])
         self.assertNotIn("Legacy footing plan", captured["prompt"])
+
+    def test_morning_briefing_keeps_running_without_active_plan(self) -> None:
+        plan, today_session = self._create_plan_with_today_session()
+        self.db.delete(plan)
+        self.db.commit()
+
+        captured: dict[str, str] = {}
+        original_llm = heartbeat._llm_generate
+        try:
+            def fake_llm(system: str, prompt: str, *, allow_no_send: bool = True):
+                captured["prompt"] = prompt
+                return "ok"
+
+            heartbeat._llm_generate = fake_llm
+            draft = heartbeat.morning_briefing()
+        finally:
+            heartbeat._llm_generate = original_llm
+
+        self.assertEqual(draft.text, "ok")
+        self.assertIn(today_session.session_title, captured["prompt"])
+        self.assertIn("Source de verite planning: calendrier date reel / app.", captured["prompt"])
 
     def test_weekly_review_prefers_scheduled_sessions_over_legacy_plan(self) -> None:
         _, today_session = self._create_plan_with_today_session()

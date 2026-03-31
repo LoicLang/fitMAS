@@ -297,12 +297,16 @@ def get_user_optional(db: Session) -> s.User | None:
     return user
 
 
-def get_active_plan(db: Session, user_id: int) -> s.WeeklyPlan:
-    plan = (
+def get_active_plan_optional(db: Session, user_id: int) -> s.WeeklyPlan | None:
+    return (
         db.query(s.WeeklyPlan)
         .filter(s.WeeklyPlan.user_id == user_id, s.WeeklyPlan.status == "active")
         .first()
     )
+
+
+def get_active_plan(db: Session, user_id: int) -> s.WeeklyPlan:
+    plan = get_active_plan_optional(db, user_id)
     if plan is None:
         raise RuntimeError("No active plan in DB")
     return plan

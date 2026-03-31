@@ -10,6 +10,9 @@ from sqlalchemy.orm import Session
 from fitmas import mutations, repository as repo
 from fitmas.adaptation import check_and_adapt_health_facts
 from fitmas.adaptation_log import build_adaptation_log_entry
+from fitmas.activity_helpers import claimed_activities_last_days
+from fitmas.activity_claims import build_execution_conflict_archive_payloads
+from fitmas.execution_clarification import ExecutionClarification, build_execution_clarification
 from fitmas.execution_evidence import classify_execution_evidence
 from fitmas.athlete_profile import build_athlete_profile
 from fitmas.api_payloads import IncomingMessage
@@ -344,6 +347,59 @@ def _execution_contestation_reply(
     return f"OK. Je ne compte pas {subject} comme faite. Je repars de ce que tu me dis, pas d'une validation implicite."
 
 
+def _targeted_execution_clarification(
+    *,
+    db: Session,
+    user,
+    conversation_context,
+    user_indication: UserIndication | None,
+) -> ExecutionClarification | None:
+    if (
+        user_indication is not None
+        and user_indication.kind is UserIndicationKind.AVAILABILITY_CONSTRAINT
+    ):
+        return None
+
+    today = conversation_context.temporal_resolution.local_date
+    yesterday = today.fromordinal(today.toordinal() - 1)
+    if (
+        conversation_context.non_completion_claim is not None
+        and conversation_context.non_completion_claim.resolved_date_iso == yesterday.isoformat()
+    ):
+        return None
+    if (
+        conversation_context.current_activity_claim is not None
+        and conversation_context.current_activity_claim.resolved_date_iso == yesterday.isoformat()
+    ):
+        return None
+
+    recent_sessions = repo.get_scheduled_sessions_between_dates(
+        db,
+        user.id,
+        start_date=today.fromordinal(today.toordinal() - 13),
+        end_date=today,
+        limit=42,
+    )
+    yesterday_sessions = [
+        session
+        for session in recent_sessions
+        if _coerce_local_date(_value(session, "scheduled_date"), timezone_name=user.timezone) == yesterday
+        and str(_value(session, "sport_type") or "").lower() != "rest"
+    ]
+    if not yesterday_sessions:
+        return None
+
+    recent_claims = claimed_activities_last_days(db, user, days=14)
+    return build_execution_clarification(
+        today=today,
+        target_session=yesterday_sessions[0],
+        target_date=yesterday,
+        scheduled_sessions=recent_sessions,
+        activities=repo.get_activities(db, user.id, limit=120),
+        claims=list(recent_claims),
+    )
+
+
 def _render_applied_decision_reply(
     *,
     decision: MutationDecision,
@@ -487,6 +543,21 @@ def post_message(payload: IncomingMessage, db: Session = Depends(get_db)) -> Mes
         payload.text,
         timezone_name=user.timezone,
     )
+    clarification = _targeted_execution_clarification(
+        db=db,
+        user=user,
+        conversation_context=conversation_context,
+        user_indication=user_indication,
+    )
+    if clarification is not None:
+        reply_text = clarification.question
+        repo.add_message(db, user.id, "agent", reply_text)
+        return MessageReply(
+            user_message=Message(role=MessageRole.USER, text=payload.text),
+            extraction=Extraction(confidence=0.9),
+            assistant_message=Message(role=MessageRole.AGENT, text=reply_text),
+            day_updated=None,
+        )
     health_indication_facts = build_health_fact_payloads_from_indication(user_indication)
     health_indication_handled = bool(health_indication_facts)
     if health_indication_facts:
@@ -663,6 +734,13 @@ def post_message(payload: IncomingMessage, db: Session = Depends(get_db)) -> Mes
 
     repo.add_message(db, user.id, "agent", reply_text)
     extracted_facts = extract_facts(payload.text, reply_text, active_facts)
+    extracted_facts.extend(
+        build_execution_conflict_archive_payloads(
+            active_facts,
+            activity_claim=conversation_context.current_activity_claim,
+            non_completion_claim=conversation_context.non_completion_claim,
+        )
+    )
     if extracted_facts:
         _persist_memory_updates(db, user.id, extracted_facts)
 

@@ -120,6 +120,78 @@ class FitMASCoreFlowsTest(unittest.TestCase):
         self.db.refresh(tomorrow_session)
         return plan, tomorrow_session
 
+    def _seed_uncertain_yesterday_key_session(self) -> tuple[s.WeeklyPlan, s.ScheduledSession]:
+        now = get_local_now(self.user.timezone)
+        today_key = DAY_KEYS[now.weekday()]
+        yesterday_key = DAY_KEYS[(now.weekday() - 1) % 7]
+        two_days_ago_key = DAY_KEYS[(now.weekday() - 2) % 7]
+        plan = repo.replace_plan(
+            self.db,
+            self.user.id,
+            intention="reprendre propre",
+            summary="test",
+            timezone_name=self.user.timezone,
+            days=[
+                {
+                    "day": two_days_ago_key,
+                    "label": day_label_fr(two_days_ago_key, capitalize=True),
+                    "sport_type": "swimming",
+                    "session_type": "easy",
+                    "session_title": "Natation support",
+                    "session_goal": "Bouger",
+                    "session_note": "",
+                    "session_description": "",
+                    "duration_min": 40,
+                    "intensity": "easy",
+                    "load_score": 1,
+                    "priority": "Support",
+                    "nutrition_focus": "",
+                    "flexibility": "stable",
+                    "completion_status": "planned",
+                },
+                {
+                    "day": today_key,
+                    "label": day_label_fr(today_key, capitalize=True),
+                    "sport_type": "cycling",
+                    "session_type": "easy",
+                    "session_title": "Velo facile",
+                    "session_goal": "Bouger",
+                    "session_note": "",
+                    "session_description": "",
+                    "duration_min": 45,
+                    "intensity": "easy",
+                    "load_score": 1,
+                    "priority": "Normal",
+                    "nutrition_focus": "",
+                    "flexibility": "stable",
+                    "completion_status": "planned",
+                },
+            ],
+        )
+        yesterday_session = s.ScheduledSession(
+            user_id=self.user.id,
+            day=yesterday_key,
+            label=day_label_fr(yesterday_key, capitalize=True),
+            scheduled_date=(now - timedelta(days=1)).replace(hour=7, minute=0, second=0, microsecond=0),
+            sport_type="running",
+            session_type="tempo",
+            session_title="Course cle hier",
+            session_goal="Stimulus",
+            session_note="",
+            session_description="",
+            duration_min=60,
+            intensity="moderate",
+            load_score=4,
+            priority="High",
+            nutrition_focus="",
+            flexibility="stable",
+            completion_status="planned",
+        )
+        self.db.add(yesterday_session)
+        self.db.commit()
+        self.db.refresh(yesterday_session)
+        return plan, yesterday_session
+
     def test_move_session_keeps_placeholder_and_creates_future_copy(self) -> None:
         _, session = self._create_plan_for_today()
         moved = move_session(
@@ -302,6 +374,53 @@ class FitMASCoreFlowsTest(unittest.TestCase):
         self.assertIn("version courte", adapted_session.session_title.lower())
         self.assertIsNotNone(latest_adaptation)
         self.assertEqual(latest_adaptation.reason_code, "fatigue_signal")
+
+    def test_message_flow_asks_targeted_clarification_before_generic_chat_when_yesterday_changes_week(self) -> None:
+        self._seed_uncertain_yesterday_key_session()
+        original_decide = api_messages.decide
+        original_extract_facts = api_messages.extract_facts
+        try:
+            def should_not_run(*args, **kwargs):
+                raise AssertionError("LLM decide should not run before targeted execution clarification")
+
+            api_messages.decide = should_not_run
+            api_messages.extract_facts = lambda *args, **kwargs: []
+            result = self.client.post("/api/v0/messages", json={"text": "Tu me conseilles quoi aujourd'hui ?"}).json()
+        finally:
+            api_messages.decide = original_decide
+            api_messages.extract_facts = original_extract_facts
+
+        self.assertIn("Tu l'as faite ou non", result["assistant_message"]["text"])
+
+    def test_message_flow_blocks_fatigue_adaptation_until_targeted_clarification_is_answered(self) -> None:
+        _, yesterday_session = self._seed_uncertain_yesterday_key_session()
+        today_session = repo.get_today_scheduled_session(self.db, self.user.id, timezone_name=self.user.timezone)
+        self.assertIsNotNone(today_session)
+        original_decide = api_messages.decide
+        original_extract_facts = api_messages.extract_facts
+        try:
+            def should_not_run(*args, **kwargs):
+                raise AssertionError("LLM decide should not run before targeted execution clarification")
+
+            api_messages.decide = should_not_run
+            api_messages.extract_facts = lambda *args, **kwargs: []
+            result = self.client.post("/api/v0/messages", json={"text": "Je suis rincé aujourd'hui"}).json()
+        finally:
+            api_messages.decide = original_decide
+            api_messages.extract_facts = original_extract_facts
+
+        self.db.expire_all()
+        verify_db = SessionLocal()
+        try:
+            refreshed_today = repo.get_scheduled_session(verify_db, self.user.id, today_session.id)
+            latest_adaptation = repo.get_latest_adaptation_event(verify_db, self.user.id)
+        finally:
+            verify_db.close()
+
+        self.assertIn("Tu l'as faite ou non", result["assistant_message"]["text"])
+        self.assertEqual(refreshed_today.completion_status, "planned")
+        self.assertIsNone(latest_adaptation)
+        self.assertEqual(yesterday_session.completion_status, "planned")
 
     def test_message_flow_can_replan_future_availability_constraint_without_llm(self) -> None:
         _, tomorrow_session = self._create_plan_with_tomorrow_session()
@@ -639,6 +758,65 @@ class FitMASCoreFlowsTest(unittest.TestCase):
 
         self.assertIn("Je ne compte pas", result["assistant_message"]["text"])
         self.assertEqual(updated.completion_status, "skipped")
+
+    def test_execution_fact_correction_archives_conflicting_working_memory(self) -> None:
+        self._create_plan_for_today()
+        original_decide = api_messages.decide
+        original_extract_facts = api_messages.extract_facts
+        try:
+            api_messages.decide = lambda *args, **kwargs: MutationDecision(
+                mutation_type="no_change",
+                rationale="ok",
+                fitmas_message="Bien recu.",
+            )
+
+            def fake_extract_facts(user_text: str, assistant_text: str, existing_facts: list[dict]) -> list[dict]:
+                lowered = user_text.lower()
+                if "n'ai pas couru" in lowered:
+                    return [
+                        {
+                            "category": "execution",
+                            "key": "session_running_sunday_skipped",
+                            "value": "N'a pas complete la seance de running du dimanche",
+                            "confidence": 0.9,
+                            "confirmed": True,
+                            "source": "conversation",
+                            "action": "upsert",
+                        }
+                    ]
+                if "finalement couru 45 min" in lowered:
+                    return [
+                        {
+                            "category": "execution",
+                            "key": "session_running_sunday_completed",
+                            "value": "A complete 45min de running dimanche",
+                            "confidence": 0.9,
+                            "confirmed": True,
+                            "source": "conversation",
+                            "action": "upsert",
+                        }
+                    ]
+                return []
+
+            api_messages.extract_facts = fake_extract_facts
+            self.client.post("/api/v0/messages", json={"text": "Je n'ai pas couru hier"})
+            self.client.post("/api/v0/messages", json={"text": "J'ai finalement couru 45 min hier"})
+        finally:
+            api_messages.decide = original_decide
+            api_messages.extract_facts = original_extract_facts
+
+        rows = (
+            self.db.query(s.WorkingMemoryEntry)
+            .filter(s.WorkingMemoryEntry.category == "execution")
+            .order_by(s.WorkingMemoryEntry.id)
+            .all()
+        )
+        active_keys = {row.key for row in rows if row.active}
+        archived_keys = {row.key for row in rows if not row.active}
+
+        self.assertIn("session_running_sunday_completed", active_keys)
+        self.assertNotIn("session_running_sunday_skipped", active_keys)
+        self.assertIn("session_running_sunday_skipped", archived_keys)
 
     def test_replace_session_reply_is_aligned_with_applied_duration(self) -> None:
         _, session = self._create_plan_for_today()

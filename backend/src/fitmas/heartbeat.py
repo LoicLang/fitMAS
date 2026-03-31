@@ -30,6 +30,7 @@ from fitmas.calibration_needs import (
 from fitmas.calibration_status import build_calibration_status
 from fitmas.coach_messages import CoachDraft
 from fitmas.db import SessionLocal
+from fitmas.execution_clarification import build_execution_clarification
 from fitmas.execution_evidence import classify_execution_evidence
 from fitmas.fact_memory import fact_is_current
 from fitmas.knowledge import load_sport_knowledge
@@ -244,8 +245,10 @@ def morning_briefing() -> CoachDraft | None:
         today_session = repo.get_today_scheduled_session(db, user.id, timezone_name=user.timezone)
         if not today_session:
             return None
-        _, day = repo.get_current_week_day_plan_for_session(db, user=user, session=today_session)
-        plan = repo.get_active_plan(db, user.id)
+        plan = repo.get_active_plan_optional(db, user.id)
+        day = None
+        if plan is not None:
+            _, day = repo.get_current_week_day_plan_for_session(db, user=user, session=today_session)
         calibration_need = _select_calibration_need(
             db,
             user,
@@ -263,6 +266,7 @@ def morning_briefing() -> CoachDraft | None:
         yesterday_day = repo.get_day_plan(db, plan.id, yesterday_key) if plan else None
 
         yesterday_context = ""
+        clarification_session = None
         yesterday_activities = _activities_on_local_date(db, user, target_date=yesterday_date)
         yesterday_claims = _claimed_activities_on_local_date(db, user, target_date=yesterday_date)
         if yesterday_sessions:
@@ -274,6 +278,7 @@ def morning_briefing() -> CoachDraft | None:
             ]
             titles = ", ".join(session.session_title for session in non_rest_sessions[:2])
             primary_session = non_rest_sessions[0] if non_rest_sessions else None
+            clarification_session = primary_session
             evidence = classify_execution_evidence(
                 planned_session=primary_session,
                 activities=yesterday_activities,
@@ -310,6 +315,7 @@ def morning_briefing() -> CoachDraft | None:
                 yesterday_context = f"\nHier ({yesterday_label}): adapte/saute. On avance."
         elif yesterday_day and yesterday_day.sport_type != "rest":
             yesterday_label = yesterday_day.label or DAY_LABELS.get(yesterday_key, yesterday_key)
+            clarification_session = yesterday_day
             evidence = classify_execution_evidence(
                 planned_session=yesterday_day,
                 activities=yesterday_activities,
@@ -344,8 +350,31 @@ def morning_briefing() -> CoachDraft | None:
             elif yesterday_day.completion_status in ("skipped", "adapted"):
                 yesterday_context = f"\nHier ({yesterday_label}): adapte/saute. On avance."
 
+        recent_sessions = repo.get_scheduled_sessions_between_dates(
+            db,
+            user.id,
+            start_date=local_now.date() - timedelta(days=13),
+            end_date=local_now.date(),
+            limit=42,
+        )
+        recent_activities = repo.get_activities(db, user.id, limit=120)
+        recent_claims = _claimed_activities_last_days(db, user, days=14)
+        clarification = build_execution_clarification(
+            today=local_now.date(),
+            target_session=clarification_session,
+            target_date=yesterday_date,
+            scheduled_sessions=recent_sessions,
+            activities=recent_activities,
+            claims=list(recent_claims),
+        )
+        effective_calibration_need = None if clarification is not None else calibration_need
+
         # Collect signals for richer context
-        signals = collect_signals(db, user)
+        try:
+            signals = collect_signals(db, user)
+        except RuntimeError:
+            logger.warning("Morning briefing proceeding without active plan-backed signals", exc_info=True)
+            signals = []
         signals_block = format_signals_for_prompt(signals)
 
         # Try LLM-generated briefing
@@ -363,6 +392,11 @@ def morning_briefing() -> CoachDraft | None:
                 "Integre les signaux dans ton message de maniere naturelle. "
                 "Si un signal est un warning ou action, adapte ton ton en consequence."
             )
+        if clarification is not None:
+            system += (
+                "\n\nSi une clarification prioritaire est fournie, pose exactement cette question. "
+                "Pas de deuxieme question. Une phrase de contexte max."
+            )
         system += _format_active_facts_for_prompt(db, user)
         sport_knowledge = load_sport_knowledge({today_session.sport_type}, max_tokens=500)
         if sport_knowledge:
@@ -378,16 +412,25 @@ def morning_briefing() -> CoachDraft | None:
             f"Note: {(day.session_note if day else today_session.session_note) or ''}"
             f"{yesterday_context}"
         )
-        if calibration_need is not None:
-            prompt += f"\n\n{render_hidden_need_brief(calibration_need)}"
+        if clarification is not None:
+            prompt += (
+                "\n\nClarification prioritaire:\n"
+                f"- question: {clarification.question}\n"
+                f"- pourquoi: {clarification.reason}\n"
+                "- Cette clarification change reellement la lecture de la semaine."
+            )
+        if effective_calibration_need is not None:
+            prompt += f"\n\n{render_hidden_need_brief(effective_calibration_need)}"
         llm_msg = _llm_generate(system, prompt)
         if llm_msg:
             memory_updates = []
-            if calibration_need is not None and looks_like_clarification_message(llm_msg):
-                memory_updates.append(calibration_need.as_memory_update())
+            if effective_calibration_need is not None and looks_like_clarification_message(llm_msg):
+                memory_updates.append(effective_calibration_need.as_memory_update())
             return CoachDraft(text=llm_msg, proactive=True, memory_updates=memory_updates)
 
         # Fallback: structured message
+        if clarification is not None:
+            return CoachDraft(text=clarification.question, proactive=True)
         msg = (
             f"Bonjour. {label} — {today_session.session_title}.\n"
             f"{today_session.session_goal}. Priorite: {today_session.priority}."

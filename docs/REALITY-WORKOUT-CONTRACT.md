@@ -412,6 +412,8 @@ Etat :
 - `planning_decision.py` peut maintenant basculer en `restart_consistency`
 - readiness lit aussi `compliance_confirmed`, `load_ratio` et `missed_streak_days`
 - overview / evolution exposent maintenant `recent_reality`
+- extension livrée : `recent_reality` expose aussi une lecture `7j / 14j` plus lisible pour l'app
+- extension livrée : le heartbeat et le chat peuvent maintenant poser une clarification ciblée sur hier seulement si la réponse change vraiment la lecture de la semaine
 
 Fichiers principaux :
 
@@ -441,6 +443,8 @@ Critères de succès :
 - après une semaine 2/5 confirmées, FitMAS ne repart pas sur une semaine "forte" par défaut
 - le système explique la simplification avec une base factuelle lisible
 - le planner peut réduire `target_tss`, `key_sessions` et retirer la longue quand la régularité récente est trop basse
+- l'app expose une preuve courte sur `7j / 14j` au lieu de forcer une lecture implicite
+- le coach ne pose pas une question de confirmation par défaut; il la pose seulement si elle change `restart`, une séance clé sauvée, ou la streak récente
 
 ### Slice 3 — Workout Content Contract
 
