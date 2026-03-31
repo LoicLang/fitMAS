@@ -528,6 +528,68 @@ Etat :
   - brancher des signaux plus riches que le texte séance seul
   - tenir compte explicitement du sport clé voisin et du matériel réel côté app/profil
 
+### Suite prioritaire après MVP — Strength Signals
+
+Objectif :
+
+- faire passer le renfo de "contextuel via le texte de seance" a "contextuel via signaux reels de semaine"
+
+Approche recommandée :
+
+- ajouter un module pur `strength_signals.py`
+- laisser `strength_engine.py` consommer un objet simple derive, pas aller lire la DB directement
+- garder les side effects et lectures repo dans les orchestrateurs / builders amont
+
+Contrat vise :
+
+```python
+@dataclass(frozen=True, slots=True)
+class StrengthSignals:
+    recent_completion_band: str
+    recent_load_band: str
+    fatigue_flag: bool
+    health_flags: tuple[str, ...]
+    available_time_band: str
+    protected_sport: str | None
+```
+
+Usage MVP :
+
+- `recent_completion_band = low` -> pousser vers `restart_consistency_strength` ou `minimum_effective_dose`
+- `recent_load_band = low` + fatigue -> garder seulement 3-5 blocs utiles, pas de dette de fatigue
+- `health_flags` epaule / genou / achille -> substitutions deterministes dans les slots
+- `available_time_band = short` -> raccourcir la prescription sans changer tout le blueprint
+- `protected_sport` running / swimming -> proteger jambes ou epaules meme si le texte seance ne le dit pas explicitement
+
+Regles MVP :
+
+- les signaux reels modulent d'abord la dose avant de changer completement de blueprint
+- un signal fatigue seul ne suffit pas toujours a basculer en mobilite pure
+- si la semaine recente est faible ou incomplete, le systeme prefere finir "trop facile" plutot que "trop cher"
+- le moteur doit rester deterministic-first : meme input -> meme output
+
+Decoupage recommande :
+
+1. `strength_signals.py`
+   - derive des bandes simples a partir de `recent_reality`, faits actifs, duree seance
+2. `strength_engine.py`
+   - etend `StrengthContext`
+   - choisit `load_mode` et blueprint avec ces bandes
+3. `workout_content.py`
+   - passe les nouveaux signaux sans melanger rendu et logique
+4. tests
+   - semaine faible + renfo -> `minimum_effective_dose`
+   - fatigue + running protege -> peu de jambes
+   - epaule sensible + natation protegee -> pas d'overhead
+   - dispo courte -> prescription compressee
+
+Hors scope pour l'instant :
+
+- progression de force sur plusieurs semaines
+- suivi de charge renfo specifique
+- heuristiques materiel complexes issues du profil app
+- personnalisation fine par historique exercice par exercice
+
 Exemples attendus :
 
 - jambes rincées + séance course clé demain -> upper/core/mobilité, peu de jambes

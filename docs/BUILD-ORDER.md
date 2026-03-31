@@ -153,6 +153,49 @@ Progression actuelle :
 - Clarification ciblée maintenant partagée : heartbeat + chat bloquent conseil/adaptation tant que `hier` reste réellement structurant pour la semaine, sans bloquer une simple indispo future explicite
 - Prochain chantier naturel : enrichir le moteur strength avec des signaux réels hors texte séance seul
 
+### Suite immédiate — Strength Signals MVP
+
+But :
+
+- faire varier le renfo selon le réel recent, pas seulement selon le texte de la seance
+- garder un moteur 100% deterministe, lisible et testable
+- viser un gain produit net sans lancer un gros systeme de progression force
+
+Valeur MVP attendue :
+
+- eviter un renfo trop agressif apres une semaine faible ou confuse
+- reduire les seances renfo "a cote de la plaque" quand fatigue / douleur / temps dispo sont deja connus
+- donner un rendu plus credible cote coach sans ouvrir une nouvelle dette d'architecture
+
+Scope MVP volontairement serre :
+
+- brancher seulement 3 familles de signaux :
+  - `recent_reality` (`confirmed_completion`, `load_ratio`, `key_sessions_salvaged`)
+  - signaux user courts (`fatigue`, `health`)
+  - temps dispo / duree cible reelle
+- produire seulement 3 modes d'intensite renfo :
+  - `full`
+  - `light`
+  - `minimum_effective_dose`
+- ne PAS faire maintenant :
+  - progression force long terme
+  - gestion fine des charges / RPE historisees
+  - adaptation par materiel complexe cote app
+  - moteur LLM pour choisir le blueprint
+
+Ordre recommande en commits atomiques :
+
+1. introduire un module pur `strength_signals.py`
+2. enrichir `StrengthContext` avec ces signaux reels
+3. faire evoluer la selection de blueprint / prescription
+4. ajouter tests deterministes
+5. documenter les nouveaux cas couverts
+
+Critere go / no-go :
+
+- si le moteur sait deja sortir `minimum_effective_dose` apres semaine faible ou fatigue du jour, le MVP apporte de la vraie valeur
+- si on commence a discuter historique force, cycles ou surcharge locale complexe, on sort du MVP
+
 Règle :
 
 - ne pas commencer par un redesign UI
