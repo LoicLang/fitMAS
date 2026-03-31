@@ -38,3 +38,41 @@ def test_strength_content_falls_back_to_actionable_execution() -> None:
     assert content.rationale == "Support léger pour la semaine."
     assert len(content.execution) >= 3
     assert any("pont fessier" in step.lower() or "wall slides" in step.lower() for step in content.execution)
+
+
+def test_strength_content_uses_recent_signals_for_compressed_prescription() -> None:
+    content = build_workout_content(
+        {
+            "id": 30,
+            "sport_type": "strength",
+            "session_type": "general",
+            "session_goal": "Faire juste utile.",
+            "session_note": "On coupe sans bricoler.",
+            "session_description": "",
+            "scheduled_date": "2026-03-31T07:00:00+02:00",
+            "duration_min": 25,
+            "intensity": "easy",
+        },
+        recent_reality={
+            "planned_sessions_7d": 4,
+            "compliance_confirmed": 0.25,
+            "planned_tss_7d": 120.0,
+            "load_ratio": 0.45,
+            "missed_streak_days": 3,
+        },
+        active_facts=(
+            {"category": "fatigue", "key": "fatigue_today", "value": "fatigue residuelle aujourd'hui"},
+        ),
+        surrounding_sessions=(
+            {
+                "id": 31,
+                "sport_type": "running",
+                "scheduled_date": "2026-04-01T07:00:00+02:00",
+                "priority": "High",
+                "load_score": 3,
+            },
+        ),
+    )
+
+    assert len(content.execution) <= 4
+    assert not any("squat" in step.lower() or "fente" in step.lower() for step in content.execution)

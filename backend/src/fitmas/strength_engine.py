@@ -4,15 +4,7 @@ from dataclasses import dataclass
 from typing import Any, Sequence
 
 from fitmas.strength_exercise_bank import StrengthExercise, list_strength_exercises
-
-_SHOULDER_MARKERS = ("epaule", "shoulder", "coiffe")
-_KNEE_MARKERS = ("genou", "knee", "rotule")
-_LOW_BACK_MARKERS = ("dos", "lomb", "back")
-_LEG_FATIGUE_MARKERS = ("jambes", "mollet", "quad", "ischio", "leg fatigue", "jambe lourde")
-_ACHILLES_MARKERS = ("achille", "achilles")
-_FATIGUE_MARKERS = ("fatigue", "courbature", "crame", "epuise", "reprise", "relance", "restart")
-_RUN_MARKERS = ("course", "run", "trail", "footing")
-_SWIM_MARKERS = ("natation", "swim", "piscine")
+from fitmas.strength_signals import StrengthSignals, derive_strength_signals
 
 
 @dataclass(frozen=True, slots=True)
@@ -22,8 +14,12 @@ class StrengthContext:
     fatigue_level: str
     duration_min: int
     equipment: tuple[str, ...]
-    next_key_session_sport: str | None
+    protected_sport: str | None
     load_mode: str
+    recent_completion_band: str
+    recent_load_band: str
+    fatigue_flag: bool
+    available_time_band: str
 
 
 @dataclass(frozen=True, slots=True)
@@ -139,8 +135,9 @@ def build_strength_workout(
     *,
     session: Any,
     watch_items: Sequence[dict[str, Any]] | Sequence[Any] = (),
+    signals: StrengthSignals | dict[str, Any] | None = None,
 ) -> StrengthWorkout:
-    context = derive_strength_context(session=session, watch_items=watch_items)
+    context = derive_strength_context(session=session, watch_items=watch_items, signals=signals)
     blueprint = select_strength_blueprint(context)
     execution = render_strength_execution(blueprint=blueprint, context=context)
     objective = _clean_text(_value(session, "session_goal")) or blueprint.objective
@@ -158,58 +155,36 @@ def derive_strength_context(
     *,
     session: Any,
     watch_items: Sequence[dict[str, Any]] | Sequence[Any] = (),
+    signals: StrengthSignals | dict[str, Any] | None = None,
 ) -> StrengthContext:
-    text_parts = [
-        _clean_text(_value(session, "session_goal")),
-        _clean_text(_value(session, "session_note")),
-        _clean_text(_value(session, "session_description")),
-        *[_clean_text(_value(item, "title")) for item in watch_items],
-        *[_clean_text(_value(item, "detail")) for item in watch_items],
-    ]
-    combined = " ".join(part for part in text_parts if part).lower()
+    resolved_signals = _coerce_signals(signals) or derive_strength_signals(session=session, watch_items=watch_items)
     session_type = str(_value(session, "session_type") or "general").lower()
     intensity = str(_value(session, "intensity") or "easy").lower()
-
-    symptom_flags: list[str] = []
-    if any(marker in combined for marker in _SHOULDER_MARKERS):
-        symptom_flags.append("shoulder_pain")
-    if any(marker in combined for marker in _KNEE_MARKERS):
-        symptom_flags.append("knee_pain")
-    if any(marker in combined for marker in _LOW_BACK_MARKERS):
-        symptom_flags.append("low_back_risk")
-    if any(marker in combined for marker in _LEG_FATIGUE_MARKERS):
-        symptom_flags.append("leg_fatigue")
-    if any(marker in combined for marker in _ACHILLES_MARKERS):
-        symptom_flags.append("achilles_pain")
-
-    next_key_session_sport = None
-    if any(marker in combined for marker in _SWIM_MARKERS):
-        next_key_session_sport = "swimming"
-    elif any(marker in combined for marker in _RUN_MARKERS):
-        next_key_session_sport = "running"
-
-    fatigue_level = "high" if any(marker in combined for marker in _FATIGUE_MARKERS) or intensity == "easy" else "medium"
     if session_type == "mobility":
         goal = "mobility_restore"
     elif session_type == "core":
         goal = "core_support"
-    elif next_key_session_sport == "swimming":
+    elif resolved_signals.protected_sport == "swimming":
         goal = "support_swim"
-    elif next_key_session_sport == "running":
+    elif resolved_signals.protected_sport == "running":
         goal = "support_run"
-    elif fatigue_level == "high":
+    elif resolved_signals.recent_completion_band == "low" or resolved_signals.fatigue_flag:
         goal = "restart_consistency"
     else:
         goal = "general_support"
 
     return StrengthContext(
         goal=goal,
-        symptom_flags=tuple(symptom_flags),
-        fatigue_level=fatigue_level,
+        symptom_flags=resolved_signals.health_flags,
+        fatigue_level="high" if resolved_signals.fatigue_flag else "medium",
         duration_min=max(20, int(_value(session, "duration_min") or 30)),
         equipment=("bodyweight",),
-        next_key_session_sport=next_key_session_sport,
-        load_mode="easy" if intensity in {"easy", "recovery"} else "standard",
+        protected_sport=resolved_signals.protected_sport,
+        load_mode=_select_load_mode(signals=resolved_signals, intensity=intensity),
+        recent_completion_band=resolved_signals.recent_completion_band,
+        recent_load_band=resolved_signals.recent_load_band,
+        fatigue_flag=resolved_signals.fatigue_flag,
+        available_time_band=resolved_signals.available_time_band,
     )
 
 
@@ -217,13 +192,15 @@ def select_strength_blueprint(context: StrengthContext) -> StrengthBlueprint:
     flags = set(context.symptom_flags)
     if context.goal == "mobility_restore":
         return _BLUEPRINTS["mobility_restore"]
-    if "shoulder_pain" in flags or context.goal == "support_swim":
+    if "shoulder_pain" in flags or context.protected_sport == "swimming":
         return _BLUEPRINTS["lower_stability_protect_shoulders"]
-    if "leg_fatigue" in flags or context.goal == "support_run":
+    if flags.intersection({"leg_fatigue", "knee_pain", "achilles_pain"}) or context.protected_sport == "running":
         return _BLUEPRINTS["upper_core_protect_legs"]
     if "low_back_risk" in flags or context.goal == "core_support":
         return _BLUEPRINTS["minimum_effective_dose"]
-    if context.goal == "restart_consistency" or context.fatigue_level == "high":
+    if context.load_mode == "minimum_effective_dose":
+        return _BLUEPRINTS["minimum_effective_dose"]
+    if context.goal == "restart_consistency" or context.recent_completion_band == "low":
         return _BLUEPRINTS["restart_consistency_strength"]
     return _BLUEPRINTS["full_body_support"]
 
@@ -232,12 +209,12 @@ def render_strength_execution(*, blueprint: StrengthBlueprint, context: Strength
     exercises = list_strength_exercises()
     used_keys: set[str] = set()
     lines: list[str] = []
-    for slot in blueprint.slots:
+    for slot in blueprint.slots[:_slot_budget(blueprint=blueprint, context=context)]:
         exercise = _pick_exercise(exercises=exercises, slot=slot, context=context, used_keys=used_keys)
         if exercise is None:
             continue
         used_keys.add(exercise.key)
-        prescription = exercise.prescription_light if context.load_mode == "easy" or context.fatigue_level == "high" else exercise.prescription_standard
+        prescription = exercise.prescription_standard if context.load_mode == "full" else exercise.prescription_light
         lines.append(f"{exercise.name} — {prescription} — recup {exercise.rest_seconds}s")
     return tuple(lines)
 
@@ -270,6 +247,39 @@ def _matches(*, exercise: StrengthExercise, required_tags: tuple[str, ...], cont
     if any(flag in exercise.contraindications for flag in context.symptom_flags):
         return False
     return all(tag in exercise.tags for tag in required_tags)
+
+
+def _select_load_mode(*, signals: StrengthSignals, intensity: str) -> str:
+    easy_request = intensity in {"easy", "recovery", "mobility"}
+    if signals.available_time_band == "short":
+        return "minimum_effective_dose"
+    if signals.recent_completion_band == "low" and (signals.fatigue_flag or signals.recent_load_band == "low"):
+        return "minimum_effective_dose"
+    if signals.fatigue_flag or signals.recent_completion_band == "low" or signals.recent_load_band == "low" or easy_request:
+        return "light"
+    return "full"
+
+
+def _slot_budget(*, blueprint: StrengthBlueprint, context: StrengthContext) -> int:
+    count = len(blueprint.slots)
+    if context.load_mode == "full":
+        return count
+    if context.load_mode == "minimum_effective_dose":
+        return min(count, 4 if context.available_time_band == "short" else 5)
+    return min(count, 5 if context.available_time_band == "short" else max(count - 1, 4))
+
+
+def _coerce_signals(value: StrengthSignals | dict[str, Any] | None) -> StrengthSignals | None:
+    if value is None or isinstance(value, StrengthSignals):
+        return value
+    return StrengthSignals(
+        recent_completion_band=str(value.get("recent_completion_band") or "ok"),
+        recent_load_band=str(value.get("recent_load_band") or "ok"),
+        fatigue_flag=bool(value.get("fatigue_flag")),
+        health_flags=tuple(str(flag) for flag in value.get("health_flags") or ()),
+        available_time_band=str(value.get("available_time_band") or "normal"),
+        protected_sport=str(value.get("protected_sport")) if value.get("protected_sport") else None,
+    )
 
 
 def _value(obj: Any, key: str) -> Any:

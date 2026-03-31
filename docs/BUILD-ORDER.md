@@ -216,6 +216,10 @@ Objectif :
 - ne plus confondre `seance prevue manquee` avec `aucune activite reelle`
 - ne plus reutiliser une duree planifiee comme si c'etait la duree executee
 
+Note backlog issue de smoke reel :
+- polir les reponses purement factuelles du coach pour qu'elles restent informatives sans rebasculer trop vite en tonalite "push" ou coaching
+- revalider la correction de claims temporels (`non c'etait hier`) pour eviter d'empiler plusieurs `claimed_activity_*` actifs sur la meme histoire recente
+
 Deja pose :
 - `execution_context.py` pour resumer `prevu vs reel` sur aujourd'hui
 - `temporal_resolver.py` pour ancrer `aujourd'hui / demain / hier`

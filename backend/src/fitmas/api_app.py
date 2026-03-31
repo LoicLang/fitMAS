@@ -336,6 +336,14 @@ def get_session_detail(session_id: int, db: Session = Depends(get_db)) -> dict:
     _, day_row = repo.get_current_week_day_plan_for_session(db, user=user, session=session)
     linked_activity = next((activity for activity in session.activities if activity.sport_type == session.sport_type), None)
     recent_activity = _build_recent_activity(db, user=user, session=session)
+    scheduled_sessions = repo.get_scheduled_sessions(db, user.id, limit=84)
+    activities = repo.get_activities(db, user.id, limit=120)
+    recent_reality = build_recent_reality_window(
+        today=get_local_now(user.timezone).date(),
+        scheduled_sessions=scheduled_sessions,
+        activities=activities,
+    )
+    active_facts = repo.get_active_facts(db, user.id, limit=12)
     change_notes = [{"title": note.title, "detail": note.detail} for note in (day_row.change_notes if day_row else [])]
     watch_items = [{"title": item.title, "detail": item.detail} for item in (day_row.watch_items if day_row else [])]
 
@@ -347,4 +355,7 @@ def get_session_detail(session_id: int, db: Session = Depends(get_db)) -> dict:
         recent_activity=recent_activity.model_dump() if recent_activity is not None else None,
         change_notes=change_notes,
         watch_items=watch_items,
+        recent_reality=recent_reality.as_dict(),
+        active_facts=[repo.to_pydantic_fact(fact).model_dump() for fact in active_facts],
+        surrounding_sessions=scheduled_sessions,
     )

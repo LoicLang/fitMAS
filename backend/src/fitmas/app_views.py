@@ -222,10 +222,19 @@ def build_session_detail(
     recent_activity: dict[str, Any] | None,
     change_notes: list[dict[str, Any]],
     watch_items: list[dict[str, Any]],
+    recent_reality: dict[str, Any] | None = None,
+    active_facts: list[dict[str, Any]] | tuple[dict[str, Any], ...] = (),
+    surrounding_sessions: list[Any] | tuple[Any, ...] = (),
 ) -> dict[str, Any]:
     resolved_session = build_session_item(session, [linked_activity] if linked_activity else [], today=today_date)
     sport = str(_value(session, "sport_type") or "").lower()
-    content = build_workout_content(session, watch_items=watch_items)
+    content = build_workout_content(
+        session,
+        watch_items=watch_items,
+        recent_reality=recent_reality,
+        active_facts=active_facts,
+        surrounding_sessions=surrounding_sessions,
+    )
     distance_m = _float(_value(linked_activity, "distance_m"))
     duration_min = _float(_value(linked_activity, "duration_min")) or _float(_value(session, "duration_min"))
     avg_speed = _float(_value(linked_activity, "avg_speed"))

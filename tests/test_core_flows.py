@@ -761,6 +761,9 @@ class FitMASCoreFlowsTest(unittest.TestCase):
 
     def test_execution_fact_correction_archives_conflicting_working_memory(self) -> None:
         self._create_plan_for_today()
+        yesterday_key = DAY_KEYS[(get_local_now(self.user.timezone).weekday() - 1) % 7]
+        skipped_key = f"session_running_{yesterday_key}_skipped"
+        completed_key = f"session_running_{yesterday_key}_completed"
         original_decide = api_messages.decide
         original_extract_facts = api_messages.extract_facts
         try:
@@ -776,8 +779,8 @@ class FitMASCoreFlowsTest(unittest.TestCase):
                     return [
                         {
                             "category": "execution",
-                            "key": "session_running_sunday_skipped",
-                            "value": "N'a pas complete la seance de running du dimanche",
+                            "key": skipped_key,
+                            "value": f"N'a pas complete la seance de running du {yesterday_key}",
                             "confidence": 0.9,
                             "confirmed": True,
                             "source": "conversation",
@@ -788,8 +791,8 @@ class FitMASCoreFlowsTest(unittest.TestCase):
                     return [
                         {
                             "category": "execution",
-                            "key": "session_running_sunday_completed",
-                            "value": "A complete 45min de running dimanche",
+                            "key": completed_key,
+                            "value": f"A complete 45min de running {yesterday_key}",
                             "confidence": 0.9,
                             "confirmed": True,
                             "source": "conversation",
@@ -814,9 +817,9 @@ class FitMASCoreFlowsTest(unittest.TestCase):
         active_keys = {row.key for row in rows if row.active}
         archived_keys = {row.key for row in rows if not row.active}
 
-        self.assertIn("session_running_sunday_completed", active_keys)
-        self.assertNotIn("session_running_sunday_skipped", active_keys)
-        self.assertIn("session_running_sunday_skipped", archived_keys)
+        self.assertIn(completed_key, active_keys)
+        self.assertNotIn(skipped_key, active_keys)
+        self.assertIn(skipped_key, archived_keys)
 
     def test_replace_session_reply_is_aligned_with_applied_duration(self) -> None:
         _, session = self._create_plan_for_today()

@@ -5,6 +5,7 @@ from typing import Any
 
 from fitmas.session_templates import render_session_description, select_session_template
 from fitmas.strength_engine import build_strength_workout
+from fitmas.strength_signals import derive_strength_signals
 
 _SYSTEM_MARKERS = (
     "clawcoach",
@@ -53,13 +54,23 @@ def build_workout_content(
     session: Any,
     *,
     watch_items: tuple[dict[str, Any], ...] | list[dict[str, Any]] | tuple[Any, ...] | list[Any] = (),
+    recent_reality: Any | None = None,
+    active_facts: tuple[dict[str, Any], ...] | list[dict[str, Any]] | tuple[Any, ...] | list[Any] = (),
+    surrounding_sessions: tuple[dict[str, Any], ...] | list[dict[str, Any]] | tuple[Any, ...] | list[Any] = (),
 ) -> WorkoutContent:
     template = select_session_template(
         sport_type=str(_value(session, "sport_type") or "running"),
         session_type=str(_value(session, "session_type") or "easy"),
     )
     if template.sport_type == "strength":
-        strength = build_strength_workout(session=session, watch_items=watch_items)
+        signals = derive_strength_signals(
+            session=session,
+            watch_items=watch_items,
+            recent_reality=recent_reality,
+            active_facts=active_facts,
+            nearby_sessions=surrounding_sessions,
+        )
+        strength = build_strength_workout(session=session, watch_items=watch_items, signals=signals)
         return WorkoutContent(
             objective=strength.objective,
             rationale=strength.rationale,
