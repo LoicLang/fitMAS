@@ -24,7 +24,7 @@ Les garde-fous, la planification, les permissions, les cooldowns et la persistan
 - Les effets de bord vivent dans les orchestrateurs : API, bot, scheduler
 - Les futures briques de sophistication doivent s'appuyer sur une vérité planning stable
 
-## État réel du code — 28 mars 2026
+## État réel du code — 31 mars 2026
 
 **Déployé sur Fly.io : https://the deployed app/**
 
@@ -71,7 +71,7 @@ Les garde-fous, la planification, les permissions, les cooldowns et la persistan
 - `Aperçu` enrichi : contexte de forme + prochains jours + utilitaires secondaires
 - Strava callback redirige vers webapp (plus de JSON brut)
 - `/help` Telegram
-- Grounding conversationnel en cours : `execution_context.py`, `temporal_resolver.py`, `activity_claims.py`, `conversation_context.py`
+- Grounding conversationnel pose : `execution_context.py`, `temporal_resolver.py`, `activity_claims.py`, `conversation_context.py`
 - Nouveau bounded context `user indications` : interpretation LLM bornee, resolution planning future et routing metier (`user_indications.py`, `user_indication_llm.py`, `planning_window_resolution.py`)
 - Tool mémoire partagé : `fact_memory.py`
 - Socle runtime tools posé : `tool_contract.py`, `tool_registry.py`, `tool_runtime.py`, `tool_metrics.py`, `tool_routing.py`, `conversation_prompting.py`
@@ -89,9 +89,15 @@ Les garde-fous, la planification, les permissions, les cooldowns et la persistan
 
 ### Ce qui n'existe pas encore
 
+- Prompt coach en 2 zones + cache explicite
+- Debounce Telegram pour les rafales courtes
+- Permissions tiers explicites sur les mutations
+- Transcript structure persistant
+- Consolidation memoire periodique propre
+- Heartbeat scoring tick-based
 - Verrou robuste anti-doublon multi-instance
 - Polish visuel écran par écran pour coller encore davantage au Figma
-- Périodisation explicite
+- Périodisation plus riche que le simple cycle actuel
 - Webhook Strava (actuellement polling toutes les 2h)
 - Lineage de plans explicite
 - Decision log explicite
@@ -131,14 +137,17 @@ Les garde-fous, la planification, les permissions, les cooldowns et la persistan
 ## Prochaine évolution structurante
 
 Ordre recommandé :
-1. Fiabiliser Telegram et la fréquence des messages
-2. Introduire le calcul de charge (`tss`, `CTL/ATL/TSB`)
-3. Finir la bascule complète des mutations et vues app vers `scheduled_session_id`
-4. Durcir les read models app et finir le dashboard performance sur cette base
-5. Ajouter la périodisation
-6. Repousser l'architecture multi-agent après stabilisation
+1. prompt 2 zones + cache sur la partie stable
+2. debounce Telegram pour les rafales courtes
+3. dates absolues + `profile_summary`
+4. permissions tiers sur les mutations
+5. transcript structure persistant
+6. consolidation memoire periodique
+7. heartbeat scoring tick-based
+8. ensuite seulement : planner plus riche, polish Figma, extensions
+Voir `BUILD-ORDER.md` pour le sequencing canonique.
 
-### Pourquoi le calendrier persistant est prioritaire
+### Pourquoi le calendrier persistant reste une fondation, mais plus le prochain chantier
 
 Le principal défaut structurel actuel n'est pas le manque de graphes ou de LLM.
 C'est le fait que le modèle principal reste encore piloté par un `WeeklyPlan` destructif.
@@ -149,7 +158,7 @@ Conséquences :
 - adaptation semaine suivante peu propre
 - base faible pour dashboard et périodisation
 
-Le pivot est maintenant bien avancé avec `ScheduledSession`, et la boucle coach sait cibler ou échanger des séances datées.
+Le pivot est maintenant largement pose avec `ScheduledSession`, et la boucle coach sait cibler ou échanger des séances datées.
 Il reste encore quelques chemins legacy `day key`, mais ils sont désormais secondaires et servent surtout de fallback.
 
 Conséquence récente importante :

@@ -289,6 +289,24 @@ Etat :
 - archivage des patterns maintenance absents au cycle suivant : fait
 - compactage profile memory : plus tard
 
+## Priorites maintenant
+
+Le prochain gain memoire ne vient pas d'une V3 abstraite.
+Il vient d'un meilleur write path et d'un meilleur resume injecte.
+
+Ordre :
+
+1. normaliser les faits temporels en date absolue avant `upsert_facts`
+2. produire un `profile_summary` compact et toujours injectable
+3. persister un transcript structure avant de lancer une vraie consolidation
+4. seulement ensuite : compactage / consolidation periodique de `profile_memory`
+
+Notes :
+
+- `transcript != memory durable`
+- la consolidation attend un write path temporel plus fiable
+- un resume profil propre vaut mieux qu'une pile de facts bruts
+
 ## Idees V3
 
 Garder pour plus tard.

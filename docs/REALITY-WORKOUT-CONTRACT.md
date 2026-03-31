@@ -1,5 +1,5 @@
 ---
-summary: plan d'évolution prioritaire pour fiabiliser la vérité d'exécution, adapter la semaine au réel et rendre les séances app actionnables
+summary: reference du contrat de verite d'execution et du contenu seance, avec etat du chantier desormais largement absorbe
 read_when:
   - corriger un faux "done" ou une validation fantôme
   - rendre le coach Telegram plus fiable sur hier / aujourd'hui / la semaine passée
@@ -12,7 +12,15 @@ read_when:
 
 ## Pourquoi ce document existe
 
-Ce document cadre le prochain chantier prioritaire FitMAS.
+Ce document capture un chantier prioritaire desormais largement absorbe.
+Il reste la reference quand on doit retoucher :
+
+- la verite d'execution
+- le contrat de contenu seance
+- le branchement du planner sur le reel recent
+- le renfo deterministe contextuel
+
+La priorite repo-wide du moment vit maintenant dans `BUILD-ORDER.md`.
 
 Le problème n'est pas un simple bug UI ou un simple prompt à retoucher.
 Le problème est un contrat de vérité encore trop faible entre :
@@ -528,7 +536,7 @@ Etat :
   - brancher des signaux plus riches que le texte séance seul
   - tenir compte explicitement du sport clé voisin et du matériel réel côté app/profil
 
-### Suite prioritaire après MVP — Strength Signals
+### Suite possible si on rouvre ce track — Strength Signals
 
 Objectif :
 

@@ -18,6 +18,7 @@ Objectifs :
 - garder un seul orchestrateur LLM
 - rester auditables
 - mesurer l'impact reel avant d'augmenter la liberte du modele
+- reduire le contexte injecte avant de multiplier les tools
 
 ## Ce qu'on fait
 
@@ -34,6 +35,7 @@ Objectifs :
 - pas de write tool
 - pas de boucle infinie de tool calls
 - pas de `multi_mutate` pour l'instant
+- pas de skill system formel tant qu'on n'a pas assez de workflows repetes
 
 ## Modules
 
@@ -95,6 +97,7 @@ Etat actuel :
 - `plan_lookup` garde l'ancrage planning mais coupe les blocs inutiles comme les signaux
 - `fact_recall` garde surtout le temps local + la memoire utile
 - la policy choisie remonte maintenant dans les traces tools via `context_policy`
+- prochaine etape : decouper le prompt coach en zone statique cacheable + zone dynamique courte
 
 ### `tool_metrics.py`
 
@@ -179,10 +182,17 @@ Le planner V2 doit d'abord passer par `planning_state.py` et `PlanningDecision`.
 ## Decision CTO
 
 Le bon ordre :
-1. signaux filtres dans le chat
-2. runtime tools read-only + metrics
-3. tool use borne dans `decide()` pour quelques questions de lecture
-4. reduction du context dump guidee par les metriques
+1. prompt 2 zones + caching sur la partie stable
+2. routing deterministe vers tres peu de tools offres
+3. runtime tools read-only semantiques + metrics
+4. tool use borne dans `decide()` pour quelques questions de lecture
+5. transcript structure de session avant toute sophistication plus large
+
+Notes de sequencing :
+
+- `transcript structure > compaction` a ce stade
+- les tools doivent rester etroits : plan, reel recent, charge, contraintes, contrat seance
+- pas de write tools avant d'avoir des permission tiers propres sur les mutations
 
 Pas de liberte large du modele avant d'avoir :
 - mesure

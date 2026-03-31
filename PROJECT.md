@@ -2,7 +2,7 @@
 
 Coach IA multisport proactif qui ajuste ton entraînement selon ta vraie vie.
 
-## Statut — 28 mars 2026
+## Statut — 31 mars 2026
 
 **Déployé et fonctionnel sur https://the deployed app/**
 
@@ -16,7 +16,8 @@ Ce qui tourne en prod :
 - Read models backend dédiés aux écrans app : `overview`, `calendar`, `evolution`, `session detail`
 - Activités manuelles + Strava OAuth + import + synchro automatique
 - Heartbeat proactif avec cooldowns (briefing matin, rappel pré-séance, revue dimanche, nouveau plan lundi)
-- Mémoire utile via UserFact (extraction LLM + upsert)
+- Mémoire V2 base : `profile / working / patterns`
+- Runtime tools V1 read-only bornés pour certaines questions de lecture
 - Revue hebdomadaire + régénération automatique du plan le lundi matin
 - Bot Telegram avec commandes (/start, /plan, /today, /newweek, /sync, /log)
 
@@ -25,7 +26,8 @@ Ce qui manque encore → voir `docs/BUILD-ORDER.md`
 Cap produit actuel :
 - Telegram = coach conversationnel
 - App = cockpit performance
-- prochaine fondation : polish écran par écran pour coller au Figma, puis durcissement périodisation / charge
+- priorite immediate : meilleur harness conversationnel et memoire plus propre
+- ordre courant : prompt 2 zones + cache, debounce Telegram, dates absolues + profile summary, permissions tiers, transcript structure
 
 ## Stack
 
@@ -42,19 +44,20 @@ Cap produit actuel :
 
 1. `AGENTS.md` — règles de travail
 2. `PROJECT.md` — ce fichier
-3. `docs/PRODUCT.md` — vision, scope, parcours utilisateur
-4. `docs/ARCHITECTURE.md` — stack, modèle de données, flux
-5. `docs/APP-UX.md` — contrat UX de l'app
-6. `docs/PLANNING-ENGINE-V2.md` — roadmap moteur adaptee au code actuel
-7. `docs/SOUL.md` — voix, heartbeat, messagerie
-8. `docs/BUILD-ORDER.md` — ce qui est fait, ce qui reste, dans quel ordre
+3. `docs/README.md` — carte des docs
+4. `docs/PRODUCT.md` — vision, scope, parcours utilisateur
+5. `docs/ARCHITECTURE.md` — stack, modèle de données, flux
+6. `docs/BUILD-ORDER.md` — état réel et ordre des prochains chantiers
+7. `docs/APP-UX.md` — contrat UX de l'app
+8. `docs/PLANNING-ENGINE-V2.md` — référence planner, désormais en raffinement
+9. `docs/SOUL.md` — voix, heartbeat, messagerie
 
 ## Structure du repo
 
 ```
 AGENTS.md            — règles agentiques
 PROJECT.md           — point d'entrée
-docs/                — 4 docs essentiels + README
+docs/                — documentation durable + README
 backend/src/fitmas/  — API + bot + domaines partagés (34 modules, ~5200 lignes)
 frontend/            — webapp React/Vite/Tailwind
 scripts/             — dev, dev-web, start-prod, docs:list
@@ -81,6 +84,7 @@ Variables : `ANTHROPIC_API_KEY`, `TELEGRAM_BOT_TOKEN`, `STRAVA_CLIENT_ID`, `STRA
 
 - Déterminisme avant LLM
 - Un seul appel LLM bien prompté tant que le domaine n'exige pas mieux
+- Mono-agent propre avant toute tentation multi-agent
 - Heuristiques d'entraînement en dur, LLM pour personnaliser et formuler
 - Telegram pour valider la proactivité, WhatsApp quand prouvé
 - Telegram = relation coach, app = tableau de bord performance

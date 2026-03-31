@@ -1,5 +1,5 @@
 ---
-summary: vérité de conversation, sources de contexte fiables, trous actuels et plan d'implémentation du grounding Telegram
+summary: reference du grounding Telegram, de la hierarchie de verite et des durcissements encore utiles
 read_when:
   - corriger un bug de contexte conversationnel
   - modifier api_messages.py
@@ -19,6 +19,26 @@ Rendre le coach Telegram factuellement fiable quand il parle :
 
 Le sujet n'est pas d'ajouter "plus de contexte" au LLM.
 Le sujet est de lui donner une verite plus structuree et plus parcimonieuse.
+
+## Priorite relative
+
+Le gros du grounding conversationnel est maintenant pose.
+
+Ce document reste la reference pour :
+
+- la hierarchie de verite
+- la resolution temporelle
+- la lecture `prevu vs reel`
+- les corrections explicites utilisateur
+
+La priorite repo-wide du moment a bouge vers :
+
+- prompt 2 zones + cache
+- debounce Telegram
+- memoire plus propre
+- transcript structure
+
+Voir `BUILD-ORDER.md` pour l'ordre global.
 
 ## Probleme produit actuel
 

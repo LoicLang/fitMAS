@@ -7,7 +7,7 @@ read_when:
 
 # Docs
 
-13 documents essentiels :
+14 documents essentiels :
 
 | Document | Contenu |
 |----------|---------|
@@ -17,12 +17,13 @@ read_when:
 | `PLANNING-ENGINE-V2.md` | Plan adapte du moteur V2, sequence d'implementation et mapping avec le code actuel |
 | `PLANNING-CONTRACT.md` | Contrat produit/technique de la planification adaptative, horizons de verite et ordre d'implementation |
 | `MEMORY-V2.md` | Architecture memoire V2 : profile vs working vs patterns, regles d'ecriture/lecture et plan de migration |
-| `CONVERSATION-GROUNDING.md` | Verite conversationnelle, grounding Telegram, trous actuels et ordre d'implementation |
-| `REALITY-WORKOUT-CONTRACT.md` | Plan prioritaire pour fiabiliser le réel, recalibrer la semaine sur l'exécution récente et imposer un contrat propre des séances |
+| `CONVERSATION-GROUNDING.md` | Référence du grounding Telegram : hiérarchie de vérité, résolution temporelle et durcissements résiduels |
+| `REALITY-WORKOUT-CONTRACT.md` | Référence du contrat vérité d'exécution et contenu séance, avec état du chantier désormais largement absorbé |
 | `USER-INDICATIONS.md` | Contrat des indications utilisateur: interpretation, grounding planning, mutation et explication |
 | `RUNTIME-TOOLS.md` | Contrat des tools runtime, registre V1 read-only, limites et métriques |
+| `CLAUDE-CODE-LEARNINGS.md` | Analyse externe du harness Claude Code et patterns utiles pour faire évoluer FitMAS sans sur-réagir au multi-agent |
 | `SOUL.md` | Voix FitMAS, heartbeat, messagerie, exemples de ton |
-| `BUILD-ORDER.md` | État actuel, roadmap recommandée, ordre de priorités |
+| `BUILD-ORDER.md` | État réel, plan canonique de priorités et sujets explicitement sortis de la roadmap immédiate |
 | `RUNBOOK.md` | Commandes, flux à tester, debug, déploiement, mapping rapide du code |
 
 ## Règles
@@ -37,17 +38,18 @@ Pour un nouvel agent :
 1. `README.md`
 2. `PRODUCT.md`
 3. `ARCHITECTURE.md`
-4. `APP-UX.md`
-5. `PLANNING-ENGINE-V2.md`
-6. `PLANNING-CONTRACT.md`
-7. `MEMORY-V2.md`
-8. `CONVERSATION-GROUNDING.md`
-9. `REALITY-WORKOUT-CONTRACT.md`
-10. `USER-INDICATIONS.md`
-11. `RUNTIME-TOOLS.md`
-12. `SOUL.md`
-13. `BUILD-ORDER.md`
-14. `RUNBOOK.md`
+4. `BUILD-ORDER.md`
+5. `APP-UX.md`
+6. `PLANNING-ENGINE-V2.md`
+7. `PLANNING-CONTRACT.md`
+8. `MEMORY-V2.md`
+9. `CONVERSATION-GROUNDING.md`
+10. `REALITY-WORKOUT-CONTRACT.md`
+11. `USER-INDICATIONS.md`
+12. `RUNTIME-TOOLS.md`
+13. `CLAUDE-CODE-LEARNINGS.md`
+14. `SOUL.md`
+15. `RUNBOOK.md`
 
 Raccourci utile :
 - si le sujet est "que faut-il construire maintenant ?", lire `BUILD-ORDER.md`
@@ -61,9 +63,10 @@ Raccourci utile :
 - si le sujet est "comment fiabiliser le vrai/faux done, adapter la semaine au réel et remettre le bon contenu séance dans l'app ?", lire `REALITY-WORKOUT-CONTRACT.md`
 - si le sujet est "comment transformer un message user en event candidate solide ?", lire `USER-INDICATIONS.md`
 - si le sujet est "comment brancher des tools runtime au LLM sans casser l'architecture ?", lire `RUNTIME-TOOLS.md`
+- si le sujet est "quels patterns agentiques/harness valent vraiment le coup pour FitMAS ?", lire `CLAUDE-CODE-LEARNINGS.md`
 
 ## Archive
 
 Les anciens documents de cadrage (30+ fichiers v1) sont dans `docs/archive/`.
-Ils ont été condensés dans les 5 docs ci-dessus.
-Le runbook actuel complète ces docs pour l'exploitation quotidienne.
+Ils ont ete remplaces par le set documentaire actuel.
+Le runbook actuel complete ces docs pour l'exploitation quotidienne.

@@ -20,6 +20,22 @@ Faire evoluer FitMAS d'un planner hebdo deterministe simple vers un moteur de pl
 - pas de multi-agent
 - pas d'event bus
 
+## Priorite relative
+
+Ce document reste la reference planner.
+Mais le prochain chantier repo-wide n'est plus ici.
+
+Avant de rouvrir fortement ce track, la priorite globale vit dans `BUILD-ORDER.md` :
+
+- prompt 2 zones + cache
+- debounce Telegram
+- memoire plus propre
+- permissions sur mutations
+- transcript structure
+
+Le planner V2 n'est plus en rattrapage.
+Il est en phase de raffinement.
+
 ## Ce qu'on garde du plan propose
 
 - single orchestrator
@@ -167,6 +183,8 @@ Ordre recommande :
 
 ### Prochaines briques
 
+- ce sont les prochaines briques **planner-specifiques**
+- pas les prochaines briques **repo-wide**
 - enrichir `periodization.py` pour aller au-dela du simple cycle 3+1 et porter des blocs plus riches
 - enrichir encore `planner.py` avec une distribution de charge plus fine par sport
 - faire porter plus proprement l'explication de `PlanningDecision` jusque dans `heartbeat.py`
@@ -357,97 +375,42 @@ Decision CTO :
 - ne pas tout creer d'un coup
 - commencer par ce qui sert directement le planner V2
 
-## Plan executable
+## Reste ouvert dans V2
 
-### Phase 1 — Fondations domaine
+### 1. Periodization plus riche
 
-Livrables :
-- `planning_config.py`
-- `athlete_profile.py`
-- `fitness_snapshot.py`
-- tables `fitness_snapshots`, `readiness_snapshots`, `planning_decisions`
+But :
 
-Definition of done :
-- snapshots testables
-- aucune regression API
-- compile + tests unitaires passes
+- aller au-dela du simple `3+1`
+- rendre les blocs plus lisibles et plus explicables
 
-### Phase 2 — Readiness + Decision Engine
+### 2. Distribution multisport plus fine
 
-Livrables :
-- `readiness.py`
-- `planning_decision.py`
-- persistance de la decision
+But :
 
-Definition of done :
-- une semaine peut produire une decision explicite sans LLM
-- les raisons sont lisibles
+- mieux repartir la charge par sport
+- mieux tenir compte des roles par sport dans la semaine
 
-### Phase 3 — Templates + Validator
+### 3. Explications jusque dans les surfaces coach
 
-Livrables :
-- `session_templates.py`
-- `plan_validator.py`
+But :
 
-Definition of done :
-- fallback full deterministic possible
-- guardrails V1 centralises
+- porter `PlanningDecision` proprement dans `heartbeat.py`
+- puis dans le chat et l'app quand cela aide vraiment
 
-Etat :
-- fait
+### 4. Onboarding sportif plus fin
 
-### Phase 4 — Planner V2
+But :
 
-Livrables :
-- refactor `planner.py`
-- integration `periodization.py`
-- squelette hebdo base sur `PlanningDecision`
+- enrichir seulement ce qui nourrit reellement les decisions planner
+- eviter le questionnaire sportif plus riche tant que le harness conversationnel reste le goulot
 
-Definition of done :
-- `build_week_plan()` garde une interface compatible
-- la structure de semaine ne depend pas du LLM
+### Ordre quand ce track redevient prioritaire
 
-Etat :
-- bien avance
-- `build_week_plan()` accepte deja `PlanningDecision` + `AthleteProfileSnapshot`
-- la structure de semaine est maintenant decidee hors LLM
-- `periodization.py` reste a faire pour fermer la boucle cycle/deload
-
-### Phase 5 — LLM session detailing
-
-Livrables :
-- prompt de detailing borne dans `llm.py`
-- 2 retries max
-- fallback template si validation KO
-
-Definition of done :
-- un plan detaille valide peut etre genere
-- les blocs de seance sont coherents
-
-### Phase 6 — Onboarding V2
-
-Livrables :
-- enrichment de `telegram_onboarding.py`
-- completion explicite d'onboarding
-- nouvelles donnees utiles au planner
-
-Definition of done :
-- un user incomplet ne recoit pas un "vrai" plan V2
-- reprise d'onboarding possible
-
-Etat :
-- partiellement lance
-- l'onboarding et la regeneration passent deja par `planning_state.py`
-- l'enrichissement du questionnaire sportif reste a faire
-
-### Phase 7 — Conversation + Heartbeat
-
-Livrables :
-- `heartbeat.py` et conversation utilisent `PlanningDecision` et `Readiness`
-- explication des changements de plan
-
-Definition of done :
-- le coach explique les grosses adaptations avec le bon contexte
+1. enrichir `periodization.py`
+2. enrichir la distribution de charge dans `planner.py`
+3. faire remonter l'explication de `PlanningDecision`
+4. finir l'enrichissement onboarding
 
 ## Ce qu'on ne fait pas dans V2
 
