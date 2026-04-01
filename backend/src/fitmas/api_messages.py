@@ -11,7 +11,15 @@ from fitmas import mutations, repository as repo
 from fitmas.adaptation import check_and_adapt_health_facts
 from fitmas.adaptation_log import build_adaptation_log_entry
 from fitmas.activity_helpers import claimed_activities_last_days
-from fitmas.activity_claims import build_execution_conflict_archive_payloads
+from fitmas.activity_claims import (
+    ActivityClaim,
+    NonCompletionClaim,
+    build_claim_fact_payloads,
+    build_execution_conflict_archive_payloads,
+    build_non_completion_fact_payloads,
+    format_activity_claim_for_prompt,
+    format_non_completion_claim_for_prompt,
+)
 from fitmas.execution_clarification import ExecutionClarification, build_execution_clarification
 from fitmas.execution_evidence import classify_execution_evidence
 from fitmas.athlete_profile import build_athlete_profile
@@ -52,6 +60,7 @@ from fitmas.user_indications import (
     UserIndicationPolarity,
     UserIndicationScope,
     build_health_fact_payloads_from_indication,
+    looks_like_execution_clarification_prompt,
     supports_planning_resolution,
 )
 from fitmas.time_context import get_timezone
@@ -322,7 +331,7 @@ def _execution_contestation_reply(
     if evidence.display_status == "confirmed_done":
         return None
 
-    if target_session is not None and str(_value(target_session, "completion_status") or "").lower() == "done":
+    if target_session is not None and str(_value(target_session, "completion_status") or "").lower() in {"planned", "done"}:
         updated_session = repo.set_scheduled_session_status(db, int(_value(target_session, "id")), "skipped")
         if updated_session is not None:
             _, day_plan = repo.get_current_week_day_plan_for_session(db, user=user, session=updated_session)
@@ -353,23 +362,34 @@ def _targeted_execution_clarification(
     user,
     conversation_context,
     user_indication: UserIndication | None,
+    resolved_non_completion_claim: NonCompletionClaim | None,
+    resolved_activity_claim: ActivityClaim | None,
+    previous_agent_text: str | None,
 ) -> ExecutionClarification | None:
     if (
         user_indication is not None
         and user_indication.kind is UserIndicationKind.AVAILABILITY_CONSTRAINT
     ):
         return None
+    if (
+        user_indication is not None
+        and user_indication.kind is UserIndicationKind.HEALTH_SIGNAL
+        and user_indication.execution_completed is False
+    ):
+        return None
+    if looks_like_execution_clarification_prompt(previous_agent_text):
+        return None
 
     today = conversation_context.temporal_resolution.local_date
     yesterday = today.fromordinal(today.toordinal() - 1)
     if (
-        conversation_context.non_completion_claim is not None
-        and conversation_context.non_completion_claim.resolved_date_iso == yesterday.isoformat()
+        resolved_non_completion_claim is not None
+        and resolved_non_completion_claim.resolved_date_iso == yesterday.isoformat()
     ):
         return None
     if (
-        conversation_context.current_activity_claim is not None
-        and conversation_context.current_activity_claim.resolved_date_iso == yesterday.isoformat()
+        resolved_activity_claim is not None
+        and resolved_activity_claim.resolved_date_iso == yesterday.isoformat()
     ):
         return None
 
@@ -398,6 +418,100 @@ def _targeted_execution_clarification(
         activities=repo.get_activities(db, user.id, limit=120),
         claims=list(recent_claims),
     )
+
+
+def _latest_agent_text(conversation_history: list[dict]) -> str | None:
+    for msg in reversed(conversation_history):
+        if msg.get("role") == "agent":
+            return str(msg.get("text") or "")
+    return None
+
+
+def _yesterday_target_session(db: Session, user, *, today: date):
+    recent_sessions = repo.get_scheduled_sessions_between_dates(
+        db,
+        user.id,
+        start_date=today.fromordinal(today.toordinal() - 13),
+        end_date=today,
+        limit=42,
+    )
+    yesterday = today.fromordinal(today.toordinal() - 1)
+    return next(
+        (
+            session
+            for session in recent_sessions
+            if _coerce_local_date(_value(session, "scheduled_date"), timezone_name=user.timezone) == yesterday
+            and str(_value(session, "sport_type") or "").lower() != "rest"
+        ),
+        None,
+    )
+
+
+def _resolved_non_completion_from_indication(indication: UserIndication | None) -> NonCompletionClaim | None:
+    if indication is None or indication.execution_completed is not False:
+        return None
+    if indication.time_reference is None or indication.time_reference.resolved_date is None:
+        return None
+    return NonCompletionClaim(
+        sport_type=indication.execution_sport_type,
+        resolved_date_iso=indication.time_reference.resolved_date.isoformat(),
+        confidence=max(float(indication.confidence or 0.0), 0.82),
+        source_text=indication.source_text,
+    )
+
+
+def _resolved_activity_from_indication(indication: UserIndication | None) -> ActivityClaim | None:
+    if indication is None or indication.execution_completed is not True:
+        return None
+    if indication.time_reference is None or indication.time_reference.resolved_date is None:
+        return None
+    return ActivityClaim(
+        sport_type=indication.execution_sport_type,
+        duration_min=indication.execution_duration_min,
+        resolved_date_iso=indication.time_reference.resolved_date.isoformat(),
+        temporal_reference=indication.time_reference.relative_reference or indication.time_reference.label,
+        confidence=max(float(indication.confidence or 0.0), 0.82),
+        source_text=indication.source_text,
+    )
+
+
+def _apply_non_completion_resolution(
+    *,
+    db: Session,
+    user,
+    scheduled_sessions,
+    timezone_name: str | None,
+    non_completion_claim: NonCompletionClaim | None,
+) -> None:
+    if non_completion_claim is None or non_completion_claim.resolved_date_iso is None:
+        return
+    target_date = date.fromisoformat(non_completion_claim.resolved_date_iso)
+    sessions_on_date = [
+        session
+        for session in scheduled_sessions
+        if _coerce_local_date(_value(session, "scheduled_date"), timezone_name=timezone_name) == target_date
+        and str(_value(session, "sport_type") or "").lower() != "rest"
+    ]
+    target_session = next(
+        (
+            session
+            for session in sessions_on_date
+            if non_completion_claim.sport_type
+            and str(_value(session, "sport_type") or "").lower() == non_completion_claim.sport_type
+        ),
+        sessions_on_date[0] if len(sessions_on_date) == 1 else None,
+    )
+    if target_session is None:
+        return
+    if str(_value(target_session, "completion_status") or "").lower() not in {"planned", "done"}:
+        return
+    updated_session = repo.set_scheduled_session_status(db, int(_value(target_session, "id")), "skipped")
+    if updated_session is None:
+        return
+    _, day_plan = repo.get_current_week_day_plan_for_session(db, user=user, session=updated_session)
+    if day_plan is not None and str(day_plan.completion_status or "").lower() == "done":
+        day_plan.completion_status = "skipped"
+        db.commit()
 
 
 def _render_applied_decision_reply(
@@ -459,6 +573,7 @@ def post_message(payload: IncomingMessage, db: Session = Depends(get_db)) -> Mes
 
     msgs = repo.get_messages(db, user.id)
     conversation_history = [{"role": m.role, "text": m.text} for m in msgs]
+    previous_agent_text = _latest_agent_text(conversation_history[:-1])
     pydantic_plan = repo.to_pydantic_plan(plan)
     scheduled_sessions = repo.get_scheduled_sessions(db, user.id, limit=21)
     timeline = [repo.to_pydantic_scheduled_session(session) for session in scheduled_sessions]
@@ -539,15 +654,65 @@ def post_message(payload: IncomingMessage, db: Session = Depends(get_db)) -> Mes
             claim_summary = "\n".join(part for part in (claim_summary, non_completion_summary) if part)
 
     profile_snapshot = build_athlete_profile(user, facts=active_memory_rows)
+    clarification_target_session = _yesterday_target_session(
+        db,
+        user,
+        today=conversation_context.temporal_resolution.local_date,
+    )
     user_indication = interpret_user_indication(
         payload.text,
         timezone_name=user.timezone,
+        recent_agent_text=previous_agent_text,
+        clarification_date=(
+            _coerce_local_date(_value(clarification_target_session, "scheduled_date"), timezone_name=user.timezone).isoformat()
+            if clarification_target_session is not None
+            else None
+        ),
+        clarification_sport_type=str(_value(clarification_target_session, "sport_type") or "").strip().lower() or None,
     )
+    resolved_non_completion_claim = conversation_context.non_completion_claim or _resolved_non_completion_from_indication(user_indication)
+    resolved_activity_claim = conversation_context.current_activity_claim or _resolved_activity_from_indication(user_indication)
+    supplemental_claim_payloads: list[dict] = []
+    if conversation_context.current_activity_claim is None and resolved_activity_claim is not None:
+        supplemental_claim_payloads.extend(
+            build_claim_fact_payloads(
+                resolved_activity_claim,
+                activities=activities,
+                timezone_name=user.timezone,
+            )
+        )
+    if conversation_context.non_completion_claim is None and resolved_non_completion_claim is not None:
+        supplemental_claim_payloads.extend(build_non_completion_fact_payloads(resolved_non_completion_claim))
+    if supplemental_claim_payloads:
+        _persist_memory_updates(db, user.id, supplemental_claim_payloads)
+        active_memory_rows, active_facts = _active_memory_payloads(db, user.id)
+    _apply_non_completion_resolution(
+        db=db,
+        user=user,
+        scheduled_sessions=scheduled_sessions,
+        timezone_name=user.timezone,
+        non_completion_claim=resolved_non_completion_claim,
+    )
+    if resolved_non_completion_claim is not None:
+        scheduled_sessions = repo.get_scheduled_sessions(db, user.id, limit=21)
+        timeline = [repo.to_pydantic_scheduled_session(session) for session in scheduled_sessions]
+        today_session = repo.get_today_scheduled_session(db, user.id, timezone_name=user.timezone)
+    if conversation_context.current_activity_claim is None and resolved_activity_claim is not None:
+        claim_summary = "\n".join(
+            part for part in (claim_summary, format_activity_claim_for_prompt(resolved_activity_claim)) if part
+        )
+    if conversation_context.non_completion_claim is None and resolved_non_completion_claim is not None:
+        claim_summary = "\n".join(
+            part for part in (claim_summary, format_non_completion_claim_for_prompt(resolved_non_completion_claim)) if part
+        )
     clarification = _targeted_execution_clarification(
         db=db,
         user=user,
         conversation_context=conversation_context,
         user_indication=user_indication,
+        resolved_non_completion_claim=resolved_non_completion_claim,
+        resolved_activity_claim=resolved_activity_claim,
+        previous_agent_text=previous_agent_text,
     )
     if clarification is not None:
         reply_text = clarification.question
@@ -625,7 +790,7 @@ def post_message(payload: IncomingMessage, db: Session = Depends(get_db)) -> Mes
         scheduled_sessions=scheduled_sessions,
         activities=activities,
         timezone_name=user.timezone,
-        non_completion_claim=conversation_context.non_completion_claim,
+        non_completion_claim=resolved_non_completion_claim,
     )
     if (
         open_calibration_need is not None
@@ -723,7 +888,7 @@ def post_message(payload: IncomingMessage, db: Session = Depends(get_db)) -> Mes
         reply_text = no_candidate_reply
         logger.info("No-candidate constraint reply: %s", reply_text[:120])
     elif execution_contestation_reply is not None:
-        extraction = Extraction(confidence=max(float(conversation_context.non_completion_claim.confidence or 0.0), 0.88))
+        extraction = Extraction(confidence=max(float(resolved_non_completion_claim.confidence or 0.0), 0.88))
         reply_text = execution_contestation_reply
         logger.info("Execution contestation reply: %s", reply_text[:120])
     else:
@@ -737,8 +902,8 @@ def post_message(payload: IncomingMessage, db: Session = Depends(get_db)) -> Mes
     extracted_facts.extend(
         build_execution_conflict_archive_payloads(
             active_facts,
-            activity_claim=conversation_context.current_activity_claim,
-            non_completion_claim=conversation_context.non_completion_claim,
+            activity_claim=resolved_activity_claim,
+            non_completion_claim=resolved_non_completion_claim,
         )
     )
     if extracted_facts:

@@ -1,11 +1,12 @@
 from __future__ import annotations
 
 import unittest
-from datetime import datetime
+from datetime import date, datetime
 
 from fitmas.activity_claims import (
     build_claim_correction_payloads,
     build_claim_fact_payloads,
+    build_non_completion_fact_payloads,
     extract_non_completion_claim,
     extract_claims_from_facts,
     extract_activity_claim,
@@ -151,6 +152,42 @@ class ActivityClaimsTest(unittest.TestCase):
         self.assertEqual(claim.sport_type, "running")
         self.assertEqual(claim.resolved_date_iso, "2026-03-29")
         self.assertIn("non realise", format_non_completion_claim_for_prompt(claim))
+
+    def test_short_non_is_resolved_with_clarification_context(self) -> None:
+        claim = extract_non_completion_claim(
+            "Non",
+            timezone_name="Europe/Paris",
+            default_date=date(2026, 3, 31),
+            default_sport_type="strength",
+            allow_contextual_short_answer=True,
+        )
+
+        self.assertIsNotNone(claim)
+        self.assertEqual(claim.sport_type, "strength")
+        self.assertEqual(claim.resolved_date_iso, "2026-03-31")
+
+    def test_negative_phrase_does_not_become_positive_activity_claim(self) -> None:
+        claim = extract_activity_claim(
+            "Je n'ai rien fait hier",
+            timezone_name="Europe/Paris",
+            now=datetime.fromisoformat("2026-03-30T08:00:00+02:00"),
+        )
+
+        self.assertIsNone(claim)
+
+    def test_builds_non_completion_fact_payload(self) -> None:
+        claim = extract_non_completion_claim(
+            "Je n'ai rien fait hier",
+            timezone_name="Europe/Paris",
+            now=datetime.fromisoformat("2026-03-30T08:00:00+02:00"),
+            default_sport_type="running",
+        )
+
+        payloads = build_non_completion_fact_payloads(claim)
+
+        self.assertEqual(len(payloads), 1)
+        self.assertEqual(payloads[0]["category"], "execution")
+        self.assertIn("claimed_non_completion_2026-03-29", payloads[0]["key"])
 
 
 if __name__ == "__main__":

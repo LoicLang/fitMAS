@@ -22,6 +22,10 @@ NON_COMPLETION_MARKERS = (
     "je n'ai pas",
     "je nai pas",
     "j ai pas",
+    "j'ai rien fait",
+    "jai rien fait",
+    "j ai rien fait",
+    "rien fait",
     "pas couru",
     "pas nage",
     "pas nagé",
@@ -88,6 +92,8 @@ def extract_activity_claim(
     now: datetime | None = None,
 ) -> ActivityClaim | None:
     lowered = text.lower()
+    if any(marker in lowered for marker in NON_COMPLETION_MARKERS):
+        return None
     temporal = resolve_temporal_context(text, timezone_name=timezone_name, now=now)
     has_claim_verb = any(token in lowered for token in CLAIM_VERBS)
     has_correction_marker = any(token in lowered for token in CORRECTION_MARKERS)
@@ -168,27 +174,33 @@ def extract_non_completion_claim(
     *,
     timezone_name: str | None,
     now: datetime | None = None,
+    default_date: date | None = None,
+    default_sport_type: str | None = None,
+    allow_contextual_short_answer: bool = False,
 ) -> NonCompletionClaim | None:
     lowered = text.lower()
+    cleaned = " ".join(lowered.replace("?", " ").replace("!", " ").replace(".", " ").split())
     temporal = resolve_temporal_context(text, timezone_name=timezone_name, now=now)
-    if temporal.resolved_date is None:
+    resolved_date = temporal.resolved_date or default_date
+    if resolved_date is None:
         return None
     if not any(marker in lowered for marker in NON_COMPLETION_MARKERS):
-        return None
+        if not (allow_contextual_short_answer and cleaned in {"non", "nope", "nan"}):
+            return None
 
-    sport_type = _extract_sport(lowered)
-    if sport_type is None and "seance" not in lowered and "séance" not in lowered:
+    sport_type = _extract_sport(lowered) or default_sport_type
+    if sport_type is None and "seance" not in lowered and "séance" not in lowered and default_sport_type is None:
         return None
 
     confidence = 0.78
     if sport_type is not None:
         confidence += 0.1
-    if temporal.primary_reference != "unspecified":
+    if temporal.primary_reference != "unspecified" or default_date is not None:
         confidence += 0.07
 
     return NonCompletionClaim(
         sport_type=sport_type,
-        resolved_date_iso=temporal.resolved_date.isoformat(),
+        resolved_date_iso=resolved_date.isoformat(),
         confidence=min(confidence, 0.95),
         source_text=text.strip(),
     )
@@ -224,6 +236,27 @@ def build_claim_fact_payloads(
             "category": "execution",
             "key": _claim_key(claim),
             "value": _claim_value(claim),
+            "confidence": claim.confidence,
+            "confirmed": True,
+            "source": "conversation",
+            "affects": ["conversation", "heartbeat"],
+            "action": "upsert",
+        }
+    ]
+
+
+def build_non_completion_fact_payloads(claim: NonCompletionClaim | None) -> list[dict[str, Any]]:
+    if claim is None or claim.resolved_date_iso is None:
+        return []
+    sport = claim.sport_type or "unknown"
+    return [
+        {
+            "category": "execution",
+            "key": f"claimed_non_completion_{claim.resolved_date_iso}_{sport}",
+            "value": (
+                "Seance declaree non realisee par l'utilisateur: "
+                f"{sport}, date {claim.resolved_date_iso}."
+            ),
             "confidence": claim.confidence,
             "confirmed": True,
             "source": "conversation",
@@ -384,6 +417,13 @@ def _execution_fact_matches_target(
         if sport_type is None:
             return True
         return claim.sport_type == sport_type
+    if key.startswith("claimed_non_completion_"):
+        date_iso, fact_sport = _non_completion_from_key(key)
+        if date_iso != target_date_iso:
+            return False
+        if sport_type is None:
+            return True
+        return fact_sport == sport_type
 
     haystack = f"{key} {str(_activity_value(fact, 'value') or '')}".lower()
     if sport_type is not None and not _haystack_mentions_sport(haystack, sport_type):
@@ -398,6 +438,8 @@ def _execution_fact_polarity(fact: Any) -> str | None:
     key = str(_activity_value(fact, "key") or "").strip()
     if key.startswith("claimed_activity_"):
         return "completion"
+    if key.startswith("claimed_non_completion_"):
+        return "non_completion"
 
     haystack = f"{key} {str(_activity_value(fact, 'value') or '')}".lower()
     if any(marker in haystack for marker in NON_COMPLETION_FACT_MARKERS):
@@ -456,6 +498,16 @@ def _claim_from_fact(fact: Any) -> ActivityClaim | None:
         confidence=float(_activity_value(fact, "confidence") or 0.7),
         source_text=value,
     )
+
+
+def _non_completion_from_key(key: str) -> tuple[str | None, str | None]:
+    match = re.match(r"claimed_non_completion_(\d{4}-\d{2}-\d{2})_(.+)$", key)
+    if not match:
+        return None, None
+    sport_type = match.group(2)
+    if sport_type == "unknown":
+        sport_type = None
+    return match.group(1), sport_type
 
 
 def _activity_local_date(activity: Any, *, timezone_name: str | None) -> str | None:

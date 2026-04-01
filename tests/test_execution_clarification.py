@@ -138,3 +138,25 @@ def test_execution_clarification_skips_when_answer_would_not_change_week() -> No
     )
 
     assert clarification is None
+
+
+def test_execution_clarification_skips_for_already_skipped_session() -> None:
+    clarification = build_execution_clarification(
+        today=date(2026, 3, 30),
+        target_date=date(2026, 3, 29),
+        target_session={
+            "id": 3,
+            "sport_type": "running",
+            "scheduled_date": "2026-03-29T07:00:00+01:00",
+            "session_title": "Footing",
+            "duration_min": 25,
+            "intensity": "easy",
+            "load_score": 1,
+            "priority": "Support",
+            "completion_status": "skipped",
+        },
+        scheduled_sessions=[],
+        activities=[],
+    )
+
+    assert clarification is None

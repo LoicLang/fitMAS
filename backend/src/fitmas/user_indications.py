@@ -7,7 +7,7 @@ from datetime import date, datetime
 from enum import StrEnum
 from typing import Any
 
-from fitmas.activity_claims import extract_activity_claim
+from fitmas.activity_claims import extract_activity_claim, extract_non_completion_claim
 from fitmas.temporal_resolver import TemporalResolution, resolve_temporal_context
 from fitmas.time_context import DAY_KEYS
 
@@ -48,6 +48,15 @@ _HEALTH_PATTERNS = (
     "ça coince",
     "sensible",
     "tendon",
+    "malade",
+    "maladie",
+    "virus",
+    "fievre",
+    "fièvre",
+    "grippe",
+    "creve",
+    "crevé",
+    "hs",
 )
 _SEVERE_HEALTH_PATTERNS = (
     "blessure",
@@ -84,7 +93,13 @@ _EXECUTION_PATTERNS = (
     "j'ai nagé",
     "j ai roule",
     "j'ai roulé",
+    "j ai rien fait",
+    "j'ai rien fait",
+    "rien fait",
+    "pas fait",
 )
+_SHORT_NEGATIVE_ANSWERS = {"non", "nope", "nan"}
+_SHORT_POSITIVE_ANSWERS = {"oui", "ouais", "yes", "ok oui", "si"}
 
 
 class UserIndicationKind(StrEnum):
@@ -138,6 +153,7 @@ class UserIndication:
     health_severity: HealthSeverity | None = None
     execution_sport_type: str | None = None
     execution_duration_min: int | None = None
+    execution_completed: bool | None = None
 
 
 def indication_from_payload(
@@ -195,6 +211,7 @@ def indication_from_payload(
         health_severity=severity,
         execution_sport_type=str(execution.get("sport_type") or "").strip() or None,
         execution_duration_min=_coerce_int(execution.get("duration_min")),
+        execution_completed=_coerce_execution_completed(execution.get("status")),
     )
 
 
@@ -203,20 +220,60 @@ def fallback_interpret_user_indication(
     *,
     timezone_name: str | None,
     now: datetime | None = None,
+    recent_agent_text: str | None = None,
+    clarification_date: date | None = None,
+    clarification_sport_type: str | None = None,
 ) -> UserIndication | None:
     normalized = _normalize(text)
     temporal = resolve_temporal_context(text, timezone_name=timezone_name, now=now)
+    clarification_active = looks_like_execution_clarification_prompt(recent_agent_text)
 
     availability = _fallback_availability_indication(text, normalized=normalized, temporal=temporal)
     if availability is not None:
         return availability
 
+    non_completion = extract_non_completion_claim(
+        text,
+        timezone_name=timezone_name,
+        now=now,
+        default_date=clarification_date if clarification_active else None,
+        default_sport_type=clarification_sport_type if clarification_active else None,
+        allow_contextual_short_answer=clarification_active,
+    )
     health = _fallback_health_indication(text, normalized=normalized, temporal=temporal)
     if health is not None:
+        if non_completion is not None:
+            return _with_execution_resolution(
+                health,
+                completed=False,
+                resolved_date=date.fromisoformat(non_completion.resolved_date_iso) if non_completion.resolved_date_iso else None,
+                sport_type=non_completion.sport_type,
+            )
         return health
 
+    if non_completion is not None:
+        return UserIndication(
+            kind=UserIndicationKind.EXECUTION_UPDATE,
+            confidence=min(0.95, non_completion.confidence),
+            source_text=text.strip(),
+            scope=UserIndicationScope.SINGLE_DAY,
+            polarity=UserIndicationPolarity.SIGNAL,
+            time_reference=IndicationTimeReference(
+                label=temporal.primary_reference if temporal.primary_reference != "unspecified" else "clarification",
+                resolved_date=date.fromisoformat(non_completion.resolved_date_iso) if non_completion.resolved_date_iso else None,
+                day_key=_day_key_from_date(date.fromisoformat(non_completion.resolved_date_iso)) if non_completion.resolved_date_iso else None,
+                relative_reference=temporal.primary_reference if temporal.primary_reference != "unspecified" else None,
+                window=temporal.part_of_day,
+            ),
+            execution_sport_type=non_completion.sport_type,
+            execution_completed=False,
+        )
+
     claim = extract_activity_claim(text, timezone_name=timezone_name, now=now)
-    if claim is not None and any(token in normalized for token in _EXECUTION_PATTERNS):
+    if claim is not None and (
+        any(token in normalized for token in _EXECUTION_PATTERNS)
+        or (clarification_active and normalized in _SHORT_POSITIVE_ANSWERS)
+    ):
         return UserIndication(
             kind=UserIndicationKind.EXECUTION_UPDATE,
             confidence=min(0.95, claim.confidence),
@@ -232,21 +289,30 @@ def fallback_interpret_user_indication(
             ),
             execution_sport_type=claim.sport_type,
             execution_duration_min=claim.duration_min,
+            execution_completed=True,
+        )
+    if clarification_active and normalized in _SHORT_POSITIVE_ANSWERS and clarification_date is not None:
+        return UserIndication(
+            kind=UserIndicationKind.EXECUTION_UPDATE,
+            confidence=0.86,
+            source_text=text.strip(),
+            scope=UserIndicationScope.SINGLE_DAY,
+            polarity=UserIndicationPolarity.SIGNAL,
+            time_reference=IndicationTimeReference(
+                label="clarification",
+                resolved_date=clarification_date,
+                day_key=_day_key_from_date(clarification_date),
+                relative_reference="yesterday",
+                window=temporal.part_of_day,
+            ),
+            execution_sport_type=clarification_sport_type,
+            execution_completed=True,
         )
     return None
 
 
 def should_attempt_indication_interpretation(text: str) -> bool:
-    normalized = _normalize(text)
-    if any(token in normalized for token in _UNAVAILABLE_PATTERNS):
-        return True
-    if any(token in normalized for token in _TRAVEL_PATTERNS):
-        return True
-    if any(token in normalized for token in _HEALTH_PATTERNS):
-        return True
-    if any(token in normalized for token in _EXECUTION_PATTERNS):
-        return True
-    return False
+    return bool((text or "").strip())
 
 
 def supports_planning_resolution(indication: UserIndication | None) -> bool:
@@ -264,7 +330,10 @@ def build_health_fact_payloads_from_indication(indication: UserIndication | None
     trigger_activity = indication.trigger_activity or "general"
     symptom = indication.symptom_type or "pain"
     severity = (indication.health_severity or HealthSeverity.MODERATE).value
-    value_parts = ["Douleur"]
+    if symptom == "illness":
+        value_parts = ["Etat de sante general degrade"]
+    else:
+        value_parts = ["Douleur"]
     if body_zone != "general":
         value_parts.append(f"a la zone {body_zone}")
     if trigger_activity != "general":
@@ -328,7 +397,7 @@ def _fallback_health_indication(
     trigger_activity = _match_mapping(normalized, _TRIGGER_ACTIVITY_PATTERNS)
     severity = HealthSeverity.HIGH if any(token in normalized for token in _SEVERE_HEALTH_PATTERNS) else HealthSeverity.MODERATE
     confidence = 0.9 if body_zone or trigger_activity else 0.8
-    symptom = "pain_tightness" if "tire" in normalized else "pain"
+    symptom = "illness" if any(token in normalized for token in ("malade", "maladie", "virus", "fievre", "fièvre", "grippe", "creve", "crevé", "hs")) else ("pain_tightness" if "tire" in normalized else "pain")
     return UserIndication(
         kind=UserIndicationKind.HEALTH_SIGNAL,
         confidence=confidence,
@@ -336,8 +405,8 @@ def _fallback_health_indication(
         scope=UserIndicationScope.SINGLE_DAY if temporal.resolved_date else UserIndicationScope.UNKNOWN,
         polarity=UserIndicationPolarity.SIGNAL,
         time_reference=_time_reference_from_temporal(temporal),
-        body_zone=body_zone,
-        trigger_activity=trigger_activity,
+        body_zone=body_zone or ("general" if symptom == "illness" else None),
+        trigger_activity=trigger_activity or ("general" if symptom == "illness" else None),
         symptom_type=symptom,
         health_severity=severity,
     )
@@ -436,3 +505,52 @@ def _day_key_from_date(value: date | None) -> str | None:
     if value is None:
         return None
     return DAY_KEYS[value.weekday()]
+
+
+def _coerce_execution_completed(value: Any) -> bool | None:
+    normalized = str(value or "").strip().lower()
+    if normalized == "done":
+        return True
+    if normalized == "not_done":
+        return False
+    return None
+
+
+def looks_like_execution_clarification_prompt(text: str | None) -> bool:
+    normalized = _normalize(text or "")
+    return "tu l as faite ou non" in normalized or "tu l'as faite ou non" in normalized
+
+
+def _with_execution_resolution(
+    indication: UserIndication,
+    *,
+    completed: bool,
+    resolved_date: date | None,
+    sport_type: str | None,
+) -> UserIndication:
+    time_reference = indication.time_reference
+    if resolved_date is not None and (time_reference is None or time_reference.resolved_date is None):
+        time_reference = IndicationTimeReference(
+            label="clarification",
+            resolved_date=resolved_date,
+            day_key=_day_key_from_date(resolved_date),
+            relative_reference="yesterday",
+            window=time_reference.window if time_reference is not None else None,
+        )
+    return UserIndication(
+        kind=indication.kind,
+        confidence=indication.confidence,
+        source_text=indication.source_text,
+        scope=indication.scope,
+        polarity=indication.polarity,
+        time_reference=time_reference,
+        needs_followup=indication.needs_followup,
+        followup_reason=indication.followup_reason,
+        body_zone=indication.body_zone,
+        trigger_activity=indication.trigger_activity,
+        symptom_type=indication.symptom_type,
+        health_severity=indication.health_severity,
+        execution_sport_type=sport_type or indication.execution_sport_type,
+        execution_duration_min=indication.execution_duration_min,
+        execution_completed=completed,
+    )

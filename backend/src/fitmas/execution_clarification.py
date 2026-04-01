@@ -38,6 +38,9 @@ def build_execution_clarification(
 ) -> ExecutionClarification | None:
     if target_session is None:
         return None
+    completion_status = str(_value(target_session, "completion_status") or "").strip().lower()
+    if completion_status in {"skipped", "adapted", "rest"}:
+        return None
 
     evidence = classify_execution_evidence(
         planned_session=target_session,

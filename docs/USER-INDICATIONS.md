@@ -35,6 +35,12 @@ Exemples :
 
 Avant toute mutation, FitMAS doit produire un objet structure.
 
+Règle de parsing :
+
+- tout message user non trivial doit passer d'abord par l'interpréteur structuré
+- les regex fallback restent un secours, pas le portier principal
+- le backend valide ensuite, grounde, persiste et mute
+
 ## Types MVP
 
 ### `availability_constraint`
@@ -165,6 +171,8 @@ Porte :
 Dans `api_messages.py` :
 
 1. on interprete le message en `UserIndication`
+   - en pratique, presque tous les messages non triviaux passent par le parseur structuré
+   - le parseur voit aussi le dernier message coach utile quand une clarification est en cours
 2. si c'est un `health_signal` fort :
    - on ecrit un fait sante
    - on tente une adaptation protective
@@ -180,6 +188,8 @@ Comportements importants :
 - `voyage`, `deplacement`, `je bouge` sont traites comme des `availability_constraint`
 - un `demain soir` sans seance cible ne doit jamais inventer une mutation sur un autre jour
 - `douleur epaule + natation` force une adaptation protective hors natation, meme si le LLM propose juste une version plus douce de nage
+- une reponse courte a une clarification d'execution (`oui`, `non`, `j'ai rien fait`, `je suis malade`) doit etre interpretee dans le contexte de la question precedente
+- une clarification d'execution deja resolue ne doit pas etre repetee verbatim au tour suivant
 
 ### Runtime tools
 

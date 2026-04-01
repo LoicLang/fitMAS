@@ -43,6 +43,24 @@ class UserIndicationsTest(unittest.TestCase):
         self.assertIn("shoulder", payloads[0]["key"])
         self.assertIn("Douleur", payloads[0]["value"])
 
+    def test_fallback_interprets_general_illness_and_clarification_answer(self) -> None:
+        indication = fallback_interpret_user_indication(
+            "Je suis malade comme un chien j'ai rien fait",
+            timezone_name="Europe/Paris",
+            now=datetime(2026, 4, 1, 8, 0),
+            recent_agent_text="Je ne vois pas de trace de ton renfo hier. Tu l'as faite ou non ?",
+            clarification_date=date(2026, 3, 31),
+            clarification_sport_type="strength",
+        )
+
+        self.assertIsNotNone(indication)
+        self.assertEqual(indication.kind, UserIndicationKind.HEALTH_SIGNAL)
+        self.assertEqual(indication.symptom_type, "illness")
+        self.assertFalse(indication.execution_completed)
+        self.assertEqual(indication.execution_sport_type, "strength")
+        self.assertIsNotNone(indication.time_reference)
+        self.assertEqual(indication.time_reference.resolved_date, date(2026, 3, 31))
+
     def test_fallback_interprets_week_travel_constraint(self) -> None:
         indication = fallback_interpret_user_indication(
             "Cette semaine je voyage de mercredi a vendredi",
