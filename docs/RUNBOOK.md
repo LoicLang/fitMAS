@@ -49,11 +49,13 @@ Pour prod / déploiement :
 - `TZ`
 - `FLY_APP_NAME`
 - `FITMAS_ENABLE_DEBUG_ENDPOINTS`
+- `FITMAS_TELEGRAM_DEBOUNCE_SECONDS`
 
 Notes :
 - `.env` est chargé par l'API et le bot
 - en local, DB par défaut : `fitmas.db` à la racine
 - en prod, DB : `/data/fitmas.db`
+- debounce Telegram par défaut : `2.5s`
 
 ## Commandes de base
 

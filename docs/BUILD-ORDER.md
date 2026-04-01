@@ -18,6 +18,7 @@ read_when:
 ### Socle produit déjà solide
 
 - onboarding Telegram complet avec preview coach
+- bridge Telegram debounced sur rafales courtes
 - planner déterministe + fondations `PlanningDecision`
 - calendrier daté persistant via `ScheduledSession`
 - webapp React/Vite déployée avec `Aperçu / Calendrier / Évolution`
@@ -97,6 +98,11 @@ Scope :
 - buffer court `2-3s`
 - une seule décision LLM par rafale courte
 - garde-fous pour ne pas retarder inutilement un vrai échange isolé
+
+Etat :
+
+- fait en bridge Telegram
+- buffer configurable via `FITMAS_TELEGRAM_DEBOUNCE_SECONDS`
 
 Docs de référence :
 

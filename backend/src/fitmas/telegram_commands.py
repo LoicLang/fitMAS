@@ -1,16 +1,27 @@
 from __future__ import annotations
 
 import logging
+import os
 
 import httpx
 from telegram import Update
 from telegram.ext import Application, CommandHandler, ContextTypes, MessageHandler, filters
 
 from fitmas.telegram_api import api_get, api_post
+from fitmas.telegram_debounce import (
+    build_batched_text,
+    consume_messages,
+    enqueue_message,
+    has_pending_messages,
+    is_in_flight,
+    mark_in_flight,
+)
 from fitmas.telegram_shared import DAY_LABELS, SPORT_EMOJIS, persist_draft_for_owner
 from fitmas.time_context import build_time_context
 
 logger = logging.getLogger(__name__)
+
+_DEBOUNCE_SECONDS = float(os.getenv("FITMAS_TELEGRAM_DEBOUNCE_SECONDS", "2.5"))
 
 
 async def cmd_plan(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -63,9 +74,82 @@ async def cmd_today(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     user_text = update.message.text
+    if not user_text or update.effective_chat is None:
+        return
+    if context.job_queue is None:
+        await _forward_message_immediately(update, user_text)
+        return
+    chat_id = int(update.effective_chat.id)
+    enqueue_message(chat_id, user_text)
+    _schedule_debounced_flush(context, chat_id)
+
+
+async def _flush_debounced_messages(context: ContextTypes.DEFAULT_TYPE) -> None:
+    if context.job is None:
+        return
+    chat_id = int(context.job.chat_id or (context.job.data or {}).get("chat_id") or 0)
+    if chat_id <= 0:
+        return
+    if is_in_flight(chat_id):
+        if has_pending_messages(chat_id):
+            _schedule_debounced_flush(context, chat_id)
+        return
+
+    batched_messages = consume_messages(chat_id)
+    if not batched_messages:
+        return
+
+    user_text = build_batched_text(batched_messages)
     if not user_text:
         return
 
+    mark_in_flight(chat_id, True)
+    try:
+        result = await api_post("/api/v0/messages", {"text": user_text})
+        reply = result.get("assistant_message", {}).get("text", "...")
+        await context.bot.send_message(chat_id=chat_id, text=reply)
+    except httpx.HTTPStatusError as exc:
+        if exc.response.status_code == 404:
+            await context.bot.send_message(chat_id=chat_id, text="Je n'ai pas encore ton setup. Lance /start.")
+            return
+        logger.exception("Error forwarding debounced message")
+        await context.bot.send_message(
+            chat_id=chat_id,
+            text="Probleme de connexion avec FitMAS. Reessaie dans un instant.",
+        )
+    except Exception:
+        logger.exception("Error forwarding debounced message")
+        await context.bot.send_message(
+            chat_id=chat_id,
+            text="Probleme de connexion avec FitMAS. Reessaie dans un instant.",
+        )
+    finally:
+        mark_in_flight(chat_id, False)
+        if has_pending_messages(chat_id):
+            _schedule_debounced_flush(context, chat_id)
+
+
+def _schedule_debounced_flush(context: ContextTypes.DEFAULT_TYPE, chat_id: int) -> None:
+    job_queue = context.job_queue
+    if job_queue is None:
+        return
+    name = _debounce_job_name(chat_id)
+    for job in job_queue.get_jobs_by_name(name):
+        job.schedule_removal()
+    job_queue.run_once(
+        _flush_debounced_messages,
+        when=_DEBOUNCE_SECONDS,
+        data={"chat_id": chat_id},
+        name=name,
+        chat_id=chat_id,
+    )
+
+
+def _debounce_job_name(chat_id: int) -> str:
+    return f"telegram_debounce:{chat_id}"
+
+
+async def _forward_message_immediately(update: Update, user_text: str) -> None:
     try:
         result = await api_post("/api/v0/messages", {"text": user_text})
         reply = result.get("assistant_message", {}).get("text", "...")
