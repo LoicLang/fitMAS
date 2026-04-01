@@ -24,6 +24,12 @@ class ToolRoutingTest(unittest.TestCase):
         self.assertEqual(decision.reason, "plan_dispute")
         self.assertEqual(decision.tool_names, ("get_today_context", "get_plan_window"))
 
+    def test_routes_load_questions_to_load_tools(self) -> None:
+        decision = route_tools_for_query("La charge de cette semaine elle dit quoi ?", pipeline="conversation")
+
+        self.assertEqual(decision.reason, "load_context")
+        self.assertEqual(decision.tool_names, ("get_load_context", "get_recent_reality_window"))
+
     def test_routes_fact_queries_to_memory_tool(self) -> None:
         decision = route_tools_for_query("Qu'est-ce que tu sais de mes contraintes ?", pipeline="conversation")
 

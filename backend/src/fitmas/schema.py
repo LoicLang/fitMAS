@@ -61,6 +61,9 @@ class User(Base):
     messages: Mapped[list[CoachMessage]] = relationship(
         back_populates="user", cascade="all, delete-orphan"
     )
+    conversation_turns: Mapped[list[ConversationTurnRecord]] = relationship(
+        back_populates="user", cascade="all, delete-orphan"
+    )
     fitness_snapshots: Mapped[list[FitnessSnapshotRecord]] = relationship(
         back_populates="user", cascade="all, delete-orphan"
     )
@@ -68,6 +71,9 @@ class User(Base):
         back_populates="user", cascade="all, delete-orphan"
     )
     planning_decisions: Mapped[list[PlanningDecisionRecord]] = relationship(
+        back_populates="user", cascade="all, delete-orphan"
+    )
+    pending_mutation_confirmations: Mapped[list[PendingMutationConfirmation]] = relationship(
         back_populates="user", cascade="all, delete-orphan"
     )
 
@@ -349,6 +355,47 @@ class CoachMessage(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
     user: Mapped[User] = relationship(back_populates="messages")
+
+
+class ConversationTurnRecord(Base):
+    __tablename__ = "conversation_turns"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
+    user_message: Mapped[str] = mapped_column(Text)
+    assistant_message: Mapped[str] = mapped_column(Text)
+    response_mode: Mapped[str] = mapped_column(String(32), default="reply")
+    extraction_confidence: Mapped[float] = mapped_column(Float, default=0.0)
+    day_updated: Mapped[str | None] = mapped_column(String(16), nullable=True, default=None)
+    mutation_type: Mapped[str] = mapped_column(String(32), default="")
+    mutation_applied: Mapped[bool] = mapped_column(Boolean, default=False)
+    pending_confirmation: Mapped[bool] = mapped_column(Boolean, default=False)
+    pending_confirmation_id: Mapped[int | None] = mapped_column(nullable=True, default=None)
+    decision_json: Mapped[str] = mapped_column(Text, default="{}")
+    context_json: Mapped[str] = mapped_column(Text, default="{}")
+    memory_writes_json: Mapped[str] = mapped_column(Text, default="[]")
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+
+    user: Mapped[User] = relationship(back_populates="conversation_turns")
+
+
+class PendingMutationConfirmation(Base):
+    __tablename__ = "pending_mutation_confirmations"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
+    status: Mapped[str] = mapped_column(String(16), default="pending")
+    impact_level: Mapped[str] = mapped_column(String(16), default="high")
+    reason: Mapped[str] = mapped_column(String(64), default="")
+    mutation_type: Mapped[str] = mapped_column(String(32), default="no_change")
+    summary: Mapped[str] = mapped_column(Text, default="")
+    source_text: Mapped[str] = mapped_column(Text, default="")
+    decision_json: Mapped[str] = mapped_column(Text, default="{}")
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True, default=None)
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+    resolved_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True, default=None)
+
+    user: Mapped[User] = relationship(back_populates="pending_mutation_confirmations")
 
 
 class AdaptationEventRecord(Base):

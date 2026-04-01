@@ -6,6 +6,8 @@ __pycache__/
 .env
 fitmas.db
 *.bak
+.pytest_cache/
+.tmp-*
 
 # Local frontend / browser tooling
 node_modules/

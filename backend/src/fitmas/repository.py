@@ -5,7 +5,7 @@ from datetime import date, datetime, time, timedelta
 
 from sqlalchemy.orm import Session
 
-from fitmas import schema as s
+from fitmas import repo_conversation, schema as s
 from fitmas.adaptation_log import AdaptationLogEntry
 from fitmas.fact_memory import fact_is_current, normalize_fact_payload
 from fitmas.fitness_snapshot import FitnessSnapshot
@@ -325,12 +325,22 @@ def get_day_plan(db: Session, plan_id: int, day: str) -> s.DayPlan | None:
 
 
 def get_messages(db: Session, user_id: int) -> list[s.CoachMessage]:
-    return (
-        db.query(s.CoachMessage)
-        .filter(s.CoachMessage.user_id == user_id)
-        .order_by(s.CoachMessage.id)
-        .all()
-    )
+    return repo_conversation.get_messages(db, user_id)
+
+
+def get_recent_conversation_turns(
+    db: Session,
+    user_id: int,
+    *,
+    limit: int = 20,
+) -> list[s.ConversationTurnRecord]:
+    return repo_conversation.get_recent_conversation_turns(db, user_id, limit=limit)
+
+
+def get_active_pending_mutation_confirmation(
+    db: Session, user_id: int
+) -> s.PendingMutationConfirmation | None:
+    return repo_conversation.get_active_pending_mutation_confirmation(db, user_id)
 
 
 def get_active_facts(db: Session, user_id: int, limit: int = 12) -> list[s.UserFact]:
@@ -633,11 +643,76 @@ def add_message(
     *,
     proactive: bool = False,
 ) -> s.CoachMessage:
-    msg = s.CoachMessage(user_id=user_id, role=role, text=text, proactive=proactive)
-    db.add(msg)
-    db.commit()
-    db.refresh(msg)
-    return msg
+    return repo_conversation.add_message(db, user_id, role, text, proactive=proactive)
+
+
+def add_conversation_turn(
+    db: Session,
+    *,
+    user_id: int,
+    user_message: str,
+    assistant_message: str,
+    response_mode: str,
+    extraction_confidence: float,
+    day_updated: str | None,
+    mutation_type: str,
+    mutation_applied: bool,
+    pending_confirmation: bool,
+    pending_confirmation_id: int | None,
+    decision_json: str,
+    context: dict[str, object] | None,
+    memory_writes: list[dict[str, object]] | None,
+) -> s.ConversationTurnRecord:
+    return repo_conversation.add_conversation_turn(
+        db,
+        user_id=user_id,
+        user_message=user_message,
+        assistant_message=assistant_message,
+        response_mode=response_mode,
+        extraction_confidence=extraction_confidence,
+        day_updated=day_updated,
+        mutation_type=mutation_type,
+        mutation_applied=mutation_applied,
+        pending_confirmation=pending_confirmation,
+        pending_confirmation_id=pending_confirmation_id,
+        decision_json=decision_json,
+        context=context,
+        memory_writes=memory_writes,
+    )
+
+
+def create_pending_mutation_confirmation(
+    db: Session,
+    *,
+    user_id: int,
+    impact_level: str,
+    reason: str,
+    mutation_type: str,
+    summary: str,
+    source_text: str,
+    decision_json: str,
+    expires_at: datetime | None,
+) -> s.PendingMutationConfirmation:
+    return repo_conversation.create_pending_mutation_confirmation(
+        db,
+        user_id=user_id,
+        impact_level=impact_level,
+        reason=reason,
+        mutation_type=mutation_type,
+        summary=summary,
+        source_text=source_text,
+        decision_json=decision_json,
+        expires_at=expires_at,
+    )
+
+
+def resolve_pending_mutation_confirmation(
+    db: Session,
+    row_id: int,
+    *,
+    status: str,
+) -> s.PendingMutationConfirmation | None:
+    return repo_conversation.resolve_pending_mutation_confirmation(db, row_id, status=status)
 
 
 def add_adaptation_event(db: Session, user_id: int, entry: AdaptationLogEntry) -> s.AdaptationEventRecord:
@@ -1312,7 +1387,7 @@ def set_change_notes(db: Session, day_plan_id: int, notes: list[tuple[str, str]]
 
 
 def _json_dumps(value: object) -> str:
-    return json.dumps(value, ensure_ascii=True, sort_keys=True)
+    return json.dumps(value, ensure_ascii=True, sort_keys=True, default=_json_default)
 
 
 def _json_loads_dict(raw_value: str) -> dict[str, float]:
@@ -1332,3 +1407,11 @@ def _json_loads_list(raw_value: str) -> list[str]:
     if not raw_value:
         return []
     return [str(value) for value in json.loads(raw_value)]
+
+
+def _json_default(value: object) -> str:
+    if isinstance(value, datetime):
+        return value.isoformat()
+    if isinstance(value, date):
+        return value.isoformat()
+    return str(value)

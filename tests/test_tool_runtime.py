@@ -73,6 +73,8 @@ class ToolRuntimeTest(unittest.TestCase):
         self.assertIn("resolve_planning_window", names)
         self.assertIn("get_recent_activities", names)
         self.assertIn("get_relevant_facts", names)
+        self.assertIn("get_recent_reality_window", names)
+        self.assertIn("get_load_context", names)
 
     def test_execute_tool_call_returns_today_context(self) -> None:
         result, trace = execute_tool_call(
@@ -136,6 +138,24 @@ class ToolRuntimeTest(unittest.TestCase):
         self.assertEqual(result.status, "ok")
         self.assertEqual(result.payload["matched_session_id"], 13)
         self.assertTrue(result.payload["exact_match"])
+
+    def test_recent_reality_window_returns_plan_and_actual(self) -> None:
+        registry = build_tool_registry()
+        result = registry["get_recent_reality_window"].handler(self.context, {"days": 7, "limit": 4})
+
+        self.assertEqual(result.status, "ok")
+        self.assertEqual(len(result.payload["planned_sessions"]), 1)
+        self.assertEqual(len(result.payload["activities"]), 2)
+        self.assertEqual(result.payload["planned_sessions"][0]["session_title"], "Natation")
+
+    def test_load_context_summarizes_recent_and_upcoming_load(self) -> None:
+        registry = build_tool_registry()
+        result = registry["get_load_context"].handler(self.context, {"days": 7})
+
+        self.assertEqual(result.status, "ok")
+        self.assertEqual(result.payload["recent_actual_duration_min"], 160)
+        self.assertEqual(result.payload["upcoming_planned_duration_min"], 105)
+        self.assertEqual(result.payload["upcoming_planned_session_count"], 2)
 
 
 if __name__ == "__main__":

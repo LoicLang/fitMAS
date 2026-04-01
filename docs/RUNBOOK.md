@@ -110,7 +110,13 @@ cd frontend && npm test -- --run
 Tests backend app/read-models :
 
 ```bash
-PYTHONPATH=backend/src ./.venv/bin/python -m pytest tests/test_calendar_resolution.py tests/test_load_projection.py tests/test_app_endpoints.py
+./scripts/test-backend tests/test_calendar_resolution.py tests/test_load_projection.py tests/test_app_endpoints.py
+```
+
+Smoke backend conversation/tools :
+
+```bash
+./scripts/test-backend -q tests/test_conversation_prompting.py tests/test_tool_routing.py tests/test_llm_json.py tests/test_llm_tools.py tests/test_conversation_context.py tests/test_execution_context.py tests/test_tool_runtime.py tests/test_user_indications.py tests/test_memory_routing.py tests/test_memory_patterns.py tests/test_core_flows.py
 ```
 
 Smoke API minimal :

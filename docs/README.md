@@ -7,7 +7,7 @@ read_when:
 
 # Docs
 
-14 documents essentiels :
+15 documents essentiels :
 
 | Document | Contenu |
 |----------|---------|
@@ -22,6 +22,7 @@ read_when:
 | `USER-INDICATIONS.md` | Contrat des indications utilisateur: interpretation, grounding planning, mutation et explication |
 | `RUNTIME-TOOLS.md` | Contrat des tools runtime, registre V1 read-only, limites et métriques |
 | `CLAUDE-CODE-LEARNINGS.md` | Analyse externe du harness Claude Code et patterns utiles pour faire évoluer FitMAS sans sur-réagir au multi-agent |
+| `HARNESS-REFACTOR.md` | Plan de refactor du harness, phases, statut et checks de verification |
 | `SOUL.md` | Voix FitMAS, heartbeat, messagerie, exemples de ton |
 | `BUILD-ORDER.md` | État réel, plan canonique de priorités et sujets explicitement sortis de la roadmap immédiate |
 | `RUNBOOK.md` | Commandes, flux à tester, debug, déploiement, mapping rapide du code |
@@ -48,8 +49,9 @@ Pour un nouvel agent :
 11. `USER-INDICATIONS.md`
 12. `RUNTIME-TOOLS.md`
 13. `CLAUDE-CODE-LEARNINGS.md`
-14. `SOUL.md`
-15. `RUNBOOK.md`
+14. `HARNESS-REFACTOR.md`
+15. `SOUL.md`
+16. `RUNBOOK.md`
 
 Raccourci utile :
 - si le sujet est "que faut-il construire maintenant ?", lire `BUILD-ORDER.md`
@@ -64,6 +66,7 @@ Raccourci utile :
 - si le sujet est "comment transformer un message user en event candidate solide ?", lire `USER-INDICATIONS.md`
 - si le sujet est "comment brancher des tools runtime au LLM sans casser l'architecture ?", lire `RUNTIME-TOOLS.md`
 - si le sujet est "quels patterns agentiques/harness valent vraiment le coup pour FitMAS ?", lire `CLAUDE-CODE-LEARNINGS.md`
+- si le sujet est "dans quel ordre refactorer le harness et quel est le statut ?", lire `HARNESS-REFACTOR.md`
 
 ## Archive
 

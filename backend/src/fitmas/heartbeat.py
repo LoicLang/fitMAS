@@ -13,7 +13,7 @@ from datetime import date, datetime, timedelta, timezone
 
 from sqlalchemy.orm import Session
 
-from fitmas import repository as repo, schema as s
+from fitmas import heartbeat_evaluation, repository as repo, schema as s
 from fitmas.activity_helpers import (
     activities_last_days as _activities_last_days,
     activities_on_local_date as _activities_on_local_date,
@@ -41,13 +41,11 @@ from fitmas.time_context import DAY_LABELS_FR, build_time_context, get_local_now
 
 logger = logging.getLogger(__name__)
 
-# Minimum hours between proactive coach messages
-PROACTIVE_COOLDOWN_HOURS = 6
-# Minimum hours since last user exchange before sending a pre-session reminder
-RECENT_EXCHANGE_HOURS = 2
-MAX_PROACTIVE_MESSAGES_PER_DAY = 2
-MODULE_GUARD_WINDOW = timedelta(minutes=2)
-_LAST_PROACTIVE_GUARD_AT: dict[int, datetime] = {}
+PROACTIVE_COOLDOWN_HOURS = heartbeat_evaluation.PROACTIVE_COOLDOWN_HOURS
+RECENT_EXCHANGE_HOURS = heartbeat_evaluation.RECENT_EXCHANGE_HOURS
+MAX_PROACTIVE_MESSAGES_PER_DAY = heartbeat_evaluation.MAX_PROACTIVE_MESSAGES_PER_DAY
+MODULE_GUARD_WINDOW = heartbeat_evaluation.MODULE_GUARD_WINDOW
+_LAST_PROACTIVE_GUARD_AT = heartbeat_evaluation.LAST_PROACTIVE_GUARD_AT
 
 DAY_MAP = {
     0: "monday", 1: "tuesday", 2: "wednesday",
@@ -74,77 +72,23 @@ def _get_today_key(timezone_name: str | None) -> str:
 
 
 def _check_module_guard(user_id: int, *, now: datetime | None = None) -> bool:
-    current = now or datetime.now(timezone.utc)
-    last_guard_at = _LAST_PROACTIVE_GUARD_AT.get(user_id)
-    if not last_guard_at:
-        return True
-    if current - last_guard_at < MODULE_GUARD_WINDOW:
-        logger.info("Module guard active for user %s", user_id)
-        return False
-    return True
+    return heartbeat_evaluation.check_module_guard(user_id, now=now)
 
 
 def _reserve_module_guard(user_id: int, *, now: datetime | None = None) -> None:
-    _LAST_PROACTIVE_GUARD_AT[user_id] = now or datetime.now(timezone.utc)
+    heartbeat_evaluation.reserve_module_guard(user_id, now=now)
 
 
 def _check_daily_cap(db: Session, user: s.User, max_messages: int = MAX_PROACTIVE_MESSAGES_PER_DAY) -> bool:
-    local_now = get_local_now(user.timezone)
-    local_midnight = local_now.replace(hour=0, minute=0, second=0, microsecond=0)
-    utc_midnight = local_midnight.astimezone(timezone.utc).replace(tzinfo=None)
-    sent_today = (
-        db.query(s.CoachMessage)
-        .filter(
-            s.CoachMessage.user_id == user.id,
-            s.CoachMessage.role == "agent",
-            s.CoachMessage.proactive.is_(True),
-            s.CoachMessage.created_at >= utc_midnight,
-        )
-        .count()
-    )
-    if sent_today >= max_messages:
-        logger.info("Daily proactive cap reached for user %s: %d/%d", user.id, sent_today, max_messages)
-        return False
-    return True
+    return heartbeat_evaluation.check_daily_cap(db, user, max_messages=max_messages)
 
 
 def _check_cooldown(db: Session, user_id: int, cooldown_hours: float = PROACTIVE_COOLDOWN_HOURS) -> bool:
-    """Return True if enough time has passed since the last proactive agent message."""
-    last_agent_msg = (
-        db.query(s.CoachMessage)
-        .filter(
-            s.CoachMessage.user_id == user_id,
-            s.CoachMessage.role == "agent",
-            s.CoachMessage.proactive.is_(True),
-        )
-        .order_by(s.CoachMessage.created_at.desc())
-        .first()
-    )
-    if not last_agent_msg or not last_agent_msg.created_at:
-        return True  # no previous message, ok to send
-    elapsed = hours_since(last_agent_msg.created_at)
-    if elapsed is None:
-        return True
-    if elapsed < cooldown_hours:
-        logger.info("Cooldown active: last agent msg %.1fh ago (need %.1fh)", elapsed, cooldown_hours)
-        return False
-    return True
+    return heartbeat_evaluation.check_cooldown(db, user_id, cooldown_hours=cooldown_hours)
 
 
 def _had_recent_exchange(db: Session, user_id: int, hours: float = RECENT_EXCHANGE_HOURS) -> bool:
-    """Return True if the user sent a message recently."""
-    last_user_msg = (
-        db.query(s.CoachMessage)
-        .filter(s.CoachMessage.user_id == user_id, s.CoachMessage.role == "user")
-        .order_by(s.CoachMessage.created_at.desc())
-        .first()
-    )
-    if not last_user_msg or not last_user_msg.created_at:
-        return False
-    elapsed = hours_since(last_user_msg.created_at)
-    if elapsed is None:
-        return False
-    return elapsed < hours
+    return heartbeat_evaluation.had_recent_exchange(db, user_id, hours=hours)
 
 
 def _llm_generate(system: str, prompt: str, *, allow_no_send: bool = True) -> str | None:
@@ -229,15 +173,9 @@ def morning_briefing() -> CoachDraft | None:
     try:
         user = repo.get_user(db)
 
-        # Cooldown: don't spam if we sent something recently
-        if not _check_module_guard(user.id):
-            logger.info("Morning briefing skipped — module guard active")
-            return None
-        if not _check_cooldown(db, user.id, cooldown_hours=PROACTIVE_COOLDOWN_HOURS):
-            logger.info("Morning briefing skipped — cooldown active")
-            return None
-        if not _check_daily_cap(db, user):
-            logger.info("Morning briefing skipped — daily cap reached")
+        gate = heartbeat_evaluation.evaluate_proactive_gate(db, user)
+        if not gate.allowed:
+            logger.info("Morning briefing skipped — %s", str(gate.reason or "blocked").replace("_", " "))
             return None
 
         time_context = build_time_context(user.timezone)
@@ -451,20 +389,14 @@ def pre_session_reminder() -> CoachDraft | None:
     try:
         user = repo.get_user(db)
 
-        # Cooldown: don't send if recent proactive message
-        if not _check_module_guard(user.id):
-            logger.info("Pre-session reminder skipped — module guard active")
-            return None
-        if not _check_cooldown(db, user.id, cooldown_hours=PROACTIVE_COOLDOWN_HOURS):
-            logger.info("Pre-session reminder skipped — cooldown active")
-            return None
-        if not _check_daily_cap(db, user):
-            logger.info("Pre-session reminder skipped — daily cap reached")
-            return None
-
-        # Skip if user just talked to the coach
-        if _had_recent_exchange(db, user.id, hours=RECENT_EXCHANGE_HOURS):
-            logger.info("Pre-session reminder skipped — recent exchange")
+        gate = heartbeat_evaluation.evaluate_proactive_gate(
+            db,
+            user,
+            require_recent_exchange_gap=True,
+            recent_exchange_hours=RECENT_EXCHANGE_HOURS,
+        )
+        if not gate.allowed:
+            logger.info("Pre-session reminder skipped — %s", str(gate.reason or "blocked").replace("_", " "))
             return None
 
         time_context = build_time_context(user.timezone)
@@ -621,18 +553,14 @@ def signal_check() -> CoachDraft | None:
     try:
         user = repo.get_user(db)
 
-        if not _check_module_guard(user.id):
-            logger.info("Signal check skipped — module guard active")
-            return None
-        if not _check_cooldown(db, user.id, cooldown_hours=PROACTIVE_COOLDOWN_HOURS):
-            logger.info("Signal check skipped — cooldown active")
-            return None
-        if not _check_daily_cap(db, user):
-            logger.info("Signal check skipped — daily cap reached")
-            return None
-
-        if _had_recent_exchange(db, user.id, hours=RECENT_EXCHANGE_HOURS):
-            logger.info("Signal check skipped — recent exchange")
+        gate = heartbeat_evaluation.evaluate_proactive_gate(
+            db,
+            user,
+            require_recent_exchange_gap=True,
+            recent_exchange_hours=RECENT_EXCHANGE_HOURS,
+        )
+        if not gate.allowed:
+            logger.info("Signal check skipped — %s", str(gate.reason or "blocked").replace("_", " "))
             return None
 
         # Adaptive plan: check TSB and missed cascade triggers

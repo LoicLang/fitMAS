@@ -29,6 +29,12 @@ def route_tools_for_query(user_text: str, *, pipeline: str) -> ToolRoutingDecisi
             tool_names=("get_activity_highlights", "get_recent_activities"),
             reason="activity_highlights",
         )
+    if _matches_any(lowered, _LOAD_CONTEXT_PATTERNS):
+        return ToolRoutingDecision(
+            pipeline=pipeline,
+            tool_names=("get_load_context", "get_recent_reality_window"),
+            reason="load_context",
+        )
     if _matches_any(lowered, _PLAN_DISPUTE_PATTERNS):
         return ToolRoutingDecision(
             pipeline=pipeline,
@@ -91,6 +97,18 @@ _RECENT_ACTIVITY_PATTERNS = (
     "récemment",
     "j'ai fait quoi",
     "j ai fait quoi",
+)
+
+_LOAD_CONTEXT_PATTERNS = (
+    "charge",
+    "volume",
+    "j'en fais trop",
+    "j en fais trop",
+    "trop charge",
+    "trop chargé",
+    "cette semaine je charge",
+    "la semaine chargee",
+    "la semaine chargée",
 )
 
 _PLAN_PATTERNS = (

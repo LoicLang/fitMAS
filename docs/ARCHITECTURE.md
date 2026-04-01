@@ -78,21 +78,24 @@ Les garde-fous, la planification, les permissions, les cooldowns et la persistan
 - Le chat peut maintenant faire un unique tool call read-only borne pour certaines questions de lecture
 - Les tools offerts au chat sont maintenant choisis par routing déterministe selon le type de question
 - Le prompt conversationnel commence aussi a se compacter selon la requete, au lieu d'injecter toujours les memes blocs
+- Le prompt conversationnel est maintenant splitte en 2 zones avec une partie `system` stable cachee cote Anthropic
+- Un `profile_summary` deterministe compacte maintenant le profil injecte au coach
 - Les metrics tools couvrent aussi maintenant les branches `tools offerts sans appel`, `tool loop complete` et `fallback de la boucle`
 - Les metrics tools remontent aussi un volume de prompt exploitable (`prompt_char_count`, `history_messages_used`, `tool_count_offered`)
 - La boucle coach reçoit maintenant un résumé structuré `prévu vs réel`, une résolution temporelle, des claims d'activité récents, une mémoire utile sélectionnée et quelques signaux filtrés
+- Les mutations structurantes passent maintenant par une policy d'impact explicite avec confirmation `oui/non`
+- Chaque tour de conversation est maintenant persisté dans `conversation_turns` avec contexte, décision et memory writes
+- Le hotspot `repository.py` commence a se vider via un premier slice `repo_conversation.py`
 - `signals.py` et `heartbeat.py` lisent mieux les activités réelles hors plan au lieu de s'appuyer uniquement sur le plan
 - le chat et le heartbeat traitent maintenant le calendrier daté / app comme source de vérité planning avant le `WeeklyPlan`
+- L'evaluation des garde-fous heartbeat est maintenant extraite dans `heartbeat_evaluation.py`
+- Les runtime tools couvrent aussi maintenant `get_recent_reality_window` et `get_load_context`
 - le moteur planner V2 a maintenant `session_templates.py` + `plan_validator.py`
 - `planner.py` consomme déjà `PlanningDecision` pour structurer la semaine avant le LLM
 - l'onboarding et la régénération hebdo passent maintenant par `planning_state.py`
 
 ### Ce qui n'existe pas encore
 
-- Prompt coach en 2 zones + cache explicite
-- Debounce Telegram pour les rafales courtes
-- Permissions tiers explicites sur les mutations
-- Transcript structure persistant
 - Consolidation memoire periodique propre
 - Heartbeat scoring tick-based
 - Verrou robuste anti-doublon multi-instance
@@ -137,14 +140,11 @@ Les garde-fous, la planification, les permissions, les cooldowns et la persistan
 ## Prochaine évolution structurante
 
 Ordre recommandé :
-1. prompt 2 zones + cache sur la partie stable
-2. debounce Telegram pour les rafales courtes
-3. dates absolues + `profile_summary`
-4. permissions tiers sur les mutations
-5. transcript structure persistant
-6. consolidation memoire periodique
-7. heartbeat scoring tick-based
-8. ensuite seulement : planner plus riche, polish Figma, extensions
+1. consolidation memoire periodique
+2. split progressif restant du repository (`memory / planning / activities`)
+3. heartbeat scoring tick-based
+4. verrou robuste anti-doublon multi-instance
+5. ensuite seulement : planner plus riche, polish Figma, extensions
 Voir `BUILD-ORDER.md` pour le sequencing canonique.
 
 ### Pourquoi le calendrier persistant reste une fondation, mais plus le prochain chantier

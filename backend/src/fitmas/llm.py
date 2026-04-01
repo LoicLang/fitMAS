@@ -12,7 +12,9 @@ from fitmas.conversation_prompting import select_conversation_prompt_policy
 from fitmas.fact_memory import normalize_fact_payload as normalize_fact_memory_payload
 from fitmas.fact_memory import select_relevant_facts
 from fitmas.knowledge import load_sport_knowledge
+from fitmas.llm_prompt_builder import build_conversation_prompt_bundle, render_conversation_time_block
 from fitmas.onboarding_contract import build_coach_profile, build_goal_summary
+from fitmas.profile_summary import build_profile_summary
 from fitmas.time_context import build_time_context, render_time_context
 from fitmas.tool_contract import ToolCall, ToolContext
 from fitmas.tool_metrics import build_tool_trace, log_tool_trace
@@ -91,7 +93,7 @@ def _request_text(*, system: str, prompt: str, model: str = "claude-haiku-4-5-20
 
 def _request_message(
     *,
-    system: str,
+    system: Any,
     messages: list[dict[str, Any]],
     model: str = "claude-haiku-4-5-20251001",
     max_tokens: int = 512,
@@ -247,140 +249,33 @@ def decide(
         return None
 
     resolved_time_context = time_context or build_time_context((coach_context or {}).get("timezone"))
-    time_block = render_time_context(resolved_time_context)
     routing = route_tools_for_query(user_text, pipeline=tool_context.pipeline) if tool_context is not None else None
     prompt_policy = select_conversation_prompt_policy(routing_reason=routing.reason if routing is not None else None)
-
-    # Build conversation context
-    history_block = ""
-    history_messages_used = 0
-    if conversation_history:
-        recent = conversation_history[-prompt_policy.history_limit :]
-        history_messages_used = len(recent)
-        lines = []
-        for msg in recent:
-            prefix = "Utilisateur" if msg["role"] == "user" else "FitMAS"
-            lines.append(f"{prefix}: {msg['text']}")
-        if lines:
-            history_block = f"\nHistorique recent:\n" + "\n".join(lines) + "\n"
-
-    coach_block = ""
-    if coach_context and prompt_policy.include_coach_context:
-        coach_block = (
-            "\nContexte coach:\n"
-            f"- nom: {coach_context.get('coach_name', 'FitMAS')}\n"
-            f"- style: {coach_context.get('coach_style', 'direct')}\n"
-            f"- relation: {coach_context.get('coach_relationship', '')}\n"
-            f"- fait bien: {coach_context.get('coach_do', '')}\n"
-            f"- ne fait jamais: {coach_context.get('coach_dont', '')}\n"
-            f"- ame: {coach_context.get('coach_soul', '')}\n"
-            f"- session du jour id: {coach_context.get('today_session_id')}\n"
-        )
-
-    facts_block = ""
     selected_facts = (coach_context or {}).get("selected_facts") or select_prompt_facts(remembered_facts or [])
-    if selected_facts and prompt_policy.include_facts:
-        facts_block = "\nMemoire utile (elements high/medium a prendre en compte dans tes decisions):\n" + "\n".join(f"- {fact}" for fact in selected_facts) + "\n"
-
-    timeline_block = ""
-    if timeline_summary and prompt_policy.include_timeline:
-        timeline_block = f"\nCalendrier date reel:\n{timeline_summary}\n"
-
-    execution_block = ""
-    if execution_summary and prompt_policy.include_execution:
-        execution_block = f"\n{execution_summary}\n"
-
-    temporal_block = ""
-    if temporal_summary and prompt_policy.include_temporal:
-        temporal_block = f"\n{temporal_summary}\n"
-
-    claim_block = ""
-    if activity_claim_summary and prompt_policy.include_claim:
-        claim_block = f"\n{activity_claim_summary}\n"
-
-    signal_block = ""
-    if signal_summary and prompt_policy.include_signals:
-        signal_block = f"\n{signal_summary}\n"
-
-    plan_anchor = ""
-    if prompt_policy.include_plan_summary:
-        plan_anchor = f"Repere legacy semaine courante:\n{plan_summary}\n"
-
-    prompt = f"""{time_block}
-Source de vérité planning conversationnelle: calendrier daté / app.
-Ignore tout repère hebdo legacy si le calendrier daté dit autre chose.
-{plan_anchor}
-{timeline_block}
-{execution_block}{temporal_block}{claim_block}{signal_block}
-{coach_block}{facts_block}
-{history_block}
-Nouveau message de l'utilisateur:
-{user_text}
-
-Analyse ce message et decide quelle action prendre sur le calendrier d'entrainement reel.
-
-Actions possibles:
-- "move_session": deplacer une seance concrete a une date cible
-- "swap_sessions": echanger deux seances concretes
-- "lighten_day": alleger une seance concrete ou un jour (convertit en repos)
-- "replace_session": transformer une seance (changer sport, type, duree, intensite, description) — utilise ca quand l'utilisateur a besoin d'une adaptation (douleur, fatigue, envie differente) plutot qu'une suppression
-- "update_session": modifier le titre ou l'objectif d'une seance concrete
-- "no_change": aucune modification necessaire
-
-Les jours doivent etre en anglais: monday, tuesday, wednesday, thursday, friday, saturday, sunday.
-Quand une seance concrete est identifiable dans le calendrier date reel, privilegie toujours `target_session_id`.
-Pour un echange concret, renseigne `target_session_id` et `second_session_id`.
-Pour un deplacement concret, renseigne `target_date` au format ISO `YYYY-MM-DD`.
-Si l'utilisateur parle de aujourd'hui, demain, hier, ce soir, demain matin ou demande la date/l'heure/jour exact, tu dois raisonner a partir du contexte temporel exact ci-dessus.
-Tu dois respecter cette hierarchie de verite:
-1. activite reelle persistée
-2. claim activite recent utilisateur
-3. correction utilisateur recente dans l'historique
-4. seance planifiee
-5. inference faible
-N'affirme jamais une duree ou un sport comme un fait si cela vient seulement du plan et qu'un claim utilisateur plus recent dit autre chose.
-Si une activite reelle existe aujourd'hui mais sur un autre sport que le plan, ne dis jamais "tu n'as rien fait". Le bon diagnostic est "hors plan" ou "pas la seance prevue".
-Si la bonne reponse est purement temporelle ou explicative, garde "mutation_type": "no_change" et reponds clairement dans "fitmas_message".
-Si tu choisis "no_change", tu n'as pas le droit de promettre une annulation, un deplacement, un remplacement, une nouvelle duree ou un nouveau sport comme si c'etait deja applique.
-Avec "no_change", tu peux reconnaitre le probleme, expliquer la logique, ou proposer de recalibrer, mais sans decrire une modification de planning non persistée.
-Si l'utilisateur pose une question factuelle sur l'historique, le planning, la date, ou une seance, reponds en 1-2 phrases max, sans jugement, sans micro-analyse de niveau, sans recadrage non demande.
-
-Exemples:
-- "mardi c'est mort, je bascule sur jeudi" → move_session, target_session_id: 12, target_date: "2026-03-26"
-- "mercredi j'ai une grosse journee" → lighten_day, target_session_id: 12
-- "echange samedi et dimanche" → swap_sessions, target_session_id: 12, second_session_id: 13
-- "jeudi je prefere faire du fractionne" → update_session, target_session_id: 12, new_title: "Fractionne 8x400m"
-- "j'ai mal a l'epaule droite" → replace_session, target_session_id: 15, new_sport_type: "strength", new_session_type: "mobility", new_duration_min: 25, new_intensity: "easy", new_description: "Mobilite epaule + renfo rotateurs externes"
-- "je suis claque, pas envie de fractionne" → replace_session, target_session_id: 12, new_session_type: "endurance", new_intensity: "easy", new_description: "Footing souple en endurance fondamentale"
-- "ok ca me va" → no_change
-- "on est quel jour exactement ?" → no_change, fitmas_message explique le jour et la date locale
-- "ce soir c'est quoi deja ?" → no_change ou update utile selon la seance du jour et le contexte temporel
-- "c'est pas ce qui est sur mon planning dans l'app" → no_change, tu reconnais que l'app / calendrier date est la source de verite et tu repars de cette seance-la
-
-Reponds avec un JSON valide contenant exactement ces champs:
-- "mutation_type": une des valeurs ci-dessus
-- "target_session_id": id de la seance cible ou null
-- "second_session_id": id de la 2e seance si swap, sinon null
-- "target_date": date cible ISO `YYYY-MM-DD` ou null
-- "from_day": jour source (anglais) ou null
-- "to_day": jour destination (anglais) ou null
-- "new_title": nouveau titre de seance si update_session ou replace_session, null sinon
-- "new_goal": nouvel objectif si update_session ou replace_session, null sinon
-- "new_sport_type": nouveau sport si replace_session (ex: "strength", "running"), null sinon
-- "new_session_type": nouveau type si replace_session (ex: "mobility", "endurance"), null sinon
-- "new_duration_min": nouvelle duree en minutes si replace_session, null sinon
-- "new_intensity": nouvelle intensite si replace_session ("easy", "moderate", "hard"), null sinon
-- "new_description": nouvelle description si replace_session, null sinon
-- "rationale": explication courte (1 phrase, pour les notes de changement)
-- "fitmas_message": message a envoyer a l'utilisateur — court, direct, ancre dans le contexte
-
-Reponds UNIQUEMENT avec le JSON, sans markdown, sans texte autour."""
+    prompt_bundle = build_conversation_prompt_bundle(
+        user_text=user_text,
+        prompt_policy=prompt_policy,
+        time_block=render_conversation_time_block(resolved_time_context),
+        profile_summary=(coach_context or {}).get("profile_summary") or build_profile_summary(remembered_facts or []),
+        plan_summary=plan_summary,
+        timeline_summary=timeline_summary,
+        execution_summary=execution_summary,
+        temporal_summary=temporal_summary,
+        activity_claim_summary=activity_claim_summary,
+        signal_summary=signal_summary,
+        conversation_history=conversation_history,
+        coach_context=coach_context,
+        selected_facts=selected_facts,
+    )
+    prompt = prompt_bundle.prompt
+    history_messages_used = prompt_bundle.history_messages_used
+    system_prompt = prompt_bundle.system
 
     try:
         data = None
         if tool_context is not None and routing and routing.tool_names:
             data = _request_json_with_tools(
-                system=_SOUL,
+                system=system_prompt,
                 prompt=prompt,
                 tool_context=tool_context,
                 tool_names=routing.tool_names,
@@ -388,7 +283,7 @@ Reponds UNIQUEMENT avec le JSON, sans markdown, sans texte autour."""
                 history_messages_used=history_messages_used,
             )
         if data is None:
-            data = _request_json(system=_SOUL, prompt=prompt)
+            data = _request_json(system=system_prompt, prompt=prompt)
         if not data:
             return None
 

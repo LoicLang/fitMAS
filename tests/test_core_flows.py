@@ -314,6 +314,198 @@ class FitMASCoreFlowsTest(unittest.TestCase):
         self.assertEqual(today["completion_status"], "adapted")
         self.assertEqual(today["sport_type"], "rest")
 
+    def test_high_impact_replace_session_requires_confirmation_before_apply(self) -> None:
+        _, session = self._create_plan_for_today()
+        session.priority = "Seance cle"
+        self.db.commit()
+        original_decide = api_messages.decide
+        original_extract_facts = api_messages.extract_facts
+        try:
+            api_messages.decide = lambda *args, **kwargs: MutationDecision(
+                mutation_type="replace_session",
+                target_session_id=session.id,
+                new_sport_type="swimming",
+                new_session_type="easy",
+                new_duration_min=35,
+                new_intensity="easy",
+                new_title="Natation souple",
+                new_goal="Faire tourner sans impact",
+                rationale="On bascule sans impact.",
+                fitmas_message="Je te bascule la seance en natation souple.",
+            )
+            api_messages.extract_facts = lambda *args, **kwargs: []
+            result = self.client.post("/api/v0/messages", json={"text": "Tu peux remplacer ma seance ?"}).json()
+        finally:
+            api_messages.decide = original_decide
+            api_messages.extract_facts = original_extract_facts
+
+        self.db.expire_all()
+        refreshed_session = repo.get_scheduled_session(self.db, self.user.id, session.id)
+        pending = repo.get_active_pending_mutation_confirmation(self.db, self.user.id)
+
+        self.assertIn("Tu confirmes", result["assistant_message"]["text"])
+        self.assertIsNotNone(refreshed_session)
+        self.assertEqual(refreshed_session.sport_type, "running")
+        self.assertIsNotNone(pending)
+        self.assertEqual(pending.mutation_type, "replace_session")
+
+    def test_high_impact_confirmation_yes_applies_pending_mutation(self) -> None:
+        _, session = self._create_plan_for_today()
+        session.priority = "Seance cle"
+        self.db.commit()
+        original_decide = api_messages.decide
+        original_extract_facts = api_messages.extract_facts
+        try:
+            api_messages.decide = lambda *args, **kwargs: MutationDecision(
+                mutation_type="replace_session",
+                target_session_id=session.id,
+                new_sport_type="swimming",
+                new_session_type="easy",
+                new_duration_min=35,
+                new_intensity="easy",
+                new_title="Natation souple",
+                new_goal="Faire tourner sans impact",
+                rationale="On bascule sans impact.",
+                fitmas_message="Je te bascule la seance en natation souple.",
+            )
+            api_messages.extract_facts = lambda *args, **kwargs: []
+            first = self.client.post("/api/v0/messages", json={"text": "Tu peux remplacer ma seance ?"}).json()
+            second = self.client.post("/api/v0/messages", json={"text": "oui"}).json()
+        finally:
+            api_messages.decide = original_decide
+            api_messages.extract_facts = original_extract_facts
+
+        self.db.expire_all()
+        refreshed_session = repo.get_scheduled_session(self.db, self.user.id, session.id)
+        pending = repo.get_active_pending_mutation_confirmation(self.db, self.user.id)
+
+        self.assertIn("Tu confirmes", first["assistant_message"]["text"])
+        self.assertIsNotNone(refreshed_session)
+        self.assertEqual(refreshed_session.sport_type, "swimming")
+        self.assertIn("natation", second["assistant_message"]["text"].lower())
+        self.assertIsNone(pending)
+
+    def test_high_impact_confirmation_no_keeps_plan_unchanged(self) -> None:
+        _, session = self._create_plan_for_today()
+        session.priority = "Seance cle"
+        self.db.commit()
+        original_decide = api_messages.decide
+        original_extract_facts = api_messages.extract_facts
+        try:
+            api_messages.decide = lambda *args, **kwargs: MutationDecision(
+                mutation_type="replace_session",
+                target_session_id=session.id,
+                new_sport_type="swimming",
+                new_session_type="easy",
+                new_duration_min=35,
+                new_intensity="easy",
+                new_title="Natation souple",
+                new_goal="Faire tourner sans impact",
+                rationale="On bascule sans impact.",
+                fitmas_message="Je te bascule la seance en natation souple.",
+            )
+            api_messages.extract_facts = lambda *args, **kwargs: []
+            first = self.client.post("/api/v0/messages", json={"text": "Tu peux remplacer ma seance ?"}).json()
+            second = self.client.post("/api/v0/messages", json={"text": "non"}).json()
+        finally:
+            api_messages.decide = original_decide
+            api_messages.extract_facts = original_extract_facts
+
+        self.db.expire_all()
+        refreshed_session = repo.get_scheduled_session(self.db, self.user.id, session.id)
+        pending = repo.get_active_pending_mutation_confirmation(self.db, self.user.id)
+
+        self.assertIn("Tu confirmes", first["assistant_message"]["text"])
+        self.assertIsNotNone(refreshed_session)
+        self.assertEqual(refreshed_session.sport_type, "running")
+        self.assertIn("Je ne touche pas", second["assistant_message"]["text"])
+        self.assertIsNone(pending)
+
+    def test_conversation_turn_records_applied_mutation(self) -> None:
+        _, session = self._create_plan_for_today()
+        original_decide = api_messages.decide
+        original_extract_facts = api_messages.extract_facts
+        try:
+            api_messages.decide = lambda *args, **kwargs: MutationDecision(
+                mutation_type="lighten_day",
+                target_session_id=session.id,
+                rationale="On leve le pied aujourd'hui.",
+                fitmas_message="On allège aujourd'hui. Tu récupères.",
+            )
+            api_messages.extract_facts = lambda *args, **kwargs: []
+            self.client.post("/api/v0/messages", json={"text": "Tu peux me simplifier la séance ?"})
+        finally:
+            api_messages.decide = original_decide
+            api_messages.extract_facts = original_extract_facts
+
+        turns = repo.get_recent_conversation_turns(self.db, self.user.id, limit=1)
+
+        self.assertEqual(len(turns), 1)
+        self.assertEqual(turns[0].response_mode, "mutation_applied")
+        self.assertTrue(turns[0].mutation_applied)
+        self.assertEqual(turns[0].mutation_type, "lighten_day")
+        self.assertIn('"mutation_type": "lighten_day"', turns[0].decision_json)
+
+    def test_conversation_turn_records_pending_confirmation(self) -> None:
+        _, session = self._create_plan_for_today()
+        session.priority = "Seance cle"
+        self.db.commit()
+        original_decide = api_messages.decide
+        original_extract_facts = api_messages.extract_facts
+        try:
+            api_messages.decide = lambda *args, **kwargs: MutationDecision(
+                mutation_type="replace_session",
+                target_session_id=session.id,
+                new_sport_type="swimming",
+                new_session_type="easy",
+                new_duration_min=35,
+                new_intensity="easy",
+                new_title="Natation souple",
+                new_goal="Faire tourner sans impact",
+                rationale="On bascule sans impact.",
+                fitmas_message="Je te bascule la seance en natation souple.",
+            )
+            api_messages.extract_facts = lambda *args, **kwargs: []
+            self.client.post("/api/v0/messages", json={"text": "Tu peux remplacer ma seance ?"})
+        finally:
+            api_messages.decide = original_decide
+            api_messages.extract_facts = original_extract_facts
+
+        turns = repo.get_recent_conversation_turns(self.db, self.user.id, limit=1)
+
+        self.assertEqual(len(turns), 1)
+        self.assertEqual(turns[0].response_mode, "mutation_confirmation")
+        self.assertFalse(turns[0].mutation_applied)
+        self.assertTrue(turns[0].pending_confirmation)
+        self.assertIsNotNone(turns[0].pending_confirmation_id)
+
+    def test_conversation_turn_serializes_datetime_memory_writes(self) -> None:
+        row = repo.add_conversation_turn(
+            self.db,
+            user_id=self.user.id,
+            user_message="test",
+            assistant_message="ok",
+            response_mode="reply",
+            extraction_confidence=0.9,
+            day_updated=None,
+            mutation_type="",
+            mutation_applied=False,
+            pending_confirmation=False,
+            pending_confirmation_id=None,
+            decision_json="{}",
+            context={"kind": "test"},
+            memory_writes=[
+                {
+                    "category": "execution",
+                    "key": "claimed_activity_test",
+                    "value": "test",
+                    "expires_at": datetime(2026, 4, 2, 7, 30, 0),
+                }
+            ],
+        )
+
+        self.assertIn("2026-04-02T07:30:00", row.memory_writes_json)
+
     def test_message_flow_can_replan_simple_unavailability_without_llm(self) -> None:
         _, session = self._create_plan_for_today()
         next_day_key = DAY_KEYS[(session.scheduled_date.date().weekday() + 1) % 7]

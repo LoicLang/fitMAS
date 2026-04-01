@@ -36,12 +36,13 @@ def client():
 
 def request_message(
     *,
-    system: str,
+    system: Any,
     messages: list[dict[str, Any]],
     model: str = "claude-haiku-4-5-20251001",
     max_tokens: int = 512,
     tools: list[dict[str, Any]] | None = None,
     tool_choice: dict[str, Any] | None = None,
+    cache_control: dict[str, Any] | None = None,
 ):
     """Send a message to the Anthropic API. Returns response or None."""
     c = client()
@@ -58,6 +59,8 @@ def request_message(
             kwargs["tools"] = tools
         if tool_choice:
             kwargs["tool_choice"] = tool_choice
+        if cache_control:
+            kwargs["cache_control"] = cache_control
         return c.messages.create(**kwargs)
     except Exception:
         logger.exception("LLM message call failed")
