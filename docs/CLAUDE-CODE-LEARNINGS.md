@@ -104,6 +104,32 @@ Autrement dit :
 
 - **le produit est surtout un bon harness**
 
+## Lecture FitMAS — avril 2026
+
+Ce qu'on a bien repris :
+
+- la séparation entre contexte durable et contexte injecté
+- la valeur de tools sémantiques bornés
+- la priorité au mono-agent bien outillé
+- le transcript comme unité d'audit
+
+Ce qu'on a seulement partiellement repris :
+
+- la vraie atomicité des décisions métier
+- la compaction fondée sur des couches réellement vivantes partout
+- la séparation stricte entre compréhension, choix et action
+
+Ce qu'il ne faut pas mal comprendre :
+
+- "Claude Code a plein de liberté" ne veut pas dire qu'un coach produit doit tout laisser émerger du modèle
+- les bonnes surfaces typed servent surtout à réduire l'ambiguïté et à rendre l'action pilotable
+
+Leçon pratique pour FitMAS :
+
+- lecture atomique : déjà correcte
+- décision atomique : encore insuffisante
+- il faut extraire davantage de primitives métier, pas seulement davantage de prompts
+
 ## 2. La surface de tools est riche, et surtout typée
 
 Le package officiel recent expose clairement une surface typed pour :

@@ -4,6 +4,7 @@ import os
 import tempfile
 import unittest
 from datetime import datetime, timedelta
+from datetime import timezone as dt_timezone
 
 os.environ.setdefault("FITMAS_DB_PATH", tempfile.mktemp(prefix="fitmas-heartbeat-", suffix=".db"))
 
@@ -519,6 +520,79 @@ class HeartbeatGroundingTest(unittest.TestCase):
         self.assertTrue(draft.memory_updates)
         self.assertEqual(draft.memory_updates[0]["category"], "calibration_need")
 
+    def test_morning_briefing_does_not_repeat_stable_constraint_fact(self) -> None:
+        _, _ = self._create_plan_with_today_session()
+        repo.upsert_facts(
+            self.db,
+            self.user.id,
+            [
+                {
+                    "category": "constraint",
+                    "key": "pool_fixed_slots",
+                    "value": "Piscine fixee lundi et jeudi matin a 7h.",
+                    "confidence": 0.95,
+                    "confirmed": True,
+                    "source": "conversation",
+                    "affects": ["planning", "conversation", "heartbeat"],
+                }
+            ],
+        )
+
+        captured: dict[str, str] = {}
+        original_llm = heartbeat._llm_generate
+        try:
+            def fake_llm(system: str, prompt: str, *, allow_no_send: bool = True):
+                captured["system"] = system
+                return "ok"
+
+            heartbeat._llm_generate = fake_llm
+            draft = heartbeat.morning_briefing()
+        finally:
+            heartbeat._llm_generate = original_llm
+
+        self.assertEqual(draft.text, "ok")
+        self.assertNotIn("Piscine fixee lundi et jeudi matin a 7h.", captured["system"])
+
+    def test_morning_briefing_includes_recent_proactive_messages_for_novelty(self) -> None:
+        _, _ = self._create_plan_with_today_session()
+        self.db.add_all(
+            [
+                s.CoachMessage(
+                    user_id=self.user.id,
+                    role="agent",
+                    text="Bonjour. Journee flexible. Priorite: souplesse.",
+                    proactive=True,
+                    created_at=(datetime.now(dt_timezone.utc) - timedelta(days=2)).replace(tzinfo=None),
+                ),
+                s.CoachMessage(
+                    user_id=self.user.id,
+                    role="agent",
+                    text="Bonjour. Je garde de l'air a la semaine.",
+                    proactive=True,
+                    created_at=(datetime.now(dt_timezone.utc) - timedelta(days=2, minutes=5)).replace(tzinfo=None),
+                ),
+            ]
+        )
+        self.db.commit()
+
+        captured: dict[str, str] = {}
+        original_llm = heartbeat._llm_generate
+        try:
+            def fake_llm(system: str, prompt: str, *, allow_no_send: bool = True):
+                captured["system"] = system
+                captured["prompt"] = prompt
+                return "ok"
+
+            heartbeat._llm_generate = fake_llm
+            draft = heartbeat.morning_briefing()
+        finally:
+            heartbeat._llm_generate = original_llm
+
+        self.assertEqual(draft.text, "ok")
+        self.assertIn("cherche de la nouveauté utile", captured["system"].lower())
+        self.assertIn("derniers messages proactifs a ne pas recycler", captured["prompt"].lower())
+        self.assertIn("journee flexible", captured["prompt"].lower())
+
     def test_weekly_review_prompt_mentions_claimed_activities(self) -> None:
         now = get_local_now(self.user.timezone)
         today_key = DAY_KEYS[now.weekday()]
@@ -578,6 +652,128 @@ class HeartbeatGroundingTest(unittest.TestCase):
         self.assertEqual(draft.text, "ok")
         self.assertIn("Activites declarees non loggees sur 7 jours: 1", captured["prompt"])
         self.assertIn("Duree declaree totale: 30 min", captured["prompt"])
+
+    def test_weekly_review_prompt_mentions_active_health_fact(self) -> None:
+        now = get_local_now(self.user.timezone)
+        today_key = DAY_KEYS[now.weekday()]
+        repo.replace_plan(
+            self.db,
+            self.user.id,
+            intention="test",
+            summary="test",
+            timezone_name=self.user.timezone,
+            days=[
+                {
+                    "day": today_key,
+                    "label": day_label_fr(today_key, capitalize=True),
+                    "sport_type": "running",
+                    "session_type": "easy",
+                    "session_title": "Footing",
+                    "session_goal": "Bouger",
+                    "session_note": "",
+                    "session_description": "",
+                    "duration_min": 45,
+                    "intensity": "easy",
+                    "load_score": 1,
+                    "priority": "Normal",
+                    "nutrition_focus": "",
+                    "flexibility": "stable",
+                    "completion_status": "planned",
+                }
+            ],
+        )
+        repo.upsert_facts(
+            self.db,
+            self.user.id,
+            [
+                {
+                    "category": "health",
+                    "key": "reported_health_general",
+                    "value": "Etat de sante general degrade. type illness. severite moderate. source: Je suis malade comme un chien.",
+                    "confidence": 0.95,
+                    "confirmed": True,
+                    "source": "conversation",
+                    "affects": ["planning", "conversation", "heartbeat"],
+                }
+            ],
+        )
+        captured: dict[str, str] = {}
+        original_llm = heartbeat._llm_generate
+        try:
+            def fake_llm(system: str, prompt: str, *, allow_no_send: bool = True):
+                captured["system"] = system
+                captured["prompt"] = prompt
+                return "ok"
+
+            heartbeat._llm_generate = fake_llm
+            draft = heartbeat.weekly_review()
+        finally:
+            heartbeat._llm_generate = original_llm
+
+        self.assertEqual(draft.text, "ok")
+        self.assertIn("faits actifs a prendre en compte", captured["system"].lower())
+        self.assertIn("etat de sante general degrade", captured["system"].lower())
+
+    def test_weekly_review_prompt_mentions_weekly_health_highlight_from_transcript(self) -> None:
+        now = get_local_now(self.user.timezone)
+        today_key = DAY_KEYS[now.weekday()]
+        repo.replace_plan(
+            self.db,
+            self.user.id,
+            intention="test",
+            summary="test",
+            timezone_name=self.user.timezone,
+            days=[
+                {
+                    "day": today_key,
+                    "label": day_label_fr(today_key, capitalize=True),
+                    "sport_type": "running",
+                    "session_type": "easy",
+                    "session_title": "Footing",
+                    "session_goal": "Bouger",
+                    "session_note": "",
+                    "session_description": "",
+                    "duration_min": 45,
+                    "intensity": "easy",
+                    "load_score": 1,
+                    "priority": "Normal",
+                    "nutrition_focus": "",
+                    "flexibility": "stable",
+                    "completion_status": "planned",
+                }
+            ],
+        )
+        repo.add_conversation_turn(
+            self.db,
+            user_id=self.user.id,
+            user_message="Je suis malade comme un chien cette semaine j'ai rien fait",
+            assistant_message="Repos complet. On coupe propre.",
+            response_mode="health_adaptation",
+            extraction_confidence=0.92,
+            day_updated=None,
+            mutation_type="lighten_day",
+            mutation_applied=True,
+            pending_confirmation=False,
+            pending_confirmation_id=None,
+            decision_json="{}",
+            context={},
+            memory_writes=[],
+        )
+        captured: dict[str, str] = {}
+        original_llm = heartbeat._llm_generate
+        try:
+            def fake_llm(system: str, prompt: str, *, allow_no_send: bool = True):
+                captured["prompt"] = prompt
+                return "ok"
+
+            heartbeat._llm_generate = fake_llm
+            draft = heartbeat.weekly_review()
+        finally:
+            heartbeat._llm_generate = original_llm
+
+        self.assertEqual(draft.text, "ok")
+        self.assertIn("evenements explicatifs de la semaine", captured["prompt"].lower())
+        self.assertIn("je suis malade comme un chien", captured["prompt"].lower())
 
     def test_morning_briefing_prefers_scheduled_session_over_legacy_day_plan(self) -> None:
         _, today_session = self._create_plan_with_today_session()

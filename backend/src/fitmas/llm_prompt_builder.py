@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from fitmas.conversation_prompting import ConversationPromptPolicy
+from fitmas.prompt_layers import assemble_layered_prompt
 from fitmas.time_context import render_time_context
 
 _CONVERSATION_SYSTEM_TEXT = """\
@@ -186,3 +187,83 @@ Nouveau message de l'utilisateur:
 
 def render_conversation_time_block(time_context: dict[str, str]) -> str:
     return render_time_context(time_context)
+
+
+def build_layered_conversation_prompt(
+    *,
+    user_text: str,
+    prompt_policy: ConversationPromptPolicy,
+    time_block: str,
+    profile_summary: str | None = None,
+    plan_summary: str | None = None,
+    timeline_summary: str | None = None,
+    execution_summary: str | None = None,
+    temporal_summary: str | None = None,
+    activity_claim_summary: str | None = None,
+    signal_summary: str | None = None,
+    conversation_history: list[dict[str, Any]] | None = None,
+    coach_context: dict[str, Any] | None = None,
+    selected_facts: list[str] | None = None,
+) -> ConversationPromptBundle:
+    """Build conversation prompt using the layered system.
+
+    This assembles layers with explicit token budgets and cache breakpoints,
+    then wraps the result in the same ConversationPromptBundle for compatibility.
+    """
+    layered = assemble_layered_prompt(
+        coach_context=coach_context,
+        profile_summary=profile_summary,
+        time_block=time_block,
+        plan_summary=plan_summary if prompt_policy.include_plan_summary else None,
+        timeline_summary=timeline_summary if prompt_policy.include_timeline else None,
+        execution_summary=execution_summary if prompt_policy.include_execution else None,
+        temporal_summary=temporal_summary if prompt_policy.include_temporal else None,
+        activity_claim_summary=activity_claim_summary if prompt_policy.include_claim else None,
+        signal_summary=signal_summary if prompt_policy.include_signals else None,
+        selected_facts=selected_facts if prompt_policy.include_facts else None,
+        conversation_history=conversation_history,
+        history_limit=prompt_policy.history_limit,
+    )
+
+    # Separate cacheable layers for system prompt caching
+    cache_indices = layered.cache_breakpoints()
+    system_parts = []
+    for i, layer in enumerate(sorted(layered.layers, key=lambda l: l.level)):
+        rendered = layer.render()
+        if not rendered:
+            continue
+        cache_control = (
+            {"type": "ephemeral", "ttl": "1h"}
+            if i in cache_indices
+            else None
+        )
+        entry: dict[str, Any] = {"type": "text", "text": rendered}
+        if cache_control:
+            entry["cache_control"] = cache_control
+        system_parts.append(entry)
+
+    # The mutation instruction block is always included in system
+    system_parts.insert(0, {
+        "type": "text",
+        "text": _CONVERSATION_SYSTEM_TEXT,
+        "cache_control": {"type": "ephemeral", "ttl": "1h"},
+    })
+
+    history_messages_used = 0
+    if conversation_history:
+        history_messages_used = min(len(conversation_history), prompt_policy.history_limit)
+
+    prompt_parts = [
+        "Source de vérité planning conversationnelle: calendrier daté / app.",
+        "Ignore tout repère hebdo legacy si le calendrier daté dit autre chose.",
+    ]
+    if prompt_policy.include_timeline and timeline_summary:
+        prompt_parts.append(f"Calendrier daté utile:\n{timeline_summary}")
+    prompt_parts.append(f"Nouveau message de l'utilisateur:\n{user_text}")
+    prompt = "\n".join(prompt_parts)
+
+    return ConversationPromptBundle(
+        system=system_parts,
+        prompt=prompt,
+        history_messages_used=history_messages_used,
+    )

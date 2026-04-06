@@ -59,7 +59,9 @@ class LifeChangeEvent:
     details: str
     source_text: str
     requested_day: str | None = None
+    requested_days: tuple[str, ...] = ()
     requested_window: str | None = None
+    earliest_date: date | None = None
 
 
 @dataclass(frozen=True, slots=True)

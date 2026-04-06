@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 import unicodedata
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
@@ -259,6 +260,7 @@ def extract_life_change_event(
 
     explicit_today_reference = any(pattern in normalized for pattern in _TONIGHT_PATTERNS + _TODAY_PATTERNS)
     requested_day = _requested_day(normalized, today=today)
+    requested_days = _requested_days(normalized)
     if not explicit_today_reference:
         if any(pattern in normalized for pattern in _TOMORROW_PATTERNS):
             return None
@@ -280,7 +282,9 @@ def extract_life_change_event(
         details=_event_details(reason_code),
         source_text=user_text,
         requested_day=requested_day,
+        requested_days=requested_days,
         requested_window=_requested_window(normalized),
+        earliest_date=_requested_earliest_date(normalized, source_date=today),
     )
 
 
@@ -408,8 +412,10 @@ def _event_from_indication(
         temporal_label=temporal_label,
         details=details,
         source_text=indication.source_text,
-        requested_day=None,
+        requested_day=indication.requested_days[0] if indication.requested_days else None,
+        requested_days=indication.requested_days,
         requested_window=None,
+        earliest_date=_day_to_candidate_date(indication.earliest_day, source_date=affected_date or today),
     )
 
 
@@ -433,26 +439,36 @@ def _find_move_candidate(
         if _as_date(_value(session, "scheduled_date")) is not None
     }
     constrained_days = set(availability_state.constrained_days)
-    preferred_candidate = _requested_candidate_date(event=event, source_date=source_date, max_days=max_days)
-    if preferred_candidate is not None and _candidate_is_open(
-        candidate=preferred_candidate,
-        sessions_by_date=sessions_by_date,
-        constrained_days=constrained_days,
-        availability_state=availability_state,
-        explicit_availability_days=explicit_availability_days,
-    ):
-        return preferred_candidate
-    for offset in range(1, max_days + 1):
-        candidate = source_date + timedelta(days=offset)
+    requested_candidates = _requested_candidate_dates(event=event, source_date=source_date, max_days=max_days)
+    candidate_pool = requested_candidates or [
+        source_date + timedelta(days=offset)
+        for offset in range(1, max_days + 1)
+    ]
+    if event.earliest_date is not None:
+        candidate_pool = [candidate for candidate in candidate_pool if candidate >= event.earliest_date]
+    open_candidates = [
+        candidate
+        for candidate in candidate_pool
         if _candidate_is_open(
             candidate=candidate,
             sessions_by_date=sessions_by_date,
             constrained_days=constrained_days,
             availability_state=availability_state,
             explicit_availability_days=explicit_availability_days,
-        ):
-            return candidate
-    return None
+        )
+    ]
+    if not open_candidates:
+        return None
+    return max(
+        open_candidates,
+        key=lambda candidate: _move_candidate_score(
+            candidate=candidate,
+            source_date=source_date,
+            event=event,
+            impacted_session=impacted_session,
+            scheduled_sessions=scheduled_sessions,
+        ),
+    )
 
 
 def _build_user_message(
@@ -714,12 +730,30 @@ def _event_details(reason_code: DecisionReasonCode) -> str:
 
 
 def _requested_day(normalized: str, *, today: date) -> str | None:
-    for day_key, aliases in _DAY_ALIASES.items():
-        if day_key == DAY_KEYS[today.weekday()]:
-            continue
-        if any(alias in normalized for alias in aliases):
+    for day_key in _requested_days(normalized):
+        if day_key != DAY_KEYS[today.weekday()]:
             return day_key
     return None
+
+
+def _requested_days(normalized: str) -> tuple[str, ...]:
+    positions: list[tuple[int, str]] = []
+    weekend_index = normalized.find("weekend")
+    if weekend_index == -1:
+        weekend_index = normalized.find("week end")
+    if weekend_index >= 0:
+        positions.extend(((weekend_index, "saturday"), (weekend_index + 1, "sunday")))
+    for day_key, aliases in _DAY_ALIASES.items():
+        for alias in aliases:
+            index = normalized.find(alias)
+            if index != -1:
+                positions.append((index, day_key))
+                break
+    ordered: list[str] = []
+    for _, day_key in sorted(positions, key=lambda item: item[0]):
+        if day_key not in ordered:
+            ordered.append(day_key)
+    return tuple(ordered)
 
 
 def _requested_window(normalized: str) -> str | None:
@@ -729,16 +763,98 @@ def _requested_window(normalized: str) -> str | None:
     return None
 
 
-def _requested_candidate_date(*, event: LifeChangeEvent, source_date: date, max_days: int) -> date | None:
-    if not event.requested_day:
+def _requested_candidate_dates(*, event: LifeChangeEvent, source_date: date, max_days: int) -> list[date]:
+    requested_days = event.requested_days or ((event.requested_day,) if event.requested_day else ())
+    candidates: list[date] = []
+    for requested_day in requested_days:
+        candidate = _day_to_candidate_date(requested_day, source_date=source_date)
+        if candidate is None:
+            continue
+        delta = (candidate - source_date).days
+        if delta <= 0 or delta > max_days:
+            continue
+        if candidate not in candidates:
+            candidates.append(candidate)
+    return candidates
+
+
+def _requested_earliest_date(normalized: str, *, source_date: date) -> date | None:
+    for pattern in (
+        r"pas avant (?P<day>lundi|mardi|mercredi|jeudi|vendredi|samedi|dimanche)",
+        r"a partir de (?P<day>lundi|mardi|mercredi|jeudi|vendredi|samedi|dimanche)",
+        r"apres (?P<day>lundi|mardi|mercredi|jeudi|vendredi|samedi|dimanche)",
+    ):
+        match = re.search(pattern, normalized)
+        if not match:
+            continue
+        token = match.group("day")
+        for day_key, aliases in _DAY_ALIASES.items():
+            if token in aliases:
+                return _day_to_candidate_date(day_key, source_date=source_date)
+    return None
+
+
+def _day_to_candidate_date(day_key: str | None, *, source_date: date) -> date | None:
+    if not day_key:
         return None
-    requested_idx = DAY_KEYS.index(event.requested_day)
+    requested_idx = DAY_KEYS.index(day_key)
     delta = (requested_idx - source_date.weekday()) % 7
     if delta == 0:
         delta = 7
-    if delta > max_days:
-        return None
     return source_date + timedelta(days=delta)
+
+
+def _move_candidate_score(
+    *,
+    candidate: date,
+    source_date: date,
+    event: LifeChangeEvent,
+    impacted_session: Any,
+    scheduled_sessions: Sequence[Any],
+) -> float:
+    gap_days = max(1, (candidate - source_date).days)
+    score = 100.0 - (gap_days * 9)
+    candidate_day = DAY_KEYS[candidate.weekday()]
+    for idx, requested_day in enumerate(event.requested_days):
+        if candidate_day == requested_day:
+            score += max(0.0, 18.0 - (idx * 6.0))
+            break
+    if event.earliest_date is not None and candidate == event.earliest_date:
+        score += 4.0
+    score -= _candidate_coherence_penalty(
+        candidate=candidate,
+        impacted_session=impacted_session,
+        scheduled_sessions=scheduled_sessions,
+    )
+    return score
+
+
+def _candidate_coherence_penalty(
+    *,
+    candidate: date,
+    impacted_session: Any,
+    scheduled_sessions: Sequence[Any],
+) -> float:
+    impacted_id = int(_value(impacted_session, "id") or 0)
+    impacted_sport = str(_value(impacted_session, "sport_type") or "").lower()
+    penalty = 0.0
+    for session in scheduled_sessions:
+        if int(_value(session, "id") or 0) == impacted_id:
+            continue
+        session_date = _as_date(_value(session, "scheduled_date"))
+        if session_date is None:
+            continue
+        sport_type = str(_value(session, "sport_type") or "").lower()
+        if sport_type in {"rest", "off"}:
+            continue
+        delta_days = abs((session_date - candidate).days)
+        if delta_days == 0 and sport_type == impacted_sport:
+            penalty += 28.0
+        elif delta_days == 1 and sport_type == impacted_sport:
+            penalty += 24.0
+        elif delta_days == 1 and str(_value(session, "priority") or "").lower() in {"high", "cle", "seance cle", "key"}:
+            penalty += 8.0
+    return penalty
 
 
 def _candidate_is_open(

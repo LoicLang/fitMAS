@@ -320,6 +320,155 @@ class ReplanFromLifeChangeTest(unittest.TestCase):
         self.assertEqual(decision.selected_scenario.mutation.mutation_type, "move_session")
         self.assertEqual(decision.selected_scenario.mutation.target_date, "2026-04-01")
 
+    def test_structured_indication_keeps_requested_weekend_space(self) -> None:
+        today = date(2026, 4, 2)
+        today_session = _session(
+            session_id=7,
+            day="thursday",
+            label="Jeu",
+            scheduled_date=datetime(2026, 4, 2, 7, 0),
+            session_type="technique",
+            title="Natation technique",
+            duration_min=45,
+            intensity="easy",
+            load_score=1,
+            priority="bonus",
+            sport_type="swimming",
+        )
+        week_plan = type("WeekPlan", (), {"mesocycle_week": 2, "is_deload": False})()
+        planning_decision = type(
+            "PlanningDecision",
+            (),
+            {
+                "planning_mode": "maintain_load",
+                "weekly_target_tss": 220.0,
+                "rationale": ("stabilite suffisante",),
+            },
+        )()
+        profile = AthleteProfileSnapshot(
+            user_id=7,
+            primary_sports=("swimming",),
+            primary_sport="swimming",
+            level_by_sport={"swimming": "intermediate"},
+            goals=("nager plus propre",),
+            weekly_availability={
+                "friday": ("Vendredi matin dispo",),
+                "saturday": ("Samedi matin dispo",),
+                "sunday": ("Dimanche matin dispo",),
+            },
+            equipment=("pool",),
+            constraints=(),
+            preferences=("matin",),
+            preferred_training_times=("morning",),
+            coach_tone="direct",
+            coach_style_notes="court",
+            athlete_identity_summary="Loic nage.",
+            onboarding_completed=True,
+        )
+        indication = fallback_interpret_user_indication(
+            "Je peux pas nager aujourd'hui, tu peux mettre ca samedi ou dimanche ?",
+            timezone_name="Europe/Paris",
+            now=datetime(2026, 4, 2, 6, 30),
+        )
+        self.assertIsNotNone(indication)
+        resolution = resolve_planning_window(
+            indication=indication,
+            scheduled_sessions=[today_session],
+            timezone_name="Europe/Paris",
+            now=datetime(2026, 4, 2, 6, 30),
+        )
+
+        decision = maybe_replan_from_user_indication(
+            indication=indication,
+            resolution=resolution,
+            today=today,
+            profile=profile,
+            week_plan=week_plan,
+            planning_decision=planning_decision,
+            today_session=today_session,
+            scheduled_sessions=[today_session],
+        )
+
+        self.assertIsNotNone(decision)
+        self.assertEqual(decision.selected_scenario.mutation.mutation_type, "move_session")
+        self.assertIn(decision.selected_scenario.mutation.target_date, {"2026-04-04", "2026-04-05"})
+        self.assertNotEqual(decision.selected_scenario.mutation.target_date, "2026-04-03")
+
+    def test_move_candidate_avoids_adjacent_same_sport_when_later_slot_exists(self) -> None:
+        today = date(2026, 4, 1)
+        today_session = _session(
+            session_id=11,
+            day="wednesday",
+            label="Mer",
+            scheduled_date=datetime(2026, 4, 1, 7, 0),
+            session_type="technique",
+            title="Natation technique",
+            duration_min=40,
+            intensity="easy",
+            load_score=1,
+            priority="bonus",
+            flexibility="stable",
+            sport_type="swimming",
+        )
+        thursday_swim = _session(
+            session_id=12,
+            day="thursday",
+            label="Jeu",
+            scheduled_date=datetime(2026, 4, 2, 7, 0),
+            session_type="technique",
+            title="Natation endurance",
+            duration_min=45,
+            intensity="easy",
+            load_score=1,
+            priority="Normal",
+            flexibility="stable",
+            sport_type="swimming",
+        )
+        week_plan = type("WeekPlan", (), {"mesocycle_week": 2, "is_deload": False})()
+        planning_decision = type(
+            "PlanningDecision",
+            (),
+            {
+                "planning_mode": "maintain_load",
+                "weekly_target_tss": 220.0,
+                "rationale": ("stabilite suffisante",),
+            },
+        )()
+        profile = AthleteProfileSnapshot(
+            user_id=7,
+            primary_sports=("swimming",),
+            primary_sport="swimming",
+            level_by_sport={"swimming": "intermediate"},
+            goals=("nager plus propre",),
+            weekly_availability={
+                "friday": ("Vendredi matin dispo",),
+                "saturday": ("Samedi matin dispo",),
+            },
+            equipment=("pool",),
+            constraints=(),
+            preferences=("matin",),
+            preferred_training_times=("morning",),
+            coach_tone="direct",
+            coach_style_notes="court",
+            athlete_identity_summary="Loic nage.",
+            onboarding_completed=True,
+        )
+
+        decision = maybe_replan_from_life_change(
+            user_text="Je peux pas aujourd'hui",
+            today=today,
+            time_context=build_time_context("Europe/Paris", now=datetime(2026, 4, 1, 6, 30)),
+            profile=profile,
+            week_plan=week_plan,
+            planning_decision=planning_decision,
+            today_session=today_session,
+            scheduled_sessions=[today_session, thursday_swim],
+        )
+
+        self.assertIsNotNone(decision)
+        self.assertEqual(decision.selected_scenario.mutation.mutation_type, "move_session")
+        self.assertEqual(decision.selected_scenario.mutation.target_date, "2026-04-04")
+
 
 if __name__ == "__main__":
     unittest.main()

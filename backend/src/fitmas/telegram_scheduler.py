@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import logging
 import os
 import random
@@ -31,6 +32,40 @@ def _jittered_time(hour: int, minute: int, timezone) -> dt_time:
     base = datetime(2000, 1, 1, hour, minute)
     jittered = base + timedelta(minutes=random.randint(-15, 15))
     return dt_time(hour=jittered.hour, minute=jittered.minute, tzinfo=timezone)
+
+
+def _daily_target_time(
+    *,
+    now: datetime,
+    label: str,
+    base_hour: int,
+    base_minute: int,
+    spread_minutes: int = 30,
+) -> datetime:
+    seed_input = f"{label}:{now.date().isoformat()}".encode()
+    digest = hashlib.sha256(seed_input).digest()
+    raw = int.from_bytes(digest[:4], "big")
+    offset = (raw % ((spread_minutes * 2) + 1)) - spread_minutes
+    return now.replace(hour=base_hour, minute=base_minute, second=0, microsecond=0) + timedelta(minutes=offset)
+
+
+def _within_daily_send_window(
+    *,
+    now: datetime,
+    label: str,
+    base_hour: int,
+    base_minute: int,
+    spread_minutes: int = 30,
+    grace_minutes: int = 12,
+) -> bool:
+    target = _daily_target_time(
+        now=now,
+        label=label,
+        base_hour=base_hour,
+        base_minute=base_minute,
+        spread_minutes=spread_minutes,
+    )
+    return target <= now <= (target + timedelta(minutes=grace_minutes))
 
 
 async def _send_serialized_draft(
@@ -131,6 +166,18 @@ async def send_morning_briefing(context: ContextTypes.DEFAULT_TYPE) -> None:
         logger.warning("No Telegram chat id available, skipping morning briefing")
         return
 
+    timezone = pytz.timezone(os.getenv("TZ", "Europe/Paris"))
+    local_now = datetime.now(timezone)
+    if not _within_daily_send_window(
+        now=local_now,
+        label="morning_briefing",
+        base_hour=7,
+        base_minute=30,
+        spread_minutes=30,
+        grace_minutes=12,
+    ):
+        return
+
     try:
         from fitmas.heartbeat import morning_briefing
 
@@ -170,12 +217,13 @@ def register_jobs(app: Application) -> None:
 
     timezone = pytz.timezone(os.getenv("TZ", "Europe/Paris"))
 
-    job_queue.run_daily(
+    job_queue.run_repeating(
         send_morning_briefing,
-        time=_jittered_time(7, 30, timezone),
+        interval=600,
+        first=60,
         name="morning_briefing",
     )
-    logger.info("Morning briefing scheduled with jitter in %s", timezone)
+    logger.info("Morning briefing scheduled as repeating morning window in %s", timezone)
 
     job_queue.run_daily(
         send_pre_session_reminder,

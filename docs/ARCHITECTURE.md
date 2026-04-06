@@ -24,7 +24,7 @@ Les garde-fous, la planification, les permissions, les cooldowns et la persistan
 - Les effets de bord vivent dans les orchestrateurs : API, bot, scheduler
 - Les futures briques de sophistication doivent s'appuyer sur une vérité planning stable
 
-## État réel du code — 31 mars 2026
+## État réel du code — 6 avril 2026
 
 **Déployé sur Fly.io : https://the deployed app/**
 
@@ -79,6 +79,7 @@ Les garde-fous, la planification, les permissions, les cooldowns et la persistan
 - Les tools offerts au chat sont maintenant choisis par routing déterministe selon le type de question
 - Le prompt conversationnel commence aussi a se compacter selon la requete, au lieu d'injecter toujours les memes blocs
 - Le prompt conversationnel est maintenant splitte en 2 zones avec une partie `system` stable cachee cote Anthropic
+- Le chemin live `llm.decide()` passe maintenant par `prompt_layers.py` / `llm_prompt_builder.py`
 - Un `profile_summary` deterministe compacte maintenant le profil injecte au coach
 - Les metrics tools couvrent aussi maintenant les branches `tools offerts sans appel`, `tool loop complete` et `fallback de la boucle`
 - Les metrics tools remontent aussi un volume de prompt exploitable (`prompt_char_count`, `history_messages_used`, `tool_count_offered`)
@@ -93,6 +94,17 @@ Les garde-fous, la planification, les permissions, les cooldowns et la persistan
 - le moteur planner V2 a maintenant `session_templates.py` + `plan_validator.py`
 - `planner.py` consomme déjà `PlanningDecision` pour structurer la semaine avant le LLM
 - l'onboarding et la régénération hebdo passent maintenant par `planning_state.py`
+
+- **Mutation middleware** : `mutation_hooks.py` — pre/post hooks autour des mutations. Les pre-hooks valident plausibilité (date passée, collision séance intense, limite hard/week). Les post-hooks calculent l'impact (delta charge, séances clé affectées, recovery perdu) et déclenchent une recalibration si seuil franchi.
+- **Intent-based tool routing** : `tool_routing.py` refactoré — classification d'intent déterministe (9 catégories : casual_chat, execution_report, plan_negotiation, plan_lookup, activity_review, activity_highlights, load_review, fact_recall, generic_question) avec budget de tools explicite par catégorie. Remplace le matching regex par mots-clés.
+- **Heartbeat par rôles** : `heartbeat_roles.py` — 4 rôles bornés (BriefingRole, ReminderRole, ReviewRole, SignalRole) avec capabilities déclarées (can_read, can_write, max_output_sentences). Chaque rôle a son propre prompt builder. `heartbeat.py` reste la façade qui gère le gating et la livraison.
+- **Prompt layers** : `prompt_layers.py` — assemblage structuré du prompt en 5 couches (L0: identité coach, L1: profil athlète, L2: état plan, L3: contexte immédiat, L4: mémoire épisodique) avec budgets token par couche et cache breakpoints pour prompt caching Anthropic.
+- **Ops plane** : `api_ops.py` — endpoints `/ops/` séparés du tool plane conversationnel. Inspection signaux, mémoire, mutations récentes, stats tools. Auth debug distincte.
+- **Tool observability** : `tool_runtime.py` enrichi avec post-hooks — annotation résultats vides, annotation latence sur appels lents.
+- **Structure backend rangée par clusters** :
+  - `fitmas/tools/` pour les modules runtime tools
+  - `fitmas/skills/heartbeat/` pour le cluster heartbeat
+  - wrappers de compat gardés aux anciens chemins pour éviter un big bang d'imports
 
 ### Ce qui n'existe pas encore
 
@@ -169,6 +181,17 @@ Conséquence récente importante :
 
 ```
 backend/src/fitmas/
+├── tools/
+│   ├── contract.py         — contrat typed des tools runtime
+│   ├── registry.py         — registre explicite des tools read-only
+│   ├── routing.py          — routing d'intent -> budget de tools
+│   ├── runtime.py          — executor borne + trace
+│   └── metrics.py          — metrics et observability tools
+├── skills/
+│   └── heartbeat/
+│       ├── heartbeat.py    — facade generation/gating heartbeat
+│       ├── evaluation.py   — garde-fous proactifs
+│       └── roles.py        — roles heartbeat et prompt builders
 ├── api.py                 (46 lignes) — bootstrap FastAPI + lifespan
 ├── api_static.py          (~50 lignes) — health + shell SPA React + assets buildés
 ├── api_read.py            (~150 lignes) — profile, week, today, timeline, messages, facts, activities
@@ -201,9 +224,16 @@ backend/src/fitmas/
 ├── load_projection.py     (~90 lignes) — projection de charge backend sur 4 semaines
 ├── repository.py          (469 lignes) — CRUD + convertisseurs Pydantic
 ├── planner.py             (359 lignes) — planner multisport déterministe
-├── heartbeat.py           (403 lignes) — génération des drafts proactifs
+├── heartbeat.py           — wrapper de compat vers `skills/heartbeat/heartbeat.py`
+├── heartbeat_evaluation.py — wrapper de compat vers `skills/heartbeat/evaluation.py`
+├── heartbeat_roles.py     — wrapper de compat vers `skills/heartbeat/roles.py`
 ├── signals.py             (312 lignes) — signaux dérivés
 ├── time_context.py        (122 lignes) — timezone + helpers UTC
+├── tool_contract.py       — wrapper de compat vers `tools/contract.py`
+├── tool_registry.py       — wrapper de compat vers `tools/registry.py`
+├── tool_routing.py        — wrapper de compat vers `tools/routing.py`
+├── tool_runtime.py        — wrapper de compat vers `tools/runtime.py`
+├── tool_metrics.py        — wrapper de compat vers `tools/metrics.py`
 ├── coach_messages.py      (31 lignes) — draft coach + persistance centralisée
 ├── strava.py              (210 lignes) — OAuth + import activités + enrichissement TSS
 ├── activities.py          (93 lignes) — normalisation + matching activités

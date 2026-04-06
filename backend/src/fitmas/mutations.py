@@ -2,11 +2,18 @@ from __future__ import annotations
 
 from datetime import date, timedelta
 import logging
+from typing import Any, Sequence
 
 from sqlalchemy.orm import Session
 
 from fitmas import plan_actions, repository as repo
 from fitmas.llm import MutationDecision
+from fitmas.mutation_hooks import (
+    PostMutationResult,
+    PreMutationResult,
+    run_post_mutation_hooks,
+    run_pre_mutation_hooks,
+)
 from fitmas.time_context import get_local_now
 
 logger = logging.getLogger(__name__)
@@ -19,8 +26,52 @@ def _resync_plan_sessions(db: Session, plan_id: int) -> None:
     repo.resync_plan_sessions(db, plan_id, timezone_name=plan.user.timezone)
 
 
-def apply(db: Session, plan_id: int, decision: MutationDecision) -> None:
-    """Apply a mutation decision to the plan in DB."""
+def apply(
+    db: Session,
+    plan_id: int,
+    decision: MutationDecision,
+    *,
+    scheduled_sessions: Sequence[Any] = (),
+    timezone_name: str | None = None,
+) -> tuple[PreMutationResult, PostMutationResult | None]:
+    """Apply a mutation decision to the plan in DB, with pre/post hooks.
+
+    Returns (pre_result, post_result). post_result is None if mutation was blocked or no_change.
+    """
+    # --- Pre-mutation hooks ---
+    pre_result = run_pre_mutation_hooks(
+        db,
+        plan_id,
+        decision,
+        scheduled_sessions=scheduled_sessions,
+        timezone_name=timezone_name,
+    )
+
+    if not pre_result.allowed:
+        logger.info("Mutation blocked by pre-hook: %s", pre_result.block_reason)
+        return pre_result, None
+
+    # --- Apply mutation ---
+    _apply_mutation(db, plan_id, decision)
+
+    # --- Post-mutation hooks ---
+    if decision.mutation_type == "no_change":
+        return pre_result, None
+
+    post_result = run_post_mutation_hooks(
+        db,
+        plan_id,
+        decision,
+        scheduled_sessions=scheduled_sessions,
+        timezone_name=timezone_name,
+        pre_result=pre_result,
+    )
+
+    return pre_result, post_result
+
+
+def _apply_mutation(db: Session, plan_id: int, decision: MutationDecision) -> None:
+    """Core mutation dispatch — unchanged logic, extracted from old apply()."""
 
     plan = repo.get_plan_optional(db, plan_id)
     user = plan.user if plan is not None else None

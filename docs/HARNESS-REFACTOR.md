@@ -85,6 +85,8 @@ Statut :
 - [x] zone system statique cachee via bloc Anthropic ephemere
 - [x] zone dynamique courte gardee dans le prompt utilisateur
 - [x] `llm_gateway.py` accepte maintenant `system` structure
+- [x] chemin live `llm.decide()` bascule sur le builder layered
+- [x] grounding minimal garde dans le prompt user (`source de verite` + timeline utile)
 
 ### Phase 3 — `profile_summary`
 
@@ -151,7 +153,11 @@ Statut :
 - [x] moteur d'evaluation proactif extrait dans `heartbeat_evaluation.py`
 - [x] `heartbeat.py` appelle maintenant une evaluation partagee
 - [x] delivery deja restee hors module via `CoachDraft`
-- [ ] generation des prompts heartbeat encore a scinder davantage si le module regrossit
+- [x] generation des prompts heartbeat scindee dans `heartbeat_roles.py`
+- [x] 4 roles bornes : BriefingRole, ReminderRole, ReviewRole, SignalRole
+- [x] chaque role declare ses capabilities (can_read, can_write) et ses contraintes (max_output_sentences)
+- [x] prompt builders separes par role dans `heartbeat_roles.py`
+- [x] `heartbeat.py` reste facade gating + delivery
 
 ### Phase 8 — tools V2
 
@@ -219,3 +225,44 @@ Statut :
 - resultat final :
   - backend: `75 passed`
   - frontend: `10 passed`
+
+### 2026-04-03
+
+- **phase 9 : mutation middleware**
+  - `mutation_hooks.py` cree avec pre/post hooks
+  - pre-hooks : plausibility (date passee), fragile day (collision intense), load coherence (max hard/week)
+  - post-hooks : impact calculation (delta charge/duree, key sessions affectees, recovery perdu), mutation log, recalibration trigger
+  - `mutations.apply()` retourne maintenant `(PreMutationResult, PostMutationResult | None)`
+  - call sites dans `conversation_pipeline.py` mis a jour
+- **phase 10 : intent-based tool routing**
+  - `tool_routing.py` refactore : classification d'intent en 9 categories + budget de tools par intent
+  - `IntentCategory` enum + `classify_intent()` deterministe
+  - `conversation_prompting.py` refactore : policies par intent, legacy fallback preserve
+  - `llm.py` passe maintenant l'intent au selecteur de policy
+- **phase 11 : heartbeat par roles**
+  - `heartbeat_roles.py` devient la surface canonique de generation
+  - la review hebdo voit maintenant aussi des faits actifs et des highlights transcript
+  - le briefing matin filtre le bruit des contraintes stables et recoit les derniers proactifs pour eviter la repetition
+  - le scheduler matin ne garde plus un jitter fige au boot: variation journaliere deterministe dans une fenetre
+- **phase 12 : substrate de decision planning v1**
+  - `UserIndication` et `LifeChangeEvent` portent maintenant `requested_days` + `earliest_day/date`
+  - le replan ne perd plus l'espace explicitement demande par l'utilisateur
+  - le scoring candidat penalise maintenant les placements sportivement absurdes, dont meme sport sur jours adjacents
+- verification incrementale recente :
+  - `./scripts/test-backend -q tests/test_replan_from_life_change.py tests/test_user_indications.py`
+  - `./scripts/test-backend -q tests/test_heartbeat_grounding.py tests/test_telegram_scheduler.py`
+  - `./scripts/test-backend -q tests/test_llm_prompt_builder.py tests/test_conversation_prompting.py tests/test_llm_json.py tests/test_llm_tools.py`
+  - `./scripts/test-backend -q tests/test_core_flows.py -k "replan_simple_unavailability or future_availability_constraint or conversation_turn_records or health_signal_creates_replan_and_reply"`
+  - `heartbeat_roles.py` cree : 4 roles bornes (Briefing, Reminder, Review, Signal)
+  - chaque role declare capabilities + prompt builder
+  - `heartbeat.py` refactore pour utiliser les roles, garde le gating et la livraison
+  - helpers partages extraits dans `heartbeat_roles.py`
+- **phase 12 : prompt layers**
+  - `prompt_layers.py` cree : 5 couches (identity, profile, plan, immediate, memory) avec budgets token
+  - `LayeredPrompt.cache_breakpoints()` pour prompt caching Anthropic
+  - `build_layered_conversation_prompt()` ajoute dans `llm_prompt_builder.py`
+- **phase 13 : ops plane + tool observability**
+  - `api_ops.py` cree : endpoints `/ops/` separes (signals, heartbeat, memory, mutations, tool-stats, reset)
+  - `tool_runtime.py` enrichi : post-hooks annotation resultat vide + annotation latence
+- verification :
+  - `PYTHONPATH=backend/src .venv/bin/python -m pytest tests/ -x -q` → 297 passed

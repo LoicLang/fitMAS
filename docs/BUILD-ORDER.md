@@ -13,7 +13,7 @@ read_when:
 
 **Un premier coach que Loïc reconnaît, comprend, et a envie de rouvrir demain.**
 
-## État actuel — 31 mars 2026
+## État actuel — 6 avril 2026
 
 ### Socle produit déjà solide
 
@@ -26,6 +26,12 @@ read_when:
 - heartbeat proactif de base
 - revue hebdo auto
 - mémoire V2 base : `profile / working / patterns`
+- substrate de décision planning V1 renforcé
+- chemin live conversationnel branché sur les prompt layers
+- heartbeat moins mécanique :
+  - variation journalière réelle du créneau matin
+  - filtrage des contraintes stables répétitives
+  - highlights transcript en review
 
 ### Chantiers transversaux déjà largement absorbés
 
@@ -60,11 +66,29 @@ Ces sujets sont des acquis ou des pistes dépriorisées, plus des TODO immédiat
 - la prochaine douleur n'est pas “plus d'intelligence planner”
 - la prochaine douleur est “meilleur harness conversationnel, meilleure mémoire, moins d'appels inutiles”
 - `transcript structuré > compaction` pour l'état actuel du produit
+- `dogfood > gros bloc de consolidation` tant que la V1 corrigée n'a pas été observée sur une vraie semaine
 - le plan mode ne vaut que pour les mutations à impact fort
 - les skills formels attendent assez de workflows distincts
 - pas de multi-agent tant que le mono-agent n'est pas un goulot prouvé
 
 ## Plan canonique — maintenant
+
+### 0. Dogfood guidé
+
+But :
+
+- vérifier le comportement réel après la tranche fiabilité déjà shipée
+- éviter de lancer trop tôt un gros chantier de consolidation
+
+Observer surtout :
+
+- review du dimanche
+- négociations de déplacement
+- briefings matinaux réels
+
+Décision :
+
+- si la V1 reste insuffisante, lancer le `WeeklyRealityDigest` canonique
 
 ### 1. Prompt 2 zones + prompt caching
 
@@ -126,6 +150,23 @@ Scope :
 Docs de référence :
 
 - `MEMORY-V2.md`
+
+### 6bis. Weekly reality digest canonique
+
+But :
+
+- faire de la review hebdo une lecture causale stable de la semaine
+- éviter de recomposer à la main facts + transcript + adaptations dans plusieurs endroits
+
+Quand le lancer :
+
+- si le dogfood montre que la review causalise encore mal
+- si les mêmes événements explicatifs doivent être réinjectés dans plusieurs modules
+
+Scope :
+
+- digest explicite à partir de transcript, mémoire utile, activités, claims et adaptations
+- lecture unique pour review + relance semaine suivante
 - `CONVERSATION-GROUNDING.md`
 
 ### 4. Permission tiers sur les mutations
@@ -243,6 +284,7 @@ Mais :
 - pas de write tools libres côté coach
 - pas de V2.5 “LLM adaptatif partout” tant que le contrat mutation n'est pas durci
 - pas de subagents / swarm
+- pas de "liberté coach" plus large tant que les substrates métier ne sont pas extraits
 
 ## Vérification concrète avant de monter à l'étape suivante
 

@@ -2,7 +2,7 @@
 
 Coach IA multisport proactif qui ajuste ton entraînement selon ta vraie vie.
 
-## Statut — 31 mars 2026
+## Statut — 6 avril 2026
 
 **Déployé et fonctionnel sur https://the deployed app/**
 
@@ -18,6 +18,8 @@ Ce qui tourne en prod :
 - Heartbeat proactif avec cooldowns (briefing matin, rappel pré-séance, revue dimanche, nouveau plan lundi)
 - Mémoire V2 base : `profile / working / patterns`
 - Runtime tools V1 read-only bornés pour certaines questions de lecture
+- Runtime conversationnel désormais branché sur les prompt layers live
+- Substrate de décision planning V1 renforcé pour mieux respecter l'intention de déplacement
 - Revue hebdomadaire + régénération automatique du plan le lundi matin
 - Bot Telegram avec commandes (/start, /plan, /today, /newweek, /sync, /log)
 
@@ -58,7 +60,9 @@ Cap produit actuel :
 AGENTS.md            — règles agentiques
 PROJECT.md           — point d'entrée
 docs/                — documentation durable + README
-backend/src/fitmas/  — API + bot + domaines partagés (34 modules, ~5200 lignes)
+backend/src/fitmas/  — API + bot + domaines partagés
+backend/src/fitmas/tools/ — tools runtime read-only et routing associés
+backend/src/fitmas/skills/heartbeat/ — cluster heartbeat (évaluation, rôles, génération)
 frontend/            — webapp React/Vite/Tailwind
 scripts/             — dev, dev-web, start-prod, docs:list
 Dockerfile           — image Docker multi-stage

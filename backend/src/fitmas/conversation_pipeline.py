@@ -56,7 +56,7 @@ from fitmas.replan_from_life_change import (
     maybe_replan_from_user_indication,
 )
 from fitmas.signals import collect_signals
-from fitmas.tool_contract import ToolContext
+from fitmas.tools.contract import ToolContext
 from fitmas.user_indications import UserIndicationKind, supports_planning_resolution
 
 logger = logging.getLogger(__name__)
@@ -113,7 +113,11 @@ def run_conversation_turn(
         else:
             repo.resolve_pending_mutation_confirmation(db, pending_confirmation.id, status="accepted")
             decision = deserialize_mutation_decision(pending_confirmation.decision_json)
-            mutations.apply(db, state.plan.id, decision)
+            mutations.apply(
+                db, state.plan.id, decision,
+                scheduled_sessions=state.scheduled_sessions,
+                timezone_name=user.timezone,
+            )
             updated_session = (
                 repo.get_scheduled_session(db, user.id, decision.target_session_id)
                 if decision.target_session_id is not None
@@ -515,7 +519,11 @@ def run_conversation_turn(
             )
             logger.info("Pending confirmation (%s): %s", decision.mutation_type, reply_text[:120])
         else:
-            mutations.apply(db, state.plan.id, decision)
+            pre_result, post_result = mutations.apply(
+                db, state.plan.id, decision,
+                scheduled_sessions=state.scheduled_sessions,
+                timezone_name=user.timezone,
+            )
             updated_session = (
                 repo.get_scheduled_session(db, user.id, decision.target_session_id)
                 if decision.target_session_id is not None

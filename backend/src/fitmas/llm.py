@@ -12,15 +12,15 @@ from fitmas.conversation_prompting import select_conversation_prompt_policy
 from fitmas.fact_memory import normalize_fact_payload as normalize_fact_memory_payload
 from fitmas.fact_memory import select_relevant_facts
 from fitmas.knowledge import load_sport_knowledge
-from fitmas.llm_prompt_builder import build_conversation_prompt_bundle, render_conversation_time_block
+from fitmas.llm_prompt_builder import build_layered_conversation_prompt, render_conversation_time_block
 from fitmas.onboarding_contract import build_coach_profile, build_goal_summary
 from fitmas.profile_summary import build_profile_summary
 from fitmas.time_context import build_time_context, render_time_context
-from fitmas.tool_contract import ToolCall, ToolContext
-from fitmas.tool_metrics import build_tool_trace, log_tool_trace
-from fitmas.tool_registry import list_tools_for_pipeline
-from fitmas.tool_routing import route_tools_for_query
-from fitmas.tool_runtime import execute_tool_call
+from fitmas.tools.contract import ToolCall, ToolContext
+from fitmas.tools.metrics import build_tool_trace, log_tool_trace
+from fitmas.tools.registry import list_tools_for_pipeline
+from fitmas.tools.routing import route_tools_for_query
+from fitmas.tools.runtime import execute_tool_call
 
 logger = logging.getLogger(__name__)
 
@@ -250,9 +250,12 @@ def decide(
 
     resolved_time_context = time_context or build_time_context((coach_context or {}).get("timezone"))
     routing = route_tools_for_query(user_text, pipeline=tool_context.pipeline) if tool_context is not None else None
-    prompt_policy = select_conversation_prompt_policy(routing_reason=routing.reason if routing is not None else None)
+    prompt_policy = select_conversation_prompt_policy(
+        routing_reason=routing.reason if routing is not None else None,
+        intent=routing.intent if routing is not None else None,
+    )
     selected_facts = (coach_context or {}).get("selected_facts") or select_prompt_facts(remembered_facts or [])
-    prompt_bundle = build_conversation_prompt_bundle(
+    prompt_bundle = build_layered_conversation_prompt(
         user_text=user_text,
         prompt_policy=prompt_policy,
         time_block=render_conversation_time_block(resolved_time_context),

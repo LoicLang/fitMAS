@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from fitmas.tools.routing import IntentCategory
+
 
 @dataclass(frozen=True, slots=True)
 class ConversationPromptPolicy:
@@ -17,65 +19,130 @@ class ConversationPromptPolicy:
     include_coach_context: bool = True
 
 
-def select_conversation_prompt_policy(*, routing_reason: str | None) -> ConversationPromptPolicy:
+# Maps intent categories to prompt policies for context compaction.
+_INTENT_POLICIES: dict[IntentCategory, ConversationPromptPolicy] = {
+    IntentCategory.CASUAL_CHAT: ConversationPromptPolicy(
+        name="casual_compact",
+        history_limit=6,
+        include_plan_summary=False,
+        include_timeline=False,
+        include_execution=False,
+        include_temporal=True,
+        include_claim=False,
+        include_signals=False,
+        include_facts=False,
+    ),
+    IntentCategory.EXECUTION_REPORT: ConversationPromptPolicy(
+        name="execution_report",
+        history_limit=4,
+        include_plan_summary=False,
+        include_timeline=True,
+        include_execution=True,
+        include_temporal=True,
+        include_claim=True,
+        include_signals=False,
+        include_facts=False,
+    ),
+    IntentCategory.PLAN_NEGOTIATION: ConversationPromptPolicy(
+        name="plan_negotiation_full",
+        history_limit=6,
+        include_plan_summary=False,
+        include_timeline=True,
+        include_execution=True,
+        include_temporal=True,
+        include_claim=True,
+        include_signals=True,
+        include_facts=True,
+    ),
+    IntentCategory.PLAN_LOOKUP: ConversationPromptPolicy(
+        name="plan_lookup_compact",
+        history_limit=4,
+        include_plan_summary=False,
+        include_timeline=True,
+        include_execution=True,
+        include_temporal=True,
+        include_claim=True,
+        include_signals=False,
+        include_facts=False,
+    ),
+    IntentCategory.ACTIVITY_REVIEW: ConversationPromptPolicy(
+        name="recent_activities_compact",
+        history_limit=3,
+        include_plan_summary=False,
+        include_timeline=False,
+        include_execution=False,
+        include_temporal=True,
+        include_claim=False,
+        include_signals=False,
+        include_facts=False,
+    ),
+    IntentCategory.ACTIVITY_HIGHLIGHTS: ConversationPromptPolicy(
+        name="activity_highlights_compact",
+        history_limit=2,
+        include_plan_summary=False,
+        include_timeline=False,
+        include_execution=False,
+        include_temporal=True,
+        include_claim=False,
+        include_signals=False,
+        include_facts=False,
+    ),
+    IntentCategory.LOAD_REVIEW: ConversationPromptPolicy(
+        name="load_review",
+        history_limit=4,
+        include_plan_summary=False,
+        include_timeline=True,
+        include_execution=True,
+        include_temporal=True,
+        include_claim=False,
+        include_signals=True,
+        include_facts=False,
+    ),
+    IntentCategory.FACT_RECALL: ConversationPromptPolicy(
+        name="fact_recall_compact",
+        history_limit=3,
+        include_plan_summary=False,
+        include_timeline=False,
+        include_execution=False,
+        include_temporal=True,
+        include_claim=False,
+        include_signals=False,
+        include_facts=True,
+    ),
+    IntentCategory.GENERIC_QUESTION: ConversationPromptPolicy(
+        name="generic_lookup_compact",
+        history_limit=4,
+        include_plan_summary=False,
+        include_timeline=True,
+        include_execution=True,
+        include_temporal=True,
+        include_claim=False,
+        include_signals=False,
+        include_facts=False,
+    ),
+}
+
+
+def select_conversation_prompt_policy(
+    *,
+    routing_reason: str | None = None,
+    intent: IntentCategory | None = None,
+) -> ConversationPromptPolicy:
+    """Select prompt policy based on intent category (preferred) or legacy routing_reason."""
+    # Prefer intent-based lookup
+    if intent is not None and intent in _INTENT_POLICIES:
+        return _INTENT_POLICIES[intent]
+
+    # Legacy fallback for backward compatibility
     if routing_reason in ("plan_lookup", "plan_dispute"):
-        return ConversationPromptPolicy(
-            name="plan_lookup_compact",
-            history_limit=4,
-            include_plan_summary=False,
-            include_timeline=True,
-            include_execution=True,
-            include_temporal=True,
-            include_claim=True,
-            include_signals=False,
-            include_facts=False,
-        )
+        return _INTENT_POLICIES[IntentCategory.PLAN_LOOKUP]
     if routing_reason == "activity_highlights":
-        return ConversationPromptPolicy(
-            name="activity_highlights_compact",
-            history_limit=2,
-            include_plan_summary=False,
-            include_timeline=False,
-            include_execution=False,
-            include_temporal=True,
-            include_claim=False,
-            include_signals=False,
-            include_facts=False,
-        )
+        return _INTENT_POLICIES[IntentCategory.ACTIVITY_HIGHLIGHTS]
     if routing_reason == "recent_activities":
-        return ConversationPromptPolicy(
-            name="recent_activities_compact",
-            history_limit=3,
-            include_plan_summary=False,
-            include_timeline=False,
-            include_execution=False,
-            include_temporal=True,
-            include_claim=False,
-            include_signals=False,
-            include_facts=False,
-        )
+        return _INTENT_POLICIES[IntentCategory.ACTIVITY_REVIEW]
     if routing_reason == "fact_recall":
-        return ConversationPromptPolicy(
-            name="fact_recall_compact",
-            history_limit=3,
-            include_plan_summary=False,
-            include_timeline=False,
-            include_execution=False,
-            include_temporal=True,
-            include_claim=False,
-            include_signals=False,
-            include_facts=True,
-        )
+        return _INTENT_POLICIES[IntentCategory.FACT_RECALL]
     if routing_reason == "generic_lookup":
-        return ConversationPromptPolicy(
-            name="generic_lookup_compact",
-            history_limit=4,
-            include_plan_summary=False,
-            include_timeline=True,
-            include_execution=True,
-            include_temporal=True,
-            include_claim=False,
-            include_signals=False,
-            include_facts=False,
-        )
+        return _INTENT_POLICIES[IntentCategory.GENERIC_QUESTION]
+
     return ConversationPromptPolicy(name="default_full", history_limit=8, include_plan_summary=False)

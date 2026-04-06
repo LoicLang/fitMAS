@@ -100,6 +100,15 @@ _EXECUTION_PATTERNS = (
 )
 _SHORT_NEGATIVE_ANSWERS = {"non", "nope", "nan"}
 _SHORT_POSITIVE_ANSWERS = {"oui", "ouais", "yes", "ok oui", "si"}
+_DAY_ALIASES = {
+    "monday": ("lundi", "monday"),
+    "tuesday": ("mardi", "tuesday"),
+    "wednesday": ("mercredi", "wednesday"),
+    "thursday": ("jeudi", "thursday"),
+    "friday": ("vendredi", "friday"),
+    "saturday": ("samedi", "saturday"),
+    "sunday": ("dimanche", "sunday"),
+}
 
 
 class UserIndicationKind(StrEnum):
@@ -154,6 +163,8 @@ class UserIndication:
     execution_sport_type: str | None = None
     execution_duration_min: int | None = None
     execution_completed: bool | None = None
+    requested_days: tuple[str, ...] = ()
+    earliest_day: str | None = None
 
 
 def indication_from_payload(
@@ -212,6 +223,13 @@ def indication_from_payload(
         execution_sport_type=str(execution.get("sport_type") or "").strip() or None,
         execution_duration_min=_coerce_int(execution.get("duration_min")),
         execution_completed=_coerce_execution_completed(execution.get("status")),
+        requested_days=tuple(
+            day for day in (
+                str(item).strip() for item in (payload.get("requested_days") or [])
+            )
+            if day in _DAY_ALIASES
+        ),
+        earliest_day=(str(payload.get("earliest_day") or "").strip() or None),
     )
 
 
@@ -382,6 +400,8 @@ def _fallback_availability_indication(
         scope=scope,
         polarity=polarity,
         time_reference=_time_reference_from_temporal(temporal),
+        requested_days=_extract_requested_days(normalized),
+        earliest_day=_extract_earliest_day(normalized),
     )
 
 
@@ -474,6 +494,61 @@ def _normalize(text: str) -> str:
     folded = folded.lower().replace("’", "'")
     folded = re.sub(r"\s+", " ", folded)
     return folded.strip()
+
+
+def _extract_requested_days(normalized: str) -> tuple[str, ...]:
+    earliest_spans = _earliest_day_spans(normalized)
+    positions: list[tuple[int, str]] = []
+    for day_key, aliases in _DAY_ALIASES.items():
+        for alias in aliases:
+            index = normalized.find(alias)
+            if index == -1:
+                continue
+            if any(start <= index < end for start, end in earliest_spans):
+                continue
+            positions.append((index, day_key))
+            break
+    if ("weekend" in normalized or "week end" in normalized) and not any(
+        day in {key for _, key in positions} for day in ("saturday", "sunday")
+    ):
+        weekend_index = normalized.find("weekend")
+        if weekend_index == -1:
+            weekend_index = normalized.find("week end")
+        positions.extend(((weekend_index, "saturday"), (weekend_index + 1, "sunday")))
+    ordered: list[str] = []
+    for _, day_key in sorted(positions, key=lambda item: item[0]):
+        if day_key not in ordered:
+            ordered.append(day_key)
+    return tuple(ordered)
+
+
+def _earliest_day_spans(normalized: str) -> list[tuple[int, int]]:
+    patterns = (
+        r"pas avant (?P<day>lundi|mardi|mercredi|jeudi|vendredi|samedi|dimanche)",
+        r"a partir de (?P<day>lundi|mardi|mercredi|jeudi|vendredi|samedi|dimanche)",
+        r"apres (?P<day>lundi|mardi|mercredi|jeudi|vendredi|samedi|dimanche)",
+    )
+    spans: list[tuple[int, int]] = []
+    for pattern in patterns:
+        for match in re.finditer(pattern, normalized):
+            spans.append(match.span("day"))
+    return spans
+
+
+def _extract_earliest_day(normalized: str) -> str | None:
+    for pattern in (
+        r"pas avant (?P<day>lundi|mardi|mercredi|jeudi|vendredi|samedi|dimanche)",
+        r"a partir de (?P<day>lundi|mardi|mercredi|jeudi|vendredi|samedi|dimanche)",
+        r"apres (?P<day>lundi|mardi|mercredi|jeudi|vendredi|samedi|dimanche)",
+    ):
+        match = re.search(pattern, normalized)
+        if not match:
+            continue
+        token = match.group("day")
+        for day_key, aliases in _DAY_ALIASES.items():
+            if token in aliases:
+                return day_key
+    return None
 
 
 def _match_mapping(text: str, mapping: dict[str, tuple[str, ...]]) -> str | None:

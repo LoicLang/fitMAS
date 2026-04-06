@@ -1,0 +1,476 @@
+from __future__ import annotations
+
+from datetime import date, datetime, timedelta
+from typing import Any, Sequence
+
+from fitmas.execution_context import build_today_execution_context
+from fitmas.fact_memory import select_relevant_facts
+from fitmas.planning_window_resolution import format_planning_window_summary, resolve_planning_window_inputs
+from fitmas.time_context import get_local_now, get_timezone
+from fitmas.tools.contract import ToolContext, ToolResult, ToolSpec
+
+
+def build_tool_registry() -> dict[str, ToolSpec]:
+    specs = (
+        ToolSpec(
+            name="get_today_context",
+            description="Retourne le contexte d'execution du jour: prevu, reel, ecart et activites recentes.",
+            input_schema={"type": "object", "properties": {}, "required": []},
+            allowed_pipelines=("conversation",),
+            handler=_get_today_context,
+        ),
+        ToolSpec(
+            name="get_plan_window",
+            description="Retourne les seances planifiees sur une fenetre de dates.",
+            input_schema={
+                "type": "object",
+                "properties": {
+                    "start_date": {"type": "string", "description": "Date debut ISO YYYY-MM-DD."},
+                    "end_date": {"type": "string", "description": "Date fin ISO YYYY-MM-DD."},
+                    "limit": {"type": "integer", "description": "Nombre max de seances a retourner."},
+                },
+                "required": [],
+            },
+            allowed_pipelines=("conversation", "planning"),
+            handler=_get_plan_window,
+        ),
+        ToolSpec(
+            name="resolve_planning_window",
+            description="Resout une contrainte temporelle utilisateur contre le vrai planning et retourne les seances candidates.",
+            input_schema={
+                "type": "object",
+                "properties": {
+                    "reference_label": {"type": "string", "description": "Label humain, ex: demain soir."},
+                    "resolved_date": {"type": "string", "description": "Date visee en ISO YYYY-MM-DD."},
+                    "day_key": {"type": "string", "description": "Jour vise si connu, ex: thursday."},
+                    "window": {"type": "string", "description": "Fenetre visee: morning, midday, evening."},
+                    "scope": {"type": "string", "description": "single_window, single_day ou week."},
+                    "limit": {"type": "integer", "description": "Nombre max de seances a retourner."},
+                },
+                "required": [],
+            },
+            allowed_pipelines=("conversation", "planning"),
+            handler=_resolve_planning_window_tool,
+        ),
+        ToolSpec(
+            name="get_recent_activities",
+            description="Retourne les activites recentes sur N jours.",
+            input_schema={
+                "type": "object",
+                "properties": {
+                    "days": {"type": "integer", "description": "Nombre de jours a couvrir."},
+                    "limit": {"type": "integer", "description": "Nombre max d'activites a retourner."},
+                },
+                "required": [],
+            },
+            allowed_pipelines=("conversation", "planning"),
+            handler=_get_recent_activities,
+        ),
+        ToolSpec(
+            name="get_activity_highlights",
+            description="Retourne quelques highlights activite: plus longue sortie, plus grande distance, plus rapide.",
+            input_schema={
+                "type": "object",
+                "properties": {
+                    "days": {"type": "integer", "description": "Fenetre recente en jours pour calculer les highlights."},
+                },
+                "required": [],
+            },
+            allowed_pipelines=("conversation",),
+            handler=_get_activity_highlights,
+        ),
+        ToolSpec(
+            name="get_recent_reality_window",
+            description="Retourne un recap planifie vs reel sur une fenetre recente.",
+            input_schema={
+                "type": "object",
+                "properties": {
+                    "days": {"type": "integer", "description": "Nombre de jours recents a couvrir."},
+                    "limit": {"type": "integer", "description": "Nombre max d'elements par bloc."},
+                },
+                "required": [],
+            },
+            allowed_pipelines=("conversation", "planning"),
+            handler=_get_recent_reality_window,
+        ),
+        ToolSpec(
+            name="get_load_context",
+            description="Retourne un contexte de charge simple: reel recent et planifie proche.",
+            input_schema={
+                "type": "object",
+                "properties": {
+                    "days": {"type": "integer", "description": "Nombre de jours pour comparer reel recent et planifie proche."},
+                },
+                "required": [],
+            },
+            allowed_pipelines=("conversation", "planning", "heartbeat"),
+            handler=_get_load_context,
+        ),
+        ToolSpec(
+            name="get_relevant_facts",
+            description="Retourne la memoire utile la plus pertinente selon un affect.",
+            input_schema={
+                "type": "object",
+                "properties": {
+                    "affects": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "Liste d'affects vises, ex: conversation, planning, heartbeat.",
+                    },
+                    "limit": {"type": "integer", "description": "Nombre max de facts."},
+                },
+                "required": [],
+            },
+            allowed_pipelines=("conversation", "planning", "heartbeat"),
+            handler=_get_relevant_facts,
+        ),
+    )
+    return {spec.name: spec for spec in specs}
+
+
+def list_tools_for_pipeline(pipeline: str, *, tool_names: Sequence[str] | None = None) -> list[dict[str, Any]]:
+    registry = build_tool_registry()
+    if tool_names:
+        ordered: list[dict[str, Any]] = []
+        for name in tool_names:
+            spec = registry.get(name)
+            if spec is None or pipeline not in spec.allowed_pipelines:
+                continue
+            ordered.append(
+                {
+                    "name": spec.name,
+                    "description": spec.description,
+                    "input_schema": dict(spec.input_schema),
+                }
+            )
+        return ordered
+    return [
+        {
+            "name": spec.name,
+            "description": spec.description,
+            "input_schema": dict(spec.input_schema),
+        }
+        for spec in registry.values()
+        if pipeline in spec.allowed_pipelines
+    ]
+
+
+def _get_today_context(context: ToolContext, arguments: dict[str, Any]) -> ToolResult:
+    summary = build_today_execution_context(
+        timezone_name=context.timezone_name,
+        scheduled_sessions=context.scheduled_sessions,
+        activities=context.activities,
+        now=context.now,
+    )
+    payload = {
+        "local_date": summary.local_date.isoformat(),
+        "planned_session_id": summary.planned_session_id,
+        "planned_sport": summary.planned_sport,
+        "planned_title": summary.planned_title,
+        "planned_duration_min": summary.planned_duration_min,
+        "execution_status": summary.execution_status,
+        "actual_sports_today": list(summary.actual_sports_today),
+        "actual_duration_min_today": summary.actual_duration_min_today,
+    }
+    return ToolResult(
+        tool_name="get_today_context",
+        status="ok",
+        payload=payload,
+        summary=f"Aujourd'hui: {summary.execution_status}, sport prevu={summary.planned_sport or 'none'}, sports reels={', '.join(summary.actual_sports_today) or 'none'}.",
+    )
+
+
+def _get_plan_window(context: ToolContext, arguments: dict[str, Any]) -> ToolResult:
+    local_today = get_local_now(context.timezone_name, now=context.now).date()
+    start_date = _parse_date(arguments.get("start_date")) or local_today
+    end_date = _parse_date(arguments.get("end_date")) or (start_date + timedelta(days=6))
+    limit = _coerce_int(arguments.get("limit"), default=14, minimum=1, maximum=31)
+    items: list[dict[str, Any]] = []
+    for session in context.scheduled_sessions:
+        local_date = _local_date(_value(session, "scheduled_date"), timezone_name=context.timezone_name)
+        if local_date is None or local_date < start_date or local_date > end_date:
+            continue
+        items.append(
+            {
+                "id": _value(session, "id"),
+                "scheduled_date": local_date.isoformat(),
+                "sport_type": _value(session, "sport_type"),
+                "session_title": _value(session, "session_title"),
+                "duration_min": _value(session, "duration_min"),
+                "completion_status": _value(session, "completion_status"),
+            }
+        )
+        if len(items) >= limit:
+            break
+    return ToolResult(
+        tool_name="get_plan_window",
+        status="ok",
+        payload={"start_date": start_date.isoformat(), "end_date": end_date.isoformat(), "sessions": items},
+        summary=f"{len(items)} seances entre {start_date.isoformat()} et {end_date.isoformat()}.",
+    )
+
+
+def _get_recent_activities(context: ToolContext, arguments: dict[str, Any]) -> ToolResult:
+    local_today = get_local_now(context.timezone_name, now=context.now).date()
+    days = _coerce_int(arguments.get("days"), default=7, minimum=1, maximum=90)
+    limit = _coerce_int(arguments.get("limit"), default=8, minimum=1, maximum=30)
+    cutoff = local_today - timedelta(days=max(0, days - 1))
+    items: list[dict[str, Any]] = []
+    for activity in context.activities:
+        local_date = _local_date(_value(activity, "started_at") or _value(activity, "created_at"), timezone_name=context.timezone_name)
+        if local_date is None or local_date < cutoff:
+            continue
+        items.append(
+            {
+                "id": _value(activity, "id"),
+                "local_date": local_date.isoformat(),
+                "sport_type": _value(activity, "sport_type"),
+                "title": _value(activity, "title"),
+                "duration_min": _value(activity, "duration_min"),
+                "distance_m": _value(activity, "distance_m"),
+                "avg_speed": _value(activity, "avg_speed"),
+            }
+        )
+        if len(items) >= limit:
+            break
+    return ToolResult(
+        tool_name="get_recent_activities",
+        status="ok",
+        payload={"days": days, "activities": items},
+        summary=f"{len(items)} activites sur {days} jours.",
+    )
+
+
+def _resolve_planning_window_tool(context: ToolContext, arguments: dict[str, Any]) -> ToolResult:
+    resolved = resolve_planning_window_inputs(
+        reference_label=str(arguments.get("reference_label") or arguments.get("resolved_date") or arguments.get("day_key") or "fenetre"),
+        resolved_date=_parse_date(arguments.get("resolved_date")),
+        day_key=str(arguments.get("day_key") or "").strip() or None,
+        window=str(arguments.get("window") or "").strip() or None,
+        scope=str(arguments.get("scope") or "single_window"),
+        scheduled_sessions=context.scheduled_sessions,
+        timezone_name=context.timezone_name,
+        now=context.now,
+        limit=_coerce_int(arguments.get("limit"), default=8, minimum=1, maximum=20),
+    )
+    return ToolResult(
+        tool_name="resolve_planning_window",
+        status="ok",
+        payload={
+            "reference_label": resolved.reference_label,
+            "scope": resolved.scope,
+            "resolved_date": resolved.resolved_date.isoformat() if resolved.resolved_date else None,
+            "window": resolved.window,
+            "matched_session_id": resolved.matched_session_id,
+            "exact_match": resolved.exact_match,
+            "needs_clarification": resolved.needs_clarification,
+            "clarification_reason": resolved.clarification_reason,
+            "candidate_sessions": [
+                {
+                    "session_id": item.session_id,
+                    "scheduled_date": item.scheduled_date.isoformat(),
+                    "day_key": item.day_key,
+                    "part_of_day": item.part_of_day,
+                    "sport_type": item.sport_type,
+                    "session_title": item.session_title,
+                    "completion_status": item.completion_status,
+                    "priority": item.priority,
+                }
+                for item in resolved.candidate_sessions
+            ],
+        },
+        summary=format_planning_window_summary(resolved),
+    )
+
+
+def _get_activity_highlights(context: ToolContext, arguments: dict[str, Any]) -> ToolResult:
+    recent = _get_recent_activities(context, {"days": arguments.get("days", 30), "limit": 60}).payload["activities"]
+    longest_duration = max(recent, key=lambda item: item.get("duration_min") or 0, default=None)
+    longest_distance = max(recent, key=lambda item: item.get("distance_m") or 0, default=None)
+    fastest = max(recent, key=lambda item: item.get("avg_speed") or 0, default=None)
+    payload = {
+        "longest_duration": longest_duration,
+        "longest_distance": longest_distance,
+        "fastest": fastest,
+    }
+    highlights = sum(1 for item in payload.values() if item)
+    return ToolResult(
+        tool_name="get_activity_highlights",
+        status="ok",
+        payload=payload,
+        summary=f"{highlights} highlights activite disponibles.",
+    )
+
+
+def _get_relevant_facts(context: ToolContext, arguments: dict[str, Any]) -> ToolResult:
+    affects = arguments.get("affects")
+    if not isinstance(affects, list):
+        affects = ["conversation"]
+    limit = _coerce_int(arguments.get("limit"), default=6, minimum=1, maximum=20)
+    selected = select_relevant_facts(context.active_facts, affects=affects, limit=limit, now=context.now)
+    return ToolResult(
+        tool_name="get_relevant_facts",
+        status="ok",
+        payload={"affects": affects, "facts": selected},
+        summary=f"{len(selected)} facts pertinents pour {', '.join(affects)}.",
+    )
+
+
+def _get_recent_reality_window(context: ToolContext, arguments: dict[str, Any]) -> ToolResult:
+    local_today = get_local_now(context.timezone_name, now=context.now).date()
+    days = _coerce_int(arguments.get("days"), default=7, minimum=1, maximum=30)
+    limit = _coerce_int(arguments.get("limit"), default=8, minimum=1, maximum=20)
+    start_date = local_today - timedelta(days=max(0, days - 1))
+
+    sessions: list[dict[str, Any]] = []
+    for session in context.scheduled_sessions:
+        local_date = _local_date(_value(session, "scheduled_date"), timezone_name=context.timezone_name)
+        if local_date is None or local_date < start_date or local_date > local_today:
+            continue
+        sessions.append(
+            {
+                "id": _value(session, "id"),
+                "local_date": local_date.isoformat(),
+                "sport_type": _value(session, "sport_type"),
+                "session_title": _value(session, "session_title"),
+                "duration_min": _value(session, "duration_min"),
+                "completion_status": _value(session, "completion_status"),
+            }
+        )
+        if len(sessions) >= limit:
+            break
+
+    activities: list[dict[str, Any]] = []
+    for activity in context.activities:
+        local_date = _local_date(_value(activity, "started_at") or _value(activity, "created_at"), timezone_name=context.timezone_name)
+        if local_date is None or local_date < start_date or local_date > local_today:
+            continue
+        activities.append(
+            {
+                "id": _value(activity, "id"),
+                "local_date": local_date.isoformat(),
+                "sport_type": _value(activity, "sport_type"),
+                "title": _value(activity, "title"),
+                "duration_min": _value(activity, "duration_min"),
+                "distance_m": _value(activity, "distance_m"),
+            }
+        )
+        if len(activities) >= limit:
+            break
+
+    return ToolResult(
+        tool_name="get_recent_reality_window",
+        status="ok",
+        payload={
+            "days": days,
+            "start_date": start_date.isoformat(),
+            "end_date": local_today.isoformat(),
+            "planned_sessions": sessions,
+            "activities": activities,
+        },
+        summary=f"Fenetre recente {days}j: {len(sessions)} seances planifiees, {len(activities)} activites reelles.",
+    )
+
+
+def _get_load_context(context: ToolContext, arguments: dict[str, Any]) -> ToolResult:
+    local_today = get_local_now(context.timezone_name, now=context.now).date()
+    days = _coerce_int(arguments.get("days"), default=7, minimum=1, maximum=21)
+    recent_start = local_today - timedelta(days=max(0, days - 1))
+    upcoming_end = local_today + timedelta(days=max(0, days - 1))
+
+    recent_activities = [
+        activity
+        for activity in context.activities
+        if (local_date := _local_date(_value(activity, "started_at") or _value(activity, "created_at"), timezone_name=context.timezone_name))
+        is not None
+        and recent_start <= local_date <= local_today
+    ]
+    upcoming_sessions = [
+        session
+        for session in context.scheduled_sessions
+        if (local_date := _local_date(_value(session, "scheduled_date"), timezone_name=context.timezone_name))
+        is not None
+        and local_today <= local_date <= upcoming_end
+        and str(_value(session, "sport_type") or "").lower() != "rest"
+    ]
+
+    actual_duration_min = sum(int(_value(activity, "duration_min") or 0) for activity in recent_activities)
+    planned_duration_min = sum(int(_value(session, "duration_min") or 0) for session in upcoming_sessions)
+    actual_sports = sorted({str(_value(activity, "sport_type") or "") for activity in recent_activities if _value(activity, "sport_type")})
+    key_session_count = sum(
+        1
+        for session in upcoming_sessions
+        if any(
+            token in f"{_value(session, 'priority') or ''} {_value(session, 'session_title') or ''}".lower()
+            for token in ("cle", "qualite", "bloc", "long")
+        )
+    )
+
+    return ToolResult(
+        tool_name="get_load_context",
+        status="ok",
+        payload={
+            "days": days,
+            "recent_actual_duration_min": actual_duration_min,
+            "recent_actual_activity_count": len(recent_activities),
+            "recent_actual_sports": actual_sports,
+            "upcoming_planned_duration_min": planned_duration_min,
+            "upcoming_planned_session_count": len(upcoming_sessions),
+            "upcoming_key_session_count": key_session_count,
+        },
+        summary=(
+            f"Charge {days}j: reel {actual_duration_min} min sur {len(recent_activities)} activites, "
+            f"planifie {planned_duration_min} min sur {len(upcoming_sessions)} seances."
+        ),
+    )
+
+
+def _coerce_int(value: Any, *, default: int, minimum: int, maximum: int) -> int:
+    try:
+        coerced = int(value)
+    except (TypeError, ValueError):
+        return default
+    return max(minimum, min(maximum, coerced))
+
+
+def _parse_date(value: Any) -> date | None:
+    if not value:
+        return None
+    if isinstance(value, date) and not isinstance(value, datetime):
+        return value
+    if isinstance(value, str):
+        try:
+            return date.fromisoformat(value)
+        except ValueError:
+            return None
+    return None
+
+
+def _local_date(value: Any, *, timezone_name: str | None) -> date | None:
+    if value is None:
+        return None
+    if isinstance(value, date) and not isinstance(value, datetime):
+        return value
+    timezone = get_timezone(timezone_name)
+    if isinstance(value, datetime):
+        if value.tzinfo is None:
+            return value.date()
+        return value.astimezone(timezone).date()
+    if isinstance(value, str):
+        try:
+            parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+        except ValueError:
+            try:
+                return date.fromisoformat(value)
+            except ValueError:
+                return None
+        if parsed.tzinfo is None:
+            return parsed.date()
+        return parsed.astimezone(timezone).date()
+    return None
+
+
+def _value(obj: Any, key: str) -> Any:
+    if isinstance(obj, dict):
+        return obj.get(key)
+    return getattr(obj, key, None)

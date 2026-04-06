@@ -70,34 +70,90 @@ Role :
 ### `tool_routing.py`
 
 Role :
-- router de facon deterministe une requete utilisateur vers un petit sous-ensemble de tools
+- classifier l'intent utilisateur en 9 categories deterministes
+- mapper chaque intent a un budget de tools borne
 - eviter d'offrir tout le registry a chaque question
-- garder l'ordre metier des tools presentes au modele
 
-Etat actuel :
-- actif pour le pipeline `conversation`
-- categories V1 :
-  - rappel planning
-  - highlights activite
-  - activites recentes
-  - rappel memoire/facts
-- nouveaux usages cibles :
-  - grounding d'une contrainte future sur une vraie fenetre planning
-- si le message est simple (`ok`, retour libre, adaptation simple), aucun tool n'est offert
+Architecture V2 (intent-based) :
+- `classify_intent()` → `IntentCategory` (enum)
+- `route_tools_for_query()` → `ToolRoutingDecision` avec intent + tool_names
+- plus de matching regex fragile : classification par heuristiques layered
+
+Categories d'intent :
+| Intent | Tools offerts |
+|--------|--------------|
+| `casual_chat` | aucun |
+| `execution_report` | today_context, recent_activities |
+| `plan_negotiation` | today_context, plan_window, load_context, relevant_facts |
+| `plan_lookup` | today_context, plan_window |
+| `activity_review` | recent_activities |
+| `activity_highlights` | activity_highlights, recent_activities |
+| `load_review` | load_context, recent_reality_window |
+| `fact_recall` | relevant_facts |
+| `generic_question` | today_context, plan_window, recent_activities |
 
 ### `conversation_prompting.py`
 
 Role :
-- choisir une politique de prompt selon le type de requete
+- choisir une politique de prompt selon l'intent (preferred) ou le routing_reason (legacy)
 - reduire le `context dump` pour les requetes de lecture outillees
 - garder un comportement full-context pour les cas mutation / conversation libre
 
 Etat actuel :
-- `activity_highlights` et `recent_activities` utilisent un prompt compact
-- `plan_lookup` garde l'ancrage planning mais coupe les blocs inutiles comme les signaux
-- `fact_recall` garde surtout le temps local + la memoire utile
-- la policy choisie remonte maintenant dans les traces tools via `context_policy`
-- prochaine etape : decouper le prompt coach en zone statique cacheable + zone dynamique courte
+- chaque `IntentCategory` a une policy dediee (`_INTENT_POLICIES` map)
+- `casual_chat` utilise un prompt minimal (pas de timeline, pas de signals)
+- `plan_negotiation` utilise le prompt le plus riche (signals + facts + timeline + execution)
+- le fallback legacy par `routing_reason` reste pour la compatibilite arriere
+- la policy choisie remonte dans les traces tools via `context_policy`
+- le chemin live `llm.decide()` utilise maintenant le builder layered plutot que l'ancien builder monobloc
+
+### `prompt_layers.py`
+
+Role :
+- structurer le prompt en 5 couches explicites avec budgets token independants
+- permettre le prompt caching Anthropic sur les couches stables (L0, L1)
+- compacter automatiquement les couches qui depassent leur budget
+
+Couches :
+| Level | Nom | Budget | Cacheable | Frequence de changement |
+|-------|-----|--------|-----------|------------------------|
+| 0 | identity | 300 tok | oui | jamais |
+| 1 | profile | 400 tok | oui | par session |
+| 2 | plan | 800 tok | non | par semaine |
+| 3 | immediate | 600 tok | non | par tour |
+| 4 | memory | 500 tok | non | par tour |
+
+### `mutation_hooks.py`
+
+Role :
+- valider les mutations avant application (pre-hooks)
+- calculer l'impact apres application (post-hooks)
+- declencher une recalibration si seuil franchi
+
+Pre-hooks :
+- `plausibility_check` : bloque les moves vers une date passee
+- `fragile_day_check` : warn si collision avec une seance intense
+- `load_coherence_check` : warn si depassement du max hard sessions/week
+
+Post-hooks :
+- `calculate_impact` : delta charge, duree, seances cle affectees, recovery perdu
+- `build_mutation_log` : entree structuree pour audit
+- `recalibration_trigger` : flag si impact significatif
+
+### `api_ops.py`
+
+Role :
+- surface operateur separee du tool plane conversationnel
+- endpoints `/ops/` pour debug, inspection et triggers manuels
+- auth debug distincte
+
+Endpoints :
+- `GET /ops/signals` : signaux actifs
+- `POST /ops/heartbeat/{kind}` : trigger manuel heartbeat
+- `GET /ops/memory` : etat memoire complet
+- `GET /ops/mutations/recent` : log mutations recentes
+- `GET /ops/tool-stats` : stats d'usage tools
+- `POST /ops/reset` : reset destructif
 
 ### `tool_metrics.py`
 
@@ -146,7 +202,7 @@ Les tools sont une extension future, pas un remplacement.
 Etat actuel :
 - le chat peut maintenant faire **1 tool call max** sur certaines requetes de lecture evidentes
 - activation bornee par `tool_routing.py`
-- le prompt du chat commence aussi a se compacter via `conversation_prompting.py`
+- le prompt du chat passe maintenant par `conversation_prompting.py` + `prompt_layers.py` sur le chemin live
 - puis reponse finale JSON comme avant
 - chaque tour outille produit maintenant une trace session-level exploitable pour mesurer :
   - si les tools ont ete seulement offres

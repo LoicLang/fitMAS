@@ -53,7 +53,7 @@ from fitmas.replan_from_life_change import (
     maybe_replan_from_user_indication,
 )
 from fitmas.signals import collect_signals
-from fitmas.tool_contract import ToolContext
+from fitmas.tools.contract import ToolContext
 from fitmas.user_indication_llm import interpret_user_indication
 from fitmas.user_indications import (
     UserIndication,
