@@ -16,6 +16,15 @@ class PlanMutationServiceResult:
     applied_count: int
     attempted_count: int
     event_count: int = 0
+    applied_events: tuple[PlanAppliedMutationEvent, ...] = ()
+
+
+@dataclass(frozen=True, slots=True)
+class PlanAppliedMutationEvent:
+    command_type: str
+    user_visible_summary: str
+    event_id: int | None = None
+    target_session_id: int | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -42,6 +51,7 @@ def apply_decisions_for_user(
     plan = repo.get_active_plan(db, user.id)
     applied_count = 0
     event_count = 0
+    applied_events: list[PlanAppliedMutationEvent] = []
     for decision in decisions:
         pre_result, post_result = mutations.apply(
             db,
@@ -50,7 +60,13 @@ def apply_decisions_for_user(
         )
         if pre_result.allowed and post_result is not None:
             applied_count += 1
-            repo.add_plan_mutation_event(
+            updated_session = (
+                repo.get_scheduled_session(db, user.id, decision.target_session_id)
+                if decision.target_session_id is not None
+                else None
+            )
+            user_visible_summary = _build_user_visible_summary(decision, updated_session)
+            event = repo.add_plan_mutation_event(
                 db,
                 user_id=user.id,
                 source=source,
@@ -58,20 +74,29 @@ def apply_decisions_for_user(
                 command_type=decision.mutation_type,
                 target_session_ids=_decision_session_ids(decision),
                 before_snapshot={},
-                after_snapshot={},
+                after_snapshot=_session_snapshot(updated_session),
                 reason={"rationale": decision.rationale} if decision.rationale else {},
                 impact=_jsonable_dict(post_result),
-                user_visible_summary=decision.fitmas_message,
+                user_visible_summary=user_visible_summary,
                 explained_to_user=explained_to_user,
                 conversation_turn_id=conversation_turn_id,
             )
             event_count += 1
+            applied_events.append(
+                PlanAppliedMutationEvent(
+                    command_type=decision.mutation_type,
+                    target_session_id=decision.target_session_id,
+                    user_visible_summary=user_visible_summary,
+                    event_id=_event_id(event),
+                )
+            )
 
     return PlanMutationServiceResult(
         plan_id=plan.id,
         applied_count=applied_count,
         attempted_count=len(decisions),
         event_count=event_count,
+        applied_events=tuple(applied_events),
     )
 
 
@@ -264,3 +289,35 @@ def _jsonable_dict(value: Any) -> dict[str, Any]:
 def _event_id(event: Any) -> int | None:
     value = getattr(event, "id", None)
     return int(value) if value is not None else None
+
+
+def _build_user_visible_summary(decision: MutationDecision, updated_session: Any) -> str:
+    if decision.mutation_type != "replace_session":
+        return decision.fitmas_message
+    title = str(_value(updated_session, "session_title") or decision.new_title or "seance adaptee").strip()
+    duration_min = _value(updated_session, "duration_min") or decision.new_duration_min
+    intensity = str(_value(updated_session, "intensity") or decision.new_intensity or "").strip().lower()
+    parts = [f"OK. Je bascule sur {title.lower()}."]
+    detail_bits: list[str] = []
+    if duration_min:
+        detail_bits.append(f"{int(duration_min)} min")
+    intensity_labels = {
+        "easy": "facile",
+        "moderate": "controle",
+        "hard": "soutenu",
+    }
+    if intensity in intensity_labels:
+        detail_bits.append(intensity_labels[intensity])
+    if detail_bits:
+        parts.append(f"{', '.join(detail_bits).capitalize()}.")
+    if decision.rationale:
+        parts.append(decision.rationale)
+    return " ".join(parts)
+
+
+def _value(obj: Any, key: str) -> Any:
+    if obj is None:
+        return None
+    if isinstance(obj, dict):
+        return obj.get(key)
+    return getattr(obj, key, None)

@@ -625,35 +625,6 @@ def _apply_non_completion_resolution(
     )
 
 
-def _render_applied_decision_reply(
-    *,
-    decision: MutationDecision,
-    updated_session,
-    fallback_text: str,
-) -> str:
-    if decision.mutation_type != "replace_session":
-        return fallback_text
-    title = str(_value(updated_session, "session_title") or decision.new_title or "seance adaptee").strip()
-    duration_min = _value(updated_session, "duration_min") or decision.new_duration_min
-    intensity = str(_value(updated_session, "intensity") or decision.new_intensity or "").strip().lower()
-    parts = [f"OK. Je bascule sur {title.lower()}."]
-    detail_bits: list[str] = []
-    if duration_min:
-        detail_bits.append(f"{int(duration_min)} min")
-    intensity_labels = {
-        "easy": "facile",
-        "moderate": "controle",
-        "hard": "soutenu",
-    }
-    if intensity in intensity_labels:
-        detail_bits.append(intensity_labels[intensity])
-    if detail_bits:
-        parts.append(f"{', '.join(detail_bits).capitalize()}.")
-    if decision.rationale:
-        parts.append(decision.rationale)
-    return " ".join(parts)
-
-
 def _sanitize_no_change_reply(*, user_text: str, reply_text: str, decision: MutationDecision) -> str:
     if decision.mutation_type != "no_change":
         return reply_text

@@ -251,6 +251,7 @@ class TestRunAdaptationFreeze:
 
         monkeypatch.setattr("fitmas.mutations.apply", _record_apply)
         monkeypatch.setattr("fitmas.repository.add_plan_mutation_event", lambda *args, **kwargs: None)
+        monkeypatch.setattr("fitmas.repository.get_scheduled_session", lambda *args, **kwargs: None)
 
         result = adaptation.run_adaptation(object(), user=user, trigger=trigger, allow_apply=True)
 

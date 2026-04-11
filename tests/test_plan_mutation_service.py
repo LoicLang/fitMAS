@@ -39,6 +39,7 @@ def test_apply_decisions_for_user_routes_all_decisions_through_mutations(monkeyp
 
     monkeypatch.setattr("fitmas.plan_mutation_service.mutations.apply", _fake_apply)
     monkeypatch.setattr("fitmas.plan_mutation_service.repo.add_plan_mutation_event", lambda *args, **kwargs: None)
+    monkeypatch.setattr("fitmas.plan_mutation_service.repo.get_scheduled_session", lambda *args, **kwargs: None)
 
     result = apply_decisions_for_user(
         object(),
@@ -72,6 +73,7 @@ def test_apply_decisions_for_user_counts_only_successful_applies(monkeypatch) ->
 
     monkeypatch.setattr("fitmas.plan_mutation_service.mutations.apply", _fake_apply)
     monkeypatch.setattr("fitmas.plan_mutation_service.repo.add_plan_mutation_event", lambda *args, **kwargs: None)
+    monkeypatch.setattr("fitmas.plan_mutation_service.repo.get_scheduled_session", lambda *args, **kwargs: None)
 
     result = apply_decisions_for_user(
         object(),
@@ -109,6 +111,7 @@ def test_apply_decisions_for_user_records_event_for_successful_apply(monkeypatch
         return SimpleNamespace(id=99)
 
     monkeypatch.setattr("fitmas.plan_mutation_service.repo.add_plan_mutation_event", _add_event)
+    monkeypatch.setattr("fitmas.plan_mutation_service.repo.get_scheduled_session", lambda *args, **kwargs: None)
 
     result = apply_decisions_for_user(
         object(),
@@ -137,6 +140,67 @@ def test_apply_decisions_for_user_records_event_for_successful_apply(monkeypatch
             "conversation_turn_id": None,
         }
     ]
+
+
+def test_apply_decisions_for_user_returns_event_summary_for_replace(monkeypatch) -> None:
+    user = SimpleNamespace(id=7)
+    updated_session = SimpleNamespace(
+        id=10,
+        day="monday",
+        scheduled_date=None,
+        sport_type="swimming",
+        session_type="recovery",
+        session_title="Natation douce",
+        duration_min=35,
+        intensity="easy",
+        completion_status="adapted",
+    )
+    decision = MutationDecision(
+        mutation_type="replace_session",
+        target_session_id=10,
+        new_title="Natation douce",
+        new_duration_min=35,
+        new_intensity="easy",
+        rationale="Epaule a proteger.",
+        fitmas_message="Message LLM trop vague.",
+    )
+
+    monkeypatch.setattr(
+        "fitmas.plan_mutation_service.repo.get_active_plan",
+        lambda db, user_id: SimpleNamespace(id=42),
+    )
+    monkeypatch.setattr(
+        "fitmas.plan_mutation_service.mutations.apply",
+        lambda db, plan_id, decision, **kwargs: (SimpleNamespace(allowed=True), SimpleNamespace()),
+    )
+    monkeypatch.setattr(
+        "fitmas.plan_mutation_service.repo.get_scheduled_session",
+        lambda db, user_id, session_id: updated_session,
+    )
+
+    events: list[dict] = []
+
+    def _add_event(db, **kwargs):
+        events.append(kwargs)
+        return SimpleNamespace(id=101)
+
+    monkeypatch.setattr("fitmas.plan_mutation_service.repo.add_plan_mutation_event", _add_event)
+
+    result = apply_decisions_for_user(
+        object(),
+        user=user,
+        decisions=[decision],
+        explained_to_user=True,
+    )
+
+    assert result is not None
+    assert result.applied_events
+    assert result.applied_events[0].event_id == 101
+    assert result.applied_events[0].user_visible_summary == (
+        "OK. Je bascule sur natation douce. 35 min, facile. Epaule a proteger."
+    )
+    assert events[0]["user_visible_summary"] == result.applied_events[0].user_visible_summary
+    assert events[0]["explained_to_user"] is True
 
 
 def test_session_action_helpers_route_through_low_level_actions(monkeypatch) -> None:

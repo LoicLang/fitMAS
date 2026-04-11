@@ -118,17 +118,11 @@ def run_conversation_turn(
                 db,
                 user=user,
                 decisions=[decision],
+                source="conversation",
+                trigger_type="confirmation_accepted",
+                explained_to_user=True,
             )
-            updated_session = (
-                repo.get_scheduled_session(db, user.id, decision.target_session_id)
-                if service_result is not None and service_result.applied_count > 0 and decision.target_session_id is not None
-                else None
-            )
-            reply_text = api_messages._render_applied_decision_reply(
-                decision=decision,
-                updated_session=updated_session,
-                fallback_text=decision.fitmas_message,
-            )
+            reply_text = _applied_event_summary(service_result, decision) or decision.fitmas_message
             reply_text = api_messages._sanitize_no_change_reply(
                 user_text=payload.text,
                 reply_text=reply_text,
@@ -570,11 +564,9 @@ def run_conversation_turn(
                 db,
                 user=user,
                 decisions=[decision],
-            )
-            updated_session = (
-                repo.get_scheduled_session(db, user.id, decision.target_session_id)
-                if service_result is not None and service_result.applied_count > 0 and decision.target_session_id is not None
-                else None
+                source="conversation",
+                trigger_type="message",
+                explained_to_user=True,
             )
             if adaptation is not None:
                 repo.add_adaptation_event(
@@ -582,11 +574,7 @@ def run_conversation_turn(
                     user.id,
                     build_adaptation_log_entry(decision=adaptation, scheduled_sessions=state.scheduled_sessions),
                 )
-            reply_text = api_messages._render_applied_decision_reply(
-                decision=decision,
-                updated_session=updated_session,
-                fallback_text=decision.fitmas_message,
-            )
+            reply_text = _applied_event_summary(service_result, decision) or decision.fitmas_message
             reply_text = api_messages._sanitize_no_change_reply(
                 user_text=payload.text,
                 reply_text=reply_text,
@@ -714,6 +702,15 @@ def _active_memory_payloads(db: Session, user_id: int) -> tuple[list[object], li
     import fitmas.api_messages as api_messages
 
     return api_messages._active_memory_payloads(db, user_id)
+
+
+def _applied_event_summary(service_result, decision) -> str | None:
+    if service_result is None:
+        return None
+    for event in getattr(service_result, "applied_events", ()):
+        if event.command_type == decision.mutation_type:
+            return event.user_visible_summary
+    return None
 
 
 def _latest_agent_text(conversation_history: list[dict]) -> str | None:
