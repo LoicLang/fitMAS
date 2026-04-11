@@ -47,6 +47,7 @@ from fitmas.memory_profile import upsert_profile_memory
 from fitmas.memory_routing import split_memory_payloads
 from fitmas.models import DayId, Extraction, Message, MessageReply, MessageRole
 from fitmas.nlp import extract_reply, generate_reply
+from fitmas.plan_mutation_service import skip_session_for_user
 from fitmas.planning_window_resolution import resolve_planning_window
 from fitmas.replan_from_life_change import (
     maybe_replan_from_life_change,
@@ -443,12 +444,12 @@ def _execution_contestation_reply(
         return None
 
     if target_session is not None and str(_value(target_session, "completion_status") or "").lower() in {"planned", "done"}:
-        updated_session = repo.set_scheduled_session_status(db, int(_value(target_session, "id")), "skipped")
-        if updated_session is not None:
-            _, day_plan = repo.get_current_week_day_plan_for_session(db, user=user, session=updated_session)
-            if day_plan is not None and str(day_plan.completion_status or "").lower() == "done":
-                day_plan.completion_status = "skipped"
-                db.commit()
+        skip_session_for_user(
+            db,
+            user=user,
+            session_id=int(_value(target_session, "id")),
+            source="conversation_non_completion",
+        )
 
     title = str(_value(target_session, "session_title") or "").strip()
     if title:
@@ -616,13 +617,12 @@ def _apply_non_completion_resolution(
         return
     if str(_value(target_session, "completion_status") or "").lower() not in {"planned", "done"}:
         return
-    updated_session = repo.set_scheduled_session_status(db, int(_value(target_session, "id")), "skipped")
-    if updated_session is None:
-        return
-    _, day_plan = repo.get_current_week_day_plan_for_session(db, user=user, session=updated_session)
-    if day_plan is not None and str(day_plan.completion_status or "").lower() == "done":
-        day_plan.completion_status = "skipped"
-        db.commit()
+    skip_session_for_user(
+        db,
+        user=user,
+        session_id=int(_value(target_session, "id")),
+        source="conversation_non_completion",
+    )
 
 
 def _render_applied_decision_reply(

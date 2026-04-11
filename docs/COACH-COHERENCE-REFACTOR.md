@@ -356,6 +356,23 @@ Exit gates :
 - chaque mutation appliquee cree exactement un event
 - chaque reponse utilisateur sur mutation est derivee de l'event applique
 
+Statut courant :
+
+- premier slice en place
+- `PlanMutationService` route maintenant :
+  - decisions conversation / adaptation via `mutations.apply`
+  - actions app explicites `complete / skip / move`
+  - completion liee aux activites manuelles et Strava
+  - contestations d'execution conversationnelles vers `skip`
+  - sync legacy `DayPlan done` depuis activite, en attendant retrait complet du template live
+- garde de test ajoutee pour empecher `api_plan.py`, `api_activities.py`, `api_messages.py` et `strava.py` d'appeler les writers bas niveau directement
+
+Reste pour fermer la phase 2 :
+
+- produire un record canonique `plan_mutation_events`
+- faire deriver les reponses utilisateur depuis l'event applique
+- reduire le role de `mutations.py` a un detail interne du service, ou le renommer pour clarifier la frontiere
+
 ### Phase 3 - Retire legacy runtime reads
 
 But :

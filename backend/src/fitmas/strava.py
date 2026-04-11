@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 
 from fitmas import repository as repo, schema as s
 from fitmas.activities import infer_activity_title, match_activity_to_day, normalize_activity_sport
+from fitmas.plan_mutation_service import mark_day_completed_for_user, mark_session_completed_for_user
 from fitmas.training_load import estimate_tss
 
 AUTH_URL = "https://www.strava.com/oauth/authorize"
@@ -154,7 +155,7 @@ def import_recent_activities(
             if db.is_modified(existing):
                 db.commit()
             if existing.scheduled_session_id is not None:
-                repo.mark_scheduled_session_completed(db, existing.scheduled_session_id)
+                mark_session_completed_for_user(db, user=user, session_id=existing.scheduled_session_id, source="strava")
             continue
 
         sport_type = normalize_activity_sport(raw_activity.get("sport_type") or raw_activity.get("type", "running"))
@@ -212,9 +213,9 @@ def import_recent_activities(
 
         # Only mark day done for activities from this week
         if matched_day and match_reason != "activite hors semaine courante" and plan_id:
-            repo.mark_day_completed(db, plan_id, matched_day)
+            mark_day_completed_for_user(db, plan_id=plan_id, day=matched_day, source="strava")
         if activity.scheduled_session_id is not None:
-            repo.mark_scheduled_session_completed(db, activity.scheduled_session_id)
+            mark_session_completed_for_user(db, user=user, session_id=activity.scheduled_session_id, source="strava")
 
         imported += 1
 
