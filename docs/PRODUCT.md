@@ -28,6 +28,7 @@ Le mécanisme interne ressenti est "moins de charge mentale".
 - **App = le cockpit** : calendrier, charge, exécution, progression, graphes
 - Le chat ne vit pas dans l'app
 - L'app doit pouvoir être ouverte sans contexte conversationnel et rester immédiatement utile
+- La vérité "ce qui est déjà live vs ce qu'on construit ensuite" vit dans `BUILD-ORDER.md`, pas ici
 
 ## ICP
 
@@ -81,12 +82,18 @@ Sortie attendue :
 ### 2. Plan hebdomadaire multisport
 
 - Généré par un planner déterministe (`planner.py`)
-- Enrichi par le LLM (intention, wording, arbitrages)
-- 7 jours avec : sport, type, durée, intensité, charge, priorité, note coach
+- Enrichi par le LLM pour l'intention, le wording et certains arbitrages
+- Instancié en `ScheduledSession` datées, qui servent de vérité principale pour l'app et le coach
+- `WeeklyPlan` existe encore comme synthèse de semaine et fallback legacy
+- Le contrat planning commence déjà à remonter :
+  - mission de semaine
+  - horizons de confiance
+  - budget de changement
+  - état de disponibilité
 - Régénération à la demande ou automatique le lundi matin
-- Limite actuelle : le modèle reste encore hebdomadaire et pas vraiment calendaire
+- Limite actuelle : le bloc 4-6 semaines n'est pas encore un objet produit pleinement lisible et certaines adaptations dépendent encore du squelette hebdo
 
-### 3. App (5 onglets)
+### 3. App (3 surfaces primaires + détail séance)
 
 **Aperçu** — écran quotidien
 - prochaine séance + objectif + note coach
@@ -95,42 +102,36 @@ Sortie attendue :
 - métriques bloc actif : volume, charge cible, semaine
 - hero éditorial type "prochaine séance"
 - programme semaine en cartes visuelles
+- contrat planning + mission de semaine + dernière adaptation
+- log manuel + synchro Strava directement depuis cette surface, sans onglet dédié
 
 **Calendrier** — vue plan vivant
-- séance du jour mise en avant en haut
-- navigation semaine par semaine
+- navigation par mois
 - badges certitude + statut de calibration global
-- liste hebdo inversée : plus récent en haut, plus ancien en bas
-- semaine lisible avec statut et date réelle affichée
+- la journée affiche distinctement `planned / adapted / done / missing / offplan`
 - une séance terminée se reloge sur son jour réel d'exécution
-- tri chrono sur la date réellement affichée
 - une activité du mauvais sport apparaît comme entrée distincte `hors plan` et ne valide pas la séance prévue
-- tableau de bord exécution / charge / lecture de la semaine
-- barre de charge visuelle
-- bouton régénérer
-- direction cible : vraie timeline persistée + vue performance
+- le calendrier fait foi sur ce qui était prévu, déplacé, réalisé ou hors plan
+- la direction cible reste : plus d'explication de trajectoire, pas plus d'écrans
 
 **Évolution** — cockpit charge + montée en charge
-- CTL / ATL / TSB sur 12 semaines
-- volume multisport hebdo
+- CTL / ATL / TSB + historique de charge
+- prévu vs réalisé sur la semaine
+- projection 4 semaines
 - preuve lisible + statut de calibration avant la profondeur analytique
-- complétion de la semaine en cours
-- records simples par sport
-- dashboard visuel orienté bloc actif + charge cible + lecture coach
+- lecture coach du bloc actif
+- adaptation récente + calibration visible
 
-**Activités** — réel vs prévu
-- formulaire activité manuelle
-- connexion Strava (OAuth + synchro)
-- journal brut des activités importées / loggées
-- le comparatif prévu vs fait se lit d'abord dans le calendrier
-- raccourci depuis une activité rattachée vers sa séance dans le calendrier
+**Détail séance** — contrat d'exécution lisible
+- objectif
+- rationale
+- plan exécutable
+- coach cue
+- note nutrition
 
-**Profil** — double numérique
-- objectif, sports, contraintes, préférences
-- carte coach : nom, style, do/dont, âme
-
-**Debug** — mémoire
-- facts actifs avec catégorie, source, confiance
+**Surfaces secondaires**
+- activités, profil, mémoire et debug existent encore surtout comme préoccupations d'ops et de support
+- elles ne doivent plus dicter la structure primaire de l'app
 
 ### 4. Messagerie proactive (Telegram)
 
@@ -176,9 +177,11 @@ Via message naturel au coach :
 - WhatsApp (prévu après validation Telegram)
 - webhook Strava (actuellement polling)
 - Apple Health
-- vrai calendrier persistant daté
-- dashboard performance avancé dans `Today`, split frontend modulaire, drag & drop calendrier
-- périodisation explicite
+- lineage de plan explicite lisible pour l'utilisateur
+- weekly reality digest canonique partagé par review / heartbeat / chat
+- substrate canonique `review / adaptation / session drafting / session analysis`
+- write tools ou mutation tools exposés au LLM
+- périodisation explicite par discipline
 
 ## Boucle produit
 
@@ -217,8 +220,8 @@ FitMAS ne bat personne sur un axe. FitMAS gagne sur l'orchestration, la déléga
 ## Cap produit maintenant
 
 Ordre recommandé :
-1. Fiabiliser Telegram et réduire le bruit
-2. Introduire un calendrier persistant daté
-3. Transformer l'app en dashboard de performance inspiré Runna
-4. Ajouter la périodisation et l'adaptation data-driven
-5. N'envisager une architecture multi-agent qu'après stabilisation des domaines
+1. Rendre le coach plus juste sur le réel, les adaptations et la causalité de semaine
+2. Sortir un substrate partagé `review / adaptation / session drafting / session analysis`
+3. Consolider mémoire utile + weekly reality digest
+4. Rendre le heartbeat plus contextuel et moins cron-dépendant
+5. Ensuite seulement enrichir planner, explainability app et sophistication sport-spécifique

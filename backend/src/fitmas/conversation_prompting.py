@@ -9,7 +9,7 @@ from fitmas.tools.routing import IntentCategory
 class ConversationPromptPolicy:
     name: str
     history_limit: int
-    include_plan_summary: bool = True
+    include_plan_summary: bool = False
     include_timeline: bool = True
     include_execution: bool = True
     include_temporal: bool = True

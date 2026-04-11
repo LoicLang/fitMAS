@@ -39,6 +39,8 @@ class ConversationPromptBuilderTest(unittest.TestCase):
         self.assertEqual(bundle.system[0]["cache_control"]["type"], "ephemeral")
         self.assertEqual(bundle.system[0]["cache_control"]["ttl"], "1h")
         self.assertIn("Actions possibles", bundle.system[0]["text"])
+        self.assertIn("Tu varies l'attaque de tes messages", bundle.system[0]["text"])
+        self.assertIn("Tu n'ouvres pas systematiquement par \"Bon\", \"OK\", \"Attends\" ou \"On va etre honnete\"", bundle.system[0]["text"])
         self.assertIn("Source de vérité planning conversationnelle", bundle.prompt)
         self.assertIn("Tempo", bundle.prompt)
         self.assertNotIn("Actions possibles", bundle.prompt)
@@ -75,11 +77,57 @@ class ConversationPromptBuilderTest(unittest.TestCase):
 
         self.assertGreater(len(bundle.system), 1)
         self.assertIn("Actions possibles", bundle.system[0]["text"])
+        self.assertIn("Tu varies l'attaque de tes messages", bundle.system[0]["text"])
         self.assertTrue(any("Profil resume" in part["text"] for part in bundle.system))
         self.assertTrue(any("Calendrier date reel" in part["text"] for part in bundle.system))
         self.assertIn("Source de vérité planning conversationnelle", bundle.prompt)
         self.assertTrue(bundle.prompt.endswith("Nouveau message de l'utilisateur:\nJeudi c'est quoi deja ?"))
         self.assertEqual(bundle.history_messages_used, 2)
+
+    def test_live_prompt_builders_ignore_legacy_plan_anchor_even_if_requested(self) -> None:
+        policy = ConversationPromptPolicy(name="forced_legacy", history_limit=2, include_plan_summary=True)
+
+        classic = build_conversation_prompt_bundle(
+            user_text="Jeudi c'est quoi deja ?",
+            prompt_policy=policy,
+            time_block="Nous sommes mardi 2026-04-01.",
+            profile_summary="Objectif 10 km.",
+            plan_summary="Legacy plan should never leak.",
+            timeline_summary="- id=12 | date=2026-04-03 | [running] Tempo",
+            execution_summary="Execution: planned_pending.",
+            temporal_summary="Repere temporel: demain = 2026-04-02.",
+            activity_claim_summary="Claim: aucun.",
+            signal_summary="Signal: aucun.",
+            conversation_history=[],
+            coach_context=None,
+            selected_facts=[],
+        )
+        layered = build_layered_conversation_prompt(
+            user_text="Jeudi c'est quoi deja ?",
+            prompt_policy=policy,
+            time_block="Nous sommes mardi 2026-04-01.",
+            profile_summary="Objectif 10 km.",
+            plan_summary="Legacy plan should never leak.",
+            timeline_summary="- id=12 | date=2026-04-03 | [running] Tempo",
+            execution_summary="Execution: planned_pending.",
+            temporal_summary="Repere temporel: demain = 2026-04-02.",
+            activity_claim_summary="Claim: aucun.",
+            signal_summary="Signal: aucun.",
+            conversation_history=[],
+            coach_context=None,
+            selected_facts=[],
+        )
+
+        classic_system = "\n".join(part["text"] for part in classic.system)
+        layered_system = "\n".join(part["text"] for part in layered.system)
+        self.assertNotIn("Repere legacy semaine courante", classic.prompt)
+        self.assertNotIn("Repere legacy semaine courante", classic_system)
+        self.assertNotIn("Legacy plan should never leak.", classic.prompt)
+        self.assertNotIn("Legacy plan should never leak.", classic_system)
+        self.assertNotIn("Repere legacy semaine courante", layered.prompt)
+        self.assertNotIn("Repere legacy semaine courante", layered_system)
+        self.assertNotIn("Legacy plan should never leak.", layered.prompt)
+        self.assertNotIn("Legacy plan should never leak.", layered_system)
 
 
 if __name__ == "__main__":

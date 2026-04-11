@@ -27,11 +27,10 @@ Mais le prochain chantier repo-wide n'est plus ici.
 
 Avant de rouvrir fortement ce track, la priorite globale vit dans `BUILD-ORDER.md` :
 
-- prompt 2 zones + cache
-- debounce Telegram
-- memoire plus propre
-- permissions sur mutations
-- transcript structure
+- substrate partage de capacites metier
+- weekly reality digest + memoire utile
+- split des hotspots encore trop centraux
+- heartbeat plus contextuel
 
 Le planner V2 n'est plus en rattrapage.
 Il est en phase de raffinement.

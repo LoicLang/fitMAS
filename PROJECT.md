@@ -2,7 +2,7 @@
 
 Coach IA multisport proactif qui ajuste ton entraînement selon ta vraie vie.
 
-## Statut — 6 avril 2026
+## Statut — 7 avril 2026
 
 **Déployé et fonctionnel sur https://the deployed app/**
 
@@ -23,13 +23,13 @@ Ce qui tourne en prod :
 - Revue hebdomadaire + régénération automatique du plan le lundi matin
 - Bot Telegram avec commandes (/start, /plan, /today, /newweek, /sync, /log)
 
-Ce qui manque encore → voir `docs/BUILD-ORDER.md`
+La vérité "état réel + suite" vit dans `docs/BUILD-ORDER.md`.
 
 Cap produit actuel :
 - Telegram = coach conversationnel
 - App = cockpit performance
-- priorite immediate : meilleur harness conversationnel et memoire plus propre
-- ordre courant : prompt 2 zones + cache, debounce Telegram, dates absolues + profile summary, permissions tiers, transcript structure
+- priorité immédiate : meilleure lecture du réel, meilleure adaptation, mémoire plus propre, moins de duplication métier
+- ordre courant : substrate de capacités partagé, weekly reality digest, split progressif des hotspots, heartbeat plus contextuel
 
 ## Stack
 
@@ -47,9 +47,9 @@ Cap produit actuel :
 1. `AGENTS.md` — règles de travail
 2. `PROJECT.md` — ce fichier
 3. `docs/README.md` — carte des docs
-4. `docs/PRODUCT.md` — vision, scope, parcours utilisateur
-5. `docs/ARCHITECTURE.md` — stack, modèle de données, flux
-6. `docs/BUILD-ORDER.md` — état réel et ordre des prochains chantiers
+4. `docs/BUILD-ORDER.md` — source de vérité sur l'état réel et la suite
+5. `docs/PRODUCT.md` — vision, scope, parcours utilisateur
+6. `docs/ARCHITECTURE.md` — stack, modèle de données, flux
 7. `docs/APP-UX.md` — contrat UX de l'app
 8. `docs/PLANNING-ENGINE-V2.md` — référence planner, désormais en raffinement
 9. `docs/SOUL.md` — voix, heartbeat, messagerie

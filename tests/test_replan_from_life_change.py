@@ -113,7 +113,7 @@ class ReplanFromLifeChangeTest(unittest.TestCase):
         self.assertEqual(decision.selected_scenario.mutation.mutation_type, "move_session")
         self.assertEqual(decision.selected_scenario.mutation.target_date, "2026-03-25")
         self.assertEqual(decision.selected_scenario.week_mission_status, WeekMissionStatus.UNCHANGED)
-        self.assertIn("Mission hebdo : inchangée", decision.user_message)
+        self.assertIn("Le cap de la semaine ne bouge pas", decision.user_message)
 
     def test_key_session_without_clean_move_escalates_to_meso(self) -> None:
         today = date(2026, 3, 24)
@@ -185,7 +185,7 @@ class ReplanFromLifeChangeTest(unittest.TestCase):
         self.assertEqual(decision.selected_scenario.mutation.mutation_type, "lighten_day")
         self.assertEqual(decision.selected_scenario.adaptation_level, AdaptationLevel.MESO)
         self.assertEqual(decision.selected_scenario.week_mission_status, WeekMissionStatus.SOFTENED)
-        self.assertIn("Mission hebdo : adoucie", decision.user_message)
+        self.assertIn("J'adoucis un peu la semaine", decision.user_message)
 
     def test_explicit_requested_day_is_preferred_when_valid(self) -> None:
         today = date(2026, 3, 24)

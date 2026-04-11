@@ -73,6 +73,7 @@ def create_manual_activity(payload: ManualActivityPayload, db: Session = Depends
         started_at=started_at,
         duration_min=payload.duration_min,
         week_days=week_days,
+        plan_created_at=plan.created_at,
     )
     estimated_tss = estimate_tss(
         {

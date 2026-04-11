@@ -98,8 +98,8 @@ def _build_question(*, target_session: Any, evidence_state: str) -> str:
     sport = str(_value(target_session, "sport_type") or "").strip().lower()
     subject = _SPORT_LABELS.get(sport) or _fallback_subject(target_session)
     if evidence_state == "candidate":
-        return f"Je vois une trace possible pour {subject} hier, mais pas assez nette. Tu l'as faite ou non ?"
-    return f"Je ne vois pas de trace de {subject} hier. Tu l'as faite ou non ?"
+        return f"J'ai peut-etre une trace pour {subject} hier, mais rien d'assez net. Tu l'as faite ou pas ?"
+    return f"Je ne vois pas de trace nette de {subject} hier. Tu l'as faite ou pas ?"
 
 
 def _build_reason(impact_flags: Sequence[str]) -> str:

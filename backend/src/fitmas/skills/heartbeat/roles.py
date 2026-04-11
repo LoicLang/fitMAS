@@ -211,7 +211,9 @@ def build_briefing_prompt(
         f"Tu es {user.coach_name}, coach multisport IA. "
         f"Style: {user.coach_style}. "
         f"Ton ton: clair, court, direct, chaleureux sans cheerleading. "
-        f"Tu tutoies toujours. Reponds en francais. Max {BRIEFING_ROLE.max_output_sentences} phrases."
+        f"Tu tutoies toujours. Reponds en francais. Max {BRIEFING_ROLE.max_output_sentences} phrases. "
+        "Varie l'ouverture. N'ouvre pas systematiquement par 'Bon', 'OK', 'Attends' ou 'On va etre honnete'. "
+        "N'essentialise pas un jour fixe de la semaine si ce n'est pas utile aujourd'hui."
     )
     if user.coach_soul:
         system += f"\nAme du coach: {user.coach_soul}"
@@ -279,7 +281,8 @@ def build_reminder_prompt(
         f"Style: {user.coach_style}. "
         "Ton ton: clair, court, direct. "
         f"Tu tutoies toujours. Reponds en francais. Max {REMINDER_ROLE.max_output_sentences} phrases. "
-        "Rappelle la seance de demain et demande comment l'utilisateur se sent."
+        "Rappelle la seance de demain et demande comment l'utilisateur se sent. "
+        "Varie l'ouverture et evite les formules recyclees."
     )
     if user.coach_soul:
         system += f"\nAme du coach: {user.coach_soul}"
@@ -323,7 +326,8 @@ def build_review_prompt(
         f"Style: {user.coach_style}. "
         "Ton ton: clair, court, direct, chaleureux. "
         f"Tu tutoies toujours. Reponds en francais. Max {REVIEW_ROLE.max_output_sentences} phrases. "
-        "Fais un bilan de la semaine et donne une perspective pour la suivante."
+        "Fais un bilan de la semaine et donne une perspective pour la suivante. "
+        "Varie l'attaque du message et evite la recitation."
     )
     if user.coach_soul:
         system += f"\nAme du coach: {user.coach_soul}"
@@ -355,7 +359,8 @@ def build_signal_prompt(
     system = (
         f"Tu es {user.coach_name}, coach multisport IA. "
         f"Style: {user.coach_style}. "
-        f"Ton ton: clair, court, direct. Tu tutoies. Reponds en francais. Max {SIGNAL_ROLE.max_output_sentences} phrases.\n"
+        f"Ton ton: clair, court, direct. Tu tutoies. Reponds en francais. Max {SIGNAL_ROLE.max_output_sentences} phrases. "
+        "Varie l'ouverture et evite les formules recyclees.\n"
     )
     if user.coach_soul:
         system += f"Ame du coach: {user.coach_soul}\n"

@@ -17,7 +17,6 @@ from fitmas.telegram_debounce import (
     mark_in_flight,
 )
 from fitmas.telegram_shared import DAY_LABELS, SPORT_EMOJIS, persist_draft_for_owner
-from fitmas.time_context import build_time_context
 
 logger = logging.getLogger(__name__)
 
@@ -45,9 +44,7 @@ async def cmd_plan(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
 async def cmd_today(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     try:
-        profile = await api_get("/api/v0/profile")
-        today_key = build_time_context(profile.get("timezone")).get("day_key") or build_time_context(None)["day_key"]
-        today = await api_get(f"/api/v0/today/{today_key}")
+        today = await api_get("/api/v0/today")
         label = DAY_LABELS.get(today["day"], today["day"])
         emoji = SPORT_EMOJIS.get(today.get("sport_type", "rest"), "⚪")
         text = (
@@ -63,7 +60,15 @@ async def cmd_today(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         await update.message.reply_text(text, parse_mode="Markdown")
     except httpx.HTTPStatusError as exc:
         if exc.response.status_code == 404:
-            await update.message.reply_text("Pas de profil encore. Lance /start.")
+            detail = ""
+            try:
+                detail = str(exc.response.json().get("detail") or "")
+            except Exception:
+                detail = ""
+            if detail == "No onboarded user yet":
+                await update.message.reply_text("Pas de profil encore. Lance /start.")
+                return
+            await update.message.reply_text("Rien de planifie aujourd'hui.")
             return
         logger.exception("Error in /today")
         await update.message.reply_text("Impossible de charger la journee.")

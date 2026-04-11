@@ -59,6 +59,35 @@ class ActivityMatchingTruthTest(unittest.TestCase):
         self.assertIsNone(matched_day)
         self.assertEqual(reason, "")
 
+    def test_match_activity_to_day_uses_plan_week_not_wall_clock(self) -> None:
+        matched_day, reason = match_activity_to_day(
+            sport_type="running",
+            started_at=datetime.fromisoformat("2026-03-30T07:30:00"),
+            duration_min=35,
+            plan_created_at=datetime.fromisoformat("2026-03-30T06:00:00"),
+            week_days=[
+                DayPlan(
+                    day=DayId.MONDAY,
+                    label="Lundi",
+                    sport_type="running",
+                    session_type="easy",
+                    session_title="Footing",
+                    session_goal="Reprise",
+                    session_note="",
+                    session_description="",
+                    duration_min=35,
+                    intensity="easy",
+                    load_score=1,
+                    priority="Normal",
+                    nutrition_focus="",
+                    flexibility="flexible",
+                )
+            ],
+        )
+
+        self.assertEqual(matched_day, "monday")
+        self.assertIn("meme sport", reason)
+
     def test_find_scheduled_session_for_activity_returns_none_for_other_sport(self) -> None:
         session = s.ScheduledSession(
             user_id=self.user.id,

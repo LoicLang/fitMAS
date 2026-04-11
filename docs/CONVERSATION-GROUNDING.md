@@ -33,10 +33,10 @@ Ce document reste la reference pour :
 
 La priorite repo-wide du moment a bouge vers :
 
-- prompt 2 zones + cache
-- debounce Telegram
-- memoire plus propre
-- transcript structure
+- substrate partage de capacites metier
+- weekly reality digest + memoire utile
+- split progressif des hotspots encore trop centraux
+- heartbeat plus contextuel
 
 Voir `BUILD-ORDER.md` pour l'ordre global.
 
@@ -142,6 +142,8 @@ Ordre strict pour le coach :
 
 Regle :
 - le coach ne doit jamais presenter 4 ou 5 comme un fait si 1, 2 ou 3 disent autre chose
+- une phrase de confirmation future (`demain piscine j'y serai`) ne doit pas declencher une mutation si le planning date est deja coherent
+- si l'utilisateur aligne `demain` avec un jour explicite (`demain = jeudi`), le systeme doit pouvoir repondre avec la date absolue correspondante pour lever l'ambiguite
 
 ## Ce que le LLM doit recevoir
 
