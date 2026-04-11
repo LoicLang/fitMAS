@@ -112,7 +112,7 @@ def create_manual_activity(payload: ManualActivityPayload, db: Session = Depends
     )
 
     if matched_day:
-        mark_day_completed_for_user(db, plan_id=plan.id, day=matched_day, source="manual_activity")
+        mark_day_completed_for_user(db, plan_id=plan.id, day=matched_day, source="manual_activity", user_id=user.id)
         logger.info("Marked %s as done (manual activity: %s)", matched_day, title)
     if scheduled_session:
         mark_session_completed_for_user(db, user=user, session_id=scheduled_session.id, source="manual_activity")

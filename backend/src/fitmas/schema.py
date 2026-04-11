@@ -76,6 +76,9 @@ class User(Base):
     pending_mutation_confirmations: Mapped[list[PendingMutationConfirmation]] = relationship(
         back_populates="user", cascade="all, delete-orphan"
     )
+    plan_mutation_events: Mapped[list[PlanMutationEventRecord]] = relationship(
+        back_populates="user", cascade="all, delete-orphan"
+    )
 
 
 class UserConstraint(Base):
@@ -396,6 +399,27 @@ class PendingMutationConfirmation(Base):
     resolved_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True, default=None)
 
     user: Mapped[User] = relationship(back_populates="pending_mutation_confirmations")
+
+
+class PlanMutationEventRecord(Base):
+    __tablename__ = "plan_mutation_events"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
+    source: Mapped[str] = mapped_column(String(48), default="")
+    trigger_type: Mapped[str] = mapped_column(String(48), default="")
+    command_type: Mapped[str] = mapped_column(String(48), default="")
+    target_session_ids_json: Mapped[str] = mapped_column(Text, default="[]")
+    before_snapshot_json: Mapped[str] = mapped_column(Text, default="{}")
+    after_snapshot_json: Mapped[str] = mapped_column(Text, default="{}")
+    reason_json: Mapped[str] = mapped_column(Text, default="{}")
+    impact_json: Mapped[str] = mapped_column(Text, default="{}")
+    user_visible_summary: Mapped[str] = mapped_column(Text, default="")
+    explained_to_user: Mapped[bool] = mapped_column(Boolean, default=False)
+    conversation_turn_id: Mapped[int | None] = mapped_column(nullable=True, default=None)
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+
+    user: Mapped[User] = relationship(back_populates="plan_mutation_events")
 
 
 class AdaptationEventRecord(Base):

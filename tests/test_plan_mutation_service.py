@@ -38,6 +38,7 @@ def test_apply_decisions_for_user_routes_all_decisions_through_mutations(monkeyp
         return SimpleNamespace(allowed=True), SimpleNamespace()
 
     monkeypatch.setattr("fitmas.plan_mutation_service.mutations.apply", _fake_apply)
+    monkeypatch.setattr("fitmas.plan_mutation_service.repo.add_plan_mutation_event", lambda *args, **kwargs: None)
 
     result = apply_decisions_for_user(
         object(),
@@ -70,6 +71,7 @@ def test_apply_decisions_for_user_counts_only_successful_applies(monkeypatch) ->
         return SimpleNamespace(allowed=True), None
 
     monkeypatch.setattr("fitmas.plan_mutation_service.mutations.apply", _fake_apply)
+    monkeypatch.setattr("fitmas.plan_mutation_service.repo.add_plan_mutation_event", lambda *args, **kwargs: None)
 
     result = apply_decisions_for_user(
         object(),
@@ -80,6 +82,61 @@ def test_apply_decisions_for_user_counts_only_successful_applies(monkeypatch) ->
     assert result is not None
     assert result.attempted_count == 2
     assert result.applied_count == 1
+
+
+def test_apply_decisions_for_user_records_event_for_successful_apply(monkeypatch) -> None:
+    user = SimpleNamespace(id=7)
+    decision = MutationDecision(
+        mutation_type="lighten_day",
+        target_session_id=10,
+        rationale="fatigue",
+        fitmas_message="On allege.",
+    )
+
+    monkeypatch.setattr(
+        "fitmas.plan_mutation_service.repo.get_active_plan",
+        lambda db, user_id: SimpleNamespace(id=42),
+    )
+    monkeypatch.setattr(
+        "fitmas.plan_mutation_service.mutations.apply",
+        lambda db, plan_id, decision, **kwargs: (SimpleNamespace(allowed=True), SimpleNamespace(delta_weekly_load=-2)),
+    )
+
+    events: list[dict] = []
+
+    def _add_event(db, **kwargs):
+        events.append(kwargs)
+        return SimpleNamespace(id=99)
+
+    monkeypatch.setattr("fitmas.plan_mutation_service.repo.add_plan_mutation_event", _add_event)
+
+    result = apply_decisions_for_user(
+        object(),
+        user=user,
+        decisions=[decision],
+        source="conversation",
+        trigger_type="message",
+    )
+
+    assert result is not None
+    assert result.applied_count == 1
+    assert result.event_count == 1
+    assert events == [
+        {
+            "user_id": 7,
+            "source": "conversation",
+            "trigger_type": "message",
+            "command_type": "lighten_day",
+            "target_session_ids": [10],
+            "before_snapshot": {},
+            "after_snapshot": {},
+            "reason": {"rationale": "fatigue"},
+            "impact": {"delta_weekly_load": -2},
+            "user_visible_summary": "On allege.",
+            "explained_to_user": False,
+            "conversation_turn_id": None,
+        }
+    ]
 
 
 def test_session_action_helpers_route_through_low_level_actions(monkeypatch) -> None:
@@ -102,6 +159,8 @@ def test_session_action_helpers_route_through_low_level_actions(monkeypatch) -> 
     monkeypatch.setattr("fitmas.plan_mutation_service.plan_actions.complete_session", _complete)
     monkeypatch.setattr("fitmas.plan_mutation_service.plan_actions.skip_session", _skip)
     monkeypatch.setattr("fitmas.plan_mutation_service.plan_actions.move_session", _move)
+    monkeypatch.setattr("fitmas.plan_mutation_service.repo.get_scheduled_session", lambda *args, **kwargs: session)
+    monkeypatch.setattr("fitmas.plan_mutation_service.repo.add_plan_mutation_event", lambda *args, **kwargs: None)
 
     completed = complete_session_for_user(object(), user=user, session_id=10, source="app")
     skipped = skip_session_for_user(object(), user=user, session_id=10, source="app")
@@ -126,6 +185,8 @@ def test_activity_completion_helper_records_activity_source(monkeypatch) -> None
         "fitmas.plan_mutation_service.plan_actions.complete_session",
         lambda db, *, user, session_id: session,
     )
+    monkeypatch.setattr("fitmas.plan_mutation_service.repo.get_scheduled_session", lambda *args, **kwargs: session)
+    monkeypatch.setattr("fitmas.plan_mutation_service.repo.add_plan_mutation_event", lambda *args, **kwargs: None)
 
     result = mark_session_completed_for_user(
         object(),
@@ -148,6 +209,7 @@ def test_day_completion_helper_routes_legacy_day_sync(monkeypatch) -> None:
         return True
 
     monkeypatch.setattr("fitmas.plan_mutation_service.repo.mark_day_completed", _mark_day_completed)
+    monkeypatch.setattr("fitmas.plan_mutation_service.repo.add_plan_mutation_event", lambda *args, **kwargs: None)
 
     result = mark_day_completed_for_user(
         object(),

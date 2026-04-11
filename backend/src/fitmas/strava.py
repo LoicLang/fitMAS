@@ -213,7 +213,7 @@ def import_recent_activities(
 
         # Only mark day done for activities from this week
         if matched_day and match_reason != "activite hors semaine courante" and plan_id:
-            mark_day_completed_for_user(db, plan_id=plan_id, day=matched_day, source="strava")
+            mark_day_completed_for_user(db, plan_id=plan_id, day=matched_day, source="strava", user_id=user.id)
         if activity.scheduled_session_id is not None:
             mark_session_completed_for_user(db, user=user, session_id=activity.scheduled_session_id, source="strava")
 
