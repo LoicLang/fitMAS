@@ -368,6 +368,34 @@ def run_conversation_turn(
                 else None
             )
             impact = assess_mutation_impact(first_decision, target_session=target_session)
+            if _can_auto_apply_health_suggestion(
+                decision=first_decision,
+                impact=impact,
+                user_text=payload.text,
+                normalize=api_messages._normalize_text,
+            ):
+                service_result = apply_decisions_for_user(
+                    db,
+                    user=user,
+                    decisions=[first_decision],
+                    source="conversation",
+                    trigger_type="health_adaptation",
+                    explained_to_user=True,
+                )
+                reply_text = _applied_event_summary(service_result, first_decision) or health_result.message
+                return _reply_and_record_turn(
+                    db=db,
+                    user_id=user.id,
+                    user_text=payload.text,
+                    reply_text=reply_text,
+                    extraction=Extraction(confidence=max(float(user_indication.confidence if user_indication else 0.0), 0.85)),
+                    day_updated=api_messages._resolve_day_updated(first_decision),
+                    response_mode="health_adaptation",
+                    decision=first_decision,
+                    mutation_applied=bool(service_result and service_result.applied_count > 0),
+                    turn_context=turn_context,
+                    memory_writes=turn_memory_writes,
+                )
             pending_row = repo.create_pending_mutation_confirmation(
                 db,
                 user_id=user.id,
@@ -731,6 +759,21 @@ def _active_memory_payloads(db: Session, user_id: int) -> tuple[list[object], li
     import fitmas.api_messages as api_messages
 
     return api_messages._active_memory_payloads(db, user_id)
+
+
+def _can_auto_apply_health_suggestion(*, decision, impact, user_text: str, normalize) -> bool:
+    if impact.requires_confirmation:
+        return False
+    if decision.mutation_type == "lighten_day":
+        return True
+    if decision.mutation_type != "replace_session":
+        return False
+    normalized = normalize(user_text)
+    fatigue_markers = ("fatigue", "rince", "jambes lourdes", "creve", "epuise")
+    pain_markers = ("douleur", "mal ", "blesse", "blessure", "gene")
+    return any(marker in normalized for marker in fatigue_markers) and not any(
+        marker in normalized for marker in pain_markers
+    )
 
 
 def _applied_event_summary(service_result, decision) -> str | None:

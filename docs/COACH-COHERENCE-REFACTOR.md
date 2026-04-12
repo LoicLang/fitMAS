@@ -432,6 +432,7 @@ Statut courant :
 
 - `adaptation.py` produit maintenant des propositions uniquement
 - le chemin sante conversationnel transforme une proposition d'adaptation en confirmation utilisateur, sans appliquer silencieusement
+- la fatigue explicite low-impact peut encore auto-appliquer une proposition tracee via `PlanMutationService`
 - l'API `allow_apply` a ete retiree de `adaptation.py`
 - le heartbeat peut maintenant relayer une proposition d'adaptation (`tsb` / seances manquees) sans attendre `applied=True` et sans ecrire au planning
 
