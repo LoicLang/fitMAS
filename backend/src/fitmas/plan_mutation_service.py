@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 
 from fitmas import mutations, plan_actions, repository as repo, schema as s
 from fitmas.llm import MutationDecision
+from fitmas.mutation_hooks import run_pre_mutation_hooks
 
 
 @dataclass(frozen=True, slots=True)
@@ -156,6 +157,23 @@ def move_session_for_user(
     source: str,
 ) -> PlanSessionActionResult | None:
     before = _session_snapshot(repo.get_scheduled_session(db, user.id, session_id))
+    if target_date is not None:
+        scheduled_sessions = repo.get_scheduled_sessions(db, user.id, limit=84)
+        pre_result = run_pre_mutation_hooks(
+            db,
+            0,
+            MutationDecision(
+                mutation_type="move_session",
+                target_session_id=session_id,
+                target_date=target_date.isoformat(),
+                rationale=f"source={source}",
+                fitmas_message="",
+            ),
+            scheduled_sessions=scheduled_sessions,
+            timezone_name=getattr(user, "timezone", None),
+        )
+        if not pre_result.allowed:
+            return None
     session = plan_actions.move_session(db, user=user, session_id=session_id, target_date=target_date)
     if session is None:
         return None

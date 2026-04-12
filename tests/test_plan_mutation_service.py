@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import date
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -319,6 +320,50 @@ def test_session_action_helpers_route_through_low_level_actions(monkeypatch) -> 
     assert moved is not None
     assert moved.action_type == "move_session"
     assert calls == [("complete", 10), ("skip", 10), ("move", 10)]
+
+
+def test_move_session_for_user_blocks_same_sport_proximity_before_action(monkeypatch) -> None:
+    user = SimpleNamespace(id=7, timezone="Europe/Paris")
+    target = SimpleNamespace(
+        id=10,
+        scheduled_date=date(2026, 4, 13),
+        sport_type="running",
+        session_type="tempo",
+        completion_status="planned",
+    )
+    neighbor = SimpleNamespace(
+        id=11,
+        scheduled_date=date(2026, 4, 16),
+        sport_type="running",
+        session_type="tempo",
+        completion_status="planned",
+    )
+    called = {"move": False, "event": False}
+
+    monkeypatch.setattr("fitmas.plan_mutation_service.repo.get_scheduled_session", lambda *args, **kwargs: target)
+    monkeypatch.setattr("fitmas.plan_mutation_service.repo.get_scheduled_sessions", lambda *args, **kwargs: [target, neighbor])
+
+    def _move(*args, **kwargs):
+        called["move"] = True
+        raise AssertionError("blocked move should not reach plan_actions.move_session")
+
+    def _event(*args, **kwargs):
+        called["event"] = True
+        raise AssertionError("blocked move should not create event")
+
+    monkeypatch.setattr("fitmas.plan_mutation_service.plan_actions.move_session", _move)
+    monkeypatch.setattr("fitmas.plan_mutation_service.repo.add_plan_mutation_event", _event)
+
+    result = move_session_for_user(
+        object(),
+        user=user,
+        session_id=10,
+        target_date=date(2026, 4, 15),
+        source="app",
+    )
+
+    assert result is None
+    assert called == {"move": False, "event": False}
 
 
 def test_activity_completion_helper_records_activity_source(monkeypatch) -> None:
