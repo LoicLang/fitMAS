@@ -358,3 +358,21 @@ def test_orchestrators_do_not_call_low_level_plan_writers_directly() -> None:
                 offenders.append(f"{path.name}: {token}")
 
     assert offenders == []
+
+
+def test_only_plan_mutation_service_imports_low_level_mutation_executor() -> None:
+    root = Path(__file__).resolve().parents[1] / "backend/src/fitmas"
+    offenders: list[str] = []
+    forbidden = (
+        "from fitmas import mutations",
+        "import fitmas.mutations",
+        "from fitmas.mutations",
+    )
+    for path in root.rglob("*.py"):
+        if path.name == "plan_mutation_service.py":
+            continue
+        text = path.read_text()
+        if any(token in text for token in forbidden):
+            offenders.append(str(path.relative_to(root)))
+
+    assert offenders == []

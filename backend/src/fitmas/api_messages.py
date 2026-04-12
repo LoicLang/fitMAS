@@ -7,7 +7,7 @@ from datetime import date, datetime
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
-from fitmas import mutations, repository as repo
+from fitmas import repository as repo
 from fitmas.adaptation import check_and_adapt_health_facts
 from fitmas.adaptation_log import build_adaptation_log_entry
 from fitmas.activity_helpers import claimed_activities_last_days

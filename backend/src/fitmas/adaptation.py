@@ -4,7 +4,7 @@ Architecture:
   1. Cheap Python detection (check_* functions) returns AdaptationTrigger or None
   2. Orchestrator assembles context and calls LLM with a specialized prompt
   3. LLM response is parsed into MutationDecision objects
-  4. Decisions are applied via the existing mutations.apply() pipeline
+  4. Decisions are applied by orchestrators through PlanMutationService
 """
 
 from __future__ import annotations
