@@ -347,10 +347,10 @@ def signal_check() -> CoachDraft | None:
         try:
             from fitmas.adaptation import check_and_adapt_tsb, check_and_adapt_missed
             tsb_result = check_and_adapt_tsb(db, user, allow_apply=False)
-            if tsb_result and tsb_result.applied and tsb_result.message:
+            if tsb_result and tsb_result.decisions and tsb_result.message:
                 return CoachDraft(text=tsb_result.message, proactive=True)
             missed_result = check_and_adapt_missed(db, user, allow_apply=False)
-            if missed_result and missed_result.applied and missed_result.message:
+            if missed_result and missed_result.decisions and missed_result.message:
                 return CoachDraft(text=missed_result.message, proactive=True)
         except Exception:
             logger.exception("Adaptation trigger check failed (non-blocking)")
