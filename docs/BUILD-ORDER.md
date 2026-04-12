@@ -195,7 +195,7 @@ Point de verite au 10 avril 2026 :
 
 - la convergence principale de phase 1 est en place
 - la phase 1 est maintenant fermee sur son gate strict de lecture runtime
-- le prochain sujet n'est plus de sortir `DayPlan` des surfaces live, mais de clarifier les surfaces legacy template (`/api/v0/week`) et les lectures `WeeklyPlan` encore tolerees comme contexte
+- le prochain sujet n'est plus de clarifier `/api/v0/week` : il est marque `template_compat`; la suite est de remplacer progressivement ses derniers consommateurs frontend / Telegram par des read models dates
 
 ### 0. Dogfood guidé et alignement vérité
 

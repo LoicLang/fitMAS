@@ -246,6 +246,7 @@ class FitMASCoreFlowsTest(unittest.TestCase):
         timeline = self.client.get("/api/v0/timeline")
 
         self.assertEqual(week.status_code, 200)
+        self.assertEqual(week.json()["runtime_role"], "template_compat")
         self.assertEqual(week.json()["total_weeks"], 8)
         self.assertEqual(week.json()["mesocycle_week"], 4)
         self.assertTrue(week.json()["is_deload"])

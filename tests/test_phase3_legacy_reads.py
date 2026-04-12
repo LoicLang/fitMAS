@@ -69,3 +69,9 @@ def test_heartbeat_runtime_does_not_load_legacy_week_plan_truth() -> None:
                 offenders.append(f"{path.name}: {token}")
 
     assert offenders == []
+
+
+def test_legacy_week_endpoint_is_marked_template_compat() -> None:
+    root = Path(__file__).resolve().parents[1]
+    models = (root / "backend/src/fitmas/models.py").read_text()
+    assert 'runtime_role: str = "template_compat"' in models

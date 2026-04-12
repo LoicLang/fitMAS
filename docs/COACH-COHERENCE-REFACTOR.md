@@ -403,11 +403,12 @@ Statut courant :
 - `api_app.py`, `api_stats.py` et `performance_overview.py` ne chargent plus `WeeklyPlan` / `DayPlan` comme verite runtime
 - le chemin conversation ne charge plus `WeeklyPlan` / `DayPlan` dans `ConversationTurnState`
 - le heartbeat review ne charge plus `WeeklyPlan` / `DayPlan`
+- `/api/v0/week` reste disponible comme surface template/compat et expose `runtime_role=template_compat`
 - `CoachStateBundle` accepte maintenant l'absence de template legacy et retombe sur une meta planning neutre
 
 Reste :
 
-- clarifier `/api/v0/week` comme endpoint template/compat, pas verite runtime
+- remplacer les consommateurs frontend / Telegram restants de `/api/v0/week` par des read models dates quand le scope UI le permet
 
 ### Phase 4 - Rebuild adaptation paths
 

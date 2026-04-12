@@ -52,6 +52,7 @@ class DayPlan(BaseModel):
 
 
 class WeeklyPlan(BaseModel):
+    runtime_role: str = "template_compat"
     intention: str
     summary: str
     mesocycle_week: int = 1
