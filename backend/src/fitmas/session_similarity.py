@@ -26,7 +26,7 @@ def find_same_sport_proximity_conflict(
         return None
     target_sport = str(_value(target_session, "sport_type") or "").strip().lower()
     target_type = str(_value(target_session, "session_type") or "").strip().lower()
-    if target_sport in {"", "rest", "off"}:
+    if target_sport in {"", "rest", "off"} or not target_type:
         return None
 
     for session in scheduled_sessions:

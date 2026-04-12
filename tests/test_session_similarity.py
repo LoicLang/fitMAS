@@ -32,3 +32,16 @@ def test_ignores_different_session_type() -> None:
     )
 
     assert conflict is None
+
+
+def test_ignores_missing_session_type() -> None:
+    conflict = find_same_sport_proximity_conflict(
+        target_session_id=10,
+        target_date=date(2026, 4, 15),
+        scheduled_sessions=[
+            {"id": 10, "scheduled_date": "2026-04-13", "sport_type": "running"},
+            {"id": 11, "scheduled_date": "2026-04-16", "sport_type": "running"},
+        ],
+    )
+
+    assert conflict is None
