@@ -192,6 +192,37 @@ def mark_session_completed_for_user(
     return PlanSessionActionResult(action_type="activity_completed", source=source, session=session, event_id=_event_id(event))
 
 
+def complete_session_from_activity_for_user(
+    db: Session,
+    *,
+    user: s.User,
+    session_id: int | None,
+    plan_id: int | None,
+    matched_day: str | None,
+    source: str,
+) -> PlanSessionActionResult | None:
+    if session_id is None:
+        return None
+    before = _session_snapshot(repo.get_scheduled_session(db, user.id, session_id))
+    session = plan_actions.complete_session(db, user=user, session_id=session_id)
+    if session is None:
+        return None
+    reason: dict[str, Any] = {}
+    if plan_id is not None and matched_day:
+        repo.mark_day_completed(db, plan_id, matched_day)
+        reason["legacy_day_sync"] = matched_day
+    event = _record_session_action(
+        db,
+        user=user,
+        source=source,
+        command_type="activity_completed",
+        session=session,
+        before_snapshot=before,
+        reason=reason,
+    )
+    return PlanSessionActionResult(action_type="activity_completed", source=source, session=session, event_id=_event_id(event))
+
+
 def mark_day_completed_for_user(
     db: Session,
     *,

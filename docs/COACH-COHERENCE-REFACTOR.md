@@ -367,12 +367,13 @@ Statut courant :
   - contestations d'execution conversationnelles vers `skip`
   - sync legacy `DayPlan done` depuis activite, en attendant retrait complet du template live
 - chaque action appliquee par ce service ecrit maintenant un event minimal avec source, trigger, command, ids cibles, snapshots JSON, raison, impact et resume visible disponible
+- la completion activite + sync legacy `DayPlan done` est maintenant repliee dans un seul event `activity_completed` quand une `ScheduledSession` datee existe
 - les reponses conversationnelles apres mutation appliquee utilisent maintenant le `user_visible_summary` issu de l'event applique
 - garde de test ajoutee pour empecher `api_plan.py`, `api_activities.py`, `api_messages.py` et `strava.py` d'appeler les writers bas niveau directement
 
 Reste pour fermer la phase 2 :
 
-- durcir la notion "exactement un event" sur les mutations multi-actions et les cas legacy restants
+- durcir la notion "exactement un event" sur les mutations multi-actions restantes
 - reduire le role de `mutations.py` a un detail interne du service, ou le renommer pour clarifier la frontiere
 
 ### Phase 3 - Retire legacy runtime reads

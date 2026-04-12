@@ -7,6 +7,7 @@ from fitmas.llm import MutationDecision
 from fitmas.plan_mutation_service import (
     apply_decisions_for_user,
     complete_session_for_user,
+    complete_session_from_activity_for_user,
     mark_day_completed_for_user,
     mark_session_completed_for_user,
     move_session_for_user,
@@ -263,6 +264,54 @@ def test_activity_completion_helper_records_activity_source(monkeypatch) -> None
     assert result.action_type == "activity_completed"
     assert result.source == "strava"
     assert result.session is session
+
+
+def test_activity_completion_with_legacy_day_sync_records_one_event(monkeypatch) -> None:
+    user = SimpleNamespace(id=7)
+    session = SimpleNamespace(
+        id=10,
+        day="monday",
+        scheduled_date=None,
+        sport_type="running",
+        session_type="easy",
+        session_title="Footing",
+        duration_min=40,
+        completion_status="done",
+    )
+    day_calls: list[tuple[int, str]] = []
+    events: list[dict] = []
+
+    monkeypatch.setattr(
+        "fitmas.plan_mutation_service.plan_actions.complete_session",
+        lambda db, *, user, session_id: session,
+    )
+    monkeypatch.setattr("fitmas.plan_mutation_service.repo.get_scheduled_session", lambda *args, **kwargs: session)
+    monkeypatch.setattr(
+        "fitmas.plan_mutation_service.repo.mark_day_completed",
+        lambda db, plan_id, day: day_calls.append((plan_id, day)) or True,
+    )
+    monkeypatch.setattr(
+        "fitmas.plan_mutation_service.repo.add_plan_mutation_event",
+        lambda db, **kwargs: events.append(kwargs) or SimpleNamespace(id=201),
+    )
+
+    result = complete_session_from_activity_for_user(
+        object(),
+        user=user,
+        session_id=10,
+        plan_id=42,
+        matched_day="monday",
+        source="manual_activity",
+    )
+
+    assert result is not None
+    assert result.action_type == "activity_completed"
+    assert result.event_id == 201
+    assert day_calls == [(42, "monday")]
+    assert len(events) == 1
+    assert events[0]["command_type"] == "activity_completed"
+    assert events[0]["target_session_ids"] == [10]
+    assert events[0]["reason"] == {"legacy_day_sync": "monday"}
 
 
 def test_day_completion_helper_routes_legacy_day_sync(monkeypatch) -> None:
