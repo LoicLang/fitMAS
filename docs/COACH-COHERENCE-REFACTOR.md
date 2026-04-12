@@ -473,7 +473,9 @@ Statut courant :
 
 Reste :
 
-- proteger explicitement les jours de recuperation / mission hebdo au niveau writer
+- proteger explicitement les jours de recuperation / mission hebdo au niveau writer apres design plus fin
+  - ne pas bloquer brutalement tout move vers un jour de repos, car "decaler au jour libre" est un usage normal
+  - distinguer repos flexible, repos protecteur et vraie collision de mission avant de bloquer
 - enrichir la notion de similarite au-dela de `sport_type + session_type`
 
 ### Phase 6 - Tools and memory cleanup
