@@ -45,12 +45,12 @@ def build_session_item(
     invalid_linked = [activity for activity in linked_activities if activity is not valid_activity]
 
     status = "planned"
-    if raw_status == "done":
+    if raw_status == "done" and valid_activity is not None:
         status = "done"
-    elif raw_status == "adapted":
-        status = "adapted"
     elif scheduled_date is not None and scheduled_date < today and sport_type not in REST_SPORTS:
         status = "missing"
+    elif raw_status == "adapted":
+        status = "adapted"
 
     executed_date = _date_to_iso(_as_date(_value(valid_activity, "started_at") or _value(valid_activity, "created_at")))
     display_date = executed_date or _date_to_iso(scheduled_date)

@@ -28,6 +28,29 @@ def test_past_unfinished_session_becomes_missing() -> None:
     assert resolved["display_date"] == "2026-03-23"
 
 
+def test_past_adapted_session_without_activity_becomes_missing() -> None:
+    session = {
+        "id": 3,
+        "day": "friday",
+        "label": "Vendredi",
+        "scheduled_date": "2026-04-10",
+        "sport_type": "swimming",
+        "session_type": "technique",
+        "session_title": "Natation technique",
+        "session_goal": "Nager propre",
+        "session_description": "",
+        "duration_min": 36,
+        "load_band": "easy",
+        "priority": "Support",
+        "completion_status": "adapted",
+    }
+
+    resolved = build_session_item(session, [], today=date(2026, 4, 12))
+
+    assert resolved["status"] == "missing"
+    assert resolved["completion_status"] == "adapted"
+
+
 def test_wrong_sport_linked_activity_stays_offplan() -> None:
     session = {
         "id": 2,
