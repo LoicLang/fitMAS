@@ -121,14 +121,14 @@ Etat mis a jour :
 
 ### 5. `WeeklyPlan` / `DayPlan`
 
-Source legacy encore utile pour :
-- intention de semaine
-- notes coach
-- watch items
+Source template / compat encore utile pour :
+- generation planner
+- onboarding et regeneration hebdo
+- endpoint compat `/api/v0/week` marque `runtime_role=template_compat`
 
 Limites actuelles :
-- ne doit plus etre la verite principale pour juger ce qui a vraiment ete fait aujourd'hui
-- plusieurs signaux et prompts legacy s'appuient encore trop dessus
+- ne doit plus etre une verite runtime user-facing
+- ne doit plus ancrer chat, heartbeat ou read models app
 
 ## Hierarchie de verite recommandee
 
@@ -328,54 +328,29 @@ Regle :
 
 ## Trous actuels
 
-### Trou 1 — lecture trop faible du reel execute
+### Trou 1 — digest hebdo et memoire utile encore a consolider
 
-Le coach peut encore raisonner principalement sur `DayPlan` / `completion_status`.
+Le reel execute est maintenant mieux lu par `ExecutionEvidence`, `RecentRealityWindow`, les claims utilisateur et la timeline datee.
+Il manque encore un digest canonique de semaine pour eviter de recomposer transcript + activites + events a plusieurs endroits.
 
-Effet :
-- "zero seance" alors qu'une activite hors plan existe
+### Trou 2 — resolution de referents encore a dogfooder
 
-### Trou 2 — pas de statut d'execution assez fin
+Le systeme resout deja les references temporelles et les reponses courtes de clarification (`oui` / `non`).
+Il faut maintenant observer en dogfood si des referents comme `30 min`, `celle de demain`, `la piscine` restent ambigus.
 
-Il manque un statut conversationnel explicite du genre :
-- `planned_done_as_expected`
-- `planned_done_modified`
-- `off_plan_done`
-- `planned_missed`
-- `user_claimed_unlogged_activity`
+### Trou 3 — tools de verification a garder bornes
 
-### Trou 3 — pas de resolution de referent conversationnel
+Les tools runtime existent et restent read-only.
+Le risque n'est plus l'absence de tools, mais la tentation d'exposer trop de catalogue au LLM avant d'avoir stabilise les besoins reels.
 
-Le systeme ne garde pas assez proprement :
-- a quoi renvoie `30 min`
-- si on parle de la seance faite aujourd'hui ou de celle de demain
+### Trou 4 — declaration user durable a affiner
 
-### Trou 4 — pas de tool de verification cible pour le LLM
+Les claims d'activite et non-completion sont persistés en memoire courte.
+Reste a voir si d'autres claims temporels meritent la meme approche apres dogfood.
 
-Le LLM recoit un prompt, pas une boite a outils de lecture.
+### Trou 5 — vieux chemins compat a nettoyer
 
-Effet :
-- il comble avec le plan au lieu de verifier le reel
-
-### Trou 5 — declaration user non durable
-
-Sans persistance courte, le systeme oublie trop vite :
-- une activite declaree dans le chat mais pas encore loggee
-- une correction de duree immediate
-
-Etat :
-- corrige pour les claims activite recentes
-- reste a voir si d'autres claims temporels meritent la meme approche
-
-### Trou 6 — source de verite planning encore trop legacy dans le coach
-
-Risque :
-- le chat ou le heartbeat peuvent encore s'ancrer sur `WeeklyPlan` / `DayPlan`
-- donc parler d'une seance stale alors que l'app et la timeline datee montrent autre chose
-
-Regle produit :
-- pour Telegram, la source de verite planning doit etre d'abord `ScheduledSession`
-- `WeeklyPlan` reste seulement un fallback transitoire pour quelques notes legacy
+`WeeklyPlan` / `DayPlan` restent comme template planner et compat `/api/v0/week`, mais ne doivent plus etre lus comme verite runtime par le coach, le heartbeat ou les read models app.
 
 ## Plan recommande
 
@@ -433,11 +408,11 @@ Deja pose :
 - le prompt `decide()` n'ancre plus par defaut la conversation sur le `WeeklyPlan`
 - le prompt conversationnel rappelle explicitement que la source de verite planning est le calendrier date / app
 - `heartbeat.py` parle maintenant de la seance du jour et de la revue hebdo depuis `ScheduledSession` d'abord
-- `heartbeat.py` ne retombe sur `DayPlan` que comme fallback transitoire limite
+- `heartbeat.py` ne retombe plus sur `DayPlan` pour la lecture runtime
 - les messages du type `ce n'est pas ce qu'il y a dans l'app` sont maintenant routes comme un `plan_dispute` vers les tools de lecture planning
 
 Concretement :
-- si l'app dit `Natation technique 35 min` et que le vieux `WeeklyPlan` dit autre chose, Telegram doit suivre l'app
+- si l'app dit `Natation technique 35 min` et que le vieux `WeeklyPlan` dit autre chose, Telegram doit suivre la timeline datee
 - si une activite hors plan a eu lieu hier, le briefing ne doit plus parler comme si rien n'avait ete fait
 - si le user corrige un detail de duree ou de jour, cette correction prime sur le plan
 

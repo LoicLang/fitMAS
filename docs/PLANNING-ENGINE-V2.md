@@ -177,7 +177,7 @@ Ordre recommande :
 - `llm.py` preserve maintenant les descriptions deterministes du planner si le detailing ne les enrichit pas
 - `api_onboarding.py` et `regenerate_week` passent maintenant par `planning_state.py` avant generation
 - `periodization.py` est maintenant branche dans la regeneration via `WeeklyPlan.total_weeks`, ce qui fait progresser automatiquement le mesocycle d'une semaine a l'autre
-- `/api/v0/week` expose maintenant `mesocycle_week`, `mesocycle_number`, `total_weeks`, `is_deload` et `week_label` pour l'app
+- `/api/v0/week` expose encore `mesocycle_week`, `mesocycle_number`, `total_weeks`, `is_deload` et `week_label`, mais comme surface template/compat (`runtime_role=template_compat`), pas comme verite runtime app
 - tests cibles ajoutes pour les snapshots, templates, validator, planner V2 et le flow onboarding/regeneration
 
 ### Prochaines briques

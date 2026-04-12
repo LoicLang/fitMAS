@@ -278,7 +278,7 @@ But :
 
 - sortir les bounded contexts du hotspot
 - clarifier quelle couche possède quelle vérité
-- diminuer la dépendance au `WeeklyPlan` comme ancre implicite
+- supprimer ou isoler les derniers consommateurs compat de `WeeklyPlan`
 
 Cibles :
 

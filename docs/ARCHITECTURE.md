@@ -57,8 +57,8 @@ Les garde-fous, la planification, les permissions, les cooldowns et la persistan
 - Fondation charge : `tss` sur les activités + calculs `CTL/ATL/TSB`
 - Calendrier persistant partiel : `ScheduledSession` datées + timeline lecture + lien activité↔séance
 - `Today` et les CTA app passent désormais par des APIs datées déterministes
-- `/api/v0/week` expose maintenant aussi la méta mésocycle (`mesocycle_week`, `mesocycle_number`, `total_weeks`, `is_deload`, `week_label`)
-- les vues app `week / today / timeline` exposent aussi un `load_band` dérivé pour distinguer plus clairement hard / moderate / easy / recovery / mobility
+- `/api/v0/week` reste une surface template/compat marquee `runtime_role=template_compat`; les surfaces runtime app passent par les read models dedies
+- les vues app datees exposent aussi un `load_band` dérivé pour distinguer plus clairement hard / moderate / easy / recovery / mobility
 - La boucle coach reçoit aussi la timeline datée et peut cibler une séance précise
 - `swap_sessions` sait aussi passer par des ids de séances concrètes
 - Router stats performance : `training-load`, `volume`, `records`
@@ -162,21 +162,14 @@ Voir `BUILD-ORDER.md` pour le sequencing canonique.
 
 ### Pourquoi le calendrier persistant reste une fondation, mais plus le prochain chantier
 
-Le principal défaut structurel actuel n'est pas le manque de graphes ou de LLM.
-C'est le fait que le modèle principal reste encore piloté par un `WeeklyPlan` destructif.
+Le principal défaut structurel recent etait le pilotage runtime par un `WeeklyPlan` destructif.
+Ce pivot est maintenant largement pose : `ScheduledSession` est la verite planning runtime, `CoachStateBundle` centralise la lecture, et `PlanMutationService` centralise les writes visibles avec events.
 
-Conséquences :
-- historique planning fragile
-- lecture calendaire approximative
-- adaptation semaine suivante peu propre
-- base faible pour dashboard et périodisation
-
-Le pivot est maintenant largement pose avec `ScheduledSession`, et la boucle coach sait cibler ou échanger des séances datées.
-Il reste encore quelques chemins legacy `day key`, mais ils sont désormais secondaires et servent surtout de fallback.
+Il reste utile de garder `WeeklyPlan` / `DayPlan` comme template planner, onboarding, regeneration et compat `/api/v0/week`, mais ils ne doivent plus ancrer chat, heartbeat ou read models app.
 
 Conséquence récente importante :
-- Telegram ne doit plus parler d'un planning stale quand l'app et la timeline datée disent autre chose
-- `WeeklyPlan` / `DayPlan` restent encore utiles pour quelques notes coach legacy, mais plus comme ancre principale de vérité conversationnelle
+- Telegram et l'app doivent suivre la timeline datée quand elle diverge du template
+- les futurs nettoyages doivent supprimer les vieux consommateurs compat plutot que recreer une deuxieme verite
 
 ## Modules
 
@@ -395,7 +388,7 @@ StravaConnection
 4. Backend normalise sports, contraintes, préférences, âme du coach
 5. `planner.py` génère un squelette hebdo multisport déterministe
 6. `llm.py` formule le récap et l'habillage du plan (Sonnet)
-7. Backend persiste User + UserSport + UserFact + WeeklyPlan + DayPlan
+7. Backend persiste User + UserSport + UserFact + WeeklyPlan + DayPlan, puis instancie la verite runtime en `ScheduledSession`
 8. Webapp affiche récap → semaine → today
 
 ### Flux message entrant
