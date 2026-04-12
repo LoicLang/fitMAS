@@ -739,6 +739,46 @@ class FitMASCoreFlowsTest(unittest.TestCase):
         self.assertIn("epaule", result["assistant_message"]["text"].lower())
         self.assertTrue(any(fact["category"] == "health" for fact in facts))
 
+    def test_health_adaptation_suggestion_requires_confirmation(self) -> None:
+        _, session = self._create_plan_for_today()
+        original_decide = api_messages.decide
+        original_extract_facts = api_messages.extract_facts
+        original_health = api_messages.check_and_adapt_health_facts
+        try:
+            def should_not_run(*args, **kwargs):
+                raise AssertionError("LLM decide should not run for health adaptation proposal")
+
+            api_messages.decide = should_not_run
+            api_messages.extract_facts = lambda *args, **kwargs: []
+            api_messages.check_and_adapt_health_facts = lambda *args, **kwargs: AdaptationResult(
+                trigger_type="health_fact",
+                decisions=[
+                    MutationDecision(
+                        mutation_type="replace_session",
+                        target_session_id=session.id,
+                        new_sport_type="strength",
+                        new_session_type="mobility",
+                        new_title="Mobilite epaule",
+                        rationale="Douleur epaule signalee.",
+                        fitmas_message="Je protegerais l'epaule avec une seance compatible.",
+                    )
+                ],
+                message="Je protegerais l'epaule avec une seance compatible.",
+                applied=False,
+            )
+            result = self.client.post("/api/v0/messages", json={"text": "J'ai mal a l'epaule quand je nage, ca tire"}).json()
+        finally:
+            api_messages.decide = original_decide
+            api_messages.extract_facts = original_extract_facts
+            api_messages.check_and_adapt_health_facts = original_health
+
+        pending = repo.get_active_pending_mutation_confirmation(self.db, self.user.id)
+
+        self.assertIsNotNone(pending)
+        self.assertIn("confirmes", result["assistant_message"]["text"].lower())
+        self.assertEqual(pending.mutation_type, "replace_session")
+        self.assertEqual(pending.status, "pending")
+
     def test_health_indication_is_not_reprocessed_after_reply(self) -> None:
         self._create_plan_for_today()
         original_decide = api_messages.decide

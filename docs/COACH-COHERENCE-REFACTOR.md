@@ -428,6 +428,17 @@ Exit gates :
 - plus aucun write silencieux depuis adaptation ou heartbeat
 - les chemins background restent suggestion-only tant que la policy n'est pas revalidee
 
+Statut courant :
+
+- `adaptation.py` produit maintenant des propositions uniquement, meme si un caller passe encore `allow_apply=True`
+- le chemin sante conversationnel transforme une proposition d'adaptation en confirmation utilisateur, sans appliquer silencieusement
+- le code live ne demande plus `allow_apply=True` a `adaptation.py`
+
+Reste :
+
+- renforcer le heartbeat pour afficher/suggérer les propositions d'adaptation sans se baser sur `applied=True`
+- documenter explicitement la policy qui permettra plus tard un auto-apply low-impact tracable
+
 ### Phase 5 - Add semantic coherence guards
 
 But :

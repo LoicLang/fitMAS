@@ -611,9 +611,8 @@ def run_adaptation(
     trigger: AdaptationTrigger,
     allow_apply: bool = False,
 ) -> AdaptationResult | None:
-    """Run the full adaptation pipeline: prompt → LLM → parse → apply."""
+    """Run the full adaptation pipeline: prompt -> LLM -> parse -> proposal."""
     from fitmas.llm import _request_json  # noqa: access internal for consistency
-    from fitmas.plan_mutation_service import apply_decisions_for_user
 
     prompt = _build_prompt(trigger)
     model = _model_for_trigger(trigger.trigger_type)
@@ -635,45 +634,19 @@ def run_adaptation(
         logger.info("Adaptation %s: no changes needed", trigger.trigger_type)
         return AdaptationResult(trigger_type=trigger.trigger_type, message=message)
 
-    if not allow_apply:
-        logger.info(
-            "Adaptation %s produced %d suggestion(s) but apply is disabled",
-            trigger.trigger_type,
-            len(decisions),
-        )
-        return AdaptationResult(
-            trigger_type=trigger.trigger_type,
-            decisions=decisions,
-            message=message,
-            applied=False,
-        )
-
-    # Apply each decision through the temporary single-writer wrapper.
-    try:
-        service_result = apply_decisions_for_user(
-            db,
-            user=user,
-            decisions=decisions,
-        )
-    except RuntimeError:
-        logger.warning("No active plan for adaptation")
-        return None
-    except Exception:
-        logger.exception("Failed to apply adaptation decisions through plan_mutation_service")
-        return None
-
     logger.info(
-        "Adaptation %s applied %d/%d mutations",
+        "Adaptation %s produced %d suggestion(s); apply is owned by orchestrators",
         trigger.trigger_type,
-        service_result.applied_count if service_result is not None else 0,
         len(decisions),
     )
+    if allow_apply:
+        logger.warning("Adaptation %s ignored allow_apply=True; returning suggestion-only result", trigger.trigger_type)
 
     return AdaptationResult(
         trigger_type=trigger.trigger_type,
         decisions=decisions,
         message=message,
-        applied=bool(service_result and service_result.applied_count > 0),
+        applied=False,
     )
 
 
