@@ -15,6 +15,7 @@ from sqlalchemy.orm import Session
 from fitmas import repository as repo
 from fitmas.llm import MutationDecision
 from fitmas.planning_config import GLOBAL_PLANNING_CONFIG, get_sport_planning_config
+from fitmas.session_similarity import find_same_sport_proximity_conflict
 from fitmas.time_context import get_local_now
 
 logger = logging.getLogger(__name__)
@@ -172,35 +173,23 @@ def _check_same_sport_proximity(
     target_date = _resolve_decision_target_date(decision, timezone_name=timezone_name)
     if target_date is None:
         return
-    target_session = _find_session(scheduled_sessions, decision.target_session_id)
-    if target_session is None:
+    conflict = find_same_sport_proximity_conflict(
+        target_session_id=decision.target_session_id,
+        target_date=target_date,
+        scheduled_sessions=scheduled_sessions,
+    )
+    if conflict is None:
         return
-    target_sport = str(_value(target_session, "sport_type") or "").strip().lower()
-    target_type = str(_value(target_session, "session_type") or "").strip().lower()
-    if target_sport in {"", "rest", "off"}:
-        return
-
-    for session in scheduled_sessions:
-        if _value(session, "id") == decision.target_session_id:
-            continue
-        if str(_value(session, "completion_status") or "").strip().lower() in {"done", "skipped"}:
-            continue
-        session_sport = str(_value(session, "sport_type") or "").strip().lower()
-        session_type = str(_value(session, "session_type") or "").strip().lower()
-        session_date = _session_date(session, timezone_name)
-        if session_date is None:
-            continue
-        if session_sport != target_sport or session_type != target_type:
-            continue
-        if abs((session_date - target_date).days) <= 2:
-            result.allowed = False
-            result.block_reason = "same_sport_proximity"
-            result.warnings.append(MutationWarning(
-                code="same_sport_proximity",
-                message=f"Le {target_date.isoformat()} placerait deux seances {target_sport}/{target_type} a moins de 48h.",
-                severity="warning",
-            ))
-            return
+    result.allowed = False
+    result.block_reason = "same_sport_proximity"
+    result.warnings.append(MutationWarning(
+        code="same_sport_proximity",
+        message=(
+            f"Le {target_date.isoformat()} placerait deux seances "
+            f"{conflict.sport_type}/{conflict.session_type} a moins de 48h."
+        ),
+        severity="warning",
+    ))
 
 
 # ---------------------------------------------------------------------------

@@ -470,6 +470,7 @@ Statut courant :
 
 - `PlanMutationService` passe maintenant la timeline runtime a l'executeur de mutation pour alimenter les hooks de coherence
 - premier guard pose : un `move_session` qui cree un quasi-doublon meme sport / meme type a moins de 48h est bloque avec `same_sport_proximity`
+- la similarite initiale vit dans `session_similarity.py` pour pouvoir etre enrichie sans grossir `mutation_hooks.py`
 
 Reste :
 
