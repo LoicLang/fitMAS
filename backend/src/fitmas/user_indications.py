@@ -593,7 +593,12 @@ def _coerce_execution_completed(value: Any) -> bool | None:
 
 def looks_like_execution_clarification_prompt(text: str | None) -> bool:
     normalized = _normalize(text or "")
-    return "tu l as faite ou non" in normalized or "tu l'as faite ou non" in normalized
+    return (
+        "tu l as faite ou non" in normalized
+        or "tu l'as faite ou non" in normalized
+        or "tu l as faite ou pas" in normalized
+        or "tu l'as faite ou pas" in normalized
+    )
 
 
 def _with_execution_resolution(
