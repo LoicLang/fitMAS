@@ -70,6 +70,7 @@ def run_pre_mutation_hooks(
 
     _check_plausibility(result, decision, scheduled_sessions=scheduled_sessions, timezone_name=timezone_name)
     _check_fragile_day(result, decision, scheduled_sessions=scheduled_sessions, timezone_name=timezone_name)
+    _check_same_sport_proximity(result, decision, scheduled_sessions=scheduled_sessions, timezone_name=timezone_name)
     _check_load_coherence(result, decision, scheduled_sessions=scheduled_sessions)
 
     if result.warnings:
@@ -156,6 +157,50 @@ def _check_load_coherence(
             code="hard_session_limit",
             message=f"Deja {week_hard_count} seances intenses cette semaine (max {limit}).",
         ))
+
+
+def _check_same_sport_proximity(
+    result: PreMutationResult,
+    decision: MutationDecision,
+    *,
+    scheduled_sessions: Sequence[Any],
+    timezone_name: str | None,
+) -> None:
+    """Block quasi-duplicate sessions of the same sport/type within 48h."""
+    if decision.mutation_type != "move_session" or decision.target_session_id is None:
+        return
+    target_date = _resolve_decision_target_date(decision, timezone_name=timezone_name)
+    if target_date is None:
+        return
+    target_session = _find_session(scheduled_sessions, decision.target_session_id)
+    if target_session is None:
+        return
+    target_sport = str(_value(target_session, "sport_type") or "").strip().lower()
+    target_type = str(_value(target_session, "session_type") or "").strip().lower()
+    if target_sport in {"", "rest", "off"}:
+        return
+
+    for session in scheduled_sessions:
+        if _value(session, "id") == decision.target_session_id:
+            continue
+        if str(_value(session, "completion_status") or "").strip().lower() in {"done", "skipped"}:
+            continue
+        session_sport = str(_value(session, "sport_type") or "").strip().lower()
+        session_type = str(_value(session, "session_type") or "").strip().lower()
+        session_date = _session_date(session, timezone_name)
+        if session_date is None:
+            continue
+        if session_sport != target_sport or session_type != target_type:
+            continue
+        if abs((session_date - target_date).days) <= 2:
+            result.allowed = False
+            result.block_reason = "same_sport_proximity"
+            result.warnings.append(MutationWarning(
+                code="same_sport_proximity",
+                message=f"Le {target_date.isoformat()} placerait deux seances {target_sport}/{target_type} a moins de 48h.",
+                severity="warning",
+            ))
+            return
 
 
 # ---------------------------------------------------------------------------

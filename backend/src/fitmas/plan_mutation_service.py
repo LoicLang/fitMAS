@@ -49,6 +49,7 @@ def apply_decisions_for_user(
         return None
 
     plan = repo.get_active_plan(db, user.id)
+    scheduled_sessions = repo.get_scheduled_sessions(db, user.id, limit=84)
     applied_count = 0
     event_count = 0
     applied_events: list[PlanAppliedMutationEvent] = []
@@ -57,6 +58,8 @@ def apply_decisions_for_user(
             db,
             plan.id,
             decision,
+            scheduled_sessions=scheduled_sessions,
+            timezone_name=getattr(user, "timezone", None),
         )
         if pre_result.allowed and post_result is not None:
             applied_count += 1

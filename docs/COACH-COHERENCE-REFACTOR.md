@@ -466,6 +466,16 @@ Exit gates :
 - les quasi-doublons n'apparaissent plus sans justification explicite
 - un move ne peut plus casser silencieusement la coherence locale de la semaine
 
+Statut courant :
+
+- `PlanMutationService` passe maintenant la timeline runtime a l'executeur de mutation pour alimenter les hooks de coherence
+- premier guard pose : un `move_session` qui cree un quasi-doublon meme sport / meme type a moins de 48h est bloque avec `same_sport_proximity`
+
+Reste :
+
+- proteger explicitement les jours de recuperation / mission hebdo au niveau writer
+- enrichir la notion de similarite au-dela de `sport_type + session_type`
+
 ### Phase 6 - Tools and memory cleanup
 
 But :

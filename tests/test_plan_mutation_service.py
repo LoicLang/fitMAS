@@ -40,6 +40,7 @@ def test_apply_decisions_for_user_routes_all_decisions_through_mutations(monkeyp
 
     monkeypatch.setattr("fitmas.plan_mutation_service.mutations.apply", _fake_apply)
     monkeypatch.setattr("fitmas.plan_mutation_service.repo.add_plan_mutation_event", lambda *args, **kwargs: None)
+    monkeypatch.setattr("fitmas.plan_mutation_service.repo.get_scheduled_sessions", lambda *args, **kwargs: [])
     monkeypatch.setattr("fitmas.plan_mutation_service.repo.get_scheduled_session", lambda *args, **kwargs: None)
 
     result = apply_decisions_for_user(
@@ -75,6 +76,7 @@ def test_apply_decisions_for_user_counts_only_successful_applies(monkeypatch) ->
 
     monkeypatch.setattr("fitmas.plan_mutation_service.mutations.apply", _fake_apply)
     monkeypatch.setattr("fitmas.plan_mutation_service.repo.add_plan_mutation_event", lambda *args, **kwargs: None)
+    monkeypatch.setattr("fitmas.plan_mutation_service.repo.get_scheduled_sessions", lambda *args, **kwargs: [])
     monkeypatch.setattr("fitmas.plan_mutation_service.repo.get_scheduled_session", lambda *args, **kwargs: None)
 
     result = apply_decisions_for_user(
@@ -87,6 +89,43 @@ def test_apply_decisions_for_user_counts_only_successful_applies(monkeypatch) ->
     assert result.attempted_count == 2
     assert result.applied_count == 1
     assert result.event_count == 1
+
+
+def test_apply_decisions_for_user_passes_runtime_sessions_to_mutation_hooks(monkeypatch) -> None:
+    user = SimpleNamespace(id=7, timezone="Europe/Paris")
+    sessions = [SimpleNamespace(id=10), SimpleNamespace(id=11)]
+    decision = MutationDecision(
+        mutation_type="move_session",
+        target_session_id=10,
+        target_date="2026-04-03",
+        rationale="indispo",
+        fitmas_message="Je deplace.",
+    )
+
+    monkeypatch.setattr(
+        "fitmas.plan_mutation_service.repo.get_active_plan",
+        lambda db, user_id: SimpleNamespace(id=42),
+    )
+    monkeypatch.setattr(
+        "fitmas.plan_mutation_service.repo.get_scheduled_sessions",
+        lambda db, user_id, limit: sessions,
+    )
+    monkeypatch.setattr("fitmas.plan_mutation_service.repo.get_scheduled_session", lambda *args, **kwargs: None)
+    monkeypatch.setattr("fitmas.plan_mutation_service.repo.add_plan_mutation_event", lambda *args, **kwargs: None)
+
+    captured: dict[str, object] = {}
+
+    def _fake_apply(db, plan_id, decision, **kwargs):
+        captured.update(kwargs)
+        return SimpleNamespace(allowed=True), SimpleNamespace()
+
+    monkeypatch.setattr("fitmas.plan_mutation_service.mutations.apply", _fake_apply)
+
+    result = apply_decisions_for_user(object(), user=user, decisions=[decision])
+
+    assert result is not None
+    assert captured["scheduled_sessions"] is sessions
+    assert captured["timezone_name"] == "Europe/Paris"
 
 
 def test_apply_decisions_for_user_records_event_for_successful_apply(monkeypatch) -> None:
@@ -114,6 +153,7 @@ def test_apply_decisions_for_user_records_event_for_successful_apply(monkeypatch
         return SimpleNamespace(id=99)
 
     monkeypatch.setattr("fitmas.plan_mutation_service.repo.add_plan_mutation_event", _add_event)
+    monkeypatch.setattr("fitmas.plan_mutation_service.repo.get_scheduled_sessions", lambda *args, **kwargs: [])
     monkeypatch.setattr("fitmas.plan_mutation_service.repo.get_scheduled_session", lambda *args, **kwargs: None)
 
     result = apply_decisions_for_user(
@@ -164,6 +204,7 @@ def test_multi_session_decision_records_one_event_with_both_targets(monkeypatch)
         lambda db, plan_id, decision, **kwargs: (SimpleNamespace(allowed=True), SimpleNamespace()),
     )
     monkeypatch.setattr("fitmas.plan_mutation_service.repo.get_scheduled_session", lambda *args, **kwargs: None)
+    monkeypatch.setattr("fitmas.plan_mutation_service.repo.get_scheduled_sessions", lambda *args, **kwargs: [])
 
     events: list[dict] = []
     monkeypatch.setattr(
@@ -223,6 +264,7 @@ def test_apply_decisions_for_user_returns_event_summary_for_replace(monkeypatch)
         return SimpleNamespace(id=101)
 
     monkeypatch.setattr("fitmas.plan_mutation_service.repo.add_plan_mutation_event", _add_event)
+    monkeypatch.setattr("fitmas.plan_mutation_service.repo.get_scheduled_sessions", lambda *args, **kwargs: [])
 
     result = apply_decisions_for_user(
         object(),
