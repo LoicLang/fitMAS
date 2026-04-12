@@ -474,7 +474,9 @@ Statut courant :
 - deuxieme guard pose : un `move_session` vers une recuperation stable/protegee est bloque avec `protected_recovery_target`, tandis qu'un repos `flexible` reste utilisable
 - la similarite initiale vit dans `session_similarity.py` pour pouvoir etre enrichie sans grossir `mutation_hooks.py`
 
-Reste :
+Phase 5 est fermee sur le gate actuel.
+
+Reste comme durcissement ulterieur hors gate strict :
 
 - enrichir la notion de similarite au-dela de `sport_type + session_type`
 - enrichir la mission hebdo au niveau writer quand le signal produit sera plus concret
