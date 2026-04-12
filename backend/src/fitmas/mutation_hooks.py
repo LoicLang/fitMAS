@@ -72,6 +72,7 @@ def run_pre_mutation_hooks(
     _check_plausibility(result, decision, scheduled_sessions=scheduled_sessions, timezone_name=timezone_name)
     _check_fragile_day(result, decision, scheduled_sessions=scheduled_sessions, timezone_name=timezone_name)
     _check_same_sport_proximity(result, decision, scheduled_sessions=scheduled_sessions, timezone_name=timezone_name)
+    _check_protected_recovery_target(result, decision, scheduled_sessions=scheduled_sessions, timezone_name=timezone_name)
     _check_load_coherence(result, decision, scheduled_sessions=scheduled_sessions)
 
     if result.warnings:
@@ -190,6 +191,43 @@ def _check_same_sport_proximity(
         ),
         severity="warning",
     ))
+
+
+def _check_protected_recovery_target(
+    result: PreMutationResult,
+    decision: MutationDecision,
+    *,
+    scheduled_sessions: Sequence[Any],
+    timezone_name: str | None,
+) -> None:
+    """Block moving onto stable/protective recovery, while allowing flexible rest slots."""
+    if decision.mutation_type != "move_session":
+        return
+    target_date = _resolve_decision_target_date(decision, timezone_name=timezone_name)
+    if target_date is None:
+        return
+    for session in scheduled_sessions:
+        if _value(session, "id") == decision.target_session_id:
+            continue
+        if _session_date(session, timezone_name) != target_date:
+            continue
+        if str(_value(session, "completion_status") or "").strip().lower() in {"done", "skipped"}:
+            continue
+        sport = str(_value(session, "sport_type") or "").strip().lower()
+        session_type = str(_value(session, "session_type") or "").strip().lower()
+        flexibility = str(_value(session, "flexibility") or "").strip().lower()
+        title = str(_value(session, "session_title") or "").strip().lower()
+        recovery_like = sport in {"rest", "off"} or session_type in {"rest", "recovery", "mobility"}
+        protected = flexibility != "flexible" or any(token in title for token in ("protect", "protec", "repos protect"))
+        if recovery_like and protected:
+            result.allowed = False
+            result.block_reason = "protected_recovery_target"
+            result.warnings.append(MutationWarning(
+                code="protected_recovery_target",
+                message=f"Le {target_date.isoformat()} est une recuperation protegee.",
+                severity="warning",
+            ))
+            return
 
 
 # ---------------------------------------------------------------------------
