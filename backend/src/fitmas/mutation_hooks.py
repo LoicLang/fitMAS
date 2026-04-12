@@ -347,6 +347,8 @@ def _session_date(session: Any, timezone_name: str | None) -> date | None:
     raw = _value(session, "scheduled_date")
     if raw is None:
         return None
+    if hasattr(raw, "date"):
+        return raw.date()
     if isinstance(raw, date):
         return raw
     try:
