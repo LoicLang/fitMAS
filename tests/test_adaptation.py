@@ -218,7 +218,7 @@ class TestRunAdaptationFreeze:
         assert len(result.decisions) == 1
         assert called["apply"] is False
 
-    def test_run_adaptation_can_apply_when_explicitly_allowed(self, monkeypatch):
+    def test_run_adaptation_stays_suggestion_only(self, monkeypatch):
         trigger = AdaptationTrigger(
             trigger_type="post_activity",
             urgency="next_session",
@@ -242,20 +242,38 @@ class TestRunAdaptationFreeze:
                 "message": "Je te propose d'alleger la suite.",
             },
         )
-        monkeypatch.setattr("fitmas.repository.get_active_plan", lambda db, user_id: SimpleNamespace(id=99))
         calls = {"apply": 0}
 
         def _record_apply(*args, **kwargs):
             calls["apply"] += 1
-            return SimpleNamespace(allowed=True), SimpleNamespace()
+            raise AssertionError("adaptation.py must not apply mutations directly")
 
         monkeypatch.setattr("fitmas.mutations.apply", _record_apply)
-        monkeypatch.setattr("fitmas.repository.add_plan_mutation_event", lambda *args, **kwargs: None)
-        monkeypatch.setattr("fitmas.repository.get_scheduled_session", lambda *args, **kwargs: None)
 
-        result = adaptation.run_adaptation(object(), user=user, trigger=trigger, allow_apply=True)
+        result = adaptation.run_adaptation(object(), user=user, trigger=trigger)
 
         assert result is not None
-        assert result.applied is True
+        assert result.applied is False
         assert len(result.decisions) == 1
-        assert calls["apply"] == 1
+        assert calls["apply"] == 0
+
+    def test_adaptation_module_does_not_import_plan_mutation_service(self):
+        from pathlib import Path
+
+        root = Path(__file__).resolve().parents[1]
+        source = (root / "backend/src/fitmas/adaptation.py").read_text()
+        assert "plan_mutation_service" not in source
+
+    def test_conversation_does_not_request_adaptation_auto_apply(self):
+        from pathlib import Path
+
+        root = Path(__file__).resolve().parents[1]
+        source = (root / "backend/src/fitmas/conversation_pipeline.py").read_text()
+        assert "allow_apply=True" not in source
+
+    def test_adaptation_api_no_longer_exposes_allow_apply(self):
+        from pathlib import Path
+
+        root = Path(__file__).resolve().parents[1]
+        source = (root / "backend/src/fitmas/adaptation.py").read_text()
+        assert "allow_apply" not in source

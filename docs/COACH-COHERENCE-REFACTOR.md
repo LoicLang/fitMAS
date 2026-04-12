@@ -361,7 +361,7 @@ Statut courant :
 - premier slice en place
 - table forward-only `plan_mutation_events` ajoutee
 - `PlanMutationService` route maintenant :
-  - decisions conversation / adaptation via `mutations.apply`
+  - decisions conversation via l'executeur interne `mutations.apply`
   - actions app explicites `complete / skip / move`
   - completion liee aux activites manuelles et Strava
   - contestations d'execution conversationnelles vers `skip`
@@ -427,6 +427,27 @@ Exit gates :
 
 - plus aucun write silencieux depuis adaptation ou heartbeat
 - les chemins background restent suggestion-only tant que la policy n'est pas revalidee
+
+Statut courant :
+
+- `adaptation.py` produit maintenant des propositions uniquement
+- le chemin sante conversationnel transforme une proposition d'adaptation en confirmation utilisateur, sans appliquer silencieusement
+- la fatigue explicite low-impact peut encore auto-appliquer une proposition tracee via `PlanMutationService`
+- l'API `allow_apply` a ete retiree de `adaptation.py`
+- le heartbeat peut maintenant relayer une proposition d'adaptation (`tsb` / seances manquees) sans attendre `applied=True` et sans ecrire au planning
+
+Reste :
+
+- aucun gate strict restant
+
+Policy future pour reouvrir l'auto-apply low-impact :
+
+- seulement depuis un orchestrateur explicite, jamais depuis `adaptation.py`
+- uniquement si `assess_mutation_impact(...).requires_confirmation == False`
+- passage obligatoire par `PlanMutationService`
+- event `plan_mutation_events` obligatoire avant toute reponse qui parle de changement applique
+- source explicite (`conversation`, `app`, `strava`, `heartbeat`) et `trigger_type` explicite
+- heartbeat/background restent suggestion-only tant que cette policy n'a pas de test dedie par trigger
 
 ### Phase 5 - Add semantic coherence guards
 
