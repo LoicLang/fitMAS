@@ -233,7 +233,6 @@ def run_conversation_turn(
         scheduled_sessions=state.scheduled_sessions,
         activities=state.activities,
         planning_decision=planning_decision,
-        week_plan=state.pydantic_plan,
         recent_adaptations_limit=4,
         screen="conversation",
     )
@@ -368,7 +367,7 @@ def run_conversation_turn(
         today=conversation_context.temporal_resolution.local_date,
         time_context=conversation_context.time_context,
         profile=profile_snapshot,
-        week_plan=state.pydantic_plan,
+        week_plan=None,
         planning_decision=planning_decision,
         today_session=state.today_session,
         scheduled_sessions=state.scheduled_sessions,
@@ -384,7 +383,7 @@ def run_conversation_turn(
             resolution=resolution,
             today=conversation_context.temporal_resolution.local_date,
             profile=profile_snapshot,
-            week_plan=state.pydantic_plan,
+            week_plan=None,
             planning_decision=planning_decision,
             today_session=state.today_session,
             scheduled_sessions=state.scheduled_sessions,
@@ -671,7 +670,6 @@ def run_conversation_turn(
 
 
 def _load_turn_state(*, db: Session, user, user_text: str) -> ConversationTurnState:
-    plan = repo.get_active_plan(db, user.id)
     repo.add_message(db, user.id, "user", user_text)
     logger.info("User message: %s", user_text[:120])
 
@@ -685,8 +683,6 @@ def _load_turn_state(*, db: Session, user, user_text: str) -> ConversationTurnSt
     active_memory_rows, active_facts = _active_memory_payloads(db, user.id)
     return ConversationTurnState(
         user=user,
-        plan=plan,
-        pydantic_plan=repo.to_pydantic_plan(plan),
         conversation_history=conversation_history,
         previous_agent_text=previous_agent_text,
         scheduled_sessions=scheduled_sessions,
