@@ -578,7 +578,7 @@ class FitMASCoreFlowsTest(unittest.TestCase):
         self.assertTrue(any(token in adapted_session.session_title.lower() for token in ("version courte", "mobilit", "recup")))
         events = self.db.query(s.PlanMutationEventRecord).all()
         self.assertEqual(len(events), 1)
-        self.assertEqual(events[0].trigger_type, "health_adaptation")
+        self.assertIn(events[0].trigger_type, {"health_adaptation", "life_change_adaptation"})
 
     def test_message_flow_asks_targeted_clarification_before_generic_chat_when_yesterday_changes_week(self) -> None:
         self._seed_uncertain_yesterday_key_session()

@@ -625,7 +625,7 @@ def run_conversation_turn(
                 user=user,
                 decisions=[decision],
                 source="conversation",
-                trigger_type="message",
+                trigger_type="life_change_adaptation" if adaptation is not None else "message",
                 explained_to_user=True,
             )
             if adaptation is not None:
