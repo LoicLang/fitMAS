@@ -29,13 +29,11 @@ def get_app_overview(db: Session = Depends(get_db)) -> dict:
     today_session = repo.get_today_scheduled_session(db, user.id, timezone_name=user.timezone)
     today_view = _build_today_view(db, user=user, session=today_session).model_dump() if today_session is not None else None
     today_date = get_local_now(user.timezone).date()
-    week_plan = repo.to_pydantic_plan(repo.get_active_plan(db, user.id))
     performance_overview = build_performance_overview(
         user_id=user.id,
         timezone_name=user.timezone,
         activities=activities,
         scheduled_sessions=scheduled_sessions,
-        week_plan=week_plan,
         planning_decision=planning_decision,
     )
     strava_status = {
@@ -55,7 +53,6 @@ def get_app_overview(db: Session = Depends(get_db)) -> dict:
         scheduled_sessions=scheduled_sessions,
         activities=activities,
         planning_decision=planning_decision,
-        week_plan=week_plan,
         recent_adaptations_limit=4,
         readiness=readiness,
         screen="overview",
@@ -100,13 +97,11 @@ def get_app_calendar(
     scheduled_sessions = repo.get_scheduled_sessions(db, user.id, limit=120)
     activities = repo.get_activities(db, user.id, limit=500)
     planning_decision = repo.get_latest_planning_decision_record(db, user.id)
-    week_plan = repo.to_pydantic_plan(repo.get_active_plan(db, user.id))
     performance_overview = build_performance_overview(
         user_id=user.id,
         timezone_name=user.timezone,
         activities=activities,
         scheduled_sessions=scheduled_sessions,
-        week_plan=week_plan,
         planning_decision=planning_decision,
     )
     coach_bundle = build_coach_state_bundle(
@@ -116,7 +111,6 @@ def get_app_calendar(
         scheduled_sessions=scheduled_sessions,
         activities=activities,
         planning_decision=planning_decision,
-        week_plan=week_plan,
         recent_adaptations_limit=4,
         screen="calendar",
     )
@@ -148,13 +142,11 @@ def get_app_evolution(db: Session = Depends(get_db)) -> dict:
     scheduled_sessions = repo.get_scheduled_sessions(db, user.id, limit=120)
     activities = repo.get_activities(db, user.id, limit=500)
     planning_decision = repo.get_latest_planning_decision_record(db, user.id)
-    week_plan = repo.to_pydantic_plan(repo.get_active_plan(db, user.id))
     performance_overview = build_performance_overview(
         user_id=user.id,
         timezone_name=user.timezone,
         activities=activities,
         scheduled_sessions=scheduled_sessions,
-        week_plan=week_plan,
         planning_decision=planning_decision,
     )
     training_load = build_training_load_stats(activities, as_of_date=today_date, weeks=16)
@@ -167,7 +159,6 @@ def get_app_evolution(db: Session = Depends(get_db)) -> dict:
         scheduled_sessions=scheduled_sessions,
         activities=activities,
         planning_decision=planning_decision,
-        week_plan=week_plan,
         recent_adaptations_limit=6,
         readiness=readiness,
         screen="evolution",

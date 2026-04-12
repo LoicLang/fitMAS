@@ -397,6 +397,18 @@ Exit gates :
 - aucun chemin coach, app ou heartbeat ne lit les objets legacy comme verite live
 - seuls planner, onboarding et regeneration touchent encore aux templates legacy
 
+Statut courant :
+
+- premier slice app/stat en place
+- `api_app.py`, `api_stats.py` et `performance_overview.py` ne chargent plus `WeeklyPlan` / `DayPlan` comme verite runtime
+- `CoachStateBundle` accepte maintenant l'absence de template legacy et retombe sur une meta planning neutre
+
+Reste :
+
+- retirer `WeeklyPlan` du chemin conversation
+- retirer `WeeklyPlan` du heartbeat
+- clarifier `/api/v0/week` comme endpoint template/compat, pas verite runtime
+
 ### Phase 4 - Rebuild adaptation paths
 
 But :

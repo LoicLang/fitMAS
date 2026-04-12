@@ -45,13 +45,11 @@ def get_performance_overview(db: Session = Depends(get_db)) -> dict:
         raise HTTPException(status_code=404, detail="No onboarded user yet")
     activities = repo.get_activities(db, user.id, limit=500)
     scheduled_sessions = repo.get_scheduled_sessions(db, user.id, limit=84)
-    week_plan = repo.to_pydantic_plan(repo.get_active_plan(db, user.id))
     planning_decision = repo.get_latest_planning_decision_record(db, user.id)
     return build_performance_overview(
         user_id=user.id,
         timezone_name=user.timezone,
         activities=activities,
         scheduled_sessions=scheduled_sessions,
-        week_plan=week_plan,
         planning_decision=planning_decision,
     )

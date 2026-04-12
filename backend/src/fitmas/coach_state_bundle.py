@@ -55,8 +55,8 @@ def build_coach_state_bundle(
     scheduled_sessions: list[s.ScheduledSession],
     activities: list[s.Activity],
     planning_decision: s.PlanningDecisionRecord | None,
-    week_plan: Any | None,
     recent_adaptations_limit: int,
+    week_plan: Any | None = None,
     readiness: Any | None = None,
     screen: str = "overview",
 ) -> CoachStateBundle:
