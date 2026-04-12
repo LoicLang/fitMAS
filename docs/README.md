@@ -12,6 +12,7 @@ Set documentaire actuel :
 | Document | Contenu |
 |----------|---------|
 | `PRODUCT.md` | Vision, wedge multisport, scope, parcours utilisateur, critères de succès |
+| `SYSTEM-MAP.md` | Carte simple du système : flux, frontières LLM/tools/skills/orchestrateurs et points d'extension |
 | `ARCHITECTURE.md` | Stack, modèle de données, flux techniques, décisions tranchées |
 | `APP-UX.md` | Contrat UX de la webapp : calendrier, today, performance, journal |
 | `PLANNING-ENGINE-V2.md` | Plan adapte du moteur V2, sequence d'implementation et mapping avec le code actuel |
@@ -56,24 +57,26 @@ Quand plusieurs docs semblent raconter des choses différentes :
 Pour un nouvel agent :
 1. `README.md`
 2. `BUILD-ORDER.md`
-3. `PRODUCT.md`
-4. `ARCHITECTURE.md`
-5. `APP-UX.md`
-6. `PLANNING-ENGINE-V2.md`
-7. `PLANNING-CONTRACT.md`
-8. `MEMORY-V2.md`
-9. `CONVERSATION-GROUNDING.md`
-10. `REALITY-WORKOUT-CONTRACT.md`
-11. `USER-INDICATIONS.md`
-12. `RUNTIME-TOOLS.md`
-13. `COACH-COHERENCE-REFACTOR.md`
-14. `CLAUDE-CODE-LEARNINGS.md`
-15. `HARNESS-REFACTOR.md`
-16. `SOUL.md`
-17. `RUNBOOK.md`
+3. `SYSTEM-MAP.md`
+4. `PRODUCT.md`
+5. `ARCHITECTURE.md`
+6. `APP-UX.md`
+7. `PLANNING-ENGINE-V2.md`
+8. `PLANNING-CONTRACT.md`
+9. `MEMORY-V2.md`
+10. `CONVERSATION-GROUNDING.md`
+11. `REALITY-WORKOUT-CONTRACT.md`
+12. `USER-INDICATIONS.md`
+13. `RUNTIME-TOOLS.md`
+14. `COACH-COHERENCE-REFACTOR.md`
+15. `CLAUDE-CODE-LEARNINGS.md`
+16. `HARNESS-REFACTOR.md`
+17. `SOUL.md`
+18. `RUNBOOK.md`
 
 Raccourci utile :
 - si le sujet est "où en est vraiment le repo et que construit-on ensuite ?", lire `BUILD-ORDER.md`
+- si le sujet est "comment fonctionne FitMAS dans son ensemble ?", lire `SYSTEM-MAP.md`
 - si le sujet est "quel est le bon contrat produit ?", lire `PRODUCT.md`
 - si le sujet est "quelle fondation technique avant d'ajouter de la sophistication ?", lire `ARCHITECTURE.md`
 - si le sujet est "comment l'app doit se comporter ?", lire `APP-UX.md`
