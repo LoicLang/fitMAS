@@ -371,10 +371,14 @@ Statut courant :
 - les reponses conversationnelles apres mutation appliquee utilisent maintenant le `user_visible_summary` issu de l'event applique
 - garde de test ajoutee pour empecher `api_plan.py`, `api_activities.py`, `api_messages.py` et `strava.py` d'appeler les writers bas niveau directement
 - `mutations.py` est maintenant cache derriere `PlanMutationService` cote code live
+- le gate `event_count == applied_count` est verrouille sur les decisions appliquees, y compris les decisions multi-seances comme `swap_sessions`
 
-Reste pour fermer la phase 2 :
+Phase 2 est fermee sur le gate actuel.
 
-- durcir la notion "exactement un event" sur les mutations multi-actions restantes
+Reste comme durcissement ulterieur hors gate strict :
+
+- enrichir les snapshots before/after pour les decisions legacy sans `target_session_id`
+- renommer `mutations.py` si le nom continue a creer une ambiguite de frontiere
 
 ### Phase 3 - Retire legacy runtime reads
 

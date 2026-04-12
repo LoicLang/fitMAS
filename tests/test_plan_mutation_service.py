@@ -52,6 +52,7 @@ def test_apply_decisions_for_user_routes_all_decisions_through_mutations(monkeyp
     assert result.plan_id == 42
     assert result.attempted_count == 2
     assert result.applied_count == 2
+    assert result.event_count == 2
     assert calls == [(42, "lighten_day"), (42, "replace_session")]
 
 
@@ -85,6 +86,7 @@ def test_apply_decisions_for_user_counts_only_successful_applies(monkeypatch) ->
     assert result is not None
     assert result.attempted_count == 2
     assert result.applied_count == 1
+    assert result.event_count == 1
 
 
 def test_apply_decisions_for_user_records_event_for_successful_apply(monkeypatch) -> None:
@@ -141,6 +143,41 @@ def test_apply_decisions_for_user_records_event_for_successful_apply(monkeypatch
             "conversation_turn_id": None,
         }
     ]
+
+
+def test_multi_session_decision_records_one_event_with_both_targets(monkeypatch) -> None:
+    user = SimpleNamespace(id=7)
+    decision = MutationDecision(
+        mutation_type="swap_sessions",
+        target_session_id=10,
+        second_session_id=11,
+        rationale="recovery",
+        fitmas_message="J'echange les deux seances.",
+    )
+
+    monkeypatch.setattr(
+        "fitmas.plan_mutation_service.repo.get_active_plan",
+        lambda db, user_id: SimpleNamespace(id=42),
+    )
+    monkeypatch.setattr(
+        "fitmas.plan_mutation_service.mutations.apply",
+        lambda db, plan_id, decision, **kwargs: (SimpleNamespace(allowed=True), SimpleNamespace()),
+    )
+    monkeypatch.setattr("fitmas.plan_mutation_service.repo.get_scheduled_session", lambda *args, **kwargs: None)
+
+    events: list[dict] = []
+    monkeypatch.setattr(
+        "fitmas.plan_mutation_service.repo.add_plan_mutation_event",
+        lambda db, **kwargs: events.append(kwargs) or SimpleNamespace(id=202),
+    )
+
+    result = apply_decisions_for_user(object(), user=user, decisions=[decision])
+
+    assert result is not None
+    assert result.applied_count == 1
+    assert result.event_count == 1
+    assert events[0]["command_type"] == "swap_sessions"
+    assert events[0]["target_session_ids"] == [10, 11]
 
 
 def test_apply_decisions_for_user_returns_event_summary_for_replace(monkeypatch) -> None:
