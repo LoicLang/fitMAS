@@ -466,6 +466,21 @@ Exit gates :
 - les quasi-doublons n'apparaissent plus sans justification explicite
 - un move ne peut plus casser silencieusement la coherence locale de la semaine
 
+Statut courant :
+
+- `PlanMutationService` passe maintenant la timeline runtime a l'executeur de mutation pour alimenter les hooks de coherence
+- premier guard pose : un `move_session` avec date explicite qui cree un quasi-doublon meme sport / meme type a moins de 48h est bloque avec `same_sport_proximity`
+- ce guard couvre les decisions conversationnelles et les actions app avec `target_date`; les moves app sans date restent un auto-placement a traiter separement si besoin
+- deuxieme guard pose : un `move_session` vers une recuperation stable/protegee est bloque avec `protected_recovery_target`, tandis qu'un repos `flexible` reste utilisable
+- la similarite initiale vit dans `session_similarity.py` pour pouvoir etre enrichie sans grossir `mutation_hooks.py`
+
+Phase 5 est fermee sur le gate actuel.
+
+Reste comme durcissement ulterieur hors gate strict :
+
+- enrichir la notion de similarite au-dela de `sport_type + session_type`
+- enrichir la mission hebdo au niveau writer quand le signal produit sera plus concret
+
 ### Phase 6 - Tools and memory cleanup
 
 But :

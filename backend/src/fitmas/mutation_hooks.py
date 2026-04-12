@@ -15,6 +15,7 @@ from sqlalchemy.orm import Session
 from fitmas import repository as repo
 from fitmas.llm import MutationDecision
 from fitmas.planning_config import GLOBAL_PLANNING_CONFIG, get_sport_planning_config
+from fitmas.session_similarity import find_same_sport_proximity_conflict
 from fitmas.time_context import get_local_now
 
 logger = logging.getLogger(__name__)
@@ -70,6 +71,8 @@ def run_pre_mutation_hooks(
 
     _check_plausibility(result, decision, scheduled_sessions=scheduled_sessions, timezone_name=timezone_name)
     _check_fragile_day(result, decision, scheduled_sessions=scheduled_sessions, timezone_name=timezone_name)
+    _check_same_sport_proximity(result, decision, scheduled_sessions=scheduled_sessions, timezone_name=timezone_name)
+    _check_protected_recovery_target(result, decision, scheduled_sessions=scheduled_sessions, timezone_name=timezone_name)
     _check_load_coherence(result, decision, scheduled_sessions=scheduled_sessions)
 
     if result.warnings:
@@ -156,6 +159,75 @@ def _check_load_coherence(
             code="hard_session_limit",
             message=f"Deja {week_hard_count} seances intenses cette semaine (max {limit}).",
         ))
+
+
+def _check_same_sport_proximity(
+    result: PreMutationResult,
+    decision: MutationDecision,
+    *,
+    scheduled_sessions: Sequence[Any],
+    timezone_name: str | None,
+) -> None:
+    """Block quasi-duplicate sessions of the same sport/type within 48h."""
+    if decision.mutation_type != "move_session" or decision.target_session_id is None:
+        return
+    target_date = _resolve_decision_target_date(decision, timezone_name=timezone_name)
+    if target_date is None:
+        return
+    conflict = find_same_sport_proximity_conflict(
+        target_session_id=decision.target_session_id,
+        target_date=target_date,
+        scheduled_sessions=scheduled_sessions,
+    )
+    if conflict is None:
+        return
+    result.allowed = False
+    result.block_reason = "same_sport_proximity"
+    result.warnings.append(MutationWarning(
+        code="same_sport_proximity",
+        message=(
+            f"Le {target_date.isoformat()} placerait deux seances "
+            f"{conflict.sport_type}/{conflict.session_type} a moins de 48h."
+        ),
+        severity="warning",
+    ))
+
+
+def _check_protected_recovery_target(
+    result: PreMutationResult,
+    decision: MutationDecision,
+    *,
+    scheduled_sessions: Sequence[Any],
+    timezone_name: str | None,
+) -> None:
+    """Block moving onto stable/protective recovery, while allowing flexible rest slots."""
+    if decision.mutation_type != "move_session":
+        return
+    target_date = _resolve_decision_target_date(decision, timezone_name=timezone_name)
+    if target_date is None:
+        return
+    for session in scheduled_sessions:
+        if _value(session, "id") == decision.target_session_id:
+            continue
+        if _session_date(session, timezone_name) != target_date:
+            continue
+        if str(_value(session, "completion_status") or "").strip().lower() in {"done", "skipped"}:
+            continue
+        sport = str(_value(session, "sport_type") or "").strip().lower()
+        session_type = str(_value(session, "session_type") or "").strip().lower()
+        flexibility = str(_value(session, "flexibility") or "").strip().lower()
+        title = str(_value(session, "session_title") or "").strip().lower()
+        recovery_like = sport in {"rest", "off"} or session_type in {"rest", "recovery", "mobility"}
+        protected = flexibility != "flexible" or any(token in title for token in ("protect", "protec", "repos protect"))
+        if recovery_like and protected:
+            result.allowed = False
+            result.block_reason = "protected_recovery_target"
+            result.warnings.append(MutationWarning(
+                code="protected_recovery_target",
+                message=f"Le {target_date.isoformat()} est une recuperation protegee.",
+                severity="warning",
+            ))
+            return
 
 
 # ---------------------------------------------------------------------------
@@ -302,6 +374,8 @@ def _session_date(session: Any, timezone_name: str | None) -> date | None:
     raw = _value(session, "scheduled_date")
     if raw is None:
         return None
+    if hasattr(raw, "date"):
+        return raw.date()
     if isinstance(raw, date):
         return raw
     try:
