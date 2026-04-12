@@ -258,7 +258,6 @@ def weekly_review() -> CoachDraft | None:
         scheduled_sessions = repo.get_scheduled_sessions(db, user.id, limit=120)
         activities = repo.get_activities(db, user.id, limit=500)
         planning_decision = repo.get_latest_planning_decision_record(db, user.id)
-        week_plan = repo.to_pydantic_plan(repo.get_active_plan(db, user.id))
         coach_bundle = build_coach_state_bundle(
             db,
             user=user,
@@ -266,7 +265,6 @@ def weekly_review() -> CoachDraft | None:
             scheduled_sessions=scheduled_sessions,
             activities=activities,
             planning_decision=planning_decision,
-            week_plan=week_plan,
             recent_adaptations_limit=4,
             screen="review",
         )
