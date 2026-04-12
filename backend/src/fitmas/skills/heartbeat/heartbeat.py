@@ -346,10 +346,10 @@ def signal_check() -> CoachDraft | None:
         # Adaptive plan triggers
         try:
             from fitmas.adaptation import check_and_adapt_tsb, check_and_adapt_missed
-            tsb_result = check_and_adapt_tsb(db, user, allow_apply=False)
+            tsb_result = check_and_adapt_tsb(db, user)
             if tsb_result and tsb_result.decisions and tsb_result.message:
                 return CoachDraft(text=tsb_result.message, proactive=True)
-            missed_result = check_and_adapt_missed(db, user, allow_apply=False)
+            missed_result = check_and_adapt_missed(db, user)
             if missed_result and missed_result.decisions and missed_result.message:
                 return CoachDraft(text=missed_result.message, proactive=True)
         except Exception:

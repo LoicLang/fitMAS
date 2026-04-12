@@ -218,7 +218,7 @@ class TestRunAdaptationFreeze:
         assert len(result.decisions) == 1
         assert called["apply"] is False
 
-    def test_run_adaptation_stays_suggestion_only_even_when_apply_is_requested(self, monkeypatch):
+    def test_run_adaptation_stays_suggestion_only(self, monkeypatch):
         trigger = AdaptationTrigger(
             trigger_type="post_activity",
             urgency="next_session",
@@ -250,7 +250,7 @@ class TestRunAdaptationFreeze:
 
         monkeypatch.setattr("fitmas.mutations.apply", _record_apply)
 
-        result = adaptation.run_adaptation(object(), user=user, trigger=trigger, allow_apply=True)
+        result = adaptation.run_adaptation(object(), user=user, trigger=trigger)
 
         assert result is not None
         assert result.applied is False
@@ -270,3 +270,10 @@ class TestRunAdaptationFreeze:
         root = Path(__file__).resolve().parents[1]
         source = (root / "backend/src/fitmas/conversation_pipeline.py").read_text()
         assert "allow_apply=True" not in source
+
+    def test_adaptation_api_no_longer_exposes_allow_apply(self):
+        from pathlib import Path
+
+        root = Path(__file__).resolve().parents[1]
+        source = (root / "backend/src/fitmas/adaptation.py").read_text()
+        assert "allow_apply" not in source

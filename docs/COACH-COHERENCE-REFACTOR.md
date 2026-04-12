@@ -432,7 +432,7 @@ Statut courant :
 
 - `adaptation.py` produit maintenant des propositions uniquement, meme si un caller passe encore `allow_apply=True`
 - le chemin sante conversationnel transforme une proposition d'adaptation en confirmation utilisateur, sans appliquer silencieusement
-- le code live ne demande plus `allow_apply=True` a `adaptation.py`
+- l'API `allow_apply` a ete retiree de `adaptation.py`
 - le heartbeat peut maintenant relayer une proposition d'adaptation (`tsb` / seances manquees) sans attendre `applied=True` et sans ecrire au planning
 
 Reste :

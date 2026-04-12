@@ -609,7 +609,6 @@ def run_adaptation(
     *,
     user: s.User,
     trigger: AdaptationTrigger,
-    allow_apply: bool = False,
 ) -> AdaptationResult | None:
     """Run the full adaptation pipeline: prompt -> LLM -> parse -> proposal."""
     from fitmas.llm import _request_json  # noqa: access internal for consistency
@@ -639,9 +638,6 @@ def run_adaptation(
         trigger.trigger_type,
         len(decisions),
     )
-    if allow_apply:
-        logger.warning("Adaptation %s ignored allow_apply=True; returning suggestion-only result", trigger.trigger_type)
-
     return AdaptationResult(
         trigger_type=trigger.trigger_type,
         decisions=decisions,
@@ -658,51 +654,43 @@ def check_and_adapt_health_facts(
     db: Session,
     user: s.User,
     new_facts: list[dict],
-    *,
-    allow_apply: bool = False,
 ) -> AdaptationResult | None:
     """Check health facts and run adaptation if triggered."""
     trigger = check_health_fact_trigger(db, user, new_facts)
     if trigger is None:
         return None
-    return run_adaptation(db, user=user, trigger=trigger, allow_apply=allow_apply)
+    return run_adaptation(db, user=user, trigger=trigger)
 
 
 def check_and_adapt_post_activity(
     db: Session,
     user: s.User,
     activity: s.Activity,
-    *,
-    allow_apply: bool = False,
 ) -> AdaptationResult | None:
     """Check post-activity signals and run adaptation if triggered."""
     trigger = check_post_activity_trigger(db, user, activity)
     if trigger is None:
         return None
-    return run_adaptation(db, user=user, trigger=trigger, allow_apply=allow_apply)
+    return run_adaptation(db, user=user, trigger=trigger)
 
 
 def check_and_adapt_tsb(
     db: Session,
     user: s.User,
-    *,
-    allow_apply: bool = False,
 ) -> AdaptationResult | None:
     """Check TSB and run adaptation if triggered."""
     trigger = check_tsb_trigger(db, user)
     if trigger is None:
         return None
-    return run_adaptation(db, user=user, trigger=trigger, allow_apply=allow_apply)
+    return run_adaptation(db, user=user, trigger=trigger)
 
 
 def check_and_adapt_missed(
     db: Session,
     user: s.User,
-    *,
-    allow_apply: bool = False,
 ) -> AdaptationResult | None:
     """Check missed cascade and run adaptation if triggered."""
     trigger = check_missed_cascade_trigger(db, user)
     if trigger is None:
         return None
-    return run_adaptation(db, user=user, trigger=trigger, allow_apply=allow_apply)
+    return run_adaptation(db, user=user, trigger=trigger)
