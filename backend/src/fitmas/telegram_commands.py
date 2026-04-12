@@ -25,11 +25,16 @@ _DEBOUNCE_SECONDS = float(os.getenv("FITMAS_TELEGRAM_DEBOUNCE_SECONDS", "2.5"))
 
 async def cmd_plan(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     try:
-        week = await api_get("/api/v0/week")
-        lines = [f"*{week['intention']}*\n{week['summary']}\n"]
-        for day in week["days"]:
-            emoji = SPORT_EMOJIS.get(day.get("sport_type", "rest"), "⚪")
-            lines.append(f"{emoji} *{day['label']}* — {day['session_title']}")
+        timeline = await api_get("/api/v0/timeline?limit=14")
+        if not timeline:
+            await update.message.reply_text("Pas de séance datée pour le moment.")
+            return
+        lines = ["*Planning daté*\n"]
+        for session in timeline[:7]:
+            emoji = SPORT_EMOJIS.get(session.get("sport_type", "rest"), "⚪")
+            label = session.get("label") or DAY_LABELS.get(session.get("day", ""), session.get("day", ""))
+            status = session.get("completion_status", "planned")
+            lines.append(f"{emoji} *{label}* — {session['session_title']} _{status}_")
         await update.message.reply_text("\n".join(lines), parse_mode="Markdown")
     except httpx.HTTPStatusError as exc:
         if exc.response.status_code == 404:

@@ -403,12 +403,13 @@ Statut courant :
 - `api_app.py`, `api_stats.py` et `performance_overview.py` ne chargent plus `WeeklyPlan` / `DayPlan` comme verite runtime
 - le chemin conversation ne charge plus `WeeklyPlan` / `DayPlan` dans `ConversationTurnState`
 - le heartbeat review ne charge plus `WeeklyPlan` / `DayPlan`
+- Telegram `/plan` lit maintenant la timeline datee plutot que `/api/v0/week`
 - `/api/v0/week` reste disponible comme surface template/compat et expose `runtime_role=template_compat`
 - `CoachStateBundle` accepte maintenant l'absence de template legacy et retombe sur une meta planning neutre
 
 Reste :
 
-- remplacer les consommateurs frontend / Telegram restants de `/api/v0/week` par des read models dates quand le scope UI le permet
+- remplacer le vieux bootstrap frontend inactif de `/api/v0/week` par des read models dates, ou le supprimer avec les anciennes pages `frontend/src/pages`
 
 ### Phase 4 - Rebuild adaptation paths
 
