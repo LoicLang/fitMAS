@@ -483,17 +483,14 @@ def _build_user_message(
         target_label = DAY_LABELS_FR[DAY_KEYS[target_date.weekday()]]
         lines = [
             f"OK. Je deplace {title.lower()} a {target_label}.",
-            "Je protege l'objectif principal de la semaine.",
-            f"Mission hebdo : {mission_status_label(scenario.week_mission_status)}.",
-            f"Impact trajectoire : {trajectory_impact_label(scenario.trajectory_impact)}.",
+            _week_guard_line(scenario.week_mission_status, scenario.trajectory_impact),
         ]
         return "\n".join(lines)
 
     if scenario.scenario_type == "minimum_dose":
         lines = [
             "OK. Je garde une version courte au lieu de forcer la seance normale.",
-            f"Mission hebdo : {mission_status_label(scenario.week_mission_status)}.",
-            f"Impact trajectoire : {trajectory_impact_label(scenario.trajectory_impact)}.",
+            _week_guard_line(scenario.week_mission_status, scenario.trajectory_impact),
         ]
         if week_mission.key_sessions:
             lines.insert(1, f"Je protege encore {week_mission.key_sessions[0].title.lower()}.")
@@ -501,14 +498,23 @@ def _build_user_message(
 
     lines = [
         "OK. Je libere ce creneau et je garde la suite propre.",
-        f"Mission hebdo : {mission_status_label(scenario.week_mission_status)}.",
-        f"Impact trajectoire : {trajectory_impact_label(scenario.trajectory_impact)}.",
+        _week_guard_line(scenario.week_mission_status, scenario.trajectory_impact),
     ]
     if scenario.adaptation_level is AdaptationLevel.MESO:
         lines.insert(1, "Je touche un peu a la forme de la semaine pour eviter une surcharge artificielle.")
     if week_mission.key_sessions:
         lines.insert(1, f"Je protege encore {week_mission.key_sessions[0].title.lower()}.")
     return "\n".join(lines)
+
+
+def _week_guard_line(status: WeekMissionStatus, impact: TrajectoryImpact) -> str:
+    if status is WeekMissionStatus.UNCHANGED:
+        if impact in {TrajectoryImpact.NONE, TrajectoryImpact.LOW}:
+            return "Le cap de la semaine ne bouge pas."
+        return "Le cap reste le meme, avec un petit cout sur la trajectoire."
+    if status is WeekMissionStatus.SOFTENED:
+        return "J'adoucis un peu la semaine pour garder la suite propre."
+    return "Je revise un peu la semaine pour rester coherent avec ce que tu peux vraiment faire."
 
 
 def mission_status_label(status: WeekMissionStatus) -> str:

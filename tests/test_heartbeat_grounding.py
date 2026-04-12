@@ -174,8 +174,7 @@ class HeartbeatGroundingTest(unittest.TestCase):
             heartbeat._llm_generate = original_llm
 
         self.assertEqual(draft.text, "ok")
-        self.assertIn("activite reelle detectee", captured["prompt"].lower())
-        self.assertIn("30 min", captured["prompt"])
+        self.assertNotIn("activite reelle detectee", captured["prompt"].lower())
 
     def test_morning_briefing_mentions_yesterday_claimed_activity(self) -> None:
         now = get_local_now(self.user.timezone)
@@ -252,8 +251,7 @@ class HeartbeatGroundingTest(unittest.TestCase):
             heartbeat._llm_generate = original_llm
 
         self.assertEqual(draft.text, "ok")
-        self.assertIn("activite declaree non loggee", captured["prompt"].lower())
-        self.assertIn("30 min", captured["prompt"])
+        self.assertNotIn("activite declaree non loggee", captured["prompt"].lower())
 
     def test_morning_briefing_does_not_trust_done_without_evidence(self) -> None:
         now = get_local_now(self.user.timezone)
@@ -315,7 +313,7 @@ class HeartbeatGroundingTest(unittest.TestCase):
             heartbeat._llm_generate = original_llm
 
         self.assertEqual(draft.text, "ok")
-        self.assertIn("statut a verifier", captured["prompt"].lower())
+        self.assertNotIn("statut a verifier", captured["prompt"].lower())
         self.assertNotIn("fait confirme", captured["prompt"].lower())
 
     def test_morning_briefing_adds_priority_question_when_yesterday_changes_week(self) -> None:
@@ -423,7 +421,7 @@ class HeartbeatGroundingTest(unittest.TestCase):
 
         self.assertEqual(draft.text, "ok")
         self.assertIn("clarification prioritaire", captured["prompt"].lower())
-        self.assertIn("tu l'as faite ou non", captured["prompt"].lower())
+        self.assertIn("tu l'as faite ou pas", captured["prompt"].lower())
 
     def test_morning_briefing_can_attach_hidden_calibration_need(self) -> None:
         now = get_local_now(self.user.timezone)
@@ -850,6 +848,68 @@ class HeartbeatGroundingTest(unittest.TestCase):
         self.assertIn("Source de verite planning: calendrier date reel / app.", captured["prompt"])
         self.assertIn("Natation app truth", captured["prompt"])
         self.assertNotIn("Legacy footing plan", captured["prompt"])
+
+    def test_morning_briefing_does_not_fall_back_to_legacy_yesterday_day_plan(self) -> None:
+        now = get_local_now(self.user.timezone)
+        today_key = DAY_KEYS[now.weekday()]
+        yesterday_key = DAY_KEYS[(now.weekday() - 1) % 7]
+        repo.replace_plan(
+            self.db,
+            self.user.id,
+            intention="test",
+            summary="test",
+            timezone_name=self.user.timezone,
+            days=[
+                {
+                    "day": yesterday_key,
+                    "label": day_label_fr(yesterday_key, capitalize=True),
+                    "sport_type": "swimming",
+                    "session_type": "technique",
+                    "session_title": "Legacy yesterday swim",
+                    "session_goal": "Precision",
+                    "session_note": "",
+                    "session_description": "",
+                    "duration_min": 60,
+                    "intensity": "moderate",
+                    "load_score": 2,
+                    "priority": "Normal",
+                    "nutrition_focus": "",
+                    "flexibility": "stable",
+                    "completion_status": "planned",
+                },
+                {
+                    "day": today_key,
+                    "label": day_label_fr(today_key, capitalize=True),
+                    "sport_type": "running",
+                    "session_type": "easy",
+                    "session_title": "Footing du jour",
+                    "session_goal": "Bouger",
+                    "session_note": "",
+                    "session_description": "",
+                    "duration_min": 45,
+                    "intensity": "easy",
+                    "load_score": 1,
+                    "priority": "Normal",
+                    "nutrition_focus": "",
+                    "flexibility": "stable",
+                    "completion_status": "planned",
+                },
+            ],
+        )
+        captured: dict[str, str] = {}
+        original_llm = heartbeat._llm_generate
+        try:
+            def fake_llm(system: str, prompt: str, *, allow_no_send: bool = True):
+                captured["prompt"] = prompt
+                return "ok"
+
+            heartbeat._llm_generate = fake_llm
+            draft = heartbeat.morning_briefing()
+        finally:
+            heartbeat._llm_generate = original_llm
+
+        self.assertEqual(draft.text, "ok")
+        self.assertNotIn("Legacy yesterday swim", captured["prompt"])
 
     def _create_plan_with_today_session(self) -> tuple[s.WeeklyPlan, s.ScheduledSession]:
         now = get_local_now(self.user.timezone)

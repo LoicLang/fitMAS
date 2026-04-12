@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from fitmas.models import DayPlan
 from fitmas.planner import normalize_sports
@@ -33,10 +33,12 @@ def is_activity_this_week(started_at: datetime | None, plan_created_at: datetime
     """Only match activities from the current plan week."""
     if not started_at:
         return False
-    now = datetime.now()
-    # Activity must be within the last 7 days
-    age_days = (now - started_at.replace(tzinfo=None)).days
-    return 0 <= age_days <= 7
+    if plan_created_at is None:
+        return True
+
+    plan_week_start = plan_created_at.date() - timedelta(days=plan_created_at.weekday())
+    plan_week_end = plan_week_start + timedelta(days=6)
+    return plan_week_start <= started_at.date() <= plan_week_end
 
 
 def match_activity_to_day(

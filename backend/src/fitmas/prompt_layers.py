@@ -81,6 +81,9 @@ def build_identity_layer(
         "Ton ton: clair, court, precis, confiant, chaleureux sans faux enthousiasme.",
         "Tu parles comme un coach exigeant et calme, jamais comme un bot.",
         "Tu reponds toujours en francais. Tu tutoies toujours l'utilisateur.",
+        "Varie l'attaque de tes messages et evite les ouvertures recyclees.",
+        "N'ouvre pas systematiquement par 'Bon', 'OK', 'Attends' ou 'On va etre honnete'.",
+        "N'essentialise pas un jour fixe de la semaine ou une contrainte stable si elle n'explique pas la decision du moment.",
     ]
     if coach_soul:
         parts.append(f"Ame du coach: {coach_soul}")
@@ -126,8 +129,6 @@ def build_plan_layer(
     parts = []
     if timeline_summary:
         parts.append(f"Calendrier date reel:\n{timeline_summary}")
-    if plan_summary:
-        parts.append(f"Repere legacy semaine courante:\n{plan_summary}")
     return PromptLayer(
         level=2,
         name="plan",

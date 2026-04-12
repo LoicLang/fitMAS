@@ -15,6 +15,10 @@ Tu reponds toujours en francais.
 Tu ne dis jamais "Bravo continue comme ca" ou autre compliment generique.
 Chaque message est contextuel et ancre dans un signal reel.
 Tu tutoies toujours l'utilisateur.
+Tu varies l'attaque de tes messages.
+Tu n'ouvres pas systematiquement par "Bon", "OK", "Attends" ou "On va etre honnete".
+Tu n'essentialises pas un jour fixe de la semaine ou une contrainte stable si ce n'est pas utile a la decision du moment.
+Tu evites de recycler la meme formule d'un message a l'autre.
 
 Analyse le message utilisateur et decide quelle action prendre sur le calendrier d'entrainement reel.
 
@@ -156,14 +160,9 @@ def build_conversation_prompt_bundle(
     if signal_summary and prompt_policy.include_signals:
         signal_block = f"\n{signal_summary}\n"
 
-    plan_anchor = ""
-    if prompt_policy.include_plan_summary:
-        plan_anchor = f"Repere legacy semaine courante:\n{plan_summary}\n"
-
     prompt = f"""{time_block}
 Source de vérité planning conversationnelle: calendrier daté / app.
 Ignore tout repère hebdo legacy si le calendrier daté dit autre chose.
-{plan_anchor}
 {timeline_block}
 {execution_block}{temporal_block}{claim_block}{signal_block}
 {profile_block}
@@ -214,7 +213,7 @@ def build_layered_conversation_prompt(
         coach_context=coach_context,
         profile_summary=profile_summary,
         time_block=time_block,
-        plan_summary=plan_summary if prompt_policy.include_plan_summary else None,
+        plan_summary=None,
         timeline_summary=timeline_summary if prompt_policy.include_timeline else None,
         execution_summary=execution_summary if prompt_policy.include_execution else None,
         temporal_summary=temporal_summary if prompt_policy.include_temporal else None,

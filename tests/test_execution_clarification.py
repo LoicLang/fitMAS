@@ -65,7 +65,7 @@ def test_execution_clarification_asks_when_uncertainty_changes_recent_week() -> 
     )
 
     assert clarification is not None
-    assert "Tu l'as faite ou non" in clarification.question
+    assert "Tu l'as faite ou pas" in clarification.question
     assert "key_session_salvaged" in clarification.impact_flags
 
 

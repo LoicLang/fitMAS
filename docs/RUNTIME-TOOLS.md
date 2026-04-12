@@ -37,6 +37,38 @@ Objectifs :
 - pas de `multi_mutate` pour l'instant
 - pas de skill system formel tant qu'on n'a pas assez de workflows repetes
 
+## Ce qu'on distingue
+
+Pour la suite, il faut garder 3 couches separées :
+
+### 1. Capacités métier internes
+
+Ce sont des fonctions / modules deterministes reutilisables par :
+
+- conversation
+- planner
+- heartbeat
+- app read models
+- ops / CLI
+
+Elles peuvent etre nombreuses et atomiques.
+
+### 2. Runtime tools exposes au LLM
+
+Ils doivent rester :
+
+- peu nombreux
+- semantiques
+- auditables
+- bornes
+
+Le registre runtime est volontairement **plus petit** que le nombre de capacités metier du repo.
+
+### 3. Orchestrateurs de write / side effects
+
+Les mutations, deliveries et persistance restent sous controle des orchestrateurs.
+Un tool runtime ne doit pas devenir un cheval de Troie pour ecrire partout.
+
 ## Modules
 
 ### `tool_contract.py`
@@ -55,9 +87,12 @@ Registry V1 :
 - `resolve_planning_window`
 - `get_recent_activities`
 - `get_activity_highlights`
+- `get_recent_reality_window`
+- `get_load_context`
 - `get_relevant_facts`
 
 Tous ces tools lisent des objets deja charges par l'orchestrateur.
+Le registre actuel reste volontairement tres compact.
 
 ### `tool_runtime.py`
 
@@ -244,10 +279,54 @@ Le bon ordre :
 4. tool use borne dans `decide()` pour quelques questions de lecture
 5. transcript structure de session avant toute sophistication plus large
 
+## Direction pour la prochaine tranche
+
+Le prochain chantier tools doit partir de la question :
+
+`quelle capacite metier partagee manque au repo ?`
+
+et non :
+
+`quel tool par sport veut-on exposer au modele ?`
+
+Direction recommandee :
+
+### 1. Substrate partage par capacite
+
+Premieres familles candidates :
+
+- `reality`
+- `planning`
+- `session_drafting`
+- `session_analysis`
+- `plan_review`
+
+### 2. Adapters par sport derriere ce substrate
+
+Les sports implementent les memes contrats, par exemple :
+
+- running
+- cycling
+- swimming
+- climbing
+- strength
+
+On ne donne pas directement au modele un catalogue `run_* / swim_* / bike_*`.
+
+### 3. Wrappers runtime eventuels ensuite
+
+Si une capacite est utile au LLM, on expose ensuite un wrapper borne, par exemple :
+
+- `resolve_target_session`
+- `review_current_week`
+- `build_session_draft`
+- `analyze_completed_activity`
+
 Notes de sequencing :
 
 - `transcript structure > compaction` a ce stade
 - les tools doivent rester etroits : plan, reel recent, charge, contraintes, contrat seance
+- decomposition par capacite avant decomposition par sport
 - pas de write tools avant d'avoir des permission tiers propres sur les mutations
 
 Pas de liberte large du modele avant d'avoir :

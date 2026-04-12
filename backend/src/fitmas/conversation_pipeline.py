@@ -4,7 +4,7 @@ import logging
 
 from sqlalchemy.orm import Session
 
-from fitmas import mutations, repository as repo
+from fitmas import repository as repo
 from fitmas.activity_claims import (
     build_claim_fact_payloads,
     build_execution_conflict_archive_payloads,
@@ -13,7 +13,6 @@ from fitmas.activity_claims import (
     format_non_completion_claim_for_prompt,
 )
 from fitmas.adaptation_log import build_adaptation_log_entry
-from fitmas.athlete_profile import build_athlete_profile
 from fitmas.calibration_llm import extract_calibration_resolution, generate_calibration_ack
 from fitmas.calibration_needs import (
     build_resolution_memory_updates,
@@ -21,6 +20,7 @@ from fitmas.calibration_needs import (
     is_standalone_calibration_answer,
     should_apply_calibration_resolution,
 )
+from fitmas.coach_state_bundle import build_coach_state_bundle
 from fitmas.conversation_context import (
     activity_claim_summary_for_prompt,
     build_claim_memory_updates,
@@ -49,6 +49,7 @@ from fitmas.mutation_permissions import (
     serialize_mutation_decision,
 )
 from fitmas.nlp import extract_reply, generate_reply
+from fitmas.plan_mutation_service import apply_decisions_for_user
 from fitmas.planning_window_resolution import resolve_planning_window
 from fitmas.profile_summary import build_profile_summary
 from fitmas.replan_from_life_change import (
@@ -113,21 +114,15 @@ def run_conversation_turn(
         else:
             repo.resolve_pending_mutation_confirmation(db, pending_confirmation.id, status="accepted")
             decision = deserialize_mutation_decision(pending_confirmation.decision_json)
-            mutations.apply(
-                db, state.plan.id, decision,
-                scheduled_sessions=state.scheduled_sessions,
-                timezone_name=user.timezone,
+            service_result = apply_decisions_for_user(
+                db,
+                user=user,
+                decisions=[decision],
+                source="conversation",
+                trigger_type="confirmation_accepted",
+                explained_to_user=True,
             )
-            updated_session = (
-                repo.get_scheduled_session(db, user.id, decision.target_session_id)
-                if decision.target_session_id is not None
-                else None
-            )
-            reply_text = api_messages._render_applied_decision_reply(
-                decision=decision,
-                updated_session=updated_session,
-                fallback_text=decision.fitmas_message,
-            )
+            reply_text = _applied_event_summary(service_result, decision) or decision.fitmas_message
             reply_text = api_messages._sanitize_no_change_reply(
                 user_text=payload.text,
                 reply_text=reply_text,
@@ -230,7 +225,18 @@ def run_conversation_turn(
         if non_completion_summary:
             claim_summary = "\n".join(part for part in (claim_summary, non_completion_summary) if part)
 
-    profile_snapshot = build_athlete_profile(user, facts=state.active_memory_rows)
+    planning_decision = repo.get_latest_planning_decision_record(db, user.id)
+    coach_bundle = build_coach_state_bundle(
+        db,
+        user=user,
+        today_date=conversation_context.temporal_resolution.local_date,
+        scheduled_sessions=state.scheduled_sessions,
+        activities=state.activities,
+        planning_decision=planning_decision,
+        recent_adaptations_limit=4,
+        screen="conversation",
+    )
+    profile_snapshot = coach_bundle.profile_snapshot
     clarification_target_session = api_messages._yesterday_target_session(
         db,
         user,
@@ -332,7 +338,12 @@ def run_conversation_turn(
         )
         state.active_memory_rows, state.active_facts = api_messages._active_memory_payloads(db, user.id)
 
-        health_result = dependencies.check_and_adapt_health_facts(db, user, health_indication_facts)
+        health_result = dependencies.check_and_adapt_health_facts(
+            db,
+            user,
+            health_indication_facts,
+            allow_apply=True,
+        )
         if health_result and health_result.applied and health_result.message:
             first_decision = health_result.decisions[0] if health_result.decisions else None
             extraction = Extraction(confidence=max(float(user_indication.confidence if user_indication else 0.0), 0.85))
@@ -356,8 +367,8 @@ def run_conversation_turn(
         today=conversation_context.temporal_resolution.local_date,
         time_context=conversation_context.time_context,
         profile=profile_snapshot,
-        week_plan=state.pydantic_plan,
-        planning_decision=repo.get_latest_planning_decision_record(db, user.id),
+        week_plan=None,
+        planning_decision=planning_decision,
         today_session=state.today_session,
         scheduled_sessions=state.scheduled_sessions,
     )
@@ -372,17 +383,29 @@ def run_conversation_turn(
             resolution=resolution,
             today=conversation_context.temporal_resolution.local_date,
             profile=profile_snapshot,
-            week_plan=state.pydantic_plan,
-            planning_decision=repo.get_latest_planning_decision_record(db, user.id),
+            week_plan=None,
+            planning_decision=planning_decision,
             today_session=state.today_session,
             scheduled_sessions=state.scheduled_sessions,
         )
     else:
         resolution = None
 
+    standalone_calibration_answer = (
+        open_calibration_need is not None
+        and should_apply_calibration_resolution(calibration_resolution)
+        and adaptation is None
+        and is_standalone_calibration_answer(payload.text)
+    )
+
     week_scope_reply = None
     no_candidate_reply = None
-    if adaptation is None and user_indication is not None and user_indication.kind is UserIndicationKind.AVAILABILITY_CONSTRAINT:
+    if (
+        adaptation is None
+        and not standalone_calibration_answer
+        and user_indication is not None
+        and user_indication.kind is UserIndicationKind.AVAILABILITY_CONSTRAINT
+    ):
         if resolution is None and user_indication.time_reference is not None:
             resolution = resolve_planning_window(
                 indication=user_indication,
@@ -401,12 +424,7 @@ def run_conversation_turn(
         timezone_name=user.timezone,
         non_completion_claim=resolved_non_completion_claim,
     )
-    if (
-        open_calibration_need is not None
-        and should_apply_calibration_resolution(calibration_resolution)
-        and adaptation is None
-        and is_standalone_calibration_answer(payload.text)
-    ):
+    if standalone_calibration_answer:
         calibration_only_reply = generate_calibration_ack(
             need=open_calibration_need,
             resolution=calibration_resolution,
@@ -433,12 +451,23 @@ def run_conversation_turn(
             for fact in (list(conversation_context.selected_facts) or [])[:6]
         ],
         "user_indication_kind": user_indication.kind.value if user_indication is not None else None,
+        "planning_contract": coach_bundle.planning_contract.as_dict(),
+        "availability_state": coach_bundle.availability_state.as_dict(),
+        "week_mission": coach_bundle.week_mission.as_dict(),
+        "recent_reality": coach_bundle.recent_reality.as_dict(),
+        "last_adaptation": coach_bundle.latest_adaptation.as_dict() if coach_bundle.latest_adaptation is not None else None,
+        "week_context": {
+            "summary": coach_bundle.week_summary,
+            "planning": coach_bundle.planning_context,
+            "next_week": coach_bundle.next_week,
+            "coach_reading": coach_bundle.coach_reading,
+        },
     }
 
     decision = (
         dependencies.decide(
             payload.text,
-            api_messages.make_plan_summary(state.pydantic_plan.days),
+            "",
             timeline_summary=api_messages.make_timeline_summary(state.timeline),
             execution_summary=execution_summary_for_prompt(conversation_context),
             temporal_summary=temporal_summary_for_prompt(conversation_context),
@@ -456,6 +485,17 @@ def run_conversation_turn(
                 "today_session_id": state.today_session.id if state.today_session else None,
                 "profile_summary": build_profile_summary(state.active_memory_rows),
                 "selected_facts": list(conversation_context.selected_facts) or api_messages.select_prompt_facts(state.active_facts),
+                "planning_contract": coach_bundle.planning_contract.as_dict(),
+                "availability_state": coach_bundle.availability_state.as_dict(),
+                "week_mission": coach_bundle.week_mission.as_dict(),
+                "recent_reality": coach_bundle.recent_reality.as_dict(),
+                "last_adaptation": coach_bundle.latest_adaptation.as_dict() if coach_bundle.latest_adaptation is not None else None,
+                "week_context": {
+                    "summary": coach_bundle.week_summary,
+                    "planning": coach_bundle.planning_context,
+                    "next_week": coach_bundle.next_week,
+                    "coach_reading": coach_bundle.coach_reading,
+                },
             },
             remembered_facts=state.active_facts,
             time_context=conversation_context.time_context,
@@ -519,15 +559,13 @@ def run_conversation_turn(
             )
             logger.info("Pending confirmation (%s): %s", decision.mutation_type, reply_text[:120])
         else:
-            pre_result, post_result = mutations.apply(
-                db, state.plan.id, decision,
-                scheduled_sessions=state.scheduled_sessions,
-                timezone_name=user.timezone,
-            )
-            updated_session = (
-                repo.get_scheduled_session(db, user.id, decision.target_session_id)
-                if decision.target_session_id is not None
-                else None
+            service_result = apply_decisions_for_user(
+                db,
+                user=user,
+                decisions=[decision],
+                source="conversation",
+                trigger_type="message",
+                explained_to_user=True,
             )
             if adaptation is not None:
                 repo.add_adaptation_event(
@@ -535,11 +573,7 @@ def run_conversation_turn(
                     user.id,
                     build_adaptation_log_entry(decision=adaptation, scheduled_sessions=state.scheduled_sessions),
                 )
-            reply_text = api_messages._render_applied_decision_reply(
-                decision=decision,
-                updated_session=updated_session,
-                fallback_text=decision.fitmas_message,
-            )
+            reply_text = _applied_event_summary(service_result, decision) or decision.fitmas_message
             reply_text = api_messages._sanitize_no_change_reply(
                 user_text=payload.text,
                 reply_text=reply_text,
@@ -636,7 +670,6 @@ def run_conversation_turn(
 
 
 def _load_turn_state(*, db: Session, user, user_text: str) -> ConversationTurnState:
-    plan = repo.get_active_plan(db, user.id)
     repo.add_message(db, user.id, "user", user_text)
     logger.info("User message: %s", user_text[:120])
 
@@ -650,8 +683,6 @@ def _load_turn_state(*, db: Session, user, user_text: str) -> ConversationTurnSt
     active_memory_rows, active_facts = _active_memory_payloads(db, user.id)
     return ConversationTurnState(
         user=user,
-        plan=plan,
-        pydantic_plan=repo.to_pydantic_plan(plan),
         conversation_history=conversation_history,
         previous_agent_text=previous_agent_text,
         scheduled_sessions=scheduled_sessions,
@@ -667,6 +698,15 @@ def _active_memory_payloads(db: Session, user_id: int) -> tuple[list[object], li
     import fitmas.api_messages as api_messages
 
     return api_messages._active_memory_payloads(db, user_id)
+
+
+def _applied_event_summary(service_result, decision) -> str | None:
+    if service_result is None:
+        return None
+    for event in getattr(service_result, "applied_events", ()):
+        if event.command_type == decision.mutation_type:
+            return event.user_visible_summary
+    return None
 
 
 def _latest_agent_text(conversation_history: list[dict]) -> str | None:

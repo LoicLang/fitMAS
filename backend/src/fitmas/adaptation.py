@@ -4,7 +4,7 @@ Architecture:
   1. Cheap Python detection (check_* functions) returns AdaptationTrigger or None
   2. Orchestrator assembles context and calls LLM with a specialized prompt
   3. LLM response is parsed into MutationDecision objects
-  4. Decisions are applied via the existing mutations.apply() pipeline
+  4. Decisions are applied by orchestrators through PlanMutationService
 """
 
 from __future__ import annotations
@@ -609,10 +609,11 @@ def run_adaptation(
     *,
     user: s.User,
     trigger: AdaptationTrigger,
+    allow_apply: bool = False,
 ) -> AdaptationResult | None:
     """Run the full adaptation pipeline: prompt → LLM → parse → apply."""
-    from fitmas import mutations
     from fitmas.llm import _request_json  # noqa: access internal for consistency
+    from fitmas.plan_mutation_service import apply_decisions_for_user
 
     prompt = _build_prompt(trigger)
     model = _model_for_trigger(trigger.trigger_type)
@@ -634,26 +635,45 @@ def run_adaptation(
         logger.info("Adaptation %s: no changes needed", trigger.trigger_type)
         return AdaptationResult(trigger_type=trigger.trigger_type, message=message)
 
-    # Apply each decision
+    if not allow_apply:
+        logger.info(
+            "Adaptation %s produced %d suggestion(s) but apply is disabled",
+            trigger.trigger_type,
+            len(decisions),
+        )
+        return AdaptationResult(
+            trigger_type=trigger.trigger_type,
+            decisions=decisions,
+            message=message,
+            applied=False,
+        )
+
+    # Apply each decision through the temporary single-writer wrapper.
     try:
-        plan = repo.get_active_plan(db, user.id)
+        service_result = apply_decisions_for_user(
+            db,
+            user=user,
+            decisions=decisions,
+        )
     except RuntimeError:
         logger.warning("No active plan for adaptation")
         return None
+    except Exception:
+        logger.exception("Failed to apply adaptation decisions through plan_mutation_service")
+        return None
 
-    for decision in decisions:
-        try:
-            mutations.apply(db, plan.id, decision)
-        except Exception:
-            logger.exception("Failed to apply adaptation decision: %s", decision)
-
-    logger.info("Adaptation %s applied %d mutations", trigger.trigger_type, len(decisions))
+    logger.info(
+        "Adaptation %s applied %d/%d mutations",
+        trigger.trigger_type,
+        service_result.applied_count if service_result is not None else 0,
+        len(decisions),
+    )
 
     return AdaptationResult(
         trigger_type=trigger.trigger_type,
         decisions=decisions,
         message=message,
-        applied=True,
+        applied=bool(service_result and service_result.applied_count > 0),
     )
 
 
@@ -665,43 +685,51 @@ def check_and_adapt_health_facts(
     db: Session,
     user: s.User,
     new_facts: list[dict],
+    *,
+    allow_apply: bool = False,
 ) -> AdaptationResult | None:
     """Check health facts and run adaptation if triggered."""
     trigger = check_health_fact_trigger(db, user, new_facts)
     if trigger is None:
         return None
-    return run_adaptation(db, user=user, trigger=trigger)
+    return run_adaptation(db, user=user, trigger=trigger, allow_apply=allow_apply)
 
 
 def check_and_adapt_post_activity(
     db: Session,
     user: s.User,
     activity: s.Activity,
+    *,
+    allow_apply: bool = False,
 ) -> AdaptationResult | None:
     """Check post-activity signals and run adaptation if triggered."""
     trigger = check_post_activity_trigger(db, user, activity)
     if trigger is None:
         return None
-    return run_adaptation(db, user=user, trigger=trigger)
+    return run_adaptation(db, user=user, trigger=trigger, allow_apply=allow_apply)
 
 
 def check_and_adapt_tsb(
     db: Session,
     user: s.User,
+    *,
+    allow_apply: bool = False,
 ) -> AdaptationResult | None:
     """Check TSB and run adaptation if triggered."""
     trigger = check_tsb_trigger(db, user)
     if trigger is None:
         return None
-    return run_adaptation(db, user=user, trigger=trigger)
+    return run_adaptation(db, user=user, trigger=trigger, allow_apply=allow_apply)
 
 
 def check_and_adapt_missed(
     db: Session,
     user: s.User,
+    *,
+    allow_apply: bool = False,
 ) -> AdaptationResult | None:
     """Check missed cascade and run adaptation if triggered."""
     trigger = check_missed_cascade_trigger(db, user)
     if trigger is None:
         return None
-    return run_adaptation(db, user=user, trigger=trigger)
+    return run_adaptation(db, user=user, trigger=trigger, allow_apply=allow_apply)

@@ -9,76 +9,201 @@ read_when:
 
 # FitMAS — Build Order
 
+## Role canonique
+
+Ce document est la **source de verite** pour :
+
+- ce qui existe vraiment dans le code
+- ce qui reste partiel, legacy ou trompeur
+- l'ordre de construction recommande a partir de maintenant
+
+Si un autre doc diverge :
+
+- `BUILD-ORDER.md` gagne sur **l'etat reel** et **la suite**
+- `PRODUCT.md` decrit la promesse et le scope
+- `ARCHITECTURE.md` decrit la structure technique et les contraintes
+- les docs domaine decrivent les contrats locaux
+
 ## Phrase guide
 
 **Un premier coach que Loïc reconnaît, comprend, et a envie de rouvrir demain.**
 
-## État actuel — 6 avril 2026
+## État actuel — 7 avril 2026
 
-### Socle produit déjà solide
+### Vérité repo
+
+Le repo est deja plus avance que plusieurs TODO historiques.
+
+Ce qui est vrai dans le code aujourd'hui :
 
 - onboarding Telegram complet avec preview coach
-- bridge Telegram debounced sur rafales courtes
-- planner déterministe + fondations `PlanningDecision`
-- calendrier daté persistant via `ScheduledSession`
-- webapp React/Vite déployée avec `Aperçu / Calendrier / Évolution`
+- coach conversationnel Telegram = surface principale de relation
+- webapp React/Vite mobile-first = cockpit performance a 3 surfaces :
+  - `Aperçu`
+  - `Calendrier`
+  - `Évolution`
+  - détail séance sur `/workout/:sessionId`
+- read models backend dédiés aux écrans app :
+  - `overview`
+  - `calendar`
+  - `evolution`
+  - `session detail`
+- vérité planning app/chat = `ScheduledSession` datées en priorité
+- `WeeklyPlan` / `DayPlan` existent encore, mais surtout comme squelette legacy / fallback
+- planner déterministe multisport + `PlanningDecision` + `planning_state`
 - activités réelles : manuel + Strava + matching + vues app
-- heartbeat proactif de base
-- revue hebdo auto
-- mémoire V2 base : `profile / working / patterns`
-- substrate de décision planning V1 renforcé
-- chemin live conversationnel branché sur les prompt layers
-- heartbeat moins mécanique :
-  - variation journalière réelle du créneau matin
-  - filtrage des contraintes stables répétitives
-  - highlights transcript en review
+- couche planning contract déjà visible dans l'app :
+  - `PlanningContract`
+  - `WeekMission`
+  - `AvailabilityState`
+  - `SessionPolicy`
+  - `change_budget`
+- boucle conversationnelle déjà modernisée :
+  - prompt layers
+  - prompt caching sur la partie stable
+  - debounce Telegram
+  - routing déterministe des tools
+  - 1 tool read-only max par tour outillé
+  - confirmations `oui/non` pour mutations à impact fort
+  - transcript structuré persisté dans `conversation_turns`
+- couche réalité déjà posée :
+  - `ExecutionEvidence`
+  - `RecentRealityWindow`
+  - `WorkoutContent`
+  - `strength_engine`
+  - distinction `planned / done / missing / offplan` côté backend app
+- mémoire V2 déjà active :
+  - `UserFact` surtout pour le profil utile
+  - `working_memory_entries` pour le court terme
+  - `user_patterns` pour les patterns promus
+  - cron de maintenance mémoire toutes les 6h
+- heartbeat proactif déjà en prod :
+  - briefing matin
+  - rappel pré-séance
+  - review dimanche
+  - nouveau plan lundi
+- surface ops / debug distincte du tool plane conversationnel :
+  - `api_ops.py`
+  - `api_debug.py`
 
-### Chantiers transversaux déjà largement absorbés
+### Ce qui est déjà fait et ne doit plus revenir comme gros TODO
 
-- `REALITY-WORKOUT-CONTRACT.md`
-  - vérité d'exécution durcie
-  - `RecentRealityWindow` posé
-  - `WorkoutContent` posé
-  - `strength_engine` déterministe MVP posé
-  - app remappée sur le contrat séance
-- `CONVERSATION-GROUNDING.md`
-  - résolution `aujourd'hui / demain / hier`
-  - `execution_context`, `execution_evidence`, `activity_claims`
-  - meilleure lecture du réel hors plan
-  - runtime tools V1 read-only branchés au chat
-- `PLANNING-ENGINE-V2.md`
-  - snapshots + readiness + decision engine posés
-  - templates + validator posés
-  - planner déjà recentré hors LLM
+- migration React/Vite + app mobile-first
+- calendrier daté persistant + timeline backend
+- détail séance dédié
+- prompt 2 zones + caching
+- debounce Telegram
+- `profile_summary` compact
+- permission tiers initiale sur mutations
+- runtime tools V1 read-only
+- transcript structuré de conversation
+- `execution_evidence` / `recent_reality` / `workout_content`
+- split heartbeat en cluster `skills/heartbeat`
+- mémoire V2 base + maintenance périodique
 
-### Ce qui ne doit plus apparaître comme “à faire”
+### Ce qui reste partiel, legacy ou fragile
 
-- migration React/Vite
-- calendrier persistant
-- cockpit app de base
-- séparation `profile / working / patterns`
-- sprint “agents”
-
-Ces sujets sont des acquis ou des pistes dépriorisées, plus des TODO immédiats.
+- `WeeklyPlan` / `DayPlan` ne sont pas encore totalement sortis des chemins legacy
+- `repository.py` reste un hotspot trop gros, même si `repo_conversation.py` a commencé l'extraction
+- le runtime tools plane reste volontairement étroit :
+  - read-only
+  - 1 tool call max
+  - pas de write tools
+- le heartbeat reste principalement cron + gating, pas encore tick-based
+- le verrou anti-doublon reste surtout mono-process / best effort
+- la couverture tests reste légère au regard de la richesse du domaine
+- le savoir sport existe en contenu et heuristiques, pas encore comme **substrate canonique de capacités partagées**
 
 ## Décision de sequencing
 
 - la prochaine douleur n'est pas “plus d'intelligence planner”
-- la prochaine douleur est “meilleur harness conversationnel, meilleure mémoire, moins d'appels inutiles”
-- `transcript structuré > compaction` pour l'état actuel du produit
-- `dogfood > gros bloc de consolidation` tant que la V1 corrigée n'a pas été observée sur une vraie semaine
-- le plan mode ne vaut que pour les mutations à impact fort
-- les skills formels attendent assez de workflows distincts
-- pas de multi-agent tant que le mono-agent n'est pas un goulot prouvé
+- la prochaine douleur est “meilleure lecture du réel, meilleure adaptation, meilleure mémoire, moins de duplication métier”
+- FitMAS gagne si le coach paraît juste, pas si l'algorithme paraît sophistiqué
+- `transcript structuré > compaction` reste la bonne priorité
+- `dogfood > gros refactor abstrait` tant que la boucle coach n'est pas observée proprement sur une vraie semaine
+- pas de multi-agent visible tant que le mono-agent et le substrate déterministe ne sont pas un goulot prouvé
+
+## Politique tools pour la suite
+
+Le prochain chantier tools ne doit **pas** partir d'un catalogue exposé par sport.
+
+Ordre canonique :
+
+### 1. Capacités métier partagées
+
+Construire d'abord des modules déterministes, atomiques, réutilisables par :
+
+- conversation
+- planner
+- heartbeat
+- app read models
+- CLI / ops
+
+Capacités candidates :
+
+- `reality`
+- `planning`
+- `session_drafting`
+- `session_analysis`
+- `plan_review`
+
+### 2. Adapters par sport derrière ces capacités
+
+Les sports implémentent le substrate, ils ne définissent pas le tool plane.
+
+Exemples :
+
+- `running`
+- `cycling`
+- `swimming`
+- `climbing`
+- `strength`
+
+### 3. Runtime tools LLM-facing très peu nombreux
+
+Le LLM ne doit voir que des wrappers sémantiques et bornés.
+
+Exemples cibles à terme :
+
+- `resolve_target_session`
+- `get_recent_reality_window`
+- `review_current_week`
+- `build_session_draft`
+- `analyze_completed_activity`
+
+Mais la règle reste :
+
+- expose peu
+- implémente beaucoup
+- pas de catalogue `run_* / swim_* / bike_*` directement donné au modèle
+
+### 4. Write / commit séparés
+
+Les mutations à effet de bord restent possédées par les orchestrateurs tant que les permission tiers ne sont pas plus riches.
 
 ## Plan canonique — maintenant
 
-### 0. Dogfood guidé
+Le chantier prioritaire qui detaille cette remise en coherence vit dans `docs/COACH-COHERENCE-REFACTOR.md`.
+Il traduit le plan OMX courant en doc durable repo et fixe l'ordre :
+
+- une verite planning runtime
+- un writer unique
+- un bundle de lecture partage
+- des mutations expliquees depuis des events reels
+
+Point de verite au 10 avril 2026 :
+
+- la convergence principale de phase 1 est en place
+- la phase 1 est maintenant fermee sur son gate strict de lecture runtime
+- le prochain sujet n'est plus de clarifier `/api/v0/week` : il est marque `template_compat`; la suite est de remplacer progressivement ses derniers consommateurs frontend / Telegram par des read models dates
+
+### 0. Dogfood guidé et alignement vérité
 
 But :
 
-- vérifier le comportement réel après la tranche fiabilité déjà shipée
-- éviter de lancer trop tôt un gros chantier de consolidation
+- vérifier le comportement réel de la boucle coach
+- ne plus laisser des docs raconter un état antérieur
+- confirmer ou corriger les prochaines priorités avec usage réel
 
 Observer surtout :
 
@@ -86,167 +211,105 @@ Observer surtout :
 - négociations de déplacement
 - briefings matinaux réels
 
-Décision :
+Décision si douleur confirmée :
 
-- si la V1 reste insuffisante, lancer le `WeeklyRealityDigest` canonique
+- lancer le `WeeklyRealityDigest` canonique
+- ou prioriser le substrate capabilities si la douleur dominante est la duplication métier
 
-### 1. Prompt 2 zones + prompt caching
-
-But :
-
-- sortir le contexte stable du flux quotidien
-- réduire coût + latence des appels coach
-- garder une base de prompt plus lisible
-
-Scope :
-
-- zone statique : rôle, ton, règles, tools, doctrine
-- zone dynamique : temps local, planning utile, mémoire utile, réel récent
-- brancher le caching Anthropic sur la zone statique
-
-Docs de référence :
-
-- `RUNTIME-TOOLS.md`
-- `SOUL.md`
-- `CONVERSATION-GROUNDING.md`
-
-### 2. Debounce Telegram
+### 1. Substrate de capacités métier partagé
 
 But :
 
-- éviter 3 appels LLM pour 3 messages rapides
-- répondre sur le bon paquet conversationnel
+- sortir la logique réutilisable du duo `conversation + planner + heartbeat + app`
+- préparer des tools atomiques sans donner trop de liberté au modèle
 
-Scope :
+Premiers modules cibles :
 
-- buffer court `2-3s`
-- une seule décision LLM par rafale courte
-- garde-fous pour ne pas retarder inutilement un vrai échange isolé
+- `resolve_target_session`
+- `build_session_draft`
+- `analyze_completed_activity`
+- `review_current_week`
+- `propose_adaptation`
 
-Etat :
+Principe :
 
-- fait en bridge Telegram
-- buffer configurable via `FITMAS_TELEGRAM_DEBOUNCE_SECONDS`
+- décomposition par capacité, pas par sport
+- implémentation sport-spécifique derrière interface partagée
+- zéro write side effect dans ces modules
 
-Docs de référence :
-
-- `BUILD-ORDER.md`
-- `CONVERSATION-GROUNDING.md`
-
-### 3. Mémoire utile — dates absolues + contrat typed + profil résumé
+### 2. Weekly reality digest canonique + mémoire utile
 
 But :
 
-- ne plus écrire de mémoire relative qui devient du bruit
-- garder un `profile_summary` compact toujours injectable
-- rendre `UserFact` plus prédictible pour le coach
-
-Scope :
-
-- normaliser les faits temporels en date absolue avant `upsert_facts`
-- consolider la frontière `profile` vs `working`
-- produire un résumé profil court, stable, cheap à injecter
-
-Docs de référence :
-
-- `MEMORY-V2.md`
-
-### 6bis. Weekly reality digest canonique
-
-But :
-
-- faire de la review hebdo une lecture causale stable de la semaine
-- éviter de recomposer à la main facts + transcript + adaptations dans plusieurs endroits
-
-Quand le lancer :
-
-- si le dogfood montre que la review causalise encore mal
-- si les mêmes événements explicatifs doivent être réinjectés dans plusieurs modules
+- avoir une lecture causale unique de la semaine
+- arrêter de recomposer facts + transcript + adaptations à plusieurs endroits
+- rendre la review du dimanche et le lundi matin plus cohérents
 
 Scope :
 
 - digest explicite à partir de transcript, mémoire utile, activités, claims et adaptations
-- lecture unique pour review + relance semaine suivante
+- meilleur tri `profile / working / patterns`
+- dates absolues partout quand un fait est temporel
+- garder `profile_summary` petit, stable, injectable partout
+
+Docs de référence :
+
+- `MEMORY-V2.md`
 - `CONVERSATION-GROUNDING.md`
+- `REALITY-WORKOUT-CONTRACT.md`
 
-### 4. Permission tiers sur les mutations
-
-But :
-
-- auto-exécuter les adaptations triviales
-- demander confirmation sur les vraies mutations à impact
-
-Règle :
-
-- low impact : exécuter puis confirmer
-- high impact : proposer puis attendre validation
-
-Exemples high impact :
-
-- réorganisation de plusieurs jours
-- remplacement de sport
-- adaptation santé qui touche la semaine
-
-Docs de référence :
-
-- `USER-INDICATIONS.md`
-- `PLANNING-CONTRACT.md`
-- `CLAUDE-CODE-LEARNINGS.md`
-
-### 5. Transcript structuré persistant
+### 3. Unifier revue hebdo, briefings et adaptation sur le même substrate
 
 But :
 
-- rendre le système débuggable
-- préparer une vraie consolidation mémoire
-- garder une trace exploitable des tours importants
+- donner la même lecture du réel au chat, au heartbeat et à l'app
+- éviter que chaque surface rederive sa propre vérité
 
 Scope :
 
-- persister un transcript structuré, pas juste du texte brut
-- relier message, contexte utilisé, décision, mutation, tool calls éventuels
-- ne pas confondre transcript et mémoire durable
+- week review
+- monday new week intro
+- morning brief
+- adaptation summaries
 
-Docs de référence :
-
-- `MEMORY-V2.md`
-- `RUNTIME-TOOLS.md`
-
-### 6. Consolidation mémoire périodique
+### 4. Split progressif du repository et nettoyage des chemins legacy
 
 But :
 
-- dédupliquer le durable
-- remonter un profil plus propre
-- éviter l'accumulation de bruit
+- sortir les bounded contexts du hotspot
+- clarifier quelle couche possède quelle vérité
+- diminuer la dépendance au `WeeklyPlan` comme ancre implicite
 
-Pré-requis :
+Cibles :
 
-- transcript structuré en place
-- écriture temporelle fiable
-- frontière `profile / working` plus ferme
+- `memory`
+- `planning`
+- `activities`
+- `adaptation`
+- `read models`
 
-Docs de référence :
-
-- `MEMORY-V2.md`
-
-### 7. Heartbeat scoring tick-based
+### 5. Heartbeat scoring tick-based + verrou anti-doublon plus robuste
 
 But :
 
-- remplacer les crons trop rigides par une lecture plus contextuelle
-- capter aussi les observations silencieuses quand le coach ne parle pas
+- remplacer la rigidité cron par une lecture plus situationnelle
+- réduire les doublons si on sort du mono-process simple
 
-Scope :
+### 6. Ensuite seulement : enrichissement planner et expansion tools
 
-- scoring de proactivité
-- log d'observations silencieuses
-- meilleure priorisation des moments où parler
+But :
 
-Docs de référence :
+- planner plus riche
+- explications plus lisibles dans l'app
+- éventuelle exposition de nouveaux runtime tools sémantiques
 
-- `CLAUDE-CODE-LEARNINGS.md`
-- `SOUL.md`
+## Ce qui n'est pas le prochain sujet
+
+- multi-agent visible
+- write tools LLM-facing
+- catalogue de tools par sport exposé au modèle
+- multiplication des tabs app
+- planner V3 avant clarification du substrate partagé
 
 ## Tracks domaine à reprendre après ce socle
 

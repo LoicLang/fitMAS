@@ -715,6 +715,42 @@ def resolve_pending_mutation_confirmation(
     return repo_conversation.resolve_pending_mutation_confirmation(db, row_id, status=status)
 
 
+def add_plan_mutation_event(
+    db: Session,
+    *,
+    user_id: int,
+    source: str,
+    trigger_type: str,
+    command_type: str,
+    target_session_ids: list[int],
+    before_snapshot: dict | None = None,
+    after_snapshot: dict | None = None,
+    reason: dict | None = None,
+    impact: dict | None = None,
+    user_visible_summary: str = "",
+    explained_to_user: bool = False,
+    conversation_turn_id: int | None = None,
+) -> s.PlanMutationEventRecord:
+    row = s.PlanMutationEventRecord(
+        user_id=user_id,
+        source=source,
+        trigger_type=trigger_type,
+        command_type=command_type,
+        target_session_ids_json=_json_dumps(target_session_ids),
+        before_snapshot_json=_json_dumps(before_snapshot or {}),
+        after_snapshot_json=_json_dumps(after_snapshot or {}),
+        reason_json=_json_dumps(reason or {}),
+        impact_json=_json_dumps(impact or {}),
+        user_visible_summary=user_visible_summary,
+        explained_to_user=explained_to_user,
+        conversation_turn_id=conversation_turn_id,
+    )
+    db.add(row)
+    db.commit()
+    db.refresh(row)
+    return row
+
+
 def add_adaptation_event(db: Session, user_id: int, entry: AdaptationLogEntry) -> s.AdaptationEventRecord:
     row = s.AdaptationEventRecord(
         user_id=user_id,

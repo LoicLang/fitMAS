@@ -28,6 +28,7 @@ from fitmas.activity_helpers import (
     claimed_activities_on_local_date as _claimed_activities_on_local_date,
 )
 from fitmas.calibration_needs import CalibrationNeedType, looks_like_clarification_message
+from fitmas.coach_state_bundle import build_coach_state_bundle
 from fitmas.coach_messages import CoachDraft
 from fitmas.db import SessionLocal
 from fitmas.execution_clarification import build_execution_clarification
@@ -36,7 +37,6 @@ from fitmas.skills.heartbeat import evaluation as heartbeat_evaluation
 from fitmas.skills.heartbeat.roles import (
     DAY_LABELS,
     NEXT_DAY,
-    PREV_DAY,
     build_briefing_prompt,
     build_reminder_prompt,
     build_review_prompt,
@@ -87,10 +87,7 @@ def morning_briefing() -> CoachDraft | None:
         today_session = repo.get_today_scheduled_session(db, user.id, timezone_name=user.timezone)
         if not today_session:
             return None
-        plan = repo.get_active_plan_optional(db, user.id)
         day = None
-        if plan is not None:
-            _, day = repo.get_current_week_day_plan_for_session(db, user=user, session=today_session)
         calibration_need = select_calibration_need(
             db, user,
             preferred_types=(CalibrationNeedType.AVAILABILITY_WINDOW,),
@@ -101,7 +98,7 @@ def morning_briefing() -> CoachDraft | None:
         # Build yesterday context
         yesterday_date = local_now.date() - timedelta(days=1)
         yesterday_context, clarification_session = _build_yesterday_context(
-            db, user, plan, time_context, yesterday_date,
+            db, user, time_context, yesterday_date,
         )
 
         # Build execution clarification
@@ -258,16 +255,28 @@ def weekly_review() -> CoachDraft | None:
         user = repo.get_user(db)
         local_today = get_local_now(user.timezone).date()
         start_date = local_today - timedelta(days=6)
-        week_sessions = repo.get_scheduled_sessions_between_dates(
-            db, user.id,
-            start_date=start_date,
-            end_date=local_today,
-            limit=42,
+        scheduled_sessions = repo.get_scheduled_sessions(db, user.id, limit=120)
+        activities = repo.get_activities(db, user.id, limit=500)
+        planning_decision = repo.get_latest_planning_decision_record(db, user.id)
+        coach_bundle = build_coach_state_bundle(
+            db,
+            user=user,
+            today_date=local_today,
+            scheduled_sessions=scheduled_sessions,
+            activities=activities,
+            planning_decision=planning_decision,
+            recent_adaptations_limit=4,
+            screen="review",
         )
+        week_sessions = [
+            session
+            for session in scheduled_sessions
+            if session.scheduled_date and start_date <= session.scheduled_date.date() <= local_today
+        ]
 
         lines = []
-        done_count = 0
-        planned_count = 0
+        done_count = int(coach_bundle.week_summary.get("done") or 0)
+        planned_count = int(coach_bundle.week_summary.get("remaining") or 0)
         recent_activities = _activities_last_days(db, user, days=7)
         actual_activity_count = len(recent_activities)
         actual_duration_min = sum(activity.duration_min or 0 for activity in recent_activities)
@@ -280,10 +289,8 @@ def weekly_review() -> CoachDraft | None:
             if session.sport_type != "rest":
                 if session.completion_status == "done":
                     status_marker = " ✅"
-                    done_count += 1
                 elif session.completion_status == "planned":
                     status_marker = " (pas fait)"
-                    planned_count += 1
                 elif session.completion_status in ("skipped", "adapted"):
                     status_marker = f" ({session.completion_status})"
             lines.append(f"- {label}: {session.session_title}{status_marker}")
@@ -298,7 +305,7 @@ def weekly_review() -> CoachDraft | None:
             week_text=week_text,
             done_count=done_count,
             planned_count=planned_count,
-            total_sessions=len(week_sessions),
+            total_sessions=int(coach_bundle.week_summary.get("total_sessions") or len(week_sessions)),
             actual_activity_count=actual_activity_count,
             actual_duration_min=actual_duration_min,
             claimed_activity_count=claimed_activity_count,
@@ -339,10 +346,10 @@ def signal_check() -> CoachDraft | None:
         # Adaptive plan triggers
         try:
             from fitmas.adaptation import check_and_adapt_tsb, check_and_adapt_missed
-            tsb_result = check_and_adapt_tsb(db, user)
+            tsb_result = check_and_adapt_tsb(db, user, allow_apply=False)
             if tsb_result and tsb_result.applied and tsb_result.message:
                 return CoachDraft(text=tsb_result.message, proactive=True)
-            missed_result = check_and_adapt_missed(db, user)
+            missed_result = check_and_adapt_missed(db, user, allow_apply=False)
             if missed_result and missed_result.applied and missed_result.message:
                 return CoachDraft(text=missed_result.message, proactive=True)
         except Exception:
@@ -402,14 +409,11 @@ def signal_check() -> CoachDraft | None:
 def _build_yesterday_context(
     db: Session,
     user: s.User,
-    plan,
     time_context: dict,
     yesterday_date,
 ) -> tuple[str, object | None]:
     """Build yesterday status string and return clarification target session."""
     yesterday_sessions = repo.get_scheduled_sessions_for_date(db, user.id, target_date=yesterday_date)
-    yesterday_key = PREV_DAY[time_context["day_key"]]
-    yesterday_day = repo.get_day_plan(db, plan.id, yesterday_key) if plan else None
 
     yesterday_context = ""
     clarification_session = None
@@ -457,43 +461,6 @@ def _build_yesterday_context(
                 f"pas marque comme fait. A noter."
             )
         elif adapted_sessions:
-            yesterday_context = f"\nHier ({yesterday_label}): adapte/saute. On avance."
-
-    elif yesterday_day and yesterday_day.sport_type != "rest":
-        yesterday_label = yesterday_day.label or DAY_LABELS.get(yesterday_key, yesterday_key)
-        clarification_session = yesterday_day
-        evidence = classify_execution_evidence(
-            planned_session=yesterday_day,
-            activities=yesterday_activities,
-            claims=list(yesterday_claims),
-        )
-        if evidence.display_status == "confirmed_done":
-            yesterday_context = f"\nHier ({yesterday_label}): {yesterday_day.session_title} — fait confirme."
-        elif evidence.display_status == "offplan_done" and yesterday_activities:
-            sports = ", ".join(sorted({a.sport_type for a in yesterday_activities}))
-            total_duration = sum(a.duration_min or 0 for a in yesterday_activities)
-            yesterday_context = (
-                f"\nHier ({yesterday_label}): seance prevue non validee, "
-                f"mais activite reelle detectee ({sports}, {total_duration} min)."
-            )
-        elif evidence.display_status == "claimed_done" and yesterday_claims:
-            sports = ", ".join(sorted({c.sport_type or 'sport inconnu' for c in yesterday_claims}))
-            total_duration = sum(c.duration_min or 0 for c in yesterday_claims)
-            yesterday_context = (
-                f"\nHier ({yesterday_label}): seance prevue non validee, "
-                f"mais activite declaree non loggee detectee ({sports}, {total_duration} min)."
-            )
-        elif evidence.display_status == "uncertain":
-            yesterday_context = (
-                f"\nHier ({yesterday_label}): {yesterday_day.session_title} — statut a verifier, "
-                "pas de trace assez forte pour dire que c'etait fait."
-            )
-        elif yesterday_day.completion_status == "planned":
-            yesterday_context = (
-                f"\nHier ({yesterday_label}): {yesterday_day.session_title} — "
-                f"pas marque comme fait. A noter."
-            )
-        elif yesterday_day.completion_status in ("skipped", "adapted"):
             yesterday_context = f"\nHier ({yesterday_label}): adapte/saute. On avance."
 
     return yesterday_context, clarification_session

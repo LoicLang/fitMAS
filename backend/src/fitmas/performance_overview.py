@@ -5,10 +5,11 @@ from typing import Any
 
 from fitmas.fitness_snapshot import build_fitness_snapshot, estimate_scheduled_session_tss
 from fitmas.load_projection import planning_mode_label_fr
-from fitmas.models import WeeklyPlan
+from fitmas.periodization import compute_mesocycle_state
 from fitmas.recent_reality import build_recent_reality_window
 from fitmas.session_metadata import compute_load_band
 from fitmas.time_context import get_local_now
+from fitmas.week_metadata import build_week_label
 
 LOAD_BANDS = ("hard", "moderate", "easy", "recovery", "mobility")
 
@@ -19,7 +20,6 @@ def build_performance_overview(
     timezone_name: str | None,
     activities: list[Any],
     scheduled_sessions: list[Any],
-    week_plan: WeeklyPlan,
     planning_decision: Any | None,
 ) -> dict[str, Any]:
     today = get_local_now(timezone_name).date()
@@ -56,15 +56,16 @@ def build_performance_overview(
     target_tss = round(snapshot.weekly_target_tss, 1)
     actual_tss = round(snapshot.weekly_actual_tss, 1)
     remaining_tss = round(max(target_tss - actual_tss, 0.0), 1)
+    mesocycle = compute_mesocycle_state(total_weeks=1)
 
     return {
         "week": {
             "week_start": week_start.isoformat(),
             "week_end": week_end.isoformat(),
-            "label": week_plan.week_label,
-            "mesocycle_week": week_plan.mesocycle_week,
-            "mesocycle_number": week_plan.mesocycle_number,
-            "is_deload": week_plan.is_deload,
+            "label": build_week_label(mesocycle),
+            "mesocycle_week": mesocycle.week_in_cycle,
+            "mesocycle_number": mesocycle.cycle_number,
+            "is_deload": mesocycle.is_recovery_week,
             "planning_mode": planning_mode_label_fr(str(_value(planning_decision, "planning_mode") or "maintain_load")),
             "adaptation_level": _value(planning_decision, "adaptation_level"),
             "adaptation_scope": _value(planning_decision, "adaptation_scope"),

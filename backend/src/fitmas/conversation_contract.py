@@ -15,8 +15,6 @@ class ConversationTurnInput:
 @dataclass(slots=True)
 class ConversationTurnState:
     user: Any
-    plan: Any
-    pydantic_plan: Any
     conversation_history: list[dict[str, Any]]
     previous_agent_text: str | None
     scheduled_sessions: list[Any]

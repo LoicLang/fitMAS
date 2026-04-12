@@ -260,7 +260,7 @@ def decide(
         prompt_policy=prompt_policy,
         time_block=render_conversation_time_block(resolved_time_context),
         profile_summary=(coach_context or {}).get("profile_summary") or build_profile_summary(remembered_facts or []),
-        plan_summary=plan_summary,
+        plan_summary=None,
         timeline_summary=timeline_summary,
         execution_summary=execution_summary,
         temporal_summary=temporal_summary,

@@ -5,9 +5,10 @@ from datetime import date
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
-from fitmas import plan_actions, repository as repo
+from fitmas import repository as repo
 from fitmas.db import get_db
 from fitmas.models import MoveSessionPayload, ScheduledSession
+from fitmas.plan_mutation_service import complete_session_for_user, move_session_for_user, skip_session_for_user
 
 router = APIRouter()
 
@@ -17,10 +18,10 @@ def complete_session(session_id: int, db: Session = Depends(get_db)) -> Schedule
     user = repo.get_user_optional(db)
     if user is None:
         raise HTTPException(status_code=404, detail="No onboarded user yet")
-    session = plan_actions.complete_session(db, user=user, session_id=session_id)
-    if session is None:
+    result = complete_session_for_user(db, user=user, session_id=session_id, source="app")
+    if result is None:
         raise HTTPException(status_code=404, detail="Scheduled session not found")
-    return repo.to_pydantic_scheduled_session(session)
+    return repo.to_pydantic_scheduled_session(result.session)
 
 
 @router.post("/api/v0/plan/sessions/{session_id}/skip", response_model=ScheduledSession)
@@ -28,10 +29,10 @@ def skip_session(session_id: int, db: Session = Depends(get_db)) -> ScheduledSes
     user = repo.get_user_optional(db)
     if user is None:
         raise HTTPException(status_code=404, detail="No onboarded user yet")
-    session = plan_actions.skip_session(db, user=user, session_id=session_id)
-    if session is None:
+    result = skip_session_for_user(db, user=user, session_id=session_id, source="app")
+    if result is None:
         raise HTTPException(status_code=404, detail="Scheduled session not found")
-    return repo.to_pydantic_scheduled_session(session)
+    return repo.to_pydantic_scheduled_session(result.session)
 
 
 @router.post("/api/v0/plan/sessions/{session_id}/move", response_model=ScheduledSession)
@@ -49,7 +50,7 @@ def move_session(
             target_date = date.fromisoformat(payload.target_date)
         except ValueError as exc:
             raise HTTPException(status_code=400, detail="Invalid target_date") from exc
-    session = plan_actions.move_session(db, user=user, session_id=session_id, target_date=target_date)
-    if session is None:
+    result = move_session_for_user(db, user=user, session_id=session_id, target_date=target_date, source="app")
+    if result is None:
         raise HTTPException(status_code=404, detail="Scheduled session not found")
-    return repo.to_pydantic_scheduled_session(session)
+    return repo.to_pydantic_scheduled_session(result.session)

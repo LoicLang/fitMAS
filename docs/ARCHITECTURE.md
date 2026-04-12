@@ -152,11 +152,12 @@ Les garde-fous, la planification, les permissions, les cooldowns et la persistan
 ## Prochaine évolution structurante
 
 Ordre recommandé :
-1. consolidation memoire periodique
-2. split progressif restant du repository (`memory / planning / activities`)
-3. heartbeat scoring tick-based
-4. verrou robuste anti-doublon multi-instance
-5. ensuite seulement : planner plus riche, polish Figma, extensions
+1. substrate partagé de capacités métier (`reality / planning / session_drafting / session_analysis / plan_review`)
+2. weekly reality digest + consolidation mémoire utile
+3. split progressif restant du repository (`memory / planning / activities / adaptation / read models`)
+4. heartbeat scoring tick-based
+5. verrou robuste anti-doublon multi-instance
+6. ensuite seulement : planner plus riche, polish Figma, extensions
 Voir `BUILD-ORDER.md` pour le sequencing canonique.
 
 ### Pourquoi le calendrier persistant reste une fondation, mais plus le prochain chantier
@@ -431,7 +432,8 @@ Ce module doit être utilisé par:
 5. Persist Activity + marque le jour comme "done" si match cette semaine
 
 Limite actuelle :
-- le matching travaille encore sur un plan hebdomadaire, pas sur un vrai calendrier persistant
+- le matching et certains marquages auto gardent encore des traces de logique hebdomadaire legacy
+- la vérité calendrier existe déjà, mais tout le pipeline activité n'est pas encore entièrement recentré dessus
 
 ### Flux heartbeat
 1. APScheduler déclenche le trigger (matin 7h30, soir 18h, dimanche 20h)

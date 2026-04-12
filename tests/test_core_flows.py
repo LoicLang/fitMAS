@@ -246,6 +246,7 @@ class FitMASCoreFlowsTest(unittest.TestCase):
         timeline = self.client.get("/api/v0/timeline")
 
         self.assertEqual(week.status_code, 200)
+        self.assertEqual(week.json()["runtime_role"], "template_compat")
         self.assertEqual(week.json()["total_weeks"], 8)
         self.assertEqual(week.json()["mesocycle_week"], 4)
         self.assertTrue(week.json()["is_deload"])
@@ -256,6 +257,18 @@ class FitMASCoreFlowsTest(unittest.TestCase):
 
         self.assertEqual(timeline.status_code, 200)
         self.assertEqual(timeline.json()[0]["load_band"], "hard")
+
+    def test_today_by_day_does_not_fall_back_to_legacy_day_plan(self) -> None:
+        _, session = self._create_plan_for_today()
+        today_key = session.day
+
+        self.db.delete(session)
+        self.db.commit()
+
+        response = self.client.get(f"/api/v0/today/{today_key}")
+
+        self.assertEqual(response.status_code, 404)
+        self.assertEqual(response.json()["detail"], f"No scheduled session found for {today_key}")
 
     def test_performance_overview_exposes_tss_and_distribution(self) -> None:
         _, session = self._create_plan_for_today()
@@ -531,7 +544,7 @@ class FitMASCoreFlowsTest(unittest.TestCase):
         overview = self.client.get("/api/v0/app/overview").json()
         calendar = self.client.get(f"/api/v0/app/calendar?month={session.scheduled_date.date().isoformat()[:7]}").json()
 
-        self.assertIn("Mission hebdo", result["assistant_message"]["text"])
+        self.assertIn("Le cap de la semaine ne bouge pas", result["assistant_message"]["text"])
         self.assertEqual(len(sessions), 2)
         self.assertEqual(len(planned_sessions), 1)
         self.assertGreater(planned_sessions[0].scheduled_date.date(), session.scheduled_date.date())
@@ -579,7 +592,7 @@ class FitMASCoreFlowsTest(unittest.TestCase):
             api_messages.decide = original_decide
             api_messages.extract_facts = original_extract_facts
 
-        self.assertIn("Tu l'as faite ou non", result["assistant_message"]["text"])
+        self.assertIn("Tu l'as faite ou pas", result["assistant_message"]["text"])
 
     def test_message_flow_blocks_fatigue_adaptation_until_targeted_clarification_is_answered(self) -> None:
         _, yesterday_session = self._seed_uncertain_yesterday_key_session()
@@ -606,7 +619,7 @@ class FitMASCoreFlowsTest(unittest.TestCase):
         finally:
             verify_db.close()
 
-        self.assertIn("Tu l'as faite ou non", result["assistant_message"]["text"])
+        self.assertIn("Tu l'as faite ou pas", result["assistant_message"]["text"])
         self.assertEqual(refreshed_today.completion_status, "planned")
         self.assertIsNone(latest_adaptation)
         self.assertEqual(yesterday_session.completion_status, "planned")
@@ -631,7 +644,7 @@ class FitMASCoreFlowsTest(unittest.TestCase):
         refreshed_yesterday = repo.get_scheduled_session(self.db, self.user.id, yesterday_session.id)
         facts = self.client.get("/api/v0/facts").json()
 
-        self.assertIn("Tu l'as faite ou non", first["assistant_message"]["text"])
+        self.assertIn("Tu l'as faite ou pas", first["assistant_message"]["text"])
         self.assertNotEqual(second["assistant_message"]["text"], first["assistant_message"]["text"])
         self.assertIn("Je ne compte pas", second["assistant_message"]["text"])
         self.assertEqual(refreshed_yesterday.completion_status, "skipped")
@@ -664,7 +677,7 @@ class FitMASCoreFlowsTest(unittest.TestCase):
         refreshed_yesterday = repo.get_scheduled_session(self.db, self.user.id, yesterday_session.id)
         facts = self.client.get("/api/v0/facts").json()
 
-        self.assertIn("Tu l'as faite ou non", first["assistant_message"]["text"])
+        self.assertIn("Tu l'as faite ou pas", first["assistant_message"]["text"])
         self.assertNotEqual(second["assistant_message"]["text"], first["assistant_message"]["text"])
         self.assertIn("malade", second["assistant_message"]["text"].lower())
         self.assertEqual(refreshed_yesterday.completion_status, "skipped")
@@ -696,7 +709,7 @@ class FitMASCoreFlowsTest(unittest.TestCase):
             if scheduled.sport_type == "running" and scheduled.session_title == "Tempo demain"
         )
 
-        self.assertIn("Mission hebdo", result["assistant_message"]["text"])
+        self.assertIn("Le cap de la semaine ne bouge pas", result["assistant_message"]["text"])
         self.assertGreater(moved_tomorrow_session.scheduled_date.date(), original_date)
 
     def test_health_indication_can_bypass_decide_and_trigger_protective_reply(self) -> None:
@@ -1163,6 +1176,7 @@ class FitMASCoreFlowsTest(unittest.TestCase):
 
     def test_message_flow_can_consume_hidden_calibration_answer_without_llm(self) -> None:
         self._create_plan_for_today()
+        now = get_local_now(self.user.timezone)
         need = calibration_needs.CalibrationNeed(
             id="availability_window:availability:thursday",
             need_type=calibration_needs.CalibrationNeedType.AVAILABILITY_WINDOW,
@@ -1172,9 +1186,9 @@ class FitMASCoreFlowsTest(unittest.TestCase):
             priority=calibration_needs.CalibrationNeedPriority.MEDIUM,
             source="heartbeat_morning",
             channel_hint="telegram",
-            created_at="2026-03-29T08:00+00:00",
-            expires_at="2026-04-03T08:00+00:00",
-            last_prompted_at="2026-03-29T08:00+00:00",
+            created_at=now.isoformat(timespec="minutes"),
+            expires_at=(now + timedelta(days=3)).isoformat(timespec="minutes"),
+            last_prompted_at=now.isoformat(timespec="minutes"),
             context={"day": "thursday", "day_label": "jeudi", "session_id": 12, "session_title": "Tempo"},
             allowed_answers=("morning", "evening", "both", "none"),
             write_targets=("working_memory.availability",),

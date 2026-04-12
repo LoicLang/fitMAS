@@ -12,6 +12,7 @@ from fitmas.api_payloads import ManualActivityPayload
 from fitmas.api_support import parse_optional_datetime, public_base_url
 from fitmas.db import get_db
 from fitmas.models import Activity
+from fitmas.plan_mutation_service import complete_session_from_activity_for_user, mark_day_completed_for_user
 from fitmas.training_load import estimate_tss
 
 logger = logging.getLogger(__name__)
@@ -73,6 +74,7 @@ def create_manual_activity(payload: ManualActivityPayload, db: Session = Depends
         started_at=started_at,
         duration_min=payload.duration_min,
         week_days=week_days,
+        plan_created_at=plan.created_at,
     )
     estimated_tss = estimate_tss(
         {
@@ -110,10 +112,18 @@ def create_manual_activity(payload: ManualActivityPayload, db: Session = Depends
     )
 
     if matched_day:
-        repo.mark_day_completed(db, plan.id, matched_day)
+        if scheduled_session is None:
+            mark_day_completed_for_user(db, plan_id=plan.id, day=matched_day, source="manual_activity", user_id=user.id)
         logger.info("Marked %s as done (manual activity: %s)", matched_day, title)
     if scheduled_session:
-        repo.mark_scheduled_session_completed(db, scheduled_session.id)
+        complete_session_from_activity_for_user(
+            db,
+            user=user,
+            session_id=scheduled_session.id,
+            plan_id=plan.id if matched_day else None,
+            matched_day=matched_day,
+            source="manual_activity",
+        )
 
     return repo.to_pydantic_activity(activity)
 

@@ -7,7 +7,7 @@ from datetime import date, datetime
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
-from fitmas import mutations, repository as repo
+from fitmas import repository as repo
 from fitmas.adaptation import check_and_adapt_health_facts
 from fitmas.adaptation_log import build_adaptation_log_entry
 from fitmas.activity_helpers import claimed_activities_last_days
@@ -47,6 +47,7 @@ from fitmas.memory_profile import upsert_profile_memory
 from fitmas.memory_routing import split_memory_payloads
 from fitmas.models import DayId, Extraction, Message, MessageReply, MessageRole
 from fitmas.nlp import extract_reply, generate_reply
+from fitmas.plan_mutation_service import skip_session_for_user
 from fitmas.planning_window_resolution import resolve_planning_window
 from fitmas.replan_from_life_change import (
     maybe_replan_from_life_change,
@@ -64,7 +65,7 @@ from fitmas.user_indications import (
     looks_like_execution_clarification_prompt,
     supports_planning_resolution,
 )
-from fitmas.time_context import get_timezone
+from fitmas.time_context import DAY_LABELS_FR, MONTH_LABELS_FR, get_timezone
 
 logger = logging.getLogger(__name__)
 
@@ -117,6 +118,46 @@ _LOAD_RECALIBRATION_MARKERS = (
     "charge",
     "semaine derniere",
 )
+_FUTURE_CONFIRMATION_MARKERS = (
+    "j y serai",
+    "j'y serai",
+    "sans faute",
+    "je serai la",
+    "je serai là",
+    "je la fais",
+    "je le fais",
+    "je la ferai",
+    "je le ferai",
+    "on la garde",
+    "on le garde",
+    "laisse la",
+    "laisse le",
+    "garde la",
+    "garde le",
+)
+_FUTURE_MUTATION_MARKERS = (
+    "je peux pas",
+    "je ne peux pas",
+    "pas dispo",
+    "indispo",
+    "annule",
+    "decale",
+    "décale",
+    "deplace",
+    "déplace",
+    "remplace",
+    "echange",
+    "échange",
+    "swap",
+    "pas demain",
+)
+_SPORT_KEYWORDS = {
+    "running": ("course", "courir", "run", "footing"),
+    "swimming": ("natation", "piscine", "nage"),
+    "cycling": ("velo", "vélo", "bike", "roule"),
+    "strength": ("renfo", "muscu", "gainage"),
+    "climbing": ("escalade", "grimpe", "bloc"),
+}
 
 
 def _resolve_day_updated(decision: MutationDecision) -> DayId | None:
@@ -240,6 +281,63 @@ def _no_candidate_constraint_reply(indication: UserIndication | None, resolution
     return f"OK. Je n'ai rien de sensible planifie {_human_time_label(indication, resolution)}. Rien a bouger pour l'instant."
 
 
+def _maybe_future_session_confirmation_reply(
+    *,
+    user_text: str,
+    conversation_context,
+    scheduled_sessions,
+    timezone_name: str | None,
+) -> str | None:
+    normalized = _normalize_text(user_text)
+    if not any(marker in normalized for marker in _FUTURE_CONFIRMATION_MARKERS):
+        return None
+    if any(marker in normalized for marker in _FUTURE_MUTATION_MARKERS):
+        return None
+
+    temporal = conversation_context.temporal_resolution
+    resolved_date = temporal.resolved_date
+    if resolved_date is None or resolved_date <= temporal.local_date:
+        return None
+
+    sessions_on_date = [
+        session
+        for session in scheduled_sessions
+        if _coerce_local_date(_value(session, "scheduled_date"), timezone_name=timezone_name) == resolved_date
+        and str(_value(session, "sport_type") or "").lower() not in {"rest", "off"}
+        and str(_value(session, "completion_status") or "").lower() in {"planned", "adapted"}
+    ]
+    if not sessions_on_date:
+        return None
+
+    mentioned_sport = _mentioned_sport_type(normalized)
+    target_session = next(
+        (
+            session
+            for session in sessions_on_date
+            if mentioned_sport
+            and str(_value(session, "sport_type") or "").strip().lower() == mentioned_sport
+        ),
+        sessions_on_date[0] if len(sessions_on_date) == 1 else None,
+    )
+    if target_session is None:
+        return None
+
+    target_title = str(_value(target_session, "session_title") or _value(target_session, "sport_type") or "cette seance").strip().lower()
+    target_label = _format_day_date_fr(resolved_date)
+    if temporal.explicit_day_matches_resolved_date is False:
+        today_label = _format_day_date_fr(temporal.local_date)
+        explicit_day = DAY_LABELS_FR.get(str(temporal.explicit_day_key or ""), str(temporal.explicit_day_key or ""))
+        return (
+            f"On se cale: aujourd'hui c'est {today_label}. "
+            f"Demain, c'est {target_label}. "
+            f"Si tu visais {explicit_day}, ce n'est pas la meme date. "
+            "Je ne bouge rien tant que ce n'est pas clair."
+        )
+    if temporal.explicit_day_key is not None or "on est " in normalized:
+        return f"Oui. Aujourd'hui c'est {_format_day_date_fr(temporal.local_date)}. Demain, c'est {target_label}. Je garde {target_title} comme prevu."
+    return f"Parfait. On garde {target_title} demain, {target_label}, comme prevu."
+
+
 def _active_memory_payloads(db: Session, user_id: int) -> tuple[list[object], list[dict]]:
     rows = repo.get_active_memory_items(
         db,
@@ -292,6 +390,19 @@ def _coerce_local_date(value, *, timezone_name: str | None) -> date | None:
     return None
 
 
+def _mentioned_sport_type(normalized_text: str) -> str | None:
+    for sport_type, keywords in _SPORT_KEYWORDS.items():
+        if any(keyword in normalized_text for keyword in keywords):
+            return sport_type
+    return None
+
+
+def _format_day_date_fr(value: date) -> str:
+    day_label = DAY_LABELS_FR.get(("monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday")[value.weekday()], value.isoformat())
+    month_label = MONTH_LABELS_FR.get(value.month, str(value.month))
+    return f"{day_label} {value.day} {month_label}"
+
+
 def _execution_contestation_reply(
     *,
     db: Session,
@@ -333,12 +444,12 @@ def _execution_contestation_reply(
         return None
 
     if target_session is not None and str(_value(target_session, "completion_status") or "").lower() in {"planned", "done"}:
-        updated_session = repo.set_scheduled_session_status(db, int(_value(target_session, "id")), "skipped")
-        if updated_session is not None:
-            _, day_plan = repo.get_current_week_day_plan_for_session(db, user=user, session=updated_session)
-            if day_plan is not None and str(day_plan.completion_status or "").lower() == "done":
-                day_plan.completion_status = "skipped"
-                db.commit()
+        skip_session_for_user(
+            db,
+            user=user,
+            session_id=int(_value(target_session, "id")),
+            source="conversation_non_completion",
+        )
 
     title = str(_value(target_session, "session_title") or "").strip()
     if title:
@@ -354,7 +465,7 @@ def _execution_contestation_reply(
         subject = sport_labels.get(non_completion_claim.sport_type, "cette seance")
     else:
         subject = "cette seance"
-    return f"OK. Je ne compte pas {subject} comme faite. Je repars de ce que tu me dis, pas d'une validation implicite."
+    return f"Bien note. Je ne compte pas {subject} comme faite. Je repars de ton retour, pas d'une validation implicite."
 
 
 def _targeted_execution_clarification(
@@ -506,42 +617,12 @@ def _apply_non_completion_resolution(
         return
     if str(_value(target_session, "completion_status") or "").lower() not in {"planned", "done"}:
         return
-    updated_session = repo.set_scheduled_session_status(db, int(_value(target_session, "id")), "skipped")
-    if updated_session is None:
-        return
-    _, day_plan = repo.get_current_week_day_plan_for_session(db, user=user, session=updated_session)
-    if day_plan is not None and str(day_plan.completion_status or "").lower() == "done":
-        day_plan.completion_status = "skipped"
-        db.commit()
-
-
-def _render_applied_decision_reply(
-    *,
-    decision: MutationDecision,
-    updated_session,
-    fallback_text: str,
-) -> str:
-    if decision.mutation_type != "replace_session":
-        return fallback_text
-    title = str(_value(updated_session, "session_title") or decision.new_title or "seance adaptee").strip()
-    duration_min = _value(updated_session, "duration_min") or decision.new_duration_min
-    intensity = str(_value(updated_session, "intensity") or decision.new_intensity or "").strip().lower()
-    parts = [f"OK. Je bascule sur {title.lower()}."]
-    detail_bits: list[str] = []
-    if duration_min:
-        detail_bits.append(f"{int(duration_min)} min")
-    intensity_labels = {
-        "easy": "facile",
-        "moderate": "controle",
-        "hard": "soutenu",
-    }
-    if intensity in intensity_labels:
-        detail_bits.append(intensity_labels[intensity])
-    if detail_bits:
-        parts.append(f"{', '.join(detail_bits).capitalize()}.")
-    if decision.rationale:
-        parts.append(decision.rationale)
-    return " ".join(parts)
+    skip_session_for_user(
+        db,
+        user=user,
+        session_id=int(_value(target_session, "id")),
+        source="conversation_non_completion",
+    )
 
 
 def _sanitize_no_change_reply(*, user_text: str, reply_text: str, decision: MutationDecision) -> str:

@@ -34,13 +34,8 @@ def _build_today_view(
     user: s.User,
     session: s.ScheduledSession,
 ) -> TodayView:
-    _, day_row = repo.get_current_week_day_plan_for_session(db, user=user, session=session)
-    if day_row is not None:
-        change_notes = [ChangeNote(title=note.title, detail=note.detail) for note in day_row.change_notes]
-        watch_items = [WatchItem(title=item.title, detail=item.detail) for item in day_row.watch_items]
-    else:
-        change_notes = []
-        watch_items = []
+    change_notes: list[ChangeNote] = []
+    watch_items: list[WatchItem] = []
     fitness = _build_today_fitness(db, user=user)
     recent_activity = _build_recent_activity(db, user=user, session=session)
     return TodayView(
@@ -163,7 +158,6 @@ def get_today_by_day(day: DayId, db: Session = Depends(get_db)) -> TodayView:
     user = repo.get_user_optional(db)
     if user is None:
         raise HTTPException(status_code=404, detail="No onboarded user yet")
-    # Prefer ScheduledSession (source of truth for dated planning)
     matching_session = next(
         (
             session
@@ -174,32 +168,7 @@ def get_today_by_day(day: DayId, db: Session = Depends(get_db)) -> TodayView:
     )
     if matching_session is not None:
         return _build_today_view(db, user=user, session=matching_session)
-    # Fall back to legacy DayPlan
-    plan = repo.get_active_plan(db, user.id)
-    day_row = repo.get_day_plan(db, plan.id, day.value)
-    if day_row is None:
-        raise HTTPException(status_code=404, detail=f"Day {day.value} not found in plan")
-    d = repo.to_pydantic_day(day_row)
-    return TodayView(
-        scheduled_session_id=0,
-        scheduled_date="",
-        day=d.day,
-        label=d.label,
-        sport_type=d.sport_type,
-        session_type=d.session_type,
-        session_title=d.session_title,
-        session_goal=d.session_goal,
-        session_note=d.session_note,
-        session_description=d.session_description,
-        duration_min=d.duration_min,
-        intensity=d.intensity,
-        load_band=d.load_band,
-        priority=d.priority,
-        nutrition_focus=d.nutrition_focus,
-        completion_status=d.completion_status,
-        change_notes=d.change_notes,
-        watch_items=d.watch_items,
-    )
+    raise HTTPException(status_code=404, detail=f"No scheduled session found for {day.value}")
 
 
 @router.get("/api/v0/messages")

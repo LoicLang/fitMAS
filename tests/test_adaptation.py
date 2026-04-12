@@ -1,5 +1,9 @@
 """Tests for the adaptation module triggers and response parsing."""
 
+from types import SimpleNamespace
+
+import fitmas.adaptation as adaptation
+
 from fitmas.adaptation import (
     _HIGH_URGENCY_KEYWORDS,
     _build_conservative_health_fallback,
@@ -172,3 +176,86 @@ class TestConservativeHealthFallback:
         )
 
         assert _should_force_conservative_health_fallback(trigger) is True
+
+
+class TestRunAdaptationFreeze:
+    def test_run_adaptation_returns_suggestion_only_by_default(self, monkeypatch):
+        trigger = AdaptationTrigger(
+            trigger_type="post_activity",
+            urgency="next_session",
+            affected_session_ids=[7],
+            context_data={
+                "activity": {"sport": "running", "duration_min": 60, "tss": 40.0},
+                "matched_session": {"id": 7, "sport_type": "running", "title": "Tempo"},
+                "reasons": ["charge haute"],
+                "tsb": -22.0,
+                "sessions_48h": [],
+            },
+        )
+        user = SimpleNamespace(id=1, timezone="Europe/Paris")
+
+        monkeypatch.setattr(
+            "fitmas.llm._request_json",
+            lambda **kwargs: {
+                "adaptations": [
+                    {"session_id": 7, "action": "lighten", "rationale": "charge haute"}
+                ],
+                "message": "Je te proposerais d'alleger la suite.",
+            },
+        )
+        called = {"apply": False}
+
+        def _fail_apply(*args, **kwargs):
+            called["apply"] = True
+            raise AssertionError("mutations.apply should stay off by default")
+
+        monkeypatch.setattr("fitmas.mutations.apply", _fail_apply)
+
+        result = adaptation.run_adaptation(object(), user=user, trigger=trigger)
+
+        assert result is not None
+        assert result.applied is False
+        assert len(result.decisions) == 1
+        assert called["apply"] is False
+
+    def test_run_adaptation_can_apply_when_explicitly_allowed(self, monkeypatch):
+        trigger = AdaptationTrigger(
+            trigger_type="post_activity",
+            urgency="next_session",
+            affected_session_ids=[7],
+            context_data={
+                "activity": {"sport": "running", "duration_min": 60, "tss": 40.0},
+                "matched_session": {"id": 7, "sport_type": "running", "title": "Tempo"},
+                "reasons": ["charge haute"],
+                "tsb": -22.0,
+                "sessions_48h": [],
+            },
+        )
+        user = SimpleNamespace(id=1, timezone="Europe/Paris")
+
+        monkeypatch.setattr(
+            "fitmas.llm._request_json",
+            lambda **kwargs: {
+                "adaptations": [
+                    {"session_id": 7, "action": "lighten", "rationale": "charge haute"}
+                ],
+                "message": "Je te propose d'alleger la suite.",
+            },
+        )
+        monkeypatch.setattr("fitmas.repository.get_active_plan", lambda db, user_id: SimpleNamespace(id=99))
+        calls = {"apply": 0}
+
+        def _record_apply(*args, **kwargs):
+            calls["apply"] += 1
+            return SimpleNamespace(allowed=True), SimpleNamespace()
+
+        monkeypatch.setattr("fitmas.mutations.apply", _record_apply)
+        monkeypatch.setattr("fitmas.repository.add_plan_mutation_event", lambda *args, **kwargs: None)
+        monkeypatch.setattr("fitmas.repository.get_scheduled_session", lambda *args, **kwargs: None)
+
+        result = adaptation.run_adaptation(object(), user=user, trigger=trigger, allow_apply=True)
+
+        assert result is not None
+        assert result.applied is True
+        assert len(result.decisions) == 1
+        assert calls["apply"] == 1
