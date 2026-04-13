@@ -15,6 +15,52 @@ read_when:
 Déterminisme avant LLM. Le LLM propose, formule et adapte le ton.
 Les garde-fous, la planification, les permissions, les cooldowns et la persistance sont déterministes.
 
+## Principes de harness
+
+### Comprendre puis decider
+
+Le LLM ne doit pas comprendre, choisir et agir en un seul bloc.
+Le bon flux : message → extraction structuree → scoring de scenarios → choix → explication.
+Le LLM aide a comprendre et expliquer. Le moteur protege la coherence.
+
+### Contexte en couches
+
+| Couche | Contenu | Stabilite |
+|--------|---------|-----------|
+| Stable | identite coach, style, doctrine, regles | Quasi jamais |
+| Semi-stable | profil resume, mission semaine, calendrier date | Par session/semaine |
+| Immediate | temps local, realite recente, signaux du jour | Chaque tour |
+| Memoire | memoire utile selectionnee, highlights transcript | Variable |
+
+Regles : le contexte durable vit hors prompt, le prompt recoit des resumes compacts, pas d'historique brut par reflexe.
+
+### Transcript et memoire sont differents
+
+Le transcript garde ce qui a ete dit, decide, utilise — pour audit et debug.
+La memoire garde uniquement ce qui merite d'influencer le futur (`profile / working / patterns`).
+On ne promeut pas un message brut en verite durable sans raison.
+
+### Tools atomiques et bornes
+
+Un tool = une lecture metier claire. Pas de shell mental "fais tout avec un seul appel".
+Les tools restent read-only. Les orchestrateurs possedent les writes.
+
+### Liberte asymetrique
+
+| Axe | Liberte | Raison |
+|-----|---------|--------|
+| Parole | Moyenne | Un message imparfait se rattrape |
+| Memoire | Faible a moyenne, structuree | Une memoire fausse pollue des semaines |
+| Action | Faible, tres bornee | Une action fausse casse la confiance |
+
+### Anti-patterns a eviter
+
+- faire lire tout le profil brut a chaque tour
+- heartbeat sur les memes contraintes stables sans nouveaute
+- perdre l'intention utilisateur entre extraction et mutation
+- laisser un "jour libre" gagner contre une semaine absurde
+- confondre fact actif, verite durable et souvenir conversationnel
+
 ## Contrat d'architecture produit
 
 - **Telegram = interface coach** : messages, adaptations, relation, proactivité
@@ -245,7 +291,7 @@ backend/src/fitmas/
 └── __init__.py            (2 lignes)
 
 frontend/
-├── index.html             — entrée Vite
+├── index.html             — entree Vite
 ├── package.json           — stack frontend + scripts build/dev
 ├── public/
 │   └── manifest.json      — manifest PWA
@@ -253,8 +299,9 @@ frontend/
     ├── app/               — router + layout shell
     ├── features/          — overview, calendar, evolution, workout-detail
     ├── shared/            — API, format, visuels, primitives UI
-    ├── state/app-actions.tsx — mutations UI + revalidation légère
-    ├── styles/            — index.css, theme.css, héritage CSS legacy
+    ├── state/app-actions.tsx — mutations UI + revalidation
+    ├── lib/polyline.ts    — decodage polyline Strava
+    ├── styles/            — index.css, theme.css
     └── test/              — Vitest + routes + view models
 ```
 

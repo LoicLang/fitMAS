@@ -2,7 +2,7 @@
 
 Coach IA multisport proactif qui ajuste ton entraînement selon ta vraie vie.
 
-## Statut — 7 avril 2026
+## Statut — 13 avril 2026
 
 **Déployé et fonctionnel sur https://the deployed app/**
 
@@ -44,26 +44,27 @@ Cap produit actuel :
 
 ## Ordre de lecture
 
-1. `AGENTS.md` — règles de travail
+1. `AGENTS.md` — regles de travail
 2. `PROJECT.md` — ce fichier
 3. `docs/README.md` — carte des docs
-4. `docs/BUILD-ORDER.md` — source de vérité sur l'état réel et la suite
-5. `docs/PRODUCT.md` — vision, scope, parcours utilisateur
-6. `docs/ARCHITECTURE.md` — stack, modèle de données, flux
-7. `docs/APP-UX.md` — contrat UX de l'app
-8. `docs/PLANNING-ENGINE-V2.md` — référence planner, désormais en raffinement
-9. `docs/SOUL.md` — voix, heartbeat, messagerie
+4. `docs/BUILD-ORDER.md` — source de verite sur l'etat reel et la suite
+5. `docs/ARCHITECTURE.md` — stack, principes de harness, modele de donnees, flux
+6. `docs/PRODUCT.md` — vision, scope, parcours utilisateur
+7. `docs/COACH-COHERENCE-REFACTOR.md` — gouvernance state/mutations
+8. `docs/PLANNING.md` — contrat + moteur planning
+9. `docs/CONVERSATION.md` — grounding + indications utilisateur
+10. `docs/SOUL.md` — voix, heartbeat, messagerie
 
 ## Structure du repo
 
 ```
-AGENTS.md            — règles agentiques
-PROJECT.md           — point d'entrée
-docs/                — documentation durable + README
-backend/src/fitmas/  — API + bot + domaines partagés
-backend/src/fitmas/tools/ — tools runtime read-only et routing associés
-backend/src/fitmas/skills/heartbeat/ — cluster heartbeat (évaluation, rôles, génération)
-frontend/            — webapp React/Vite/Tailwind
+AGENTS.md            — regles agentiques
+PROJECT.md           — point d'entree
+docs/                — 12 docs actifs + README (anciens docs en docs/archive/)
+backend/src/fitmas/  — API + bot + domaines partages
+backend/src/fitmas/tools/ — tools runtime read-only et routing associes
+backend/src/fitmas/skills/heartbeat/ — cluster heartbeat (evaluation, roles, generation)
+frontend/            — webapp React/Vite/Tailwind (3 tabs + detail seance)
 scripts/             — dev, dev-web, start-prod, docs:list
 Dockerfile           — image Docker multi-stage
 fly.toml             — config Fly.io

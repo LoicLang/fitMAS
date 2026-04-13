@@ -241,23 +241,60 @@ Regle :
 
 ## Statut actuel
 
-### Audit du 10 avril 2026
+### Audit du 13 avril 2026
 
-Verdict :
+Verdict franc :
 
-- phase 0 = largement fermee
-- phase 1 = fermee
+- phase 0 = fermee (prompts live ne dependent plus de WeeklyPlan/DayPlan comme verite)
+- phase 1 = fermee cote lectures app (overview, calendar, evolution, session detail lisent ScheduledSession)
+- phase 2 = fermee cote routing (PlanMutationService est le gateway unique)
+- phase 3 = partiellement fermee (lectures user-facing migrees, mais signals.py lit encore WeeklyPlan)
+- phase 4 = partiellement fermee (adaptation produit des propositions, mais certains chemins auto-appliquent encore)
+- phase 5 = fermee sur 2 guards (same_sport_proximity, protected_recovery_target)
 
-Ce qui est deja vrai dans le code :
+#### Realite dual-write non resolue
 
-- `CoachStateBundle` sert maintenant de socle partage pour l'app, la conversation et le heartbeat
-- les prompts live n'injectent plus le repere `WeeklyPlan` / `DayPlan` comme verite runtime concurrente
-- le gel initial des writes background a bien progresse :
-  - `adaptation.py` peut rester suggestion-only
-  - le heartbeat n'auto-applique plus ses adaptations en phase de freeze
+Le pattern reel du systeme de mutation est un **dual-write** `ScheduledSession` + `DayPlan`.
 
-Pourquoi la phase 1 n'est pas encore totalement close :
-Ce point est maintenant leve.
+`plan_actions.py` ecrit dans DayPlan dans **tous** ses chemins principaux :
+- `lighten_session()` mute DayPlan
+- `modify_session()` mute DayPlan
+- `replace_session()` mute DayPlan
+- `swap_sessions()` mute DayPlan directement
+- `move_session_to_date()` lit et mute DayPlan
+- `set_completion_status()` mute DayPlan
+
+`plan_mutation_service.py` appelle `repo.mark_day_completed()` a chaque completion.
+`strava.py` et `api_activities.py` marquent DayPlan done via `mark_day_completed_for_user()`.
+
+Ce n'est pas du template/compat — c'est le coeur du systeme de mutation.
+
+#### Lectures legacy encore actives
+
+`signals.py` (354 lignes) lit `WeeklyPlan` / `DayPlan` pour les 5 detecteurs de signaux.
+Ces signaux alimentent le heartbeat (user-facing). Ce n'est pas isole.
+
+`activities.py` matche les activites Strava contre `DayPlan` via `match_activity_to_day()`.
+
+#### Ce qui a ete retire (reel)
+
+- lectures DayPlan dans les read models app (overview, calendar, evolution, session detail)
+- DayPlan dans TodayView et `/api/v0/today/{day}`
+- DayPlan dans le briefing heartbeat
+- plan_summary legacy dans la plomberie conversationnelle
+- WeeklyPlan dans le chemin conversation (`ConversationTurnState`)
+- Telegram `/plan` lit la timeline datee
+
+#### Ce qui reste
+
+- **dual-write actif** dans plan_actions.py (6 chemins)
+- **dual-write completion** dans plan_mutation_service / strava / api_activities
+- **runtime read** dans signals.py (5 detecteurs)
+- **runtime read** dans activities.py (matching Strava)
+- `/api/v0/week` comme compat endpoint
+- frontend dead code (`src/pages/`, `src/lib/api.ts`)
+
+### Audit precedent du 10 avril 2026
 
 Ce qui a ete retire pour fermer la phase 1 :
 
@@ -267,29 +304,11 @@ Ce qui a ete retire pour fermer la phase 1 :
 - la reprise `DayPlan` dans le briefing heartbeat
 - le passage de `plan_summary` legacy dans la plomberie conversationnelle
 
-Dette encore visible mais non bloquante pour le coeur de phase 1 :
-
-- `/api/v0/week` et certains clients legacy restent vivants comme surface template / compatibilite
-- certaines metadonnees hebdo continuent de provenir de `WeeklyPlan` comme template, ce qui releve de la suite du chantier et non du gate strict `no DayPlan runtime truth`
-
-Verification realisee pendant cet audit :
+Verification realisee :
 
 - `./scripts/test-backend -q tests/test_coach_state_bundle.py tests/test_prompt_truth_gates.py tests/test_plan_mutation_service.py tests/test_app_endpoints.py tests/test_core_flows.py tests/test_heartbeat_grounding.py`
 - `./scripts/test-backend -q tests/test_adaptation.py tests/test_api_messages_helpers.py tests/test_temporal_resolver.py tests/test_llm_prompt_builder.py`
-
-Resultat :
-
 - `83 passed`
-
-Condition concrete pour fermer vraiment la phase 1 :
-Condition maintenant atteinte sur le scope strict de phase 1 :
-
-- plus aucun chemin de lecture user-facing runtime ne depend de `DayPlan` comme verite live
-
-Next utile apres phase 1 :
-
-- clarifier le statut de `/api/v0/week` comme endpoint template-only legacy ou le sortir des consommateurs actifs
-- reduire les lectures `WeeklyPlan` encore presentes dans certaines metadonnees de contexte
 
 ### Phase 0 - Freeze and protect
 
@@ -409,7 +428,7 @@ Statut courant :
 
 Reste :
 
-- remplacer le vieux bootstrap frontend inactif de `/api/v0/week` par des read models dates, ou le supprimer avec les anciennes pages `frontend/src/pages`
+- `/api/v0/week` en compat — les anciennes pages `frontend/src/pages` ont ete supprimees le 13 avril 2026
 
 ### Phase 4 - Rebuild adaptation paths
 

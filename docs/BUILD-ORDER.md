@@ -86,13 +86,15 @@ Ce qui est vrai dans le code aujourd'hui :
 - surface ops / debug distincte du tool plane conversationnel :
   - `api_ops.py`
   - `api_debug.py`
-- refactor coherence phases 1-5 fermé sur le gate courant :
-  - `CoachStateBundle` = lecture partagée
-  - `PlanMutationService` = writer unique des mutations visibles
-  - `plan_mutation_events` = audit forward-only
-  - `adaptation.py` = propositions uniquement
-  - heartbeat/background = suggestion-only sauf policy explicite future
-  - guards writer : `same_sport_proximity` et `protected_recovery_target`
+- refactor coherence — etat reel :
+  - `CoachStateBundle` = lecture partagée pour app, conversation, heartbeat ✓
+  - `PlanMutationService` = gateway unique des mutations visibles ✓
+  - `plan_mutation_events` = audit forward-only ✓
+  - guards writer : `same_sport_proximity` et `protected_recovery_target` ✓
+  - **dual-write actif** : `plan_actions.py` mute `DayPlan` dans tous ses chemins en parallele de `ScheduledSession`
+  - **lectures legacy actives** : `signals.py` lit `WeeklyPlan`/`DayPlan`, `activities.py` matche contre `DayPlan`
+  - `adaptation.py` produit des propositions, mais certains chemins (fatigue low-impact) auto-appliquent encore via orchestrateur
+  - heartbeat = suggestion-only ✓
 
 ### Ce qui est déjà fait et ne doit plus revenir comme gros TODO
 
@@ -117,21 +119,52 @@ Ce qui est vrai dans le code aujourd'hui :
 - guard `protected_recovery_target` sur repos/récupération stable
 - `SYSTEM-MAP.md` comme carte d'architecture pour les agents
 
-### Ce qui reste partiel, legacy ou fragile
+### Dette technique vivante
 
-- `WeeklyPlan` / `DayPlan` restent utiles comme template planner et compat, mais les derniers consommateurs compat doivent rester isolés
-- vieux bootstrap frontend inactif (`frontend/src/state/app-state.tsx` + `frontend/src/pages`) encore à supprimer ou isoler
-- `repository.py` reste un hotspot trop gros, même si `repo_conversation.py` a commencé l'extraction
-- le runtime tools plane reste volontairement étroit :
-  - read-only
-  - 1 tool call max
-  - pas de write tools
+#### Dual-write ScheduledSession / DayPlan (critique)
+
+Le systeme mute `DayPlan` et `ScheduledSession` en parallele. Ce n'est pas du compat — c'est le coeur du mutation path.
+
+Writers actifs :
+- `plan_actions.py` : lighten, modify, replace, swap, move, set_completion_status — tous mutent DayPlan
+- `plan_mutation_service.py` : appelle `mark_day_completed()` a chaque completion
+- `strava.py`, `api_activities.py` : marquent DayPlan done via `mark_day_completed_for_user()`
+
+Readers actifs :
+- `signals.py` : 5 detecteurs lisent `WeeklyPlan` / `DayPlan` pour alimenter le heartbeat
+- `activities.py` : `match_activity_to_day()` matche contre DayPlan
+
+Resolution cible : migrer `plan_actions.py` pour muter uniquement `ScheduledSession`, puis retirer les readers legacy.
+
+#### repository.py hotspot (1 453 lignes, 72 fonctions)
+
+Seul `repo_conversation.py` a ete extrait. Tout le reste du backend depend de ce fichier.
+Candidats d'extraction : session queries, memory queries, converters to_pydantic_*.
+
+#### Frontend code mort
+
+Supprime le 13 avril 2026 :
+- `frontend/src/pages/` (5 fichiers morts remplaces par `features/`)
+- `frontend/src/state/app-state.tsx`
+- `frontend/src/lib/api.ts`, `planning.ts`, `visuals.ts`
+- `frontend/src/components/WorkoutModal.tsx`
+
+#### conversation_pipeline.py (853 lignes)
+
+Prochain hotspot. Orchestre message → signals → LLM → mutation → reponse. Pas encore sur le radar docs.
+
+#### Couverture tests
+
+Legere au regard de la richesse du domaine. Le systeme fait des mutations automatiques (adaptation) sans filet de tests suffisant.
+
+### Ce qui reste partiel ou fragile
+
+- le runtime tools plane reste volontairement etroit (read-only, 1 tool call max, pas de write tools)
 - le heartbeat reste principalement cron + gating, pas encore tick-based
 - le verrou anti-doublon reste surtout mono-process / best effort
-- la couverture tests reste légère au regard de la richesse du domaine
-- le savoir sport existe en contenu et heuristiques, pas encore comme **substrate canonique de capacités partagées**
+- le savoir sport existe en contenu et heuristiques, pas encore comme **substrate canonique de capacites partagees**
 - le `WeeklyRealityDigest` canonique n'existe pas encore
-- la similarité de séance est encore simple (`sport_type + session_type`)
+- la similarite de seance est encore simple (`sport_type + session_type`)
 
 ## Décision de sequencing
 
@@ -280,8 +313,7 @@ Scope :
 Docs de référence :
 
 - `MEMORY-V2.md`
-- `CONVERSATION-GROUNDING.md`
-- `REALITY-WORKOUT-CONTRACT.md`
+- `CONVERSATION.md`
 
 ### 3. Unifier revue hebdo, briefings et adaptation sur le même substrate
 
@@ -338,22 +370,22 @@ But :
 
 ## Tracks domaine à reprendre après ce socle
 
-### `PLANNING-ENGINE-V2.md`
+### `PLANNING.md`
 
 Quand le track planner redevient prioritaire :
 
-- enrichir `periodization.py` au-delà du simple `3+1`
+- enrichir `periodization.py` au-dela du simple `3+1`
 - mieux distribuer la charge par sport
 - porter l'explication de `PlanningDecision` jusque dans coach + app
-- enrichir l'onboarding sportif seulement après ça
+- enrichir l'onboarding sportif seulement apres ca
 
-### `REALITY-WORKOUT-CONTRACT.md`
+### Workout / strength
 
-Le gros chantier est absorbé.
+Le gros chantier reality-workout est absorbe.
 Le vrai next domain, si on y revient :
 
 - `strength_signals` plus riches
-- variations renfo depuis réel récent + fatigue + santé + temps dispo
+- variations renfo depuis reel recent + fatigue + sante + temps dispo
 - sans ouvrir un moteur de progression force complexe
 
 ### `APP-UX.md`

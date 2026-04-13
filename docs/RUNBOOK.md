@@ -300,10 +300,10 @@ Si la demande concerne :
 ## Réalité des hotspots
 
 Les fichiers encore lourds :
-- `llm.py`
-- `repository.py`
-- `frontend/src/styles/app.css` (héritage, à réduire au profit de `styles/theme.css`)
-- `frontend/src/state/app-state.tsx` (legacy, hors chemin principal)
+- `repository.py` (1453 lignes, 72 fonctions)
+- `llm.py` (971 lignes)
+- `conversation_pipeline.py` (853 lignes)
+- `adaptation.py` (696 lignes)
 - `heartbeat.py`
 
 Avant d'ajouter de la logique dedans, se poser la question :
