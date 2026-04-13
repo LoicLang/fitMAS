@@ -73,6 +73,7 @@ def run_pre_mutation_hooks(
     _check_fragile_day(result, decision, scheduled_sessions=scheduled_sessions, timezone_name=timezone_name)
     _check_same_sport_proximity(result, decision, scheduled_sessions=scheduled_sessions, timezone_name=timezone_name)
     _check_protected_recovery_target(result, decision, scheduled_sessions=scheduled_sessions, timezone_name=timezone_name)
+    _check_occupied_training_target(result, decision, scheduled_sessions=scheduled_sessions, timezone_name=timezone_name)
     _check_load_coherence(result, decision, scheduled_sessions=scheduled_sessions)
 
     if result.warnings:
@@ -228,6 +229,44 @@ def _check_protected_recovery_target(
                 severity="warning",
             ))
             return
+
+
+def _check_occupied_training_target(
+    result: PreMutationResult,
+    decision: MutationDecision,
+    *,
+    scheduled_sessions: Sequence[Any],
+    timezone_name: str | None,
+) -> None:
+    """Block move_session from overwriting another real training session."""
+    if decision.mutation_type != "move_session":
+        return
+    target_date = _resolve_decision_target_date(decision, timezone_name=timezone_name)
+    if target_date is None:
+        return
+    for session in scheduled_sessions:
+        if _value(session, "id") == decision.target_session_id:
+            continue
+        if _session_date(session, timezone_name) != target_date:
+            continue
+        if str(_value(session, "completion_status") or "").strip().lower() in {"done", "skipped", "canceled"}:
+            continue
+        sport = str(_value(session, "sport_type") or "").strip().lower()
+        session_type = str(_value(session, "session_type") or "").strip().lower()
+        recovery_like = sport in {"", "rest", "off"} or session_type in {"rest", "recovery", "mobility"}
+        if recovery_like:
+            continue
+        result.allowed = False
+        result.block_reason = "occupied_training_target"
+        result.warnings.append(MutationWarning(
+            code="occupied_training_target",
+            message=(
+                f"Le {target_date.isoformat()} contient deja une vraie seance. "
+                "Utilise swap_sessions ou demande confirmation."
+            ),
+            severity="warning",
+        ))
+        return
 
 
 # ---------------------------------------------------------------------------

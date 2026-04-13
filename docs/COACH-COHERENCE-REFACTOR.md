@@ -388,6 +388,7 @@ Statut courant :
 - chaque action appliquee par ce service ecrit maintenant un event minimal avec source, trigger, command, ids cibles, snapshots JSON, raison, impact et resume visible disponible
 - la completion activite + sync legacy `DayPlan done` est maintenant repliee dans un seul event `activity_completed` quand une `ScheduledSession` datee existe
 - les reponses conversationnelles apres mutation appliquee utilisent maintenant le `user_visible_summary` issu de l'event applique
+- les reponses conversationnelles ne peuvent plus annoncer un changement applique si `applied_count` ou `event_count` vaut zero
 - garde de test ajoutee pour empecher `api_plan.py`, `api_activities.py`, `api_messages.py` et `strava.py` d'appeler les writers bas niveau directement
 - `mutations.py` est maintenant cache derriere `PlanMutationService` cote code live
 - le gate `event_count == applied_count` est verrouille sur les decisions appliquees, y compris les decisions multi-seances comme `swap_sessions`
@@ -491,6 +492,7 @@ Statut courant :
 - premier guard pose : un `move_session` avec date explicite qui cree un quasi-doublon meme sport / meme type a moins de 48h est bloque avec `same_sport_proximity`
 - ce guard couvre les decisions conversationnelles et les actions app avec `target_date`; les moves app sans date restent un auto-placement a traiter separement si besoin
 - deuxieme guard pose : un `move_session` vers une recuperation stable/protegee est bloque avec `protected_recovery_target`, tandis qu'un repos `flexible` reste utilisable
+- troisieme guard pose : un `move_session` vers une journee qui contient deja une vraie seance training est bloque avec `occupied_training_target`; il faut un `swap_sessions` ou une clarification
 - la similarite initiale vit dans `session_similarity.py` pour pouvoir etre enrichie sans grossir `mutation_hooks.py`
 
 Phase 5 est fermee sur le gate actuel.

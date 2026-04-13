@@ -12,6 +12,7 @@ from fastapi.testclient import TestClient
 
 import fitmas.api_messages as api_messages
 import fitmas.calibration_needs as calibration_needs
+import fitmas.conversation_pipeline as conversation_pipeline
 import fitmas.llm as llm
 from fitmas.adaptation import AdaptationResult
 from fitmas.api import app
@@ -458,6 +459,60 @@ class FitMASCoreFlowsTest(unittest.TestCase):
         self.assertTrue(turns[0].mutation_applied)
         self.assertEqual(turns[0].mutation_type, "lighten_day")
         self.assertIn('"mutation_type": "lighten_day"', turns[0].decision_json)
+
+    def test_conversation_turn_records_no_change_as_not_applied(self) -> None:
+        self._create_plan_for_today()
+        original_decide = api_messages.decide
+        original_extract_facts = api_messages.extract_facts
+        try:
+            api_messages.decide = lambda *args, **kwargs: MutationDecision(
+                mutation_type="no_change",
+                rationale="lecture seule",
+                fitmas_message="Je regarde sans toucher au plan.",
+            )
+            api_messages.extract_facts = lambda *args, **kwargs: []
+            self.client.post("/api/v0/messages", json={"text": "Tu vois quoi aujourd'hui ?"})
+        finally:
+            api_messages.decide = original_decide
+            api_messages.extract_facts = original_extract_facts
+
+        turns = repo.get_recent_conversation_turns(self.db, self.user.id, limit=1)
+
+        self.assertEqual(len(turns), 1)
+        self.assertEqual(turns[0].mutation_type, "no_change")
+        self.assertFalse(turns[0].mutation_applied)
+
+    def test_blocked_mutation_does_not_reply_as_applied(self) -> None:
+        _, session = self._create_plan_for_today()
+        original_decide = api_messages.decide
+        original_extract_facts = api_messages.extract_facts
+        original_apply = conversation_pipeline.apply_decisions_for_user
+        try:
+            api_messages.decide = lambda *args, **kwargs: MutationDecision(
+                mutation_type="move_session",
+                target_session_id=session.id,
+                target_date=(session.scheduled_date.date() + timedelta(days=1)).isoformat(),
+                rationale="unsafe move",
+                fitmas_message="OK. Je deplace la seance demain.",
+            )
+            api_messages.extract_facts = lambda *args, **kwargs: []
+            conversation_pipeline.apply_decisions_for_user = lambda *args, **kwargs: SimpleNamespace(
+                applied_count=0,
+                event_count=0,
+                applied_events=(),
+            )
+            result = self.client.post("/api/v0/messages", json={"text": "Mets ca demain"}).json()
+        finally:
+            api_messages.decide = original_decide
+            api_messages.extract_facts = original_extract_facts
+            conversation_pipeline.apply_decisions_for_user = original_apply
+
+        turns = repo.get_recent_conversation_turns(self.db, self.user.id, limit=1)
+
+        self.assertNotIn("OK. Je deplace", result["assistant_message"]["text"])
+        self.assertEqual(len(turns), 1)
+        self.assertEqual(turns[0].mutation_type, "move_session")
+        self.assertFalse(turns[0].mutation_applied)
 
     def test_conversation_turn_records_pending_confirmation(self) -> None:
         _, session = self._create_plan_for_today()

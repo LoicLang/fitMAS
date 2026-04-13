@@ -52,7 +52,10 @@ def apply(
         return pre_result, None
 
     # --- Apply mutation ---
-    _apply_mutation(db, plan_id, decision)
+    applied = _apply_mutation(db, plan_id, decision)
+    if not applied:
+        logger.info("Mutation produced no DB change: %s", decision.mutation_type)
+        return pre_result, None
 
     # --- Post-mutation hooks ---
     if decision.mutation_type == "no_change":
@@ -70,8 +73,8 @@ def apply(
     return pre_result, post_result
 
 
-def _apply_mutation(db: Session, plan_id: int, decision: MutationDecision) -> None:
-    """Core mutation dispatch — unchanged logic, extracted from old apply()."""
+def _apply_mutation(db: Session, plan_id: int, decision: MutationDecision) -> bool:
+    """Core mutation dispatch. Returns whether the database changed."""
 
     plan = repo.get_plan_optional(db, plan_id)
     user = plan.user if plan is not None else None
@@ -91,7 +94,7 @@ def _apply_mutation(db: Session, plan_id: int, decision: MutationDecision) -> No
                 target_date,
                 moved.id if moved else None,
             )
-            return
+            return moved is not None
 
         if decision.mutation_type == "lighten_day":
             session = plan_actions.lighten_session(
@@ -101,7 +104,7 @@ def _apply_mutation(db: Session, plan_id: int, decision: MutationDecision) -> No
                 rationale=decision.rationale,
             )
             logger.info("Applied session lighten: session=%s result=%s", decision.target_session_id, session.id if session else None)
-            return
+            return session is not None
 
         if decision.mutation_type == "swap_sessions" and decision.second_session_id:
             swapped = plan_actions.swap_sessions(
@@ -117,7 +120,7 @@ def _apply_mutation(db: Session, plan_id: int, decision: MutationDecision) -> No
                 decision.second_session_id,
                 bool(swapped),
             )
-            return
+            return bool(swapped)
 
         if decision.mutation_type == "update_session":
             session = plan_actions.update_session_details(
@@ -129,7 +132,7 @@ def _apply_mutation(db: Session, plan_id: int, decision: MutationDecision) -> No
                 rationale=decision.rationale,
             )
             logger.info("Applied session update: session=%s result=%s", decision.target_session_id, session.id if session else None)
-            return
+            return session is not None
 
         if decision.mutation_type == "replace_session":
             session = plan_actions.replace_session(
@@ -146,11 +149,11 @@ def _apply_mutation(db: Session, plan_id: int, decision: MutationDecision) -> No
                 rationale=decision.rationale,
             )
             logger.info("Applied session replace: session=%s result=%s", decision.target_session_id, session.id if session else None)
-            return
+            return session is not None
 
     if decision.mutation_type == "move_session":
         if not decision.from_day or not decision.to_day:
-            return
+            return False
 
         repo.move_session(db, plan_id, decision.from_day, decision.to_day)
 
@@ -165,15 +168,16 @@ def _apply_mutation(db: Session, plan_id: int, decision: MutationDecision) -> No
 
         _resync_plan_sessions(db, plan_id)
         logger.info("Applied move_session: %s → %s", decision.from_day, decision.to_day)
+        return True
 
     elif decision.mutation_type == "swap_sessions":
         if not decision.from_day or not decision.to_day:
-            return
+            return False
 
         src = repo.get_day_plan(db, plan_id, decision.from_day)
         dst = repo.get_day_plan(db, plan_id, decision.to_day)
         if not src or not dst:
-            return
+            return False
 
         # Swap all session fields
         for field in (
@@ -201,14 +205,15 @@ def _apply_mutation(db: Session, plan_id: int, decision: MutationDecision) -> No
 
         _resync_plan_sessions(db, plan_id)
         logger.info("Applied swap_sessions: %s <-> %s", decision.from_day, decision.to_day)
+        return True
 
     elif decision.mutation_type == "update_session":
         if not decision.from_day:
-            return
+            return False
 
         day = repo.get_day_plan(db, plan_id, decision.from_day)
         if not day:
-            return
+            return False
 
         if decision.new_title:
             day.session_title = decision.new_title
@@ -220,14 +225,15 @@ def _apply_mutation(db: Session, plan_id: int, decision: MutationDecision) -> No
 
         _resync_plan_sessions(db, plan_id)
         logger.info("Applied update_session on %s: %s", decision.from_day, decision.new_title or "(goal only)")
+        return True
 
     elif decision.mutation_type == "lighten_day":
         if not decision.from_day:
-            return
+            return False
 
         day = repo.get_day_plan(db, plan_id, decision.from_day)
         if not day:
-            return
+            return False
 
         day.sport_type = "rest"
         day.session_type = "rest"
@@ -246,14 +252,15 @@ def _apply_mutation(db: Session, plan_id: int, decision: MutationDecision) -> No
 
         _resync_plan_sessions(db, plan_id)
         logger.info("Applied lighten_day on %s", decision.from_day)
+        return True
 
     elif decision.mutation_type == "replace_session":
         if not decision.from_day:
-            return
+            return False
 
         day = repo.get_day_plan(db, plan_id, decision.from_day)
         if not day:
-            return
+            return False
 
         if decision.new_sport_type:
             day.sport_type = decision.new_sport_type
@@ -276,10 +283,14 @@ def _apply_mutation(db: Session, plan_id: int, decision: MutationDecision) -> No
 
         _resync_plan_sessions(db, plan_id)
         logger.info("Applied replace_session on %s: %s → %s", decision.from_day, decision.new_sport_type, decision.new_title)
+        return True
 
     # "no_change" → nothing to do
     elif decision.mutation_type == "no_change":
         logger.info("No change needed: %s", decision.rationale)
+        return False
+
+    return False
 
 
 def _resolve_target_date(decision: MutationDecision, *, timezone_name: str | None) -> date | None:

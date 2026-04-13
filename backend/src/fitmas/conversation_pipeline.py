@@ -122,7 +122,12 @@ def run_conversation_turn(
                 trigger_type="confirmation_accepted",
                 explained_to_user=True,
             )
-            reply_text = _applied_event_summary(service_result, decision) or decision.fitmas_message
+            applied = _mutation_was_applied(service_result)
+            reply_text = (
+                _applied_event_summary(service_result, decision)
+                if applied
+                else _blocked_mutation_reply(decision)
+            )
             reply_text = api_messages._sanitize_no_change_reply(
                 user_text=payload.text,
                 reply_text=reply_text,
@@ -134,10 +139,10 @@ def run_conversation_turn(
                 user_text=payload.text,
                 reply_text=reply_text,
                 extraction=Extraction(confidence=0.98),
-                day_updated=api_messages._resolve_day_updated(decision),
-                response_mode="confirmation_applied",
+                day_updated=api_messages._resolve_day_updated(decision) if applied else None,
+                response_mode="confirmation_applied" if applied else "confirmation_blocked",
                 decision=decision,
-                mutation_applied=True,
+                mutation_applied=applied,
                 turn_context={"pending_confirmation": True, "pending_confirmation_id": pending_confirmation.id},
                 memory_writes=turn_memory_writes,
             )
@@ -619,6 +624,20 @@ def run_conversation_turn(
                 pending_confirmation_id=pending_row.id,
             )
             logger.info("Pending confirmation (%s): %s", decision.mutation_type, reply_text[:120])
+        elif decision.mutation_type == "no_change":
+            reply_text = api_messages._sanitize_no_change_reply(
+                user_text=payload.text,
+                reply_text=decision.fitmas_message,
+                decision=decision,
+            )
+            outcome = ConversationTurnOutcome(
+                extraction=Extraction(confidence=adaptation.event.confidence if adaptation else 0.85),
+                reply_text=reply_text,
+                response_mode="reply",
+                decision=decision,
+                mutation_applied=False,
+            )
+            logger.info("LLM reply (%s): %s", decision.mutation_type, reply_text[:120])
         else:
             service_result = apply_decisions_for_user(
                 db,
@@ -634,7 +653,12 @@ def run_conversation_turn(
                     user.id,
                     build_adaptation_log_entry(decision=adaptation, scheduled_sessions=state.scheduled_sessions),
                 )
-            reply_text = _applied_event_summary(service_result, decision) or decision.fitmas_message
+            applied = _mutation_was_applied(service_result)
+            reply_text = (
+                _applied_event_summary(service_result, decision)
+                if applied
+                else _blocked_mutation_reply(decision)
+            )
             reply_text = api_messages._sanitize_no_change_reply(
                 user_text=payload.text,
                 reply_text=reply_text,
@@ -643,10 +667,10 @@ def run_conversation_turn(
             outcome = ConversationTurnOutcome(
                 extraction=Extraction(confidence=adaptation.event.confidence if adaptation else 0.85),
                 reply_text=reply_text,
-                day_updated=api_messages._resolve_day_updated(decision),
-                response_mode="mutation_applied",
+                day_updated=api_messages._resolve_day_updated(decision) if applied else None,
+                response_mode="mutation_applied" if applied else "mutation_blocked",
                 decision=decision,
-                mutation_applied=True,
+                mutation_applied=applied,
             )
             logger.info("LLM reply (%s): %s", decision.mutation_type, reply_text[:120])
     elif calibration_only_reply is not None:
@@ -783,6 +807,23 @@ def _applied_event_summary(service_result, decision) -> str | None:
         if event.command_type == decision.mutation_type:
             return event.user_visible_summary
     return None
+
+
+def _mutation_was_applied(service_result) -> bool:
+    if service_result is None:
+        return False
+    return int(getattr(service_result, "applied_count", 0) or 0) > 0 and int(
+        getattr(service_result, "event_count", 0) or 0
+    ) > 0
+
+
+def _blocked_mutation_reply(decision) -> str:
+    if getattr(decision, "mutation_type", "") == "move_session":
+        return (
+            "Je ne l'ai pas applique: le creneau cible n'est pas assez sur. "
+            "Si tu veux echanger deux seances, donne-moi les deux seances ou les deux jours."
+        )
+    return "Je ne l'ai pas applique: le changement n'a pas ete valide par le planning."
 
 
 def _latest_agent_text(conversation_history: list[dict]) -> str | None:

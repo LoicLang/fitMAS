@@ -92,6 +92,39 @@ def test_apply_decisions_for_user_counts_only_successful_applies(monkeypatch) ->
     assert result.event_count == 1
 
 
+def test_apply_decisions_for_user_does_not_event_noop_move(monkeypatch) -> None:
+    user = SimpleNamespace(id=7)
+    decision = MutationDecision(
+        mutation_type="move_session",
+        target_session_id=None,
+        target_date="2026-04-17",
+        rationale="no concrete session",
+        fitmas_message="OK. Je deplace.",
+    )
+
+    monkeypatch.setattr(
+        "fitmas.plan_mutation_service.repo.get_active_plan",
+        lambda db, user_id: SimpleNamespace(id=42),
+    )
+    monkeypatch.setattr(
+        "fitmas.plan_mutation_service.mutations.apply",
+        lambda db, plan_id, decision, **kwargs: (SimpleNamespace(allowed=True), None),
+    )
+    monkeypatch.setattr("fitmas.plan_mutation_service.repo.get_scheduled_sessions", lambda *args, **kwargs: [])
+
+    def _add_event(*args, **kwargs):
+        raise AssertionError("no-op move should not create a mutation event")
+
+    monkeypatch.setattr("fitmas.plan_mutation_service.repo.add_plan_mutation_event", _add_event)
+
+    result = apply_decisions_for_user(object(), user=user, decisions=[decision])
+
+    assert result is not None
+    assert result.applied_count == 0
+    assert result.event_count == 0
+    assert result.applied_events == ()
+
+
 def test_apply_decisions_for_user_passes_runtime_sessions_to_mutation_hooks(monkeypatch) -> None:
     user = SimpleNamespace(id=7, timezone="Europe/Paris")
     sessions = [SimpleNamespace(id=10), SimpleNamespace(id=11)]

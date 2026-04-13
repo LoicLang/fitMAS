@@ -154,3 +154,42 @@ def test_move_session_allows_flexible_recovery_target() -> None:
 
     assert result.allowed is True
     assert result.block_reason is None
+
+
+def test_move_session_blocks_occupied_training_target() -> None:
+    decision = MutationDecision(
+        mutation_type="move_session",
+        target_session_id=10,
+        target_date="2026-04-15",
+        rationale="indispo",
+        fitmas_message="Je deplace.",
+    )
+    sessions = [
+        {
+            "id": 10,
+            "scheduled_date": "2026-04-13",
+            "sport_type": "strength",
+            "session_type": "general",
+            "completion_status": "planned",
+        },
+        {
+            "id": 11,
+            "scheduled_date": "2026-04-15",
+            "sport_type": "running",
+            "session_type": "endurance",
+            "session_title": "Footing endurance",
+            "flexibility": "stable",
+            "completion_status": "planned",
+        },
+    ]
+
+    result = run_pre_mutation_hooks(
+        object(),
+        plan_id=42,
+        decision=decision,
+        scheduled_sessions=sessions,
+        timezone_name="Europe/Paris",
+    )
+
+    assert result.allowed is False
+    assert result.block_reason == "occupied_training_target"

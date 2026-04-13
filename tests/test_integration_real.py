@@ -249,8 +249,8 @@ class TestPromptLayersWithLLM(unittest.TestCase):
 # ---------------------------------------------------------------------------
 
 class TestMutationHooksIntegration(unittest.TestCase):
-    def test_pre_hooks_warn_on_hard_collision(self):
-        """Pre-hooks should warn when moving to a day with an existing hard session."""
+    def test_pre_hooks_block_hard_training_collision(self):
+        """Pre-hooks should block moves that would overwrite a real training day."""
         from fitmas.llm import MutationDecision
 
         decision = MutationDecision(
@@ -274,9 +274,11 @@ class TestMutationHooksIntegration(unittest.TestCase):
             timezone_name="Europe/Paris",
         )
 
-        self.assertTrue(result.allowed, "Should still be allowed (warning, not block)")
+        self.assertFalse(result.allowed, "Should block training collisions")
+        self.assertEqual(result.block_reason, "occupied_training_target")
         warning_codes = [w.code for w in result.warnings]
         self.assertIn("hard_session_collision", warning_codes)
+        self.assertIn("occupied_training_target", warning_codes)
         print(f"  Warnings: {warning_codes}")
 
     def test_post_hooks_calculate_lighten_impact(self):

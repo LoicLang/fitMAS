@@ -548,12 +548,35 @@ def make_timeline_summary(sessions: list) -> str:
     for session in sessions:
         day = getattr(session, "day", "")
         date_value = getattr(session, "scheduled_date", "")
+        sport_type = getattr(session, "sport_type", "running")
+        session_type = getattr(session, "session_type", "")
+        status = getattr(session, "completion_status", "planned")
+        slot = _timeline_slot_kind(session)
+        movable_target = slot == "free_flexible"
+        status_key = str(status or "").strip().lower()
+        swappable = slot == "training" and status_key not in {"done", "skipped", "canceled"}
         lines.append(
             f"- id={getattr(session, 'id', '?')} | date={date_value} | day={day} | "
-            f"[{getattr(session, 'sport_type', 'running')}] {getattr(session, 'session_title', '')} "
-            f"| goal={getattr(session, 'session_goal', '')} | status={getattr(session, 'completion_status', 'planned')}"
+            f"slot={slot} | movable_target={str(movable_target).lower()} | "
+            f"swappable={str(swappable).lower()} | [{sport_type}/{session_type}] "
+            f"{getattr(session, 'session_title', '')} | goal={getattr(session, 'session_goal', '')} | status={status}"
         )
     return "\n".join(lines)
+
+
+def _timeline_slot_kind(session: object) -> str:
+    sport = str(getattr(session, "sport_type", "") or "").strip().lower()
+    session_type = str(getattr(session, "session_type", "") or "").strip().lower()
+    flexibility = str(getattr(session, "flexibility", "") or "").strip().lower()
+    status = str(getattr(session, "completion_status", "") or "").strip().lower()
+    if status in {"done", "skipped", "canceled"}:
+        return "protected_recovery" if sport in {"rest", "off"} or session_type in {"rest", "recovery", "mobility"} else "training"
+    recovery_like = sport in {"rest", "off", ""} or session_type in {"rest", "recovery", "mobility"}
+    if recovery_like and flexibility == "flexible":
+        return "free_flexible"
+    if recovery_like:
+        return "protected_recovery"
+    return "training"
 
 
 def preview_coach_voice(context: dict, *, time_context: dict | None = None) -> list[str]:
