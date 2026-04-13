@@ -28,7 +28,7 @@ Si un autre doc diverge :
 
 **Un premier coach que Loïc reconnaît, comprend, et a envie de rouvrir demain.**
 
-## État actuel — 7 avril 2026
+## État actuel — 13 avril 2026
 
 ### Vérité repo
 
@@ -48,8 +48,9 @@ Ce qui est vrai dans le code aujourd'hui :
   - `calendar`
   - `evolution`
   - `session detail`
-- vérité planning app/chat = `ScheduledSession` datées en priorité
-- `WeeklyPlan` / `DayPlan` existent encore, mais surtout comme squelette legacy / fallback
+- vérité planning runtime app/chat/heartbeat = `ScheduledSession` datées
+- `WeeklyPlan` / `DayPlan` existent encore comme template planner et compat, pas comme vérité runtime
+- `/api/v0/week` est marqué `runtime_role=template_compat`
 - planner déterministe multisport + `PlanningDecision` + `planning_state`
 - activités réelles : manuel + Strava + matching + vues app
 - couche planning contract déjà visible dans l'app :
@@ -85,6 +86,13 @@ Ce qui est vrai dans le code aujourd'hui :
 - surface ops / debug distincte du tool plane conversationnel :
   - `api_ops.py`
   - `api_debug.py`
+- refactor coherence phases 1-5 fermé sur le gate courant :
+  - `CoachStateBundle` = lecture partagée
+  - `PlanMutationService` = writer unique des mutations visibles
+  - `plan_mutation_events` = audit forward-only
+  - `adaptation.py` = propositions uniquement
+  - heartbeat/background = suggestion-only sauf policy explicite future
+  - guards writer : `same_sport_proximity` et `protected_recovery_target`
 
 ### Ce qui est déjà fait et ne doit plus revenir comme gros TODO
 
@@ -100,10 +108,19 @@ Ce qui est vrai dans le code aujourd'hui :
 - `execution_evidence` / `recent_reality` / `workout_content`
 - split heartbeat en cluster `skills/heartbeat`
 - mémoire V2 base + maintenance périodique
+- `CoachStateBundle`
+- `PlanMutationService` + `plan_mutation_events`
+- retrait de `WeeklyPlan` / `DayPlan` des lectures runtime app, conversation et heartbeat
+- `/api/v0/week` clarifié comme compat template
+- adaptation background suggestion-only
+- guard `same_sport_proximity` sur moves datés
+- guard `protected_recovery_target` sur repos/récupération stable
+- `SYSTEM-MAP.md` comme carte d'architecture pour les agents
 
 ### Ce qui reste partiel, legacy ou fragile
 
-- `WeeklyPlan` / `DayPlan` ne sont pas encore totalement sortis des chemins legacy
+- `WeeklyPlan` / `DayPlan` restent utiles comme template planner et compat, mais les derniers consommateurs compat doivent rester isolés
+- vieux bootstrap frontend inactif (`frontend/src/state/app-state.tsx` + `frontend/src/pages`) encore à supprimer ou isoler
 - `repository.py` reste un hotspot trop gros, même si `repo_conversation.py` a commencé l'extraction
 - le runtime tools plane reste volontairement étroit :
   - read-only
@@ -113,6 +130,8 @@ Ce qui est vrai dans le code aujourd'hui :
 - le verrou anti-doublon reste surtout mono-process / best effort
 - la couverture tests reste légère au regard de la richesse du domaine
 - le savoir sport existe en contenu et heuristiques, pas encore comme **substrate canonique de capacités partagées**
+- le `WeeklyRealityDigest` canonique n'existe pas encore
+- la similarité de séance est encore simple (`sport_type + session_type`)
 
 ## Décision de sequencing
 
@@ -191,11 +210,13 @@ Il traduit le plan OMX courant en doc durable repo et fixe l'ordre :
 - un bundle de lecture partage
 - des mutations expliquees depuis des events reels
 
-Point de verite au 10 avril 2026 :
+Point de verite au 13 avril 2026 :
 
 - la convergence principale de phase 1 est en place
-- la phase 1 est maintenant fermee sur son gate strict de lecture runtime
-- le prochain sujet n'est plus de clarifier `/api/v0/week` : il est marque `template_compat`; la suite est de remplacer progressivement ses derniers consommateurs frontend / Telegram par des read models dates
+- les phases 1 a 5 du refactor coherence sont fermees sur leurs gates courants
+- le prochain sujet n'est pas Phase 6 par défaut
+- le prochain sujet est dogfood guide sur le profil reel pour verifier la coherence coach/app/planning apres refactor
+- Phase 6 ne doit demarrer que si le dogfood confirme une douleur memoire/tools/digest
 
 ### 0. Dogfood guidé et alignement vérité
 
@@ -207,6 +228,10 @@ But :
 
 Observer surtout :
 
+- calendrier app : `missing / adapted / done / offplan`
+- conversation fatigue/douleur/indisponibilite
+- confirmations de mutation forte
+- events `plan_mutation_events`
 - review du dimanche
 - négociations de déplacement
 - briefings matinaux réels
