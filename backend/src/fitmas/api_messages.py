@@ -151,6 +151,12 @@ _FUTURE_MUTATION_MARKERS = (
     "swap",
     "pas demain",
 )
+_SWAP_REQUEST_MARKERS = (
+    "echange",
+    "echanger",
+    "swap",
+    "switch",
+)
 _SPORT_KEYWORDS = {
     "running": ("course", "courir", "run", "footing"),
     "swimming": ("natation", "piscine", "nage"),
@@ -191,6 +197,11 @@ def _to_mutation_decision(proposed, *, fitmas_message: str) -> MutationDecision:
 def _normalize_text(text: str) -> str:
     folded = unicodedata.normalize("NFKD", text or "").encode("ascii", "ignore").decode("ascii")
     return " ".join(folded.lower().strip().split())
+
+
+def _looks_like_swap_request(text: str) -> bool:
+    normalized = _normalize_text(text)
+    return any(marker in normalized for marker in _SWAP_REQUEST_MARKERS)
 
 
 def _maybe_low_signal_reply(text: str, *, has_open_calibration_need: bool) -> str | None:

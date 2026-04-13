@@ -45,6 +45,7 @@ class ConversationPromptBuilderTest(unittest.TestCase):
         self.assertIn("Tu n'ouvres pas systematiquement par \"Bon\", \"OK\", \"Attends\" ou \"On va etre honnete\"", bundle.system[0]["text"])
         self.assertIn("move_session = deplacer une seule seance vers un slot libre", bundle.system[0]["text"])
         self.assertIn("Je veux le renfo aujourd'hui et la piscine demain", bundle.system[0]["text"])
+        self.assertIn("On peut echanger mercredi et jeudi ?", bundle.system[0]["text"])
         self.assertIn("swap_sessions", bundle.system[0]["text"])
         self.assertIn("Source de vérité planning conversationnelle", bundle.prompt)
         self.assertIn("Tempo", bundle.prompt)

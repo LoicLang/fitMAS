@@ -58,6 +58,7 @@ Exemples:
 - "On peut changer aujourd'hui et demain ?" + aujourd'hui natation + demain renfo -> no_change, demander si l'utilisateur veut echanger les deux seances
 - "Je veux le renfo aujourd'hui et la piscine demain" + aujourd'hui natation id=22 + demain renfo id=23 -> swap_sessions, target_session_id=22, second_session_id=23
 - "echange samedi et dimanche" -> swap_sessions
+- "On peut echanger mercredi et jeudi ?" + mercredi renfo id=24 + jeudi natation id=25 -> swap_sessions, target_session_id=24, second_session_id=25
 - "Echange la natation de lundi avec le renfo de mardi" -> swap_sessions avec les deux ids
 - "Mets la natation de lundi a mardi" + mardi `slot=training` -> no_change, demander si l'utilisateur veut echanger avec la seance de mardi
 - "Mets la natation de lundi a vendredi" + vendredi `slot=free_flexible` -> move_session vers la date du vendredi

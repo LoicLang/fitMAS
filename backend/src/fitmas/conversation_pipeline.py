@@ -438,7 +438,13 @@ def run_conversation_turn(
         today_session=state.today_session,
         scheduled_sessions=state.scheduled_sessions,
     )
-    if adaptation is None and user_indication is not None and supports_planning_resolution(user_indication):
+    swap_request = api_messages._looks_like_swap_request(payload.text)
+    if (
+        adaptation is None
+        and user_indication is not None
+        and supports_planning_resolution(user_indication)
+        and not swap_request
+    ):
         resolution = resolve_planning_window(
             indication=user_indication,
             scheduled_sessions=state.scheduled_sessions,
@@ -471,6 +477,7 @@ def run_conversation_turn(
         and not standalone_calibration_answer
         and user_indication is not None
         and user_indication.kind is UserIndicationKind.AVAILABILITY_CONSTRAINT
+        and not swap_request
     ):
         if resolution is None and user_indication.time_reference is not None:
             resolution = resolve_planning_window(

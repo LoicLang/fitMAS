@@ -1026,6 +1026,94 @@ class FitMASCoreFlowsTest(unittest.TestCase):
         self.assertIn("Natation hotel", result["assistant_message"]["text"])
         self.assertIn("Renfo hotel", result["assistant_message"]["text"])
 
+    def test_swap_wording_bypasses_availability_week_scope_reply(self) -> None:
+        self._create_plan_for_today()
+        now = get_local_now(self.user.timezone)
+        wednesday = now + timedelta(days=(2 - now.weekday()) % 7)
+        thursday = now + timedelta(days=(3 - now.weekday()) % 7)
+        renfo = s.ScheduledSession(
+            user_id=self.user.id,
+            day=DAY_KEYS[wednesday.weekday()],
+            label=day_label_fr(DAY_KEYS[wednesday.weekday()], capitalize=True),
+            scheduled_date=wednesday.replace(hour=7, minute=0, second=0, microsecond=0),
+            sport_type="strength",
+            session_type="general",
+            session_title="Renfo general",
+            session_goal="Socle",
+            session_note="",
+            session_description="36 min",
+            duration_min=36,
+            intensity="moderate",
+            load_score=2,
+            priority="Support",
+            nutrition_focus="",
+            flexibility="stable",
+            completion_status="planned",
+        )
+        swim = s.ScheduledSession(
+            user_id=self.user.id,
+            day=DAY_KEYS[thursday.weekday()],
+            label=day_label_fr(DAY_KEYS[thursday.weekday()], capitalize=True),
+            scheduled_date=thursday.replace(hour=7, minute=0, second=0, microsecond=0),
+            sport_type="swimming",
+            session_type="css",
+            session_title="Natation CSS",
+            session_goal="Seuil",
+            session_note="",
+            session_description="40 min",
+            duration_min=40,
+            intensity="moderate",
+            load_score=3,
+            priority="Support",
+            nutrition_focus="",
+            flexibility="stable",
+            completion_status="planned",
+        )
+        self.db.add_all([renfo, swim])
+        self.db.commit()
+        self.db.refresh(renfo)
+        self.db.refresh(swim)
+
+        original_decide = api_messages.decide
+        original_extract_facts = api_messages.extract_facts
+        original_interpret = api_messages.interpret_user_indication
+        try:
+            api_messages.extract_facts = lambda *args, **kwargs: []
+            api_messages.interpret_user_indication = lambda *args, **kwargs: UserIndication(
+                kind=UserIndicationKind.AVAILABILITY_CONSTRAINT,
+                confidence=0.95,
+                source_text="On peut echanger mercredi et jeudi ?",
+                scope=UserIndicationScope.WEEK,
+                polarity=UserIndicationPolarity.UNAVAILABLE,
+                time_reference=IndicationTimeReference(
+                    label="mercredi et jeudi",
+                    resolved_date=wednesday.date(),
+                    day_key=DAY_KEYS[wednesday.weekday()],
+                    relative_reference="this_week",
+                    window=None,
+                ),
+            )
+
+            def fake_decide(*args, **kwargs):
+                return MutationDecision(
+                    mutation_type="swap_sessions",
+                    target_session_id=renfo.id,
+                    second_session_id=swim.id,
+                    rationale="Echange mercredi et jeudi.",
+                    fitmas_message="Je peux echanger mercredi et jeudi.",
+                )
+
+            api_messages.decide = fake_decide
+            result = self.client.post("/api/v0/messages", json={"text": "On peut échanger mercredi et jeudi ?"}).json()
+        finally:
+            api_messages.decide = original_decide
+            api_messages.extract_facts = original_extract_facts
+            api_messages.interpret_user_indication = original_interpret
+
+        self.assertNotIn("off complet", result["assistant_message"]["text"].lower())
+        self.assertIn("echanger", result["assistant_message"]["text"].lower())
+        self.assertIn("confirmes", result["assistant_message"]["text"].lower())
+
     def test_future_constraint_without_candidate_stays_honest_and_skips_llm(self) -> None:
         self._create_plan_for_today()
         original_decide = api_messages.decide
