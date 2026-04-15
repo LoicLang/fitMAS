@@ -80,6 +80,10 @@ Interdits :
 - aucune mutation planning
 
 Le resultat sert de gate d'orchestration. Si le routeur marque `plan_mutation`, un claim de non-completion reste du contexte et ne peut pas skipper la seance avant arbitrage.
+Cette intention structuree est aussi transmise a `llm.decide()` pour choisir la prompt policy et le budget de tools quand les heuristiques lexicales seraient trompeuses.
+
+Pour les contraintes de disponibilite, les reponses deterministes `week_scope` et `no_candidate` deviennent aussi du grounding quand le routeur classe le tour comme `availability_constraint` ou `plan_mutation`.
+Le LLM formule alors la reponse finale avec ce contexte. Si le LLM ne rend pas de decision valide, l'orchestrateur conserve la reponse deterministe comme fallback.
 
 ### Types d'indication
 

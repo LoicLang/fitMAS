@@ -204,7 +204,9 @@ Regle de routage :
 
 - pour un message non trivial ou compose, le LLM arbitre l'intention principale
 - le routeur de tour ne fait aucun write; il ne sert qu'a proteger les gates du pipeline
+- l'intention du routeur peut surclasser la classification deterministe pour choisir la prompt policy et le budget de tools
 - les extracteurs deterministes ajoutent du contexte, mais ne doivent pas produire de reply finale quand une intention planning explicite est presente
+- les replies deterministes de disponibilite large / absence de candidat sont du grounding LLM quand le routeur reconnait une contrainte de planning, avec fallback deterministe si le LLM echoue
 - aucun side-effect planning ne doit arriver avant l'arbitrage du tour si le message contient une demande de mutation (`swap`, `echange`, `decale`, `deplace`, `remplace`, `change`)
 
 ### Planning

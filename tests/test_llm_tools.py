@@ -239,6 +239,64 @@ class LLMToolsTest(unittest.TestCase):
         self.assertEqual(traces[0].context_policy, "plan_lookup_compact")
         self.assertEqual(traces[0].tool_count_offered, 2)
 
+    def test_turn_plan_intent_overrides_keyword_tool_routing(self) -> None:
+        original_client = llm._client
+        original_request_message = llm._request_message
+        original_log_tool_trace = llm.log_tool_trace
+        traces: list[object] = []
+        prompts: list[str] = []
+        systems: list[str] = []
+
+        def fake_request_message(*, system, messages, model="claude-haiku-4-5-20251001", max_tokens=512, tools=None, tool_choice=None):
+            self.assertIsNotNone(tools)
+            self.assertEqual(
+                [tool["name"] for tool in tools],
+                ["get_today_context", "get_plan_window", "get_load_context", "get_relevant_facts"],
+            )
+            prompts.append(messages[0]["content"] if isinstance(messages[0]["content"], str) else "")
+            systems.append("\n".join(part["text"] for part in system) if isinstance(system, list) else str(system))
+            return SimpleNamespace(
+                stop_reason="end_turn",
+                content=[
+                    SimpleNamespace(
+                        type="text",
+                        text='{"mutation_type":"no_change","target_session_id":null,"second_session_id":null,"target_date":null,"from_day":null,"to_day":null,"new_title":null,"new_goal":null,"rationale":"contrainte disponibilite","fitmas_message":"Je vois les seances touchees."}',
+                    )
+                ],
+                usage=SimpleNamespace(input_tokens=160, output_tokens=36),
+            )
+
+        llm._client = lambda: object()
+        llm._request_message = fake_request_message
+        llm.log_tool_trace = lambda trace: traces.append(trace)
+        try:
+            decision = llm.decide(
+                "Cette semaine je voyage de mercredi a vendredi",
+                "Repere",
+                temporal_summary="Contexte orchestration planning: sessions touchees",
+                coach_context={
+                    "turn_primary_intent": "availability_constraint",
+                    "turn_secondary_intents": [],
+                },
+                tool_context=ToolContext(
+                    pipeline="conversation",
+                    user_id=1,
+                    timezone_name="Europe/Paris",
+                    scheduled_sessions=[],
+                    activities=[],
+                    active_facts=[],
+                ),
+            )
+        finally:
+            llm._client = original_client
+            llm._request_message = original_request_message
+            llm.log_tool_trace = original_log_tool_trace
+
+        self.assertIsNotNone(decision)
+        self.assertEqual(decision.mutation_type, "no_change")
+        self.assertEqual(traces[0].context_policy, "plan_negotiation_full")
+        self.assertIn("Contexte orchestration planning", systems[0])
+
 
 if __name__ == "__main__":
     unittest.main()

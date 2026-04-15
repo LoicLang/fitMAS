@@ -630,7 +630,8 @@ class FitMASCoreFlowsTest(unittest.TestCase):
         self.assertTrue(result["assistant_message"]["text"].strip())
         self.assertIsNotNone(adapted_session)
         self.assertEqual(adapted_session.completion_status, "adapted")
-        self.assertTrue(any(token in adapted_session.session_title.lower() for token in ("version courte", "mobilit", "recup")))
+        normalized_title = api_messages._normalize_text(adapted_session.session_title)
+        self.assertTrue(any(token in normalized_title for token in ("version courte", "mobilit", "recup")))
         events = self.db.query(s.PlanMutationEventRecord).all()
         self.assertEqual(len(events), 1)
         self.assertIn(events[0].trigger_type, {"health_adaptation", "life_change_adaptation"})
@@ -960,7 +961,7 @@ class FitMASCoreFlowsTest(unittest.TestCase):
 
         self.assertEqual(result["assistant_message"]["text"], "Bien recu.")
 
-    def test_week_scope_constraint_uses_real_candidates_in_reply(self) -> None:
+    def test_week_scope_constraint_routes_grounded_context_to_llm(self) -> None:
         self._create_plan_for_today()
         now = get_local_now(self.user.timezone)
         wednesday = now + timedelta(days=3)
@@ -997,11 +998,9 @@ class FitMASCoreFlowsTest(unittest.TestCase):
         original_decide = api_messages.decide
         original_extract_facts = api_messages.extract_facts
         original_interpret = api_messages.interpret_user_indication
+        original_plan_turn = api_messages.plan_conversation_turn
+        captured: dict[str, str] = {}
         try:
-            def should_not_run(*args, **kwargs):
-                raise AssertionError("LLM decide should not run for grounded week-scope reply")
-
-            api_messages.decide = should_not_run
             api_messages.extract_facts = lambda *args, **kwargs: []
             api_messages.interpret_user_indication = lambda *args, **kwargs: UserIndication(
                 kind=UserIndicationKind.AVAILABILITY_CONSTRAINT,
@@ -1017,14 +1016,36 @@ class FitMASCoreFlowsTest(unittest.TestCase):
                     window=None,
                 ),
             )
+            api_messages.plan_conversation_turn = lambda *args, **kwargs: SimpleNamespace(
+                primary_intent="availability_constraint",
+                secondary_intents=(),
+                has_plan_mutation=False,
+                model_dump=lambda mode="json": {
+                    "primary_intent": "availability_constraint",
+                    "secondary_intents": [],
+                    "has_plan_mutation": False,
+                },
+            )
+
+            def fake_decide(*args, **kwargs):
+                captured["signal_summary"] = kwargs.get("signal_summary") or ""
+                return MutationDecision(
+                    mutation_type="no_change",
+                    rationale="Contrainte large, besoin confirmation.",
+                    fitmas_message="Je vois les seances touchees. Tu confirmes off complet ?",
+                )
+
+            api_messages.decide = fake_decide
             result = self.client.post("/api/v0/messages", json={"text": "Cette semaine je voyage de mercredi a vendredi"}).json()
         finally:
             api_messages.decide = original_decide
             api_messages.extract_facts = original_extract_facts
             api_messages.interpret_user_indication = original_interpret
+            api_messages.plan_conversation_turn = original_plan_turn
 
-        self.assertIn("Natation hotel", result["assistant_message"]["text"])
-        self.assertIn("Renfo hotel", result["assistant_message"]["text"])
+        self.assertEqual(result["assistant_message"]["text"], "Je vois les seances touchees. Tu confirmes off complet ?")
+        self.assertIn("Natation hotel", captured["signal_summary"])
+        self.assertIn("Renfo hotel", captured["signal_summary"])
 
     def test_swap_wording_bypasses_availability_week_scope_reply(self) -> None:
         self._create_plan_for_today()
@@ -1322,22 +1343,42 @@ class FitMASCoreFlowsTest(unittest.TestCase):
         updated = repo.get_scheduled_session(self.db, self.user.id, swim.id)
         self.assertEqual(updated.completion_status, "planned")
 
-    def test_future_constraint_without_candidate_stays_honest_and_skips_llm(self) -> None:
+    def test_future_constraint_without_candidate_routes_context_to_llm(self) -> None:
         self._create_plan_for_today()
         original_decide = api_messages.decide
         original_extract_facts = api_messages.extract_facts
+        original_plan_turn = api_messages.plan_conversation_turn
+        captured: dict[str, str] = {}
         try:
-            def should_not_run(*args, **kwargs):
-                raise AssertionError("LLM decide should not run when no session matches the constrained window")
-
-            api_messages.decide = should_not_run
             api_messages.extract_facts = lambda *args, **kwargs: []
+            api_messages.plan_conversation_turn = lambda *args, **kwargs: SimpleNamespace(
+                primary_intent="availability_constraint",
+                secondary_intents=(),
+                has_plan_mutation=False,
+                model_dump=lambda mode="json": {
+                    "primary_intent": "availability_constraint",
+                    "secondary_intents": [],
+                    "has_plan_mutation": False,
+                },
+            )
+
+            def fake_decide(*args, **kwargs):
+                captured["signal_summary"] = kwargs.get("signal_summary") or ""
+                return MutationDecision(
+                    mutation_type="no_change",
+                    rationale="Aucune seance candidate dans cette fenetre.",
+                    fitmas_message="Rien a bouger demain soir.",
+                )
+
+            api_messages.decide = fake_decide
             result = self.client.post("/api/v0/messages", json={"text": "Je ne suis pas dispo demain soir"}).json()
         finally:
             api_messages.decide = original_decide
             api_messages.extract_facts = original_extract_facts
+            api_messages.plan_conversation_turn = original_plan_turn
 
         self.assertIn("Rien a bouger", result["assistant_message"]["text"])
+        self.assertIn("Rien a bouger", captured["signal_summary"])
 
     def test_message_flow_persists_unlogged_activity_claim_fact(self) -> None:
         self._create_plan_for_today()
@@ -1608,6 +1649,67 @@ class FitMASCoreFlowsTest(unittest.TestCase):
         self.assertIn("jeudi", result["assistant_message"]["text"].lower())
         self.assertIn(("availability", "weekly_slot_thursday"), categories)
         self.assertNotIn(("calibration_need", "availability:thursday"), categories)
+
+    def test_standalone_calibration_answer_wins_over_availability_parse(self) -> None:
+        _, session = self._create_plan_with_tomorrow_session()
+        now = get_local_now(self.user.timezone)
+        target_date = session.scheduled_date.date()
+        need = calibration_needs.CalibrationNeed(
+            id="availability_window:availability:thursday",
+            need_type=calibration_needs.CalibrationNeedType.AVAILABILITY_WINDOW,
+            topic="availability:thursday",
+            status=calibration_needs.CalibrationNeedStatus.OPEN,
+            why_now="test",
+            priority=calibration_needs.CalibrationNeedPriority.MEDIUM,
+            source="heartbeat_morning",
+            channel_hint="telegram",
+            created_at=now.isoformat(timespec="minutes"),
+            expires_at=(now + timedelta(days=3)).isoformat(timespec="minutes"),
+            last_prompted_at=now.isoformat(timespec="minutes"),
+            context={
+                "day": DAY_KEYS[target_date.weekday()],
+                "day_label": day_label_fr(DAY_KEYS[target_date.weekday()]),
+                "session_id": session.id,
+                "session_title": session.session_title,
+            },
+            allowed_answers=("morning", "evening", "both", "none"),
+            write_targets=("working_memory.availability",),
+        )
+        repo.upsert_working_memory(self.db, self.user.id, [need.as_memory_update()])
+
+        original_decide = api_messages.decide
+        original_extract_facts = api_messages.extract_facts
+        original_interpret = api_messages.interpret_user_indication
+        try:
+            def should_not_run(*args, **kwargs):
+                raise AssertionError("LLM decide should not run for standalone calibration answers")
+
+            api_messages.decide = should_not_run
+            api_messages.extract_facts = lambda *args, **kwargs: []
+            api_messages.interpret_user_indication = lambda *args, **kwargs: UserIndication(
+                kind=UserIndicationKind.AVAILABILITY_CONSTRAINT,
+                confidence=0.9,
+                source_text="Plutot le soir",
+                scope=UserIndicationScope.SINGLE_DAY,
+                polarity=UserIndicationPolarity.UNAVAILABLE,
+                time_reference=IndicationTimeReference(
+                    label="soir",
+                    resolved_date=target_date,
+                    day_key=DAY_KEYS[target_date.weekday()],
+                    relative_reference="tomorrow",
+                    window="evening",
+                ),
+            )
+            result = self.client.post("/api/v0/messages", json={"text": "Plutot le soir"}).json()
+        finally:
+            api_messages.decide = original_decide
+            api_messages.extract_facts = original_extract_facts
+            api_messages.interpret_user_indication = original_interpret
+
+        self.db.expire_all()
+        updated = repo.get_scheduled_session(self.db, self.user.id, session.id)
+        self.assertIn("jeudi", result["assistant_message"]["text"].lower())
+        self.assertEqual(updated.completion_status, "planned")
 
     def test_message_flow_can_answer_read_query_via_tool(self) -> None:
         _, session = self._create_plan_for_today()

@@ -187,6 +187,30 @@ def run_conversation_turn(
                 turn_memory_writes=turn_memory_writes,
             )
             state.active_memory_rows, state.active_facts = api_messages._active_memory_payloads(db, user.id)
+            if is_standalone_calibration_answer(payload.text):
+                reply_text = generate_calibration_ack(
+                    need=open_calibration_need,
+                    resolution=calibration_resolution,
+                    timezone_name=user.timezone,
+                    coach_context={
+                        "coach_name": user.coach_name,
+                        "coach_style": user.coach_style,
+                        "coach_relationship": user.coach_relationship,
+                        "coach_do": user.coach_do,
+                        "coach_dont": user.coach_dont,
+                        "coach_soul": user.coach_soul,
+                    },
+                )
+                return _reply_and_record_turn(
+                    db=db,
+                    user_id=user.id,
+                    user_text=payload.text,
+                    reply_text=reply_text,
+                    extraction=Extraction(confidence=max(float(calibration_resolution.confidence or 0.0), 0.85)),
+                    response_mode="calibration",
+                    turn_context={"calibration_need": open_calibration_need.id},
+                    memory_writes=turn_memory_writes,
+                )
 
     try:
         signals = collect_signals(db, user)
@@ -500,6 +524,27 @@ def run_conversation_turn(
             )
         no_candidate_reply = api_messages._no_candidate_constraint_reply(user_indication, resolution)
         week_scope_reply = api_messages._week_scope_reply(user_indication, resolution)
+    route_availability_context_to_llm = _should_route_availability_context_to_llm(
+        turn_plan,
+        week_scope_reply=week_scope_reply,
+        no_candidate_reply=no_candidate_reply,
+    )
+    availability_prompt_context = (
+        _availability_context_for_prompt(
+            week_scope_reply=week_scope_reply,
+            no_candidate_reply=no_candidate_reply,
+        )
+        if route_availability_context_to_llm
+        else None
+    )
+    decision_temporal_summary = _append_prompt_section(
+        temporal_summary_for_prompt(conversation_context),
+        availability_prompt_context,
+    )
+    decision_signal_summary = _append_prompt_section(
+        signal_summary_for_prompt(conversation_context),
+        availability_prompt_context,
+    )
 
     calibration_only_reply = None
     execution_contestation_reply = (
@@ -532,9 +577,9 @@ def run_conversation_turn(
         "profile_summary": build_profile_summary(state.active_memory_rows),
         "timeline_summary": api_messages.make_timeline_summary(state.timeline),
         "execution_summary": execution_summary_for_prompt(conversation_context),
-        "temporal_summary": temporal_summary_for_prompt(conversation_context),
+        "temporal_summary": decision_temporal_summary,
         "activity_claim_summary": claim_summary,
-        "signal_summary": signal_summary_for_prompt(conversation_context),
+        "signal_summary": decision_signal_summary,
         "history_messages": max(len(state.conversation_history) - 1, 0),
         "selected_fact_keys": [
             _fact_identity(fact)
@@ -561,9 +606,9 @@ def run_conversation_turn(
             "",
             timeline_summary=api_messages.make_timeline_summary(state.timeline),
             execution_summary=execution_summary_for_prompt(conversation_context),
-            temporal_summary=temporal_summary_for_prompt(conversation_context),
+            temporal_summary=decision_temporal_summary,
             activity_claim_summary=claim_summary,
-            signal_summary=signal_summary_for_prompt(conversation_context),
+            signal_summary=decision_signal_summary,
             conversation_history=state.conversation_history[:-1],
             coach_context={
                 "coach_name": user.coach_name,
@@ -574,6 +619,8 @@ def run_conversation_turn(
                 "coach_soul": user.coach_soul,
                 "timezone": user.timezone,
                 "today_session_id": state.today_session.id if state.today_session else None,
+                "turn_primary_intent": getattr(turn_plan, "primary_intent", None),
+                "turn_secondary_intents": list(getattr(turn_plan, "secondary_intents", ()) or ()),
                 "profile_summary": build_profile_summary(state.active_memory_rows),
                 "selected_facts": list(conversation_context.selected_facts) or api_messages.select_prompt_facts(state.active_facts),
                 "planning_contract": coach_bundle.planning_contract.as_dict(),
@@ -601,8 +648,8 @@ def run_conversation_turn(
         )
         if adaptation is None
         and calibration_only_reply is None
-        and week_scope_reply is None
-        and no_candidate_reply is None
+        and (week_scope_reply is None or route_availability_context_to_llm)
+        and (no_candidate_reply is None or route_availability_context_to_llm)
         and execution_contestation_reply is None
         else (
             api_messages._to_mutation_decision(adaptation.selected_scenario.mutation, fitmas_message=adaptation.user_message)
@@ -931,3 +978,37 @@ def _turn_plan_payload(turn_plan) -> dict | None:
         }
     payload["has_plan_mutation"] = bool(getattr(turn_plan, "has_plan_mutation", False))
     return payload
+
+
+def _should_route_availability_context_to_llm(
+    turn_plan,
+    *,
+    week_scope_reply: str | None,
+    no_candidate_reply: str | None,
+) -> bool:
+    if week_scope_reply is None and no_candidate_reply is None:
+        return False
+    if turn_plan is None:
+        return False
+    primary_intent = str(getattr(turn_plan, "primary_intent", "") or "")
+    return primary_intent in {"availability_constraint", "plan_mutation"} or bool(
+        getattr(turn_plan, "has_plan_mutation", False)
+    )
+
+
+def _availability_context_for_prompt(*, week_scope_reply: str | None, no_candidate_reply: str | None) -> str | None:
+    reply = week_scope_reply or no_candidate_reply
+    if not reply:
+        return None
+    return (
+        "Contexte orchestration planning:\n"
+        f"- grounding deterministe: {reply}\n"
+        "- utilise ce grounding comme verite de contexte, mais formule toi-meme la reponse finale\n"
+        "- si aucune mutation sure n'est applicable, garde mutation_type=no_change et explique sobrement"
+    )
+
+
+def _append_prompt_section(base: str, section: str | None) -> str:
+    if not section:
+        return base
+    return "\n".join(part for part in (base, section) if part)

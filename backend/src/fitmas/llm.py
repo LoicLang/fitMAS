@@ -19,7 +19,7 @@ from fitmas.time_context import build_time_context, render_time_context
 from fitmas.tools.contract import ToolCall, ToolContext
 from fitmas.tools.metrics import build_tool_trace, log_tool_trace
 from fitmas.tools.registry import list_tools_for_pipeline
-from fitmas.tools.routing import route_tools_for_query
+from fitmas.tools.routing import IntentCategory, route_tools_for_query
 from fitmas.tools.runtime import execute_tool_call
 
 logger = logging.getLogger(__name__)
@@ -67,6 +67,31 @@ _DAYS_FR_TO_EN = {
     "dimanche": "sunday",
 }
 
+_TURN_INTENT_TO_PROMPT_INTENT = {
+    "availability_constraint": IntentCategory.PLAN_NEGOTIATION,
+    "plan_mutation": IntentCategory.PLAN_NEGOTIATION,
+    "plan_lookup": IntentCategory.PLAN_LOOKUP,
+    "execution_report": IntentCategory.EXECUTION_REPORT,
+    "health_signal": IntentCategory.PLAN_NEGOTIATION,
+    "preference_signal": IntentCategory.PLAN_NEGOTIATION,
+}
+_TURN_INTENT_TOOL_BUDGETS = {
+    IntentCategory.PLAN_NEGOTIATION: (
+        "get_today_context",
+        "get_plan_window",
+        "get_load_context",
+        "get_relevant_facts",
+    ),
+    IntentCategory.PLAN_LOOKUP: (
+        "get_today_context",
+        "get_plan_window",
+    ),
+    IntentCategory.EXECUTION_REPORT: (
+        "get_today_context",
+        "get_recent_activities",
+    ),
+}
+
 
 def _normalize_day(raw: str | None) -> str | None:
     """Convert French day names to English keys, pass through English names."""
@@ -74,6 +99,11 @@ def _normalize_day(raw: str | None) -> str | None:
         return None
     key = raw.strip().lower()
     return _DAYS_FR_TO_EN.get(key, key)
+
+
+def _prompt_intent_from_turn_context(coach_context: dict | None) -> IntentCategory | None:
+    primary_intent = str((coach_context or {}).get("turn_primary_intent") or "")
+    return _TURN_INTENT_TO_PROMPT_INTENT.get(primary_intent)
 
 
 def _client():
@@ -250,9 +280,16 @@ def decide(
 
     resolved_time_context = time_context or build_time_context((coach_context or {}).get("timezone"))
     routing = route_tools_for_query(user_text, pipeline=tool_context.pipeline) if tool_context is not None else None
+    turn_prompt_intent = _prompt_intent_from_turn_context(coach_context)
+    effective_intent = turn_prompt_intent or (routing.intent if routing is not None else None)
     prompt_policy = select_conversation_prompt_policy(
         routing_reason=routing.reason if routing is not None else None,
-        intent=routing.intent if routing is not None else None,
+        intent=effective_intent,
+    )
+    tool_names = (
+        _TURN_INTENT_TOOL_BUDGETS.get(turn_prompt_intent, ())
+        if turn_prompt_intent is not None
+        else (routing.tool_names if routing is not None else ())
     )
     selected_facts = (coach_context or {}).get("selected_facts") or select_prompt_facts(remembered_facts or [])
     prompt_bundle = build_layered_conversation_prompt(
@@ -276,12 +313,12 @@ def decide(
 
     try:
         data = None
-        if tool_context is not None and routing and routing.tool_names:
+        if tool_context is not None and tool_names:
             data = _request_json_with_tools(
                 system=system_prompt,
                 prompt=prompt,
                 tool_context=tool_context,
-                tool_names=routing.tool_names,
+                tool_names=tool_names,
                 context_policy=prompt_policy.name,
                 history_messages_used=history_messages_used,
             )
