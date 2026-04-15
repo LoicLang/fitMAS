@@ -41,6 +41,7 @@ from fitmas.conversation_context import (
     temporal_summary_for_prompt,
 )
 from fitmas.conversation_contract import ConversationPipelineDependencies, ConversationTurnInput, ConversationUserNotFoundError
+from fitmas.conversation_turn_planner import plan_conversation_turn
 from fitmas.db import get_db
 from fitmas.llm import MutationDecision, decide, extract_facts, make_plan_summary, make_timeline_summary, select_prompt_facts
 from fitmas.memory_profile import upsert_profile_memory
@@ -202,6 +203,23 @@ def _normalize_text(text: str) -> str:
 def _looks_like_swap_request(text: str) -> bool:
     normalized = _normalize_text(text)
     return any(marker in normalized for marker in _SWAP_REQUEST_MARKERS)
+
+
+def _looks_like_plan_mutation_request(text: str) -> bool:
+    normalized = _normalize_text(text)
+    mutation_markers = (
+        "decale",
+        "decaler",
+        "deplace",
+        "deplacer",
+        "bascule",
+        "basculer",
+        "remplace",
+        "remplacer",
+        "change",
+        "changer",
+    )
+    return _looks_like_swap_request(text) or any(marker in normalized for marker in mutation_markers)
 
 
 def _maybe_low_signal_reply(text: str, *, has_open_calibration_need: bool) -> str | None:
@@ -454,14 +472,6 @@ def _execution_contestation_reply(
     if evidence.display_status == "confirmed_done":
         return None
 
-    if target_session is not None and str(_value(target_session, "completion_status") or "").lower() in {"planned", "done"}:
-        skip_session_for_user(
-            db,
-            user=user,
-            session_id=int(_value(target_session, "id")),
-            source="conversation_non_completion",
-        )
-
     title = str(_value(target_session, "session_title") or "").strip()
     if title:
         subject = title.lower()
@@ -667,6 +677,7 @@ def post_message(payload: IncomingMessage, db: Session = Depends(get_db)) -> Mes
                 extract_facts=extract_facts,
                 check_and_adapt_health_facts=check_and_adapt_health_facts,
                 interpret_user_indication=interpret_user_indication,
+                plan_turn=plan_conversation_turn,
             ),
         )
     except ConversationUserNotFoundError as exc:

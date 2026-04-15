@@ -168,6 +168,27 @@ class ConversationPromptBuilderTest(unittest.TestCase):
         self.assertIn("movable_target=false", summary)
         self.assertIn("id=26 | date=2026-04-17 | day=friday | slot=free_flexible", summary)
         self.assertIn("movable_target=true", summary)
+        self.assertIn("can_swap_with_training=true", summary)
+
+    def test_system_prompt_explains_flexible_recovery_swaps(self) -> None:
+        bundle = build_conversation_prompt_bundle(
+            user_text="Swap la piscine avec vendredi",
+            prompt_policy=ConversationPromptPolicy(name="test", history_limit=0, include_plan_summary=False),
+            time_block="Nous sommes mercredi 2026-04-15.",
+            plan_summary="Legacy plan",
+            timeline_summary="- id=12 | date=2026-04-15 | slot=training | swappable=true",
+            execution_summary="Execution: planned_pending.",
+            temporal_summary="Repere temporel: aujourd'hui = 2026-04-15.",
+            activity_claim_summary="Claim: non realisation swimming 2026-04-15.",
+            signal_summary="Signal: aucun.",
+            conversation_history=[],
+            coach_context=None,
+            selected_facts=[],
+        )
+
+        system_text = "\n".join(part["text"] for part in bundle.system)
+        self.assertIn("free_flexible", system_text)
+        self.assertIn("la recuperation migre", system_text)
 
 
 if __name__ == "__main__":

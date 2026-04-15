@@ -65,6 +65,22 @@ Avant toute mutation, FitMAS produit un objet structure.
 3. **Decider** — `replan_from_life_change.py` ou `adaptation.py` produisent des actions autorisees
 4. **Expliquer** — `llm.py` formule la reponse naturelle
 
+### Triage du tour
+
+`conversation_turn_planner.py` ajoute un routage LLM read-only avant les side-effects d'execution.
+
+Role :
+- detecter l'intention principale du tour
+- conserver les intentions secondaires quand le message est compose
+- proteger les demandes de mutation implicites (`vendredi a la place ?`) que les marqueurs deterministes ne savent pas fiabiliser
+
+Interdits :
+- aucun write DB
+- aucune reply finale
+- aucune mutation planning
+
+Le resultat sert de gate d'orchestration. Si le routeur marque `plan_mutation`, un claim de non-completion reste du contexte et ne peut pas skipper la seance avant arbitrage.
+
 ### Types d'indication
 
 | Type | Exemples | Comportement |
@@ -85,6 +101,8 @@ Comportements importants :
 - `demain soir` sans seance cible ne doit jamais inventer une mutation sur un autre jour
 - `douleur epaule + natation` force adaptation hors natation
 - reponse courte a clarification (`oui`/`non`) interpretee dans le contexte de la question precedente
+- si un message combine un claim d'execution et une demande explicite de mutation (`swap`, `echange`, `decale`, `deplace`, `remplace`, `change`), le claim enrichit le contexte mais ne produit pas de reply finale et ne doit pas muter la seance avant arbitrage LLM
+- les contestations d'execution pures peuvent encore etre resolues par l'orchestrateur, mais les messages composes donnent la priorite a l'intention de mutation
 
 ---
 
@@ -136,6 +154,7 @@ Non :
 - un prompt ne remplace pas un tool de verite
 - le LLM n'ecrit jamais directement en memoire
 - les mutations passent toujours par les orchestrateurs
+- les detecteurs de claims ne doivent pas voler le tour quand le message contient aussi une intention planning explicite
 
 ## Anti-patterns
 
@@ -143,3 +162,4 @@ Non :
 - parser toute la langue naturelle avec des regex
 - muter le plan directement depuis une extraction LLM
 - ecrire un signal utilisateur flou en memoire durable
+- appliquer un side-effect DB avant que l'intention principale du tour soit arbitree

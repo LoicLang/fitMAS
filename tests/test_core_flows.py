@@ -1114,6 +1114,214 @@ class FitMASCoreFlowsTest(unittest.TestCase):
         self.assertIn("echanger", result["assistant_message"]["text"].lower())
         self.assertIn("confirmes", result["assistant_message"]["text"].lower())
 
+    def test_compound_non_completion_swap_reaches_llm_before_skip(self) -> None:
+        now = get_local_now(self.user.timezone)
+        today = now.replace(hour=7, minute=0, second=0, microsecond=0)
+        friday = now + timedelta(days=(4 - now.weekday()) % 7)
+        if friday.date() == now.date():
+            friday = friday + timedelta(days=7)
+        repo.replace_plan(
+            self.db,
+            self.user.id,
+            intention="reprise propre",
+            summary="test",
+            timezone_name=self.user.timezone,
+            days=[
+                {
+                    "day": DAY_KEYS[today.weekday()],
+                    "label": day_label_fr(DAY_KEYS[today.weekday()], capitalize=True),
+                    "sport_type": "swimming",
+                    "session_type": "css",
+                    "session_title": "Natation CSS",
+                    "session_goal": "Seuil",
+                    "session_note": "",
+                    "session_description": "6x100m allure CSS",
+                    "duration_min": 40,
+                    "intensity": "moderate",
+                    "load_score": 3,
+                    "priority": "Seance cle",
+                    "nutrition_focus": "",
+                    "flexibility": "stable",
+                    "completion_status": "planned",
+                },
+                {
+                    "day": DAY_KEYS[friday.weekday()],
+                    "label": day_label_fr(DAY_KEYS[friday.weekday()], capitalize=True),
+                    "sport_type": "rest",
+                    "session_type": "rest",
+                    "session_title": "Recuperation flexible",
+                    "session_goal": "Absorber",
+                    "session_note": "",
+                    "session_description": "Repos",
+                    "duration_min": 0,
+                    "intensity": "easy",
+                    "load_score": 0,
+                    "priority": "Recovery",
+                    "nutrition_focus": "",
+                    "flexibility": "flexible",
+                    "completion_status": "planned",
+                },
+            ],
+        )
+        sessions = repo.get_scheduled_sessions(self.db, self.user.id, limit=14)
+        swim = next(session for session in sessions if session.sport_type == "swimming")
+
+        original_decide = api_messages.decide
+        original_extract_facts = api_messages.extract_facts
+        original_interpret = api_messages.interpret_user_indication
+        captured: dict[str, object] = {}
+        try:
+            api_messages.extract_facts = lambda *args, **kwargs: []
+            api_messages.interpret_user_indication = lambda *args, **kwargs: UserIndication(
+                kind=UserIndicationKind.EXECUTION_UPDATE,
+                confidence=0.95,
+                source_text="Mince j'ai oublie piscine, swap avec vendredi",
+                scope=UserIndicationScope.SINGLE_DAY,
+                polarity=UserIndicationPolarity.SIGNAL,
+                time_reference=IndicationTimeReference(
+                    label="aujourd'hui",
+                    resolved_date=today.date(),
+                    day_key=DAY_KEYS[today.weekday()],
+                    relative_reference="today",
+                    window=None,
+                ),
+                execution_sport_type="swimming",
+                execution_completed=False,
+            )
+
+            def fake_decide(*args, **kwargs):
+                captured["timeline_summary"] = kwargs["timeline_summary"]
+                return MutationDecision(
+                    mutation_type="no_change",
+                    rationale="Le routeur LLM doit voir la demande composee avant tout skip.",
+                    fitmas_message="Je garde la demande de swap comme intention principale.",
+                )
+
+            api_messages.decide = fake_decide
+            result = self.client.post(
+                "/api/v0/messages",
+                json={"text": "Mince j'ai complètement oublié que j'avais piscine, on peut swap la piscine de aujourd'hui avec la séance de vendredi ?"},
+            ).json()
+        finally:
+            api_messages.decide = original_decide
+            api_messages.extract_facts = original_extract_facts
+            api_messages.interpret_user_indication = original_interpret
+
+        self.assertEqual(result["assistant_message"]["text"], "Je garde la demande de swap comme intention principale.")
+        self.assertIn(f"id={swim.id}", str(captured.get("timeline_summary")))
+        self.assertIn("status=planned", str(captured.get("timeline_summary")))
+        self.db.expire_all()
+        updated = repo.get_scheduled_session(self.db, self.user.id, swim.id)
+        self.assertEqual(updated.completion_status, "planned")
+
+    def test_llm_turn_plan_can_protect_mutation_without_keyword(self) -> None:
+        now = get_local_now(self.user.timezone)
+        today = now.replace(hour=7, minute=0, second=0, microsecond=0)
+        friday = now + timedelta(days=(4 - now.weekday()) % 7)
+        if friday.date() == now.date():
+            friday = friday + timedelta(days=7)
+        repo.replace_plan(
+            self.db,
+            self.user.id,
+            intention="reprise propre",
+            summary="test",
+            timezone_name=self.user.timezone,
+            days=[
+                {
+                    "day": DAY_KEYS[today.weekday()],
+                    "label": day_label_fr(DAY_KEYS[today.weekday()], capitalize=True),
+                    "sport_type": "swimming",
+                    "session_type": "css",
+                    "session_title": "Natation CSS",
+                    "session_goal": "Seuil",
+                    "session_note": "",
+                    "session_description": "6x100m allure CSS",
+                    "duration_min": 40,
+                    "intensity": "moderate",
+                    "load_score": 3,
+                    "priority": "Seance cle",
+                    "nutrition_focus": "",
+                    "flexibility": "stable",
+                    "completion_status": "planned",
+                },
+                {
+                    "day": DAY_KEYS[friday.weekday()],
+                    "label": day_label_fr(DAY_KEYS[friday.weekday()], capitalize=True),
+                    "sport_type": "rest",
+                    "session_type": "rest",
+                    "session_title": "Recuperation flexible",
+                    "session_goal": "Absorber",
+                    "session_note": "",
+                    "session_description": "Repos",
+                    "duration_min": 0,
+                    "intensity": "easy",
+                    "load_score": 0,
+                    "priority": "Recovery",
+                    "nutrition_focus": "",
+                    "flexibility": "flexible",
+                    "completion_status": "planned",
+                },
+            ],
+        )
+        sessions = repo.get_scheduled_sessions(self.db, self.user.id, limit=14)
+        swim = next(session for session in sessions if session.sport_type == "swimming")
+
+        original_decide = api_messages.decide
+        original_extract_facts = api_messages.extract_facts
+        original_interpret = api_messages.interpret_user_indication
+        original_plan_turn = api_messages.plan_conversation_turn
+        try:
+            api_messages.extract_facts = lambda *args, **kwargs: []
+            api_messages.interpret_user_indication = lambda *args, **kwargs: UserIndication(
+                kind=UserIndicationKind.EXECUTION_UPDATE,
+                confidence=0.95,
+                source_text="Piscine impossible ce matin, vendredi a la place ?",
+                scope=UserIndicationScope.SINGLE_DAY,
+                polarity=UserIndicationPolarity.SIGNAL,
+                time_reference=IndicationTimeReference(
+                    label="aujourd'hui",
+                    resolved_date=today.date(),
+                    day_key=DAY_KEYS[today.weekday()],
+                    relative_reference="today",
+                    window=None,
+                ),
+                execution_sport_type="swimming",
+                execution_completed=False,
+            )
+            api_messages.plan_conversation_turn = lambda *args, **kwargs: SimpleNamespace(
+                primary_intent="plan_mutation",
+                secondary_intents=("non_completion_claim",),
+                has_plan_mutation=True,
+                model_dump=lambda mode="json": {
+                    "primary_intent": "plan_mutation",
+                    "secondary_intents": ["non_completion_claim"],
+                    "has_plan_mutation": True,
+                },
+            )
+            api_messages.decide = lambda *args, **kwargs: MutationDecision(
+                mutation_type="no_change",
+                rationale="Le routeur LLM protege la mutation implicite.",
+                fitmas_message="Je traite vendredi a la place comme une demande de reprogrammation.",
+            )
+
+            result = self.client.post(
+                "/api/v0/messages",
+                json={"text": "Piscine impossible ce matin, vendredi a la place ?"},
+            ).json()
+        finally:
+            api_messages.decide = original_decide
+            api_messages.extract_facts = original_extract_facts
+            api_messages.interpret_user_indication = original_interpret
+            api_messages.plan_conversation_turn = original_plan_turn
+
+        self.assertEqual(
+            result["assistant_message"]["text"],
+            "Je traite vendredi a la place comme une demande de reprogrammation.",
+        )
+        self.db.expire_all()
+        updated = repo.get_scheduled_session(self.db, self.user.id, swim.id)
+        self.assertEqual(updated.completion_status, "planned")
+
     def test_future_constraint_without_candidate_stays_honest_and_skips_llm(self) -> None:
         self._create_plan_for_today()
         original_decide = api_messages.decide

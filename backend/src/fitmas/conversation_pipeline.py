@@ -269,6 +269,7 @@ def run_conversation_turn(
     resolved_activity_claim = (
         conversation_context.current_activity_claim or api_messages._resolved_activity_from_indication(user_indication)
     )
+    heuristic_plan_mutation_request = api_messages._looks_like_plan_mutation_request(payload.text)
 
     supplemental_claim_payloads: list[dict] = []
     if conversation_context.current_activity_claim is None and resolved_activity_claim is not None:
@@ -290,17 +291,6 @@ def run_conversation_turn(
         )
         state.active_memory_rows, state.active_facts = api_messages._active_memory_payloads(db, user.id)
 
-    api_messages._apply_non_completion_resolution(
-        db=db,
-        user=user,
-        scheduled_sessions=state.scheduled_sessions,
-        timezone_name=user.timezone,
-        non_completion_claim=resolved_non_completion_claim,
-    )
-    if resolved_non_completion_claim is not None:
-        state.scheduled_sessions = repo.get_scheduled_sessions(db, user.id, limit=21)
-        state.timeline = [repo.to_pydantic_scheduled_session(session) for session in state.scheduled_sessions]
-        state.today_session = repo.get_today_scheduled_session(db, user.id, timezone_name=user.timezone)
     if conversation_context.current_activity_claim is None and resolved_activity_claim is not None:
         claim_summary = "\n".join(
             part for part in (claim_summary, format_activity_claim_for_prompt(resolved_activity_claim)) if part
@@ -309,6 +299,29 @@ def run_conversation_turn(
         claim_summary = "\n".join(
             part for part in (claim_summary, format_non_completion_claim_for_prompt(resolved_non_completion_claim)) if part
         )
+    turn_plan = dependencies.plan_turn(
+        user_text=payload.text,
+        temporal_summary=temporal_summary_for_prompt(conversation_context),
+        execution_summary=execution_summary_for_prompt(conversation_context),
+        activity_claim_summary=claim_summary,
+        signal_summary=signal_summary_for_prompt(conversation_context),
+    )
+    plan_mutation_request = bool(
+        heuristic_plan_mutation_request
+        or (turn_plan is not None and getattr(turn_plan, "has_plan_mutation", False))
+    )
+    if not plan_mutation_request:
+        api_messages._apply_non_completion_resolution(
+            db=db,
+            user=user,
+            scheduled_sessions=state.scheduled_sessions,
+            timezone_name=user.timezone,
+            non_completion_claim=resolved_non_completion_claim,
+        )
+    if resolved_non_completion_claim is not None and not plan_mutation_request:
+        state.scheduled_sessions = repo.get_scheduled_sessions(db, user.id, limit=21)
+        state.timeline = [repo.to_pydantic_scheduled_session(session) for session in state.scheduled_sessions]
+        state.today_session = repo.get_today_scheduled_session(db, user.id, timezone_name=user.timezone)
 
     clarification = api_messages._targeted_execution_clarification(
         db=db,
@@ -489,13 +502,17 @@ def run_conversation_turn(
         week_scope_reply = api_messages._week_scope_reply(user_indication, resolution)
 
     calibration_only_reply = None
-    execution_contestation_reply = api_messages._execution_contestation_reply(
-        db=db,
-        user=user,
-        scheduled_sessions=state.scheduled_sessions,
-        activities=state.activities,
-        timezone_name=user.timezone,
-        non_completion_claim=resolved_non_completion_claim,
+    execution_contestation_reply = (
+        None
+        if plan_mutation_request
+        else api_messages._execution_contestation_reply(
+            db=db,
+            user=user,
+            scheduled_sessions=state.scheduled_sessions,
+            activities=state.activities,
+            timezone_name=user.timezone,
+            non_completion_claim=resolved_non_completion_claim,
+        )
     )
     if standalone_calibration_answer:
         calibration_only_reply = generate_calibration_ack(
@@ -524,6 +541,7 @@ def run_conversation_turn(
             for fact in (list(conversation_context.selected_facts) or [])[:6]
         ],
         "user_indication_kind": user_indication.kind.value if user_indication is not None else None,
+        "turn_plan": _turn_plan_payload(turn_plan),
         "planning_contract": coach_bundle.planning_contract.as_dict(),
         "availability_state": coach_bundle.availability_state.as_dict(),
         "week_mission": coach_bundle.week_mission.as_dict(),
@@ -899,3 +917,17 @@ def _fact_identity(fact: object) -> str:
     if isinstance(fact, dict):
         return f"{fact.get('category')}:{fact.get('key')}"
     return str(fact)
+
+
+def _turn_plan_payload(turn_plan) -> dict | None:
+    if turn_plan is None:
+        return None
+    if hasattr(turn_plan, "model_dump"):
+        payload = turn_plan.model_dump(mode="json")
+    else:
+        payload = {
+            "primary_intent": getattr(turn_plan, "primary_intent", None),
+            "secondary_intents": list(getattr(turn_plan, "secondary_intents", ()) or ()),
+        }
+    payload["has_plan_mutation"] = bool(getattr(turn_plan, "has_plan_mutation", False))
+    return payload

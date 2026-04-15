@@ -195,9 +195,17 @@ Regle :
 
 - `conversation_pipeline.py` : tour de conversation
 - `conversation_context.py` : grounding temps / claims / activites
+- `conversation_turn_planner.py` : routeur LLM read-only pour intention primaire / intentions secondaires
 - `conversation_prompting.py` : politique de prompt
 - `llm_prompt_builder.py` / `prompt_layers.py` : prompt structure
 - `user_indications.py` / `user_indication_llm.py` : message user -> indication structuree
+
+Regle de routage :
+
+- pour un message non trivial ou compose, le LLM arbitre l'intention principale
+- le routeur de tour ne fait aucun write; il ne sert qu'a proteger les gates du pipeline
+- les extracteurs deterministes ajoutent du contexte, mais ne doivent pas produire de reply finale quand une intention planning explicite est presente
+- aucun side-effect planning ne doit arriver avant l'arbitrage du tour si le message contient une demande de mutation (`swap`, `echange`, `decale`, `deplace`, `remplace`, `change`)
 
 ### Planning
 

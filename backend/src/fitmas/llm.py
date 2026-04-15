@@ -554,11 +554,13 @@ def make_timeline_summary(sessions: list) -> str:
         slot = _timeline_slot_kind(session)
         movable_target = slot == "free_flexible"
         status_key = str(status or "").strip().lower()
-        swappable = slot == "training" and status_key not in {"done", "skipped", "canceled"}
+        can_swap_with_training = slot in {"training", "free_flexible"} and status_key not in {"done", "skipped", "canceled"}
+        swappable = can_swap_with_training
         lines.append(
             f"- id={getattr(session, 'id', '?')} | date={date_value} | day={day} | "
             f"slot={slot} | movable_target={str(movable_target).lower()} | "
-            f"swappable={str(swappable).lower()} | [{sport_type}/{session_type}] "
+            f"swappable={str(swappable).lower()} | "
+            f"can_swap_with_training={str(can_swap_with_training).lower()} | [{sport_type}/{session_type}] "
             f"{getattr(session, 'session_title', '')} | goal={getattr(session, 'session_goal', '')} | status={status}"
         )
     return "\n".join(lines)
