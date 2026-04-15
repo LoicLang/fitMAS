@@ -54,8 +54,11 @@ class FitMASCoreFlowsTest(unittest.TestCase):
         self.db.add(self.user)
         self.db.commit()
         self.db.refresh(self.user)
+        self._original_plan_conversation_turn = api_messages.plan_conversation_turn
+        api_messages.plan_conversation_turn = lambda *args, **kwargs: None
 
     def tearDown(self) -> None:
+        api_messages.plan_conversation_turn = self._original_plan_conversation_turn
         self.db.close()
 
     def _create_plan_for_today(self) -> tuple[s.WeeklyPlan, s.ScheduledSession]:
@@ -771,6 +774,50 @@ class FitMASCoreFlowsTest(unittest.TestCase):
         self.assertIn("Le cap de la semaine ne bouge pas", result["assistant_message"]["text"])
         self.assertGreater(moved_tomorrow_session.scheduled_date.date(), original_date)
 
+    def test_grounded_availability_adaptation_routes_candidate_to_llm(self) -> None:
+        _, tomorrow_session = self._create_plan_with_tomorrow_session()
+        original_date = tomorrow_session.scheduled_date.date()
+        next_open_key = DAY_KEYS[(tomorrow_session.scheduled_date.date().weekday() + 2) % 7]
+        self.user.weekly_structure_notes = f"{day_label_fr(next_open_key, capitalize=True)} soir dispo."
+        self.db.commit()
+        original_decide = api_messages.decide
+        original_extract_facts = api_messages.extract_facts
+        original_plan_turn = api_messages.plan_conversation_turn
+        captured: dict[str, str] = {}
+        try:
+            api_messages.extract_facts = lambda *args, **kwargs: []
+            api_messages.plan_conversation_turn = lambda *args, **kwargs: SimpleNamespace(
+                primary_intent="availability_constraint",
+                secondary_intents=(),
+                has_plan_mutation=False,
+                model_dump=lambda mode="json": {
+                    "primary_intent": "availability_constraint",
+                    "secondary_intents": [],
+                    "has_plan_mutation": False,
+                },
+            )
+
+            def fake_decide(*args, **kwargs):
+                captured["temporal_summary"] = kwargs.get("temporal_summary") or ""
+                return MutationDecision(
+                    mutation_type="no_change",
+                    rationale="Le LLM arbitre la candidate deterministe.",
+                    fitmas_message="Je vois une option de report, tu confirmes ?",
+                )
+
+            api_messages.decide = fake_decide
+            result = self.client.post("/api/v0/messages", json={"text": "Je ne suis pas dispo demain soir"}).json()
+        finally:
+            api_messages.decide = original_decide
+            api_messages.extract_facts = original_extract_facts
+            api_messages.plan_conversation_turn = original_plan_turn
+
+        self.db.expire_all()
+        unchanged_session = repo.get_scheduled_session(self.db, self.user.id, tomorrow_session.id)
+        self.assertEqual(result["assistant_message"]["text"], "Je vois une option de report, tu confirmes ?")
+        self.assertEqual(unchanged_session.scheduled_date.date(), original_date)
+        self.assertIn("Adaptation candidate", captured["temporal_summary"])
+
     def test_health_indication_can_bypass_decide_and_trigger_protective_reply(self) -> None:
         self._create_plan_for_today()
         original_decide = api_messages.decide
@@ -837,6 +884,71 @@ class FitMASCoreFlowsTest(unittest.TestCase):
         self.assertIn("confirmes", result["assistant_message"]["text"].lower())
         self.assertEqual(pending.mutation_type, "replace_session")
         self.assertEqual(pending.status, "pending")
+
+    def test_compound_health_and_plan_mutation_reaches_llm_before_health_adaptation(self) -> None:
+        _, session = self._create_plan_for_today()
+        original_decide = api_messages.decide
+        original_extract_facts = api_messages.extract_facts
+        original_health = api_messages.check_and_adapt_health_facts
+        original_interpret = api_messages.interpret_user_indication
+        original_plan_turn = api_messages.plan_conversation_turn
+        captured: dict[str, object] = {}
+        try:
+            api_messages.extract_facts = lambda *args, **kwargs: []
+
+            def should_not_run_health(*args, **kwargs):
+                raise AssertionError("health adaptation should not run before LLM on compound mutation turns")
+
+            api_messages.check_and_adapt_health_facts = should_not_run_health
+            api_messages.interpret_user_indication = lambda *args, **kwargs: UserIndication(
+                kind=UserIndicationKind.HEALTH_SIGNAL,
+                confidence=0.95,
+                source_text="J'ai mal a l'epaule quand je nage, mets piscine vendredi a la place",
+                scope=UserIndicationScope.SINGLE_DAY,
+                polarity=UserIndicationPolarity.SIGNAL,
+                body_zone="shoulder",
+                trigger_activity="swimming",
+                symptom_type="pain",
+                health_severity=None,
+            )
+            api_messages.plan_conversation_turn = lambda *args, **kwargs: SimpleNamespace(
+                primary_intent="plan_mutation",
+                secondary_intents=("health_signal",),
+                has_plan_mutation=True,
+                model_dump=lambda mode="json": {
+                    "primary_intent": "plan_mutation",
+                    "secondary_intents": ["health_signal"],
+                    "has_plan_mutation": True,
+                },
+            )
+
+            def fake_decide(*args, **kwargs):
+                captured["selected_facts"] = kwargs.get("coach_context", {}).get("selected_facts", [])
+                return MutationDecision(
+                    mutation_type="no_change",
+                    rationale="Signal sante + demande de mutation a arbitrer ensemble.",
+                    fitmas_message="Je tiens compte de l'epaule avant de bouger la piscine.",
+                )
+
+            api_messages.decide = fake_decide
+            result = self.client.post(
+                "/api/v0/messages",
+                json={"text": "J'ai mal a l'épaule quand je nage, mets piscine vendredi à la place"},
+            ).json()
+        finally:
+            api_messages.decide = original_decide
+            api_messages.extract_facts = original_extract_facts
+            api_messages.check_and_adapt_health_facts = original_health
+            api_messages.interpret_user_indication = original_interpret
+            api_messages.plan_conversation_turn = original_plan_turn
+
+        self.db.expire_all()
+        updated = repo.get_scheduled_session(self.db, self.user.id, session.id)
+        facts = self.client.get("/api/v0/facts").json()
+        self.assertEqual(result["assistant_message"]["text"], "Je tiens compte de l'epaule avant de bouger la piscine.")
+        self.assertEqual(updated.completion_status, "planned")
+        self.assertTrue(any(fact["category"] == "health" for fact in facts))
+        self.assertTrue(any("epaule" in str(fact).lower() or "shoulder" in str(fact).lower() for fact in captured["selected_facts"]))
 
     def test_health_indication_is_not_reprocessed_after_reply(self) -> None:
         self._create_plan_for_today()

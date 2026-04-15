@@ -85,6 +85,8 @@ Cette intention structuree est aussi transmise a `llm.decide()` pour choisir la 
 Pour les contraintes de disponibilite, les reponses deterministes `week_scope` et `no_candidate` deviennent aussi du grounding quand le routeur classe le tour comme `availability_constraint` ou `plan_mutation`.
 Le LLM formule alors la reponse finale avec ce contexte. Si le LLM ne rend pas de decision valide, l'orchestrateur conserve la reponse deterministe comme fallback.
 
+Pour les messages composes `health_signal + plan_mutation`, le fait sante est persiste et injecte dans le contexte, mais l'adaptation sante automatique ne court-circuite pas le tour. Le LLM doit arbitrer la demande principale avec la contrainte sante visible, puis les orchestrateurs valident/appliquent.
+
 ### Types d'indication
 
 | Type | Exemples | Comportement |

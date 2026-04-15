@@ -207,6 +207,7 @@ Regle de routage :
 - l'intention du routeur peut surclasser la classification deterministe pour choisir la prompt policy et le budget de tools
 - les extracteurs deterministes ajoutent du contexte, mais ne doivent pas produire de reply finale quand une intention planning explicite est presente
 - les replies deterministes de disponibilite large / absence de candidat sont du grounding LLM quand le routeur reconnait une contrainte de planning, avec fallback deterministe si le LLM echoue
+- les signaux sante restent prioritaires comme faits de contexte, mais une demande composee sante + mutation ne doit pas lancer d'adaptation sante automatique avant l'arbitrage LLM
 - aucun side-effect planning ne doit arriver avant l'arbitrage du tour si le message contient une demande de mutation (`swap`, `echange`, `decale`, `deplace`, `remplace`, `change`)
 
 ### Planning

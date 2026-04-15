@@ -371,6 +371,7 @@ def run_conversation_turn(
 
     health_indication_facts = api_messages.build_health_fact_payloads_from_indication(user_indication)
     health_indication_handled = bool(health_indication_facts)
+    defer_health_adaptation_to_llm = bool(health_indication_facts and plan_mutation_request)
     if health_indication_facts:
         _persist_turn_memory_updates(
             db,
@@ -380,6 +381,7 @@ def run_conversation_turn(
         )
         state.active_memory_rows, state.active_facts = api_messages._active_memory_payloads(db, user.id)
 
+    if health_indication_facts and not defer_health_adaptation_to_llm:
         health_result = dependencies.check_and_adapt_health_facts(
             db,
             user,
@@ -499,6 +501,7 @@ def run_conversation_turn(
         )
     else:
         resolution = None
+    route_adaptation_context_to_llm = _should_route_adaptation_context_to_llm(turn_plan, adaptation)
 
     standalone_calibration_answer = (
         open_calibration_need is not None
@@ -529,13 +532,17 @@ def run_conversation_turn(
         week_scope_reply=week_scope_reply,
         no_candidate_reply=no_candidate_reply,
     )
-    availability_prompt_context = (
-        _availability_context_for_prompt(
-            week_scope_reply=week_scope_reply,
-            no_candidate_reply=no_candidate_reply,
+    availability_prompt_context = _append_prompt_section(
+        (
+            _availability_context_for_prompt(
+                week_scope_reply=week_scope_reply,
+                no_candidate_reply=no_candidate_reply,
+            )
+            if route_availability_context_to_llm
+            else None
         )
-        if route_availability_context_to_llm
-        else None
+        or "",
+        _adaptation_context_for_prompt(adaptation) if route_adaptation_context_to_llm else None,
     )
     decision_temporal_summary = _append_prompt_section(
         temporal_summary_for_prompt(conversation_context),
@@ -622,7 +629,7 @@ def run_conversation_turn(
                 "turn_primary_intent": getattr(turn_plan, "primary_intent", None),
                 "turn_secondary_intents": list(getattr(turn_plan, "secondary_intents", ()) or ()),
                 "profile_summary": build_profile_summary(state.active_memory_rows),
-                "selected_facts": list(conversation_context.selected_facts) or api_messages.select_prompt_facts(state.active_facts),
+                "selected_facts": _selected_facts_for_prompt(conversation_context, state.active_facts),
                 "planning_contract": coach_bundle.planning_contract.as_dict(),
                 "availability_state": coach_bundle.availability_state.as_dict(),
                 "week_mission": coach_bundle.week_mission.as_dict(),
@@ -646,7 +653,7 @@ def run_conversation_turn(
                 active_facts=state.active_facts,
             ),
         )
-        if adaptation is None
+        if (adaptation is None or route_adaptation_context_to_llm)
         and calibration_only_reply is None
         and (week_scope_reply is None or route_availability_context_to_llm)
         and (no_candidate_reply is None or route_availability_context_to_llm)
@@ -657,6 +664,8 @@ def run_conversation_turn(
             else None
         )
     )
+    if decision is None and adaptation is not None and route_adaptation_context_to_llm:
+        decision = api_messages._to_mutation_decision(adaptation.selected_scenario.mutation, fitmas_message=adaptation.user_message)
 
     if decision:
         target_session = (
@@ -996,6 +1005,34 @@ def _should_route_availability_context_to_llm(
     )
 
 
+def _should_route_adaptation_context_to_llm(turn_plan, adaptation) -> bool:
+    if adaptation is None or turn_plan is None:
+        return False
+    primary_intent = str(getattr(turn_plan, "primary_intent", "") or "")
+    return primary_intent in {"availability_constraint", "plan_mutation"} or bool(
+        getattr(turn_plan, "has_plan_mutation", False)
+    )
+
+
+def _adaptation_context_for_prompt(adaptation) -> str | None:
+    if adaptation is None:
+        return None
+    scenario = adaptation.selected_scenario
+    mutation = scenario.mutation
+    lines = [
+        "Adaptation candidate deterministe:",
+        f"- raison: {adaptation.event.reason_code.value}",
+        f"- confiance: {adaptation.event.confidence}",
+        f"- mutation candidate: {mutation.mutation_type}",
+        f"- session cible: {mutation.target_session_id}",
+        f"- date cible: {mutation.target_date}",
+        f"- resume: {scenario.summary}",
+        f"- message candidate: {adaptation.user_message}",
+        "- utilise cette candidate comme option valide, mais arbitre la reponse finale selon le message utilisateur",
+    ]
+    return "\n".join(lines)
+
+
 def _availability_context_for_prompt(*, week_scope_reply: str | None, no_candidate_reply: str | None) -> str | None:
     reply = week_scope_reply or no_candidate_reply
     if not reply:
@@ -1012,3 +1049,13 @@ def _append_prompt_section(base: str, section: str | None) -> str:
     if not section:
         return base
     return "\n".join(part for part in (base, section) if part)
+
+
+def _selected_facts_for_prompt(conversation_context, active_facts: list[dict]) -> list[str]:
+    import fitmas.api_messages as api_messages
+
+    selected = list(getattr(conversation_context, "selected_facts", ()) or ())
+    for fact in api_messages.select_prompt_facts(active_facts):
+        if fact not in selected:
+            selected.append(fact)
+    return selected[:6]

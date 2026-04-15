@@ -117,9 +117,9 @@ class TestConversationDecide(unittest.TestCase):
             messages=[{"role": "user", "content": (
                 "Contexte temporel: Jeudi 3 avril 2026, 14h30.\n"
                 "Calendrier date reel:\n"
-                "- 2026-04-03 (Jeudi) [id=42]: Fractionne court (running) — planned\n"
-                "- 2026-04-04 (Vendredi): Repos\n"
-                "- 2026-04-05 (Samedi) [id=44]: Sortie longue (running) — planned\n\n"
+                "- id=42 | date=2026-04-03 | day=thursday | slot=training | movable_target=false | swappable=true | [running/interval] Fractionne court | goal=Vitesse | status=planned\n"
+                "- id=43 | date=2026-04-04 | day=friday | slot=free_flexible | movable_target=true | swappable=true | [rest/rest] Repos flexible | goal=Recuperer | status=planned\n"
+                "- id=44 | date=2026-04-05 | day=saturday | slot=training | movable_target=false | swappable=true | [running/long] Sortie longue | goal=Endurance | status=planned\n\n"
                 "Contexte coach:\n"
                 "- session du jour id: 42\n\n"
                 "Nouveau message de l'utilisateur:\n"
@@ -130,7 +130,7 @@ class TestConversationDecide(unittest.TestCase):
         self.assertIsNotNone(response)
         parsed = message_json(response)
         self.assertIsNotNone(parsed, f"Response not valid JSON: {message_text(response)[:200]}")
-        self.assertIn(parsed.get("mutation_type"), ("move_session", "lighten_day"))
+        self.assertIn(parsed.get("mutation_type"), ("move_session", "swap_sessions", "lighten_day"))
         print(f"  Decision: {parsed['mutation_type']}")
         print(f"  Target: session={parsed.get('target_session_id')}, date={parsed.get('target_date')}")
         print(f"  Message: {parsed.get('fitmas_message', '')[:100]}")
