@@ -158,6 +158,66 @@ _SWAP_REQUEST_MARKERS = (
     "swap",
     "switch",
 )
+# Markers that signal the message carries real conversational payload the LLM
+# must arbitrate. Used as a defense-in-depth guard against deterministic
+# early-exits (low-signal fast-path, standalone calibration ack) swallowing
+# compound messages.
+_RICH_SIGNAL_MARKERS = (
+    # plan mutation
+    "decale",
+    "decaler",
+    "deplace",
+    "deplacer",
+    "bascule",
+    "basculer",
+    "remplace",
+    "remplacer",
+    "swap",
+    "switch",
+    "echange",
+    "echanger",
+    "permute",
+    "intervert",
+    "a la place",
+    # non-completion / execution claim
+    "oublie",
+    "oublier",
+    "pas fait",
+    "ai pas fait",
+    "n ai pas",
+    "impossible",
+    "pas pu",
+    "loupe",
+    "loup",
+    # health
+    "mal",
+    "douleur",
+    "fatigue",
+    "malade",
+    "gene",
+    "gêne",
+    "blesse",
+    "courbature",
+    # availability constraints
+    "peux pas",
+    "ne peux pas",
+    "pas dispo",
+    "indispo",
+    "empeche",
+    "absent",
+)
+
+
+def _has_rich_signal_marker(text: str) -> bool:
+    """True if the message carries any marker the LLM should arbitrate.
+
+    Used to protect deterministic early-exits from swallowing compound
+    messages. Intentionally conservative: false positives (routing to LLM
+    when the message was trivial after all) are cheap; false negatives
+    (missing a real signal) are the bug class we refactored to eliminate.
+    """
+    normalized = _normalize_text(text)
+    return any(marker in normalized for marker in _RICH_SIGNAL_MARKERS)
 _SPORT_KEYWORDS = {
     "running": ("course", "courir", "run", "footing"),
     "swimming": ("natation", "piscine", "nage"),
@@ -224,6 +284,11 @@ def _looks_like_plan_mutation_request(text: str) -> bool:
 
 def _maybe_low_signal_reply(text: str, *, has_open_calibration_need: bool) -> str | None:
     if has_open_calibration_need:
+        return None
+    # Defense-in-depth: if the message carries any rich signal marker, we
+    # refuse to short-circuit even when the normalized text would otherwise
+    # match an ACK / greeting / motivation phrase. The LLM decide() takes over.
+    if _has_rich_signal_marker(text):
         return None
     normalized = _normalize_text(text)
     if normalized in _ACK_TEXTS:

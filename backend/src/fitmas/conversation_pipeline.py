@@ -187,7 +187,15 @@ def run_conversation_turn(
                 turn_memory_writes=turn_memory_writes,
             )
             state.active_memory_rows, state.active_facts = api_messages._active_memory_payloads(db, user.id)
-            if is_standalone_calibration_answer(payload.text):
+            # Defense-in-depth: if the message also carries a rich signal
+            # (mutation, health, non-completion, availability), do NOT
+            # produce the standalone calibration ack here. The calibration
+            # fact is persisted above; control continues down to the LLM
+            # decide() so it can arbitrate the compound intent.
+            if (
+                is_standalone_calibration_answer(payload.text)
+                and not api_messages._has_rich_signal_marker(payload.text)
+            ):
                 reply_text = generate_calibration_ack(
                     need=open_calibration_need,
                     resolution=calibration_resolution,
@@ -347,14 +355,22 @@ def run_conversation_turn(
         state.timeline = [repo.to_pydantic_scheduled_session(session) for session in state.scheduled_sessions]
         state.today_session = repo.get_today_scheduled_session(db, user.id, timezone_name=user.timezone)
 
-    clarification = api_messages._targeted_execution_clarification(
-        db=db,
-        user=user,
-        conversation_context=conversation_context,
-        user_indication=user_indication,
-        resolved_non_completion_claim=resolved_non_completion_claim,
-        resolved_activity_claim=resolved_activity_claim,
-        previous_agent_text=state.previous_agent_text,
+    # Do not fire a targeted execution clarification when the turn plan (or
+    # deterministic fallback) signals a plan mutation intent. The LLM must
+    # arbitrate — a canned clarification about yesterday's session would
+    # silently swallow the user's real request.
+    clarification = (
+        None
+        if plan_mutation_request
+        else api_messages._targeted_execution_clarification(
+            db=db,
+            user=user,
+            conversation_context=conversation_context,
+            user_indication=user_indication,
+            resolved_non_completion_claim=resolved_non_completion_claim,
+            resolved_activity_claim=resolved_activity_claim,
+            previous_agent_text=state.previous_agent_text,
+        )
     )
     if clarification is not None:
         reply_text = clarification.question
@@ -508,6 +524,10 @@ def run_conversation_turn(
         and should_apply_calibration_resolution(calibration_resolution)
         and adaptation is None
         and is_standalone_calibration_answer(payload.text)
+        # When the same message also asks for a mutation, the LLM must
+        # arbitrate. The calibration fact is already persisted upstream.
+        and not plan_mutation_request
+        and not api_messages._has_rich_signal_marker(payload.text)
     )
 
     week_scope_reply = None

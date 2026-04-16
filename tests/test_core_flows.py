@@ -1455,6 +1455,187 @@ class FitMASCoreFlowsTest(unittest.TestCase):
         updated = repo.get_scheduled_session(self.db, self.user.id, swim.id)
         self.assertEqual(updated.completion_status, "planned")
 
+    def test_targeted_execution_clarification_skipped_on_mutation_intent(self) -> None:
+        """Compound: yesterday had a run, user asks to move a future session.
+
+        The targeted execution clarification about yesterday's run must NOT
+        short-circuit the pipeline when the turn plan signals a plan mutation.
+        The LLM decide() must be reached.
+        """
+        self._create_plan_for_today()
+        now = get_local_now(self.user.timezone)
+        today = now.replace(hour=7, minute=0, second=0, microsecond=0)
+        yesterday = today - timedelta(days=1)
+        # Add a yesterday session that would trigger the clarification path.
+        self.db.add(
+            s.ScheduledSession(
+                user_id=self.user.id,
+                day=DAY_KEYS[yesterday.weekday()],
+                label=day_label_fr(DAY_KEYS[yesterday.weekday()], capitalize=True),
+                scheduled_date=yesterday,
+                sport_type="running",
+                session_type="easy",
+                session_title="Footing hier",
+                session_goal="Reprise",
+                session_note="",
+                session_description="40 min",
+                duration_min=40,
+                intensity="easy",
+                load_score=2,
+                priority="Normal",
+                nutrition_focus="",
+                flexibility="stable",
+                completion_status="planned",
+            )
+        )
+        self.db.commit()
+
+        original_decide = api_messages.decide
+        original_extract_facts = api_messages.extract_facts
+        original_interpret = api_messages.interpret_user_indication
+        original_plan_turn = api_messages.plan_conversation_turn
+        captured: dict[str, object] = {}
+        try:
+            api_messages.extract_facts = lambda *args, **kwargs: []
+            # Ambiguous interpretation: nothing tying the message to yesterday.
+            api_messages.interpret_user_indication = lambda *args, **kwargs: None
+            api_messages.plan_conversation_turn = lambda *args, **kwargs: SimpleNamespace(
+                primary_intent="plan_mutation",
+                secondary_intents=(),
+                has_plan_mutation=True,
+                model_dump=lambda mode="json": {
+                    "primary_intent": "plan_mutation",
+                    "secondary_intents": [],
+                    "has_plan_mutation": True,
+                },
+            )
+
+            def fake_decide(*args, **kwargs):
+                captured["called"] = True
+                return MutationDecision(
+                    mutation_type="no_change",
+                    rationale="Le routeur LLM voit la demande de mutation avant toute clarification.",
+                    fitmas_message="Je traite la demande de reprogrammation.",
+                )
+
+            api_messages.decide = fake_decide
+            result = self.client.post(
+                "/api/v0/messages",
+                json={"text": "decale la seance de jeudi a vendredi"},
+            ).json()
+        finally:
+            api_messages.decide = original_decide
+            api_messages.extract_facts = original_extract_facts
+            api_messages.interpret_user_indication = original_interpret
+            api_messages.plan_conversation_turn = original_plan_turn
+
+        self.assertTrue(captured.get("called"), "decide() must be called on mutation intent")
+        self.assertEqual(
+            result["assistant_message"]["text"],
+            "Je traite la demande de reprogrammation.",
+        )
+        self.assertNotIn("hier", result["assistant_message"]["text"].lower())
+
+    def test_calibration_standalone_ack_skipped_on_compound_mutation(self) -> None:
+        """Open calibration + compound mutation in same message.
+
+        With an open availability calibration need, a message that both answers
+        the calibration AND asks for a mutation must NOT short-circuit to the
+        calibration ack. The LLM decide() must arbitrate.
+        """
+        self._create_plan_for_today()
+        now = get_local_now(self.user.timezone)
+        need = calibration_needs.CalibrationNeed(
+            id="availability_window:availability:thursday",
+            need_type=calibration_needs.CalibrationNeedType.AVAILABILITY_WINDOW,
+            topic="availability:thursday",
+            status=calibration_needs.CalibrationNeedStatus.OPEN,
+            why_now="test",
+            priority=calibration_needs.CalibrationNeedPriority.MEDIUM,
+            source="heartbeat_morning",
+            channel_hint="telegram",
+            created_at=now.isoformat(timespec="minutes"),
+            expires_at=(now + timedelta(days=3)).isoformat(timespec="minutes"),
+            last_prompted_at=now.isoformat(timespec="minutes"),
+            context={"day": "thursday", "day_label": "jeudi", "session_id": 12, "session_title": "Tempo"},
+            allowed_answers=("morning", "evening", "both", "none"),
+            write_targets=("working_memory.availability",),
+        )
+        repo.upsert_working_memory(self.db, self.user.id, [need.as_memory_update()])
+
+        original_decide = api_messages.decide
+        original_extract_facts = api_messages.extract_facts
+        original_interpret = api_messages.interpret_user_indication
+        original_plan_turn = api_messages.plan_conversation_turn
+        captured: dict[str, object] = {}
+        try:
+            api_messages.extract_facts = lambda *args, **kwargs: []
+            api_messages.interpret_user_indication = lambda *args, **kwargs: None
+            api_messages.plan_conversation_turn = lambda *args, **kwargs: SimpleNamespace(
+                primary_intent="plan_mutation",
+                secondary_intents=("calibration_answer",),
+                has_plan_mutation=True,
+                model_dump=lambda mode="json": {
+                    "primary_intent": "plan_mutation",
+                    "secondary_intents": ["calibration_answer"],
+                    "has_plan_mutation": True,
+                },
+            )
+
+            def fake_decide(*args, **kwargs):
+                captured["called"] = True
+                return MutationDecision(
+                    mutation_type="no_change",
+                    rationale="Compound: calibration + mutation, LLM arbitre.",
+                    fitmas_message="Je note le creneau et je traite la demande de swap.",
+                )
+
+            api_messages.decide = fake_decide
+            # "plutot le soir, swap piscine" — 5 tokens, passes is_standalone_calibration_answer
+            result = self.client.post(
+                "/api/v0/messages",
+                json={"text": "plutot le soir, swap piscine"},
+            ).json()
+        finally:
+            api_messages.decide = original_decide
+            api_messages.extract_facts = original_extract_facts
+            api_messages.interpret_user_indication = original_interpret
+            api_messages.plan_conversation_turn = original_plan_turn
+
+        self.assertTrue(
+            captured.get("called"),
+            "decide() must be called when calibration answer is compounded with a mutation",
+        )
+        self.assertEqual(
+            result["assistant_message"]["text"],
+            "Je note le creneau et je traite la demande de swap.",
+        )
+
+    def test_low_signal_fast_path_refuses_rich_signal(self) -> None:
+        """The low-signal fast-path is defense-in-depth: if any rich signal
+        marker appears in the message, it must refuse to short-circuit even
+        when the normalized text would otherwise match an ACK phrase.
+        """
+        # Baseline: pure ack still replies "Bien recu."
+        self.assertEqual(
+            api_messages._maybe_low_signal_reply("merci", has_open_calibration_need=False),
+            "Bien recu.",
+        )
+        # Defense-in-depth: simulate a hypothetical compound where normalize
+        # happens to equal an ACK phrase AND contains a rich marker.
+        original_ack_texts = api_messages._ACK_TEXTS
+        try:
+            api_messages._ACK_TEXTS = original_ack_texts | {"merci decale"}
+            self.assertIsNone(
+                api_messages._maybe_low_signal_reply(
+                    "merci decale",
+                    has_open_calibration_need=False,
+                ),
+                "Fast-path must refuse when a rich mutation marker is present",
+            )
+        finally:
+            api_messages._ACK_TEXTS = original_ack_texts
+
     def test_future_constraint_without_candidate_routes_context_to_llm(self) -> None:
         self._create_plan_for_today()
         original_decide = api_messages.decide
