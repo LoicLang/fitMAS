@@ -2054,7 +2054,10 @@ class FitMASCoreFlowsTest(unittest.TestCase):
 
         self.db.expire_all()
         updated = repo.get_scheduled_session(self.db, self.user.id, session.id)
-        self.assertIn("jeudi", result["assistant_message"]["text"].lower())
+        # The ack must name the day of the target session (tomorrow relative
+        # to today's test run), not a hard-coded weekday.
+        expected_day_label = day_label_fr(DAY_KEYS[target_date.weekday()])
+        self.assertIn(expected_day_label, result["assistant_message"]["text"].lower())
         self.assertEqual(updated.completion_status, "planned")
 
     def test_message_flow_can_answer_read_query_via_tool(self) -> None:
