@@ -138,122 +138,15 @@ def _request_message(
 
 
 def _request_json(*, system: str, prompt: str, model: str = "claude-haiku-4-5-20251001", max_tokens: int = 1024) -> dict | None:
-    """Request JSON — routes through module-level _request_text (patchable chain)."""
+    """Request JSON — routes through module-level _request_text (patchable chain).
+
+    Delegates parsing to llm_gateway._robust_json_loads so every JSON
+    entry point (this, gw.request_json, gw.message_json) shares one
+    truncation/noise-repair strategy."""
     raw = _request_text(system=system, prompt=prompt, model=model, max_tokens=max_tokens)
     if not raw:
         return None
-    cleaned = _strip_json_fences(raw)
-    for candidate in _json_parse_candidates(cleaned):
-        try:
-            loaded = json.loads(candidate)
-        except Exception:
-            continue
-        if isinstance(loaded, dict):
-            return loaded
-    logger.exception("Failed to decode LLM JSON: %s", cleaned[:200])
-    return None
-
-
-def _strip_json_fences(raw: str) -> str:
-    candidate = raw.strip()
-    if candidate.startswith("```"):
-        parts = candidate.split("```")
-        if len(parts) >= 2:
-            candidate = parts[1]
-    if candidate.startswith("json"):
-        candidate = candidate[4:]
-    return candidate.strip()
-
-
-def _json_parse_candidates(raw: str) -> list[str]:
-    candidates: list[str] = []
-    started = _slice_from_json_start(raw)
-    for candidate in (
-        raw.strip(),
-        started,
-        _balanced_json_prefix(started),
-        _repair_truncated_json(started),
-    ):
-        normalized = str(candidate or "").strip()
-        if not normalized or normalized in candidates:
-            continue
-        candidates.append(normalized)
-    return candidates
-
-
-def _slice_from_json_start(raw: str) -> str:
-    start_positions = [pos for pos in (raw.find("{"), raw.find("[")) if pos >= 0]
-    if not start_positions:
-        return raw
-    return raw[min(start_positions):].strip()
-
-
-def _balanced_json_prefix(raw: str) -> str | None:
-    if not raw:
-        return None
-    stack: list[str] = []
-    in_string = False
-    escape = False
-    started = False
-    for idx, char in enumerate(raw):
-        if escape:
-            escape = False
-            continue
-        if char == "\\" and in_string:
-            escape = True
-            continue
-        if char == '"':
-            in_string = not in_string
-            continue
-        if in_string:
-            continue
-        if char in "{[":
-            stack.append(char)
-            started = True
-            continue
-        if char in "}]":
-            if not stack:
-                return None
-            opener = stack.pop()
-            if (opener, char) not in {("{", "}"), ("[", "]")}:
-                return None
-            if started and not stack:
-                return raw[: idx + 1]
-    return None
-
-
-def _repair_truncated_json(raw: str) -> str | None:
-    if not raw:
-        return None
-    buffer: list[str] = []
-    stack: list[str] = []
-    in_string = False
-    escape = False
-    for char in raw:
-        buffer.append(char)
-        if escape:
-            escape = False
-            continue
-        if char == "\\" and in_string:
-            escape = True
-            continue
-        if char == '"':
-            in_string = not in_string
-            continue
-        if in_string:
-            continue
-        if char in "{[":
-            stack.append(char)
-            continue
-        if char in "}]":
-            if stack and (stack[-1], char) in {("{", "}"), ("[", "]")}:
-                stack.pop()
-    repaired = "".join(buffer).rstrip()
-    if in_string:
-        repaired += '"'
-    if stack:
-        repaired += "".join("}" if opener == "{" else "]" for opener in reversed(stack))
-    return repaired.strip()
+    return gw._robust_json_loads(raw)
 
 
 def decide(
