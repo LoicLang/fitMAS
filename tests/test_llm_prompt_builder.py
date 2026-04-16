@@ -47,6 +47,10 @@ class ConversationPromptBuilderTest(unittest.TestCase):
         self.assertIn("Je veux le renfo aujourd'hui et la piscine demain", bundle.system[0]["text"])
         self.assertIn("On peut echanger mercredi et jeudi ?", bundle.system[0]["text"])
         self.assertIn("swap_sessions", bundle.system[0]["text"])
+        # The prompt must explicitly forbid swapping with a protected
+        # recovery so the LLM doesn't suggest displacing rest days the
+        # backend would reject post-hoc.
+        self.assertIn("swap_sessions` impliquant une seance `slot=protected_recovery", bundle.system[0]["text"])
         self.assertIn("Source de vérité planning conversationnelle", bundle.prompt)
         self.assertIn("Tempo", bundle.prompt)
         self.assertNotIn("Actions possibles", bundle.prompt)

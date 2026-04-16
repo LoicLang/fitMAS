@@ -156,6 +156,88 @@ def test_move_session_allows_flexible_recovery_target() -> None:
     assert result.block_reason is None
 
 
+def test_swap_sessions_blocks_protected_recovery_target() -> None:
+    """A swap that would move a training into a stable rest day must be
+    blocked — the protected recovery cannot be displaced."""
+    decision = MutationDecision(
+        mutation_type="swap_sessions",
+        target_session_id=10,
+        second_session_id=11,
+        rationale="swap",
+        fitmas_message="Je swap.",
+    )
+    sessions = [
+        {
+            "id": 10,
+            "scheduled_date": "2026-04-13",
+            "sport_type": "swimming",
+            "session_type": "css",
+            "completion_status": "planned",
+        },
+        {
+            "id": 11,
+            "scheduled_date": "2026-04-15",
+            "sport_type": "rest",
+            "session_type": "rest",
+            "session_title": "Repos stable",
+            "flexibility": "stable",
+            "completion_status": "planned",
+        },
+    ]
+
+    result = run_pre_mutation_hooks(
+        object(),
+        plan_id=42,
+        decision=decision,
+        scheduled_sessions=sessions,
+        timezone_name="Europe/Paris",
+    )
+
+    assert result.allowed is False
+    assert result.block_reason == "protected_recovery_target"
+
+
+def test_swap_sessions_allows_flexible_recovery_target() -> None:
+    """A swap between a training and a flexible recovery is allowed —
+    the recovery migrates, it does not disappear."""
+    decision = MutationDecision(
+        mutation_type="swap_sessions",
+        target_session_id=10,
+        second_session_id=11,
+        rationale="swap",
+        fitmas_message="Je swap.",
+    )
+    sessions = [
+        {
+            "id": 10,
+            "scheduled_date": "2026-04-13",
+            "sport_type": "swimming",
+            "session_type": "css",
+            "completion_status": "planned",
+        },
+        {
+            "id": 11,
+            "scheduled_date": "2026-04-15",
+            "sport_type": "rest",
+            "session_type": "rest",
+            "session_title": "Journee flexible",
+            "flexibility": "flexible",
+            "completion_status": "planned",
+        },
+    ]
+
+    result = run_pre_mutation_hooks(
+        object(),
+        plan_id=42,
+        decision=decision,
+        scheduled_sessions=sessions,
+        timezone_name="Europe/Paris",
+    )
+
+    assert result.allowed is True
+    assert result.block_reason is None
+
+
 def test_move_session_blocks_occupied_training_target() -> None:
     decision = MutationDecision(
         mutation_type="move_session",
