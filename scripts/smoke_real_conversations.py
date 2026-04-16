@@ -345,6 +345,75 @@ def scenario_motivation_signal(db: SessionLocal, client: TestClient, user: s.Use
     _post_message(client, db, user, "Je suis motive cette semaine")
 
 
+def _setup_compound_swap(db: SessionLocal) -> s.User:
+    """Seeds piscine today + flexible recovery Friday to exercise the
+    original compound-intent bug: a message that combines a non-completion
+    claim ('j'ai oublie la piscine') with a swap request ('swap avec
+    vendredi') must reach the LLM decide() and be treated as a mutation,
+    not as a mere non-completion report."""
+    now = get_local_now("Europe/Paris")
+    weekly_notes = "Semaine chargee, dimanche long protege. Vendredi recuperation flexible."
+    user = _create_user(db, weekly_structure_notes=weekly_notes)
+    today_key = DAY_KEYS[now.weekday()]
+    friday_offset = (4 - now.weekday()) % 7 or 7  # ensure a future Friday
+    friday = (now + timedelta(days=friday_offset)).replace(hour=7, minute=0, second=0, microsecond=0)
+    friday_key = DAY_KEYS[friday.weekday()]
+    repo.replace_plan(
+        db,
+        user.id,
+        intention="reprise propre",
+        summary="smoke",
+        timezone_name=user.timezone,
+        days=[
+            {
+                "day": today_key,
+                "label": day_label_fr(today_key, capitalize=True),
+                "sport_type": "swimming",
+                "session_type": "css",
+                "session_title": "Natation CSS",
+                "session_goal": "Seuil technique",
+                "session_note": "cle",
+                "session_description": "6x100m allure CSS",
+                "duration_min": 40,
+                "intensity": "moderate",
+                "load_score": 3,
+                "priority": "Seance cle",
+                "nutrition_focus": "",
+                "flexibility": "stable",
+                "completion_status": "planned",
+            },
+            {
+                "day": friday_key,
+                "label": day_label_fr(friday_key, capitalize=True),
+                "sport_type": "rest",
+                "session_type": "rest",
+                "session_title": "Recuperation flexible",
+                "session_goal": "Absorber",
+                "session_note": "",
+                "session_description": "Repos",
+                "duration_min": 0,
+                "intensity": "easy",
+                "load_score": 0,
+                "priority": "Recovery",
+                "nutrition_focus": "",
+                "flexibility": "flexible",
+                "completion_status": "planned",
+            },
+        ],
+    )
+    _seed_recent_activities(db, user)
+    return user
+
+
+def scenario_compound_non_completion_swap(db: SessionLocal, client: TestClient, user: s.User) -> None:
+    _post_message(
+        client,
+        db,
+        user,
+        "Mince j'ai completement oublie que j'avais piscine, on peut swap la piscine de aujourd'hui avec la seance de vendredi ?",
+    )
+
+
 def scenario_heartbeat_calibration(db: SessionLocal, client: TestClient, user: s.User) -> None:
     heartbeat._LAST_PROACTIVE_GUARD_AT.clear()
     before = _snapshot(db, user.id)
@@ -387,6 +456,11 @@ SCENARIOS: list[Scenario] = [
     Scenario("week_scope_constraint", "Contrainte large sur la semaine", scenario_week_scope_constraint),
     Scenario("motivation_signal", "Signal motivation vague", scenario_motivation_signal),
     Scenario("heartbeat_calibration", "Question naturelle de calibration puis reponse", scenario_heartbeat_calibration),
+    Scenario(
+        "compound_non_completion_swap",
+        "Bug originel: non-completion implicite + swap dans le meme message",
+        scenario_compound_non_completion_swap,
+    ),
 ]
 
 
@@ -398,6 +472,8 @@ def _run_scenario(scenario: Scenario) -> None:
             user = _setup_base(db, strong_next_day_hint=True)
         elif scenario.name == "heartbeat_calibration":
             user = _setup_base(db, vague_week=True)
+        elif scenario.name == "compound_non_completion_swap":
+            user = _setup_compound_swap(db)
         else:
             user = _setup_base(db)
 
