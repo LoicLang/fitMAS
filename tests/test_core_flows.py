@@ -1536,6 +1536,59 @@ class FitMASCoreFlowsTest(unittest.TestCase):
         )
         self.assertNotIn("hier", result["assistant_message"]["text"].lower())
 
+    def test_intent_divergence_between_heuristic_and_llm_logs_warning(self) -> None:
+        """Observability: when the deterministic heuristic and the LLM turn
+        planner disagree on whether the user wants a plan mutation, the
+        pipeline must emit a structured WARNING so we can audit drift.
+
+        Behavior is unchanged (OR of both signals still drives routing);
+        this test exists solely to prevent regressions of the warning.
+        """
+        self._create_plan_for_today()
+        original_decide = api_messages.decide
+        original_extract_facts = api_messages.extract_facts
+        original_interpret = api_messages.interpret_user_indication
+        original_plan_turn = api_messages.plan_conversation_turn
+        try:
+            api_messages.extract_facts = lambda *args, **kwargs: []
+            api_messages.interpret_user_indication = lambda *args, **kwargs: None
+            # LLM says: NOT a plan mutation.
+            api_messages.plan_conversation_turn = lambda *args, **kwargs: SimpleNamespace(
+                primary_intent="information_request",
+                secondary_intents=(),
+                has_plan_mutation=False,
+                model_dump=lambda mode="json": {
+                    "primary_intent": "information_request",
+                    "secondary_intents": [],
+                    "has_plan_mutation": False,
+                },
+            )
+            api_messages.decide = lambda *args, **kwargs: MutationDecision(
+                mutation_type="no_change",
+                rationale="routage conservateur",
+                fitmas_message="Bien recu.",
+            )
+            # Heuristic says: YES (message carries "deplace").
+            with self.assertLogs("fitmas.conversation_pipeline", level="WARNING") as captured:
+                self.client.post(
+                    "/api/v0/messages",
+                    json={"text": "deplace la seance de jeudi a vendredi"},
+                )
+        finally:
+            api_messages.decide = original_decide
+            api_messages.extract_facts = original_extract_facts
+            api_messages.interpret_user_indication = original_interpret
+            api_messages.plan_conversation_turn = original_plan_turn
+
+        divergence_records = [r for r in captured.records if "intent_divergence" in r.getMessage()]
+        self.assertTrue(
+            divergence_records,
+            f"expected pipeline.intent_divergence warning, got records: {[r.getMessage() for r in captured.records]}",
+        )
+        message = divergence_records[0].getMessage()
+        self.assertIn("heuristic=True", message)
+        self.assertIn("llm=False", message)
+
     def test_calibration_standalone_ack_skipped_on_compound_mutation(self) -> None:
         """Open calibration + compound mutation in same message.
 
