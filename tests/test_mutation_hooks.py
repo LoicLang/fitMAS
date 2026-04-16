@@ -238,6 +238,138 @@ def test_swap_sessions_allows_flexible_recovery_target() -> None:
     assert result.block_reason is None
 
 
+def test_replace_session_blocks_protected_recovery() -> None:
+    """Replacing a stable recovery session with a training is forbidden —
+    the protected recovery cannot be erased in place."""
+    decision = MutationDecision(
+        mutation_type="replace_session",
+        target_session_id=11,
+        rationale="remplacer",
+        fitmas_message="Je remplace.",
+    )
+    sessions = [
+        {
+            "id": 11,
+            "scheduled_date": "2026-04-15",
+            "sport_type": "rest",
+            "session_type": "rest",
+            "session_title": "Repos protecteur",
+            "flexibility": "stable",
+            "completion_status": "planned",
+        },
+    ]
+
+    result = run_pre_mutation_hooks(
+        object(),
+        plan_id=42,
+        decision=decision,
+        scheduled_sessions=sessions,
+        timezone_name="Europe/Paris",
+    )
+
+    assert result.allowed is False
+    assert result.block_reason == "protected_recovery_target"
+
+
+def test_replace_session_allows_flexible_recovery() -> None:
+    """Replacing a flexible recovery is allowed — the user can take back
+    a rest day that wasn't protected."""
+    decision = MutationDecision(
+        mutation_type="replace_session",
+        target_session_id=11,
+        rationale="remplacer",
+        fitmas_message="Je remplace.",
+    )
+    sessions = [
+        {
+            "id": 11,
+            "scheduled_date": "2026-04-15",
+            "sport_type": "rest",
+            "session_type": "rest",
+            "session_title": "Journee flexible",
+            "flexibility": "flexible",
+            "completion_status": "planned",
+        },
+    ]
+
+    result = run_pre_mutation_hooks(
+        object(),
+        plan_id=42,
+        decision=decision,
+        scheduled_sessions=sessions,
+        timezone_name="Europe/Paris",
+    )
+
+    assert result.allowed is True
+    assert result.block_reason is None
+
+
+def test_update_session_blocks_protected_recovery() -> None:
+    """Updating a protected recovery into something else is forbidden —
+    e.g. converting a stable rest day into a training."""
+    decision = MutationDecision(
+        mutation_type="update_session",
+        target_session_id=11,
+        rationale="update",
+        fitmas_message="Je mets a jour.",
+    )
+    sessions = [
+        {
+            "id": 11,
+            "scheduled_date": "2026-04-15",
+            "sport_type": "rest",
+            "session_type": "rest",
+            "session_title": "Repos protecteur",
+            "flexibility": "stable",
+            "completion_status": "planned",
+        },
+    ]
+
+    result = run_pre_mutation_hooks(
+        object(),
+        plan_id=42,
+        decision=decision,
+        scheduled_sessions=sessions,
+        timezone_name="Europe/Paris",
+    )
+
+    assert result.allowed is False
+    assert result.block_reason == "protected_recovery_target"
+
+
+def test_lighten_day_blocks_protected_recovery() -> None:
+    """Trying to lighten a protected recovery day is forbidden — there's
+    nothing to lighten and mutating it would erode the recovery slot."""
+    decision = MutationDecision(
+        mutation_type="lighten_day",
+        target_session_id=11,
+        rationale="allege",
+        fitmas_message="J'allege.",
+    )
+    sessions = [
+        {
+            "id": 11,
+            "scheduled_date": "2026-04-15",
+            "sport_type": "rest",
+            "session_type": "rest",
+            "session_title": "Repos protecteur",
+            "flexibility": "stable",
+            "completion_status": "planned",
+        },
+    ]
+
+    result = run_pre_mutation_hooks(
+        object(),
+        plan_id=42,
+        decision=decision,
+        scheduled_sessions=sessions,
+        timezone_name="Europe/Paris",
+    )
+
+    assert result.allowed is False
+    assert result.block_reason == "protected_recovery_target"
+
+
 def test_move_session_blocks_occupied_training_target() -> None:
     decision = MutationDecision(
         mutation_type="move_session",

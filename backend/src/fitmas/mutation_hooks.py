@@ -221,10 +221,16 @@ def _check_protected_recovery_target(
     scheduled_sessions: Sequence[Any],
     timezone_name: str | None,
 ) -> None:
-    """Block moving or swapping onto stable/protective recovery, while allowing
-    flexible rest slots. Covers both move_session (target_date lands on a
-    protected recovery) and swap_sessions (either leg of the swap is a
-    protected recovery)."""
+    """Block mutations that would erode a stable/protective recovery slot.
+
+    Covers:
+    - move_session: target_date lands on a protected recovery
+    - swap_sessions: either leg of the swap is a protected recovery
+    - replace_session / update_session / lighten_day: the target session
+      itself is a protected recovery (in-place mutation erodes the slot)
+
+    Flexible rest slots (`flexibility == "flexible"`, no protective title)
+    pass through — the user owns those and can reclaim them."""
     if decision.mutation_type == "move_session":
         target_date = _resolve_decision_target_date(decision, timezone_name=timezone_name)
         if target_date is None:
@@ -265,6 +271,25 @@ def _check_protected_recovery_target(
                     severity="warning",
                 ))
                 return
+        return
+
+    if decision.mutation_type in {"replace_session", "update_session", "lighten_day"}:
+        if decision.target_session_id is None:
+            return
+        target = _find_session(scheduled_sessions, decision.target_session_id)
+        if target is None:
+            return
+        if _is_protected_recovery_session(target):
+            session_date = _session_date(target, timezone_name)
+            date_label = session_date.isoformat() if session_date is not None else "cette seance"
+            result.allowed = False
+            result.block_reason = "protected_recovery_target"
+            result.warnings.append(MutationWarning(
+                code="protected_recovery_target",
+                message=f"{date_label} est une recuperation protegee, on ne la modifie pas en place.",
+                severity="warning",
+            ))
+            return
 
 
 def _check_occupied_training_target(
