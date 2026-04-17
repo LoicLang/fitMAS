@@ -534,7 +534,11 @@ def run_conversation_turn(
         )
     else:
         resolution = None
-    route_adaptation_context_to_llm = _should_route_adaptation_context_to_llm(turn_plan, adaptation)
+    route_adaptation_context_to_llm = _should_route_adaptation_context_to_llm(
+        turn_plan,
+        adaptation,
+        plan_mutation_request=plan_mutation_request,
+    )
 
     standalone_calibration_answer = (
         open_calibration_need is not None
@@ -1109,8 +1113,28 @@ def _should_route_availability_context_to_llm(
     )
 
 
-def _should_route_adaptation_context_to_llm(turn_plan, adaptation) -> bool:
-    if adaptation is None or turn_plan is None:
+def _should_route_adaptation_context_to_llm(
+    turn_plan,
+    adaptation,
+    *,
+    plan_mutation_request: bool = False,
+) -> bool:
+    """Decide whether a deterministic adaptation candidate must be passed
+    to `decide()` as context (True) or applied directly (False).
+
+    Faille B closure: when the deterministic heuristic already flagged
+    the message as a plan mutation request (e.g. the user said "decale"
+    or "deplace"), the LLM must arbitrate even if the turn planner
+    returned None (classifier unavailable) or misclassified the intent.
+    Otherwise a deterministic adaptation candidate computed from a
+    life-change pattern would be applied silently, overriding the user's
+    explicit mutation phrasing.
+    """
+    if adaptation is None:
+        return False
+    if plan_mutation_request:
+        return True
+    if turn_plan is None:
         return False
     primary_intent = str(getattr(turn_plan, "primary_intent", "") or "")
     return primary_intent in {"availability_constraint", "plan_mutation"} or bool(
