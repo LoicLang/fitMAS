@@ -291,16 +291,56 @@ def _detect_big_session_done(
 
 # ── Bonus: Streak detection ─────────────────────────────────────────────────
 
+# Minimum duration (minutes) for an activity or claim to count as a real
+# training "session" in the streak. Short walks, commute rides and
+# bakery-round strolls would otherwise inflate the streak and make the
+# coach LLM confabulate weekly volume ("tu as sorti 4 seances cette
+# semaine" when only one was a real workout). Unknown-duration entries
+# (duration_min is None) still count, since claims like "j'ai couru"
+# without a number are explicit user intent we shouldn't discard.
+_STREAK_MIN_DURATION_MIN = 20
+
+
+def _is_substantive_entry(entry: Any) -> bool:
+    """True if an activity or claim looks like a real training session.
+
+    Keeps entries without a duration (explicit claims / manual logs),
+    filters out short durations below the streak threshold.
+    """
+    duration_min = _value(entry, "duration_min")
+    if duration_min is None:
+        return True
+    try:
+        return int(duration_min) >= _STREAK_MIN_DURATION_MIN
+    except (TypeError, ValueError):
+        return True
+
+
+def _value(obj: Any, key: str) -> Any:
+    if obj is None:
+        return None
+    if isinstance(obj, dict):
+        return obj.get(key)
+    return getattr(obj, key, None)
+
+
 def _detect_streak(
     db: Session, user: s.User, plan: s.WeeklyPlan, today_key: str,
 ) -> Signal | None:
-    """Fire if user has 3+ consecutive local days with actual activity."""
+    """Fire if user has 3+ consecutive local days with a substantive
+    training activity (>= 20 min or unknown duration). Short walks and
+    commute rides do not qualify."""
     local_today = get_local_now(user.timezone).date()
     streak = 0
 
     for offset in range(1, 8):  # look back up to 7 days
         target_date = local_today.fromordinal(local_today.toordinal() - offset)
-        if _activities_on_local_date(db, user, target_date=target_date) or _claimed_activities_on_local_date(db, user, target_date=target_date):
+        activities = _activities_on_local_date(db, user, target_date=target_date)
+        claims = _claimed_activities_on_local_date(db, user, target_date=target_date)
+        has_substantive = any(_is_substantive_entry(entry) for entry in activities) or any(
+            _is_substantive_entry(entry) for entry in claims
+        )
+        if has_substantive:
             streak += 1
         else:
             break
