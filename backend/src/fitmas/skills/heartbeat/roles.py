@@ -38,6 +38,7 @@ from fitmas.execution_evidence import classify_execution_evidence
 from fitmas.fact_memory import fact_is_current
 from fitmas.knowledge import load_sport_knowledge
 from fitmas.planning_contract import build_availability_state
+from fitmas.recent_reality import RecentRealityWindow
 from fitmas.signals import collect_signals, format_signals_for_prompt
 from fitmas.time_context import DAY_LABELS_FR, build_time_context, get_local_now, render_time_context
 
@@ -203,6 +204,7 @@ def build_briefing_prompt(
     facts_block: str,
     sport_knowledge: str,
     recent_proactive_context: str = "",
+    recent_reality: RecentRealityWindow | None = None,
 ) -> tuple[str, str]:
     """Build system + user prompt for morning briefing. Returns (system, prompt)."""
     label = today_session.label or DAY_LABELS[time_context["day_key"]]
@@ -217,6 +219,15 @@ def build_briefing_prompt(
     )
     if user.coach_soul:
         system += f"\nAme du coach: {user.coach_soul}"
+    # Anti-hallucination rule — unconditional, defense in depth. Applies even
+    # when recent_reality isn't supplied (legacy callers) so the LLM never
+    # fabricates a weekly count.
+    system += (
+        "\n\nQuand tu mentionnes un decompte de la semaine (seances faites, volume, "
+        "regularite, streak), utilise EXACTEMENT les chiffres du bloc \"Execution reelle "
+        "semaine\" du contexte. N'invente jamais un comptage hebdomadaire: si le bloc est "
+        "absent ou n'a pas l'info, reste qualitatif (ex: \"cette semaine\") sans citer de nombre."
+    )
     if signals_block:
         system += (
             f"\n\n{signals_block}\n"
@@ -248,6 +259,14 @@ def build_briefing_prompt(
         f"Note: {(day.session_note if day else today_session.session_note) or ''}"
         f"{yesterday_context}"
     )
+    if recent_reality is not None:
+        prompt += (
+            "\n\nExecution reelle semaine (7 jours glissants, verite terrain):\n"
+            f"- {recent_reality.planned_sessions_7d} seances planifiees\n"
+            f"- {recent_reality.confirmed_sessions_7d} seances confirmees (faites + trace Strava/manuelle)\n"
+            f"- {recent_reality.claimed_sessions_7d} seances revendiquees sans trace forte\n"
+            f"- {recent_reality.missed_streak_days} jours consecutifs sans seance realisee"
+        )
     if clarification is not None:
         prompt += (
             "\n\nClarification prioritaire:\n"

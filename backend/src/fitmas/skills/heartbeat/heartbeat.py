@@ -47,6 +47,7 @@ from fitmas.skills.heartbeat.roles import (
 )
 from fitmas.knowledge import load_sport_knowledge
 from fitmas.llm_gateway import generate_heartbeat_text
+from fitmas.recent_reality import build_recent_reality_window
 from fitmas.signals import collect_signals, format_signals_for_prompt
 from fitmas.time_context import build_time_context, get_local_now
 
@@ -127,6 +128,20 @@ def morning_briefing() -> CoachDraft | None:
             logger.warning("Morning briefing proceeding without active plan-backed signals", exc_info=True)
             signals = []
 
+        # Ground-truth execution counters for the week. Without this, the LLM
+        # confabulates a weekly count (it once told the user "tu as sorti 4
+        # seances cette semaine" when only 1 real workout had happened).
+        try:
+            recent_reality = build_recent_reality_window(
+                today=local_now.date(),
+                scheduled_sessions=recent_sessions,
+                activities=recent_activities,
+                claims=list(recent_claims),
+            )
+        except Exception:
+            logger.warning("Morning briefing: failed to build recent reality window", exc_info=True)
+            recent_reality = None
+
         # Build prompt via BriefingRole
         system, prompt = build_briefing_prompt(
             user=user,
@@ -140,6 +155,7 @@ def morning_briefing() -> CoachDraft | None:
             facts_block=format_active_facts_for_prompt(db, user),
             sport_knowledge=load_sport_knowledge({today_session.sport_type}, max_tokens=500),
             recent_proactive_context=_recent_proactive_context(db, user, limit=2),
+            recent_reality=recent_reality,
         )
 
         llm_msg = _llm_generate(system, prompt)
