@@ -232,9 +232,44 @@ def decide(
         )
         return decision
 
-    except Exception:
-        logger.exception("LLM call failed — falling back to rules")
+    except Exception as exc:
+        error_type = _classify_llm_exception(exc)
+        logger.warning(
+            "llm.decide_failed type=%s message=%r — falling back to rules",
+            error_type,
+            str(exc)[:200],
+            exc_info=True,
+        )
         return None
+
+
+def _classify_llm_exception(exc: BaseException) -> str:
+    """Classify a raised exception so operators can triage failures.
+
+    Returns a short stable label (`timeout`, `rate_limit`, `bad_request`,
+    `auth`, `connection`, `api_other`, `json_parse`, `unknown`). The
+    labels are log-only — `decide()` still returns None for every case.
+    """
+    try:
+        import anthropic as _anthropic
+    except Exception:
+        _anthropic = None
+    if _anthropic is not None:
+        if isinstance(exc, _anthropic.APITimeoutError):
+            return "timeout"
+        if isinstance(exc, _anthropic.RateLimitError):
+            return "rate_limit"
+        if isinstance(exc, _anthropic.BadRequestError):
+            return "bad_request"
+        if isinstance(exc, _anthropic.AuthenticationError):
+            return "auth"
+        if isinstance(exc, _anthropic.APIConnectionError):
+            return "connection"
+        if isinstance(exc, _anthropic.APIError):
+            return "api_other"
+    if isinstance(exc, json.JSONDecodeError):
+        return "json_parse"
+    return "unknown"
 
 
 def _request_json_with_tools(

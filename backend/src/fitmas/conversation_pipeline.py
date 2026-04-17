@@ -340,15 +340,21 @@ def run_conversation_turn(
         activity_claim_summary=claim_summary,
         signal_summary=signal_summary_for_prompt(conversation_context),
     )
-    llm_plan_mutation_request = bool(
-        turn_plan is not None and getattr(turn_plan, "has_plan_mutation", False)
-    )
+    if turn_plan is None:
+        llm_plan_mutation_request = False
+        llm_plan_mutation_state = "unavailable"
+    else:
+        llm_plan_mutation_request = bool(getattr(turn_plan, "has_plan_mutation", False))
+        llm_plan_mutation_state = "True" if llm_plan_mutation_request else "False"
     plan_mutation_request = bool(heuristic_plan_mutation_request or llm_plan_mutation_request)
     # Observability (Faille A): the deterministic heuristic and the LLM turn
     # planner are both allowed to signal a plan mutation, and we OR them so
     # neither can silently drop the intent. But a persistent divergence is a
     # drift signal — the heuristic might be missing a new phrasing pattern,
     # or the LLM prompt might be failing to classify obvious mutation verbs.
+    # We also distinguish `llm=unavailable` (classifier crashed / timed out)
+    # from `llm=False` (classifier returned a clean no): the former is a
+    # platform incident, the latter is a classifier disagreement.
     # Emit a structured WARNING on disagreement so we can audit patterns
     # offline without changing runtime behavior.
     if heuristic_plan_mutation_request != llm_plan_mutation_request:
@@ -356,7 +362,7 @@ def run_conversation_turn(
             "pipeline.intent_divergence user=%s heuristic=%s llm=%s text=%r",
             getattr(user, "id", None),
             heuristic_plan_mutation_request,
-            llm_plan_mutation_request,
+            llm_plan_mutation_state,
             (payload.text or "")[:160],
         )
     if not plan_mutation_request:

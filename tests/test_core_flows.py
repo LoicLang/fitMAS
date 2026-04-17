@@ -1589,6 +1589,45 @@ class FitMASCoreFlowsTest(unittest.TestCase):
         self.assertIn("heuristic=True", message)
         self.assertIn("llm=False", message)
 
+    def test_intent_divergence_logs_llm_unavailable_when_turn_plan_missing(self) -> None:
+        """Observability: when the LLM turn planner returned None (classifier
+        crash, timeout, rate limit), the divergence log must distinguish
+        `llm=unavailable` from `llm=False` (classifier returned a clean no).
+
+        Both failure modes push the pipeline onto the deterministic heuristic
+        alone, but they are different signals: `unavailable` is a platform
+        incident to watch; `False` is a genuine disagreement worth auditing.
+        """
+        self._create_plan_for_today()
+        original_decide = api_messages.decide
+        original_extract_facts = api_messages.extract_facts
+        original_interpret = api_messages.interpret_user_indication
+        try:
+            api_messages.extract_facts = lambda *args, **kwargs: []
+            api_messages.interpret_user_indication = lambda *args, **kwargs: None
+            # plan_conversation_turn stays set to None via setUp -> classifier unavailable.
+            api_messages.decide = lambda *args, **kwargs: MutationDecision(
+                mutation_type="no_change",
+                rationale="routage conservateur",
+                fitmas_message="Bien recu.",
+            )
+            # Heuristic fires (message carries "deplace").
+            with self.assertLogs("fitmas.conversation_pipeline", level="WARNING") as captured:
+                self.client.post(
+                    "/api/v0/messages",
+                    json={"text": "deplace la seance de jeudi a vendredi"},
+                )
+        finally:
+            api_messages.decide = original_decide
+            api_messages.extract_facts = original_extract_facts
+            api_messages.interpret_user_indication = original_interpret
+
+        divergence_records = [r for r in captured.records if "intent_divergence" in r.getMessage()]
+        self.assertTrue(divergence_records, "expected pipeline.intent_divergence warning")
+        message = divergence_records[0].getMessage()
+        self.assertIn("heuristic=True", message)
+        self.assertIn("llm=unavailable", message)
+
     def test_calibration_standalone_ack_skipped_on_compound_mutation(self) -> None:
         """Open calibration + compound mutation in same message.
 
