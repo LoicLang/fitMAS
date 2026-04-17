@@ -18,6 +18,7 @@ class PlanMutationServiceResult:
     attempted_count: int
     event_count: int = 0
     applied_events: tuple[PlanAppliedMutationEvent, ...] = ()
+    blocked_events: tuple[PlanBlockedMutationEvent, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -26,6 +27,22 @@ class PlanAppliedMutationEvent:
     user_visible_summary: str
     event_id: int | None = None
     target_session_id: int | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class PlanBlockedMutationEvent:
+    """Surface pre-hook rejection details to the caller.
+
+    Carries the mutation_type, the typed `block_reason` from the hook
+    (e.g. `protected_recovery_target`, `same_sport_proximity`,
+    `occupied_training_target`), and the warning messages so the caller
+    can craft a reason-specific reply instead of a generic fallback.
+    """
+    command_type: str
+    block_reason: str | None
+    target_session_id: int | None = None
+    second_session_id: int | None = None
+    warnings: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -54,6 +71,7 @@ def apply_decisions_for_user(
     applied_count = 0
     event_count = 0
     applied_events: list[PlanAppliedMutationEvent] = []
+    blocked_events: list[PlanBlockedMutationEvent] = []
     for decision in decisions:
         pre_result, post_result = mutations.apply(
             db,
@@ -62,6 +80,19 @@ def apply_decisions_for_user(
             scheduled_sessions=scheduled_sessions,
             timezone_name=getattr(user, "timezone", None),
         )
+        if not pre_result.allowed:
+            warning_messages = tuple(
+                getattr(w, "message", "") for w in (getattr(pre_result, "warnings", ()) or ())
+            )
+            blocked_events.append(
+                PlanBlockedMutationEvent(
+                    command_type=decision.mutation_type,
+                    block_reason=getattr(pre_result, "block_reason", None),
+                    target_session_id=decision.target_session_id,
+                    second_session_id=decision.second_session_id,
+                    warnings=warning_messages,
+                )
+            )
         if pre_result.allowed and post_result is not None:
             applied_count += 1
             updated_session = (
@@ -101,6 +132,7 @@ def apply_decisions_for_user(
         attempted_count=len(decisions),
         event_count=event_count,
         applied_events=tuple(applied_events),
+        blocked_events=tuple(blocked_events),
     )
 
 

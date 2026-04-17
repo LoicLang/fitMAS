@@ -92,6 +92,49 @@ def test_apply_decisions_for_user_counts_only_successful_applies(monkeypatch) ->
     assert result.event_count == 1
 
 
+def test_apply_decisions_for_user_exposes_blocked_events_with_reason(monkeypatch) -> None:
+    """When a pre-hook blocks a mutation, the service result must surface
+    the block_reason so the caller can generate a reason-specific reply
+    instead of a generic fallback."""
+    user = SimpleNamespace(id=7)
+    decision = MutationDecision(
+        mutation_type="move_session",
+        target_session_id=10,
+        target_date="2026-04-17",
+        rationale="repos",
+        fitmas_message="Je deplace.",
+    )
+
+    monkeypatch.setattr(
+        "fitmas.plan_mutation_service.repo.get_active_plan",
+        lambda db, user_id: SimpleNamespace(id=42),
+    )
+    monkeypatch.setattr(
+        "fitmas.plan_mutation_service.mutations.apply",
+        lambda db, plan_id, decision, **kwargs: (
+            SimpleNamespace(allowed=False, block_reason="protected_recovery_target", warnings=[]),
+            None,
+        ),
+    )
+    monkeypatch.setattr("fitmas.plan_mutation_service.repo.get_scheduled_sessions", lambda *args, **kwargs: [])
+    monkeypatch.setattr("fitmas.plan_mutation_service.repo.add_plan_mutation_event", lambda *args, **kwargs: None)
+
+    result = apply_decisions_for_user(
+        object(),
+        user=user,
+        decisions=[decision],
+    )
+
+    assert result is not None
+    assert result.attempted_count == 1
+    assert result.applied_count == 0
+    assert len(result.blocked_events) == 1
+    blocked = result.blocked_events[0]
+    assert blocked.command_type == "move_session"
+    assert blocked.block_reason == "protected_recovery_target"
+    assert blocked.target_session_id == 10
+
+
 def test_apply_decisions_for_user_does_not_event_noop_move(monkeypatch) -> None:
     user = SimpleNamespace(id=7)
     decision = MutationDecision(

@@ -126,8 +126,10 @@ def run_conversation_turn(
             reply_text = (
                 _applied_event_summary(service_result, decision)
                 if applied
-                else _blocked_mutation_reply(decision)
+                else _blocked_mutation_reply(decision, service_result)
             )
+            if not applied:
+                _log_mutation_blocked(service_result, user_id=user.id)
             reply_text = api_messages._sanitize_no_change_reply(
                 user_text=payload.text,
                 reply_text=reply_text,
@@ -773,8 +775,10 @@ def run_conversation_turn(
             reply_text = (
                 _applied_event_summary(service_result, decision)
                 if applied
-                else _blocked_mutation_reply(decision)
+                else _blocked_mutation_reply(decision, service_result)
             )
+            if not applied:
+                _log_mutation_blocked(service_result, user_id=user.id)
             reply_text = api_messages._sanitize_no_change_reply(
                 user_text=payload.text,
                 reply_text=reply_text,
@@ -925,6 +929,23 @@ def _applied_event_summary(service_result, decision) -> str | None:
     return None
 
 
+def _log_mutation_blocked(service_result, *, user_id: int | None) -> None:
+    """Emit a structured log per blocked mutation so dogfood logs can be
+    grepped by reason. Silent when there are no blocked events (e.g. the
+    mutation was a no-op rather than a pre-hook rejection)."""
+    if service_result is None:
+        return
+    for event in getattr(service_result, "blocked_events", ()) or ():
+        logger.warning(
+            "mutation_blocked user=%s command=%s reason=%s target=%s second=%s",
+            user_id,
+            event.command_type,
+            event.block_reason,
+            event.target_session_id,
+            event.second_session_id,
+        )
+
+
 def _mutation_was_applied(service_result) -> bool:
     if service_result is None:
         return False
@@ -933,7 +954,55 @@ def _mutation_was_applied(service_result) -> bool:
     ) > 0
 
 
-def _blocked_mutation_reply(decision) -> str:
+_BLOCK_REASON_REPLIES: dict[str, str] = {
+    "protected_recovery_target": (
+        "Je ne l'ai pas applique: le jour cible est une recuperation protegee, "
+        "je ne pose pas de seance dessus. Donne-moi un autre jour, ou precise "
+        "un swap (deux seances a echanger) et la recuperation migrera proprement."
+    ),
+    "same_sport_proximity": (
+        "Je ne l'ai pas applique: ca mettrait deux seances du meme sport/type "
+        "a moins de 48h, ce qui casse la recuperation. Propose-moi un jour "
+        "plus eloigne ou un autre sport sur ce creneau."
+    ),
+    "occupied_training_target": (
+        "Je ne l'ai pas applique: le jour cible a deja une vraie seance. "
+        "Si tu veux les echanger, dis-le explicitement et je fais un swap."
+    ),
+}
+
+
+def _blocked_mutation_reply(decision, service_result=None) -> str:
+    """Produce a user-facing explanation when a mutation was blocked.
+
+    Prefers a reason-specific message derived from the pre-hook
+    `block_reason` (surfaced via `PlanMutationServiceResult.blocked_events`)
+    so the user understands the constraint and the LLM, on the next turn,
+    sees a concrete rejection rather than a generic "couldn't apply"."""
+    block_reason: str | None = None
+    warning_hint: str | None = None
+    if service_result is not None:
+        blocked = getattr(service_result, "blocked_events", ()) or ()
+        decision_target = getattr(decision, "target_session_id", None)
+        matching = next(
+            (
+                event for event in blocked
+                if event.command_type == getattr(decision, "mutation_type", "")
+                and (decision_target is None or event.target_session_id == decision_target)
+            ),
+            None,
+        )
+        if matching is None and blocked:
+            matching = blocked[0]
+        if matching is not None:
+            block_reason = matching.block_reason
+            warnings = matching.warnings or ()
+            warning_hint = warnings[0] if warnings else None
+
+    if block_reason and block_reason in _BLOCK_REASON_REPLIES:
+        return _BLOCK_REASON_REPLIES[block_reason]
+    if warning_hint:
+        return f"Je ne l'ai pas applique: {warning_hint}"
     if getattr(decision, "mutation_type", "") == "move_session":
         return (
             "Je ne l'ai pas applique: le creneau cible n'est pas assez sur. "
