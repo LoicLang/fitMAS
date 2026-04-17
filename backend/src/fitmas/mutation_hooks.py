@@ -221,16 +221,23 @@ def _check_protected_recovery_target(
     scheduled_sessions: Sequence[Any],
     timezone_name: str | None,
 ) -> None:
-    """Block mutations that would erode a stable/protective recovery slot.
+    """Block mutations that would erase a protected recovery in place.
 
-    Covers:
-    - move_session: target_date lands on a protected recovery
-    - swap_sessions: either leg of the swap is a protected recovery
-    - replace_session / update_session / lighten_day: the target session
-      itself is a protected recovery (in-place mutation erodes the slot)
+    Sport coherence: a recovery is a satellite of the hard session it
+    protects — its value is the rest it provides relative to stress, not
+    the specific date. So:
 
-    Flexible rest slots (`flexibility == "flexible"`, no protective title)
-    pass through — the user owns those and can reclaim them."""
+    - move_session onto a protected recovery is blocked (target date
+      would overwrite the recovery → it disappears).
+    - swap_sessions involving a protected recovery is ALLOWED: the swap
+      moves the recovery to a new date, it stays in the week. The LLM
+      is expected to reason about whether the new placement still makes
+      sense physiologically (see system prompt guidance).
+    - replace_session / update_session / lighten_day targeting a
+      protected recovery is blocked: these mutations erase the recovery
+      in place.
+
+    Flexible rest slots always pass through — the user owns those."""
     if decision.mutation_type == "move_session":
         target_date = _resolve_decision_target_date(decision, timezone_name=timezone_name)
         if target_date is None:
@@ -246,28 +253,6 @@ def _check_protected_recovery_target(
                 result.warnings.append(MutationWarning(
                     code="protected_recovery_target",
                     message=f"Le {target_date.isoformat()} est une recuperation protegee.",
-                    severity="warning",
-                ))
-                return
-        return
-
-    if decision.mutation_type == "swap_sessions":
-        swap_ids = {
-            sid for sid in (decision.target_session_id, decision.second_session_id) if sid is not None
-        }
-        if not swap_ids:
-            return
-        for session in scheduled_sessions:
-            if _value(session, "id") not in swap_ids:
-                continue
-            if _is_protected_recovery_session(session):
-                session_date = _session_date(session, timezone_name)
-                date_label = session_date.isoformat() if session_date is not None else "la seance"
-                result.allowed = False
-                result.block_reason = "protected_recovery_target"
-                result.warnings.append(MutationWarning(
-                    code="protected_recovery_target",
-                    message=f"Le swap implique une recuperation protegee ({date_label}).",
                     severity="warning",
                 ))
                 return

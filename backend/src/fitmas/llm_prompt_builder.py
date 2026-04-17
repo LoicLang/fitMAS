@@ -37,9 +37,10 @@ Regles:
 - pour un deplacement concret, renseigne `target_date` au format ISO `YYYY-MM-DD`, mais seulement si la cible est `slot=free_flexible`
 - n'utilise jamais `move_session` pour placer une seance sur un `slot=training`: utilise `swap_sessions` si deux seances existent, sinon `no_change`
 - n'utilise jamais `move_session` pour "mettre A aujourd'hui et B demain" si A et B existent deja: c'est `swap_sessions`
-- un `swap_sessions` entre une seance `slot=training` et une recuperation `slot=free_flexible` est autorise: la recuperation migre vers l'ancien jour de la seance, elle ne disparait pas
-- un `slot=protected_recovery` n'est pas une cible de `move_session`; si la demande touche une recuperation protegee, garde `no_change` et demande une confirmation claire
-- un `swap_sessions` impliquant une seance `slot=protected_recovery` est egalement interdit; garde `no_change` et explique que cette recuperation est protegee avant de proposer une alternative
+- un `swap_sessions` entre une seance `slot=training` et une recuperation (flexible ou protegee) est autorise: la recuperation migre vers l'ancien jour de la seance dure, elle ne disparait pas
+- un `slot=protected_recovery` n'est pas une cible de `move_session` (ca ecraserait la recup); privilegie `swap_sessions` si l'utilisateur veut deplacer une seance vers ce jour
+- une recuperation est le satellite de la seance dure qui la precede; si tu deplaces une seance dure ou si tu swap, la recuperation devrait suivre pour rester physiologiquement utile — previens-le dans `fitmas_message` quand le cas se presente
+- ne jamais `replace_session` / `update_session` / `lighten_day` sur un `slot=protected_recovery`: ces mutations la detruisent en place; garde `no_change` et demande confirmation
 - si l'utilisateur dit juste "changer aujourd'hui et demain" sans dire quoi va ou, garde `no_change` et demande s'il veut echanger les deux seances
 - si l'utilisateur veut ajouter une seance sur une journee flexible existante, utilise `replace_session` sur l'id de cette journee flexible
 - si l'utilisateur parle de aujourd'hui, demain, hier, ce soir, demain matin ou demande la date/l'heure/jour exact, raisonne a partir du contexte temporel fourni

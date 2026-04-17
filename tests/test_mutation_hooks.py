@@ -156,9 +156,13 @@ def test_move_session_allows_flexible_recovery_target() -> None:
     assert result.block_reason is None
 
 
-def test_swap_sessions_blocks_protected_recovery_target() -> None:
-    """A swap that would move a training into a stable rest day must be
-    blocked — the protected recovery cannot be displaced."""
+def test_swap_sessions_allows_stable_recovery_target() -> None:
+    """Sport coherence: a swap never destroys a recovery — it just moves
+    it. Whether the recovery is flagged `stable` or `flexible`, the swap
+    preserves both sessions in the week, so we allow it.
+
+    The destructive mutations (replace/update/lighten) still block on
+    stable recovery because they erase it in place."""
     decision = MutationDecision(
         mutation_type="swap_sessions",
         target_session_id=10,
@@ -193,8 +197,8 @@ def test_swap_sessions_blocks_protected_recovery_target() -> None:
         timezone_name="Europe/Paris",
     )
 
-    assert result.allowed is False
-    assert result.block_reason == "protected_recovery_target"
+    assert result.allowed is True
+    assert result.block_reason is None
 
 
 def test_swap_sessions_allows_flexible_recovery_target() -> None:

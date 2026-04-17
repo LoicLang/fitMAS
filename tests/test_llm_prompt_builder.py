@@ -47,10 +47,13 @@ class ConversationPromptBuilderTest(unittest.TestCase):
         self.assertIn("Je veux le renfo aujourd'hui et la piscine demain", bundle.system[0]["text"])
         self.assertIn("On peut echanger mercredi et jeudi ?", bundle.system[0]["text"])
         self.assertIn("swap_sessions", bundle.system[0]["text"])
-        # The prompt must explicitly forbid swapping with a protected
-        # recovery so the LLM doesn't suggest displacing rest days the
-        # backend would reject post-hoc.
-        self.assertIn("swap_sessions` impliquant une seance `slot=protected_recovery", bundle.system[0]["text"])
+        # Sport coherence rules: swap involving a recovery is allowed
+        # (the recovery migrates), destructive mutations on protected
+        # recovery stay forbidden, and the LLM must flag when moving a
+        # hard session should drag its recovery along.
+        self.assertIn("recuperation (flexible ou protegee) est autorise", bundle.system[0]["text"])
+        self.assertIn("satellite de la seance dure", bundle.system[0]["text"])
+        self.assertIn("`replace_session` / `update_session` / `lighten_day` sur un `slot=protected_recovery`", bundle.system[0]["text"])
         self.assertIn("Source de vérité planning conversationnelle", bundle.prompt)
         self.assertIn("Tempo", bundle.prompt)
         self.assertNotIn("Actions possibles", bundle.prompt)
