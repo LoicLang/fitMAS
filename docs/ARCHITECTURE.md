@@ -163,6 +163,19 @@ Les tools restent read-only. Les orchestrateurs possedent les writes.
 - **Briefing grounding** (910f47a) : le prompt de briefing matin recoit des compteurs execution 7 jours (`planned / confirmed / claimed / missed_streak`). Le systeme prompt interdit d'inventer un decompte hebdo. Empeche la confabulation "tu as sorti 4 seances cette semaine" quand une seule a reellement eu lieu.
 - **Streak signal propre** (a59a6da) : `signals.py` filtre les activites non-substantives (< 15 min) avant de calculer un streak — une marche courte ne deverrouille plus le signal `streak`.
 
+### Digest coach — 19 avril 2026
+
+- **`coach_reading_digest.py`** (12b4bf8) : contexte pre-digere pour messages proactifs et conversation, remplace les compteurs bruts qui faisaient parler le coach comme un dashboard.
+- Deux couches :
+  - **Faits (deterministe)** : reel 7j avec offplan distingue, plan 7j (prevues / executees conformes / hors plan / streak manquee), silence_days, 7j d'echanges bruts (avec fallback dernier tour meme plus vieux pour eviter l'amnesie sur silence long), patterns `user_patterns`, contexte jour.
+  - **Lecture (LLM pre-pass Haiku JSON)** : triplet `{sens_du_jour, angle, ne_pas_faire}` que le LLM de composition finale suit.
+- Injection :
+  - **Briefing matin** (`skills/heartbeat/roles.py`) : remplace le bloc `Execution reelle semaine` par le digest. Voice rules : interdit `zero realisees` quand offplan > 0, interdit `oublie la culpabilite`, conseils sommeil/assiette sans signal, listings TSS/CTL abstraits, felicitations vides. A faire : reconnaitre ce qui est fait (y compris offplan), poser UNE question si un pourquoi manque, aligner le ton sur le dernier echange.
+  - **`decide()`** : via `coach_context["coach_reading_digest_text"]` consomme par le layer `immediate` (`prompt_layers.py`), gate par `turn_plan.primary_intent in {plan_lookup, execution_report, availability_constraint}`. Les intents mutation n'activent pas le digest (le prompt de mutation a deja son propre grounding).
+- Degradation : lens Haiku rate → `lens=None`, les faits partent seuls. Digest entier rate → fallback sur le bloc `recent_reality` legacy.
+- Audit : logs structures `coach_reading_lens.ok / .dropped / .failed` avec timing + champs tronques.
+- Tests : 3 snapshots sur fixtures (offplan / vide / conforme) verrouillent le rendu — les changements de format sont attrapes immediatement.
+
 ### Ce qui n'existe pas encore
 
 - Consolidation memoire periodique propre

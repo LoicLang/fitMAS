@@ -118,6 +118,7 @@ Ce qui est vrai dans le code aujourd'hui :
 - guard `same_sport_proximity` sur moves datés
 - guard `protected_recovery_target` sur repos/récupération stable
 - `SYSTEM-MAP.md` comme carte d'architecture pour les agents
+- `coach_reading_digest` : contexte pré-digéré (facts déterministes + lens Haiku JSON) injecté dans briefing matin et `decide()` sur intents lookup/report/availability, avec voice rules anti-bullshit (12b4bf8)
 
 ### Dette technique vivante
 

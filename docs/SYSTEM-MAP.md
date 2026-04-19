@@ -215,6 +215,7 @@ Regle :
 - `llm_gateway.py` : client LLM + parseur JSON robuste partage (eea74e7)
 - `user_indications.py` / `user_indication_llm.py` : message user -> indication structuree
 - `mutation_hooks.py` : pre-hooks de coherence avec `block_reason` typed
+- `coach_reading_digest.py` : contexte pre-digere (faits + lens Haiku JSON) injecte dans briefing matin et `decide()` sur intents lookup/report/availability (12b4bf8)
 
 Regle de routage :
 

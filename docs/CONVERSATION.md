@@ -171,6 +171,7 @@ Comportements importants :
 | `conversation_turn_planner.py` | Classifieur LLM read-only intent primaire + secondaires | Pose (e79d734), gate orchestration pipeline |
 | `llm_gateway.py` | Parseur JSON robuste (strip fences, balanced prefix, truncated repair) partage par tous les chemins LLM | Pose (eea74e7) |
 | `recent_reality.py` | Compteurs `planned / confirmed / claimed / missed_streak` semaine | Injecte dans briefing matin (910f47a) — empeche confabulation de decompte hebdo |
+| `coach_reading_digest.py` | Contexte pre-digere (faits + lens Haiku JSON `sens_du_jour / angle / ne_pas_faire`) | Pose (12b4bf8). Injecte dans briefing matin et dans `decide()` quand `primary_intent in {plan_lookup, execution_report, availability_constraint}`. Remplace le bloc compteurs bruts par une lecture offplan-aware. Fallback gracieux sur `recent_reality` si le digest foire. |
 
 ## Ce que le LLM recoit
 
@@ -184,7 +185,7 @@ Oui :
 - `turn_primary_intent` + `turn_secondary_intents` depuis le planner (pour router la prompt policy et le budget de tools dans `llm.decide()`)
 - contexte `availability` (week_scope / no_candidate) injecte si `primary_intent in {availability_constraint, plan_mutation}`
 - contexte `adaptation` candidate injecte si `turn_plan.has_plan_mutation` et une adaptation deterministe existe
-- dans le briefing matin : `recent_reality` compteurs (planned/confirmed/claimed/missed_streak) pour empecher la confabulation de decompte hebdo
+- dans le briefing matin ET dans `decide()` pour `plan_lookup / execution_report / availability_constraint` : `coach_reading_digest` (faits offplan-aware + lens pre-pass `sens_du_jour / angle / ne_pas_faire`). Ne recoit PAS le digest pour les intents mutation (leur prompt a deja son grounding)
 
 Non :
 - tout l'historique brut
@@ -195,7 +196,7 @@ Non :
 
 ## Trous restants
 
-1. **Digest hebdo** — manque un digest canonique de semaine pour eviter de recomposer transcript + activites + events a plusieurs endroits
+1. ~~**Digest hebdo**~~ — pose le 19 avril (`coach_reading_digest.py`, 12b4bf8) : faits offplan-aware + lens pre-pass, injecte briefing + `decide()` sur intents lookup/report/availability. A observer : qualite du lens Haiku sur semaine longue (les 3 champs coherents avec les faits ?).
 2. **Referents** — a dogfooder : est-ce que `30 min`, `celle de demain`, `la piscine` restent ambigus ?
 3. **Tools** — garder bornes, ne pas exposer trop de catalogue avant d'avoir stabilise les besoins reels
 4. **Claims temporels** — observer si d'autres claims meritent la meme approche que les claims d'activite
