@@ -20,6 +20,7 @@ from fitmas.calibration_needs import (
     is_standalone_calibration_answer,
     should_apply_calibration_resolution,
 )
+from fitmas.coach_reading_digest import build_coach_reading_digest, render_digest_for_prompt
 from fitmas.coach_state_bundle import build_coach_state_bundle
 from fitmas.conversation_context import (
     activity_claim_summary_for_prompt,
@@ -688,6 +689,13 @@ def run_conversation_turn(
                     "next_week": coach_bundle.next_week,
                     "coach_reading": coach_bundle.coach_reading,
                 },
+                "coach_reading_digest_text": _maybe_build_coach_reading_digest_text(
+                    db,
+                    user=user,
+                    today=conversation_context.temporal_resolution.local_date,
+                    recent_reality_window=coach_bundle.recent_reality,
+                    turn_plan=turn_plan,
+                ),
             },
             remembered_facts=state.active_facts,
             time_context=conversation_context.time_context,
@@ -1193,3 +1201,40 @@ def _selected_facts_for_prompt(conversation_context, active_facts: list[dict]) -
         if fact not in selected:
             selected.append(fact)
     return selected[:6]
+
+
+_DIGEST_INTENTS = frozenset({"plan_lookup", "execution_report", "availability_constraint"})
+
+
+def _maybe_build_coach_reading_digest_text(
+    db,
+    *,
+    user,
+    today,
+    recent_reality_window,
+    turn_plan,
+) -> str | None:
+    """Build a coach-reading digest when the turn intent calls for it.
+
+    Gated on the turn planner's primary_intent so we don't spend a second LLM
+    call on trivial acks or pure mutations (the mutation prompt already has
+    plenty of grounding). Degrades silently on any failure: None -> the
+    immediate layer just skips the block."""
+    primary_intent = getattr(turn_plan, "primary_intent", None) if turn_plan is not None else None
+    if primary_intent not in _DIGEST_INTENTS:
+        return None
+    try:
+        digest = build_coach_reading_digest(
+            db,
+            user,
+            today=today,
+            recent_reality=recent_reality_window,
+        )
+    except Exception:
+        logger.warning("decide: failed to build coach reading digest", exc_info=True)
+        return None
+    try:
+        return render_digest_for_prompt(digest)
+    except Exception:
+        logger.warning("decide: failed to render coach reading digest", exc_info=True)
+        return None

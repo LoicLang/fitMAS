@@ -28,6 +28,7 @@ from fitmas.activity_helpers import (
     claimed_activities_on_local_date as _claimed_activities_on_local_date,
 )
 from fitmas.calibration_needs import CalibrationNeedType, looks_like_clarification_message
+from fitmas.coach_reading_digest import build_coach_reading_digest
 from fitmas.coach_state_bundle import build_coach_state_bundle
 from fitmas.coach_messages import CoachDraft
 from fitmas.db import SessionLocal
@@ -142,6 +143,18 @@ def morning_briefing() -> CoachDraft | None:
             logger.warning("Morning briefing: failed to build recent reality window", exc_info=True)
             recent_reality = None
 
+        # Pre-digested coach context: facts (deterministic) + lens (LLM pre-pass).
+        # The lens degrades gracefully to None on LLM failure — facts still ship.
+        try:
+            digest = build_coach_reading_digest(
+                db, user,
+                today=local_now.date(),
+                recent_reality=recent_reality,
+            )
+        except Exception:
+            logger.warning("Morning briefing: failed to build coach reading digest", exc_info=True)
+            digest = None
+
         # Build prompt via BriefingRole
         system, prompt = build_briefing_prompt(
             user=user,
@@ -156,6 +169,7 @@ def morning_briefing() -> CoachDraft | None:
             sport_knowledge=load_sport_knowledge({today_session.sport_type}, max_tokens=500),
             recent_proactive_context=_recent_proactive_context(db, user, limit=2),
             recent_reality=recent_reality,
+            digest=digest,
         )
 
         llm_msg = _llm_generate(system, prompt)

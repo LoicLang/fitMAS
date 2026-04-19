@@ -33,6 +33,7 @@ from fitmas.calibration_needs import (
 )
 from fitmas.calibration_status import build_calibration_status
 from fitmas.coach_messages import CoachDraft
+from fitmas.coach_reading_digest import CoachReadingDigest, render_digest_for_prompt
 from fitmas.execution_clarification import build_execution_clarification
 from fitmas.execution_evidence import classify_execution_evidence
 from fitmas.fact_memory import fact_is_current
@@ -205,6 +206,7 @@ def build_briefing_prompt(
     sport_knowledge: str,
     recent_proactive_context: str = "",
     recent_reality: RecentRealityWindow | None = None,
+    digest: CoachReadingDigest | None = None,
 ) -> tuple[str, str]:
     """Build system + user prompt for morning briefing. Returns (system, prompt)."""
     label = today_session.label or DAY_LABELS[time_context["day_key"]]
@@ -219,14 +221,28 @@ def build_briefing_prompt(
     )
     if user.coach_soul:
         system += f"\nAme du coach: {user.coach_soul}"
+    # Voice rules — banlist + positive rules. The briefing was tending to
+    # robotic dashboards ("tu as 3 seances prevues et 0 realisees… oublie la
+    # culpabilite… focalise-toi sommeil et assiette"). These rules exist to
+    # pull it back to a coach voice: reconnaitre ce qui est fait (y compris
+    # offplan), poser une question si un pourquoi manque, aligner le ton.
+    system += (
+        "\n\nVoix coach — regles :"
+        "\n- Reconnais ce qui a ete fait, y compris les sorties hors plan, avant tout autre point."
+        "\n- Si un point reste non resolu (une seance sautee plusieurs semaines, un silence anormal), pose UNE question courte, sans juger."
+        "\n- Aligne ton ton sur le dernier echange visible : ne repete pas un angle deja servi, ne re-propose pas ce que l'utilisateur a deja ignore."
+        "\n- Ne dis JAMAIS : \"zero realisees\" si des sorties offplan existent, \"oublie la culpabilite\", \"presque parfait\", des conseils sommeil/assiette sans signal explicite, des listings TSS/CTL/volume abstraits, des formules vides style \"calendrier et realite se sont perdus\"."
+        "\n- Pas de moralisation, pas de feliciter-pour-feliciter, pas de recitation des chiffres bruts."
+    )
     # Anti-hallucination rule — unconditional, defense in depth. Applies even
     # when recent_reality isn't supplied (legacy callers) so the LLM never
     # fabricates a weekly count.
     system += (
         "\n\nQuand tu mentionnes un decompte de la semaine (seances faites, volume, "
-        "regularite, streak), utilise EXACTEMENT les chiffres du bloc \"Execution reelle "
-        "semaine\" du contexte. N'invente jamais un comptage hebdomadaire: si le bloc est "
-        "absent ou n'a pas l'info, reste qualitatif (ex: \"cette semaine\") sans citer de nombre."
+        "regularite, streak), utilise EXACTEMENT les chiffres du bloc \"Lecture de la "
+        "semaine\" ou \"Execution reelle semaine\" du contexte. N'invente jamais un "
+        "comptage hebdomadaire: si le bloc est absent ou n'a pas l'info, reste qualitatif "
+        "(ex: \"cette semaine\") sans citer de nombre."
     )
     if signals_block:
         system += (
@@ -259,7 +275,9 @@ def build_briefing_prompt(
         f"Note: {(day.session_note if day else today_session.session_note) or ''}"
         f"{yesterday_context}"
     )
-    if recent_reality is not None:
+    if digest is not None:
+        prompt += "\n\n" + render_digest_for_prompt(digest)
+    elif recent_reality is not None:
         prompt += (
             "\n\nExecution reelle semaine (7 jours glissants, verite terrain):\n"
             f"- {recent_reality.planned_sessions_7d} seances planifiees\n"

@@ -145,6 +145,7 @@ def build_immediate_layer(
     temporal_summary: str | None = None,
     activity_claim_summary: str | None = None,
     signal_summary: str | None = None,
+    coach_reading_text: str | None = None,
 ) -> PromptLayer:
     """Layer 3: Immediate context — changes every turn."""
     parts = [
@@ -160,6 +161,8 @@ def build_immediate_layer(
         parts.append(activity_claim_summary)
     if signal_summary:
         parts.append(signal_summary)
+    if coach_reading_text:
+        parts.append(coach_reading_text)
 
     return PromptLayer(
         level=3,
@@ -243,6 +246,7 @@ def assemble_layered_prompt(
         temporal_summary=temporal_summary,
         activity_claim_summary=activity_claim_summary,
         signal_summary=signal_summary,
+        coach_reading_text=ctx.get("coach_reading_digest_text"),
     ))
     prompt.add(build_memory_layer(
         selected_facts=selected_facts,
