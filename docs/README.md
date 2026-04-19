@@ -24,6 +24,7 @@ read_when:
 | `SOUL.md` | Voix FitMAS, heartbeat, messagerie, ton |
 | `RUNBOOK.md` | Commandes, flux a tester, debug, deploiement, mapping du code |
 | `TESTER-GUIDE.md` | Guide d'onboarding pour les testeurs alpha |
+| `CONVERSATION-AUDIT-2026-04-17.md` | Audit architecture conversation + contexte post-passe de fiabilite |
 
 ## Hierarchie de verite
 

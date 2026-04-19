@@ -70,7 +70,7 @@ Les tools restent read-only. Les orchestrateurs possedent les writes.
 - Les effets de bord vivent dans les orchestrateurs : API, bot, scheduler
 - Les futures briques de sophistication doivent s'appuyer sur une vérité planning stable
 
-## État réel du code — 6 avril 2026
+## État réel du code — 17 avril 2026
 
 **Déployé sur Fly.io : https://the deployed app/**
 
@@ -151,6 +151,17 @@ Les tools restent read-only. Les orchestrateurs possedent les writes.
   - `fitmas/tools/` pour les modules runtime tools
   - `fitmas/skills/heartbeat/` pour le cluster heartbeat
   - wrappers de compat gardés aux anciens chemins pour éviter un big bang d'imports
+
+### Durcissement conversation — 15-17 avril 2026
+
+- **Turn planner LLM** (`conversation_turn_planner.py`, e79d734) : classifieur read-only (Haiku) execute avant les side-effects du pipeline conversation. Sort un `ConversationTurnPlan` avec `primary_intent`, `secondary_intents`, `has_plan_mutation`. Le pipeline arbitre `plan_mutation_request = heuristic OR llm` — aucun des deux ne peut silencieusement supprimer l'intention (failles A/C closures).
+- **LLM gateway unifie** (`llm_gateway.py`, eea74e7) : toutes les routes LLM passent par un client partage et un parseur JSON robuste (strip fences, balanced prefix, truncated repair). Les queues tronquees et le prose residuel ne droppent plus les payloads valides.
+- **Force LLM arbitrage sur mutation** (af54eda, faille B) : quand l'heuristique flagge `plan_mutation`, le contexte availability / adaptation / health est route au LLM au lieu d'etre applique en early-exit deterministe. Les clarifications execution et contestations sont aussi skippees.
+- **Block_reason typed** (199a40e) : `PlanMutationService` expose `PlanBlockedMutationEvent.block_reason`. La reply utilisateur est derivee du code (`protected_recovery_target`, `same_sport_proximity`, `occupied_training_target`), jamais improvisee par le LLM. Chaque blocage loggue un `mutation_blocked` structure.
+- **Observabilite LLM failures** (e81c3da, faille D) : `_classify_llm_exception` retourne des labels stables (`timeout / rate_limit / bad_request / auth / connection / api_other / json_parse / unknown`). Le pipeline distingue `llm=unavailable` (crash) de `llm=False` (classifieur propre) pour le WARNING de divergence heuristique.
+- **Protected recovery guards** (b39c712, 216bf11, 605eb5f) : `mutation_hooks` etend `protected_recovery_target` aux mutations `replace / update / lighten / move` et autorise `swap_sessions` meme si la seance de recuperation est impliquee (c'est un satellite).
+- **Briefing grounding** (910f47a) : le prompt de briefing matin recoit des compteurs execution 7 jours (`planned / confirmed / claimed / missed_streak`). Le systeme prompt interdit d'inventer un decompte hebdo. Empeche la confabulation "tu as sorti 4 seances cette semaine" quand une seule a reellement eu lieu.
+- **Streak signal propre** (a59a6da) : `signals.py` filtre les activites non-substantives (< 15 min) avant de calculer un streak — une marche courte ne deverrouille plus le signal `streak`.
 
 ### Ce qui n'existe pas encore
 
@@ -441,11 +452,17 @@ StravaConnection
 ### Flux message entrant
 1. User envoie un message (Telegram ou webapp)
 2. Backend persiste CoachMessage(role=user)
-3. Prompt assemblé : âme du coach + plan courant + derniers messages + facts + contexte temporel exact
-4. LLM (Haiku) propose une MutationDecision ou no-op
-5. `mutations.py` applique le changement si besoin
-6. Backend persiste CoachMessage(role=agent)
-7. LLM extrait des facts stables à mémoriser
+3. Interpreter : `user_indication_llm` produit un `UserIndication` structure
+4. Turn planner : `conversation_turn_planner` classe `primary_intent` + `secondary_intents` (Haiku, read-only)
+5. Gates deterministes : confirmation pending, low-signal, calibration, clarification — skippes si `plan_mutation_request == true`
+6. Grounding : claims activite / non-completion, contexte adaptation / availability routes au LLM selon le turn plan
+7. `llm.decide()` : Haiku avec prompt layers + tool budget route par `primary_intent` — sort une `MutationDecision`
+8. Validation : `mutation_permissions.assess_mutation_impact` → confirmation pending si requires_confirmation
+9. `PlanMutationService` : pre-hooks coherence → writer → events (ou `blocked_events` avec `block_reason` typed)
+10. Reply finale derivee de l'event applique ou du `block_reason`
+11. Persistance `CoachMessage(role=agent)` + `conversation_turns`
+12. Extraction facts stables a memoriser, promotion patterns
+
 
 ### Contexte temporel partagé
 

@@ -36,8 +36,19 @@ Capacites metier deterministes
 reality / planning / readiness / analysis / drafting
         |
         v
-LLM si utile
+Turn planner (LLM read-only, conversation seulement)
+conversation_turn_planner.plan_conversation_turn()
+primary_intent + secondary_intents + has_plan_mutation
+        |
+        v
+Arbitrage heuristique OR LLM
+plan_mutation_request = heuristic OR llm
+divergence logguee, llm=unavailable toleree
+        |
+        v
+LLM decide()
 comprehension, proposition, formulation
+tool budget route par primary_intent
         |
         v
 Validation backend
@@ -47,7 +58,10 @@ permissions, hooks, confirmations, coherence guards
 PlanMutationService
         |
         v
-DB + plan_mutation_events
+DB + plan_mutation_events (+ blocked_events typed)
+        |
+        v
+Reply derivee de l'event applique ou block_reason typed
 ```
 
 ## Frontieres
@@ -193,22 +207,43 @@ Regle :
 
 ### Conversation
 
-- `conversation_pipeline.py` : tour de conversation
+- `conversation_pipeline.py` : tour de conversation, orchestrateur principal
 - `conversation_context.py` : grounding temps / claims / activites
-- `conversation_turn_planner.py` : routeur LLM read-only pour intention primaire / intentions secondaires
+- `conversation_turn_planner.py` : classifieur LLM read-only pour intention primaire / intentions secondaires (e79d734)
 - `conversation_prompting.py` : politique de prompt
 - `llm_prompt_builder.py` / `prompt_layers.py` : prompt structure
+- `llm_gateway.py` : client LLM + parseur JSON robuste partage (eea74e7)
 - `user_indications.py` / `user_indication_llm.py` : message user -> indication structuree
+- `mutation_hooks.py` : pre-hooks de coherence avec `block_reason` typed
 
 Regle de routage :
 
 - pour un message non trivial ou compose, le LLM arbitre l'intention principale
 - le routeur de tour ne fait aucun write; il ne sert qu'a proteger les gates du pipeline
-- l'intention du routeur peut surclasser la classification deterministe pour choisir la prompt policy et le budget de tools
+- l'intention du routeur peut surclasser la classification deterministe pour choisir la prompt policy et le budget de tools (`_TURN_INTENT_TO_PROMPT_INTENT` dans `llm.py`)
 - les extracteurs deterministes ajoutent du contexte, mais ne doivent pas produire de reply finale quand une intention planning explicite est presente
 - les replies deterministes de disponibilite large / absence de candidat sont du grounding LLM quand le routeur reconnait une contrainte de planning, avec fallback deterministe si le LLM echoue
 - les signaux sante restent prioritaires comme faits de contexte, mais une demande composee sante + mutation ne doit pas lancer d'adaptation sante automatique avant l'arbitrage LLM
 - aucun side-effect planning ne doit arriver avant l'arbitrage du tour si le message contient une demande de mutation (`swap`, `echange`, `decale`, `deplace`, `remplace`, `change`)
+- `plan_mutation_request = heuristic OR llm` — divergence → WARNING (`pipeline.intent_divergence`), `llm=unavailable` accepte sans downgrade
+
+### Feedback bloquant mutations
+
+Quand un pre-hook bloque une mutation, `PlanMutationService` expose un `PlanBlockedMutationEvent` avec un `block_reason` typed (`protected_recovery_target`, `same_sport_proximity`, `occupied_training_target`).
+
+Regle :
+- la reply utilisateur est derivee du `block_reason` via un dict `_BLOCK_REASON_REPLIES` — jamais improvisee par le LLM
+- chaque blocage emit `logger.info("mutation_blocked ...")` pour audit
+- ajouter une nouvelle raison implique d'ajouter la reply associee
+
+### Failles conversation documentees
+
+| Faille | Closure | Ref |
+|--------|---------|-----|
+| A divergence heuristique/LLM | OR des deux + WARNING structure | b78db28 |
+| B LLM ignore mutation heuristique | Force routage LLM pour availability/adaptation/health si heuristic=True | af54eda |
+| C pas de classifieur intent | conversation_turn_planner dedie | e79d734 |
+| D erreurs LLM opaques | `_classify_llm_exception` → labels stables | e81c3da |
 
 ### Planning
 

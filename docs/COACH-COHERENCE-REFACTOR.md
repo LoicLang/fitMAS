@@ -241,6 +241,24 @@ Regle :
 
 ## Statut actuel
 
+### Mise a jour du 17 avril 2026 — durcissement conversation
+
+Une passe dediee a la fiabilite conversation a ete close :
+
+- **Intent routing arbitrage** : `plan_mutation_request = heuristic OR llm_turn_planner` (failles A + C closures). Divergence → WARNING structure, `llm=unavailable` accepte sans downgrade (e79d734, b78db28).
+- **LLM force arbitrage sur mutation** (faille B, af54eda) : les early-exits deterministes (availability week_scope / no_candidate, adaptation candidate, health auto-apply, execution clarification, execution contestation) sont gatees sur `plan_mutation_request`. Un message compose `mutation + claim` ne peut plus etre silencieusement swallowe par un extracteur deterministe.
+- **LLM failure modes types** (faille D, e81c3da) : `_classify_llm_exception` produit des labels stables pour triage operationnel.
+- **JSON parsing robuste** (eea74e7) : tous les chemins LLM passent par `llm_gateway._robust_json_loads` — les queues tronquees et le prose residuel ne droppent plus de payloads.
+- **Protected recovery guards** (b39c712, 216bf11, 605eb5f) : extension `protected_recovery_target` aux mutations `replace / update / lighten / move` + autorisation `swap` impliquant une recuperation (c'est un satellite).
+- **Block_reason typed propage a l'utilisateur** (199a40e) : le pre-hook ne produit plus une reply generique, mais une raison lisible (`protected_recovery_target`, `same_sport_proximity`, `occupied_training_target`).
+- **Briefing grounding** (910f47a) : compteurs execution 7 jours injectes dans le briefing matin — ferme un trou de confabulation de decompte hebdo.
+- **Streak signal propre** (a59a6da) : activites < 15 min filtrees avant computation streak.
+
+Invariants consolides :
+- aucun side-effect planning ne peut arriver avant l'arbitrage du tour quand une mutation est demandee
+- la reply de mutation bloquee est derivee du `block_reason` typed, jamais improvisee
+- le briefing matin ne peut plus citer un decompte hebdo en l'absence de compteurs reels
+
 ### Audit du 13 avril 2026
 
 Verdict franc :
