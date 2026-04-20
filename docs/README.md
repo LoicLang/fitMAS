@@ -25,6 +25,7 @@ read_when:
 | `RUNBOOK.md` | Commandes, flux a tester, debug, deploiement, mapping du code |
 | `TESTER-GUIDE.md` | Guide d'onboarding pour les testeurs alpha |
 | `CONVERSATION-AUDIT-2026-04-17.md` | Audit architecture conversation + contexte post-passe de fiabilite |
+| `COACH-AUTONOMY-REFACTOR.md` | Refonte coach : suppression court-circuits, tools de lecture brute, skill replan validé, posture "DÉCIDE" |
 
 ## Hierarchie de verite
 
@@ -66,6 +67,7 @@ Pour un nouvel agent :
 | Comment evoluer la memoire sans fourre-tout ? | `MEMORY-V2.md` |
 | Comment brancher des tools runtime ? | `RUNTIME-TOOLS.md` |
 | Comment l'app doit se comporter ? | `APP-UX.md` |
+| Pourquoi le coach hallucine, agrege au lieu de detailler, demande au lieu de decider ? | `COACH-AUTONOMY-REFACTOR.md` |
 
 ## Regles
 
