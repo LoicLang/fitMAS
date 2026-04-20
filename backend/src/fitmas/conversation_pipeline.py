@@ -1117,14 +1117,11 @@ def _should_route_availability_context_to_llm(
     week_scope_reply: str | None,
     no_candidate_reply: str | None,
 ) -> bool:
-    if week_scope_reply is None and no_candidate_reply is None:
-        return False
-    if turn_plan is None:
-        return False
-    primary_intent = str(getattr(turn_plan, "primary_intent", "") or "")
-    return primary_intent in {"availability_constraint", "plan_mutation"} or bool(
-        getattr(turn_plan, "has_plan_mutation", False)
-    )
+    # Chantier 1 (autonomy refactor): any availability grounding must reach
+    # decide() so the coach can arbitrate the response itself instead of
+    # closing the conversation with a templated "rien a bouger". The
+    # turn_plan signal is no longer used as a gate.
+    return week_scope_reply is not None or no_candidate_reply is not None
 
 
 def _should_route_adaptation_context_to_llm(
@@ -1133,27 +1130,11 @@ def _should_route_adaptation_context_to_llm(
     *,
     plan_mutation_request: bool = False,
 ) -> bool:
-    """Decide whether a deterministic adaptation candidate must be passed
-    to `decide()` as context (True) or applied directly (False).
-
-    Faille B closure: when the deterministic heuristic already flagged
-    the message as a plan mutation request (e.g. the user said "decale"
-    or "deplace"), the LLM must arbitrate even if the turn planner
-    returned None (classifier unavailable) or misclassified the intent.
-    Otherwise a deterministic adaptation candidate computed from a
-    life-change pattern would be applied silently, overriding the user's
-    explicit mutation phrasing.
-    """
-    if adaptation is None:
-        return False
-    if plan_mutation_request:
-        return True
-    if turn_plan is None:
-        return False
-    primary_intent = str(getattr(turn_plan, "primary_intent", "") or "")
-    return primary_intent in {"availability_constraint", "plan_mutation"} or bool(
-        getattr(turn_plan, "has_plan_mutation", False)
-    )
+    # Chantier 1 (autonomy refactor): any deterministic adaptation candidate
+    # is passed to decide() as context. The LLM arbitrates whether to apply
+    # it, modify it, or override it. Direct application without LLM
+    # arbitration is no longer allowed in conversation turns.
+    return adaptation is not None
 
 
 def _adaptation_context_for_prompt(adaptation) -> str | None:

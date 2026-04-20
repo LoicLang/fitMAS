@@ -585,10 +585,10 @@ class FitMASCoreFlowsTest(unittest.TestCase):
         original_decide = api_messages.decide
         original_extract_facts = api_messages.extract_facts
         try:
-            def should_not_run(*args, **kwargs):
-                raise AssertionError("LLM decide should not run for deterministic unavailability replans")
-
-            api_messages.decide = should_not_run
+            # Chantier 1 (autonomy refactor): decide() must run on every
+            # conversational turn. When the LLM returns None the deterministic
+            # adaptation falls back to apply, so the data outcome is unchanged.
+            api_messages.decide = lambda *args, **kwargs: None
             api_messages.extract_facts = lambda *args, **kwargs: []
             result = self.client.post("/api/v0/messages", json={"text": "Merde imprévu je peux pas ce soir"}).json()
         finally:
@@ -617,10 +617,10 @@ class FitMASCoreFlowsTest(unittest.TestCase):
         original_decide = api_messages.decide
         original_extract_facts = api_messages.extract_facts
         try:
-            def should_not_run(*args, **kwargs):
-                raise AssertionError("LLM decide should not run for deterministic fatigue replans")
-
-            api_messages.decide = should_not_run
+            # Chantier 1 (autonomy refactor): decide() must run on every
+            # conversational turn. With the LLM returning None the deterministic
+            # fatigue adaptation falls back to apply unchanged.
+            api_messages.decide = lambda *args, **kwargs: None
             api_messages.extract_facts = lambda *args, **kwargs: []
             result = self.client.post("/api/v0/messages", json={"text": "Je suis rincé aujourd'hui, jambes lourdes"}).json()
         finally:
@@ -754,10 +754,10 @@ class FitMASCoreFlowsTest(unittest.TestCase):
         original_decide = api_messages.decide
         original_extract_facts = api_messages.extract_facts
         try:
-            def should_not_run(*args, **kwargs):
-                raise AssertionError("LLM decide should not run for grounded future availability replans")
-
-            api_messages.decide = should_not_run
+            # Chantier 1 (autonomy refactor): decide() must run on every
+            # conversational turn. The deterministic future-availability
+            # adaptation falls back when the LLM returns None.
+            api_messages.decide = lambda *args, **kwargs: None
             api_messages.extract_facts = lambda *args, **kwargs: []
             result = self.client.post("/api/v0/messages", json={"text": "Je ne suis pas dispo demain soir"}).json()
         finally:
