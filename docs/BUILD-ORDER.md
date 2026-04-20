@@ -49,6 +49,14 @@ Suite de la même conversation Telegram, le matin du 20 avril, deux nouvelles pa
 
 **Conséquence sur le sequencing** : la décision "dogfood guidé d'abord" est consommée. Le dogfood a livré son verdict. Le prochain chantier canonique devient `COACH-AUTONOMY-REFACTOR.md` — il remplace "dogfood guidé" comme étape 0. Le doc a été enrichi des turns 5-7 dans le golden case, et un nouveau **Chantier 1bis "Anti-mensonge dire = faire"** a été ajouté entre la suppression des court-circuits et l'ajout des tools de lecture.
 
+### Chantier 0 du refactor — fait
+
+Le Chantier 0 (pré-requis) est livré le 20 avril 2026 :
+- Golden case gelé comme smoke scenario : `./scripts/smoke-real-conversations --scenario golden_case_autonomy`
+- Inventaire system prompts + audit court-circuits → `docs/COACH-AUTONOMY-AUDIT.md`
+
+Prochain pas : Chantier 1 (suppression court-circuits non-transactionnels).
+
 ### Vérité repo
 
 Le repo est deja plus avance que plusieurs TODO historiques.

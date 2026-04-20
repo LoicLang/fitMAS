@@ -141,10 +141,10 @@ User : "Mercredi"
 
 ## Plan d'attaque — 7 chantiers ordonnés
 
-### Chantier 0 — Pré-requis (1h)
-- Geler le golden case ci-dessus comme test de bout en bout (smoke script)
-- Localiser tous les system prompts en jeu (heartbeat roles, conversation prompt builder, indication parser)
-- Audit exhaustif des court-circuits dans `api_messages.py` (lister chaque template f-string qui shortcuit le LLM)
+### Chantier 0 — Pré-requis ✅ (fait le 20 avril 2026)
+- ✅ Golden case gelé comme smoke scenario : `scripts/smoke-real-conversations --scenario golden_case_autonomy` rejoue les 7 tours
+- ✅ Inventaire des system prompts → `docs/COACH-AUTONOMY-AUDIT.md` § 1 (11 prompts en jeu)
+- ✅ Audit exhaustif des court-circuits → `docs/COACH-AUTONOMY-AUDIT.md` § 2 (9 court-circuits, dont 4 transactionnels à garder, 5 non-transactionnels à réécrire, + 1 cas hybride `_build_user_message`)
 
 ### Chantier 1 — Suppression court-circuits non-transactionnels (2-3h)
 - Garder uniquement les vraiment transactionnels : ack mutation confirmée, oui/non binaire
