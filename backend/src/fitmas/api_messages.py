@@ -282,21 +282,30 @@ def _looks_like_plan_mutation_request(text: str) -> bool:
     return _looks_like_swap_request(text) or any(marker in normalized for marker in mutation_markers)
 
 
-def _maybe_low_signal_reply(text: str, *, has_open_calibration_need: bool) -> str | None:
+def _maybe_low_signal_label(text: str, *, has_open_calibration_need: bool) -> str | None:
+    """Classify a user message as a low-signal conversational filler so the
+    LLM can adapt its tone (sober ack, no phantom action, no closing
+    statement). Returns one of "ack" / "greeting" / "motivation" or None.
+
+    Chantier 1 (autonomy refactor): this used to short-circuit the LLM with
+    a templated reply ("Bien recu." / "Salut." / "On garde cette energie,
+    rien a changer pour l'instant"). The motivation case in particular
+    asserted a phantom decision ("rien a changer") without arbitration. We
+    now expose only the label so decide() can arbitrate the response."""
     if has_open_calibration_need:
         return None
     # Defense-in-depth: if the message carries any rich signal marker, we
-    # refuse to short-circuit even when the normalized text would otherwise
-    # match an ACK / greeting / motivation phrase. The LLM decide() takes over.
+    # refuse to label as low-signal even when the normalized text would
+    # otherwise match an ACK / greeting / motivation phrase.
     if _has_rich_signal_marker(text):
         return None
     normalized = _normalize_text(text)
     if normalized in _ACK_TEXTS:
-        return "Bien recu."
+        return "ack"
     if normalized in _GREETING_TEXTS:
-        return "Salut."
+        return "greeting"
     if normalized in _MOTIVATION_TEXTS:
-        return "Bien. On garde cette energie, rien a changer pour l'instant."
+        return "motivation"
     return None
 
 

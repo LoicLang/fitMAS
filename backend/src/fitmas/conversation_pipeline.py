@@ -151,21 +151,10 @@ def run_conversation_turn(
             )
 
     open_calibration_need = find_open_calibration_need(state.active_memory_rows)
-    low_signal_reply = api_messages._maybe_low_signal_reply(
+    low_signal_label = api_messages._maybe_low_signal_label(
         payload.text,
         has_open_calibration_need=open_calibration_need is not None,
     )
-    if low_signal_reply is not None:
-        return _reply_and_record_turn(
-            db=db,
-            user_id=user.id,
-            user_text=payload.text,
-            reply_text=low_signal_reply,
-            extraction=Extraction(confidence=0.95),
-            response_mode="low_signal",
-            turn_context={"low_signal": True},
-            memory_writes=turn_memory_writes,
-        )
 
     calibration_resolution = None
     if open_calibration_need is not None:
@@ -607,6 +596,10 @@ def run_conversation_turn(
     grounding_prompt_context = _append_prompt_section(
         grounding_prompt_context,
         _execution_contestation_context_for_prompt(execution_contestation_reply),
+    )
+    grounding_prompt_context = _append_prompt_section(
+        grounding_prompt_context,
+        _low_signal_context_for_prompt(low_signal_label),
     )
     decision_temporal_summary = _append_prompt_section(
         temporal_summary_for_prompt(conversation_context),
@@ -1162,6 +1155,32 @@ def _availability_context_for_prompt(*, week_scope_reply: str | None, no_candida
         "- utilise ce grounding comme verite de contexte, mais formule toi-meme la reponse finale\n"
         "- si aucune mutation sure n'est applicable, garde mutation_type=no_change et explique sobrement"
     )
+
+
+_LOW_SIGNAL_LABEL_HINTS = {
+    "ack": (
+        "Le message utilisateur est un simple accuse de reception (ex. 'ok', 'merci'). "
+        "Reponds sobrement, n'invente pas de decision a annoncer, n'affirme pas un etat du plan."
+    ),
+    "greeting": (
+        "Le message utilisateur est une salutation pure (ex. 'salut', 'hello'). "
+        "Reponds brievement et naturellement, sans ouvrir un sujet planning."
+    ),
+    "motivation": (
+        "Le message utilisateur est une expression de motivation pure (ex. 'allez', 'go'). "
+        "Reconnais l'energie sans affirmer 'rien a changer' ou autre etat du plan: "
+        "tu n'as pas arbitre de decision sur ce tour."
+    ),
+}
+
+
+def _low_signal_context_for_prompt(label: str | None) -> str | None:
+    if label is None:
+        return None
+    hint = _LOW_SIGNAL_LABEL_HINTS.get(label)
+    if hint is None:
+        return None
+    return f"Contexte tour low-signal:\n- {hint}"
 
 
 def _execution_contestation_context_for_prompt(reply: str | None) -> str | None:

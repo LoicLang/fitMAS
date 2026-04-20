@@ -1064,19 +1064,31 @@ class FitMASCoreFlowsTest(unittest.TestCase):
 
         self.assertEqual(captured["conversation_history"], [])
 
-    def test_low_signal_ack_skips_llm_and_stays_brief(self) -> None:
+    def test_low_signal_ack_routes_label_context_to_llm(self) -> None:
+        """Chantier 1 (autonomy refactor): low-signal acks no longer
+        short-circuit decide() with a templated reply. The classifier
+        produces a label that is injected as prompt context, and the LLM
+        arbitrates a short, plain answer.
+        """
         self._create_plan_for_today()
         original_decide = api_messages.decide
+        captured: dict[str, str] = {}
         try:
-            def should_not_run(*args, **kwargs):
-                raise AssertionError("LLM decide should not run for low-signal ack")
+            def fake_decide(*args, **kwargs):
+                captured["temporal_summary"] = kwargs.get("temporal_summary") or ""
+                return MutationDecision(
+                    mutation_type="no_change",
+                    rationale="Ack pur, pas de mutation.",
+                    fitmas_message="Bien recu.",
+                )
 
-            api_messages.decide = should_not_run
+            api_messages.decide = fake_decide
             result = self.client.post("/api/v0/messages", json={"text": "ok merci"}).json()
         finally:
             api_messages.decide = original_decide
 
         self.assertEqual(result["assistant_message"]["text"], "Bien recu.")
+        self.assertIn("low-signal", captured["temporal_summary"])
 
     def test_week_scope_constraint_routes_grounded_context_to_llm(self) -> None:
         self._create_plan_for_today()
@@ -1708,15 +1720,16 @@ class FitMASCoreFlowsTest(unittest.TestCase):
             "Je note le creneau et je traite la demande de swap.",
         )
 
-    def test_low_signal_fast_path_refuses_rich_signal(self) -> None:
-        """The low-signal fast-path is defense-in-depth: if any rich signal
-        marker appears in the message, it must refuse to short-circuit even
-        when the normalized text would otherwise match an ACK phrase.
+    def test_low_signal_label_refuses_rich_signal(self) -> None:
+        """The low-signal classifier is defense-in-depth: if any rich signal
+        marker appears in the message, it must refuse to label as low-signal
+        so decide() arbitrates the response (Chantier 1 autonomy refactor:
+        the classifier no longer short-circuits the LLM).
         """
-        # Baseline: pure ack still replies "Bien recu."
+        # Baseline: pure ack is labelled "ack".
         self.assertEqual(
-            api_messages._maybe_low_signal_reply("merci", has_open_calibration_need=False),
-            "Bien recu.",
+            api_messages._maybe_low_signal_label("merci", has_open_calibration_need=False),
+            "ack",
         )
         # Defense-in-depth: simulate a hypothetical compound where normalize
         # happens to equal an ACK phrase AND contains a rich marker.
@@ -1724,11 +1737,11 @@ class FitMASCoreFlowsTest(unittest.TestCase):
         try:
             api_messages._ACK_TEXTS = original_ack_texts | {"merci decale"}
             self.assertIsNone(
-                api_messages._maybe_low_signal_reply(
+                api_messages._maybe_low_signal_label(
                     "merci decale",
                     has_open_calibration_need=False,
                 ),
-                "Fast-path must refuse when a rich mutation marker is present",
+                "Classifier must refuse when a rich mutation marker is present",
             )
         finally:
             api_messages._ACK_TEXTS = original_ack_texts
