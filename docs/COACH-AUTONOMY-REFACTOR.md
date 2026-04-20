@@ -162,14 +162,15 @@ User : "Mercredi"
 - ✅ Tests : 23 unit tests sur claim_guard (verbes/négations/proposals/elision droite et typographique) + 2 integration tests sur le pipeline (tour "Mercredi" rewrite vs tour neutre passe-through). 440 tests passent au total
 - ⏳ Reste hors scope 1bis : forcer côté prompt le pattern "tool call mutation OU formulation non-affirmative". Couvert en partie par le Chantier 3 (rewrite postures `decide()` + `signal_check`)
 
-### Chantier 2 — Tools de lecture brute pour le coach (3-4h)
-- `get_plan_window(start_date, end_date)` → ScheduledSession futures avec sport/date/durée/status, JSON strict
-- `get_activities_detailed(days)` → activités brutes par sport+date+durée+id, pas un compteur
-- `get_user_constraints()` → contraintes actives (indications utilisateur avec valid_until)
-- `get_load_context()` → ATL/CTL/TSB courant, charge semaine, dernière séance dure
-- Tous read-only, JSON structuré strict (date ISO, id explicite, sport en string)
-- Pré-fetch en `ToolContext` quand le pipeline a déjà chargé les données, sinon appel via tool runtime
-- Test : sur "piscine fermée 2 semaines" le coach lit le plan via tool, ne hallucine plus
+### Chantier 2 — Tools de lecture brute pour le coach ✅ (fait le 20 avril 2026)
+- ✅ `get_plan_window` (existait déjà — ScheduledSession futures, JSON strict, ISO dates)
+- ✅ `get_activities_detailed` couvert par `get_recent_activities` existant (id/local_date/sport_type/title/duration_min/distance_m/avg_speed)
+- ✅ `get_user_constraints` créé : filtre `active_facts` par catégories (`availability`, `schedule`, `constraint`, `health`, `fatigue`), exclut inactifs et expirés, retourne id/key/value/urgency/expires_at ISO. Wired dans budgets `PLAN_NEGOTIATION` et `PLAN_LOOKUP` (routing.py + llm.py)
+- ✅ `get_load_context` enrichi avec ATL/CTL/TSB (snapshot via `compute_ctl_atl_tsb`) + label `frais`/`neutre`/`fatigue` (TSB > 5 / -10 ≤ TSB ≤ 5 / TSB < -10). TSS estimé à la volée si absent des activités.
+- ✅ Pré-fetch via `ToolContext.scheduled_sessions` / `activities` / `active_facts` (déjà en place)
+- ✅ Routing : turn_planner intent `availability_constraint` → `PLAN_NEGOTIATION` → 5 tools dont `get_plan_window` + `get_user_constraints`. Le coach LLM reçoit donc plan futur + contraintes mémorisées sur "piscine fermée 2 semaines"
+- ✅ Tests : 3 nouveaux unit tests sur `get_load_context` ATL/CTL/TSB et `get_user_constraints` (filtrage actif/expiré + categories override). Tests routing et llm_tools mis à jour pour le budget enrichi. 443 tests passent
+- ⏳ Chantier 4 (mémoire des contraintes temporelles avec `valid_until`) — `expires_at` existe déjà sur `UserFact`/`WorkingMemoryEntry` et est respecté par `get_user_constraints` ; reste à connecter le LLM extracteur d'indications pour qu'il pose `expires_at` cohérent avec la durée de la contrainte
 
 ### Chantier 2bis — Heartbeat utilise les mêmes capacités (2h)
 - Brancher `coach_reading_digest` dans `weekly_review()` (actuellement non utilisé là)

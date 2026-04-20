@@ -72,7 +72,16 @@ Anti-mensonge "dire = faire", livré le 20 avril 2026 :
 - Couvre le cas hybride `_build_user_message` de `replan_from_life_change.py:474-507` au runtime : si la mutation downstream est appliquée, la phrase reste ; sinon elle est rewrite avant envoi Telegram/app
 - 440 tests passent (25 nouveaux : 23 unit tests sur claim_guard + 2 integration tests pipeline)
 
-Prochain pas : Chantier 2 (tools de lecture brute pour le coach) — `get_plan_window`, `get_activities_detailed`, `get_user_constraints`, `get_load_context`.
+### Chantier 2 du refactor — fait
+
+Tools de lecture brute pour le coach LLM, livré le 20 avril 2026. Scope recalibré : 3 des 4 tools du plan existaient déjà, le vrai gap était `get_user_constraints` (manquant) et l'enrichissement ATL/CTL/TSB de `get_load_context`.
+- ✅ `get_user_constraints` créé (`backend/src/fitmas/tools/registry.py`) : filtre `active_facts` par catégories (availability/schedule/constraint/health/fatigue), exclut inactifs et expirés via `fact_is_current`, retourne payload structuré JSON-strict
+- ✅ `get_load_context` enrichi avec `ctl`/`atl`/`tsb` + label `frais`/`neutre`/`fatigue` via `compute_ctl_atl_tsb` (TSS estimé à la volée si absent)
+- ✅ Routing budgets enrichis (`tools/routing.py` + `llm.py:_TURN_INTENT_TOOL_BUDGETS`) : `PLAN_NEGOTIATION` reçoit 5 tools dont `get_user_constraints` ; `PLAN_LOOKUP` reçoit 3 tools dont `get_user_constraints`. L'intent `availability_constraint` du turn_planner mappe sur PLAN_NEGOTIATION
+- ✅ Tests : 3 nouveaux unit tests + tests routing/llm_tools mis à jour. 443 tests passent
+- ⏳ Hors scope chantier 2 : que l'extracteur d'indications pose un `expires_at` cohérent avec la durée annoncée ("2 semaines", "demain", "ce mois") — couvert par chantier 4
+
+Prochain pas : Chantier 2bis (heartbeat utilise les mêmes capacités — brancher `coach_reading_digest` dans `weekly_review`).
 
 ### Vérité repo
 

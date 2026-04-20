@@ -107,7 +107,10 @@ class LLMToolsTest(unittest.TestCase):
 
         def fake_request_message(*, system, messages, model="claude-haiku-4-5-20251001", max_tokens=512, tools=None, tool_choice=None):
             self.assertIsNotNone(tools)
-            self.assertEqual([tool["name"] for tool in tools], ["get_today_context", "get_plan_window"])
+            self.assertEqual(
+                [tool["name"] for tool in tools],
+                ["get_today_context", "get_plan_window", "get_user_constraints"],
+            )
             prompts.append(messages[0]["content"] if isinstance(messages[0]["content"], str) else "")
             return SimpleNamespace(
                 stop_reason="end_turn",
@@ -150,7 +153,7 @@ class LLMToolsTest(unittest.TestCase):
         self.assertEqual(traces[0].response_stop_reason, "end_turn")
         self.assertFalse(traces[0].fallback_used)
         self.assertEqual(traces[0].context_policy, "plan_lookup_compact")
-        self.assertEqual(traces[0].tool_count_offered, 2)
+        self.assertEqual(traces[0].tool_count_offered, 3)
         self.assertGreaterEqual(traces[0].prompt_char_count, 1)
         self.assertNotIn("Repere legacy semaine courante", prompts[0])
         self.assertIn("Source de vérité planning conversationnelle", prompts[0])
@@ -198,7 +201,10 @@ class LLMToolsTest(unittest.TestCase):
 
         def fake_request_message(*, system, messages, model="claude-haiku-4-5-20251001", max_tokens=512, tools=None, tool_choice=None):
             self.assertIsNotNone(tools)
-            self.assertEqual([tool["name"] for tool in tools], ["get_today_context", "get_plan_window"])
+            self.assertEqual(
+                [tool["name"] for tool in tools],
+                ["get_today_context", "get_plan_window", "get_user_constraints"],
+            )
             return SimpleNamespace(
                 stop_reason="end_turn",
                 content=[
@@ -237,7 +243,7 @@ class LLMToolsTest(unittest.TestCase):
         self.assertEqual(len(traces), 1)
         self.assertTrue(traces[0].tool_offered)
         self.assertEqual(traces[0].context_policy, "plan_lookup_compact")
-        self.assertEqual(traces[0].tool_count_offered, 2)
+        self.assertEqual(traces[0].tool_count_offered, 3)
 
     def test_turn_plan_intent_overrides_keyword_tool_routing(self) -> None:
         original_client = llm._client
@@ -251,7 +257,7 @@ class LLMToolsTest(unittest.TestCase):
             self.assertIsNotNone(tools)
             self.assertEqual(
                 [tool["name"] for tool in tools],
-                ["get_today_context", "get_plan_window", "get_load_context", "get_relevant_facts"],
+                ["get_today_context", "get_plan_window", "get_load_context", "get_user_constraints", "get_relevant_facts"],
             )
             prompts.append(messages[0]["content"] if isinstance(messages[0]["content"], str) else "")
             systems.append("\n".join(part["text"] for part in system) if isinstance(system, list) else str(system))

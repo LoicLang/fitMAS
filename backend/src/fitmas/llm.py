@@ -80,11 +80,13 @@ _TURN_INTENT_TOOL_BUDGETS = {
         "get_today_context",
         "get_plan_window",
         "get_load_context",
+        "get_user_constraints",
         "get_relevant_facts",
     ),
     IntentCategory.PLAN_LOOKUP: (
         "get_today_context",
         "get_plan_window",
+        "get_user_constraints",
     ),
     IntentCategory.EXECUTION_REPORT: (
         "get_today_context",

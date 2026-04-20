@@ -4,10 +4,11 @@ from datetime import date, datetime, timedelta
 from typing import Any, Sequence
 
 from fitmas.execution_context import build_today_execution_context
-from fitmas.fact_memory import select_relevant_facts
+from fitmas.fact_memory import fact_is_current, select_relevant_facts
 from fitmas.planning_window_resolution import format_planning_window_summary, resolve_planning_window_inputs
 from fitmas.time_context import get_local_now, get_timezone
 from fitmas.tools.contract import ToolContext, ToolResult, ToolSpec
+from fitmas.training_load import compute_ctl_atl_tsb, estimate_tss
 
 
 def build_tool_registry() -> dict[str, ToolSpec]:
@@ -123,6 +124,24 @@ def build_tool_registry() -> dict[str, ToolSpec]:
             },
             allowed_pipelines=("conversation", "planning", "heartbeat"),
             handler=_get_relevant_facts,
+        ),
+        ToolSpec(
+            name="get_user_constraints",
+            description="Retourne les contraintes utilisateur actives (indisponibilite, sante, blessure) avec leur date d'expiration.",
+            input_schema={
+                "type": "object",
+                "properties": {
+                    "categories": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "Filtre par categories. Defaut: availability, schedule, constraint, health, fatigue.",
+                    },
+                    "limit": {"type": "integer", "description": "Nombre max de contraintes."},
+                },
+                "required": [],
+            },
+            allowed_pipelines=("conversation", "planning", "heartbeat"),
+            handler=_get_user_constraints,
         ),
     )
     return {spec.name: spec for spec in specs}
@@ -406,6 +425,8 @@ def _get_load_context(context: ToolContext, arguments: dict[str, Any]) -> ToolRe
         )
     )
 
+    fitness = _compute_fitness_snapshot(context.activities, as_of_date=local_today)
+
     return ToolResult(
         tool_name="get_load_context",
         status="ok",
@@ -417,12 +438,94 @@ def _get_load_context(context: ToolContext, arguments: dict[str, Any]) -> ToolRe
             "upcoming_planned_duration_min": planned_duration_min,
             "upcoming_planned_session_count": len(upcoming_sessions),
             "upcoming_key_session_count": key_session_count,
+            "as_of_date": fitness["as_of_date"],
+            "ctl": fitness["ctl"],
+            "atl": fitness["atl"],
+            "tsb": fitness["tsb"],
+            "fitness_label": fitness["label"],
         },
         summary=(
             f"Charge {days}j: reel {actual_duration_min} min sur {len(recent_activities)} activites, "
-            f"planifie {planned_duration_min} min sur {len(upcoming_sessions)} seances."
+            f"planifie {planned_duration_min} min sur {len(upcoming_sessions)} seances. "
+            f"CTL {fitness['ctl']} ATL {fitness['atl']} TSB {fitness['tsb']} ({fitness['label']})."
         ),
     )
+
+
+def _get_user_constraints(context: ToolContext, arguments: dict[str, Any]) -> ToolResult:
+    raw_categories = arguments.get("categories")
+    if isinstance(raw_categories, list) and raw_categories:
+        categories = {str(item).strip().lower() for item in raw_categories if str(item).strip()}
+    else:
+        categories = {"availability", "schedule", "constraint", "health", "fatigue"}
+    limit = _coerce_int(arguments.get("limit"), default=8, minimum=1, maximum=30)
+    items: list[dict[str, Any]] = []
+    for fact in context.active_facts:
+        category = str(_value(fact, "category") or "").strip().lower()
+        if category not in categories:
+            continue
+        if not fact_is_current(fact, now=context.now):
+            continue
+        expires_at = _value(fact, "expires_at")
+        items.append(
+            {
+                "category": category,
+                "key": _value(fact, "key"),
+                "value": _value(fact, "value"),
+                "urgency": _value(fact, "urgency"),
+                "confirmed": bool(_value(fact, "confirmed")),
+                "expires_at": _datetime_iso(expires_at),
+            }
+        )
+        if len(items) >= limit:
+            break
+    return ToolResult(
+        tool_name="get_user_constraints",
+        status="ok",
+        payload={"categories": sorted(categories), "constraints": items},
+        summary=f"{len(items)} contraintes actives ({', '.join(sorted(categories))}).",
+    )
+
+
+def _compute_fitness_snapshot(
+    activities: Sequence[Any], *, as_of_date: date
+) -> dict[str, Any]:
+    enriched: list[dict[str, Any]] = []
+    for activity in activities:
+        tss = _value(activity, "tss")
+        if tss is None:
+            tss = estimate_tss(activity)
+        enriched.append(
+            {
+                "started_at": _value(activity, "started_at") or _value(activity, "created_at"),
+                "tss": tss,
+            }
+        )
+    snapshot = compute_ctl_atl_tsb(enriched, as_of_date=as_of_date)
+    tsb = float(snapshot.get("tsb") or 0.0)
+    if tsb > 5:
+        label = "frais"
+    elif tsb < -10:
+        label = "fatigue"
+    else:
+        label = "neutre"
+    return {
+        "as_of_date": snapshot.get("as_of_date") or as_of_date.isoformat(),
+        "ctl": snapshot.get("ctl") or 0.0,
+        "atl": snapshot.get("atl") or 0.0,
+        "tsb": snapshot.get("tsb") or 0.0,
+        "label": label,
+    }
+
+
+def _datetime_iso(value: Any) -> str | None:
+    if value is None:
+        return None
+    if isinstance(value, datetime):
+        return value.isoformat()
+    if isinstance(value, str):
+        return value or None
+    return None
 
 
 def _coerce_int(value: Any, *, default: int, minimum: int, maximum: int) -> int:

@@ -157,6 +157,109 @@ class ToolRuntimeTest(unittest.TestCase):
         self.assertEqual(result.payload["upcoming_planned_duration_min"], 105)
         self.assertEqual(result.payload["upcoming_planned_session_count"], 2)
 
+    def test_load_context_includes_ctl_atl_tsb_snapshot(self) -> None:
+        """Chantier 2: get_load_context expose ATL/CTL/TSB pour donner au
+        coach LLM une lecture chiffree de la fatigue/forme."""
+        registry = build_tool_registry()
+        result = registry["get_load_context"].handler(self.context, {"days": 7})
+
+        self.assertEqual(result.status, "ok")
+        self.assertIn("ctl", result.payload)
+        self.assertIn("atl", result.payload)
+        self.assertIn("tsb", result.payload)
+        self.assertIn("fitness_label", result.payload)
+        self.assertEqual(result.payload["as_of_date"], "2026-03-22")
+        self.assertGreater(float(result.payload["ctl"]), 0.0)
+        self.assertGreater(float(result.payload["atl"]), 0.0)
+        self.assertIn(result.payload["fitness_label"], {"frais", "neutre", "fatigue"})
+
+    def test_user_constraints_returns_active_availability_facts(self) -> None:
+        """Chantier 2: get_user_constraints filtre les facts par categorie
+        (availability/schedule/constraint/health/fatigue) et exclut les
+        facts inactifs ou expires."""
+        from datetime import timedelta
+
+        future = datetime.fromisoformat("2026-04-30T00:00:00+00:00")
+        past = datetime.fromisoformat("2026-01-01T00:00:00+00:00")
+        context = ToolContext(
+            pipeline="conversation",
+            user_id=1,
+            timezone_name="Europe/Paris",
+            now=datetime.fromisoformat("2026-03-22T19:56:00+01:00"),
+            scheduled_sessions=(),
+            activities=(),
+            active_facts=[
+                {
+                    "category": "availability",
+                    "key": "pool_closed",
+                    "value": "Piscine fermee 2 semaines",
+                    "active": True,
+                    "expires_at": future,
+                    "urgency": "high",
+                    "confirmed": True,
+                },
+                {
+                    "category": "health",
+                    "key": "knee_pain",
+                    "value": "Douleur genou gauche",
+                    "active": True,
+                    "expires_at": None,
+                    "urgency": "medium",
+                    "confirmed": True,
+                },
+                {
+                    "category": "preference",
+                    "key": "morning_runner",
+                    "value": "Court mieux le matin",
+                    "active": True,
+                    "expires_at": None,
+                },
+                {
+                    "category": "availability",
+                    "key": "expired_constraint",
+                    "value": "Voyage termine",
+                    "active": True,
+                    "expires_at": past,
+                },
+                {
+                    "category": "availability",
+                    "key": "inactive",
+                    "value": "Annule",
+                    "active": False,
+                    "expires_at": future,
+                },
+            ],
+        )
+
+        registry = build_tool_registry()
+        result = registry["get_user_constraints"].handler(context, {})
+
+        self.assertEqual(result.status, "ok")
+        keys = {item["key"] for item in result.payload["constraints"]}
+        self.assertEqual(keys, {"pool_closed", "knee_pain"})
+        for item in result.payload["constraints"]:
+            if item["key"] == "pool_closed":
+                self.assertEqual(item["category"], "availability")
+                self.assertIsNotNone(item["expires_at"])
+
+    def test_user_constraints_respects_categories_filter(self) -> None:
+        registry = build_tool_registry()
+        context = ToolContext(
+            pipeline="conversation",
+            user_id=1,
+            timezone_name="Europe/Paris",
+            now=datetime.fromisoformat("2026-03-22T19:56:00+01:00"),
+            active_facts=[
+                {"category": "availability", "key": "a", "value": "x", "active": True, "expires_at": None},
+                {"category": "health", "key": "b", "value": "y", "active": True, "expires_at": None},
+            ],
+        )
+        result = registry["get_user_constraints"].handler(context, {"categories": ["health"]})
+
+        self.assertEqual(result.status, "ok")
+        keys = {item["key"] for item in result.payload["constraints"]}
+        self.assertEqual(keys, {"b"})
+
 
 if __name__ == "__main__":
     unittest.main()

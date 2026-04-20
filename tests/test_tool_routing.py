@@ -16,13 +16,19 @@ class ToolRoutingTest(unittest.TestCase):
         decision = route_tools_for_query("Jeudi c'est quoi deja ?", pipeline="conversation")
 
         self.assertEqual(decision.reason, "plan_lookup")
-        self.assertEqual(decision.tool_names, ("get_today_context", "get_plan_window"))
+        self.assertEqual(
+            decision.tool_names,
+            ("get_today_context", "get_plan_window", "get_user_constraints"),
+        )
 
     def test_routes_plan_dispute_queries_to_plan_tools(self) -> None:
         decision = route_tools_for_query("C'est pas ce qui est sur mon planning dans l'app", pipeline="conversation")
 
         self.assertEqual(decision.reason, "plan_lookup")
-        self.assertEqual(decision.tool_names, ("get_today_context", "get_plan_window"))
+        self.assertEqual(
+            decision.tool_names,
+            ("get_today_context", "get_plan_window", "get_user_constraints"),
+        )
 
     def test_routes_load_questions_to_load_tools(self) -> None:
         decision = route_tools_for_query("La charge de cette semaine elle dit quoi ?", pipeline="conversation")
