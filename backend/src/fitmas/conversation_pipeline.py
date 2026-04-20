@@ -49,7 +49,6 @@ from fitmas.mutation_permissions import (
     parse_confirmation_reply,
     serialize_mutation_decision,
 )
-from fitmas.nlp import extract_reply, generate_reply
 from fitmas.plan_mutation_service import apply_decisions_for_user
 from fitmas.planning_window_resolution import resolve_planning_window
 from fitmas.profile_summary import build_profile_summary
@@ -652,6 +651,10 @@ def run_conversation_turn(
         },
     }
 
+    # Chantier 1 (autonomy refactor): decide() runs on every conversational
+    # turn that is not a calibration-only ack. The deterministic groundings
+    # (availability, adaptation, execution contestation, low-signal) are
+    # exposed as prompt context, never as final replies.
     decision = (
         dependencies.decide(
             payload.text,
@@ -705,17 +708,14 @@ def run_conversation_turn(
                 active_facts=state.active_facts,
             ),
         )
-        if (adaptation is None or route_adaptation_context_to_llm)
-        and calibration_only_reply is None
-        and (week_scope_reply is None or route_availability_context_to_llm)
-        and (no_candidate_reply is None or route_availability_context_to_llm)
-        else (
-            api_messages._to_mutation_decision(adaptation.selected_scenario.mutation, fitmas_message=adaptation.user_message)
-            if adaptation is not None
-            else None
-        )
+        if calibration_only_reply is None
+        else None
     )
-    if decision is None and adaptation is not None and route_adaptation_context_to_llm:
+    # Adaptation fallback: the LLM may legitimately return None when the
+    # Anthropic client is unavailable (offline / rate-limited). When a
+    # deterministic adaptation candidate exists we apply it transparently
+    # so the user still gets the safe arbitration.
+    if decision is None and adaptation is not None and calibration_only_reply is None:
         decision = api_messages._to_mutation_decision(adaptation.selected_scenario.mutation, fitmas_message=adaptation.user_message)
 
     if decision:
@@ -814,29 +814,18 @@ def run_conversation_turn(
             response_mode="calibration",
         )
         logger.info("Calibration reply: %s", outcome.reply_text[:120])
-    elif week_scope_reply is not None:
-        outcome = ConversationTurnOutcome(
-            extraction=Extraction(confidence=max(float(user_indication.confidence or 0.0), 0.85)),
-            reply_text=week_scope_reply,
-            response_mode="week_scope",
-        )
-        logger.info("Week-scope reply: %s", outcome.reply_text[:120])
-    elif no_candidate_reply is not None:
-        outcome = ConversationTurnOutcome(
-            extraction=Extraction(confidence=max(float(user_indication.confidence or 0.0), 0.85)),
-            reply_text=no_candidate_reply,
-            response_mode="no_candidate",
-        )
-        logger.info("No-candidate constraint reply: %s", outcome.reply_text[:120])
     else:
-        extraction = extract_reply(payload.text)
-        fallback = generate_reply(payload.text, extraction)
+        # Chantier 1 (autonomy refactor): the only remaining path here is
+        # "decide() returned None and there is no deterministic adaptation
+        # to fall back on" — typically the Anthropic client is unavailable.
+        # Reply soberly: do not assert any plan state, do not regurgitate
+        # rule-based phrases that could lie about the situation.
+        logger.warning("conversation_pipeline: decide() returned None with no fallback decision")
         outcome = ConversationTurnOutcome(
-            extraction=extraction,
-            reply_text=fallback.assistant_message.text,
-            response_mode="fallback",
+            extraction=Extraction(confidence=0.5),
+            reply_text="Je ne peux pas te repondre tout de suite. Reessaie dans un instant.",
+            response_mode="llm_unavailable",
         )
-        logger.info("Fallback reply: %s", outcome.reply_text[:120])
     extracted_facts = dependencies.extract_facts(payload.text, outcome.reply_text, state.active_facts)
     extracted_facts.extend(
         build_execution_conflict_archive_payloads(

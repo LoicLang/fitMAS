@@ -47,7 +47,6 @@ from fitmas.llm import MutationDecision, decide, extract_facts, make_plan_summar
 from fitmas.memory_profile import upsert_profile_memory
 from fitmas.memory_routing import split_memory_payloads
 from fitmas.models import DayId, Extraction, Message, MessageReply, MessageRole
-from fitmas.nlp import extract_reply, generate_reply
 from fitmas.plan_mutation_service import skip_session_for_user
 from fitmas.planning_window_resolution import resolve_planning_window
 from fitmas.replan_from_life_change import (
