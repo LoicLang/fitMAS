@@ -14,6 +14,7 @@ from fitmas.activity_claims import (
 )
 from fitmas.adaptation_log import build_adaptation_log_entry
 from fitmas.calibration_llm import extract_calibration_resolution, generate_calibration_ack
+from fitmas.claim_guard import looks_like_action_claim, safe_rewrite_for_claim_without_mutation
 from fitmas.calibration_needs import (
     build_resolution_memory_updates,
     find_open_calibration_need,
@@ -826,6 +827,25 @@ def run_conversation_turn(
             reply_text="Je ne peux pas te repondre tout de suite. Reessaie dans un instant.",
             response_mode="llm_unavailable",
         )
+
+    # Chantier 1bis (anti-mensonge "dire = faire"): if the reply asserts a
+    # mutation action ("Je libere ce creneau", "Je deplace cette seance") but
+    # no plan_mutation_event was emitted on this turn (no apply, no pending
+    # confirmation that would already be worded as a proposal), demote the
+    # reply to an explicit clarification request and log a faille.
+    mutation_actually_committed = bool(
+        outcome.mutation_applied or outcome.pending_confirmation
+    )
+    if not mutation_actually_committed and looks_like_action_claim(outcome.reply_text):
+        logger.warning(
+            "conversation_pipeline.claim_without_mutation user=%s text=%r reply=%r",
+            user.id,
+            payload.text[:120],
+            outcome.reply_text[:200],
+        )
+        outcome.reply_text = safe_rewrite_for_claim_without_mutation()
+        outcome.response_mode = "claim_without_mutation_blocked"
+
     extracted_facts = dependencies.extract_facts(payload.text, outcome.reply_text, state.active_facts)
     extracted_facts.extend(
         build_execution_conflict_archive_payloads(

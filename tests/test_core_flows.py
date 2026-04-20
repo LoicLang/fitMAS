@@ -1090,6 +1090,58 @@ class FitMASCoreFlowsTest(unittest.TestCase):
         self.assertEqual(result["assistant_message"]["text"], "Bien recu.")
         self.assertIn("low-signal", captured["temporal_summary"])
 
+    def test_claim_without_mutation_is_demoted_at_pipeline_egress(self) -> None:
+        """Chantier 1bis (anti-mensonge "dire = faire"): si le LLM affirme
+        une action ("Je libere ce creneau") sans qu'aucune mutation ne soit
+        committee ce tour, la reponse doit etre reecrite en demande de
+        clarification explicite.
+        """
+        self._create_plan_for_today()
+        original_decide = api_messages.decide
+        try:
+            def fake_decide(*args, **kwargs):
+                return MutationDecision(
+                    mutation_type="no_change",
+                    rationale="Phantom action emise par le LLM.",
+                    fitmas_message="OK. Je libere ce creneau et je garde la suite propre.",
+                )
+
+            api_messages.decide = fake_decide
+            result = self.client.post(
+                "/api/v0/messages", json={"text": "Mercredi"}
+            ).json()
+        finally:
+            api_messages.decide = original_decide
+
+        text = result["assistant_message"]["text"]
+        self.assertNotIn("Je libere", text)
+        self.assertIn("n'ai applique aucun changement", text)
+
+    def test_neutral_reply_with_no_mutation_passes_through(self) -> None:
+        """Le garde dire=faire ne doit toucher que les reponses qui affirment
+        une action mutationnelle. Une reponse neutre passe sans modification.
+        """
+        self._create_plan_for_today()
+        original_decide = api_messages.decide
+        try:
+            def fake_decide(*args, **kwargs):
+                return MutationDecision(
+                    mutation_type="no_change",
+                    rationale="Question simple, pas de mutation.",
+                    fitmas_message="Bien recu, je note.",
+                )
+
+            api_messages.decide = fake_decide
+            result = self.client.post(
+                "/api/v0/messages", json={"text": "ok"}
+            ).json()
+        finally:
+            api_messages.decide = original_decide
+
+        text = result["assistant_message"]["text"]
+        self.assertEqual(text, "Bien recu, je note.")
+        self.assertNotIn("n'ai applique aucun changement", text)
+
     def test_week_scope_constraint_routes_grounded_context_to_llm(self) -> None:
         self._create_plan_for_today()
         now = get_local_now(self.user.timezone)

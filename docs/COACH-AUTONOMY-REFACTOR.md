@@ -155,12 +155,12 @@ User : "Mercredi"
 - ✅ Seul court-circuit non-mutation restant : `calibration_only_reply` (transactionnel par définition)
 - ✅ Tests core flows mis à jour (test_low_signal_ack, test_message_flow_can_replan_*, test_explicit_non_completion_correction, test_contextual_non_answer, test_adaptation_routing : 415 passent)
 
-### Chantier 1bis — Anti-mensonge "dire = faire" (2-3h)
-- Constat : le coach peut affirmer "Je libere ce creneau" sans qu'aucune mutation réelle ne soit commitée. C'est l'anti-pattern le plus dommageable pour la confiance utilisateur (l'app et le coach divergent).
-- Garde côté pipeline : si la réponse contient des marqueurs d'action affirmée (`je libere`, `je deplace`, `je remplace`, `je supprime`, `je decale`, `je mets`, `j'ajoute`) ET qu'aucun `plan_mutation_event` n'a été émis ce tour → bloquer l'envoi et logger une faille `claim_without_mutation`
-- En sortie LLM : forcer le pattern "tool call mutation OU formulation non-affirmative". Si le LLM veut affirmer une action, il doit avoir tool-callé `apply_plan` (ou équivalent) au préalable
-- Audit existant : recenser tous les `_build_user_message` et templates qui pré-formulent "OK. Je..." sans garantir la mutation downstream
-- Test : tour "Mercredi" → soit le coach mute réellement et l'écrit, soit il dit "je propose X, ok pour appliquer ?", jamais "je libere" en l'air
+### Chantier 1bis — Anti-mensonge "dire = faire" ✅ (fait le 20 avril 2026)
+- ✅ Module `backend/src/fitmas/claim_guard.py` créé : `looks_like_action_claim(reply_text)` détecte les verbes 1ère personne du présent (`libere`, `deplace`, `remplace`, `supprime`, `decale`, `bascule`, `echange`, `retire`, `annule`, `ajoute`, `swap`, `swappe`) précédés de `je` ou `j'`, en excluant les négations (`ne`, `n'`) et les marqueurs de proposition (`je propose`, `je peux`, `je pourrais`, `veux-tu`, `tu confirmes`, `ok pour`, etc.)
+- ✅ Garde sortie pipeline (`conversation_pipeline.py`) : si `looks_like_action_claim(outcome.reply_text)` ET ni `outcome.mutation_applied` ni `outcome.pending_confirmation` → réécriture par `safe_rewrite_for_claim_without_mutation()` ("Je n'ai applique aucun changement sur ce tour. Dis-moi explicitement ce que tu veux...") + log warning `conversation_pipeline.claim_without_mutation user=… text=… reply=…` + `response_mode="claim_without_mutation_blocked"`
+- ✅ Couvre le cas hybride `_build_user_message` (replan_from_life_change.py:474-507) au runtime sans toucher au template lui-même : si la mutation downstream est appliquée, la phrase reste ; si elle est bloquée, le garde rewrite avant envoi
+- ✅ Tests : 23 unit tests sur claim_guard (verbes/négations/proposals/elision droite et typographique) + 2 integration tests sur le pipeline (tour "Mercredi" rewrite vs tour neutre passe-through). 440 tests passent au total
+- ⏳ Reste hors scope 1bis : forcer côté prompt le pattern "tool call mutation OU formulation non-affirmative". Couvert en partie par le Chantier 3 (rewrite postures `decide()` + `signal_check`)
 
 ### Chantier 2 — Tools de lecture brute pour le coach (3-4h)
 - `get_plan_window(start_date, end_date)` → ScheduledSession futures avec sport/date/durée/status, JSON strict

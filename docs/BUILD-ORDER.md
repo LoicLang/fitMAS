@@ -64,7 +64,15 @@ Suppression des 5 court-circuits non-transactionnels, livré le 20 avril 2026 (4
 - 415 tests passent, smoke `golden_case_autonomy` toujours rejouable
 - Détails par chantier dans `docs/COACH-AUTONOMY-AUDIT.md` et `docs/COACH-AUTONOMY-REFACTOR.md`
 
-Prochain pas : Chantier 1bis (anti-mensonge "dire = faire") — bloquer toute affirmation d'action si aucun `plan_mutation_event` n'a été émis ce tour.
+### Chantier 1bis du refactor — fait
+
+Anti-mensonge "dire = faire", livré le 20 avril 2026 :
+- Nouveau module `backend/src/fitmas/claim_guard.py` : détection 1ère personne présent de 12 verbes mutationnels (`libere`, `deplace`, `remplace`, `supprime`, `decale`, `bascule`, `echange`, `retire`, `annule`, `ajoute`, `swap`, `swappe`), exclut négations (`ne`, `n'`) et marqueurs de proposition (`je propose`, `je peux`, `je pourrais`, `veux-tu`, `tu confirmes`, `ok pour`, etc.)
+- Garde sortie pipeline (`conversation_pipeline.py`) : si `looks_like_action_claim(reply)` ET aucune mutation committee ce tour → réécriture en demande de clarification + log `conversation_pipeline.claim_without_mutation` + `response_mode="claim_without_mutation_blocked"`
+- Couvre le cas hybride `_build_user_message` de `replan_from_life_change.py:474-507` au runtime : si la mutation downstream est appliquée, la phrase reste ; sinon elle est rewrite avant envoi Telegram/app
+- 440 tests passent (25 nouveaux : 23 unit tests sur claim_guard + 2 integration tests pipeline)
+
+Prochain pas : Chantier 2 (tools de lecture brute pour le coach) — `get_plan_window`, `get_activities_detailed`, `get_user_constraints`, `get_load_context`.
 
 ### Vérité repo
 

@@ -80,7 +80,7 @@ Pas un court-circuit du pipeline mais un **template d'action affirmée** utilis�
 
 - `replan_from_life_change.py:474-507 _build_user_message()` produit "OK. Je libere ce creneau et je garde la suite propre."
 - Si la mutation downstream n'est PAS appliquée (mutation_type=no_change, ou session_id mauvaise, ou bloquée par validator), le user reçoit une affirmation d'action fantôme
-- **Cible Chantier 1bis "Anti-mensonge dire = faire"** : la phrase ne doit jamais sortir si aucun `plan_mutation_event` n'a été émis
+- **Couvert Chantier 1bis "Anti-mensonge dire = faire" (fait 2026-04-20)** : la phrase est désormais filtrée à la sortie pipeline. Le module `backend/src/fitmas/claim_guard.py` détecte les marqueurs d'action affirmée 1ère personne (`Je libere`, `Je deplace`, `Je remplace`, `Je supprime`, `Je decale`, `Je bascule`, `Je echange`, `Je retire`, `Je annule`, `J'ajoute`, `Je swappe`) sans négation ni marqueur de proposition. Si déclenché ET aucune mutation committee ce tour (`outcome.mutation_applied=False` ET `outcome.pending_confirmation=False`), la réponse est réécrite en demande de clarification explicite et un warning `conversation_pipeline.claim_without_mutation` est loggé. Wired dans `conversation_pipeline.py` juste avant `_reply_and_record_turn`
 
 ### Routing guards (Chantier 1 fait)
 
@@ -96,7 +96,7 @@ Effet : `decide()` est appelé sur **100% des tours conversationnels** sauf le s
 | Chantier | Cible code | Cible inventaire |
 |----------|-----------|------------------|
 | 1 | ✅ fait 2026-04-20 — voir commits `chantier 1: ...` | N1, N2, N3, N4, N5 |
-| 1bis | `replan_from_life_change.py:474-507` + garde "claim_without_mutation" sortie pipeline | template hybride |
+| 1bis | ✅ fait 2026-04-20 — `claim_guard.py` + garde sortie pipeline `conversation_pipeline.py` | template hybride couvert au runtime |
 | 2 | nouveaux tools `get_plan_window`, `get_activities_detailed`, `get_user_constraints`, `get_load_context` | (ajout, pas remplacement) |
 | 2bis | `skills/heartbeat/roles.py:359-385 weekly_review` + `coach_reading_digest` branchement | weekly_review prompt |
 | 3 | `llm_prompt_builder.py:10-96` (decide), `skills/heartbeat/roles.py:394-416` (signal_check) | postures "DÉCIDE" |
