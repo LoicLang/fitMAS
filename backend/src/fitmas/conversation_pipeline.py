@@ -580,28 +580,6 @@ def run_conversation_turn(
         week_scope_reply=week_scope_reply,
         no_candidate_reply=no_candidate_reply,
     )
-    availability_prompt_context = _append_prompt_section(
-        (
-            _availability_context_for_prompt(
-                week_scope_reply=week_scope_reply,
-                no_candidate_reply=no_candidate_reply,
-            )
-            if route_availability_context_to_llm
-            else None
-        )
-        or "",
-        _adaptation_context_for_prompt(adaptation) if route_adaptation_context_to_llm else None,
-    )
-    decision_temporal_summary = _append_prompt_section(
-        temporal_summary_for_prompt(conversation_context),
-        availability_prompt_context,
-    )
-    decision_signal_summary = _append_prompt_section(
-        signal_summary_for_prompt(conversation_context),
-        availability_prompt_context,
-    )
-
-    calibration_only_reply = None
     execution_contestation_reply = (
         None
         if plan_mutation_request
@@ -614,6 +592,32 @@ def run_conversation_turn(
             non_completion_claim=resolved_non_completion_claim,
         )
     )
+    grounding_prompt_context = _append_prompt_section(
+        (
+            _availability_context_for_prompt(
+                week_scope_reply=week_scope_reply,
+                no_candidate_reply=no_candidate_reply,
+            )
+            if route_availability_context_to_llm
+            else None
+        )
+        or "",
+        _adaptation_context_for_prompt(adaptation) if route_adaptation_context_to_llm else None,
+    )
+    grounding_prompt_context = _append_prompt_section(
+        grounding_prompt_context,
+        _execution_contestation_context_for_prompt(execution_contestation_reply),
+    )
+    decision_temporal_summary = _append_prompt_section(
+        temporal_summary_for_prompt(conversation_context),
+        grounding_prompt_context,
+    )
+    decision_signal_summary = _append_prompt_section(
+        signal_summary_for_prompt(conversation_context),
+        grounding_prompt_context,
+    )
+
+    calibration_only_reply = None
     if standalone_calibration_answer:
         calibration_only_reply = generate_calibration_ack(
             need=open_calibration_need,
@@ -712,7 +716,6 @@ def run_conversation_turn(
         and calibration_only_reply is None
         and (week_scope_reply is None or route_availability_context_to_llm)
         and (no_candidate_reply is None or route_availability_context_to_llm)
-        and execution_contestation_reply is None
         else (
             api_messages._to_mutation_decision(adaptation.selected_scenario.mutation, fitmas_message=adaptation.user_message)
             if adaptation is not None
@@ -832,13 +835,6 @@ def run_conversation_turn(
             response_mode="no_candidate",
         )
         logger.info("No-candidate constraint reply: %s", outcome.reply_text[:120])
-    elif execution_contestation_reply is not None:
-        outcome = ConversationTurnOutcome(
-            extraction=Extraction(confidence=max(float(resolved_non_completion_claim.confidence or 0.0), 0.88)),
-            reply_text=execution_contestation_reply,
-            response_mode="execution_contestation",
-        )
-        logger.info("Execution contestation reply: %s", outcome.reply_text[:120])
     else:
         extraction = extract_reply(payload.text)
         fallback = generate_reply(payload.text, extraction)
@@ -1165,6 +1161,22 @@ def _availability_context_for_prompt(*, week_scope_reply: str | None, no_candida
         f"- grounding deterministe: {reply}\n"
         "- utilise ce grounding comme verite de contexte, mais formule toi-meme la reponse finale\n"
         "- si aucune mutation sure n'est applicable, garde mutation_type=no_change et explique sobrement"
+    )
+
+
+def _execution_contestation_context_for_prompt(reply: str | None) -> str | None:
+    """Chantier 1 (autonomy refactor): the deterministic execution
+    contestation resolver previously short-circuited the LLM with a
+    templated "Je ne compte pas X comme faite" reply. We now expose its
+    finding as prompt context so decide() can keep the same factual
+    posture but adapt the wording to the conversation thread."""
+    if not reply:
+        return None
+    return (
+        "Contexte execution contestation:\n"
+        f"- grounding deterministe: {reply}\n"
+        "- l'utilisateur conteste une execution: ne compte pas la seance comme faite\n"
+        "- formule toi-meme la reponse finale en gardant cette verite de contexte"
     )
 
 

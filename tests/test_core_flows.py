@@ -691,10 +691,15 @@ class FitMASCoreFlowsTest(unittest.TestCase):
         original_decide = api_messages.decide
         original_extract_facts = api_messages.extract_facts
         try:
-            def should_not_run(*args, **kwargs):
-                raise AssertionError("LLM decide should not run when contextual non-completion resolves clarification")
-
-            api_messages.decide = should_not_run
+            # Chantier 1 (autonomy refactor): the contextual "Non" turn now
+            # routes through decide() with the execution contestation context
+            # injected. Stub returns the canonical wording so we can still
+            # assert the side effect on the session status.
+            api_messages.decide = lambda *args, **kwargs: MutationDecision(
+                mutation_type="no_change",
+                rationale="Reponse a la clarification: non realisee.",
+                fitmas_message="Bien note. Je ne compte pas cette seance comme faite.",
+            )
             api_messages.extract_facts = lambda *args, **kwargs: []
             first = self.client.post("/api/v0/messages", json={"text": "Tu me conseilles quoi aujourd'hui ?"}).json()
             second = self.client.post("/api/v0/messages", json={"text": "Non"}).json()
@@ -1819,11 +1824,22 @@ class FitMASCoreFlowsTest(unittest.TestCase):
 
         original_decide = api_messages.decide
         original_extract_facts = api_messages.extract_facts
+        captured: dict[str, str] = {}
         try:
-            def should_not_run(*args, **kwargs):
-                raise AssertionError("LLM decide should not run for explicit non-completion correction")
+            # Chantier 1 (autonomy refactor): the execution contestation
+            # grounding is now passed to decide() as prompt context. We assert
+            # decide() runs and receives the contestation context, and we stub
+            # it to produce the canonical wording so we can still verify the
+            # downgrade side effect (handled before the LLM call).
+            def fake_decide(*args, **kwargs):
+                captured["activity_claim_summary"] = kwargs.get("activity_claim_summary") or ""
+                return MutationDecision(
+                    mutation_type="no_change",
+                    rationale="Contestation execution sans mutation a appliquer.",
+                    fitmas_message="Bien note. Je ne compte pas cette sortie comme faite.",
+                )
 
-            api_messages.decide = should_not_run
+            api_messages.decide = fake_decide
             api_messages.extract_facts = lambda *args, **kwargs: []
             result = self.client.post("/api/v0/messages", json={"text": "Je n'ai pas couru hier"}).json()
         finally:
@@ -1838,6 +1854,7 @@ class FitMASCoreFlowsTest(unittest.TestCase):
             verify_db.close()
 
         self.assertIn("Je ne compte pas", result["assistant_message"]["text"])
+        self.assertIn("contestation", captured["activity_claim_summary"].lower())
         self.assertEqual(updated.completion_status, "skipped")
 
     def test_execution_fact_correction_archives_conflicting_working_memory(self) -> None:
