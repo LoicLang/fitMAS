@@ -414,6 +414,180 @@ def scenario_compound_non_completion_swap(db: SessionLocal, client: TestClient, 
     )
 
 
+def _setup_golden_case_autonomy(db: SessionLocal) -> s.User:
+    """Reproduit l'etat ayant produit la conversation Telegram du 19-20 avril
+    2026 (golden case du refactor COACH-AUTONOMY-REFACTOR.md) :
+
+    - Loic, multisport (running > swimming > strength)
+    - Semaine ecoulee (J-6 a J-0) : 2 nages planifiees skipped (J-6 et J-4) +
+      1 strength done (J-3) + 1 nage offplan done vendredi-equivalent (J-2)
+    - Semaine a venir (J+1 a J+7) : VIDE (aucune session)
+
+    Cet etat declenche les 5 pathologies cibles :
+      - briefing dimanche affirme "zero natation" alors qu'une nage offplan
+        existe (pre-digestion agregee en weekly_review)
+      - sur "piscine fermee 2 semaines" le coach hallucine "natation prevue
+        lundi 20 et mercredi 22" alors que J+1 a J+7 sont vides
+      - sur "imprevus" / reponses courtes ("Running", "Mercredi") :
+        court-circuits deterministes qui empechent l'appel du LLM principal
+      - sur "Mercredi" : phantom action (le coach affirme "je libere ce
+        creneau" sans appliquer de mutation reelle)
+    """
+    now = get_local_now("Europe/Paris")
+    weekly_notes = (
+        "Semaine triple : running socle, natation 2x technique + endurance, "
+        "renfo support. Dimanche soir bilan."
+    )
+    user = _create_user(
+        db,
+        weekly_structure_notes=weekly_notes,
+        current_state_notes="reprise propre, charge moderee, focus natation technique",
+    )
+
+    # Plan semaine ecoulee : 2 nages planifiees + 1 renfo
+    past_swim_mon = (now - timedelta(days=6)).replace(hour=7, minute=0, second=0, microsecond=0)
+    past_swim_wed = (now - timedelta(days=4)).replace(hour=7, minute=0, second=0, microsecond=0)
+    past_strength = (now - timedelta(days=3)).replace(hour=18, minute=0, second=0, microsecond=0)
+
+    for scheduled_date, sport, title, duration, status in [
+        (past_swim_mon, "swimming", "Natation technique", 36, "skipped"),
+        (past_swim_wed, "swimming", "Natation CSS", 40, "skipped"),
+        (past_strength, "strength", "Renfo support", 30, "done"),
+    ]:
+        day_key = DAY_KEYS[scheduled_date.weekday()]
+        db.add(s.ScheduledSession(
+            user_id=user.id,
+            day=day_key,
+            label=day_label_fr(day_key, capitalize=True),
+            scheduled_date=scheduled_date,
+            source_plan_created_at=now - timedelta(days=10),
+            sport_type=sport,
+            session_type="endurance" if sport == "swimming" else "strength",
+            session_title=title,
+            session_goal="Technique" if sport == "swimming" else "Support",
+            session_note="cle" if sport == "swimming" else "support",
+            session_description=f"{duration} min",
+            duration_min=duration,
+            intensity="moderate",
+            load_score=3,
+            priority="Seance cle" if sport == "swimming" else "Normal",
+            nutrition_focus="",
+            flexibility="stable",
+            completion_status=status,
+        ))
+    db.commit()
+
+    # Activite reelle : nage offplan vendredi-equivalent (J-2), 22 min
+    offplan_swim_started = (now - timedelta(days=2)).replace(hour=14, minute=0, second=0, microsecond=0)
+    repo.add_activity(
+        db,
+        user_id=user.id,
+        source="strava",
+        scheduled_session_id=None,
+        sport_type="swimming",
+        title="Afternoon Swim",
+        duration_min=22,
+        distance_m=1100,
+        elevation_m=0,
+        perceived_load=2,
+        note="offplan",
+        started_at=offplan_swim_started,
+        matched_day=None,
+        match_reason="offplan",
+        tss=15.0,
+    )
+    # Activite reelle : renfo done (J-3), 58 min
+    strength_started = (now - timedelta(days=3)).replace(hour=18, minute=0, second=0, microsecond=0)
+    repo.add_activity(
+        db,
+        user_id=user.id,
+        source="manual",
+        scheduled_session_id=None,
+        sport_type="strength",
+        title="Renfo adapte",
+        duration_min=58,
+        distance_m=0,
+        elevation_m=0,
+        perceived_load=3,
+        note="done",
+        started_at=strength_started,
+        matched_day=None,
+        match_reason="manual",
+        tss=30.0,
+    )
+    return user
+
+
+def scenario_golden_case_autonomy(db: SessionLocal, client: TestClient, user: s.User) -> None:
+    """Joue les 7 tours du golden case de COACH-AUTONOMY-REFACTOR.md.
+
+    Bugs attendus avant le refactor (a verifier visuellement) :
+      Tour 1 (heartbeat weekly_review) : "zero natation" leak
+      Tour 3 ("J'ai eut des imprevu") : token interne `this_week` dans la sortie
+      Tour 4 (piscine fermee 2 semaines) : hallucination natation J+1/J+3
+      Tour 6 ("Running") : "Je peux ajuster, mais j'ai besoin d'un point de plus"
+      Tour 7 ("Mercredi") : "OK. Je libere ce creneau" SANS mutation appliquee
+
+    Le refactor (Chantiers 1 a 5) doit faire disparaitre chacun de ces bugs.
+    """
+    # Tour 1 : briefing Sunday evening (heartbeat weekly_review)
+    import fitmas.heartbeat as heartbeat
+    from fitmas.coach_messages import persist_draft
+
+    heartbeat._LAST_PROACTIVE_GUARD_AT.clear()
+    before = _snapshot(db, user.id)
+    draft = heartbeat.weekly_review()
+    if draft is not None:
+        persist_draft(user.id, draft, db=db)
+        db.expire_all()
+        after = _snapshot(db, user.id)
+        print("TURN: heartbeat:weekly_review (Tour 1)")
+        print(f"assistant: {draft.text}")
+        new_memory = []
+        for key, value in after["memory"].items():
+            if before["memory"].get(key) != value:
+                new_memory.append(f"{key[0]}:{key[1]}")
+        print(f"memory_changes: {', '.join(new_memory) if new_memory else '-'}")
+        print("session_changes: -")
+        print("adaptation: -")
+        print("BUG_EXPECTED: regarde si le coach dit 'zero natation' alors qu'une nage offplan J-2 existe")
+        print("")
+    else:
+        print("TURN: heartbeat:weekly_review (Tour 1)")
+        print("assistant: NO_SEND")
+        print("")
+
+    # Tour 2 : correction utilisateur (nage offplan)
+    _post_message(client, db, user, "J'ai nage vendredi regarde mes seances reel")
+    print("BUG_EXPECTED: peut halluciner un session id different de la vraie nage offplan J-2")
+    print("")
+
+    # Tour 3 : aveu utilisateur
+    _post_message(client, db, user, "J'ai eut des imprevu")
+    print("BUG_EXPECTED: token interne 'this_week' recopie brut dans la sortie (court-circuit _week_scope_reply)")
+    print("")
+
+    # Tour 4 : contrainte forte
+    _post_message(client, db, user, "je ne peux pas nager les deux prochaines semaine ma piscine est fermee")
+    print("BUG_EXPECTED: hallucination 'natation prevue lundi/mercredi' alors que J+1 a J+7 sont vides")
+    print("")
+
+    # Tour 5 : acquiescement
+    _post_message(client, db, user, "Oui")
+    print("BUG_EXPECTED: posture passive (re-demande des options au lieu de decider)")
+    print("")
+
+    # Tour 6 : reponse courte
+    _post_message(client, db, user, "Running")
+    print("BUG_EXPECTED: fallback nlp.py:60 'Je peux ajuster, mais j'ai besoin d'un point de plus' (LLM jamais appele)")
+    print("")
+
+    # Tour 7 : phantom action
+    _post_message(client, db, user, "Mercredi")
+    print("BUG_EXPECTED: 'OK. Je libere ce creneau' sans mutation reelle - aucun session_changes attendu")
+    print("")
+
+
 def scenario_heartbeat_calibration(db: SessionLocal, client: TestClient, user: s.User) -> None:
     heartbeat._LAST_PROACTIVE_GUARD_AT.clear()
     before = _snapshot(db, user.id)
@@ -461,6 +635,11 @@ SCENARIOS: list[Scenario] = [
         "Bug originel: non-completion implicite + swap dans le meme message",
         scenario_compound_non_completion_swap,
     ),
+    Scenario(
+        "golden_case_autonomy",
+        "Golden case du refactor coach autonomy (7 tours, conversation 19-20 avril)",
+        scenario_golden_case_autonomy,
+    ),
 ]
 
 
@@ -474,6 +653,8 @@ def _run_scenario(scenario: Scenario) -> None:
             user = _setup_base(db, vague_week=True)
         elif scenario.name == "compound_non_completion_swap":
             user = _setup_compound_swap(db)
+        elif scenario.name == "golden_case_autonomy":
+            user = _setup_golden_case_autonomy(db)
         else:
             user = _setup_base(db)
 
