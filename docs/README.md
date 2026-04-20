@@ -26,6 +26,7 @@ read_when:
 | `TESTER-GUIDE.md` | Guide d'onboarding pour les testeurs alpha |
 | `CONVERSATION-AUDIT-2026-04-17.md` | Audit architecture conversation + contexte post-passe de fiabilite |
 | `COACH-AUTONOMY-REFACTOR.md` | Refonte coach : suppression court-circuits, tools de lecture brute, skill replan validé, posture "DÉCIDE" |
+| `COACH-AUTONOMY-AUDIT.md` | Inventaire system prompts + court-circuits du pipeline coach (sortie du Chantier 0) |
 
 ## Hierarchie de verite
 
