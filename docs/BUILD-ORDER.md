@@ -55,7 +55,16 @@ Le Chantier 0 (pré-requis) est livré le 20 avril 2026 :
 - Golden case gelé comme smoke scenario : `./scripts/smoke-real-conversations --scenario golden_case_autonomy`
 - Inventaire system prompts + audit court-circuits → `docs/COACH-AUTONOMY-AUDIT.md`
 
-Prochain pas : Chantier 1 (suppression court-circuits non-transactionnels).
+### Chantier 1 du refactor — fait
+
+Suppression des 5 court-circuits non-transactionnels, livré le 20 avril 2026 (4 commits atomiques `chantier 1: ...`) :
+- Routing guards `_should_route_*_context_to_llm` généralisées : `decide()` est appelé sur 100 % des tours conversationnels (sauf calibration_only_reply)
+- N5 execution_contestation, N2 low_signal, N3 week_scope, N4 no_candidate routés en contexte de prompt (helpers `_*_context_for_prompt`)
+- N1 nlp.py fallback supprimé ; module `backend/src/fitmas/nlp.py` deleted ; le fallback restant est une réponse sobre "LLM indisponible" qui ne ment pas sur l'état du plan
+- 415 tests passent, smoke `golden_case_autonomy` toujours rejouable
+- Détails par chantier dans `docs/COACH-AUTONOMY-AUDIT.md` et `docs/COACH-AUTONOMY-REFACTOR.md`
+
+Prochain pas : Chantier 1bis (anti-mensonge "dire = faire") — bloquer toute affirmation d'action si aucun `plan_mutation_event` n'a été émis ce tour.
 
 ### Vérité repo
 

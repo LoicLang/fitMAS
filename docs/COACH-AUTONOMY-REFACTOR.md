@@ -146,13 +146,14 @@ User : "Mercredi"
 - ✅ Inventaire des system prompts → `docs/COACH-AUTONOMY-AUDIT.md` § 1 (11 prompts en jeu)
 - ✅ Audit exhaustif des court-circuits → `docs/COACH-AUTONOMY-AUDIT.md` § 2 (9 court-circuits, dont 4 transactionnels à garder, 5 non-transactionnels à réécrire, + 1 cas hybride `_build_user_message`)
 
-### Chantier 1 — Suppression court-circuits non-transactionnels (2-3h)
-- Garder uniquement les vraiment transactionnels : ack mutation confirmée, oui/non binaire
-- Pour tous les autres (`_week_scope_reply`, `_day_scope_reply`, etc.) : injecter le résultat du resolver comme **contexte du prompt**, pas comme **réponse finale**
-- **Inclure aussi le fallback `nlp.py:60 generate_reply()` cablé dans `conversation_pipeline.py:843-844`** : c'est lui qui produit "Je peux ajuster, mais j'ai besoin d'un point de plus" sur les réponses courtes ("Running", "Mercredi", etc.) et qui empêche le LLM de continuer un fil de conversation
-- Le LLM principal `decide()` est appelé sur 100% des tours conversationnels
-- Test 1 : le tour "imprévus" passe par le LLM principal, plus aucun token `this_week` brut
-- Test 2 : sur un échange (Q coach fermée → "Running") le LLM voit la question ouverte et applique la décision
+### Chantier 1 — Suppression court-circuits non-transactionnels ✅ (fait le 20 avril 2026)
+- ✅ Routing guards `_should_route_availability_context_to_llm` / `_should_route_adaptation_context_to_llm` généralisées : True dès qu'un grounding existe, indépendamment du turn_plan
+- ✅ N5 `_execution_contestation_reply` réécrit en contexte de prompt via `_execution_contestation_context_for_prompt`
+- ✅ N2 `_maybe_low_signal_reply` renommé `_maybe_low_signal_label` (ack/greeting/motivation) ; injecté via `_low_signal_context_for_prompt` (3 hints anti-phantom-action)
+- ✅ N1 `nlp.py extract_reply` + `generate_reply` supprimés ; module `backend/src/fitmas/nlp.py` deleted ; le fallback restant n'est plus qu'une réponse "LLM indisponible, reessaie" sobre
+- ✅ N3 / N4 elif branches supprimées ; les groundings sont en contexte de prompt
+- ✅ Seul court-circuit non-mutation restant : `calibration_only_reply` (transactionnel par définition)
+- ✅ Tests core flows mis à jour (test_low_signal_ack, test_message_flow_can_replan_*, test_explicit_non_completion_correction, test_contextual_non_answer, test_adaptation_routing : 415 passent)
 
 ### Chantier 1bis — Anti-mensonge "dire = faire" (2-3h)
 - Constat : le coach peut affirmer "Je libere ce creneau" sans qu'aucune mutation réelle ne soit commitée. C'est l'anti-pattern le plus dommageable pour la confiance utilisateur (l'app et le coach divergent).

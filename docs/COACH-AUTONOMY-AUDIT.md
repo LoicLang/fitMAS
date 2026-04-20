@@ -62,17 +62,17 @@ Total trouvé : **9**, dont **4 transactionnels** (à garder) et **5 non-transac
 
 Justification "garder" : ce sont des transactions binaires (oui/non) ou des acks immédiats post-mutation. Pas d'arbitrage à faire.
 
-### Non-transactionnels (à réécrire)
+### Non-transactionnels (réécrits — Chantier 1 fait au 20 avril 2026)
 
-Ordonné par sévérité d'impact utilisateur :
+Tous routés vers `decide()` comme contexte de prompt. Statut individuel :
 
-| # | Fonction | Fichier:ligne | Trigger | Exemple sortie | Wired | Sévérité |
-|---|----------|---------------|---------|----------------|-------|----------|
-| N1 | `extract_reply()` + `generate_reply()` | `nlp.py:18, 60` | Catch-all : tous les chemins non handlés | "Je peux ajuster, mais j'ai besoin d'un point de plus..." | `conversation_pipeline.py:843-844` | **CRITIQUE** : universal fallback, ignore le fil de conversation, regurgite des phrases hardcodées |
-| N2 | `_maybe_low_signal_reply()` | `api_messages.py:285` | Pas de calibration need + ack/greeting/motivation normalisé | "Bien recu." / "Bien. On garde cette energie..." | `conversation_pipeline.py:154` | **HAUTE** : affirme phantom action ("on garde cette energie, rien à changer") sans arbitrage LLM |
-| N3 | `_week_scope_reply()` | `api_messages.py:317` | `availability_constraint` + scope = WEEK + pas de matched_session_id | "OK. Je n'ai rien de sensible planifie sur this_week..." | `conversation_pipeline.py:577` | **HAUTE** : leak de token interne `this_week`, ferme la conversation |
-| N4 | `_no_candidate_constraint_reply()` | `api_messages.py:368` | `availability_constraint` + scope SINGLE + pas de candidats | "OK. Je n'ai rien de sensible planifie sur ce créneau. Rien à bouger pour l'instant." | `conversation_pipeline.py:576` | **HAUTE** : ferme un planning complexe avec une réponse déterministe |
-| N5 | `_execution_contestation_reply()` | `api_messages.py:500` | Non-completion claim + evidence pas confirmed_done | "Bien noté. Je ne compte pas [session] comme faite..." | `conversation_pipeline.py:605` | **MOYENNE** : rejette une contestation user sans laisser le LLM valider l'intent |
+| # | Fonction | Statut Chantier 1 | Forme actuelle |
+|---|----------|-------------------|----------------|
+| N1 | `extract_reply()` + `generate_reply()` (nlp.py) | **supprimé** | Module `nlp.py` deleted ; le fallback restant n'est qu'une réponse "LLM indisponible, reessaie" qui ne ment pas |
+| N2 | `_maybe_low_signal_reply()` | **réécrit** | Renommé `_maybe_low_signal_label()` → retourne "ack" / "greeting" / "motivation" ; injecté via `_low_signal_context_for_prompt()` dans le prompt decide() |
+| N3 | `_week_scope_reply()` | **routé** | Toujours produit côté resolver, mais injecté en contexte via `_availability_context_for_prompt()` ; elif branch supprimée |
+| N4 | `_no_candidate_constraint_reply()` | **routé** | Idem N3 : grounding deterministe → contexte de prompt |
+| N5 | `_execution_contestation_reply()` | **réécrit** | Le downgrade non-completion s'applique en amont ; le wording final passe par decide() via `_execution_contestation_context_for_prompt()` |
 
 ### Cas hybride : `_build_user_message` (replan_from_life_change.py)
 
@@ -82,20 +82,20 @@ Pas un court-circuit du pipeline mais un **template d'action affirmée** utilis�
 - Si la mutation downstream n'est PAS appliquée (mutation_type=no_change, ou session_id mauvaise, ou bloquée par validator), le user reçoit une affirmation d'action fantôme
 - **Cible Chantier 1bis "Anti-mensonge dire = faire"** : la phrase ne doit jamais sortir si aucun `plan_mutation_event` n'a été émis
 
-### Routing guards déjà en place
+### Routing guards (Chantier 1 fait)
 
-Deux gardes existent pour rerouter certains court-circuits vers le LLM quand le turn_plan le demande :
+Les deux gardes ont été **généralisées** au 20 avril 2026 :
 
-- `_should_route_availability_context_to_llm()` (`conversation_pipeline.py:1114`) → suppress `_week_scope_reply` / `_no_candidate_constraint_reply` quand `turn_plan.primary_intent in {plan_mutation, availability_constraint}`
-- `_should_route_adaptation_context_to_llm()` (`conversation_pipeline.py:1130`) → idem pour les adaptations
+- `_should_route_availability_context_to_llm()` → True dès qu'un grounding (week_scope ou no_candidate) existe ; le turn_plan n'est plus une condition
+- `_should_route_adaptation_context_to_llm()` → True dès qu'une adaptation candidate existe ; idem
 
-Ces gardes sont la bonne forme : Chantier 1 doit les **généraliser** à tous les short-circuits non-transactionnels (au lieu de la logique actuelle "court-circuit par défaut, route au LLM seulement si turn_plan le force").
+Effet : `decide()` est appelé sur **100% des tours conversationnels** sauf le seul court-circuit transactionnel restant `calibration_only_reply`. Quand le LLM est indisponible (Anthropic client absent / rate limited) et qu'il n'y a pas d'adaptation à appliquer, on répond sobrement "Je ne peux pas te repondre tout de suite. Reessaie dans un instant." plutôt que de regurgiter une phrase rule-based qui pourrait mentir sur l'état du plan.
 
 ## 3. Cibles de réécriture par chantier
 
 | Chantier | Cible code | Cible inventaire |
 |----------|-----------|------------------|
-| 1 | `conversation_pipeline.py:843-844` (fallback nlp), `:577` (week_scope), `:576` (no_candidate), `:605` (contestation), `:154` (low_signal) | N1, N2, N3, N4, N5 |
+| 1 | ✅ fait 2026-04-20 — voir commits `chantier 1: ...` | N1, N2, N3, N4, N5 |
 | 1bis | `replan_from_life_change.py:474-507` + garde "claim_without_mutation" sortie pipeline | template hybride |
 | 2 | nouveaux tools `get_plan_window`, `get_activities_detailed`, `get_user_constraints`, `get_load_context` | (ajout, pas remplacement) |
 | 2bis | `skills/heartbeat/roles.py:359-385 weekly_review` + `coach_reading_digest` branchement | weekly_review prompt |
