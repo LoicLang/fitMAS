@@ -5,7 +5,11 @@ from types import SimpleNamespace
 
 from fitmas.conversation_prompting import ConversationPromptPolicy
 from fitmas.llm import make_timeline_summary
-from fitmas.llm_prompt_builder import build_conversation_prompt_bundle, build_layered_conversation_prompt
+from fitmas.llm_prompt_builder import (
+    build_conversation_prompt_bundle,
+    build_layered_conversation_prompt,
+    detect_open_question,
+)
 
 
 class ConversationPromptBuilderTest(unittest.TestCase):
@@ -196,6 +200,126 @@ class ConversationPromptBuilderTest(unittest.TestCase):
         system_text = "\n".join(part["text"] for part in bundle.system)
         self.assertIn("free_flexible", system_text)
         self.assertIn("la recuperation migre", system_text)
+
+
+class CoachPostureTest(unittest.TestCase):
+    """Chantier 3: posture rule must be in the conversation system prompt so
+    the LLM stops asking 'tu veux que je...?' when it could decide itself."""
+
+    def test_system_prompt_contains_decide_and_defend_posture(self) -> None:
+        bundle = build_conversation_prompt_bundle(
+            user_text="ok",
+            prompt_policy=ConversationPromptPolicy(name="test", history_limit=0, include_plan_summary=False),
+            time_block="Nous sommes mardi.",
+            plan_summary="",
+            timeline_summary=None,
+            execution_summary=None,
+            temporal_summary=None,
+            activity_claim_summary=None,
+            signal_summary=None,
+            conversation_history=None,
+            coach_context=None,
+            selected_facts=[],
+        )
+        system_text = bundle.system[0]["text"]
+
+        self.assertIn("Posture coach", system_text)
+        self.assertIn("Tu DECIDES", system_text)
+        self.assertIn("Tu defends ton choix", system_text)
+        self.assertIn("Continuation de fil", system_text)
+        # The posture must explicitly reject the menu-of-options pattern.
+        self.assertIn("Tu ne renvoies pas la balle", system_text)
+        self.assertIn("Imprevu", system_text)
+
+
+class OpenQuestionDetectionTest(unittest.TestCase):
+    def test_returns_none_when_no_question_mark(self) -> None:
+        self.assertIsNone(detect_open_question("Tres bien, on y va."))
+
+    def test_returns_none_for_empty_or_missing(self) -> None:
+        self.assertIsNone(detect_open_question(""))
+        self.assertIsNone(detect_open_question(None))
+
+    def test_returns_last_question_sentence(self) -> None:
+        text = "On a 3 seances. Tu preferes deplacer la natation ou le footing ?"
+        self.assertEqual(
+            detect_open_question(text),
+            "Tu preferes deplacer la natation ou le footing ?",
+        )
+
+    def test_ignores_pure_confirmation_tags(self) -> None:
+        # "ok ?" / "tu confirmes ?" are administrative pings, not open questions
+        self.assertIsNone(detect_open_question("Je decale au jeudi. Ok ?"))
+        self.assertIsNone(detect_open_question("On part la-dessus, tu confirmes ?"))
+
+    def test_returns_question_when_only_question_in_text(self) -> None:
+        self.assertEqual(
+            detect_open_question("Qu'est-ce qui s'est passe mardi ?"),
+            "Qu'est-ce qui s'est passe mardi ?",
+        )
+
+
+class OpenQuestionMarkerInjectionTest(unittest.TestCase):
+    """Chantier 3: when the previous coach turn ended on an open question, the
+    next prompt must surface it so the coach doesn't drop the thread."""
+
+    def _build(self, *, history, layered: bool):
+        kwargs = dict(
+            user_text="Imprevu, j'ai pas pu",
+            prompt_policy=ConversationPromptPolicy(name="test", history_limit=4, include_plan_summary=False),
+            time_block="Nous sommes mardi.",
+            timeline_summary=None,
+            execution_summary=None,
+            temporal_summary=None,
+            activity_claim_summary=None,
+            signal_summary=None,
+            conversation_history=history,
+            coach_context=None,
+            selected_facts=[],
+        )
+        if layered:
+            return build_layered_conversation_prompt(**kwargs)
+        kwargs["plan_summary"] = ""
+        return build_conversation_prompt_bundle(**kwargs)
+
+    def test_classic_builder_injects_open_question_marker(self) -> None:
+        history = [
+            {"role": "user", "text": "Mardi c'est mort"},
+            {"role": "agent", "text": "Compris. Tu veux qu'on garde la natation jeudi a la place ?"},
+            {"role": "user", "text": "Imprevu, j'ai pas pu"},
+        ]
+        bundle = self._build(history=history, layered=False)
+        self.assertIn("Question ouverte du tour precedent", bundle.prompt)
+        self.assertIn(
+            "Tu veux qu'on garde la natation jeudi a la place ?",
+            bundle.prompt,
+        )
+
+    def test_layered_builder_injects_open_question_marker(self) -> None:
+        history = [
+            {"role": "user", "text": "Mardi c'est mort"},
+            {"role": "agent", "text": "Compris. Qu'est-ce qui s'est passe ?"},
+            {"role": "user", "text": "Imprevu, j'ai pas pu"},
+        ]
+        bundle = self._build(history=history, layered=True)
+        self.assertIn("Question ouverte du tour precedent", bundle.prompt)
+        self.assertIn("Qu'est-ce qui s'est passe ?", bundle.prompt)
+
+    def test_no_marker_when_previous_coach_turn_was_statement(self) -> None:
+        history = [
+            {"role": "agent", "text": "Je decale au jeudi."},
+            {"role": "user", "text": "Imprevu, j'ai pas pu"},
+        ]
+        bundle = self._build(history=history, layered=False)
+        self.assertNotIn("Question ouverte du tour precedent", bundle.prompt)
+
+    def test_no_marker_when_previous_coach_turn_was_confirmation_only(self) -> None:
+        history = [
+            {"role": "agent", "text": "Je decale au jeudi. Ok ?"},
+            {"role": "user", "text": "Imprevu, j'ai pas pu"},
+        ]
+        bundle = self._build(history=history, layered=False)
+        self.assertNotIn("Question ouverte du tour precedent", bundle.prompt)
 
 
 if __name__ == "__main__":

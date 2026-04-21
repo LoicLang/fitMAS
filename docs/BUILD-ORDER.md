@@ -91,7 +91,18 @@ Heartbeat utilise les mêmes capacités que la conversation pour la lecture de l
 - ✅ Tests : nouveau `test_weekly_review_surfaces_offplan_swimming_entry` qui ajoute une nage offplan et vérifie que le prompt contient "Lecture de la semaine", "swimming", "(offplan)" + system prompt contient l'anti-hallu rule. 444 tests passent
 - ⏳ Hors scope 2bis : faire passer weekly_review et morning_briefing par `route_tools_for_query` + `execute_tool_call` (aujourd'hui ils consomment les builders directement, pas le tool runtime — étape ultérieure)
 
-Prochain pas : Chantier 3 (audit + rewrite system prompts pour la posture coach "DÉCIDE et défends").
+### Chantier 3 du refactor — fait
+
+Audit + rewrite system prompts pour la posture coach "DÉCIDE et défends", livré le 21 avril 2026 :
+- ✅ Audit : la pathologie est moins lexicale qu'architecturale. Les prompts contiennent peu de "propose deux options" mais aucune posture explicite "tu décides, tu défends" et aucun marker de continuation de fil
+- ✅ Bloc **"Posture coach (non-negociable)"** ajouté à `_CONVERSATION_SYSTEM_TEXT` : "Tu DECIDES. Tu defends ton choix. Tu ne renvoies pas la balle au user pour un arbitrage que tu peux trancher avec le contexte fourni." + "Tu n'ouvres pas par 'Tu veux que je...', 'Tu preferes A ou B ?'." + "Imprevu n'est pas une demande de menu, c'est un signal a creuser." + clause continuation de fil
+- ✅ Helper déterministe `detect_open_question(coach_text)` (`backend/src/fitmas/llm_prompt_builder.py`) : retourne la dernière phrase interrogative significative ; ignore les confirmations (`ok ?`, `tu confirmes ?`, `ca te va ?`...)
+- ✅ Marker injecté dans le user prompt des deux builders conversation (classique + layered) : `Question ouverte du tour precedent (a toi, pas au user) : "..."` + consigne "ne change pas de sujet en silence"
+- ✅ Marker équivalent côté heartbeat morning_briefing : `_pending_open_question_for_user(db, user)` détecte la question en attente seulement si le user n'a rien écrit depuis ; injecté via `pending_open_question` à `build_briefing_prompt`
+- ✅ Tests : 12 nouveaux (1 posture + 5 détection + 4 injection prompt + 2 heartbeat). **456 tests passent**.
+- ⏳ Hors scope 3 : court-circuit `clarification` du pipeline (`conversation_pipeline.py:375-399`) qui shunte `decide()` reste un risque architectural — laissé tel quel (couvert par 1bis sur la sortie ; à reprendre si la posture LLM ne suffit pas en dogfood)
+
+Prochain pas : Chantier 4 (mémoire des contraintes temporelles avec `valid_until` posé par l'extracteur d'indications).
 
 ### Vérité repo
 

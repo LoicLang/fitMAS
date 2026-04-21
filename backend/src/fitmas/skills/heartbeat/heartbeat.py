@@ -48,6 +48,7 @@ from fitmas.skills.heartbeat.roles import (
 )
 from fitmas.knowledge import load_sport_knowledge
 from fitmas.llm_gateway import generate_heartbeat_text
+from fitmas.llm_prompt_builder import detect_open_question
 from fitmas.recent_reality import build_recent_reality_window
 from fitmas.signals import collect_signals, format_signals_for_prompt
 from fitmas.time_context import build_time_context, get_local_now
@@ -170,6 +171,7 @@ def morning_briefing() -> CoachDraft | None:
             recent_proactive_context=_recent_proactive_context(db, user, limit=2),
             recent_reality=recent_reality,
             digest=digest,
+            pending_open_question=_pending_open_question_for_user(db, user),
         )
 
         llm_msg = _llm_generate(system, prompt)
@@ -574,3 +576,31 @@ def _recent_proactive_context(db: Session, user: s.User, *, limit: int = 2) -> s
         for row in reversed(rows)
         if str(row.text or "").strip()
     )
+
+
+def _pending_open_question_for_user(db: Session, user: s.User) -> str | None:
+    """If the latest agent message ended on an open question and the user has
+    not since written anything, surface that question for the next proactive
+    turn. Without this the briefing tends to silently drop unanswered prompts
+    ("imprevu" pathology — coach asks then changes subject the next morning)."""
+    latest_agent = (
+        db.query(s.CoachMessage)
+        .filter(s.CoachMessage.user_id == user.id, s.CoachMessage.role == "agent")
+        .order_by(s.CoachMessage.created_at.desc(), s.CoachMessage.id.desc())
+        .first()
+    )
+    if latest_agent is None:
+        return None
+    question = detect_open_question(str(latest_agent.text or ""))
+    if not question:
+        return None
+    latest_user = (
+        db.query(s.CoachMessage)
+        .filter(s.CoachMessage.user_id == user.id, s.CoachMessage.role == "user")
+        .order_by(s.CoachMessage.created_at.desc(), s.CoachMessage.id.desc())
+        .first()
+    )
+    if latest_user is not None and latest_user.created_at and latest_agent.created_at:
+        if latest_user.created_at >= latest_agent.created_at:
+            return None
+    return question

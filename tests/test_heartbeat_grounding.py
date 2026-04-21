@@ -1025,6 +1025,77 @@ class HeartbeatGroundingTest(unittest.TestCase):
         # Anti-hallu rule must be present in the system prompt.
         self.assertIn("zero <sport>", captured["system"].lower().replace("\u00ab", "").replace("\u00bb", "").replace('"', ""))
 
+    def test_morning_briefing_surfaces_pending_open_question_from_last_agent(self) -> None:
+        """Chantier 3: if the last agent message ended on an open question and
+        the user did not write since, the next morning briefing prompt must
+        surface the question so the coach doesn't drop the thread."""
+        _, _ = self._create_plan_with_today_session()
+        # Last agent message ends on an open question, no later user reply.
+        self.db.add(
+            s.CoachMessage(
+                user_id=self.user.id,
+                role="agent",
+                text="Je vois que tu as saute la natation lundi. Qu'est-ce qui s'est passe ?",
+                proactive=True,
+                created_at=(datetime.now(dt_timezone.utc) - timedelta(days=1)).replace(tzinfo=None),
+            )
+        )
+        self.db.commit()
+
+        captured: dict[str, str] = {}
+        original_llm = heartbeat._llm_generate
+        try:
+            def fake_llm(system: str, prompt: str, *, allow_no_send: bool = True):
+                captured["prompt"] = prompt
+                return "ok"
+
+            heartbeat._llm_generate = fake_llm
+            draft = heartbeat.morning_briefing()
+        finally:
+            heartbeat._llm_generate = original_llm
+
+        self.assertEqual(draft.text, "ok")
+        self.assertIn("Question ouverte de ton dernier message proactif", captured["prompt"])
+        self.assertIn("Qu'est-ce qui s'est passe ?", captured["prompt"])
+
+    def test_morning_briefing_omits_open_question_marker_when_user_already_replied(self) -> None:
+        _, _ = self._create_plan_with_today_session()
+        agent_at = (datetime.now(dt_timezone.utc) - timedelta(days=1)).replace(tzinfo=None)
+        self.db.add_all(
+            [
+                s.CoachMessage(
+                    user_id=self.user.id,
+                    role="agent",
+                    text="Qu'est-ce qui s'est passe lundi ?",
+                    proactive=True,
+                    created_at=agent_at,
+                ),
+                s.CoachMessage(
+                    user_id=self.user.id,
+                    role="user",
+                    text="J'ai eu un imprevu",
+                    proactive=False,
+                    created_at=agent_at + timedelta(hours=1),
+                ),
+            ]
+        )
+        self.db.commit()
+
+        captured: dict[str, str] = {}
+        original_llm = heartbeat._llm_generate
+        try:
+            def fake_llm(system: str, prompt: str, *, allow_no_send: bool = True):
+                captured["prompt"] = prompt
+                return "ok"
+
+            heartbeat._llm_generate = fake_llm
+            draft = heartbeat.morning_briefing()
+        finally:
+            heartbeat._llm_generate = original_llm
+
+        self.assertEqual(draft.text, "ok")
+        self.assertNotIn("Question ouverte de ton dernier message proactif", captured["prompt"])
+
     def _create_plan_with_today_session(self) -> tuple[s.WeeklyPlan, s.ScheduledSession]:
         now = get_local_now(self.user.timezone)
         today_key = DAY_KEYS[now.weekday()]

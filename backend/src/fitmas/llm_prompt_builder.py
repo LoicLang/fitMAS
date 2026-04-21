@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from typing import Any
 
@@ -19,6 +20,14 @@ Tu varies l'attaque de tes messages.
 Tu n'ouvres pas systematiquement par "Bon", "OK", "Attends" ou "On va etre honnete".
 Tu n'essentialises pas un jour fixe de la semaine ou une contrainte stable si ce n'est pas utile a la decision du moment.
 Tu evites de recycler la meme formule d'un message a l'autre.
+
+Posture coach (non-negociable):
+- Tu DECIDES. Tu defends ton choix avec une raison courte. Tu ne renvoies pas la balle au user pour un arbitrage que tu peux trancher avec le contexte fourni.
+- Si tu changes le plan, tu l'annonces et tu expliques pourquoi en une phrase. Tu ne demandes pas la permission apres coup.
+- Tu n'ouvres pas par "Tu veux que je...", "Tu preferes A ou B ?", "Je propose deux options". Si tu as les infos pour trancher, tranche.
+- Tu ne demandes au user de choisir QUE quand une info essentielle te manque vraiment (creneau dispo, douleur localisee, contrainte non memorisee) OU quand le choix engage un trade-off lourd que toi seul ne peux pas arbitrer.
+- "Imprevu", "ca a change", "j'ai pas pu" du user n'est pas une demande de menu. C'est un signal a creuser ou a integrer dans une decision claire.
+- Continuation de fil: si le tour precedent contenait une question ouverte de ta part et que le user n'y a pas repondu, ne change pas de sujet en silence. Soit tu reformules la question autrement, soit tu decides avec ton hypothese explicite ("je pars du principe que..., on ajuste si je me trompe").
 
 Analyse le message utilisateur et decide quelle action prendre sur le calendrier d'entrainement reel.
 
@@ -94,6 +103,71 @@ Tu reponds UNIQUEMENT avec un JSON valide contenant exactement ces champs:
 
 Pas de markdown. Pas de texte autour du JSON.\
 """
+
+
+# Confirmation tags that we treat as "not really an open question" — these are
+# administrative pings ("ok ?", "tu confirmes ?") that the user can ignore by
+# acting on the next turn instead of answering literally.
+_CONFIRMATION_TAGS = (
+    "ok ?",
+    "ok pour toi ?",
+    "ca marche ?",
+    "ca te va ?",
+    "tu confirmes ?",
+    "tu valides ?",
+    "d'accord ?",
+    "c'est bon ?",
+    "ok c'est bon ?",
+)
+_SENTENCE_SPLIT_RE = re.compile(r"(?<=[.!?…])\s+")
+
+
+def detect_open_question(coach_text: str | None) -> str | None:
+    """Return the last open question in coach_text, or None.
+
+    Returns the trimmed last question sentence if the text ends on a question
+    mark and the question is not a pure confirmation prompt. Used to surface
+    "le user n'a pas repondu" continuation-of-thread context to the next coach
+    turn (Chantier 3 — refactor coach autonomy)."""
+    if not coach_text:
+        return None
+    text = coach_text.strip()
+    if not text.endswith("?"):
+        return None
+    low = text.lower().rstrip()
+    for tag in _CONFIRMATION_TAGS:
+        if low.endswith(tag):
+            return None
+    parts = _SENTENCE_SPLIT_RE.split(text)
+    for part in reversed(parts):
+        candidate = part.strip()
+        if candidate.endswith("?"):
+            return candidate
+    return text
+
+
+def _latest_agent_message(history: list[dict[str, Any]] | None) -> str | None:
+    if not history:
+        return None
+    for msg in reversed(history):
+        if msg.get("role") == "agent":
+            text = str(msg.get("text") or "").strip()
+            if text:
+                return text
+    return None
+
+
+def _open_question_block(history: list[dict[str, Any]] | None) -> str:
+    coach_text = _latest_agent_message(history)
+    question = detect_open_question(coach_text)
+    if not question:
+        return ""
+    return (
+        "\nQuestion ouverte du tour precedent (a toi, pas au user) :\n"
+        f"  \"{question}\"\n"
+        "Si le nouveau message du user n'y repond pas, ne change pas de sujet en silence : "
+        "soit tu reformules la question autrement, soit tu decides avec ton hypothese explicite.\n"
+    )
 
 
 @dataclass(frozen=True, slots=True)
@@ -176,6 +250,8 @@ def build_conversation_prompt_bundle(
     if signal_summary and prompt_policy.include_signals:
         signal_block = f"\n{signal_summary}\n"
 
+    open_question_block = _open_question_block(conversation_history)
+
     prompt = f"""{time_block}
 Source de vérité planning conversationnelle: calendrier daté / app.
 Ignore tout repère hebdo legacy si le calendrier daté dit autre chose.
@@ -183,7 +259,7 @@ Ignore tout repère hebdo legacy si le calendrier daté dit autre chose.
 {execution_block}{temporal_block}{claim_block}{signal_block}
 {profile_block}
 {coach_block}{facts_block}
-{history_block}
+{history_block}{open_question_block}
 Nouveau message de l'utilisateur:
 {user_text}"""
 
@@ -274,6 +350,9 @@ def build_layered_conversation_prompt(
     ]
     if prompt_policy.include_timeline and timeline_summary:
         prompt_parts.append(f"Calendrier daté utile:\n{timeline_summary}")
+    open_question_block = _open_question_block(conversation_history)
+    if open_question_block:
+        prompt_parts.append(open_question_block.strip())
     prompt_parts.append(f"Nouveau message de l'utilisateur:\n{user_text}")
     prompt = "\n".join(prompt_parts)
 

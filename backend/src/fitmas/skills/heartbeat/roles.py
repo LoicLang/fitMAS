@@ -207,6 +207,7 @@ def build_briefing_prompt(
     recent_proactive_context: str = "",
     recent_reality: RecentRealityWindow | None = None,
     digest: CoachReadingDigest | None = None,
+    pending_open_question: str | None = None,
 ) -> tuple[str, str]:
     """Build system + user prompt for morning briefing. Returns (system, prompt)."""
     label = today_session.label or DAY_LABELS[time_context["day_key"]]
@@ -297,6 +298,13 @@ def build_briefing_prompt(
         prompt += f"\n\n{render_hidden_need_brief(effective_need)}"
     if recent_proactive_context:
         prompt += f"\n\nDerniers messages proactifs a ne pas recycler:\n{recent_proactive_context}"
+    if pending_open_question:
+        prompt += (
+            "\n\nQuestion ouverte de ton dernier message proactif (le user n'y a pas repondu) :\n"
+            f"  \"{pending_open_question}\"\n"
+            "Ne change pas de sujet en silence. Soit tu reformules la question autrement, "
+            "soit tu prends une decision avec ton hypothese explicite et tu l'annonces."
+        )
 
     return system, prompt
 

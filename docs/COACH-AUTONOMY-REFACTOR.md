@@ -180,11 +180,20 @@ User : "Mercredi"
 - ✅ Test `test_weekly_review_surfaces_offplan_swimming_entry` : nage offplan en DB → prompt review contient "Lecture de la semaine", "swimming", "(offplan)" + system prompt contient l'anti-hallu rule. 444 tests passent
 - ⏳ Reste hors scope 2bis : faire passer weekly_review et morning_briefing par `route_tools_for_query` + `execute_tool_call` comme la conversation (aujourd'hui ils consomment les builders directement, pas le tool runtime)
 
-### Chantier 3 — Audit + rewrite system prompts (2-3h)
-- Identifier les directives "propose des options" / "laisse le user choisir" dans les prompts existants
-- Réécrire vers : "DÉCIDE et défends ton choix. Si tu changes le plan, tu l'annonces et tu expliques pourquoi. Tu ne demandes au user de choisir QUE si l'info te manque réellement."
-- Ajouter un **marker de continuation de fil** : si le tour précédent du coach contenait une question ouverte non répondue, l'injecter explicitement dans le prompt comme "question ouverte en attente : X"
-- Test : sur "imprévus" le coach creuse au lieu de fermer
+### Chantier 3 — Audit + rewrite system prompts ✅ (fait le 21 avril 2026)
+
+Audit prealable : la pathologie "demande au user au lieu de décider" est moins lexicale qu'architecturale. Les prompts contiennent peu de "propose deux options", mais :
+- Aucune **posture explicite** "tu DÉCIDES, tu défends, tu ne renvoies pas la balle" → ajoutée
+- Aucun **marker de continuation de fil** (le coach pose une question, le user répond à côté, le coach change de sujet en silence) → ajouté
+- Court-circuit `clarification` du pipeline (`conversation_pipeline.py:375-399`) qui shunte `decide()` reste un risque architectural — laissé tel quel pour ce chantier (couvert par 1bis sur la sortie ; à reprendre si la posture LLM ne suffit pas)
+
+Livré :
+- ✅ Bloc **"Posture coach (non-negociable)"** ajouté à `_CONVERSATION_SYSTEM_TEXT` (`backend/src/fitmas/llm_prompt_builder.py`) : "Tu DECIDES. Tu defends ton choix. Tu ne renvoies pas la balle au user pour un arbitrage que tu peux trancher avec le contexte fourni." + "Tu n'ouvres pas par 'Tu veux que je...', 'Tu preferes A ou B ?', 'Je propose deux options'." + clause "Imprevu n'est pas une demande de menu, c'est un signal a creuser ou a integrer dans une decision claire." + clause **continuation de fil** ("si le tour precedent contenait une question ouverte de ta part et que le user n'y a pas repondu, soit tu la reformules, soit tu decides avec ton hypothese explicite").
+- ✅ Helper `detect_open_question(coach_text)` (`backend/src/fitmas/llm_prompt_builder.py`) : déterministe, retourne la dernière phrase interrogative significative ; ignore les confirmations administratives (`ok ?`, `tu confirmes ?`, `ca te va ?`, etc.).
+- ✅ Marker injecté dans le **user prompt** (pas system) des deux builders `build_conversation_prompt_bundle` et `build_layered_conversation_prompt` : si la dernière entrée `agent` de l'historique se termine sur une vraie question, le bloc `Question ouverte du tour precedent (a toi, pas au user) : "..."` est ajouté avec consigne "ne change pas de sujet en silence".
+- ✅ Marker équivalent côté **morning_briefing** : `_pending_open_question_for_user(db, user)` regarde le dernier message agent en DB ; si la dernière interaction utilisateur est antérieure à cette question, le bloc est passé via `pending_open_question` à `build_briefing_prompt` et injecté en queue de prompt.
+- ✅ Tests : 1 test posture (`CoachPostureTest`) + 5 tests détection (`OpenQuestionDetectionTest`) + 4 tests injection prompt (`OpenQuestionMarkerInjectionTest` couvrant classique/layered/statement/confirmation) + 2 tests heartbeat (`test_morning_briefing_surfaces_pending_open_question_from_last_agent` et `..._omits_open_question_marker_when_user_already_replied`). 456 tests passent.
+- ⏳ Hors scope 3 : tester via un golden-case "imprevu" end-to-end avec LLM réel — couvert au moment du dogfood post-refactor
 
 ### Chantier 4 — Mémoire des contraintes temporelles (2h)
 - Indication de type "indispo période X-Y" → écrite en `working_memory_entries` avec `valid_until`
