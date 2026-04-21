@@ -133,7 +133,7 @@ La reply utilisateur est derivee du `block_reason` via `_BLOCK_REASON_REPLIES` (
 
 | Type | Exemples | Comportement |
 |------|----------|-------------|
-| `availability_constraint` | Indispo ponctuelle, voyage, creneau impossible | Resolve planning window → replan si seance cible claire |
+| `availability_constraint` | Indispo ponctuelle, voyage, creneau impossible | Resolve planning window → replan si seance cible claire. Si multi-jours (durée "X semaines/jours" détectée) → `build_availability_fact_payloads_from_indication` persiste un `UserFact` category=availability avec key `unavailable_<sport|general>_<start>_<end>` et `expires_at = end + 1 jour`. Le fait est ensuite filtré par `fact_is_current` et consulté par `_targeted_execution_clarification` pour sauter "tu l'as faite ou pas ?" sur les séances couvertes |
 | `health_signal` | Douleur, gene, fatigue locale | Normalise signal → ecrit fait sante → adaptation protective |
 | `execution_update` | Activite faite, correction | Reconcile le reel → claims d'activite / memoire courte |
 

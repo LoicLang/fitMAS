@@ -100,5 +100,5 @@ Effet : `decide()` est appelé sur **100% des tours conversationnels** sauf le s
 | 2 | nouveaux tools `get_plan_window`, `get_activities_detailed`, `get_user_constraints`, `get_load_context` | (ajout, pas remplacement) |
 | 2bis | `skills/heartbeat/roles.py:359-385 weekly_review` + `coach_reading_digest` branchement | weekly_review prompt |
 | 3 | `llm_prompt_builder.py:10-96` (decide), `skills/heartbeat/roles.py:394-416` (signal_check) | postures "DÉCIDE" |
-| 4 | `working_memory_entries` + nouveau champ `valid_until` | (data, pas prompt) |
+| 4 | ✅ fait 2026-04-21 — `user_indications.build_availability_fact_payloads_from_indication` + `IndicationTimeReference.window_end_date` + garde `_yesterday_session_covered_by_active_constraint` dans `api_messages._targeted_execution_clarification` (persistance sur `UserFact` existant avec `expires_at` ancré sur fin de fenêtre, pas de nouvelle colonne) | (data, pas prompt) |
 | 5 | nouveau `validator.py` + skill `propose_replan` | (nouveau code) |
