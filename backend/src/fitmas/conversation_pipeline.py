@@ -23,6 +23,7 @@ from fitmas.calibration_needs import (
 )
 from fitmas.coach_reading_digest import build_coach_reading_digest, render_digest_for_prompt
 from fitmas.coach_state_bundle import build_coach_state_bundle
+from fitmas.execution_clarification import render_unresolved_execution_followup
 from fitmas.conversation_context import (
     activity_claim_summary_for_prompt,
     build_claim_memory_updates,
@@ -368,10 +369,14 @@ def run_conversation_turn(
         state.timeline = [repo.to_pydantic_scheduled_session(session) for session in state.scheduled_sessions]
         state.today_session = repo.get_today_scheduled_session(db, user.id, timezone_name=user.timezone)
 
-    # Do not fire a targeted execution clarification when the turn plan (or
-    # deterministic fallback) signals a plan mutation intent. The LLM must
-    # arbitrate — a canned clarification about yesterday's session would
-    # silently swallow the user's real request.
+    # Targeted execution clarification: previously short-circuited the pipeline
+    # with a canned "Tu l'as faite ou pas ?" reply, which loops on missed
+    # sessions and bypasses decide(). We now surface it as soft prompt context
+    # — the LLM arbitrates whether to ask, integrate or move on based on the
+    # user's actual message this turn. The anti-spam guard
+    # (looks_like_execution_clarification_prompt on previous_agent_text) is
+    # preserved inside _targeted_execution_clarification, so a follow-up turn
+    # gets no block injected and the loop breaks.
     clarification = (
         None
         if plan_mutation_request
@@ -385,17 +390,14 @@ def run_conversation_turn(
             previous_agent_text=state.previous_agent_text,
         )
     )
+    unresolved_execution_followup_text: str | None = None
     if clarification is not None:
-        reply_text = clarification.question
-        return _reply_and_record_turn(
-            db=db,
-            user_id=user.id,
-            user_text=payload.text,
-            reply_text=reply_text,
-            extraction=Extraction(confidence=0.9),
-            response_mode="clarification",
-            turn_context=turn_context,
-            memory_writes=turn_memory_writes,
+        yesterday = conversation_context.temporal_resolution.local_date.fromordinal(
+            conversation_context.temporal_resolution.local_date.toordinal() - 1
+        )
+        unresolved_execution_followup_text = render_unresolved_execution_followup(
+            clarification,
+            target_date_iso=yesterday.isoformat(),
         )
 
     health_indication_facts = api_messages.build_health_fact_payloads_from_indication(user_indication)
@@ -697,6 +699,7 @@ def run_conversation_turn(
                     recent_reality_window=coach_bundle.recent_reality,
                     turn_plan=turn_plan,
                 ),
+                "unresolved_execution_followup": unresolved_execution_followup_text,
             },
             remembered_facts=state.active_facts,
             time_context=conversation_context.time_context,

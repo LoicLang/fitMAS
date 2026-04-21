@@ -195,6 +195,21 @@ Livré :
 - ✅ Tests : 1 test posture (`CoachPostureTest`) + 5 tests détection (`OpenQuestionDetectionTest`) + 4 tests injection prompt (`OpenQuestionMarkerInjectionTest` couvrant classique/layered/statement/confirmation) + 2 tests heartbeat (`test_morning_briefing_surfaces_pending_open_question_from_last_agent` et `..._omits_open_question_marker_when_user_already_replied`). 456 tests passent.
 - ⏳ Hors scope 3 : tester via un golden-case "imprevu" end-to-end avec LLM réel — couvert au moment du dogfood post-refactor
 
+### Chantier 3bis — Court-circuit clarification → contexte pour decide() ✅ (fait le 21 avril 2026)
+
+Symptôme remonté en dogfood : sur une séance manquée, le canned `"Tu l'as faite ou pas ?"` court-circuitait `decide()` et bouclait à chaque tour suivant ; le user avait l'impression de parler à un disque rayé.
+
+Cause : `conversation_pipeline.py:375-399` faisait un `_reply_and_record_turn(reply_text=clarification.question)` au lieu de laisser le LLM arbitrer. Aucun garde n'empêchait la pose répétée tour après tour côté pipeline (le seul garde, `looks_like_execution_clarification_prompt`, vit à l'intérieur du helper et ne s'applique que si l'agent a posé la question texto au tour précédent — ce qui était toujours vrai, mais une fois la question posée elle restait "non resolue" tant que le user ne répondait pas par "oui"/"non" propre).
+
+Refactor :
+- ✅ Helper `render_unresolved_execution_followup(clarification, *, target_date_iso)` (`backend/src/fitmas/execution_clarification.py`) : produit un bloc soft "Suivi execution non resolu (a toi de juger : creuser, integrer ou ignorer ce tour) : ..." avec id session, question candidate, raison d'impact et consigne anti-répétition.
+- ✅ Param `unresolved_execution_followup: str | None` ajouté à `build_conversation_prompt_bundle` et `build_layered_conversation_prompt` (`llm_prompt_builder.py`), injecté en queue de user prompt à côté du marker open-question.
+- ✅ `llm.py` lit `coach_context["unresolved_execution_followup"]` et le passe au builder layered.
+- ✅ `conversation_pipeline.py` : suppression du `return _reply_and_record_turn(...)` ; le clarification est rendu via `render_unresolved_execution_followup` puis attaché à `coach_context["unresolved_execution_followup"]` dans le payload `decide()`. Le garde `looks_like_execution_clarification_prompt(previous_agent_text)` à l'intérieur de `_targeted_execution_clarification` reste actif → si le LLM a posé la question au tour précédent, le helper retourne `None` et aucun bloc n'est injecté → la boucle est cassée déterministiquement.
+- ✅ Tests pipeline (`test_core_flows.py`) : `test_message_flow_surfaces_targeted_clarification_as_prompt_context_to_llm` (decide est appelé + coach_context contient le bloc), `test_targeted_clarification_does_not_block_fatigue_adaptation_anymore` (la fatigue passe maintenant sans être avalée par la clarification), `test_targeted_clarification_followup_breaks_loop_after_first_turn` (anti-loop : second tour reçoit `None`), `test_contextual_non_answer_resolves_clarification_via_decide` + `test_health_reply_after_clarification_is_ingested_normally` (les flux aval continuent de fonctionner quand le LLM relaye la question).
+- ✅ Tests prompt (`test_llm_prompt_builder.py`) : `UnresolvedExecutionFollowupInjectionTest` couvre classique/layered/None.
+- 460 tests passent.
+
 ### Chantier 4 — Mémoire des contraintes temporelles (2h)
 - Indication de type "indispo période X-Y" → écrite en `working_memory_entries` avec `valid_until`
 - `get_user_constraints()` filtre uniquement les contraintes encore actives à la date courante

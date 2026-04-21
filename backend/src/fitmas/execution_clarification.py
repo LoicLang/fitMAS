@@ -27,6 +27,27 @@ class ExecutionClarification:
     session_id: int | None
 
 
+def render_unresolved_execution_followup(
+    clarification: "ExecutionClarification",
+    *,
+    target_date_iso: str,
+) -> str:
+    """Soft prompt block injected into decide() so the LLM can arbitrate.
+
+    Replaces the canned short-circuit reply: instead of forcing
+    "Tu l'as faite ou pas ?" as the agent's full turn, we surface the
+    same signal as context. The LLM then decides whether to ask, infer,
+    or move on based on the user's actual message this turn."""
+    return (
+        "Suivi execution non resolu (a toi de juger : creuser, integrer ou ignorer ce tour) :\n"
+        f"- Hier ({target_date_iso}) seance prevue id={clarification.session_id} — "
+        f"question candidate : \"{clarification.question}\"\n"
+        f"- Pourquoi ca importe : {clarification.reason}\n"
+        "- Si le user vient de te repondre la-dessus (meme indirectement), integre sans reposer la question. "
+        "Si tu l'as deja posee dans le tour precedent, ne la repose pas — tranche avec ton hypothese."
+    )
+
+
 def build_execution_clarification(
     *,
     today: date,

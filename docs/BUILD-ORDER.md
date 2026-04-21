@@ -100,7 +100,18 @@ Audit + rewrite system prompts pour la posture coach "DÉCIDE et défends", livr
 - ✅ Marker injecté dans le user prompt des deux builders conversation (classique + layered) : `Question ouverte du tour precedent (a toi, pas au user) : "..."` + consigne "ne change pas de sujet en silence"
 - ✅ Marker équivalent côté heartbeat morning_briefing : `_pending_open_question_for_user(db, user)` détecte la question en attente seulement si le user n'a rien écrit depuis ; injecté via `pending_open_question` à `build_briefing_prompt`
 - ✅ Tests : 12 nouveaux (1 posture + 5 détection + 4 injection prompt + 2 heartbeat). **456 tests passent**.
-- ⏳ Hors scope 3 : court-circuit `clarification` du pipeline (`conversation_pipeline.py:375-399`) qui shunte `decide()` reste un risque architectural — laissé tel quel (couvert par 1bis sur la sortie ; à reprendre si la posture LLM ne suffit pas en dogfood)
+- ⏳ Hors scope 3 : court-circuit `clarification` du pipeline — repris immédiatement en Chantier 3bis (voir ci-dessous, dogfood ayant remonté la boucle "Tu l'as faite ou pas ?" sur séance manquée)
+
+### Chantier 3bis du refactor — fait
+
+Court-circuit `clarification` du pipeline converti en contexte soft pour `decide()`, livré le 21 avril 2026 :
+- ✅ Symptôme dogfood : sur séance manquée, le canned `"Tu l'as faite ou pas ?"` court-circuitait `decide()` et bouclait — coach perçu comme "disque rayé"
+- ✅ Helper `render_unresolved_execution_followup(clarification, *, target_date_iso)` (`backend/src/fitmas/execution_clarification.py`) : produit un bloc soft "Suivi execution non resolu (a toi de juger : creuser, integrer ou ignorer ce tour)" avec id session, question candidate, raison d'impact et consigne anti-répétition
+- ✅ Param `unresolved_execution_followup` ajouté aux deux builders (`build_conversation_prompt_bundle` + `build_layered_conversation_prompt`), injecté dans le user prompt aux côtés du marker open-question (`llm_prompt_builder.py`)
+- ✅ `llm.py` lit `coach_context["unresolved_execution_followup"]` et le passe au builder layered
+- ✅ `conversation_pipeline.py:375-399` : suppression du `_reply_and_record_turn(reply_text=clarification.question)` ; le bloc est désormais attaché à `coach_context` pour `decide()`. Le garde déterministe `looks_like_execution_clarification_prompt(previous_agent_text)` (déjà dans `_targeted_execution_clarification`) casse la boucle au tour suivant
+- ✅ Tests pipeline (`test_core_flows.py`) refactorisés : `..._surfaces_targeted_clarification_as_prompt_context_to_llm`, `..._does_not_block_fatigue_adaptation_anymore`, `..._followup_breaks_loop_after_first_turn`, `..._resolves_clarification_via_decide`, `..._after_clarification_is_ingested_normally`
+- ✅ Tests prompt (`test_llm_prompt_builder.py`) : `UnresolvedExecutionFollowupInjectionTest` (classique/layered/None). **460 tests passent**.
 
 Prochain pas : Chantier 4 (mémoire des contraintes temporelles avec `valid_until` posé par l'extracteur d'indications).
 

@@ -639,34 +639,57 @@ class FitMASCoreFlowsTest(unittest.TestCase):
         self.assertEqual(len(events), 1)
         self.assertIn(events[0].trigger_type, {"health_adaptation", "life_change_adaptation"})
 
-    def test_message_flow_asks_targeted_clarification_before_generic_chat_when_yesterday_changes_week(self) -> None:
+    def test_message_flow_surfaces_targeted_clarification_as_prompt_context_to_llm(self) -> None:
+        """Chantier 3bis (autonomy refactor): the targeted execution
+        clarification no longer short-circuits the pipeline with a canned
+        "Tu l'as faite ou pas ?" reply (which looped on missed sessions).
+        It is surfaced as soft prompt context — the LLM arbitrates whether
+        to ask, integrate or move on."""
         self._seed_uncertain_yesterday_key_session()
+        captured: dict[str, object] = {}
         original_decide = api_messages.decide
         original_extract_facts = api_messages.extract_facts
         try:
-            def should_not_run(*args, **kwargs):
-                raise AssertionError("LLM decide should not run before targeted execution clarification")
+            def fake_decide(*args, **kwargs):
+                captured["unresolved_followup"] = (
+                    kwargs.get("coach_context", {}).get("unresolved_execution_followup")
+                )
+                return MutationDecision(
+                    mutation_type="no_change",
+                    rationale="J'ai vu hier flou, je decide moi-meme.",
+                    fitmas_message="Aujourd'hui on tient le plan. Tu m'as pas dit pour hier — je tablerai sur seance manquee si tu ne corriges pas.",
+                )
 
-            api_messages.decide = should_not_run
+            api_messages.decide = fake_decide
             api_messages.extract_facts = lambda *args, **kwargs: []
             result = self.client.post("/api/v0/messages", json={"text": "Tu me conseilles quoi aujourd'hui ?"}).json()
         finally:
             api_messages.decide = original_decide
             api_messages.extract_facts = original_extract_facts
 
-        self.assertIn("Tu l'as faite ou pas", result["assistant_message"]["text"])
+        self.assertEqual(result["assistant_message"]["text"], "Aujourd'hui on tient le plan. Tu m'as pas dit pour hier — je tablerai sur seance manquee si tu ne corriges pas.")
+        followup = captured.get("unresolved_followup") or ""
+        self.assertIn("Suivi execution non resolu", followup)
+        self.assertIn("Tu l'as faite ou pas", followup)
 
-    def test_message_flow_blocks_fatigue_adaptation_until_targeted_clarification_is_answered(self) -> None:
+    def test_targeted_clarification_does_not_block_fatigue_adaptation_anymore(self) -> None:
+        """Chantier 3bis: the canned clarification used to swallow the
+        fatigue request. It must now coexist as soft context — decide() runs
+        and can apply the deterministic fatigue adaptation."""
         _, yesterday_session = self._seed_uncertain_yesterday_key_session()
         today_session = repo.get_today_scheduled_session(self.db, self.user.id, timezone_name=self.user.timezone)
         self.assertIsNotNone(today_session)
+        captured: dict[str, object] = {}
         original_decide = api_messages.decide
         original_extract_facts = api_messages.extract_facts
         try:
-            def should_not_run(*args, **kwargs):
-                raise AssertionError("LLM decide should not run before targeted execution clarification")
+            def fake_decide(*args, **kwargs):
+                captured["unresolved_followup"] = (
+                    kwargs.get("coach_context", {}).get("unresolved_execution_followup")
+                )
+                return None  # let deterministic adaptation fall back
 
-            api_messages.decide = should_not_run
+            api_messages.decide = fake_decide
             api_messages.extract_facts = lambda *args, **kwargs: []
             result = self.client.post("/api/v0/messages", json={"text": "Je suis rincé aujourd'hui"}).json()
         finally:
@@ -681,27 +704,67 @@ class FitMASCoreFlowsTest(unittest.TestCase):
         finally:
             verify_db.close()
 
-        self.assertIn("Tu l'as faite ou pas", result["assistant_message"]["text"])
-        self.assertEqual(refreshed_today.completion_status, "planned")
-        self.assertIsNone(latest_adaptation)
-        self.assertEqual(yesterday_session.completion_status, "planned")
+        self.assertTrue(result["assistant_message"]["text"].strip())
+        self.assertIn("Suivi execution non resolu", captured.get("unresolved_followup") or "")
+        self.assertEqual(refreshed_today.completion_status, "adapted")
+        self.assertIsNotNone(latest_adaptation)
 
-    def test_contextual_non_answer_resolves_targeted_clarification_without_repeating(self) -> None:
+    def test_targeted_clarification_followup_breaks_loop_after_first_turn(self) -> None:
+        """Chantier 3bis: anti-loop guard — once the LLM asked the
+        clarification last turn, the soft followup block must not be
+        re-injected on the next turn (regardless of how the user answered).
+        Otherwise the coach loops on missed sessions."""
         _, yesterday_session = self._seed_uncertain_yesterday_key_session()
+        captured_followups: list[str | None] = []
         original_decide = api_messages.decide
         original_extract_facts = api_messages.extract_facts
         try:
-            # Chantier 1 (autonomy refactor): the contextual "Non" turn now
-            # routes through decide() with the execution contestation context
-            # injected. Stub returns the canonical wording so we can still
-            # assert the side effect on the session status.
+            def fake_decide(*args, **kwargs):
+                captured_followups.append(
+                    kwargs.get("coach_context", {}).get("unresolved_execution_followup")
+                )
+                return MutationDecision(
+                    mutation_type="no_change",
+                    rationale="Reponse coach.",
+                    fitmas_message="Tu l'as faite ou pas hier ?",
+                )
+
+            api_messages.decide = fake_decide
+            api_messages.extract_facts = lambda *args, **kwargs: []
+            self.client.post("/api/v0/messages", json={"text": "Tu me conseilles quoi aujourd'hui ?"}).json()
+            self.client.post("/api/v0/messages", json={"text": "Non"}).json()
+        finally:
+            api_messages.decide = original_decide
+            api_messages.extract_facts = original_extract_facts
+
+        self.assertEqual(len(captured_followups), 2)
+        self.assertIsNotNone(captured_followups[0])
+        self.assertIn("Suivi execution non resolu", captured_followups[0] or "")
+        # Anti-loop guard: previous_agent_text already contained the canned
+        # phrasing, so the helper returns None and no block is injected.
+        self.assertIsNone(captured_followups[1])
+
+    def test_contextual_non_answer_resolves_clarification_via_decide(self) -> None:
+        """Chantier 3bis: when the LLM picks up the soft followup context
+        and asks the question itself, a "Non" on the next turn must still
+        resolve the session as skipped via execution contestation."""
+        _, yesterday_session = self._seed_uncertain_yesterday_key_session()
+        replies = iter([
+            # Turn 1: LLM uses the soft followup and asks the question.
+            "Avant que je tranche pour aujourd'hui — tu l'as faite ou pas hier ?",
+            # Turn 2: LLM acknowledges non-completion.
+            "Bien note. Je ne compte pas cette seance comme faite.",
+        ])
+        original_decide = api_messages.decide
+        original_extract_facts = api_messages.extract_facts
+        try:
             api_messages.decide = lambda *args, **kwargs: MutationDecision(
                 mutation_type="no_change",
-                rationale="Reponse a la clarification: non realisee.",
-                fitmas_message="Bien note. Je ne compte pas cette seance comme faite.",
+                rationale="Reponse a la clarification.",
+                fitmas_message=next(replies),
             )
             api_messages.extract_facts = lambda *args, **kwargs: []
-            first = self.client.post("/api/v0/messages", json={"text": "Tu me conseilles quoi aujourd'hui ?"}).json()
+            self.client.post("/api/v0/messages", json={"text": "Tu me conseilles quoi aujourd'hui ?"}).json()
             second = self.client.post("/api/v0/messages", json={"text": "Non"}).json()
         finally:
             api_messages.decide = original_decide
@@ -711,29 +774,31 @@ class FitMASCoreFlowsTest(unittest.TestCase):
         refreshed_yesterday = repo.get_scheduled_session(self.db, self.user.id, yesterday_session.id)
         facts = self.client.get("/api/v0/facts").json()
 
-        self.assertIn("Tu l'as faite ou pas", first["assistant_message"]["text"])
-        self.assertNotEqual(second["assistant_message"]["text"], first["assistant_message"]["text"])
         self.assertIn("Je ne compte pas", second["assistant_message"]["text"])
         self.assertEqual(refreshed_yesterday.completion_status, "skipped")
         self.assertTrue(any("claimed_non_completion_2026" in fact["key"] for fact in facts if fact["category"] == "execution"))
 
-    def test_health_reply_to_clarification_is_ingested_before_any_repeat(self) -> None:
+    def test_health_reply_after_clarification_is_ingested_normally(self) -> None:
+        """Chantier 3bis: an illness reply on the second turn must still
+        route through the health adaptation flow without the canned
+        clarification reasserting itself."""
         _, yesterday_session = self._seed_uncertain_yesterday_key_session()
         original_decide = api_messages.decide
         original_extract_facts = api_messages.extract_facts
         original_health = api_messages.check_and_adapt_health_facts
         try:
-            def should_not_run(*args, **kwargs):
-                raise AssertionError("LLM decide should not run when illness + non-completion resolves clarification")
-
-            api_messages.decide = should_not_run
+            api_messages.decide = lambda *args, **kwargs: MutationDecision(
+                mutation_type="no_change",
+                rationale="Premier tour, je pose la question.",
+                fitmas_message="Avant de trancher pour aujourd'hui — tu l'as faite ou pas hier ?",
+            )
             api_messages.extract_facts = lambda *args, **kwargs: []
             api_messages.check_and_adapt_health_facts = lambda *args, **kwargs: AdaptationResult(
                 trigger_type="health_fact",
                 message="Repos. Tu es malade, on coupe propre.",
                 applied=True,
             )
-            first = self.client.post("/api/v0/messages", json={"text": "Tu me conseilles quoi aujourd'hui ?"}).json()
+            self.client.post("/api/v0/messages", json={"text": "Tu me conseilles quoi aujourd'hui ?"}).json()
             second = self.client.post("/api/v0/messages", json={"text": "Je suis malade comme un chien j'ai rien fait"}).json()
         finally:
             api_messages.decide = original_decide
@@ -744,8 +809,6 @@ class FitMASCoreFlowsTest(unittest.TestCase):
         refreshed_yesterday = repo.get_scheduled_session(self.db, self.user.id, yesterday_session.id)
         facts = self.client.get("/api/v0/facts").json()
 
-        self.assertIn("Tu l'as faite ou pas", first["assistant_message"]["text"])
-        self.assertNotEqual(second["assistant_message"]["text"], first["assistant_message"]["text"])
         self.assertIn("malade", second["assistant_message"]["text"].lower())
         self.assertEqual(refreshed_yesterday.completion_status, "skipped")
         self.assertTrue(any(fact["category"] == "health" for fact in facts))

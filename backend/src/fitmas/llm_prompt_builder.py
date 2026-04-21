@@ -192,6 +192,7 @@ def build_conversation_prompt_bundle(
     conversation_history: list[dict[str, Any]] | None,
     coach_context: dict[str, Any] | None,
     selected_facts: list[str],
+    unresolved_execution_followup: str | None = None,
 ) -> ConversationPromptBundle:
     profile_block = ""
     if profile_summary:
@@ -252,6 +253,10 @@ def build_conversation_prompt_bundle(
 
     open_question_block = _open_question_block(conversation_history)
 
+    followup_block = ""
+    if unresolved_execution_followup:
+        followup_block = "\n" + unresolved_execution_followup.strip() + "\n"
+
     prompt = f"""{time_block}
 Source de vérité planning conversationnelle: calendrier daté / app.
 Ignore tout repère hebdo legacy si le calendrier daté dit autre chose.
@@ -259,7 +264,7 @@ Ignore tout repère hebdo legacy si le calendrier daté dit autre chose.
 {execution_block}{temporal_block}{claim_block}{signal_block}
 {profile_block}
 {coach_block}{facts_block}
-{history_block}{open_question_block}
+{history_block}{open_question_block}{followup_block}
 Nouveau message de l'utilisateur:
 {user_text}"""
 
@@ -295,6 +300,7 @@ def build_layered_conversation_prompt(
     conversation_history: list[dict[str, Any]] | None = None,
     coach_context: dict[str, Any] | None = None,
     selected_facts: list[str] | None = None,
+    unresolved_execution_followup: str | None = None,
 ) -> ConversationPromptBundle:
     """Build conversation prompt using the layered system.
 
@@ -353,6 +359,8 @@ def build_layered_conversation_prompt(
     open_question_block = _open_question_block(conversation_history)
     if open_question_block:
         prompt_parts.append(open_question_block.strip())
+    if unresolved_execution_followup:
+        prompt_parts.append(unresolved_execution_followup.strip())
     prompt_parts.append(f"Nouveau message de l'utilisateur:\n{user_text}")
     prompt = "\n".join(prompt_parts)
 

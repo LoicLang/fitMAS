@@ -322,5 +322,55 @@ class OpenQuestionMarkerInjectionTest(unittest.TestCase):
         self.assertNotIn("Question ouverte du tour precedent", bundle.prompt)
 
 
+class UnresolvedExecutionFollowupInjectionTest(unittest.TestCase):
+    """Chantier 3bis: when the pipeline detects an unresolved execution
+    clarification it surfaces the question as soft prompt context (not a
+    canned reply). The LLM arbitrates whether to ask, integrate or move on."""
+
+    _BLOCK = (
+        "Suivi execution non resolu (a toi de juger : creuser, integrer ou ignorer ce tour) :\n"
+        "- Hier (2026-04-20) seance prevue id=42 — question candidate : "
+        "\"Je ne vois pas de trace nette de ta course hier. Tu l'as faite ou pas ?\"\n"
+        "- Pourquoi ca importe : ca change la lecture des seances cle recentes\n"
+        "- Si le user vient de te repondre la-dessus (meme indirectement), integre sans reposer la question. "
+        "Si tu l'as deja posee dans le tour precedent, ne la repose pas — tranche avec ton hypothese."
+    )
+
+    def _build(self, *, layered: bool, followup: str | None):
+        kwargs = dict(
+            user_text="Tu me conseilles quoi aujourd'hui ?",
+            prompt_policy=ConversationPromptPolicy(name="test", history_limit=4, include_plan_summary=False),
+            time_block="Nous sommes mardi 2026-04-21.",
+            timeline_summary=None,
+            execution_summary=None,
+            temporal_summary=None,
+            activity_claim_summary=None,
+            signal_summary=None,
+            conversation_history=[],
+            coach_context=None,
+            selected_facts=[],
+            unresolved_execution_followup=followup,
+        )
+        if layered:
+            return build_layered_conversation_prompt(**kwargs)
+        kwargs["plan_summary"] = ""
+        return build_conversation_prompt_bundle(**kwargs)
+
+    def test_classic_builder_injects_followup_block(self) -> None:
+        bundle = self._build(layered=False, followup=self._BLOCK)
+        self.assertIn("Suivi execution non resolu", bundle.prompt)
+        self.assertIn("Tu l'as faite ou pas", bundle.prompt)
+        self.assertIn("a toi de juger", bundle.prompt)
+
+    def test_layered_builder_injects_followup_block(self) -> None:
+        bundle = self._build(layered=True, followup=self._BLOCK)
+        self.assertIn("Suivi execution non resolu", bundle.prompt)
+        self.assertIn("Tu l'as faite ou pas", bundle.prompt)
+
+    def test_no_block_when_followup_is_none(self) -> None:
+        bundle = self._build(layered=False, followup=None)
+        self.assertNotIn("Suivi execution non resolu", bundle.prompt)
+
+
 if __name__ == "__main__":
     unittest.main()

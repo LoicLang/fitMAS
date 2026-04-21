@@ -187,6 +187,7 @@ def decide(
         else (routing.tool_names if routing is not None else ())
     )
     selected_facts = (coach_context or {}).get("selected_facts") or select_prompt_facts(remembered_facts or [])
+    unresolved_execution_followup = (coach_context or {}).get("unresolved_execution_followup")
     prompt_bundle = build_layered_conversation_prompt(
         user_text=user_text,
         prompt_policy=prompt_policy,
@@ -201,6 +202,7 @@ def decide(
         conversation_history=conversation_history,
         coach_context=coach_context,
         selected_facts=selected_facts,
+        unresolved_execution_followup=unresolved_execution_followup,
     )
     prompt = prompt_bundle.prompt
     history_messages_used = prompt_bundle.history_messages_used
