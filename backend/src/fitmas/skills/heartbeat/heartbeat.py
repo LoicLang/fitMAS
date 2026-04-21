@@ -328,6 +328,30 @@ def weekly_review() -> CoachDraft | None:
 
         time_context = build_time_context(user.timezone)
 
+        # Recent reality + digest: same pre-digestion morning_briefing uses,
+        # so weekly_review can name offplan sorties (sport + day) instead of
+        # only emitting aggregate counters that hide what really happened.
+        try:
+            recent_reality = build_recent_reality_window(
+                today=local_today,
+                scheduled_sessions=week_sessions,
+                activities=recent_activities,
+                claims=list(recent_claims),
+            )
+        except Exception:
+            logger.warning("Weekly review: failed to build recent reality window", exc_info=True)
+            recent_reality = None
+
+        try:
+            digest = build_coach_reading_digest(
+                db, user,
+                today=local_today,
+                recent_reality=recent_reality,
+            )
+        except Exception:
+            logger.warning("Weekly review: failed to build coach reading digest", exc_info=True)
+            digest = None
+
         # Build prompt via ReviewRole
         system, prompt = build_review_prompt(
             user=user,
@@ -342,6 +366,7 @@ def weekly_review() -> CoachDraft | None:
             claimed_duration_min=claimed_duration_min,
             facts_block=format_active_facts_for_prompt(db, user),
             weekly_highlights=_weekly_review_highlights(db, user, start_date=start_date),
+            digest=digest,
         )
 
         llm_msg = _llm_generate(system, prompt, allow_no_send=False)

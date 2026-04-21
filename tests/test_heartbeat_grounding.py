@@ -954,6 +954,77 @@ class HeartbeatGroundingTest(unittest.TestCase):
         self.assertEqual(draft.text, "ok")
         self.assertNotIn("Legacy yesterday swim", captured["prompt"])
 
+    def test_weekly_review_surfaces_offplan_swimming_entry(self) -> None:
+        """Chantier 2bis: weekly_review pre-digests via coach_reading_digest so
+        the LLM gets the offplan swim by sport+day instead of zero-natation."""
+        now = get_local_now(self.user.timezone)
+        today_key = DAY_KEYS[now.weekday()]
+        repo.replace_plan(
+            self.db,
+            self.user.id,
+            intention="test",
+            summary="test",
+            timezone_name=self.user.timezone,
+            days=[
+                {
+                    "day": today_key,
+                    "label": day_label_fr(today_key, capitalize=True),
+                    "sport_type": "running",
+                    "session_type": "easy",
+                    "session_title": "Footing",
+                    "session_goal": "Bouger",
+                    "session_note": "",
+                    "session_description": "",
+                    "duration_min": 45,
+                    "intensity": "easy",
+                    "load_score": 1,
+                    "priority": "Normal",
+                    "nutrition_focus": "",
+                    "flexibility": "stable",
+                    "completion_status": "planned",
+                }
+            ],
+        )
+        # Offplan swim: not linked to any ScheduledSession.
+        repo.add_activity(
+            self.db,
+            user_id=self.user.id,
+            source="manual",
+            sport_type="swimming",
+            title="Nage libre piscine",
+            duration_min=45,
+            distance_m=2000,
+            elevation_m=0,
+            perceived_load=3,
+            note="",
+            started_at=now - timedelta(days=2),
+            matched_day=None,
+            match_reason="",
+            avg_hr=None,
+            avg_speed=None,
+            tss=30.0,
+        )
+        captured: dict[str, str] = {}
+        original_llm = heartbeat._llm_generate
+        try:
+            def fake_llm(system: str, prompt: str, *, allow_no_send: bool = True):
+                captured["system"] = system
+                captured["prompt"] = prompt
+                return "ok"
+
+            heartbeat._llm_generate = fake_llm
+            draft = heartbeat.weekly_review()
+        finally:
+            heartbeat._llm_generate = original_llm
+
+        self.assertEqual(draft.text, "ok")
+        # Digest block must surface the swim with offplan marker.
+        self.assertIn("Lecture de la semaine", captured["prompt"])
+        self.assertIn("swimming", captured["prompt"])
+        self.assertIn("(offplan)", captured["prompt"])
+        # Anti-hallu rule must be present in the system prompt.
+        self.assertIn("zero <sport>", captured["system"].lower().replace("\u00ab", "").replace("\u00bb", "").replace('"', ""))
+
     def _create_plan_with_today_session(self) -> tuple[s.WeeklyPlan, s.ScheduledSession]:
         now = get_local_now(self.user.timezone)
         today_key = DAY_KEYS[now.weekday()]

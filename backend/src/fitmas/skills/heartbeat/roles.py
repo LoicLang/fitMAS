@@ -356,6 +356,7 @@ def build_review_prompt(
     claimed_duration_min: int,
     facts_block: str = "",
     weekly_highlights: str = "",
+    digest: CoachReadingDigest | None = None,
 ) -> tuple[str, str]:
     """Build system + user prompt for weekly review. Returns (system, prompt)."""
     system = (
@@ -368,6 +369,16 @@ def build_review_prompt(
     )
     if user.coach_soul:
         system += f"\nAme du coach: {user.coach_soul}"
+    # Anti-hallucination — same defense in depth as the morning briefing.
+    # Without this the review LLM regularly invents weekly counts (eg. "zero
+    # natation cette semaine" while a swim was actually logged offplan).
+    system += (
+        "\n\nQuand tu mentionnes un decompte de la semaine (seances faites, volume, "
+        "regularite, sorties par sport), utilise EXACTEMENT les chiffres du bloc "
+        "\"Lecture de la semaine\" du contexte. N'invente jamais un comptage hebdomadaire "
+        "et ne dis pas \"zero <sport>\" si une sortie de ce sport apparait dans le bloc, "
+        "meme hors plan. Si le bloc est absent, reste qualitatif sans citer de nombre."
+    )
     system += facts_block
 
     prompt = (
@@ -379,6 +390,8 @@ def build_review_prompt(
         f"Activites reelles detectees sur 7 jours: {actual_activity_count}. Duree reelle totale: {actual_duration_min} min.\n"
         f"Activites declarees non loggees sur 7 jours: {claimed_activity_count}. Duree declaree totale: {claimed_duration_min} min."
     )
+    if digest is not None:
+        prompt += "\n\n" + render_digest_for_prompt(digest)
     if weekly_highlights:
         prompt += f"\n\nEvenements explicatifs de la semaine:\n{weekly_highlights}"
 

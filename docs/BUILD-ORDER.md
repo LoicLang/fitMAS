@@ -81,7 +81,17 @@ Tools de lecture brute pour le coach LLM, livré le 20 avril 2026. Scope recalib
 - ✅ Tests : 3 nouveaux unit tests + tests routing/llm_tools mis à jour. 443 tests passent
 - ⏳ Hors scope chantier 2 : que l'extracteur d'indications pose un `expires_at` cohérent avec la durée annoncée ("2 semaines", "demain", "ce mois") — couvert par chantier 4
 
-Prochain pas : Chantier 2bis (heartbeat utilise les mêmes capacités — brancher `coach_reading_digest` dans `weekly_review`).
+### Chantier 2bis du refactor — fait
+
+Heartbeat utilise les mêmes capacités que la conversation pour la lecture de la semaine, livré le 21 avril 2026 :
+- ✅ `weekly_review()` (`backend/src/fitmas/skills/heartbeat/heartbeat.py`) construit `recent_reality` via `build_recent_reality_window` puis `coach_reading_digest` via `build_coach_reading_digest` — même pattern que `morning_briefing` — avec dégradation gracieuse en log warning si l'un échoue
+- ✅ `build_review_prompt()` (`backend/src/fitmas/skills/heartbeat/roles.py`) accepte `digest: CoachReadingDigest | None` et l'injecte via `render_digest_for_prompt(digest)` après les compteurs agrégés (qui restent pour compat des tests existants)
+- ✅ Anti-hallu rule miroir du briefing matin ajoutée dans le system prompt review : "N'invente jamais un comptage hebdomadaire et ne dis pas 'zero <sport>' si une sortie de ce sport apparait dans le bloc, meme hors plan"
+- ✅ Le digest expose déjà `real_entries` détaillés (`RealEntry` avec `linked_to_plan`) — `render_digest_for_prompt` produit `swimming 45' jeu (offplan)` lisible par le LLM
+- ✅ Tests : nouveau `test_weekly_review_surfaces_offplan_swimming_entry` qui ajoute une nage offplan et vérifie que le prompt contient "Lecture de la semaine", "swimming", "(offplan)" + system prompt contient l'anti-hallu rule. 444 tests passent
+- ⏳ Hors scope 2bis : faire passer weekly_review et morning_briefing par `route_tools_for_query` + `execute_tool_call` (aujourd'hui ils consomment les builders directement, pas le tool runtime — étape ultérieure)
+
+Prochain pas : Chantier 3 (audit + rewrite system prompts pour la posture coach "DÉCIDE et défends").
 
 ### Vérité repo
 

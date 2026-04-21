@@ -172,11 +172,13 @@ User : "Mercredi"
 - ✅ Tests : 3 nouveaux unit tests sur `get_load_context` ATL/CTL/TSB et `get_user_constraints` (filtrage actif/expiré + categories override). Tests routing et llm_tools mis à jour pour le budget enrichi. 443 tests passent
 - ⏳ Chantier 4 (mémoire des contraintes temporelles avec `valid_until`) — `expires_at` existe déjà sur `UserFact`/`WorkingMemoryEntry` et est respecté par `get_user_constraints` ; reste à connecter le LLM extracteur d'indications pour qu'il pose `expires_at` cohérent avec la durée de la contrainte
 
-### Chantier 2bis — Heartbeat utilise les mêmes capacités (2h)
-- Brancher `coach_reading_digest` dans `weekly_review()` (actuellement non utilisé là)
-- Enrichir le digest pour exposer `real_entries` détaillés (déjà dans le dataclass, juste à rendre visible)
-- À terme : weekly_review et briefing matin doivent utiliser les mêmes tools que la conversation
-- Test : weekly review ne dit plus "zéro natation" quand une nage offplan existe
+### Chantier 2bis — Heartbeat utilise les mêmes capacités ✅ (fait le 21 avril 2026)
+- ✅ `weekly_review()` (heartbeat.py:281-368) construit `recent_reality` puis `coach_reading_digest` (mêmes appels que `morning_briefing`), avec dégradation gracieuse en log warning si l'un échoue
+- ✅ `build_review_prompt()` (roles.py:347-401) accepte `digest: CoachReadingDigest | None` et l'injecte via `render_digest_for_prompt(digest)` après les compteurs agrégés (qui restent pour compat des tests existants)
+- ✅ Anti-hallu rule miroir du briefing matin ajoutée dans le system prompt review : "N'invente jamais un comptage hebdomadaire et ne dis pas 'zero <sport>' si une sortie de ce sport apparait dans le bloc, meme hors plan"
+- ✅ Le digest expose déjà `real_entries` détaillés (dataclass `RealEntry` avec `linked_to_plan`) — `render_digest_for_prompt` produit `swimming 45' jeu (offplan)` lisible par le LLM
+- ✅ Test `test_weekly_review_surfaces_offplan_swimming_entry` : nage offplan en DB → prompt review contient "Lecture de la semaine", "swimming", "(offplan)" + system prompt contient l'anti-hallu rule. 444 tests passent
+- ⏳ Reste hors scope 2bis : faire passer weekly_review et morning_briefing par `route_tools_for_query` + `execute_tool_call` comme la conversation (aujourd'hui ils consomment les builders directement, pas le tool runtime)
 
 ### Chantier 3 — Audit + rewrite system prompts (2-3h)
 - Identifier les directives "propose des options" / "laisse le user choisir" dans les prompts existants
