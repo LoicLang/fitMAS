@@ -61,8 +61,10 @@ from fitmas.user_indications import (
     UserIndicationKind,
     UserIndicationPolarity,
     UserIndicationScope,
+    build_availability_fact_payloads_from_indication,
     build_health_fact_payloads_from_indication,
     looks_like_execution_clarification_prompt,
+    parse_availability_fact_key,
     supports_planning_resolution,
 )
 from fitmas.time_context import DAY_LABELS_FR, MONTH_LABELS_FR, get_timezone
@@ -615,6 +617,18 @@ def _targeted_execution_clarification(
     if not yesterday_sessions:
         return None
 
+    # Chantier 4 : skip la clarification si la séance d'hier tombe dans une
+    # contrainte d'indisponibilité encore active (ex : "piscine fermée 2
+    # semaines" → ne pas redemander "tu l'as faite ou pas ?" pour la natation
+    # de lundi qui tombe dans la fenêtre).
+    if _yesterday_session_covered_by_active_constraint(
+        db=db,
+        user=user,
+        yesterday_session=yesterday_sessions[0],
+        yesterday=yesterday,
+    ):
+        return None
+
     recent_claims = claimed_activities_last_days(db, user, days=14)
     return build_execution_clarification(
         today=today,
@@ -624,6 +638,36 @@ def _targeted_execution_clarification(
         activities=repo.get_activities(db, user.id, limit=120),
         claims=list(recent_claims),
     )
+
+
+def _yesterday_session_covered_by_active_constraint(
+    *,
+    db: Session,
+    user,
+    yesterday_session,
+    yesterday: date,
+) -> bool:
+    """Retourne True si une `UserFact` availability active recouvre la séance
+    d'hier (date dans la fenêtre ET sport match ou sport non spécifié).
+
+    Filtrage par `fact_is_current` effectué en amont via
+    `repo.get_active_facts`, donc on n'a pas à re-vérifier `expires_at`."""
+    active_facts = repo.get_active_facts(db, user.id, limit=60)
+    session_sport = str(_value(yesterday_session, "sport_type") or "").strip().lower() or None
+    for fact in active_facts:
+        if str(_value(fact, "category") or "").lower() != "availability":
+            continue
+        parsed = parse_availability_fact_key(_value(fact, "key"))
+        if parsed is None:
+            continue
+        if not (parsed.start_date <= yesterday <= parsed.end_date):
+            continue
+        if parsed.sport_type is None:
+            # contrainte générale (voyage, indispo totale) → couvre tout
+            return True
+        if session_sport is not None and parsed.sport_type == session_sport:
+            return True
+    return False
 
 
 def _latest_agent_text(conversation_history: list[dict]) -> str | None:

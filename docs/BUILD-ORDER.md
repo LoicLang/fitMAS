@@ -113,7 +113,19 @@ Court-circuit `clarification` du pipeline converti en contexte soft pour `decide
 - ✅ Tests pipeline (`test_core_flows.py`) refactorisés : `..._surfaces_targeted_clarification_as_prompt_context_to_llm`, `..._does_not_block_fatigue_adaptation_anymore`, `..._followup_breaks_loop_after_first_turn`, `..._resolves_clarification_via_decide`, `..._after_clarification_is_ingested_normally`
 - ✅ Tests prompt (`test_llm_prompt_builder.py`) : `UnresolvedExecutionFollowupInjectionTest` (classique/layered/None). **460 tests passent**.
 
-Prochain pas : Chantier 4 (mémoire des contraintes temporelles avec `valid_until` posé par l'extracteur d'indications).
+### Chantier 4 du refactor — fait
+
+Mémoire des contraintes temporelles avec `expires_at` ancré sur la fin de fenêtre, livré le 21 avril 2026 :
+- ✅ Symptôme dogfood (screenshot Telegram) : après "imprevu, piscine fermee 2 semaines", le coach continuait de reposer "tu l'as faite ou pas ?" sur la natation couverte par la contrainte, et au tour suivant il ne se souvenait plus de la fenêtre. Zéro persistence des contraintes multi-jours.
+- ✅ Schéma : `IndicationTimeReference.window_end_date: date | None` ajouté (`user_indications.py`), propagé dans `_time_reference_from_payload` pour les parses LLM.
+- ✅ Parser durée (`_extract_constraint_duration_days`) : "2 semaines", "15 jours", "une/la semaine". Branché dans `_fallback_availability_indication` → `window_end = resolved_date + (duration - 1)`, scope upgradé à WEEK.
+- ✅ Builder `build_availability_fact_payloads_from_indication` : produit un `UserFact` category=`availability`, key `unavailable_<sport|general>_<start-iso>_<end-iso>` (sport détecté via `_TRIGGER_ACTIVITY_PATTERNS`), `expires_at = datetime.combine(end + 1 jour, time.min)`. Skippe single-day + polarités non-UNAVAILABLE.
+- ✅ Parse inverse `parse_availability_fact_key` : retrouve sport + start + end depuis la clé, sans relire l'indication d'origine.
+- ✅ Pipeline (`conversation_pipeline.py`) : persiste les availability facts AVANT le flux health, refresh `_active_memory_payloads`.
+- ✅ Garde clarification (`_yesterday_session_covered_by_active_constraint` dans `api_messages.py`) : parcourt `repo.get_active_facts` (filtré par `fact_is_current`), retourne True si hier ∈ fenêtre ET (sport match ou contrainte générale). Wiré dans `_targeted_execution_clarification` après le check `yesterday_sessions`.
+- ✅ Tests `test_user_indications.py` : 3 duration parser + 7 builder/parser inverse. Tests pipeline `test_core_flows.py` : `test_availability_constraint_persists_as_fact_with_window_anchored_expires_at` + `test_execution_clarification_skipped_when_active_availability_fact_covers_yesterday`. **472 tests passent**.
+
+Prochain pas : Chantier 5 (skill `propose_replan` avec validator déterministe) — quand la piscine ferme 2 semaines, le coach doit présenter UN plan de repli validé au lieu de demander au user de choisir.
 
 ### Vérité repo
 

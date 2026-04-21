@@ -170,7 +170,7 @@ User : "Mercredi"
 - ✅ Pré-fetch via `ToolContext.scheduled_sessions` / `activities` / `active_facts` (déjà en place)
 - ✅ Routing : turn_planner intent `availability_constraint` → `PLAN_NEGOTIATION` → 5 tools dont `get_plan_window` + `get_user_constraints`. Le coach LLM reçoit donc plan futur + contraintes mémorisées sur "piscine fermée 2 semaines"
 - ✅ Tests : 3 nouveaux unit tests sur `get_load_context` ATL/CTL/TSB et `get_user_constraints` (filtrage actif/expiré + categories override). Tests routing et llm_tools mis à jour pour le budget enrichi. 443 tests passent
-- ⏳ Chantier 4 (mémoire des contraintes temporelles avec `valid_until`) — `expires_at` existe déjà sur `UserFact`/`WorkingMemoryEntry` et est respecté par `get_user_constraints` ; reste à connecter le LLM extracteur d'indications pour qu'il pose `expires_at` cohérent avec la durée de la contrainte
+- ✅ Chantier 4 (mémoire des contraintes temporelles avec `expires_at` ancré sur la fin de fenêtre) — parser de durée "X semaines/jours" branché dans le fallback, `IndicationTimeReference.window_end_date` ajouté, `build_availability_fact_payloads_from_indication` produit un `UserFact` category=availability avec `expires_at = end + 1 jour` (00:00) et une clé `unavailable_<sport>_<start>_<end>` parseable en inverse, et `_targeted_execution_clarification` saute la clarification quand la séance d'hier est recouverte par un fact availability actif
 
 ### Chantier 2bis — Heartbeat utilise les mêmes capacités ✅ (fait le 21 avril 2026)
 - ✅ `weekly_review()` (heartbeat.py:281-368) construit `recent_reality` puis `coach_reading_digest` (mêmes appels que `morning_briefing`), avec dégradation gracieuse en log warning si l'un échoue
@@ -210,10 +210,22 @@ Refactor :
 - ✅ Tests prompt (`test_llm_prompt_builder.py`) : `UnresolvedExecutionFollowupInjectionTest` couvre classique/layered/None.
 - 460 tests passent.
 
-### Chantier 4 — Mémoire des contraintes temporelles (2h)
-- Indication de type "indispo période X-Y" → écrite en `working_memory_entries` avec `valid_until`
-- `get_user_constraints()` filtre uniquement les contraintes encore actives à la date courante
-- Test : dans 7 jours le coach se rappelle de la piscine fermée et ne propose pas de natation
+### Chantier 4 — Mémoire des contraintes temporelles ✅ (fait le 21 avril 2026)
+
+Symptôme remonté en dogfood (screenshot Telegram) : après "imprevu, piscine fermee 2 semaines", le coach continuait de reposer la clarification execution "tu l'as faite ou pas ?" sur la natation de lundi, et au tour suivant il ne se souvenait plus de la contrainte. Aucune mémoire persistante de la fenêtre d'indisponibilité.
+
+Cause racine : l'interprétation d'une contrainte multi-jours produisait bien un `UserIndication(kind=AVAILABILITY_CONSTRAINT)`, mais (1) aucune durée n'était extraite (pas de `window_end_date`), (2) rien ne la persistait en `UserFact` avec `expires_at`, (3) le garde anti-clarification ne connaissait pas ces faits pour sauter la question sur les séances couvertes par la fenêtre.
+
+Refactor :
+- ✅ Schéma : `IndicationTimeReference.window_end_date: date | None` ajouté (`user_indications.py`), propagé dans `_time_reference_from_payload` pour les parses LLM.
+- ✅ Parser durée : `_extract_constraint_duration_days` gère "2 semaines", "15 jours", "une semaine", "la semaine" (quelques regex ciblées). Branché dans `_fallback_availability_indication` : `window_end = resolved_date + timedelta(days=max(0, duration - 1))`, scope upgradé à WEEK.
+- ✅ Builder : `build_availability_fact_payloads_from_indication(indication)` produit un `UserFact` category=`availability`, key `unavailable_<sport|general>_<start-iso>_<end-iso>` (encoding complet pour pouvoir retrouver start/end/sport depuis la clé, les extras sont silencieusement ignorés par le schéma), value explicite, `expires_at = datetime.combine(end + timedelta(days=1), time.min)`. Skippe les contraintes single-day et les polarités non-UNAVAILABLE. Sport détecté via `_TRIGGER_ACTIVITY_PATTERNS` sur le texte normalisé.
+- ✅ Parse inverse : `parse_availability_fact_key(key) → AvailabilityConstraintKey{sport_type, start_date, end_date}` pour que le garde anti-clarification puisse comparer la date d'hier à la fenêtre sans relire l'indication d'origine.
+- ✅ Pipeline : `conversation_pipeline.py` appelle `build_availability_fact_payloads_from_indication` AVANT le traitement health, persiste via `_persist_turn_memory_updates`, puis refresh `_active_memory_payloads` (même pattern que le flux santé).
+- ✅ Garde clarification : `_yesterday_session_covered_by_active_constraint` dans `api_messages.py` parcourt `repo.get_active_facts` (filtré par `fact_is_current(expires_at)`), parse les clés `unavailable_*`, et retourne True si la date d'hier tombe dans la fenêtre ET (sport match ou contrainte générale). Wiré dans `_targeted_execution_clarification` après le check `yesterday_sessions` et avant le `build_execution_clarification`.
+- ✅ Tests (`test_user_indications.py`) : 3 tests parser (`AvailabilityConstraintDurationTest` : "2 semaines", "15 jours", pas de durée → window_end None) + 7 tests builder/parser inverse (`AvailabilityFactBuilderTest` : produit le fact avec expires_at correct, fallback `general` sans activité, skip single-day, skip LIMITED polarity, roundtrip clé, `general` sport None, clés malformées).
+- ✅ Tests pipeline (`test_core_flows.py`) : `test_availability_constraint_persists_as_fact_with_window_anchored_expires_at` (mock interpret → UserFact en DB avec bonne clé + expires_at) + `test_execution_clarification_skipped_when_active_availability_fact_covers_yesterday` (séance natation hier + fact actif → `_targeted_execution_clarification` retourne None).
+- 472 tests passent.
 
 ### Chantier 5 — Skill `propose_replan` avec validator (1-2j)
 - Extraire un module `validator.py` testable seul :

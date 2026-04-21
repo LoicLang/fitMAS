@@ -400,6 +400,23 @@ def run_conversation_turn(
             target_date_iso=yesterday.isoformat(),
         )
 
+    # Chantier 4 (mémoire contraintes temporelles) : une contrainte multi-jours
+    # ("piscine fermée 2 semaines") est persistée comme fact avec expires_at
+    # ancré sur la fin de fenêtre. Fait AVANT le traitement health pour que
+    # le refresh `_active_memory_payloads` ci-dessous l'inclue si les deux
+    # co-occurrent sur un même tour.
+    availability_indication_facts = api_messages.build_availability_fact_payloads_from_indication(
+        user_indication
+    )
+    if availability_indication_facts:
+        _persist_turn_memory_updates(
+            db,
+            user.id,
+            availability_indication_facts,
+            turn_memory_writes=turn_memory_writes,
+        )
+        state.active_memory_rows, state.active_facts = api_messages._active_memory_payloads(db, user.id)
+
     health_indication_facts = api_messages.build_health_fact_payloads_from_indication(user_indication)
     health_indication_handled = bool(health_indication_facts)
     defer_health_adaptation_to_llm = bool(health_indication_facts and plan_mutation_request)

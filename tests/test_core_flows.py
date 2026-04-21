@@ -2317,6 +2317,166 @@ class FitMASCoreFlowsTest(unittest.TestCase):
         self.assertIn("series", load)
         self.assertGreater(len(load["series"]), 0)
 
+    def test_availability_constraint_persists_as_fact_with_window_anchored_expires_at(self) -> None:
+        """Chantier 4: a multi-day AVAILABILITY_CONSTRAINT surfaced by
+        interpret_user_indication must be persisted as a UserFact with
+        category=availability, a key encoding start/end dates, and
+        expires_at anchored on window_end + 1 day so it stays active for
+        the whole constraint and is auto-filtered out afterwards."""
+        self._create_plan_for_today()
+        now = get_local_now(self.user.timezone)
+        start = now.date() + timedelta(days=1)
+        end = start + timedelta(days=13)  # 14-day window inclusive
+
+        original_decide = api_messages.decide
+        original_extract_facts = api_messages.extract_facts
+        original_interpret = api_messages.interpret_user_indication
+        original_plan_turn = api_messages.plan_conversation_turn
+        try:
+            api_messages.extract_facts = lambda *args, **kwargs: []
+            api_messages.interpret_user_indication = lambda *args, **kwargs: UserIndication(
+                kind=UserIndicationKind.AVAILABILITY_CONSTRAINT,
+                confidence=0.9,
+                source_text="je n'ai pas acces a la piscine pendant 2 semaines",
+                scope=UserIndicationScope.WEEK,
+                polarity=UserIndicationPolarity.UNAVAILABLE,
+                time_reference=IndicationTimeReference(
+                    label="window",
+                    resolved_date=start,
+                    day_key=None,
+                    relative_reference=None,
+                    window=None,
+                    window_end_date=end,
+                ),
+            )
+            api_messages.plan_conversation_turn = lambda *args, **kwargs: None
+            api_messages.decide = lambda *args, **kwargs: MutationDecision(
+                mutation_type="no_change",
+                rationale="note prise",
+                fitmas_message="Bien note.",
+            )
+            self.client.post(
+                "/api/v0/messages",
+                json={"text": "je n'ai pas acces a la piscine pendant 2 semaines"},
+            )
+        finally:
+            api_messages.decide = original_decide
+            api_messages.extract_facts = original_extract_facts
+            api_messages.interpret_user_indication = original_interpret
+            api_messages.plan_conversation_turn = original_plan_turn
+
+        facts = (
+            self.db.query(s.UserFact)
+            .filter(s.UserFact.user_id == self.user.id, s.UserFact.category == "availability")
+            .all()
+        )
+        self.assertEqual(len(facts), 1, f"expected 1 availability fact, got {[(f.category, f.key) for f in facts]}")
+        fact = facts[0]
+        self.assertEqual(
+            fact.key,
+            f"unavailable_swimming_{start.isoformat()}_{end.isoformat()}",
+        )
+        self.assertTrue(fact.active)
+        # expires_at = end + 1 day at midnight (stays active through the last day).
+        self.assertEqual(
+            fact.expires_at,
+            datetime.combine(end + timedelta(days=1), datetime.min.time()),
+        )
+
+    def test_execution_clarification_skipped_when_active_availability_fact_covers_yesterday(self) -> None:
+        """Chantier 4: yesterday had a swimming session and an active availability
+        fact covering that date exists (key = unavailable_swimming_<yesterday>_<later>).
+        The targeted execution clarification must NOT re-ask "tu l'as faite ou pas ?"
+        — the coach already knows the pool is closed."""
+        self._create_plan_for_today()
+        now = get_local_now(self.user.timezone)
+        today = now.replace(hour=7, minute=0, second=0, microsecond=0)
+        yesterday_dt = today - timedelta(days=1)
+        yesterday_date = yesterday_dt.date()
+        self.db.add(
+            s.ScheduledSession(
+                user_id=self.user.id,
+                day=DAY_KEYS[yesterday_dt.weekday()],
+                label=day_label_fr(DAY_KEYS[yesterday_dt.weekday()], capitalize=True),
+                scheduled_date=yesterday_dt,
+                sport_type="swimming",
+                session_type="endurance",
+                session_title="Natation technique",
+                session_goal="Maintien",
+                session_note="",
+                session_description="45 min",
+                duration_min=45,
+                intensity="easy",
+                load_score=2,
+                priority="Normal",
+                nutrition_focus="",
+                flexibility="stable",
+                completion_status="planned",
+            )
+        )
+        # Active availability fact: pool closed yesterday → + 13 days.
+        end_date = yesterday_date + timedelta(days=13)
+        self.db.add(
+            s.UserFact(
+                user_id=self.user.id,
+                category="availability",
+                key=f"unavailable_swimming_{yesterday_date.isoformat()}_{end_date.isoformat()}",
+                value="Indisponibilite declaree : piscine fermee pendant 2 semaines",
+                source="conversation",
+                confidence=0.9,
+                confirmed=False,
+                active=True,
+                urgency="medium",
+                ttl="short",
+                affects_json="[]",
+                expires_at=datetime.combine(end_date + timedelta(days=1), datetime.min.time()),
+            )
+        )
+        self.db.commit()
+
+        from fitmas.conversation_context import build_conversation_context
+
+        scheduled_payloads = [
+            {
+                "id": row.id,
+                "day": row.day,
+                "scheduled_date": row.scheduled_date,
+                "sport_type": row.sport_type,
+                "session_title": row.session_title,
+                "completion_status": row.completion_status,
+            }
+            for row in repo.get_scheduled_sessions_between_dates(
+                self.db,
+                self.user.id,
+                start_date=today.date() - timedelta(days=13),
+                end_date=today.date() + timedelta(days=7),
+                limit=42,
+            )
+        ]
+        context = build_conversation_context(
+            user_text="rien de special",
+            conversation_history=[],
+            timezone_name=self.user.timezone,
+            scheduled_sessions=scheduled_payloads,
+            activities=[],
+            active_facts=[],
+            now=today,
+        )
+
+        clarification = api_messages._targeted_execution_clarification(
+            db=self.db,
+            user=self.user,
+            conversation_context=context,
+            user_indication=None,
+            resolved_non_completion_claim=None,
+            resolved_activity_claim=None,
+            previous_agent_text=None,
+        )
+        self.assertIsNone(
+            clarification,
+            "Availability fact covering yesterday must suppress the execution clarification",
+        )
+
     def test_today_view_exposes_fitness_and_recent_same_sport_activity(self) -> None:
         _, session = self._create_plan_for_today()
         repo.add_activity(

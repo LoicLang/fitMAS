@@ -7,6 +7,8 @@ from datetime import date, datetime
 from enum import StrEnum
 from typing import Any
 
+from datetime import timedelta
+
 from fitmas.activity_claims import extract_activity_claim, extract_non_completion_claim
 from fitmas.temporal_resolver import TemporalResolution, resolve_temporal_context
 from fitmas.time_context import DAY_KEYS
@@ -143,7 +145,12 @@ class IndicationTimeReference:
     resolved_date: date | None
     day_key: str | None
     relative_reference: str | None
-    window: str | None
+    window: str | None  # part-of-day ("morning", "evening"), NOT constraint duration
+    # Chantier 4 (mémoire contraintes temporelles): fin inclusive de la
+    # fenêtre d'indisponibilité. None quand l'indication couvre un jour
+    # unique ou une partie de jour ; posée à la date de fin quand l'user
+    # annonce une contrainte multi-jours ("piscine fermée 2 semaines").
+    window_end_date: date | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -341,6 +348,100 @@ def supports_planning_resolution(indication: UserIndication | None) -> bool:
     return indication.time_reference is not None and indication.time_reference.resolved_date is not None
 
 
+def build_availability_fact_payloads_from_indication(
+    indication: UserIndication | None,
+) -> list[dict[str, Any]]:
+    """Chantier 4 : transforme une `AVAILABILITY_CONSTRAINT` multi-jours en
+    `UserFact` persistante avec `expires_at` ancré sur la fin de fenêtre.
+
+    Ne produit rien quand la contrainte est mono-jour (géré via les flows
+    existants de reprogrammation), ni quand la fin de fenêtre est absente
+    (on ne veut pas synthétiser un `expires_at` arbitraire qui pollue la
+    lecture 3 semaines plus tard).
+
+    Retourne au plus un payload. La clé `unavailable_<activity>_<start>_<end>`
+    garantit l'idempotence : si l'user répète "piscine fermée 2 semaines" sur
+    la même période, on upsert le même fact."""
+    if indication is None or indication.kind is not UserIndicationKind.AVAILABILITY_CONSTRAINT:
+        return []
+    if indication.polarity is not UserIndicationPolarity.UNAVAILABLE:
+        return []
+    time_reference = indication.time_reference
+    if time_reference is None:
+        return []
+    start = time_reference.resolved_date
+    end = time_reference.window_end_date
+    if start is None or end is None:
+        return []
+    if end < start:
+        return []
+    # Choisir un label de sport : le pattern trigger ou un fallback générique.
+    trigger_activity: str | None = None
+    source_text_normalized = _normalize(indication.source_text or "")
+    for activity_key, aliases in _TRIGGER_ACTIVITY_PATTERNS.items():
+        if any(alias in source_text_normalized for alias in aliases):
+            trigger_activity = activity_key
+            break
+    scope_label = trigger_activity or "general"
+    value_text = (
+        f"Indispo {scope_label} du {start.isoformat()} au {end.isoformat()} "
+        f"(source: {indication.source_text.strip()})"
+    )
+    return [
+        {
+            "category": "availability",
+            "key": f"unavailable_{scope_label}_{start.isoformat()}_{end.isoformat()}",
+            "value": value_text,
+            "source": "conversation",
+            "confidence": indication.confidence,
+            "confirmed": True,
+            "affects": ["planning", "conversation", "heartbeat"],
+            # `expires_at` posé à la fin du jour de fin : la contrainte reste
+            # active tout le dernier jour. `fact_is_current` gère l'UTC ;
+            # on passe un datetime naïf minuit-fin-de-jour comme les autres
+            # call sites (normalize_fact_payload normalisera si besoin).
+            "expires_at": datetime.combine(
+                end + timedelta(days=1), datetime.min.time()
+            ),
+        }
+    ]
+
+
+@dataclass(frozen=True, slots=True)
+class AvailabilityConstraintKey:
+    sport_type: str | None
+    start_date: date
+    end_date: date
+
+
+_AVAILABILITY_KEY_RE = re.compile(
+    r"^unavailable_(?P<sport>[a-z_]+)_(?P<start>\d{4}-\d{2}-\d{2})_(?P<end>\d{4}-\d{2}-\d{2})$"
+)
+
+
+def parse_availability_fact_key(key: str | None) -> AvailabilityConstraintKey | None:
+    """Inverse de `build_availability_fact_payloads_from_indication` : extrait
+    sport + fenêtre depuis la clé canonique. Utilisé par
+    `_targeted_execution_clarification` pour décider si une séance d'hier
+    tombe dans une indisponibilité active."""
+    if not key:
+        return None
+    match = _AVAILABILITY_KEY_RE.match(key)
+    if match is None:
+        return None
+    sport = match.group("sport")
+    if sport == "general":
+        sport = None
+    try:
+        start = date.fromisoformat(match.group("start"))
+        end = date.fromisoformat(match.group("end"))
+    except ValueError:
+        return None
+    if end < start:
+        return None
+    return AvailabilityConstraintKey(sport_type=sport, start_date=start, end_date=end)
+
+
 def build_health_fact_payloads_from_indication(indication: UserIndication | None) -> list[dict[str, Any]]:
     if indication is None or indication.kind is not UserIndicationKind.HEALTH_SIGNAL:
         return []
@@ -393,15 +494,74 @@ def _fallback_availability_indication(
         else UserIndicationPolarity.UNAVAILABLE
     )
     confidence = 0.92 if temporal.part_of_day else 0.87
+    time_reference = _time_reference_from_temporal(temporal)
+    duration_days = _extract_constraint_duration_days(normalized)
+    if duration_days is not None and temporal.resolved_date is not None:
+        window_end = temporal.resolved_date + timedelta(days=max(0, duration_days - 1))
+        time_reference = _with_window_end(time_reference, window_end)
+        scope = UserIndicationScope.WEEK
     return UserIndication(
         kind=UserIndicationKind.AVAILABILITY_CONSTRAINT,
         confidence=confidence,
         source_text=text.strip(),
         scope=scope,
         polarity=polarity,
-        time_reference=_time_reference_from_temporal(temporal),
+        time_reference=time_reference,
         requested_days=_extract_requested_days(normalized),
         earliest_day=_extract_earliest_day(normalized),
+    )
+
+
+# Chantier 4 : patterns pour parser une durée de contrainte multi-jours.
+# Matches sur texte normalisé (accents supprimés, lowercase). Le capture
+# group `n` donne le nombre ; les bornes basses (`\b`) évitent de matcher
+# "12 semaines" sur "12 semainesabc" par exemple.
+_DURATION_PATTERNS = (
+    # "2 semaines", "pendant 2 semaines", "pour 2 semaines"
+    (re.compile(r"\b(?P<n>\d{1,2})\s*semaines?\b"), 7),
+    # "15 jours", "pendant 15 jours"
+    (re.compile(r"\b(?P<n>\d{1,2})\s*jours?\b"), 1),
+    # "une semaine", "la semaine prochaine entiere"
+    (re.compile(r"\bune semaine\b"), 7),
+    (re.compile(r"\bla semaine\b"), 7),
+)
+
+
+def _extract_constraint_duration_days(normalized: str) -> int | None:
+    """Extrait une durée en jours depuis un texte normalisé.
+
+    Retourne None si aucun pattern reconnu. Retourne un `int` quand la
+    contrainte porte sur plusieurs jours ("2 semaines" → 14, "15 jours" → 15).
+    Utilisé pour calculer `window_end_date` et ancrer `expires_at` sur la
+    fin de fenêtre réelle plutôt que sur un TTL fixe."""
+    for pattern, multiplier in _DURATION_PATTERNS:
+        match = pattern.search(normalized)
+        if match is None:
+            continue
+        groups = match.groupdict()
+        count = 1
+        if "n" in groups and groups["n"] is not None:
+            try:
+                count = max(1, int(groups["n"]))
+            except ValueError:
+                continue
+        days = count * multiplier
+        if days >= 2:
+            return days
+    return None
+
+
+def _with_window_end(
+    time_reference: IndicationTimeReference,
+    window_end: date,
+) -> IndicationTimeReference:
+    return IndicationTimeReference(
+        label=time_reference.label,
+        resolved_date=time_reference.resolved_date,
+        day_key=time_reference.day_key,
+        relative_reference=time_reference.relative_reference,
+        window=time_reference.window,
+        window_end_date=window_end,
     )
 
 
@@ -445,6 +605,7 @@ def _time_reference_from_payload(
     day_key = str(payload.get("day_key") or "").strip() or None
     relative_reference = str(payload.get("relative_reference") or "").strip() or None
     window = str(payload.get("window") or "").strip() or None
+    window_end_date = _coerce_date(payload.get("window_end_date"))
     if resolved_date is None and (label or relative_reference):
         temporal = resolve_temporal_context(label or relative_reference or "", timezone_name=timezone_name, now=now)
         resolved_date = temporal.resolved_date
@@ -464,6 +625,7 @@ def _time_reference_from_payload(
         day_key=day_key,
         relative_reference=relative_reference,
         window=window,
+        window_end_date=window_end_date,
     )
 
 
