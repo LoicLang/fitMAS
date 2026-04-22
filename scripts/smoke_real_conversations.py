@@ -4,6 +4,7 @@ from __future__ import annotations
 import argparse
 import os
 import sys
+from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -256,8 +257,24 @@ def _post_message(client: TestClient, db: SessionLocal, user: s.User, text: str)
     _print_turn(text, payload, before, after)
 
 
+@contextmanager
+def _override_now(iso_value: str | None):
+    previous = os.environ.get("FITMAS_OVERRIDE_NOW_ISO")
+    if iso_value is None:
+        os.environ.pop("FITMAS_OVERRIDE_NOW_ISO", None)
+    else:
+        os.environ["FITMAS_OVERRIDE_NOW_ISO"] = iso_value
+    try:
+        yield
+    finally:
+        if previous is None:
+            os.environ.pop("FITMAS_OVERRIDE_NOW_ISO", None)
+        else:
+            os.environ["FITMAS_OVERRIDE_NOW_ISO"] = previous
+
+
 def _setup_base(db: SessionLocal, *, vague_week: bool = False, strong_next_day_hint: bool = False) -> s.User:
-    now = get_local_now("Europe/Paris")
+    now = datetime.fromisoformat("2026-04-19T20:00:00+02:00")
     next_day_key = DAY_KEYS[(now.weekday() + 1) % 7]
     next_label = day_label_fr(next_day_key, capitalize=True)
     weekly_notes = "Semaine chargee, dimanche long protege."
@@ -351,7 +368,7 @@ def _setup_compound_swap(db: SessionLocal) -> s.User:
     claim ('j'ai oublie la piscine') with a swap request ('swap avec
     vendredi') must reach the LLM decide() and be treated as a mutation,
     not as a mere non-completion report."""
-    now = get_local_now("Europe/Paris")
+    now = datetime.fromisoformat("2026-04-19T20:00:00+02:00")
     weekly_notes = "Semaine chargee, dimanche long protege. Vendredi recuperation flexible."
     user = _create_user(db, weekly_structure_notes=weekly_notes)
     today_key = DAY_KEYS[now.weekday()]
@@ -433,7 +450,7 @@ def _setup_golden_case_autonomy(db: SessionLocal) -> s.User:
       - sur "Mercredi" : phantom action (le coach affirme "je libere ce
         creneau" sans appliquer de mutation reelle)
     """
-    now = get_local_now("Europe/Paris")
+    now = datetime.fromisoformat("2026-04-19T20:00:00+02:00")
     weekly_notes = (
         "Semaine triple : running socle, natation 2x technique + endurance, "
         "renfo support. Dimanche soir bilan."
@@ -534,56 +551,66 @@ def scenario_golden_case_autonomy(db: SessionLocal, client: TestClient, user: s.
     import fitmas.heartbeat as heartbeat
     from fitmas.coach_messages import persist_draft
 
-    heartbeat._LAST_PROACTIVE_GUARD_AT.clear()
-    before = _snapshot(db, user.id)
-    draft = heartbeat.weekly_review()
-    if draft is not None:
-        persist_draft(user.id, draft, db=db)
-        db.expire_all()
-        after = _snapshot(db, user.id)
-        print("TURN: heartbeat:weekly_review (Tour 1)")
-        print(f"assistant: {draft.text}")
-        new_memory = []
-        for key, value in after["memory"].items():
-            if before["memory"].get(key) != value:
-                new_memory.append(f"{key[0]}:{key[1]}")
-        print(f"memory_changes: {', '.join(new_memory) if new_memory else '-'}")
-        print("session_changes: -")
-        print("adaptation: -")
-        print("BUG_EXPECTED: regarde si le coach dit 'zero natation' alors qu'une nage offplan J-2 existe")
-        print("")
-    else:
-        print("TURN: heartbeat:weekly_review (Tour 1)")
-        print("assistant: NO_SEND")
-        print("")
+    sunday_review = "2026-04-19T20:00:00+02:00"
+    monday_followup = "2026-04-20T08:05:00+02:00"
+
+    with _override_now(sunday_review):
+        heartbeat._LAST_PROACTIVE_GUARD_AT.clear()
+        before = _snapshot(db, user.id)
+        draft = heartbeat.weekly_review()
+        if draft is not None:
+            persist_draft(user.id, draft, db=db)
+            db.expire_all()
+            after = _snapshot(db, user.id)
+            print("TURN: heartbeat:weekly_review (Tour 1)")
+            print(f"assistant: {draft.text}")
+            new_memory = []
+            for key, value in after["memory"].items():
+                if before["memory"].get(key) != value:
+                    new_memory.append(f"{key[0]}:{key[1]}")
+            print(f"memory_changes: {', '.join(new_memory) if new_memory else '-'}")
+            print("session_changes: -")
+            print("adaptation: -")
+            print("BUG_EXPECTED: regarde si le coach dit 'zero natation' alors qu'une nage offplan J-2 existe")
+            print("")
+        else:
+            print("TURN: heartbeat:weekly_review (Tour 1)")
+            print("assistant: NO_SEND")
+            print("")
 
     # Tour 2 : correction utilisateur (nage offplan)
-    _post_message(client, db, user, "J'ai nage vendredi regarde mes seances reel")
+    with _override_now(sunday_review):
+        _post_message(client, db, user, "J'ai nage vendredi regarde mes seances reel")
     print("BUG_EXPECTED: peut halluciner un session id different de la vraie nage offplan J-2")
     print("")
 
     # Tour 3 : aveu utilisateur
-    _post_message(client, db, user, "J'ai eut des imprevu")
+    with _override_now(sunday_review):
+        _post_message(client, db, user, "J'ai eut des imprevu")
     print("BUG_EXPECTED: token interne 'this_week' recopie brut dans la sortie (court-circuit _week_scope_reply)")
     print("")
 
     # Tour 4 : contrainte forte
-    _post_message(client, db, user, "je ne peux pas nager les deux prochaines semaine ma piscine est fermee")
+    with _override_now(sunday_review):
+        _post_message(client, db, user, "je ne peux pas nager les deux prochaines semaine ma piscine est fermee")
     print("BUG_EXPECTED: hallucination 'natation prevue lundi/mercredi' alors que J+1 a J+7 sont vides")
     print("")
 
     # Tour 5 : acquiescement
-    _post_message(client, db, user, "Oui")
+    with _override_now(monday_followup):
+        _post_message(client, db, user, "Oui")
     print("BUG_EXPECTED: posture passive (re-demande des options au lieu de decider)")
     print("")
 
     # Tour 6 : reponse courte
-    _post_message(client, db, user, "Running")
+    with _override_now(monday_followup):
+        _post_message(client, db, user, "Running")
     print("BUG_EXPECTED: fallback nlp.py:60 'Je peux ajuster, mais j'ai besoin d'un point de plus' (LLM jamais appele)")
     print("")
 
     # Tour 7 : phantom action
-    _post_message(client, db, user, "Mercredi")
+    with _override_now(monday_followup):
+        _post_message(client, db, user, "Mercredi")
     print("BUG_EXPECTED: 'OK. Je libere ce creneau' sans mutation reelle - aucun session_changes attendu")
     print("")
 

@@ -141,6 +141,17 @@ class ActivityClaimsTest(unittest.TestCase):
         self.assertEqual(payloads[0]["action"], "archive")
         self.assertIn("2026-03-22", payloads[0]["key"])
 
+    def test_explicit_friday_in_retrospective_claim_resolves_to_previous_occurrence(self) -> None:
+        claim = extract_activity_claim(
+            "J'ai nage vendredi regarde mes seances reel",
+            timezone_name="Europe/Paris",
+            now=datetime.fromisoformat("2026-04-19T20:00:00+02:00"),
+        )
+
+        self.assertIsNotNone(claim)
+        self.assertEqual(claim.sport_type, "swimming")
+        self.assertEqual(claim.resolved_date_iso, "2026-04-17")
+
     def test_extracts_non_completion_claim(self) -> None:
         claim = extract_non_completion_claim(
             "Je n'ai pas couru hier",

@@ -105,6 +105,25 @@ def extract_activity_claim(
     if sport_type is None and duration_min is None and temporal.primary_reference == "unspecified":
         return None
 
+    resolved_date = temporal.resolved_date
+    if (
+        resolved_date is not None
+        and temporal.primary_reference.startswith("explicit_")
+        and _looks_retrospective_activity_claim(lowered)
+    ):
+        local_now = get_timezone(timezone_name)
+        current = now
+        if current is None:
+            current_date = datetime.now(local_now).date()
+        else:
+            if current.tzinfo is None:
+                current = current.replace(tzinfo=local_now)
+            else:
+                current = current.astimezone(local_now)
+            current_date = current.date()
+        if resolved_date > current_date:
+            resolved_date = resolved_date.fromordinal(resolved_date.toordinal() - 7)
+
     confidence = 0.55
     if sport_type:
         confidence += 0.2
@@ -116,7 +135,7 @@ def extract_activity_claim(
     return ActivityClaim(
         sport_type=sport_type,
         duration_min=duration_min,
-        resolved_date_iso=temporal.resolved_date.isoformat() if temporal.resolved_date else None,
+        resolved_date_iso=resolved_date.isoformat() if resolved_date else None,
         temporal_reference=temporal.primary_reference,
         confidence=min(confidence, 0.95),
         source_text=text.strip(),
@@ -530,6 +549,21 @@ def _extract_sport(lowered: str) -> str | None:
         if any(keyword in lowered for keyword in keywords):
             return sport
     return None
+
+
+def _looks_retrospective_activity_claim(lowered: str) -> bool:
+    past_markers = (
+        "j'ai",
+        "j ai",
+        "couru",
+        "nage",
+        "nagé",
+        "roule",
+        "roulé",
+        "fait",
+        "viens de",
+    )
+    return any(marker in lowered for marker in past_markers)
 
 
 def _extract_duration_min(lowered: str) -> int | None:

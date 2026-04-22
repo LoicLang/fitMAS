@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from datetime import date, datetime, timedelta, timezone
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
@@ -50,14 +51,18 @@ def get_timezone(timezone_name: str | None) -> ZoneInfo:
 
 
 def get_local_now(timezone_name: str | None, *, now: datetime | None = None) -> datetime:
-    current = now or datetime.now(timezone.utc)
+    current = now or _override_now() or datetime.now(timezone.utc)
     if current.tzinfo is None:
         current = current.replace(tzinfo=timezone.utc)
     return current.astimezone(get_timezone(timezone_name))
 
 
 def utc_now(*, naive: bool = False) -> datetime:
-    current = datetime.now(timezone.utc)
+    current = _override_now() or datetime.now(timezone.utc)
+    if current.tzinfo is None:
+        current = current.replace(tzinfo=timezone.utc)
+    else:
+        current = current.astimezone(timezone.utc)
     if naive:
         return current.replace(tzinfo=None)
     return current
@@ -136,3 +141,13 @@ def _part_of_day(hour: int) -> str:
     if hour < 18:
         return "apres-midi"
     return "soir"
+
+
+def _override_now() -> datetime | None:
+    raw = os.environ.get("FITMAS_OVERRIDE_NOW_ISO")
+    if not raw:
+        return None
+    try:
+        return datetime.fromisoformat(raw)
+    except ValueError:
+        return None

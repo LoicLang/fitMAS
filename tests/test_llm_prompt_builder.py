@@ -235,6 +235,12 @@ class CoachPostureTest(unittest.TestCase):
         self.assertIn("autorisation d'ajuster", system_text)
         self.assertIn("\"demain soir\"", system_text)
         self.assertIn("ne parle jamais comme si plusieurs autres seances etaient deja annulees", system_text)
+        self.assertIn("\"j'ai nage vendredi\"", system_text)
+        self.assertIn("utilise les tools activite disponibles", system_text)
+        self.assertIn("option la plus conservative", system_text)
+        self.assertIn("running easy/steady le mercredi", system_text)
+        self.assertIn("question ambiguë", system_text)
+        self.assertIn("autre piscine ou pivot complet", system_text)
 
 
 class OpenQuestionDetectionTest(unittest.TestCase):
