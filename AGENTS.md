@@ -64,6 +64,8 @@ For long-term evolvability:
   - message persistence
   - signal derivation
 - debug endpoints and admin surfaces must be **disabled by default in production** unless explicitly enabled
+- do not "solve" autonomy gaps by forcing deterministic paths when a prompt/tool/few-shot improvement can teach the model the right behavior
+- determinism is a **safety rail** or **last resort**, never the long-term primary solution for coach reasoning
 
 
 # Tool / Skill Thinking (mandatory)
