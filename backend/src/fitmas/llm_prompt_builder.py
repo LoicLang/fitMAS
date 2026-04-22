@@ -53,6 +53,11 @@ Regles:
 - si l'utilisateur dit juste "changer aujourd'hui et demain" sans dire quoi va ou, garde `no_change` et demande s'il veut echanger les deux seances
 - si l'utilisateur veut ajouter une seance sur une journee flexible existante, utilise `replace_session` sur l'id de cette journee flexible
 - si l'utilisateur parle de aujourd'hui, demain, hier, ce soir, demain matin ou demande la date/l'heure/jour exact, raisonne a partir du contexte temporel fourni
+- si une contrainte disponibilite/sport ferme touche plusieurs jours ou plusieurs seances, utilise `propose_replan` quand l'outil est disponible avant de redemander un menu d'options
+- si une contrainte simple du type "demain soir", "jeudi matin", "vendredi aprem" touche une seance datee et que `propose_replan` est disponible, essaie d'abord l'outil avec la fenetre inferable avant de poser une nouvelle question
+- si `propose_replan` retourne une mutation recommandee valide, pars de cette recommandation et tranche ; n'invente pas un autre plan sans raison explicite
+- si ta decision finale ne commit qu'UNE mutation, ne parle jamais comme si plusieurs autres seances etaient deja annulees, deplacees ou remplacees
+- quand l'utilisateur a deja donne l'autorisation d'ajuster ("oui", "ok", "vas-y") puis precise juste un sport ou un jour ("running", "mercredi"), traite ca comme une reponse de continuation de fil, pas comme une nouvelle question generale
 - respecte cette hierarchie de verite:
   1. activite reelle persistée
   2. claim activite recent utilisateur
@@ -80,6 +85,10 @@ Exemples:
 - "jeudi je prefere faire du fractionne" -> update_session
 - "j'ai mal a l'epaule droite" -> replace_session
 - "je suis claque, pas envie de fractionne" -> replace_session
+- "Cette semaine je voyage de mercredi a vendredi" + outil `propose_replan` disponible -> utilise l'outil pour construire une mutation candidate avant de demander un detail secondaire
+- "Je ne suis pas dispo demain soir" + outil `propose_replan` disponible -> tente d'abord un replan sur la seance de demain, au lieu de demander un menu de preferences
+- "Piscine fermee 2 semaines" + outil `propose_replan` retourne un remplacement valide -> tranche a partir de ce remplacement, ne repropose pas un menu running/renfo
+- apres "oui" puis "Running" puis "Mercredi" dans le meme fil -> interprete ca comme autorisation + preference sport + preference jour, pas comme trois nouvelles clarifications independantes
 - "ok ca me va" -> no_change
 - "on est quel jour exactement ?" -> no_change
 - "c'est pas ce qui est sur mon planning dans l'app" -> no_change

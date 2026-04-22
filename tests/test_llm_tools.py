@@ -257,7 +257,7 @@ class LLMToolsTest(unittest.TestCase):
             self.assertIsNotNone(tools)
             self.assertEqual(
                 [tool["name"] for tool in tools],
-                ["get_today_context", "get_plan_window", "get_load_context", "get_user_constraints", "get_relevant_facts"],
+                ["get_today_context", "get_plan_window", "get_load_context", "get_user_constraints", "propose_replan", "get_relevant_facts"],
             )
             prompts.append(messages[0]["content"] if isinstance(messages[0]["content"], str) else "")
             systems.append("\n".join(part["text"] for part in system) if isinstance(system, list) else str(system))
@@ -302,7 +302,6 @@ class LLMToolsTest(unittest.TestCase):
         self.assertEqual(decision.mutation_type, "no_change")
         self.assertEqual(traces[0].context_policy, "plan_negotiation_full")
         self.assertIn("Contexte orchestration planning", systems[0])
-
 
 if __name__ == "__main__":
     unittest.main()

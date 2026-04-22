@@ -70,6 +70,7 @@ class ToolRuntimeTest(unittest.TestCase):
         names = {tool["name"] for tool in list_tools_for_pipeline("conversation")}
 
         self.assertIn("get_today_context", names)
+        self.assertIn("propose_replan", names)
         self.assertIn("resolve_planning_window", names)
         self.assertIn("get_recent_activities", names)
         self.assertIn("get_relevant_facts", names)
@@ -259,6 +260,69 @@ class ToolRuntimeTest(unittest.TestCase):
         self.assertEqual(result.status, "ok")
         keys = {item["key"] for item in result.payload["constraints"]}
         self.assertEqual(keys, {"b"})
+
+    def test_propose_replan_returns_valid_replacement_for_active_swim_constraint(self) -> None:
+        context = ToolContext(
+            pipeline="conversation",
+            user_id=1,
+            timezone_name="Europe/Paris",
+            now=datetime.fromisoformat("2026-03-22T19:56:00+01:00"),
+            scheduled_sessions=[
+                {
+                    "id": 21,
+                    "scheduled_date": "2026-03-23T18:00:00+01:00",
+                    "sport_type": "running",
+                    "session_title": "Tempo demain",
+                    "session_type": "tempo",
+                    "duration_min": 50,
+                    "intensity": "moderate",
+                    "priority": "Seance cle",
+                    "completion_status": "planned",
+                },
+                {
+                    "id": 22,
+                    "scheduled_date": "2026-03-24T07:00:00+01:00",
+                    "sport_type": "swimming",
+                    "session_title": "Natation endurance",
+                    "session_type": "endurance",
+                    "duration_min": 45,
+                    "intensity": "easy",
+                    "priority": "Normal",
+                    "completion_status": "planned",
+                },
+                {
+                    "id": 23,
+                    "scheduled_date": "2026-03-25T07:00:00+01:00",
+                    "sport_type": "strength",
+                    "session_title": "Renfo support",
+                    "session_type": "strength",
+                    "duration_min": 30,
+                    "intensity": "moderate",
+                    "priority": "Normal",
+                    "completion_status": "planned",
+                },
+            ],
+            active_facts=[
+                {
+                    "category": "availability",
+                    "key": "unavailable_swimming_2026-03-23_2026-04-05",
+                    "value": "Piscine fermee pendant 2 semaines",
+                    "active": True,
+                    "expires_at": datetime.fromisoformat("2026-04-06T00:00:00+00:00"),
+                }
+            ],
+        )
+
+        registry = build_tool_registry()
+        result = registry["propose_replan"].handler(context, {})
+
+        self.assertEqual(result.status, "ok")
+        self.assertEqual(result.payload["constraint"]["sport_type"], "swimming")
+        self.assertEqual(result.payload["recommended_mutation"]["mutation_type"], "replace_session")
+        self.assertEqual(result.payload["recommended_mutation"]["target_session_id"], 22)
+        self.assertTrue(result.payload["validation"]["is_valid"])
+        self.assertTrue(result.payload["scope"]["covers_all_impacted_sessions"])
+        self.assertEqual(result.payload["scope"]["covered_session_ids"], [22])
 
 
 if __name__ == "__main__":

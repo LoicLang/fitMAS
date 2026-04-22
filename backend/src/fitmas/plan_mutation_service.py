@@ -66,7 +66,8 @@ def apply_decisions_for_user(
     if not decisions:
         return None
 
-    plan = repo.get_active_plan(db, user.id)
+    plan = repo.get_active_plan_optional(db, user.id)
+    plan_id = int(getattr(plan, "id", 0) or 0)
     scheduled_sessions = repo.get_scheduled_sessions(db, user.id, limit=84)
     applied_count = 0
     event_count = 0
@@ -75,7 +76,7 @@ def apply_decisions_for_user(
     for decision in decisions:
         pre_result, post_result = mutations.apply(
             db,
-            plan.id,
+            plan_id,
             decision,
             scheduled_sessions=scheduled_sessions,
             timezone_name=getattr(user, "timezone", None),
@@ -127,7 +128,7 @@ def apply_decisions_for_user(
             )
 
     return PlanMutationServiceResult(
-        plan_id=plan.id,
+        plan_id=plan_id,
         applied_count=applied_count,
         attempted_count=len(decisions),
         event_count=event_count,

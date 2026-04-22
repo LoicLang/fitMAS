@@ -230,6 +230,11 @@ class CoachPostureTest(unittest.TestCase):
         # The posture must explicitly reject the menu-of-options pattern.
         self.assertIn("Tu ne renvoies pas la balle", system_text)
         self.assertIn("Imprevu", system_text)
+        self.assertIn("utilise `propose_replan`", system_text)
+        self.assertIn("ne repropose pas un menu running/renfo", system_text)
+        self.assertIn("autorisation d'ajuster", system_text)
+        self.assertIn("\"demain soir\"", system_text)
+        self.assertIn("ne parle jamais comme si plusieurs autres seances etaient deja annulees", system_text)
 
 
 class OpenQuestionDetectionTest(unittest.TestCase):

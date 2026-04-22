@@ -6,6 +6,7 @@ from typing import Any, Sequence
 from fitmas.execution_context import build_today_execution_context
 from fitmas.fact_memory import fact_is_current, select_relevant_facts
 from fitmas.planning_window_resolution import format_planning_window_summary, resolve_planning_window_inputs
+from fitmas.replan_proposal import build_replan_proposal
 from fitmas.time_context import get_local_now, get_timezone
 from fitmas.tools.contract import ToolContext, ToolResult, ToolSpec
 from fitmas.training_load import compute_ctl_atl_tsb, estimate_tss
@@ -142,6 +143,22 @@ def build_tool_registry() -> dict[str, ToolSpec]:
             },
             allowed_pipelines=("conversation", "planning", "heartbeat"),
             handler=_get_user_constraints,
+        ),
+        ToolSpec(
+            name="propose_replan",
+            description="Propose une mutation de replan validee pour une contrainte temporelle ou sportive active, sans ecrire en base. Utilisable aussi pour une fenetre simple inferable comme demain soir si tu passes start_date/end_date.",
+            input_schema={
+                "type": "object",
+                "properties": {
+                    "start_date": {"type": "string", "description": "Date debut ISO YYYY-MM-DD si l'user vient d'annoncer la contrainte."},
+                    "end_date": {"type": "string", "description": "Date fin ISO YYYY-MM-DD si connue."},
+                    "sport_type": {"type": "string", "description": "Sport bloque si connu, ex: swimming."},
+                    "preferred_replacement_sport": {"type": "string", "description": "Sport de remplacement prefere si le user l'a deja dit."},
+                },
+                "required": [],
+            },
+            allowed_pipelines=("conversation", "planning"),
+            handler=_propose_replan,
         ),
     )
     return {spec.name: spec for spec in specs}
@@ -318,6 +335,59 @@ def _get_activity_highlights(context: ToolContext, arguments: dict[str, Any]) ->
         status="ok",
         payload=payload,
         summary=f"{highlights} highlights activite disponibles.",
+    )
+
+
+def _propose_replan(context: ToolContext, arguments: dict[str, Any]) -> ToolResult:
+    proposal = build_replan_proposal(
+        scheduled_sessions=context.scheduled_sessions,
+        active_facts=context.active_facts,
+        timezone_name=context.timezone_name,
+        now=context.now,
+        start_date=_parse_date(arguments.get("start_date")),
+        end_date=_parse_date(arguments.get("end_date")),
+        sport_type=str(arguments.get("sport_type") or "").strip() or None,
+        preferred_replacement_sport=str(arguments.get("preferred_replacement_sport") or "").strip() or None,
+    )
+    if proposal is None:
+        return ToolResult(
+            tool_name="propose_replan",
+            status="ok",
+            payload={},
+            summary="Aucune contrainte exploitable pour proposer un replan.",
+        )
+
+    mutation = proposal.get("recommended_mutation")
+    validation = proposal.get("validation") or {}
+    scope = proposal.get("scope") or {}
+    impacted_sessions = proposal.get("impacted_sessions") or []
+    if not mutation:
+        return ToolResult(
+            tool_name="propose_replan",
+            status="ok",
+            payload=proposal,
+            summary="Contrainte comprise, mais aucune mutation candidate propre n'a ete trouvee.",
+        )
+
+    target_title = next(
+        (
+            item.get("session_title")
+            for item in impacted_sessions
+            if int(item.get("session_id") or 0) == int(mutation.get("target_session_id") or 0)
+        ),
+        "seance cible",
+    )
+    replacement_title = str(mutation.get("new_title") or mutation.get("new_sport_type") or "remplacement")
+    validity = "valide" if validation.get("is_valid") else "a confirmer"
+    scope_suffix = ""
+    if not scope.get("covers_all_impacted_sessions", True):
+        remaining = ", ".join(str(item) for item in (scope.get("remaining_session_ids") or []))
+        scope_suffix = f" Cette recommandation ne couvre que la seance cible; autres seances encore ouvertes: {remaining or 'oui'}."
+    return ToolResult(
+        tool_name="propose_replan",
+        status="ok",
+        payload=proposal,
+        summary=f"Replan {validity}: remplacer {target_title} par {replacement_title}.{scope_suffix}",
     )
 
 

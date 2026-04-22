@@ -29,7 +29,7 @@ def test_apply_decisions_for_user_routes_all_decisions_through_mutations(monkeyp
     ]
 
     monkeypatch.setattr(
-        "fitmas.plan_mutation_service.repo.get_active_plan",
+        "fitmas.plan_mutation_service.repo.get_active_plan_optional",
         lambda db, user_id: SimpleNamespace(id=42),
     )
 
@@ -58,6 +58,51 @@ def test_apply_decisions_for_user_routes_all_decisions_through_mutations(monkeyp
     assert calls == [(42, "lighten_day"), (42, "replace_session")]
 
 
+def test_apply_decisions_for_user_uses_runtime_sessions_without_active_plan(monkeypatch) -> None:
+    user = SimpleNamespace(id=7, timezone="Europe/Paris")
+    decision = MutationDecision(
+        mutation_type="replace_session",
+        target_session_id=11,
+        rationale="contrainte",
+        fitmas_message="On remplace.",
+    )
+
+    monkeypatch.setattr(
+        "fitmas.plan_mutation_service.repo.get_active_plan_optional",
+        lambda db, user_id: None,
+    )
+    monkeypatch.setattr(
+        "fitmas.plan_mutation_service.repo.get_scheduled_sessions",
+        lambda *args, **kwargs: [],
+    )
+    monkeypatch.setattr(
+        "fitmas.plan_mutation_service.repo.get_scheduled_session",
+        lambda *args, **kwargs: None,
+    )
+    monkeypatch.setattr(
+        "fitmas.plan_mutation_service.repo.add_plan_mutation_event",
+        lambda *args, **kwargs: None,
+    )
+
+    captured: list[int] = []
+
+    def _fake_apply(db, plan_id, decision, **kwargs):
+        captured.append(plan_id)
+        return SimpleNamespace(allowed=True), SimpleNamespace()
+
+    monkeypatch.setattr("fitmas.plan_mutation_service.mutations.apply", _fake_apply)
+
+    result = apply_decisions_for_user(
+        object(),
+        user=user,
+        decisions=[decision],
+    )
+
+    assert result is not None
+    assert result.plan_id == 0
+    assert captured == [0]
+
+
 def test_apply_decisions_for_user_counts_only_successful_applies(monkeypatch) -> None:
     user = SimpleNamespace(id=7)
     decisions = [
@@ -66,7 +111,7 @@ def test_apply_decisions_for_user_counts_only_successful_applies(monkeypatch) ->
     ]
 
     monkeypatch.setattr(
-        "fitmas.plan_mutation_service.repo.get_active_plan",
+        "fitmas.plan_mutation_service.repo.get_active_plan_optional",
         lambda db, user_id: SimpleNamespace(id=42),
     )
 
@@ -106,7 +151,7 @@ def test_apply_decisions_for_user_exposes_blocked_events_with_reason(monkeypatch
     )
 
     monkeypatch.setattr(
-        "fitmas.plan_mutation_service.repo.get_active_plan",
+        "fitmas.plan_mutation_service.repo.get_active_plan_optional",
         lambda db, user_id: SimpleNamespace(id=42),
     )
     monkeypatch.setattr(
@@ -146,7 +191,7 @@ def test_apply_decisions_for_user_does_not_event_noop_move(monkeypatch) -> None:
     )
 
     monkeypatch.setattr(
-        "fitmas.plan_mutation_service.repo.get_active_plan",
+        "fitmas.plan_mutation_service.repo.get_active_plan_optional",
         lambda db, user_id: SimpleNamespace(id=42),
     )
     monkeypatch.setattr(
@@ -180,7 +225,7 @@ def test_apply_decisions_for_user_passes_runtime_sessions_to_mutation_hooks(monk
     )
 
     monkeypatch.setattr(
-        "fitmas.plan_mutation_service.repo.get_active_plan",
+        "fitmas.plan_mutation_service.repo.get_active_plan_optional",
         lambda db, user_id: SimpleNamespace(id=42),
     )
     monkeypatch.setattr(
@@ -215,7 +260,7 @@ def test_apply_decisions_for_user_records_event_for_successful_apply(monkeypatch
     )
 
     monkeypatch.setattr(
-        "fitmas.plan_mutation_service.repo.get_active_plan",
+        "fitmas.plan_mutation_service.repo.get_active_plan_optional",
         lambda db, user_id: SimpleNamespace(id=42),
     )
     monkeypatch.setattr(
@@ -273,7 +318,7 @@ def test_multi_session_decision_records_one_event_with_both_targets(monkeypatch)
     )
 
     monkeypatch.setattr(
-        "fitmas.plan_mutation_service.repo.get_active_plan",
+        "fitmas.plan_mutation_service.repo.get_active_plan_optional",
         lambda db, user_id: SimpleNamespace(id=42),
     )
     monkeypatch.setattr(
@@ -322,7 +367,7 @@ def test_apply_decisions_for_user_returns_event_summary_for_replace(monkeypatch)
     )
 
     monkeypatch.setattr(
-        "fitmas.plan_mutation_service.repo.get_active_plan",
+        "fitmas.plan_mutation_service.repo.get_active_plan_optional",
         lambda db, user_id: SimpleNamespace(id=42),
     )
     monkeypatch.setattr(
