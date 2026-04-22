@@ -38,7 +38,10 @@ PREV_DAY = {
 
 def collect_signals(db: Session, user: s.User) -> list[Signal]:
     """Run all signal detectors and return any that fired."""
-    plan = repo.get_active_plan(db, user.id)
+    plan = repo.get_active_plan_optional(db, user.id)
+    if plan is None:
+        logger.info("collect_signals: no active plan for user=%s", user.id)
+        return []
     time_ctx = build_time_context(user.timezone)
     today_key = time_ctx["day_key"]
 

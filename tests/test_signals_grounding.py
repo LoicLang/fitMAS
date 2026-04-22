@@ -31,6 +31,9 @@ class SignalsGroundingTest(unittest.TestCase):
     def tearDown(self) -> None:
         self.db.close()
 
+    def test_collect_signals_returns_empty_without_active_plan(self) -> None:
+        self.assertEqual(collect_signals(self.db, self.user), [])
+
     def test_silence_signal_ignores_recent_off_plan_activity(self) -> None:
         now = get_local_now(self.user.timezone)
         days = []
