@@ -1,7 +1,7 @@
-"""Real integration tests hitting the Anthropic API.
+"""Real integration tests hitting the configured LLM API.
 
 Run with: PYTHONPATH=backend/src .venv/bin/python -m pytest tests/test_integration_real.py -v -s
-Requires ANTHROPIC_API_KEY in .env
+Requires DEEPSEEK_API_KEY (preferred) or ANTHROPIC_API_KEY in .env
 """
 from __future__ import annotations
 
@@ -42,8 +42,8 @@ from fitmas.time_context import build_time_context
 
 
 def _skip_if_no_key():
-    if not os.getenv("ANTHROPIC_API_KEY"):
-        raise unittest.SkipTest("No ANTHROPIC_API_KEY — skipping real API tests")
+    if not (os.getenv("DEEPSEEK_API_KEY") or os.getenv("ANTHROPIC_API_KEY")):
+        raise unittest.SkipTest("No DEEPSEEK_API_KEY or ANTHROPIC_API_KEY — skipping real API tests")
 
 
 # ---------------------------------------------------------------------------
@@ -56,7 +56,7 @@ class TestLLMConnectivity(unittest.TestCase):
 
     def test_client_is_available(self):
         c = client()
-        self.assertIsNotNone(c, "Anthropic client should be available with API key")
+        self.assertIsNotNone(c, "LLM client should be available with API key")
 
     def test_simple_text_request(self):
         result = request_text(

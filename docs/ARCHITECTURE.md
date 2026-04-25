@@ -200,7 +200,7 @@ Les tools restent read-only. Les orchestrateurs possedent les writes.
 | Front | React 18 + Vite + React Router + Tailwind CSS v4 + motion + Embla + Recharts | Fidélité UI, maintenance, animations, écrans modulaires |
 | Cron | APScheduler (in-process) | Pas de Temporal en V0. Suffisant pour 1 user. |
 | Messagerie | Telegram bot (python-telegram-bot 21) | Gratuit, instantané, proactivité validée |
-| IA | Anthropic Claude (Haiku quotidien, Sonnet plans) | Structured outputs + bonne qualité français |
+| IA | DeepSeek V4 (`deepseek-v4-flash` quotidien, `deepseek-v4-pro` plans/coach) | API Anthropic-compatible + tools + JSON robuste ; `ANTHROPIC_API_KEY` reste fallback temporaire |
 | Déploiement | Fly.io CDG + Docker + volume SQLite | Simple, pas cher, Paris |
 
 ### Décisions tranchées

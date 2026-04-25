@@ -8,10 +8,33 @@ from __future__ import annotations
 import json
 import logging
 import os
+from dataclasses import dataclass
 from time import perf_counter
 from typing import Any
 
 logger = logging.getLogger(__name__)
+
+DEEPSEEK_ANTHROPIC_BASE_URL = "https://api.deepseek.com/anthropic"
+DEEPSEEK_OPENAI_BASE_URL = "https://api.deepseek.com"
+DEFAULT_FAST_MODEL = "deepseek-v4-flash"
+DEFAULT_STRONG_MODEL = "deepseek-v4-pro"
+DEFAULT_MODEL = DEFAULT_STRONG_MODEL
+_CLAUDE_FAST_MODELS = {"claude-haiku-4-5-20251001"}
+_CLAUDE_STRONG_MODELS = {"claude-sonnet-4-6"}
+CLAUDE_FALLBACK_MODEL = "claude-haiku-4-5-20251001"
+DEEPSEEK_STRUCTURED_MIN_TOKENS = 3072
+DEEPSEEK_STRUCTURED_ATTEMPTS = 3
+
+
+@dataclass(frozen=True, slots=True)
+class StructuredJSONResult:
+    data: dict | None
+    provider: str
+    model: str
+    raw_text: str | None = None
+    error: str | None = None
+    json_repair_used: bool = False
+    provider_fallback_used: bool = False
 
 
 # ---------------------------------------------------------------------------
@@ -19,15 +42,66 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 
 def client():
-    """Return an Anthropic client or None if unavailable."""
-    api_key = os.getenv("ANTHROPIC_API_KEY")
+    """Return the configured Anthropic-compatible client or None if unavailable."""
+    deepseek_key = os.getenv("DEEPSEEK_API_KEY")
+    anthropic_key = os.getenv("ANTHROPIC_API_KEY")
+    api_key = deepseek_key or anthropic_key
     if not api_key:
         return None
     try:
         import anthropic
+        if deepseek_key:
+            return anthropic.Anthropic(api_key=api_key, base_url=DEEPSEEK_ANTHROPIC_BASE_URL)
         return anthropic.Anthropic(api_key=api_key)
     except ImportError:
         return None
+
+
+def anthropic_client(*, provider: str = "auto"):
+    """Return an Anthropic-compatible client for auto/deepseek/claude."""
+    deepseek_key = os.getenv("DEEPSEEK_API_KEY")
+    anthropic_key = os.getenv("ANTHROPIC_API_KEY")
+    try:
+        import anthropic
+    except ImportError:
+        return None
+
+    if provider == "claude":
+        if not anthropic_key:
+            return None
+        return anthropic.Anthropic(api_key=anthropic_key)
+    if provider == "deepseek":
+        if not deepseek_key:
+            return None
+        return anthropic.Anthropic(api_key=deepseek_key, base_url=DEEPSEEK_ANTHROPIC_BASE_URL)
+    return client()
+
+
+def deepseek_openai_client():
+    """Return a DeepSeek OpenAI-compatible client or None."""
+    deepseek_key = os.getenv("DEEPSEEK_API_KEY")
+    if not deepseek_key:
+        return None
+    try:
+        from openai import OpenAI
+    except ImportError:
+        return None
+    return OpenAI(api_key=deepseek_key, base_url=DEEPSEEK_OPENAI_BASE_URL)
+
+
+def _normalize_model_for_provider(model: str) -> str:
+    """Map legacy Claude model names to current DeepSeek V4 equivalents."""
+    if not os.getenv("DEEPSEEK_API_KEY"):
+        return model
+    if model in _CLAUDE_FAST_MODELS:
+        return DEFAULT_FAST_MODEL
+    if model in _CLAUDE_STRONG_MODELS:
+        return DEFAULT_STRONG_MODEL
+    return model
+
+
+def _using_deepseek() -> bool:
+    return bool(os.getenv("DEEPSEEK_API_KEY"))
 
 
 # ---------------------------------------------------------------------------
@@ -38,11 +112,12 @@ def request_message(
     *,
     system: Any,
     messages: list[dict[str, Any]],
-    model: str = "claude-haiku-4-5-20251001",
+    model: str = DEFAULT_MODEL,
     max_tokens: int = 512,
     tools: list[dict[str, Any]] | None = None,
     tool_choice: dict[str, Any] | None = None,
     cache_control: dict[str, Any] | None = None,
+    thinking: dict[str, Any] | None = None,
 ):
     """Send a message to the Anthropic API. Returns response or None."""
     c = client()
@@ -50,7 +125,7 @@ def request_message(
         return None
     try:
         kwargs: dict[str, Any] = {
-            "model": model,
+            "model": _normalize_model_for_provider(model),
             "max_tokens": max_tokens,
             "system": system,
             "messages": messages,
@@ -61,6 +136,10 @@ def request_message(
             kwargs["tool_choice"] = tool_choice
         if cache_control:
             kwargs["cache_control"] = cache_control
+        if thinking is not None:
+            kwargs["thinking"] = thinking
+        elif _using_deepseek():
+            kwargs["thinking"] = {"type": "disabled"}
         return c.messages.create(**kwargs)
     except Exception:
         logger.exception("LLM message call failed")
@@ -68,7 +147,7 @@ def request_message(
 
 
 def request_text(
-    *, system: str, prompt: str, model: str = "claude-haiku-4-5-20251001", max_tokens: int = 512,
+    *, system: str, prompt: str, model: str = DEFAULT_MODEL, max_tokens: int = 512,
 ) -> str | None:
     """Request plain text response from LLM."""
     response = request_message(
@@ -81,7 +160,7 @@ def request_text(
 
 
 def request_json(
-    *, system: str, prompt: str, model: str = "claude-haiku-4-5-20251001", max_tokens: int = 1024,
+    *, system: str, prompt: str, model: str = DEFAULT_MODEL, max_tokens: int = 1024,
 ) -> dict | None:
     """Request JSON response from LLM. Returns parsed dict or None.
 
@@ -91,6 +170,202 @@ def request_json(
     if not raw:
         return None
     return _robust_json_loads(raw)
+
+
+def request_structured_json(
+    *,
+    system: str,
+    messages: list[dict[str, Any]],
+    model: str = DEFAULT_FAST_MODEL,
+    max_tokens: int = 1024,
+    fallback_model: str = CLAUDE_FALLBACK_MODEL,
+    provider: str = "auto",
+) -> StructuredJSONResult:
+    """Request JSON with the best available structured-output path.
+
+    DeepSeek's OpenAI-compatible surface supports `response_format=json_object`
+    and performed better in local spikes for structured output. Claude remains
+    a provider fallback when DeepSeek OpenAI-compatible fails or returns
+    unparsable content.
+    """
+    if provider == "claude":
+        return _request_claude_json(
+            system=system,
+            messages=messages,
+            model=fallback_model,
+            max_tokens=max_tokens,
+        )
+    deepseek_result: StructuredJSONResult | None = None
+    if provider in {"auto", "deepseek_openai"} and os.getenv("DEEPSEEK_API_KEY"):
+        deepseek_result = _request_deepseek_openai_json(
+            system=system,
+            messages=messages,
+            model=_normalize_model_for_provider(model),
+            max_tokens=max_tokens,
+        )
+        if deepseek_result.data is not None:
+            return deepseek_result
+    if provider == "deepseek_openai":
+        return deepseek_result or StructuredJSONResult(data=None, provider="deepseek_openai", model=model, error="client_unavailable")
+
+    if os.getenv("ANTHROPIC_API_KEY"):
+        claude_result = _request_claude_json(
+            system=system,
+            messages=messages,
+            model=fallback_model,
+            max_tokens=max_tokens,
+        )
+        if deepseek_result is not None:
+            return StructuredJSONResult(
+                data=claude_result.data,
+                provider=claude_result.provider,
+                model=claude_result.model,
+                raw_text=claude_result.raw_text,
+                error=claude_result.error or deepseek_result.error,
+                json_repair_used=claude_result.json_repair_used,
+                provider_fallback_used=True,
+            )
+        return claude_result
+
+    if deepseek_result is not None:
+        return deepseek_result
+    return StructuredJSONResult(
+        data=None,
+        provider="none",
+        model=model,
+        error="no_structured_json_provider_available",
+    )
+
+
+def classify_llm_exception(exc: BaseException) -> str:
+    """Classify provider exceptions with stable operational labels."""
+    try:
+        import anthropic as _anthropic
+    except Exception:
+        _anthropic = None
+    if _anthropic is not None:
+        if isinstance(exc, _anthropic.APITimeoutError):
+            return "timeout"
+        if isinstance(exc, _anthropic.RateLimitError):
+            return "rate_limit"
+        if isinstance(exc, _anthropic.BadRequestError):
+            return "bad_request"
+        if isinstance(exc, _anthropic.AuthenticationError):
+            return "auth"
+        if isinstance(exc, _anthropic.APIConnectionError):
+            return "connection"
+        if isinstance(exc, _anthropic.APIError):
+            return "api_other"
+    if isinstance(exc, json.JSONDecodeError):
+        return "json_parse"
+    return "unknown"
+
+
+def _request_deepseek_openai_json(
+    *,
+    system: str,
+    messages: list[dict[str, Any]],
+    model: str,
+    max_tokens: int,
+) -> StructuredJSONResult:
+    client_obj = deepseek_openai_client()
+    if client_obj is None:
+        return StructuredJSONResult(data=None, provider="deepseek_openai", model=model, error="client_unavailable")
+    effective_max_tokens = max(max_tokens, DEEPSEEK_STRUCTURED_MIN_TOKENS)
+    last_raw: str | None = None
+    last_error: str | None = None
+    for attempt in range(1, DEEPSEEK_STRUCTURED_ATTEMPTS + 1):
+        try:
+            response = client_obj.chat.completions.create(
+                model=model,
+                temperature=0,
+                max_tokens=effective_max_tokens,
+                response_format={"type": "json_object"},
+                messages=_deepseek_json_messages(system=system, messages=messages, attempt=attempt),
+            )
+            raw = _openai_message_text(response)
+            last_raw = raw
+            data = _robust_json_loads(raw or "")
+            if data is not None:
+                return StructuredJSONResult(
+                    data=data,
+                    provider="deepseek_openai",
+                    model=model,
+                    raw_text=raw,
+                    error=None,
+                    json_repair_used=attempt > 1,
+                )
+            last_error = "json_parse_failed" if raw else "empty_response"
+        except Exception as exc:
+            logger.warning("deepseek_openai_structured_json_failed: %s", str(exc)[:200])
+            last_error = f"{type(exc).__name__}: {str(exc)[:200]}"
+            break
+    return StructuredJSONResult(
+        data=None,
+        provider="deepseek_openai",
+        model=model,
+        raw_text=last_raw,
+        error=last_error,
+        json_repair_used=DEEPSEEK_STRUCTURED_ATTEMPTS > 1,
+    )
+
+
+def _deepseek_json_messages(*, system: str, messages: list[dict[str, Any]], attempt: int) -> list[dict[str, Any]]:
+    """Wrap prompts for DeepSeek JSON mode according to provider guidance."""
+    attempt_note = "" if attempt <= 1 else f"\nTentative {attempt}: la tentative precedente etait vide ou invalide. Corrige et retourne du JSON strict."
+    json_contract = (
+        "Tu dois repondre uniquement en JSON valide. Le mot JSON est volontairement explicite.\n"
+        "Aucun markdown. Aucune prose hors JSON. Aucun champ vide si tu peux l'eviter.\n"
+        "Si l'action n'est pas claire, utilise mutation_type=\"no_change\" avec rationale et fitmas_message non vides.\n"
+        "Ne promets jamais une modification du plan si mutation_type=\"no_change\".\n"
+        "fitmas_message doit etre une phrase complete, courte, sans coupure en fin de phrase.\n"
+        "Exemple JSON attendu:\n"
+        "{\n"
+        '  "mutation_type": "no_change",\n'
+        '  "target_session_id": null,\n'
+        '  "second_session_id": null,\n'
+        '  "target_date": null,\n'
+        '  "rationale": "raison courte",\n'
+        '  "fitmas_message": "message utilisateur court"\n'
+        "}"
+        f"{attempt_note}"
+    )
+    return [{"role": "system", "content": f"{system}\n\n{json_contract}"}, *messages]
+
+
+def _request_claude_json(
+    *,
+    system: str,
+    messages: list[dict[str, Any]],
+    model: str,
+    max_tokens: int,
+) -> StructuredJSONResult:
+    client_obj = anthropic_client(provider="claude")
+    if client_obj is None:
+        return StructuredJSONResult(data=None, provider="claude_anthropic", model=model, error="client_unavailable")
+    try:
+        response = client_obj.messages.create(
+            model=model,
+            max_tokens=max_tokens,
+            system=system,
+            messages=messages,
+        )
+        raw = message_text(response)
+        return StructuredJSONResult(
+            data=_robust_json_loads(raw or ""),
+            provider="claude_anthropic",
+            model=model,
+            raw_text=raw,
+            error=None if raw else "empty_response",
+        )
+    except Exception as exc:
+        logger.warning("claude_structured_json_failed: %s", str(exc)[:200])
+        return StructuredJSONResult(
+            data=None,
+            provider="claude_anthropic",
+            model=model,
+            error=f"{type(exc).__name__}: {str(exc)[:200]}",
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -121,6 +396,21 @@ def message_json(response: Any) -> dict | None:
     if not raw:
         return None
     return _robust_json_loads(raw)
+
+
+def _openai_message_text(response: Any) -> str | None:
+    """Extract text from an OpenAI-compatible chat completion response."""
+    choices = getattr(response, "choices", None) or []
+    if not choices:
+        return None
+    message = getattr(choices[0], "message", None)
+    if message is None:
+        return None
+    content = getattr(message, "content", None)
+    if content is None:
+        return None
+    text = str(content).strip()
+    return text or None
 
 
 def first_tool_use_block(response: Any) -> Any | None:
@@ -168,7 +458,7 @@ def _robust_json_loads(raw: str) -> dict | None:
             continue
         if isinstance(loaded, dict):
             return loaded
-    logger.exception("Failed to decode LLM JSON: %s", cleaned[:200])
+    logger.warning("Failed to decode LLM JSON: %s", cleaned[:200])
     return None
 
 
@@ -325,7 +615,7 @@ def generate_heartbeat_text(system: str, prompt: str, *, allow_no_send: bool = T
     response = request_message(
         system=final_system,
         messages=[{"role": "user", "content": prompt}],
-        model="claude-haiku-4-5-20251001",
+        model=DEFAULT_FAST_MODEL,
         max_tokens=256,
     )
     if response is None:

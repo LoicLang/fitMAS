@@ -36,8 +36,15 @@ Entrypoints :
 ## Variables d'environnement
 
 Minimum local utile :
-- `ANTHROPIC_API_KEY`
+- `DEEPSEEK_API_KEY`
 - `TELEGRAM_BOT_TOKEN`
+
+`ANTHROPIC_API_KEY` reste accepte comme fallback temporaire si `DEEPSEEK_API_KEY` est absent.
+
+Provider LLM / stabilisation :
+- `FITMAS_USE_DEEPSEEK_OPENAI_STRUCTURED=1` active le chemin DeepSeek OpenAI-compatible pour les sorties structurees de conversation
+- par defaut, garder `0` hors smoke/stabilisation tant que la matrice conversationnelle n'est pas stable
+- si ce flag est actif, garder `ANTHROPIC_API_KEY` disponible pour le fallback schema Claude
 
 Pour Strava :
 - `STRAVA_CLIENT_ID`
@@ -137,6 +144,21 @@ Usage :
 - charge `.env` si besoin
 - joue une batterie de scenarios conversationnels avec vraie API Anthropic
 - utile si on touche `api_messages.py`, `heartbeat.py`, `llm.py`, `user_indication_llm.py`, `adaptation.py`
+
+Smoke DeepSeek OpenAI-compatible structured output :
+
+```bash
+FITMAS_USE_DEEPSEEK_OPENAI_STRUCTURED=1 ./scripts/spike-deepseek-openai-sdk --models deepseek-v4-flash
+```
+
+Smoke conversation avec le flag structured output :
+
+```bash
+set -a; source .env; set +a
+FITMAS_USE_DEEPSEEK_OPENAI_STRUCTURED=1 \
+ANTHROPIC_API_KEY="${ANTHROPIC_API_KEY:-$DEEPSEEK_API_KEY}" \
+./scripts/smoke-real-conversations --scenario info_query --scenario today_unavailability
+```
 
 Smoke ton sur profil reel :
 
@@ -327,7 +349,7 @@ Si le changement touche :
 - `user_indication_llm.py`
 - `planning_window_resolution.py`
 
-Et si `ANTHROPIC_API_KEY` est dispo via `.env` ou l'environnement :
+Et si `DEEPSEEK_API_KEY` ou `ANTHROPIC_API_KEY` est dispo via `.env` ou l'environnement :
 - charger `.env`
 - lancer au moins **un smoke réel LLM-backed** sur le flux touché
 - noter explicitement si le run tape bien l'API ou retombe en fallback

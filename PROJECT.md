@@ -38,7 +38,7 @@ Cap produit actuel :
 | Backend | Python 3.13 + FastAPI + SQLAlchemy 2.0 + SQLite |
 | Front | React 18 + Vite + React Router + Tailwind CSS v4 + motion + Embla + Recharts |
 | Messagerie | Telegram bot (python-telegram-bot 21) |
-| IA | Anthropic Claude — Haiku quotidien, Sonnet pour plans |
+| IA | DeepSeek V4 — `deepseek-v4-flash` quotidien, `deepseek-v4-pro` pour plans/coach |
 | Cron | APScheduler (briefing 7h30, synchro Strava 2h, revue dimanche 20h) |
 | Déploiement | Fly.io (CDG), Docker, volume SQLite persistant |
 
@@ -83,7 +83,13 @@ Override possible : `PORT=8040 ./scripts/dev`
 Frontend Vite via `./scripts/dev-web` sur `127.0.0.1:5173`, avec proxy API vers `:8033`.
 
 DB : `fitmas.db` à la racine. Supprimer pour re-seeder.
-Variables : `ANTHROPIC_API_KEY`, `TELEGRAM_BOT_TOKEN`, `STRAVA_CLIENT_ID`, `STRAVA_CLIENT_SECRET`
+Variables : `DEEPSEEK_API_KEY`, `TELEGRAM_BOT_TOKEN`, `STRAVA_CLIENT_ID`, `STRAVA_CLIENT_SECRET`
+
+Stabilisation LLM :
+- `FITMAS_USE_DEEPSEEK_OPENAI_STRUCTURED=1` active le chemin DeepSeek OpenAI-compatible pour les sorties structurees conversationnelles
+- garder `0` par defaut tant que le smoke provider n'est pas suffisamment stable
+- `ANTHROPIC_API_KEY` sert de fallback schema Claude quand DeepSeek retourne un JSON invalide metier
+`ANTHROPIC_API_KEY` reste un fallback temporaire pendant la migration provider.
 
 ## Principes
 
