@@ -66,6 +66,10 @@ For long-term evolvability:
 - debug endpoints and admin surfaces must be **disabled by default in production** unless explicitly enabled
 - do not "solve" autonomy gaps by forcing deterministic paths when a prompt/tool/few-shot improvement can teach the model the right behavior
 - determinism is a **safety rail** or **last resort**, never the long-term primary solution for coach reasoning
+- regex / keyword heuristics must be treated as **signal highlighters**, not intent classifiers
+- never create facts, mutate plans, or short-circuit coach reasoning from regex alone when user input is fuzzy (`douleur`, `soir`, `fatigue`, etc.)
+- for fuzzy intent, inject detected signals into the LLM prompt with cautions about negation/context, let the LLM extract structured intent, then use deterministic code only for validation, permissions, safety rails, commit, and audit
+- direct deterministic parsing is acceptable only for closed protocol replies with an active pending contract, e.g. explicit `oui/non` confirmation
 
 
 # Tool / Skill Thinking (mandatory)

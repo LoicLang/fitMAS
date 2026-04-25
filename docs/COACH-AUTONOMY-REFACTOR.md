@@ -1,11 +1,11 @@
 ---
-summary: refonte de la pipeline coach pour libérer le LLM des court-circuits déterministes, lui donner les bons tools de lecture, un skill de planification validée et une vraie posture de coach
+summary: refonte de la pipeline coach pour libérer le LLM des court-circuits déterministes, lui donner les bons tools de lecture/action encadrée, et garder les bonnes pratiques training comme validation de sécurité
 read_when:
   - lancer le refactor coach autonomy
   - corriger une hallucination du coach (plan futur, activités passées)
   - retirer un court-circuit déterministe dans api_messages
   - ajouter un tool de lecture pour le coach LLM
-  - construire un skill de replan validé
+  - construire un flow PlanPatch / validation / commit
   - auditer ou réécrire un system prompt heartbeat ou conversation
   - adresser une posture coach "demande au user au lieu de décider"
 ---
@@ -22,30 +22,87 @@ Le coach actuel **ne voit pas la réalité** et **ne décide pas**. Trois pathol
 
 **Diagnostic racine** : on a construit un système qui interprète et résume la donnée AVANT de la passer au LLM, au lieu de donner les **données brutes + tools** au LLM pour qu'il les explore lui-même.
 
-## Vision cible
+## Vision cible — recalee le 24 avril 2026
+
+La direction n'est pas "plus de determinisme".
+La direction est : **coach libre, cadre strict**.
+
+Le LLM principal reste le coach :
+
+- il comprend l'intention floue
+- il lit le contexte
+- il arbitre
+- il propose ou applique une adaptation
+- il maintient le fil conversationnel
+- il parle a Loic
+
+Le determinisme ne joue plus le coach. Il tient seulement le terrain :
+
+- verite planning / activites / contraintes
+- IDs, dates, timezone, preuves
+- validation training : charge, ATL/CTL/TSB, recuperation, proximite, blessure
+- permissions et confirmations
+- commit transactionnel
+- audit `plan_mutation_events`
 
 ```
-                    ┌─────────────────────┐
-                    │  COACH LLM (Sonnet) │
-                    │  prompt minimal +   │
-                    │  vraie autonomie    │
-                    └──────────┬──────────┘
-                               │
-              ┌────────────────┼────────────────┐
-              ▼                ▼                ▼
-        TOOLS LECTURE    SKILLS DÉCISION   POSTURE
-        ─────────────    ────────────────  ────────
-        get_plan_window  propose_replan    "tu DÉCIDES"
-        get_activities   (LLM-génère       pas
-        get_constraints   + validator)     "tu DEMANDES"
-        get_load_context
+User
+  -> Coach LLM
+      -> tools atomiques          # plan, contraintes, activites, load
+      -> get_coach_state optionnel# shortcut read-only quand il suffit
+      -> draft PlanPatch          # intention structuree du coach
+      -> validate_plan_patch      # bonnes pratiques training + coherence
+      -> final decision           # appliquer, confirmer, ou proposer alternative
+  -> Orchestrateur
+      -> commit_plan_patch        # write DB + event, jamais depuis une reply fantasy
+  -> Coach reply depuis le resultat reel
 ```
 
-**Pattern** : LLM-orchestrator + symbolic validator (état de l'art neuro-symbolic 2025-2026).
-- LLM **génère** le plan candidat (créativité, langage, négociation)
-- Validator déterministe **valide** (charge progressive, récupération, périodisation)
-- Si KO → diff structuré → LLM corrige → re-soumet (CEGIS loop, max 3 itérations)
-- Si OK → coach présente le plan validé comme SA décision
+Regle centrale :
+
+> Le coach garde le volant. Le determinisme est son harnais, pas son cerveau.
+
+### Niveaux de validation
+
+Toute validation training doit sortir un statut gradue :
+
+- `valid` : applicable sans confirmation
+- `warning` : suboptimal mais acceptable ; le coach peut trancher
+- `requires_confirmation` : possible mais engage un trade-off lourd ; confirmation ciblee
+- `blocked` : dangereux, incoherent, ou impossible techniquement
+
+Une recuperation protegee ne doit plus etre traitee comme un mur systematique.
+Souvent, le bon comportement est `requires_confirmation` ou une alternative structurée :
+
+- "on echange avec vendredi et je deplace la recup samedi"
+- "je peux le faire, mais tu perds la recuperation post-charge"
+- "je refuse seulement si blessure/charge rend le patch dangereux"
+
+### Non-negociable
+
+Aucun module deterministe ne doit produire une reponse conversationnelle finale, sauf :
+
+- indisponibilite LLM
+- demande de confirmation pending deja construite par l'orchestrateur
+- resume d'un event reel deja applique
+
+Les helpers deterministes peuvent produire du contexte, des candidates, des validations ou des summaries d'event.
+Ils ne doivent pas jouer l'interlocuteur.
+
+### Regex et heuristiques
+
+Les regex ne sont pas fiables a 100% sur l'intention utilisateur.
+Elles ne doivent donc jamais devenir le juge d'une intention floue.
+
+Regle produit :
+- keyword / regex = surligneur de contexte
+- LLM = extraction structuree de l'intention
+- determinisme = validation, permission, safety rail, commit, audit
+
+Exemples :
+- `top pas de douleur` ne doit pas creer un fait sante parce que le mot `douleur` apparait
+- `plutot le soir` ne doit etre resolu que par extraction LLM dans le contexte d'un besoin actif, pas par fallback lexical global
+- les seules exceptions deterministes directes sont les protocoles fermes deja actifs (`oui/non` sur confirmation pending, clarification execution explicite)
 
 ## Sources d'inspiration
 
@@ -227,17 +284,613 @@ Refactor :
 - ✅ Tests pipeline (`test_core_flows.py`) : `test_availability_constraint_persists_as_fact_with_window_anchored_expires_at` (mock interpret → UserFact en DB avec bonne clé + expires_at) + `test_execution_clarification_skipped_when_active_availability_fact_covers_yesterday` (séance natation hier + fact actif → `_targeted_execution_clarification` retourne None).
 - 472 tests passent.
 
-### Chantier 5 — Skill `propose_replan` avec validator (1-2j)
-- Extraire un module `validator.py` testable seul :
-  - `validate_week(plan, context) → ValidationResult{ok, violations[]}`
-  - règles dures : charge progressive ≤ +10%/sem, 48h post-quality, balance des sports, périodisation respectée
-- Skill agent `propose_replan(constraints, scope) → ValidatedPlan` :
-  - LLM rédige plan candidat
-  - Submit au validator
-  - Si violations → diff structuré → LLM corrige → boucle (max 3 itérations)
-  - Si OK → retourne plan structuré
-- Exposé au coach LLM comme tool `propose_replan`
-- Test : sur "piscine fermée 2 semaines" le coach reçoit UN plan validé et le présente comme sa décision
+### Etat code actuel du chantier 5 — slice partiel livre le 22 avril 2026
+
+Commit `40bf4a1` a deja pose une premiere brique :
+
+- `backend/src/fitmas/replan_proposal.py`
+- tool runtime `propose_replan` dans `backend/src/fitmas/tools/registry.py`
+- budget `PLAN_NEGOTIATION` enrichi dans `backend/src/fitmas/llm.py`
+- guidance prompt dans `backend/src/fitmas/llm_prompt_builder.py`
+- tests dans `tests/test_tool_runtime.py`, `tests/test_llm_tools.py`, `tests/test_plan_mutation_service.py`
+
+Ce slice est utile, mais il ne doit pas devenir la cible finale.
+
+Limites actuelles :
+
+- `propose_replan` choisit une mutation candidate de maniere assez deterministe (`swimming -> strength/running`)
+- il couvre surtout la premiere seance impactee, meme si la contrainte couvre plusieurs jours
+- il retourne une `recommended_mutation`, donc il peut redevenir un mini-coach cache
+- `MutationDecision` reste mono-operation dans le chemin conversationnel courant
+- `validate_week_plan()` valide une semaine reconstruite, mais pas un patch utilisateur multi-operations avec statut gradue
+- `run_pre_mutation_hooks()` reste binaire (`allowed` / blocked) avec warnings, pas `valid / warning / requires_confirmation / blocked`
+- `PlanMutationService.apply_decisions_for_user()` accepte une sequence, mais le pipeline conversation applique surtout une decision unique et les confirmations stockent une decision unique
+- le runtime tool LLM actuel fait un seul tool call par tour ; il ne supporte pas encore une vraie boucle draft -> validate -> correct -> revalidate
+
+Conclusion :
+
+`propose_replan` devient un **helper de candidates / compat**, pas le cerveau du replan.
+La cible du chantier 5 est maintenant `PlanPatch`.
+
+Priorite produit court terme :
+
+- on ne cherche pas encore un coach sportivement parfait
+- on cherche d'abord un agent fiable pour planifier, reagir aux questions/remarques/contraintes et garder le fil
+- "fiable" veut dire : lire la verite, ne pas halluciner le planning, ne pas demander un menu quand il peut decider, ne pas dire qu'il a applique sans event reel
+- les bonnes pratiques sportives restent des garde-fous gradues ; elles ne doivent pas redevenir le cerveau conversationnel
+
+## Plan d'attaque recale — Agent fiable, tools atomiques, PlanPatch audite
+
+### Chantier 5A — Regressions conversationnelles depuis dogfood
+
+But :
+
+- transformer les captures Telegram en gates de comportement
+- proteger la direction produit avant de refactorer le moteur
+- mesurer la fiabilite agentique avant l'optimisation sportive fine
+
+Fichiers :
+
+- `scripts/smoke_real_conversations.py`
+- `tests/test_core_flows.py`
+- `tests/test_llm_prompt_builder.py`
+- `tests/test_plan_mutation_service.py`
+- eventuellement `tests/test_tool_runtime.py`
+
+Cas a couvrir :
+
+- pas de token interne (`this_week`) en sortie
+- pas de plan futur hallucine quand la semaine est vide
+- "piscine fermee 2 semaines" memorise une contrainte et ne relance pas "tu l'as faite ou pas ?"
+- "Oui" puis "Running" puis "Mercredi" reste un seul fil de continuation
+- aucune phrase "je libere / je mets / je deplace" sans event mutation ou confirmation pending
+- swap avec recuperation protegee propose un chemin (`swap` ou deplacement recup), pas une boucle defensive
+- reponses aux questions simples (`tu vois ma seance ?`, `c'est quoi demain ?`, `pourquoi repos ?`) lisent les bonnes sources et restent courtes
+
+Gate :
+
+- smoke `golden_case_autonomy` enrichi avec les captures 15/17/19/20/21 avril
+- tests unitaires ciblant les failures sans dependre d'un LLM reel quand possible
+
+### Recalage 5B+ — DeepSeek, tools atomiques, skills
+
+Le smoke DeepSeek du 24 avril a change l'ordre du chantier.
+
+Observation :
+
+- DeepSeek V4 demande spontanement les bons tools pour une contrainte comme "piscine fermee 2 semaines" : `get_plan_window`, `get_user_constraints`, `get_load_context`, puis parfois `propose_replan`
+- le provider Anthropic-compatible DeepSeek ignore `disable_parallel_tool_use`
+- le code a ete durci pour satisfaire tous les `tool_use_id`, mais il n'execute encore qu'un seul tool et renvoie les autres en erreur `single_tool_per_turn`
+
+Conclusion :
+
+Le probleme n'est pas "il faut un gros `get_coach_state` qui remplace tout".
+Le probleme est : **la surface tools est bonne mais le runtime est trop etroit**.
+
+Les smokes reels DeepSeek ajoutent un prerequis :
+
+- l'API DeepSeek V4 repond bien et ne reprovoque plus le 400 tool-use
+- le modele demande souvent les bons tools
+- mais la reponse finale apres tool-use revient parfois en prose au lieu du JSON contractuel
+- le fallback actuel evite le crash, mais ce n'est pas assez fiable pour un coach quotidien
+
+Donc la sequence devient :
+
+1. stabiliser le contrat provider DeepSeek
+2. seulement ensuite elargir le runtime multi-tool
+3. puis brancher l'action sur `PlanPatch`
+
+Nouvelle doctrine tools :
+
+- garder les tools atomiques : testables, auditables, reutilisables par chat / API / heartbeat
+- autoriser une composition bornee quand le modele intelligent la demande
+- introduire des skills metier pour les workflows repetes
+- garder `get_coach_state` comme macro-tool / shortcut optionnel, pas comme fondation unique
+- toute action reste `PlanPatch -> validation -> orchestration`, jamais write DB libre depuis le tool loop
+
+Flux cible :
+
+```
+User
+  -> turn intent / skill routing
+  -> Coach LLM
+      -> read tools atomiques (multi-tool borne)
+      -> CoachDecision
+      -> PlanPatch
+  -> validate_plan_patch
+  -> conversation_pipeline / PlanMutationService.apply_patch_for_user
+  -> reply depuis event reel ou confirmation pending
+```
+
+### Chantier 5B0 — Stabilisation DeepSeek provider contract
+
+But :
+
+- garder DeepSeek V4 comme provider principal si son rapport perf/prix tient
+- ne pas confondre compatibilite Anthropic et comportement Claude natif
+- rendre les sorties structurees fiables avant d'augmenter l'autonomie tools
+
+Evidence du smoke reel 24 avril :
+
+- `tests/test_integration_real.py` : 15 tests + 5 subtests passent avec DeepSeek
+- `smoke-real-conversations` : 22 tours reels, aucun crash, aucun 400 tool-use
+- instabilite principale : 5 reponses finales en prose au lieu de JSON, surtout apres tool-use
+- fallback actuel recupere, mais masque le probleme au lieu de le rendre observable
+
+Evidence du spike OpenAI SDK 24 avril :
+
+- script : `scripts/spike_deepseek_openai_sdk.py`
+- `deepseek-v4-flash` fonctionne sur `https://api.deepseek.com` avec `response_format={"type":"json_object"}`
+- JSON direct : OK avec budget de sortie suffisant
+- tool-use -> JSON final : OK apres avoir rejoue `reasoning_content` dans le message assistant
+- tool-use -> JSON final : peut produire des `mutation_type` hors enum FitMAS (`replace`, `unplanned_skip`)
+- function-call final strict :
+  - `deepseek-v4-flash` peut fonctionner avec budget de sortie suffisant
+  - il reste a tester en matrice plus large avant de le considerer stable
+  - `deepseek-chat` peut emettre le tool final, mais n'est pas identique a V4
+- `deepseek-v4-pro` ne passe pas encore le probe JSON OpenAI-compatible local
+- conclusion : l'OpenAI SDK est prometteur pour les appels structurels, mais il faut un adapter teste par model/capability, pas une migration globale aveugle
+
+Slice livre le 24 avril :
+
+- `llm_gateway.request_structured_json(...)` ajoute le chemin DeepSeek OpenAI-compatible `response_format=json_object`
+- `FITMAS_USE_DEEPSEEK_OPENAI_STRUCTURED=1` active ce chemin dans `llm.decide()`
+- `llm.decide()` valide localement les decisions FitMAS avant `MutationDecision`
+- prose apres tool-use : tentative de repair structuree avant fallback general
+- schema invalide : fallback Claude via `ANTHROPIC_API_KEY` si disponible
+- le flag reste desactive par defaut tant que la matrice smoke n'est pas assez stable
+
+Renfort du 24 avril soir :
+
+- DeepSeek structured output passe a 3 tentatives et 3072 tokens minimum
+- le prompt JSON interdit explicitement les promesses de mutation quand `mutation_type=no_change`
+- validation locale supplementaire :
+  - `no_change` ne peut pas dire que le plan est ajuste / modifie / libere / mis a jour
+  - `no_change` ne peut pas promettre de construire, poser, placer ou ajouter une seance
+  - `fitmas_message` tronque ou finissant sur une clarification coupee est rejete
+  - le vouvoiement (`vous` / `vos` / `votre`) est rejete sur les messages coach
+- repair apres tool-use :
+  - convertit la prose en JSON canonique
+  - ignore le markup provider DSML pur pour revenir au chemin structured direct
+  - doit reformuler en clarification neutre si la prose promet une action sans mutation valide
+  - budget porte a 1024 tokens
+- le parser JSON ne log plus de faux `NoneType: None` quand un payload est simplement invalide
+
+Decision provider :
+
+- DeepSeek-first pour conversation et petits arbitrages
+- DeepSeek Flash pour low-risk / lecture / extraction si la qualite locale tient
+- DeepSeek Pro pour planning, contraintes, replan, validation complexe
+- DeepSeek OpenAI-compatible pour structured output si le smoke local confirme un gain
+- DeepSeek Anthropic-compatible conserve pour les chemins deja branches et V4 Pro tant que l'OpenAI-compatible Pro n'est pas stable
+- Claude Haiku comme fallback de format rapide
+- Claude Sonnet comme fallback rare pour cas complexes ou regression DeepSeek
+
+Cible technique :
+
+- budget complexite :
+  - ne pas introduire un nouveau chemin LLM dans les modules domaine
+  - garder `llm_gateway` comme unique frontiere provider
+  - limiter le premier slice a DeepSeek OpenAI structured-output + fallback Claude
+  - ne pas migrer heartbeat/planning/onboarding tant que conversation n'est pas stabilise
+  - supprimer ou archiver le spike une fois l'adapter produit livre
+- gateway multi-adapter :
+  - `DeepSeekOpenAIAdapter`
+  - `DeepSeekAnthropicAdapter`
+  - `ClaudeAnthropicAdapter`
+- capability matrix par modele :
+  - `json_object`
+  - `tool_call`
+  - `tool_followup_json`
+  - `forced_final_tool`
+  - `requires_reasoning_content_replay`
+- wrapper de sortie structuree :
+  - tente `message_json`
+  - si `None`, lance une repair pass courte avec le texte brut et le schema attendu
+  - si repair impossible, fallback provider
+- schema validation stricte avant d'accepter une decision
+  - champs requis non vides
+  - enums FitMAS canoniques seulement
+  - `target_session_id` obligatoire pour les mutations qui modifient une seance existante
+- metrics par appel :
+  - `provider`
+  - `model`
+  - `structured_output_ok`
+  - `json_repair_used`
+  - `provider_fallback_used`
+  - `tool_json_failure`
+  - `raw_stop_reason`
+- tests reels bornes :
+  - casual
+  - plan lookup
+  - execution report
+  - availability constraint
+  - short continuation (`Oui`, `Running`, `Mercredi`)
+  - tool-use final JSON
+
+Fichiers probables :
+
+- `backend/src/fitmas/llm_gateway.py`
+  - router provider/model
+  - isoler les adapters SDK
+  - repair structured output
+  - metrics provider
+- `scripts/spike_deepseek_openai_sdk.py`
+- `backend/src/fitmas/llm.py`
+  - utiliser le wrapper sur les decisions conversation
+  - ne plus traiter "prose apres tool" comme simple fallback silencieux
+- `tests/test_llm_gateway_json.py`
+- `tests/test_integration_real.py`
+- `scripts/smoke_real_conversations.py`
+
+Gate :
+
+- 0 sortie non-JSON acceptee comme decision finale
+- 0 crash API
+- 0 erreur 400 tool-use
+- toutes les sorties prose apres tool-use sont soit reparees, soit reroutees vers fallback provider
+- la matrice smoke ciblee tourne avec moins de 5% de fallback provider
+- chaque fallback est trace avec le texte brut tronque et le schema attendu
+- aucun import `openai` / `anthropic` hors gateway/adapters et tests
+- aucun changement de comportement domaine dans ce slice, seulement provider contract + validation
+
+### Chantier 5B — Runtime tools V2 multi-tool borne ✅ slice 1 livre le 25 avril 2026
+
+But :
+
+- tirer parti de DeepSeek V4 quand il demande plusieurs tools coherents
+- respecter le protocole Anthropic-compatible : chaque `tool_use_id` recoit un `tool_result`
+- rester borne : pas de boucle agentique libre, pas de write DB, pas d'explosion cout/latence
+
+Etat code actuel :
+
+- `_request_json_with_tools()` dans `backend/src/fitmas/llm.py` accepte plusieurs `tool_use` dans le meme tour
+- `execute_tool_calls()` dans `backend/src/fitmas/tools/runtime.py` execute un batch borne et preserve un resultat par tool demande
+- budget actuel : max 3 tools executes par tour ; les surplus recoivent `tool_budget_exceeded`
+- tous les `tool_use_id` recoivent un `tool_result`, y compris les tools bloques
+- `ToolTrace` trace encore surtout la session outillee ; la trace session-level detaillee reste a enrichir
+
+Cible :
+
+- `ToolExecutionPolicy` par intent :
+  - `max_tools_per_round`
+  - `max_round_trips`
+  - `allowed_parallel`
+  - `tool_categories` (`read`, `validation`, `write` plus tard)
+- execution de tous les tools read-only / validation-only demandes tant qu'ils sont autorises et sous budget
+- blocage explicite des surplus et des writes :
+  - `tool_result.is_error = true`
+  - payload `{error: "tool_budget_exceeded" | "tool_not_allowed" | "write_tool_not_allowed"}`
+- traces session-level :
+  - `requested_tools`
+  - `executed_tools`
+  - `blocked_tools`
+  - `tool_result_count`
+  - `tool_loop_round_trips`
+
+Fichiers touches / probables :
+
+- `backend/src/fitmas/tools/contract.py`
+  - ajouter metadata `kind: read | validation | write`
+  - ajouter une policy simple si necessaire
+- ✅ `backend/src/fitmas/tools/runtime.py`
+  - `execute_tool_calls(...)` batch ajoute
+  - `execute_tool_call(...)` conserve pour compat
+- `backend/src/fitmas/tools/metrics.py`
+  - etendre `ToolTrace` ou ajouter `ToolSessionTrace`
+- `backend/src/fitmas/llm.py`
+  - remplacer le "premier tool uniquement" par batch borne
+- `tests/test_llm_tools.py`
+- `tests/test_tool_runtime.py`
+
+Gate :
+
+- ✅ si DeepSeek renvoie `get_plan_window` + `get_user_constraints`, les deux sont executes et renvoyes au follow-up
+- ✅ si DeepSeek renvoie plus de 3 tools, les 3 premiers valides sont executes, les autres ont un `tool_result` d'erreur controlee
+- aucun tool write ne peut etre execute par le runtime conversationnel
+- ⏳ les logs session-level doivent encore mieux distinguer tools demandes/executés/bloqués
+- le smoke `golden_case_autonomy` ne produit plus de 400 tool-use
+
+### Chantier 5C — Surface tools atomique + shortcut optionnel
+
+But :
+
+- garder une interface agent-machine claire
+- eviter a la fois le "gros blob magique" et le catalogue de 40 micro-tools
+- transformer `get_coach_state` en shortcut utile, pas en cerveau cache
+
+Etat actuel a reutiliser :
+
+- `ConversationTurnState` assemble deja `scheduled_sessions`, `activities`, `active_facts`
+- `coach_state_bundle.py` produit deja un bundle partage pour app/coach
+- tools existants : `get_plan_window`, `resolve_planning_window`, `get_recent_activities`, `get_load_context`, `get_user_constraints`, `get_relevant_facts`
+- `propose_replan` existe mais agit encore comme une recommandation mono-cible
+
+Cible :
+
+- ameliorer descriptions et payloads des tools existants :
+  - descriptions 3-4 phrases quand le comportement est subtil
+  - champs high-signal seulement
+  - erreurs actionnables
+- classer chaque tool :
+  - `read`: lit une verite
+  - `validation`: valide un draft sans write
+  - `candidate`: propose des options, ne tranche pas
+  - `write`: interdit au runtime LLM pour l'instant
+- `get_coach_state` optionnel :
+  - macro-tool read-only pour les conversations simples et heartbeat
+  - payload compact : `clock`, `today`, `next_72h`, `week_sessions`, `active_constraints`, `load`, `recent_activities`, `truth_notes`
+  - ne remplace pas les tools atomiques dans les cas ambigus
+
+Fichiers probables :
+
+- `backend/src/fitmas/tools/registry.py`
+- `backend/src/fitmas/tools/contract.py`
+- `backend/src/fitmas/coach_state_bundle.py`
+- `tests/test_tool_runtime.py`
+- `tests/test_llm_tools.py`
+
+Gate :
+
+- pour "piscine fermee 2 semaines", les tools atomiques permettent de reconstruire : fenetre, seances impactees, contrainte active, load/recovery
+- `get_coach_state` ne lit jamais `WeeklyPlan` / `DayPlan` comme verite runtime
+- les tool descriptions n'incitent plus le modele a considerer `propose_replan` comme autorite finale
+
+### Chantier 5D — Skill metier `replan_after_constraint`
+
+But :
+
+- formaliser les workflows repetes sans rendre le runtime libre
+- donner au coach une routine actionnable pour les cas dogfood : piscine fermee, voyage, indispo, swap, recuperation protegee
+
+La skill n'est pas un write DB.
+C'est un protocole de raisonnement outille :
+
+```
+replan_after_constraint
+  trigger:
+    - availability_constraint
+    - plan_mutation avec contrainte temporelle/sportive
+    - continuation "oui" / "running" / "mercredi" apres question de replan
+  tools autorises:
+    - get_plan_window
+    - get_user_constraints
+    - get_load_context
+    - get_recent_activities si le user conteste le reel
+    - suggest_replan_candidates
+    - validate_plan_patch
+  sortie:
+    - CoachDecision(response_type="plan_patch", plan_patch=...)
+    - ou CoachDecision(response_type="ask_confirmation", ...)
+    - ou CoachDecision(response_type="no_change", reason clair)
+```
+
+Fichiers probables :
+
+- documentation dans `docs/RUNTIME-TOOLS.md` et ce doc
+- prompt guidance dans `backend/src/fitmas/llm_prompt_builder.py`
+- routing dans `backend/src/fitmas/llm.py` ou nouveau module de policy
+- tests `tests/test_llm_prompt_builder.py`
+
+Gate :
+
+- la skill dit explicitement "ne demande pas un menu si les tools suffisent"
+- la skill force la sortie `PlanPatch` quand une action est decidee
+- la skill ne permet aucun commit direct
+
+### Chantier 5E — Contrat `PlanPatch` ⏳ slices 1-2 livres les 24-25 avril 2026
+
+But :
+
+- remplacer la decision mono-operation implicite par une intention structuree batchable
+- laisser le LLM exprimer une adaptation complete sans que le code choisisse a sa place
+
+Cible domaine :
+
+```python
+PlanPatch {
+  reason: str
+  operations: list[PlanPatchOperation]
+  user_visible_intent: str
+}
+
+PlanPatchOperation {
+  operation_type: replace_session | move_session | swap_sessions | update_session | lighten_day | create_session
+  target_session_id: int | None
+  second_session_id: int | None
+  target_date: str | None
+  new_sport_type: str | None
+  new_session_type: str | None
+  new_duration_min: int | None
+  new_intensity: str | None
+  new_title: str | None
+  new_goal: str | None
+  rationale: str
+}
+```
+
+Approche progressive :
+
+- ✅ garder `MutationDecision` comme wire format legacy
+- ⏳ creer un adaptateur `MutationDecision -> PlanPatch`
+- ✅ creer un adaptateur `PlanPatchOperation -> MutationDecision` pour reutiliser `mutations.py` au debut
+- ✅ ne pas casser les endpoints app existants
+
+Slice livre :
+
+- `backend/src/fitmas/plan_patch.py`
+- `PlanPatch` + `PlanPatchOperation` batchable
+- operations supportees au depart : `move_session`, `swap_sessions`, `replace_session`, `update_session`, `lighten_day`, `create_session`
+- `adapt_plan_patch_to_mutation_decisions(patch)` conserve l'ordre et injecte `coach_message` comme `fitmas_message` legacy
+- `create_session` sort du legacy adapter et passe par `PlanMutationService` pour creer une `ScheduledSession` datee + event audite
+- validation locale `create_session` : date future, sport/titre/duree requis, blocage si le jour contient deja une seance training stable
+- aucun write DB dans le module
+
+Fichiers probables :
+
+- ✅ create `backend/src/fitmas/plan_patch.py`
+- modify `backend/src/fitmas/llm.py` ensuite, pas au premier slice
+- modify `backend/src/fitmas/mutation_permissions.py` pour serialiser pending confirmations patch
+- ✅ tests : `tests/test_plan_patch.py`
+
+Gate :
+
+- ✅ un patch single operation round-trippe vers l'ancien `MutationDecision`
+- ✅ un patch multi-operation conserve l'ordre et les IDs
+- ✅ aucun write DB dans ce module
+
+### Chantier 5F — `validate_plan_patch` ⏳ slice 1 livre le 24 avril 2026
+
+But :
+
+- transformer les bonnes pratiques training en validation graduee
+- ne plus confondre "suboptimal" avec "impossible"
+
+Cible :
+
+```json
+{
+  "status": "valid | warning | requires_confirmation | blocked",
+  "issues": [
+    {
+      "code": "protected_recovery_moved",
+      "severity": "requires_confirmation",
+      "message": "Vendredi protege ta recuperation post-charge.",
+      "suggested_fix": "Deplacer la recuperation samedi."
+    }
+  ],
+  "normalized_patch": {},
+  "summary": "Patch applicable avec confirmation ciblee."
+}
+```
+
+Sources de validation a composer :
+
+- `plan_validator.validate_week_plan`
+- ✅ `mutation_hooks.run_pre_mutation_hooks`
+- `mutation_permissions.assess_mutation_impact`
+- `training_load.compute_ctl_atl_tsb`
+- `session_similarity.find_same_sport_proximity_conflict`
+- active facts health / availability
+
+Regle de classification :
+
+- danger sante/blessure ou cible inexistante -> `blocked`
+- recuperation protegee modifiee mais preservable ailleurs -> `requires_confirmation`
+- proximite meme sport / load dense mais acceptable -> `warning` ou `requires_confirmation` selon gravite
+- patch propre -> `valid`
+
+Slice livre :
+
+- `validate_plan_patch(...)` dans `plan_patch.py`
+- statut global et statut par operation
+- `allowed=False` des pre-hooks -> `blocked`
+- warnings pre-hooks -> `requires_confirmation`
+- aucun commit quand le statut global n'est pas `valid`
+
+Fichiers probables :
+
+- ⏳ create `backend/src/fitmas/plan_patch_validator.py` si le wrapper devient trop riche
+- modify `backend/src/fitmas/mutation_hooks.py` seulement si necessaire ; preferer d'abord un wrapper pour limiter le risque
+- expose tool read-only `validate_plan_patch` dans `tools/registry.py`
+- ✅ tests : `tests/test_plan_patch.py`
+- tests suivants : `tests/test_plan_patch_validator.py`, `tests/test_tool_runtime.py`
+
+Gate :
+
+- swap avec recuperation protegee n'est pas bloque si la recup reste dans la semaine
+- replace d'une recuperation protegee sans preservation sort `requires_confirmation` ou `blocked` selon contexte
+- piscine fermee multi-jours produit un patch qui couvre toutes les nages impactees ou indique explicitement les restes
+- le LLM peut recevoir des `suggested_fixes` exploitables
+
+### Chantier 5G — Commit patch par orchestrateur ⏳ slice 1 livre le 24 avril 2026
+
+But :
+
+- donner au coach une capacite d'action reelle sans write libre dans un tool LLM
+- garantir "dire = faire"
+
+Cible :
+
+- `commit_plan_patch` est une capacite orchestrateur, pas un tool runtime DB libre dans le premier slice
+- le LLM finalise un `PlanPatch`
+- le pipeline revalide le patch cote serveur
+- si `valid` / `warning` acceptable -> commit via `PlanMutationService`
+- si `requires_confirmation` -> pending confirmation stocke le patch complet
+- si `blocked` -> pas de commit ; le coach recoit les raisons et propose alternative
+
+Fichiers probables :
+
+- ✅ modify `backend/src/fitmas/plan_mutation_service.py`
+  - ✅ add `apply_patch_for_user(...)`
+  - one event per operation au debut, puis summary patch si besoin
+- modify `backend/src/fitmas/conversation_pipeline.py`
+  - branch `PlanPatchDecision`
+  - pending confirmation patch
+  - reply derivee des applied events
+- modify `backend/src/fitmas/mutation_permissions.py`
+  - serialize / deserialize patch confirmations
+- tests : `tests/test_plan_mutation_service.py`, `tests/test_core_flows.py`
+
+Gate :
+
+- ✅ patch `valid` passe par `apply_decisions_for_user`
+- ✅ patch `requires_confirmation` refuse proprement avant write
+- ⏳ patch batch applique toutes ses operations ou refuse proprement avant write
+- ⏳ `event_count == applied_count`
+- reply finale vient des events appliques
+- claim guard reste en defense-in-depth
+
+### Chantier 5H — Brancher le coach LLM sur PlanPatch
+
+But :
+
+- sortir du JSON `MutationDecision` mono-operation comme seule forme d'action
+- permettre au coach de decider vraiment sur les demandes complexes
+
+Approche progressive :
+
+1. Ajouter un nouveau schema `CoachDecision` :
+   - `response_type`: `reply | plan_patch | ask_confirmation | no_change`
+   - `plan_patch`: optionnel
+   - `fitmas_message`: brouillon non fiable tant que non commit
+2. Le pipeline ignore toute promesse d'action du brouillon avant commit.
+3. Apres commit, la reply finale est regeneree ou reconstruite depuis event summary.
+4. Garder `MutationDecision` en fallback legacy pendant la transition.
+
+Fichiers probables :
+
+- `backend/src/fitmas/llm.py`
+- `backend/src/fitmas/llm_prompt_builder.py`
+- `backend/src/fitmas/conversation_pipeline.py`
+- `tests/test_llm_prompt_builder.py`
+- `tests/test_core_flows.py`
+
+Gate :
+
+- "Oui / Running / Mercredi" peut produire un patch coherent sans nouvelle clarification inutile
+- "piscine fermee 2 semaines" produit soit un patch batch complet, soit un patch partiel explicitement scoped
+- aucune reponse finale ne sort du brouillon LLM si le commit echoue
+
+### Chantier 5I — Reclasser `propose_replan`
+
+But :
+
+- eviter un nouveau determinisme coach cache
+
+Options :
+
+- renommer en `suggest_replan_candidates`
+- ou garder `propose_replan` temporairement mais changer sa description :
+  - retourne des candidates + impacts
+  - ne tranche pas
+  - ne pretend pas couvrir toute la fenetre sauf si c'est vrai
+
+Gate :
+
+- le prompt ne dit plus "pars de cette recommandation et tranche" comme si le tool avait raison par autorite
+- le tool n'est plus le seul chemin pour replanifier
+- toute decision finale passe par `PlanPatch` + validation
 
 ### Chantier 6 — Audit pipeline LLM préliminaires (différé)
 - Aujourd'hui : 3 LLM en cascade (turn_planner + indication_parser + decide)
@@ -249,8 +902,10 @@ Refactor :
 
 - **Confirmations writes maintenues** : tout `apply_plan` ou `set_completion_status` initié par le coach demande encore une confirmation oui/non Telegram. Filet de sécurité pendant la montée en autonomie.
 - **Latence acceptée** : un tour peut passer de 3s à 8-12s. Le gain en autonomie/fiabilité justifie le coût.
-- **Validator strict** : même si le coach LLM rédige un plan agressif sous pression user, le validator déterministe refuse. Le coach reçoit le diff et propose autre chose.
+- **Validation stricte mais graduee** : le validator refuse seulement les vrais dangers / impossibilites. Les bons compromis imparfaits remontent en `warning` ou `requires_confirmation`, puis le coach decide.
+- **Pas de write libre dans un runtime tool LLM au premier slice** : le LLM peut proposer et valider un `PlanPatch`; le commit reste possede par `conversation_pipeline.py` / `PlanMutationService` pour garder transaction, events et permissions.
 - **Dual-write surveillé** : pendant la migration, `plan_actions.py` mute encore `DayPlan` en parallèle. Tout nouveau tool de lecture doit lire la source canonique `ScheduledSession` via `CoachStateBundle` pour éviter divergence.
+- **Determinisme en fond seulement** : pas de nouveau template conversationnel, pas de helper qui choisit a la place du coach et parle ensuite a l'utilisateur.
 
 ## Définition de done
 
@@ -258,14 +913,19 @@ Le refactor est fini quand le golden case (7 tours ci-dessus) produit toutes les
 - Aucun token interne ne leak dans la sortie utilisateur
 - Aucun compteur agrégé n'est passé au LLM en remplacement de données détaillées
 - Le coach principal LLM est appelé sur 100% des tours conversationnels (sauf transactionnels purs)
-- Le coach présente UN plan validé argumenté au lieu de demander au user de choisir
+- Le coach repond correctement aux questions simples de planning/reel/contraintes sans ouvrir un replan inutile
+- Le coach garde le fil sur les continuations courtes (`oui`, `running`, `mercredi`) au lieu de les traiter comme des tours isoles
+- Le coach peut produire un `PlanPatch` multi-operation valide, partiel explicitement scoped, ou une alternative expliquee
+- Les validations training sortent `valid / warning / requires_confirmation / blocked`, pas seulement "allowed / blocked"
+- Une recuperation protegee peut etre deplacee ou preservee via patch quand c'est coherent ; elle n'est bloquee dur que si la recuperation disparait ou si le risque est trop fort
 - **Toute affirmation d'action ("je libere", "je deplace", "je mets") est garantie d'être suivie d'une mutation réelle auditée dans `plan_mutation_events`** ; sinon la phrase est bloquée
 - La weekly review utilise les mêmes données que la conversation (cohérence)
 - Une contrainte temporelle ("piscine fermée 2 semaines") est mémorisée et respectée 7 jours plus tard
+- Les conversations issues des captures 15/17/19/20/21 avril passent en regression
 
 ## Suivi
 
 - BUILD-ORDER.md → ce chantier devient la priorité courante, remplace "dogfood guidé" comme étape 0
-- Une fois `validator.py` + `propose_replan` stables, mettre à jour PLANNING.md
+- Une fois `PlanPatch` + `validate_plan_patch` + `apply_patch_for_user` stables, mettre à jour PLANNING.md
 - Une fois tous les court-circuits supprimés, mettre à jour CONVERSATION.md
 - Une fois les tools heartbeat alignés, mettre à jour SOUL.md

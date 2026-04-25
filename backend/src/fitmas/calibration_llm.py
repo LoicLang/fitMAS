@@ -31,10 +31,11 @@ def extract_calibration_resolution(
 ) -> CalibrationResolution | None:
     fallback = fallback_resolve_calibration_need(user_text, need)
     if not gw.client():
-        return fallback
+        return None
 
     time_context = build_time_context(timezone_name)
     coach_block = _coach_block(coach_context or {})
+    target_day = str(need.context.get("day") or "").strip() or "target_day"
     prompt = f"""{render_time_context(time_context)}
 Besoin actif a resoudre:
 - need_id: {need.id}
@@ -64,15 +65,15 @@ Retourne UNIQUEMENT un JSON:
 }}
 
 Regles de normalisation:
-- availability_window -> {{"day": "thursday", "windows": ["morning"|"evening"], "hard_blocked": ["morning"|"evening"]}}
+- availability_window -> {{"day": "{target_day}", "windows": ["morning"|"evening"], "hard_blocked": ["morning"|"evening"]}}
 - fatigue_state -> {{"session_id": 12, "state": "fresh"|"heavy"|"exhausted"}}
 - constraint_scope -> {{"scope": "session_only"|"week"}}
 """
     data = gw.request_json(system=_CALIBRATION_SOUL, prompt=prompt, model="claude-haiku-4-5-20251001", max_tokens=400)
     resolution = _resolution_from_dict(data)
     if resolution is None or resolution.need_id != need.id:
-        return fallback
-    return resolution
+        return None
+    return _normalize_resolution_for_need(resolution, need)
 
 
 def generate_calibration_ack(
@@ -93,6 +94,7 @@ Tu viens de comprendre un point utile pour mieux tenir le plan.
 Contexte:
 - need_type: {need.need_type.value}
 - why_now: {need.why_now}
+- contexte cible: {json.dumps(need.context, ensure_ascii=False)}
 - resolution: {json.dumps(resolution.normalized_value, ensure_ascii=False)}
 
 Ecris une reponse courte, naturelle, en 1 ou 2 phrases max.
@@ -136,3 +138,25 @@ def _resolution_from_dict(data: dict[str, Any] | None) -> CalibrationResolution 
         )
     except (TypeError, ValueError):
         return None
+
+
+def _normalize_resolution_for_need(
+    resolution: CalibrationResolution,
+    need: CalibrationNeed,
+) -> CalibrationResolution:
+    if need.need_type is not CalibrationNeedType.AVAILABILITY_WINDOW:
+        return resolution
+    target_day = str(need.context.get("day") or "").strip()
+    if not target_day:
+        return resolution
+    normalized_value = dict(resolution.normalized_value)
+    normalized_value["day"] = target_day
+    return CalibrationResolution(
+        need_id=resolution.need_id,
+        resolved=resolution.resolved,
+        normalized_value=normalized_value,
+        confidence=resolution.confidence,
+        followup_needed=resolution.followup_needed,
+        followup_reason=resolution.followup_reason,
+        raw_summary=resolution.raw_summary,
+    )

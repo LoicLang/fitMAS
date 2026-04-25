@@ -60,7 +60,7 @@ Avant toute mutation, FitMAS produit un objet structure.
 
 ### Flux
 
-1. **Interpreter** — `user_indication_llm.py` produit un `UserIndication` structure
+1. **Interpreter** — `user_indication_llm.py` produit un `UserIndication` structure via LLM
 2. **Grounder** — `planning_window_resolution.py` ancre la contrainte contre le vrai planning
 3. **Decider** — `replan_from_life_change.py` ou `adaptation.py` produisent des actions autorisees
 4. **Expliquer** — `llm.py` formule la reponse naturelle
@@ -88,7 +88,8 @@ Interdits :
 - aucun write DB
 - aucune reply finale
 - aucune mutation planning
-- le parseur JSON cascade (`llm_gateway._robust_json_loads`) absorbe les queues tronquees et les prose residuels; un payload ambigu retourne None → fallback heuristique seul
+- le parseur JSON cascade (`llm_gateway._robust_json_loads`) absorbe les queues tronquees et les prose residuels; un payload ambigu retourne None
+- les regex / keywords ne classent pas l'intention floue ; elles injectent seulement un `Signal lexical non conclusif` dans le prompt d'extraction avec rappel negation/contexte
 
 ### Arbitrage heuristique vs LLM
 
@@ -110,6 +111,19 @@ Consequences sur les early-exits deterministes quand `plan_mutation_request == t
 - `adaptation` candidate devient du contexte passe a decide plutot que d'etre appliquee directement
 
 Pour les messages composes `health_signal + plan_mutation`, le fait sante est persiste et injecte dans le contexte, mais l'adaptation sante automatique ne court-circuite pas le tour.
+
+### Heuristiques lexicales
+
+Les heuristiques lexicales (`douleur`, `soir`, `fatigue`, etc.) ne sont pas une source de verite.
+Elles servent uniquement a attirer l'attention du LLM extracteur.
+
+Regle :
+- un keyword peut produire un hint de prompt
+- seul le LLM extracteur peut produire un `UserIndication` flou
+- le determinisme peut ensuite valider, bloquer, demander confirmation, committer et auditer
+- exception : protocoles fermes deja actifs (`oui/non` sur confirmation pending, reponse courte a clarification execution explicite)
+
+Exemple : `top pas de douleur` doit etre classe par le LLM comme absence de signal sante, pas transforme en fait `health` par regex.
 
 ### Failles conversation documentees (15-17 avril 2026)
 
@@ -134,14 +148,14 @@ La reply utilisateur est derivee du `block_reason` via `_BLOCK_REASON_REPLIES` (
 | Type | Exemples | Comportement |
 |------|----------|-------------|
 | `availability_constraint` | Indispo ponctuelle, voyage, creneau impossible | Resolve planning window → replan si seance cible claire. Si multi-jours (durée "X semaines/jours" détectée) → `build_availability_fact_payloads_from_indication` persiste un `UserFact` category=availability avec key `unavailable_<sport|general>_<start>_<end>` et `expires_at = end + 1 jour`. Le fait est ensuite filtré par `fact_is_current` et consulté par `_targeted_execution_clarification` pour sauter "tu l'as faite ou pas ?" sur les séances couvertes |
-| `health_signal` | Douleur, gene, fatigue locale | Normalise signal → ecrit fait sante → adaptation protective |
+| `health_signal` | Douleur, gene, fatigue locale | Le LLM normalise le signal → ecrit fait sante → le coach arbitre ; adaptation protective seulement en fallback si le LLM principal ne tranche pas |
 | `execution_update` | Activite faite, correction | Reconcile le reel → claims d'activite / memoire courte |
 
 ### Implementation dans api_messages.py
 
 1. Presque tous les messages non triviaux passent par le parseur structure
-2. Si `health_signal` fort : ecrit fait sante → adaptation protective → fallback conservateur si LLM ne sort rien de propre
-3. Si `availability_constraint` future : resolve fenetre → replan borne → repond honnetement si rien a bouger
+2. Si `health_signal` fort : ecrit fait sante → injecte au coach LLM ; adaptation protective seulement comme fallback conservateur si le LLM principal ne sort rien de propre
+3. Si `availability_constraint` future : resolve fenetre → le coach LLM arbitre avec tools ; la cible 24 avril est `PlanPatch` + `validate_plan_patch`, pas un replan deterministe qui parle a sa place
 4. Sinon : pipeline conversation normal
 
 Comportements importants :
@@ -198,11 +212,11 @@ Non :
 
 1. ~~**Digest hebdo**~~ — pose le 19 avril (`coach_reading_digest.py`, 12b4bf8) : faits offplan-aware + lens pre-pass, injecte briefing + `decide()` sur intents lookup/report/availability. A observer : qualite du lens Haiku sur semaine longue (les 3 champs coherents avec les faits ?).
 2. **Referents** — a dogfooder : est-ce que `30 min`, `celle de demain`, `la piscine` restent ambigus ?
-3. **Tools** — garder bornes, ne pas exposer trop de catalogue avant d'avoir stabilise les besoins reels
+3. **Tools** — prochaine tranche : `get_coach_state`, `validate_plan_patch`, `suggest_replan_candidates`. Le commit reste orchestre par `PlanMutationService`, pas par un write tool libre.
 4. **Claims temporels** — observer si d'autres claims meritent la meme approche que les claims d'activite
 5. **Chemins compat** — `WeeklyPlan`/`DayPlan` ne doivent plus etre lus comme verite runtime
 6. **Turn planner fragile quand LLM indispo** — en cas de `llm=unavailable`, seule l'heuristique lexicale decide. Les intentions implicites (`vendredi a la place ?`) peuvent etre ratees. Envisager retry borne ou cache de decisions sur phrasings recurrents.
-7. **Block_reason tied to hardcoded replies** — l'ajout d'une raison pre-hook impose d'editer le dict `_BLOCK_REASON_REPLIES`. Faire emerger une reply builder parametree quand le set depassera 4-5 entrees.
+7. **Block_reason tied to hardcoded replies** — l'ajout d'une raison pre-hook impose d'editer le dict `_BLOCK_REASON_REPLIES`. Le chantier `PlanPatch` doit plutot remonter `valid / warning / requires_confirmation / blocked` au coach, puis deriver la reply finale depuis validation ou event reel.
 8. **Couche health_signal secondaire non arbitree** — un `health_signal` en intention secondaire d'un tour `plan_mutation` est injecte comme fact, mais il n'existe pas encore de contrat clair sur la facon dont le LLM doit trancher (prioriser sante ? refuser la mutation ?).
 
 ## Regles non negociables
@@ -222,3 +236,4 @@ Non :
 - muter le plan directement depuis une extraction LLM
 - ecrire un signal utilisateur flou en memoire durable
 - appliquer un side-effect DB avant que l'intention principale du tour soit arbitree
+- laisser un helper deterministe choisir et formuler le replan a la place du coach

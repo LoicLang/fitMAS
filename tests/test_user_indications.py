@@ -2,7 +2,11 @@ from __future__ import annotations
 
 import unittest
 from datetime import date, datetime
+from unittest.mock import patch
 
+import fitmas.calibration_llm as calibration_llm
+import fitmas.user_indication_llm as user_indication_llm
+from fitmas import calibration_needs
 from fitmas.planning_window_resolution import resolve_planning_window
 from fitmas.user_indications import (
     IndicationTimeReference,
@@ -48,6 +52,62 @@ class UserIndicationsTest(unittest.TestCase):
         self.assertEqual(payloads[0]["category"], "health")
         self.assertIn("shoulder", payloads[0]["key"])
         self.assertIn("Douleur", payloads[0]["value"])
+
+    def test_llm_interpreter_does_not_promote_keyword_fallback_when_model_says_none(self) -> None:
+        prompts: list[str] = []
+
+        def fake_request_json(*, prompt, **kwargs):
+            prompts.append(prompt)
+            return {
+                "kind": "none",
+                "confidence": 0.9,
+                "scope": "unknown",
+                "polarity": None,
+                "time_reference": None,
+                "health": None,
+                "execution": None,
+                "followup_needed": False,
+                "followup_reason": None,
+            }
+
+        with patch("fitmas.user_indication_llm.gw.client", return_value=object()):
+            with patch(
+                "fitmas.user_indication_llm.gw.request_json",
+                side_effect=fake_request_json,
+            ):
+                indication = user_indication_llm.interpret_user_indication(
+                    "top pas de douleur",
+                    timezone_name="Europe/Paris",
+                    now=datetime(2026, 3, 29, 8, 0),
+                )
+
+        self.assertIsNone(indication)
+        self.assertIn("Signal lexical non conclusif", prompts[0])
+        self.assertIn("Verifie negation", prompts[0])
+
+    def test_calibration_resolution_does_not_use_keyword_fallback_without_llm(self) -> None:
+        need = calibration_needs.CalibrationNeed(
+            id="availability_window:availability:sunday",
+            need_type=calibration_needs.CalibrationNeedType.AVAILABILITY_WINDOW,
+            topic="availability:sunday",
+            status=calibration_needs.CalibrationNeedStatus.OPEN,
+            why_now="test",
+            priority=calibration_needs.CalibrationNeedPriority.MEDIUM,
+            source="test",
+            channel_hint="telegram",
+            context={"day": "sunday", "day_label": "dimanche"},
+            allowed_answers=("morning", "evening", "both", "none"),
+            write_targets=("working_memory.availability",),
+        )
+
+        with patch("fitmas.calibration_llm.gw.client", return_value=None):
+            resolution = calibration_llm.extract_calibration_resolution(
+                user_text="Plutot le soir",
+                need=need,
+                timezone_name="Europe/Paris",
+            )
+
+        self.assertIsNone(resolution)
 
     def test_fallback_interprets_general_illness_and_clarification_answer(self) -> None:
         indication = fallback_interpret_user_indication(

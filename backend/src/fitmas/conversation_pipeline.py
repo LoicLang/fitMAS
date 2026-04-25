@@ -42,6 +42,7 @@ from fitmas.conversation_contract import (
 )
 from fitmas.models import Extraction, Message, MessageReply, MessageRole
 from fitmas.mutation_permissions import (
+    MutationImpactAssessment,
     assess_mutation_impact,
     build_confirmation_followup,
     build_confirmation_prompt,
@@ -429,91 +430,16 @@ def run_conversation_turn(
         )
         state.active_memory_rows, state.active_facts = api_messages._active_memory_payloads(db, user.id)
 
+    health_adaptation_result = None
+    health_fallback_decision = None
     if health_indication_facts and not defer_health_adaptation_to_llm:
-        health_result = dependencies.check_and_adapt_health_facts(
+        health_adaptation_result = dependencies.check_and_adapt_health_facts(
             db,
             user,
             health_indication_facts,
         )
-        if health_result and health_result.applied and health_result.message:
-            first_decision = health_result.decisions[0] if health_result.decisions else None
-            extraction = Extraction(confidence=max(float(user_indication.confidence if user_indication else 0.0), 0.85))
-            reply_text = health_result.message
-            return _reply_and_record_turn(
-                db=db,
-                user_id=user.id,
-                user_text=payload.text,
-                reply_text=reply_text,
-                extraction=extraction,
-                day_updated=api_messages._resolve_day_updated(first_decision) if first_decision is not None else None,
-                response_mode="health_adaptation",
-                decision=first_decision,
-                mutation_applied=bool(first_decision is not None),
-                turn_context=turn_context,
-                memory_writes=turn_memory_writes,
-            )
-        if health_result and health_result.decisions and health_result.message:
-            first_decision = health_result.decisions[0]
-            target_session = (
-                repo.get_scheduled_session(db, user.id, first_decision.target_session_id)
-                if first_decision.target_session_id is not None
-                else None
-            )
-            impact = assess_mutation_impact(first_decision, target_session=target_session)
-            if _can_auto_apply_health_suggestion(
-                decision=first_decision,
-                impact=impact,
-                user_text=payload.text,
-                normalize=api_messages._normalize_text,
-            ):
-                service_result = apply_decisions_for_user(
-                    db,
-                    user=user,
-                    decisions=[first_decision],
-                    source="conversation",
-                    trigger_type="health_adaptation",
-                    explained_to_user=True,
-                )
-                reply_text = _applied_event_summary(service_result, first_decision) or health_result.message
-                return _reply_and_record_turn(
-                    db=db,
-                    user_id=user.id,
-                    user_text=payload.text,
-                    reply_text=reply_text,
-                    extraction=Extraction(confidence=max(float(user_indication.confidence if user_indication else 0.0), 0.85)),
-                    day_updated=api_messages._resolve_day_updated(first_decision),
-                    response_mode="health_adaptation",
-                    decision=first_decision,
-                    mutation_applied=bool(service_result and service_result.applied_count > 0),
-                    turn_context=turn_context,
-                    memory_writes=turn_memory_writes,
-                )
-            pending_row = repo.create_pending_mutation_confirmation(
-                db,
-                user_id=user.id,
-                impact_level=impact.level,
-                reason=impact.reason,
-                mutation_type=first_decision.mutation_type,
-                summary=impact.summary,
-                source_text=payload.text,
-                decision_json=serialize_mutation_decision(first_decision),
-                expires_at=default_confirmation_expiry(),
-            )
-            reply_text = build_confirmation_prompt(first_decision, assessment=impact)
-            return _reply_and_record_turn(
-                db=db,
-                user_id=user.id,
-                user_text=payload.text,
-                reply_text=reply_text,
-                extraction=Extraction(confidence=max(float(user_indication.confidence if user_indication else 0.0), 0.85)),
-                day_updated=api_messages._resolve_day_updated(first_decision),
-                response_mode="mutation_confirmation",
-                decision=first_decision,
-                pending_confirmation=True,
-                pending_confirmation_id=pending_row.id,
-                turn_context=turn_context,
-                memory_writes=turn_memory_writes,
-            )
+        if health_adaptation_result and health_adaptation_result.decisions and health_adaptation_result.message:
+            health_fallback_decision = health_adaptation_result.decisions[0]
 
     adaptation = maybe_replan_from_life_change(
         user_text=payload.text,
@@ -738,8 +664,17 @@ def run_conversation_turn(
     # so the user still gets the safe arbitration.
     if decision is None and adaptation is not None and calibration_only_reply is None:
         decision = api_messages._to_mutation_decision(adaptation.selected_scenario.mutation, fitmas_message=adaptation.user_message)
+    health_fallback_active = False
+    if decision is None and health_fallback_decision is not None and calibration_only_reply is None:
+        decision = health_fallback_decision
+        health_fallback_active = True
 
     if decision:
+        extraction_confidence = (
+            max(float(user_indication.confidence if user_indication else 0.0), 0.85)
+            if health_fallback_active
+            else adaptation.event.confidence if adaptation else 0.85
+        )
         target_session = (
             repo.get_scheduled_session(db, user.id, decision.target_session_id)
             if decision.target_session_id is not None
@@ -755,6 +690,18 @@ def run_conversation_turn(
             target_session=target_session,
             second_session=second_session,
         )
+        if health_fallback_active and not _can_auto_apply_health_suggestion(
+            decision=decision,
+            impact=impact,
+            user_text=payload.text,
+            normalize=api_messages._normalize_text,
+        ):
+            impact = MutationImpactAssessment(
+                level="high",
+                requires_confirmation=True,
+                reason="health_suggestion_requires_confirmation",
+                summary=impact.summary,
+            )
         if impact.requires_confirmation:
             pending_row = repo.create_pending_mutation_confirmation(
                 db,
@@ -769,7 +716,7 @@ def run_conversation_turn(
             )
             reply_text = build_confirmation_prompt(decision, assessment=impact)
             outcome = ConversationTurnOutcome(
-                extraction=Extraction(confidence=adaptation.event.confidence if adaptation else 0.85),
+                extraction=Extraction(confidence=extraction_confidence),
                 reply_text=reply_text,
                 response_mode="mutation_confirmation",
                 decision=decision,
@@ -784,7 +731,7 @@ def run_conversation_turn(
                 decision=decision,
             )
             outcome = ConversationTurnOutcome(
-                extraction=Extraction(confidence=adaptation.event.confidence if adaptation else 0.85),
+                extraction=Extraction(confidence=extraction_confidence),
                 reply_text=reply_text,
                 response_mode="reply",
                 decision=decision,
@@ -797,7 +744,11 @@ def run_conversation_turn(
                 user=user,
                 decisions=[decision],
                 source="conversation",
-                trigger_type="life_change_adaptation" if adaptation is not None else "message",
+                trigger_type=(
+                    "health_adaptation"
+                    if health_fallback_active
+                    else "life_change_adaptation" if adaptation is not None else "message"
+                ),
                 explained_to_user=True,
             )
             if adaptation is not None:
@@ -820,7 +771,7 @@ def run_conversation_turn(
                 decision=decision,
             )
             outcome = ConversationTurnOutcome(
-                extraction=Extraction(confidence=adaptation.event.confidence if adaptation else 0.85),
+                extraction=Extraction(confidence=extraction_confidence),
                 reply_text=reply_text,
                 day_updated=api_messages._resolve_day_updated(decision) if applied else None,
                 response_mode="mutation_applied" if applied else "mutation_blocked",

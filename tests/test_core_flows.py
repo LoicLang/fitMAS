@@ -786,17 +786,50 @@ class FitMASCoreFlowsTest(unittest.TestCase):
         original_decide = api_messages.decide
         original_extract_facts = api_messages.extract_facts
         original_health = api_messages.check_and_adapt_health_facts
+        original_interpret = api_messages.interpret_user_indication
         try:
-            api_messages.decide = lambda *args, **kwargs: MutationDecision(
-                mutation_type="no_change",
-                rationale="Premier tour, je pose la question.",
-                fitmas_message="Avant de trancher pour aujourd'hui — tu l'as faite ou pas hier ?",
-            )
+            def fake_decide(user_text, *args, **kwargs):
+                if "malade" in user_text:
+                    return MutationDecision(
+                        mutation_type="no_change",
+                        rationale="Maladie signalee, le coach arbitre sans fallback deterministe.",
+                        fitmas_message="Tu es malade, donc on ne force rien aujourd'hui.",
+                    )
+                return MutationDecision(
+                    mutation_type="no_change",
+                    rationale="Premier tour, je pose la question.",
+                    fitmas_message="Avant de trancher pour aujourd'hui — tu l'as faite ou pas hier ?",
+                )
+
+            api_messages.decide = fake_decide
             api_messages.extract_facts = lambda *args, **kwargs: []
             api_messages.check_and_adapt_health_facts = lambda *args, **kwargs: AdaptationResult(
                 trigger_type="health_fact",
                 message="Repos. Tu es malade, on coupe propre.",
                 applied=True,
+            )
+            api_messages.interpret_user_indication = lambda text, **kwargs: (
+                UserIndication(
+                    kind=UserIndicationKind.HEALTH_SIGNAL,
+                    confidence=0.95,
+                    source_text=text,
+                    scope=UserIndicationScope.SINGLE_DAY,
+                    polarity=UserIndicationPolarity.SIGNAL,
+                    time_reference=IndicationTimeReference(
+                        label="hier",
+                        resolved_date=yesterday_session.scheduled_date.date(),
+                        day_key=yesterday_session.day,
+                        relative_reference="yesterday",
+                        window=None,
+                    ),
+                    body_zone="general",
+                    trigger_activity="general",
+                    symptom_type="illness",
+                    execution_sport_type=yesterday_session.sport_type,
+                    execution_completed=False,
+                )
+                if "malade" in text
+                else None
             )
             self.client.post("/api/v0/messages", json={"text": "Tu me conseilles quoi aujourd'hui ?"}).json()
             second = self.client.post("/api/v0/messages", json={"text": "Je suis malade comme un chien j'ai rien fait"}).json()
@@ -804,6 +837,7 @@ class FitMASCoreFlowsTest(unittest.TestCase):
             api_messages.decide = original_decide
             api_messages.extract_facts = original_extract_facts
             api_messages.check_and_adapt_health_facts = original_health
+            api_messages.interpret_user_indication = original_interpret
 
         self.db.expire_all()
         refreshed_yesterday = repo.get_scheduled_session(self.db, self.user.id, yesterday_session.id)
@@ -886,16 +920,22 @@ class FitMASCoreFlowsTest(unittest.TestCase):
         self.assertEqual(unchanged_session.scheduled_date.date(), original_date)
         self.assertIn("Adaptation candidate", captured["temporal_summary"])
 
-    def test_health_indication_can_bypass_decide_and_trigger_protective_reply(self) -> None:
+    def test_health_indication_reaches_decide_before_protective_fallback(self) -> None:
         self._create_plan_for_today()
         original_decide = api_messages.decide
         original_extract_facts = api_messages.extract_facts
         original_health = api_messages.check_and_adapt_health_facts
+        decide_calls = {"count": 0}
         try:
-            def should_not_run(*args, **kwargs):
-                raise AssertionError("LLM decide should not run for direct health protection flow")
+            def fake_decide(*args, **kwargs):
+                decide_calls["count"] += 1
+                return MutationDecision(
+                    mutation_type="no_change",
+                    rationale="Signal sante arbitre par le coach.",
+                    fitmas_message="Je prends l'epaule au serieux avant de toucher au plan.",
+                )
 
-            api_messages.decide = should_not_run
+            api_messages.decide = fake_decide
             api_messages.extract_facts = lambda *args, **kwargs: []
             api_messages.check_and_adapt_health_facts = lambda *args, **kwargs: AdaptationResult(
                 trigger_type="health_fact",
@@ -910,6 +950,7 @@ class FitMASCoreFlowsTest(unittest.TestCase):
 
         facts = self.client.get("/api/v0/facts").json()
 
+        self.assertEqual(decide_calls["count"], 1)
         self.assertIn("epaule", result["assistant_message"]["text"].lower())
         self.assertTrue(any(fact["category"] == "health" for fact in facts))
 
@@ -918,11 +959,13 @@ class FitMASCoreFlowsTest(unittest.TestCase):
         original_decide = api_messages.decide
         original_extract_facts = api_messages.extract_facts
         original_health = api_messages.check_and_adapt_health_facts
+        decide_calls = {"count": 0}
         try:
-            def should_not_run(*args, **kwargs):
-                raise AssertionError("LLM decide should not run for health adaptation proposal")
+            def fake_decide(*args, **kwargs):
+                decide_calls["count"] += 1
+                return None
 
-            api_messages.decide = should_not_run
+            api_messages.decide = fake_decide
             api_messages.extract_facts = lambda *args, **kwargs: []
             api_messages.check_and_adapt_health_facts = lambda *args, **kwargs: AdaptationResult(
                 trigger_type="health_fact",
@@ -948,6 +991,7 @@ class FitMASCoreFlowsTest(unittest.TestCase):
 
         pending = repo.get_active_pending_mutation_confirmation(self.db, self.user.id)
 
+        self.assertEqual(decide_calls["count"], 1)
         self.assertIsNotNone(pending)
         self.assertIn("confirmes", result["assistant_message"]["text"].lower())
         self.assertEqual(pending.mutation_type, "replace_session")
@@ -1290,6 +1334,34 @@ class FitMASCoreFlowsTest(unittest.TestCase):
         self.assertEqual(result["assistant_message"]["text"], "Je vois les seances touchees. Tu confirmes off complet ?")
         self.assertIn("Natation hotel", captured["signal_summary"])
         self.assertIn("Renfo hotel", captured["signal_summary"])
+        self.assertNotIn("this_week", captured["signal_summary"])
+
+    def test_week_scope_grounding_never_exposes_internal_reference_labels(self) -> None:
+        indication = UserIndication(
+            kind=UserIndicationKind.AVAILABILITY_CONSTRAINT,
+            confidence=0.95,
+            source_text="Cette semaine je voyage",
+            scope=UserIndicationScope.WEEK,
+            polarity=UserIndicationPolarity.UNAVAILABLE,
+            time_reference=IndicationTimeReference(
+                label="this_week",
+                resolved_date=get_local_now(self.user.timezone).date(),
+                day_key=None,
+                relative_reference="this_week",
+                window=None,
+            ),
+        )
+        resolution = SimpleNamespace(
+            reference_label="this_week",
+            matched_session_id=None,
+            candidate_sessions=[],
+        )
+
+        reply = api_messages._week_scope_reply(indication, resolution)
+
+        self.assertIsNotNone(reply)
+        self.assertNotIn("this_week", reply)
+        self.assertIn("cette semaine", reply.lower())
 
     def test_swap_wording_bypasses_availability_week_scope_reply(self) -> None:
         self._create_plan_for_today()
@@ -2206,10 +2278,13 @@ class FitMASCoreFlowsTest(unittest.TestCase):
             write_targets=("working_memory.availability",),
         )
         repo.upsert_working_memory(self.db, self.user.id, [need.as_memory_update()])
+        expected_day_label = day_label_fr(DAY_KEYS[target_date.weekday()])
 
         original_decide = api_messages.decide
         original_extract_facts = api_messages.extract_facts
         original_interpret = api_messages.interpret_user_indication
+        original_calibration_extract = conversation_pipeline.extract_calibration_resolution
+        original_calibration_ack = conversation_pipeline.generate_calibration_ack
         try:
             def should_not_run(*args, **kwargs):
                 raise AssertionError("LLM decide should not run for standalone calibration answers")
@@ -2230,17 +2305,33 @@ class FitMASCoreFlowsTest(unittest.TestCase):
                     window="evening",
                 ),
             )
+            conversation_pipeline.extract_calibration_resolution = lambda *args, **kwargs: calibration_needs.CalibrationResolution(
+                need_id=need.id,
+                resolved=True,
+                normalized_value={
+                    "day": DAY_KEYS[target_date.weekday()],
+                    "windows": ["evening"],
+                    "hard_blocked": ["morning"],
+                },
+                confidence=0.93,
+                followup_needed=False,
+                raw_summary="Plutot le soir",
+            )
+            conversation_pipeline.generate_calibration_ack = (
+                lambda **kwargs: f"OK, je note {expected_day_label}: plutot le soir."
+            )
             result = self.client.post("/api/v0/messages", json={"text": "Plutot le soir"}).json()
         finally:
             api_messages.decide = original_decide
             api_messages.extract_facts = original_extract_facts
             api_messages.interpret_user_indication = original_interpret
+            conversation_pipeline.extract_calibration_resolution = original_calibration_extract
+            conversation_pipeline.generate_calibration_ack = original_calibration_ack
 
         self.db.expire_all()
         updated = repo.get_scheduled_session(self.db, self.user.id, session.id)
         # The ack must name the day of the target session (tomorrow relative
         # to today's test run), not a hard-coded weekday.
-        expected_day_label = day_label_fr(DAY_KEYS[target_date.weekday()])
         self.assertIn(expected_day_label, result["assistant_message"]["text"].lower())
         self.assertEqual(updated.completion_status, "planned")
 

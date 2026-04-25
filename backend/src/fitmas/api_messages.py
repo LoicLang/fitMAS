@@ -333,7 +333,8 @@ def _week_scope_reply(indication: UserIndication | None, resolution) -> str | No
         return None
 
     if not resolution.candidate_sessions:
-        return f"OK. Je n'ai rien de sensible planifie sur {resolution.reference_label}. Rien a proteger la-dessus."
+        label = _human_time_label(indication, resolution)
+        return f"OK. Je n'ai rien de sensible planifie sur {label}. Rien a proteger la-dessus."
 
     parts = []
     for candidate in resolution.candidate_sessions[:3]:
@@ -370,6 +371,8 @@ def _human_time_label(indication: UserIndication | None, resolution) -> str:
         .replace("friday", "vendredi")
         .replace("saturday", "samedi")
         .replace("sunday", "dimanche")
+        .replace("this_week", "cette semaine")
+        .replace("next_week", "la semaine prochaine")
         .strip()
     )
     return normalized or "sur ce creneau"
