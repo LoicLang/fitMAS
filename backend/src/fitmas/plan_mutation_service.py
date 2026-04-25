@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 from fitmas import mutations, plan_actions, repository as repo, schema as s
 from fitmas.llm import MutationDecision
 from fitmas.mutation_hooks import run_pre_mutation_hooks
+from fitmas.plan_patch import PlanPatch, PlanPatchOperation, PlanPatchValidation, adapt_plan_patch_to_mutation_decisions, validate_plan_patch
 
 
 @dataclass(frozen=True, slots=True)
@@ -19,6 +20,12 @@ class PlanMutationServiceResult:
     event_count: int = 0
     applied_events: tuple[PlanAppliedMutationEvent, ...] = ()
     blocked_events: tuple[PlanBlockedMutationEvent, ...] = ()
+
+
+@dataclass(frozen=True, slots=True)
+class PlanPatchServiceResult:
+    validation: PlanPatchValidation
+    mutation_result: PlanMutationServiceResult | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -74,6 +81,24 @@ def apply_decisions_for_user(
     applied_events: list[PlanAppliedMutationEvent] = []
     blocked_events: list[PlanBlockedMutationEvent] = []
     for decision in decisions:
+        if decision.mutation_type == "create_session":
+            create_result = _apply_create_session_decision(
+                db,
+                user=user,
+                plan=plan,
+                decision=decision,
+                source=source,
+                trigger_type=trigger_type,
+                explained_to_user=explained_to_user,
+                conversation_turn_id=conversation_turn_id,
+                scheduled_sessions=scheduled_sessions,
+            )
+            if create_result is not None:
+                applied_count += create_result.applied_count
+                event_count += create_result.event_count
+                applied_events.extend(create_result.applied_events)
+                blocked_events.extend(create_result.blocked_events)
+            continue
         pre_result, post_result = mutations.apply(
             db,
             plan_id,
@@ -134,6 +159,211 @@ def apply_decisions_for_user(
         event_count=event_count,
         applied_events=tuple(applied_events),
         blocked_events=tuple(blocked_events),
+    )
+
+
+def _apply_create_session_decision(
+    db: Session,
+    *,
+    user: s.User,
+    plan: Any,
+    decision: MutationDecision,
+    source: str,
+    trigger_type: str,
+    explained_to_user: bool,
+    conversation_turn_id: int | None,
+    scheduled_sessions: Sequence[Any],
+) -> PlanMutationServiceResult:
+    plan_id = int(getattr(plan, "id", 0) or 0)
+    patch = PlanPatch(
+        operations=[
+            PlanPatchOperation(
+                operation_type="create_session",
+                target_date=decision.target_date,
+                new_sport_type=decision.new_sport_type,
+                new_session_type=decision.new_session_type,
+                new_title=decision.new_title,
+                new_goal=decision.new_goal,
+                new_duration_min=decision.new_duration_min,
+                new_intensity=decision.new_intensity,
+                new_description=decision.new_description,
+                rationale=decision.rationale,
+            )
+        ],
+        coach_message=decision.fitmas_message,
+    )
+    validation = validate_plan_patch(
+        db,
+        plan_id=plan_id,
+        patch=patch,
+        scheduled_sessions=scheduled_sessions,
+        timezone_name=getattr(user, "timezone", None),
+    )
+    if validation.status != "valid":
+        blocked = validation.operation_results[0] if validation.operation_results else None
+        return PlanMutationServiceResult(
+            plan_id=plan_id,
+            applied_count=0,
+            attempted_count=1,
+            blocked_events=(
+                PlanBlockedMutationEvent(
+                    command_type="create_session",
+                    block_reason=blocked.block_reason if blocked else validation.status,
+                    target_session_id=None,
+                    warnings=blocked.warning_messages if blocked else (),
+                ),
+            ),
+        )
+    event = _apply_create_session_operation(
+        db,
+        user=user,
+        plan=plan,
+        operation=patch.operations[0],
+        coach_message=patch.coach_message,
+        source=source,
+        trigger_type=trigger_type,
+        explained_to_user=explained_to_user,
+        conversation_turn_id=conversation_turn_id,
+    )
+    return PlanMutationServiceResult(
+        plan_id=plan_id,
+        applied_count=1 if event is not None else 0,
+        attempted_count=1,
+        event_count=1 if event is not None else 0,
+        applied_events=(event,) if event is not None else (),
+    )
+
+
+def apply_patch_for_user(
+    db: Session,
+    *,
+    user: s.User,
+    patch: PlanPatch,
+    source: str = "conversation",
+    trigger_type: str = "plan_patch",
+    explained_to_user: bool = False,
+    conversation_turn_id: int | None = None,
+) -> PlanPatchServiceResult:
+    plan = repo.get_active_plan_optional(db, user.id)
+    plan_id = int(getattr(plan, "id", 0) or 0)
+    scheduled_sessions = repo.get_scheduled_sessions(db, user.id, limit=84)
+    validation = validate_plan_patch(
+        db,
+        plan_id=plan_id,
+        patch=patch,
+        scheduled_sessions=scheduled_sessions,
+        timezone_name=getattr(user, "timezone", None),
+    )
+    if validation.status != "valid":
+        return PlanPatchServiceResult(validation=validation)
+
+    legacy_operations = [
+        operation for operation in patch.operations if operation.operation_type != "create_session"
+    ]
+    create_operations = [
+        operation for operation in patch.operations if operation.operation_type == "create_session"
+    ]
+    applied_events: list[PlanAppliedMutationEvent] = []
+    blocked_events: list[PlanBlockedMutationEvent] = []
+    applied_count = 0
+    event_count = 0
+
+    if legacy_operations:
+        legacy_result = apply_decisions_for_user(
+            db,
+            user=user,
+            decisions=adapt_plan_patch_to_mutation_decisions(
+                PlanPatch(operations=legacy_operations, coach_message=patch.coach_message)
+            ),
+            source=source,
+            trigger_type=trigger_type,
+            explained_to_user=explained_to_user,
+            conversation_turn_id=conversation_turn_id,
+        )
+        if legacy_result is not None:
+            applied_count += legacy_result.applied_count
+            event_count += legacy_result.event_count
+            applied_events.extend(legacy_result.applied_events)
+            blocked_events.extend(legacy_result.blocked_events)
+
+    for operation in create_operations:
+        event = _apply_create_session_operation(
+            db,
+            user=user,
+            plan=plan,
+            operation=operation,
+            coach_message=patch.coach_message,
+            source=source,
+            trigger_type=trigger_type,
+            explained_to_user=explained_to_user,
+            conversation_turn_id=conversation_turn_id,
+        )
+        if event is not None:
+            applied_count += 1
+            event_count += 1
+            applied_events.append(event)
+
+    mutation_result = PlanMutationServiceResult(
+        plan_id=plan_id,
+        applied_count=applied_count,
+        attempted_count=len(patch.operations),
+        event_count=event_count,
+        applied_events=tuple(applied_events),
+        blocked_events=tuple(blocked_events),
+    )
+    return PlanPatchServiceResult(validation=validation, mutation_result=mutation_result)
+
+
+def _apply_create_session_operation(
+    db: Session,
+    *,
+    user: s.User,
+    plan: Any,
+    operation: PlanPatchOperation,
+    coach_message: str,
+    source: str,
+    trigger_type: str,
+    explained_to_user: bool,
+    conversation_turn_id: int | None,
+) -> PlanAppliedMutationEvent | None:
+    target_date = _parse_target_date(operation.target_date)
+    if target_date is None:
+        return None
+    session = plan_actions.create_session(
+        db,
+        user=user,
+        target_date=target_date,
+        sport_type=str(operation.new_sport_type or "running"),
+        session_type=str(operation.new_session_type or "easy"),
+        title=str(operation.new_title or "Seance ajoutee"),
+        goal=str(operation.new_goal or operation.new_title or "Seance ajoutee"),
+        duration_min=operation.new_duration_min,
+        intensity=str(operation.new_intensity or "easy"),
+        description=str(operation.new_description or ""),
+        rationale=operation.rationale,
+        source_plan_created_at=getattr(plan, "created_at", None),
+    )
+    summary = _build_create_session_summary(operation, session, coach_message=coach_message)
+    event = repo.add_plan_mutation_event(
+        db,
+        user_id=user.id,
+        source=source,
+        trigger_type=trigger_type,
+        command_type="create_session",
+        target_session_ids=[int(session.id)],
+        before_snapshot={},
+        after_snapshot=_session_snapshot(session),
+        reason={"rationale": operation.rationale} if operation.rationale else {},
+        impact={},
+        user_visible_summary=summary,
+        explained_to_user=explained_to_user,
+        conversation_turn_id=conversation_turn_id,
+    )
+    return PlanAppliedMutationEvent(
+        command_type="create_session",
+        target_session_id=int(session.id),
+        user_visible_summary=summary,
+        event_id=_event_id(event),
     )
 
 
@@ -398,6 +628,31 @@ def _build_user_visible_summary(decision: MutationDecision, updated_session: Any
     if decision.rationale:
         parts.append(decision.rationale)
     return " ".join(parts)
+
+
+def _build_create_session_summary(
+    operation: PlanPatchOperation,
+    session: Any,
+    *,
+    coach_message: str,
+) -> str:
+    if coach_message:
+        return coach_message
+    title = str(_value(session, "session_title") or operation.new_title or "seance ajoutee").strip()
+    duration_min = _value(session, "duration_min") or operation.new_duration_min
+    parts = [f"OK. J'ajoute {title.lower()}."]
+    if duration_min:
+        parts.append(f"{int(duration_min)} min.")
+    return " ".join(parts)
+
+
+def _parse_target_date(raw_value: str | None) -> date | None:
+    if not raw_value:
+        return None
+    try:
+        return date.fromisoformat(str(raw_value)[:10])
+    except ValueError:
+        return None
 
 
 def _value(obj: Any, key: str) -> Any:

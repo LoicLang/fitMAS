@@ -125,7 +125,114 @@ Mémoire des contraintes temporelles avec `expires_at` ancré sur la fin de fen�
 - ✅ Garde clarification (`_yesterday_session_covered_by_active_constraint` dans `api_messages.py`) : parcourt `repo.get_active_facts` (filtré par `fact_is_current`), retourne True si hier ∈ fenêtre ET (sport match ou contrainte générale). Wiré dans `_targeted_execution_clarification` après le check `yesterday_sessions`.
 - ✅ Tests `test_user_indications.py` : 3 duration parser + 7 builder/parser inverse. Tests pipeline `test_core_flows.py` : `test_availability_constraint_persists_as_fact_with_window_anchored_expires_at` + `test_execution_clarification_skipped_when_active_availability_fact_covers_yesterday`. **472 tests passent**.
 
-Prochain pas : Chantier 5 (skill `propose_replan` avec validator déterministe) — quand la piscine ferme 2 semaines, le coach doit présenter UN plan de repli validé au lieu de demander au user de choisir.
+### Recalage du 24 avril 2026 — coach libre, cadre strict
+
+Les captures Telegram des 15/17/19/20/21 avril et la revue du code courant changent le cadrage du prochain chantier.
+
+Le probleme initial n'etait pas "pas assez de regles".
+Le probleme etait "des regles locales qui parlaient et decidaient a la place du coach".
+
+Nouvelle doctrine :
+
+- le coach LLM arbitre l'intention, garde le fil conversationnel et decide quoi faire
+- le determinisme tient la verite, la validation training, les permissions, le commit et l'audit
+- aucune reponse conversationnelle finale ne doit venir d'un helper deterministe, sauf outage LLM, confirmation pending ou resume d'un event reel
+- les contraintes training sortent en `valid / warning / requires_confirmation / blocked`, pas en mur binaire par defaut
+
+Etat code au 24 avril :
+
+- `propose_replan` existe (`replan_proposal.py`, commit `40bf4a1`)
+- c'est un helper read-only qui propose une mutation candidate et la valide avec `validate_week_plan`
+- il reste trop mono-cible et trop deterministe pour etre le cerveau du replan
+- `MutationDecision` est encore mono-operation
+- `PlanPatch` existe maintenant comme contrat batchable pur (`backend/src/fitmas/plan_patch.py`)
+- `validate_plan_patch` existe en premier wrapper gradue autour des pre-hooks
+- `PlanMutationService.apply_patch_for_user` existe et commit seulement les patchs `valid`
+- `PlanMutationService` sait accepter une sequence, mais le pipeline conversation applique surtout une decision unique
+- le runtime LLM offre deja plusieurs tools par intent, mais n'execute encore qu'un seul tool par tour
+- DeepSeek V4 peut demander plusieurs tools dans la meme reponse et ignore `disable_parallel_tool_use` cote Anthropic-compatible ; le runtime satisfait les ids en erreur controlee, mais ne tire pas encore parti du multi-tool
+- les smokes reels DeepSeek du 24 avril montrent une API stable, mais un format final fragile apres tool-use :
+  - `tests/test_integration_real.py` : 15 tests + 5 subtests passent
+  - `smoke-real-conversations` : 22 tours reels, aucun crash, aucun 400 tool-use
+  - 5 sorties prose au lieu de JSON apres tool-use ou continuation courte, recuperees par fallback
+- spike OpenAI SDK du 24 avril :
+  - `deepseek-v4-flash` passe en OpenAI-compatible avec `response_format=json_object`
+  - le cas tool-use -> JSON final sort bien en JSON apres replay de `reasoning_content`
+  - `response_format=json_object` garantit surtout le format ; il ne garantit pas les enums FitMAS ni les champs utiles non vides
+  - `deepseek-v4-pro` ne passe pas encore le probe JSON OpenAI-compatible local
+  - `deepseek-chat` gere mieux le function-call final, mais moins bien le tool -> JSON final
+  - conclusion : garder un gateway multi-adapter, ne pas basculer tout le runtime d'un coup
+- les pre-hooks mutation restent `allowed / blocked` + warnings
+
+Le prochain chantier canonique n'est donc plus "finir `propose_replan`".
+Il devient :
+
+> **Tools atomiques + runtime multi-tool borne + skill de replan + PlanPatch audite.**
+
+Raison : DeepSeek a montre dans le smoke qu'il demande les bons tiroirs (`get_plan_window`, `get_user_constraints`, `get_load_context`, `propose_replan`), mais l'interface actuelle le force a en utiliser un seul. Le probleme n'est pas de creer un gros tool magique ; c'est d'autoriser une composition bornee, observable, puis de faire sortir l'action via `PlanPatch`.
+
+Le critere court terme n'est pas "coach sportivement parfait".
+Le critere est : **agent de planning fiable**.
+
+Il doit :
+
+- repondre aux questions simples sans confabuler
+- reagir aux remarques et contraintes utilisateur
+- garder le fil conversationnel
+- appliquer ou refuser proprement
+- ne jamais promettre une action sans event mutation ou confirmation pending
+
+La qualite sportive fine vient apres ; pour l'instant les regles training sont un cadre de securite gradue.
+
+Ordre precis :
+
+1. Ajouter / enrichir les regressions conversationnelles issues des captures dogfood.
+2. Stabiliser le contrat provider DeepSeek avant d'augmenter l'autonomie :
+   - DeepSeek-first, Claude fallback
+   - adapter DeepSeek OpenAI SDK a evaluer pour les appels structurels
+   - conserver Anthropic-compatible tant que le runtime produit n'a pas migre
+   - contenir la complexite : un seul point d'entree `llm_gateway`, adapters SDK caches derriere la meme interface
+   - aucun module domaine ne doit connaitre OpenAI vs Anthropic
+   - repair JSON obligatoire quand la reponse finale apres tool-use est en prose
+   - fallback Haiku/Sonnet si repair impossible ou schema invalide
+   - metrics `provider / model / json_repair_used / provider_fallback_used / tool_json_failure`
+   - gate : moins de 5% de fallback provider sur la matrice smoke conversationnelle ciblee
+3. Passer le runtime tools en V2 multi-tool **read-only / validation-only** borne :
+   - ✅ `execute_tool_calls()` execute un batch borne et preserve un resultat par tool demande
+   - ✅ `llm.py` renvoie un `tool_result` pour chaque `tool_use_id`
+   - ✅ max 3 tools executes par tour ; le surplus devient `tool_budget_exceeded`
+   - max 2 round-trips LLM outilles
+   - traces `requested_tools / executed_tools / blocked_tools`
+4. Nettoyer la surface tools :
+   - garder les tools atomiques utiles
+   - ameliorer descriptions et payloads
+   - reclasser `propose_replan` en `suggest_replan_candidates`
+   - garder `get_coach_state` comme shortcut optionnel, pas comme fondation unique
+5. Ajouter une skill metier `replan_after_constraint` :
+   - quand l'utiliser
+   - tools autorises
+   - ordre recommande
+   - sortie obligatoire `PlanPatch` ou `no_change` justifie
+6. Brancher `llm.decide()` vers un schema `CoachDecision` capable de retourner un `PlanPatch`.
+7. Brancher le pipeline conversation sur `PlanPatch -> validate_plan_patch -> apply_patch_for_user`.
+8. Durcir `validate_plan_patch` au-dela du wrapper pre-hooks : suggestions de fix, batch complet, health/load/recovery.
+
+Slicings deja livres :
+
+- ✅ contrat `PlanPatch` batchable + adaptateur `PlanPatchOperation -> MutationDecision`
+- ✅ `validate_plan_patch` slice 1 avec statuts gradues depuis pre-hooks
+- ✅ `PlanMutationService.apply_patch_for_user`, commit seulement si `valid`
+- ✅ compat protocole DeepSeek : si plusieurs `tool_use` sont emis, tous les ids recoivent un `tool_result`
+- ✅ runtime multi-tool borne : `execute_tool_calls()` execute jusqu'a 3 tools et renvoie une erreur controlee aux surplus
+- ✅ action `create_session` : decision LLM / PlanPatch peut creer une `ScheduledSession` future via orchestrateur, avec validation et `plan_mutation_event`
+- ✅ calibration/fatigue guard : correction du biais `thursday` dans le prompt calibration et suppression du court-circuit sante qui shuntait `decide()` avant fallback
+- ✅ slice provider contract :
+  - `DeepSeekOpenAI` structured output disponible derriere `FITMAS_USE_DEEPSEEK_OPENAI_STRUCTURED`
+  - validation locale des decisions FitMAS (`mutation_type`, champs requis, targets)
+  - repair structuree sur prose apres tool-use
+  - fallback Claude sur schema invalide si `ANTHROPIC_API_KEY` est disponible
+
+Le plan detaille vit dans `docs/COACH-AUTONOMY-REFACTOR.md`, section "Plan d'attaque recale — Agent fiable, tools atomiques, PlanPatch audite".
 
 ### Vérité repo
 
@@ -161,7 +268,7 @@ Ce qui est vrai dans le code aujourd'hui :
   - prompt caching sur la partie stable
   - debounce Telegram
   - routing déterministe des tools
-  - 1 tool read-only max par tour outillé
+  - runtime tools V2 : plusieurs tools read-only / validation-only executes dans un meme tour, budget actuel max 3
   - confirmations `oui/non` pour mutations à impact fort
   - transcript structuré persisté dans `conversation_turns`
 - couche réalité déjà posée :
@@ -257,7 +364,7 @@ Legere au regard de la richesse du domaine. Le systeme fait des mutations automa
 
 ### Ce qui reste partiel ou fragile
 
-- le runtime tools plane reste volontairement etroit (read-only, 1 tool call max, pas de write tools)
+- le runtime tools plane reste volontairement etroit cote LLM-facing (read-only / validation-only, max 3 tools par tour aujourd'hui) ; l'action passe ensuite par `PlanPatch` + orchestrateur
 - le heartbeat reste principalement cron + gating, pas encore tick-based
 - le verrou anti-doublon reste surtout mono-process / best effort
 - le savoir sport existe en contenu et heuristiques, pas encore comme **substrate canonique de capacites partagees**
@@ -502,7 +609,7 @@ Mais :
 - pas de write tools libres côté coach
 - pas de V2.5 “LLM adaptatif partout” tant que le contrat mutation n'est pas durci
 - pas de subagents / swarm
-- pas de "liberté coach" plus large tant que les substrates métier ne sont pas extraits
+- pas de "liberté coach" non validee ; la liberte passe par substrates metier, validation et commit audite
 
 ## Vérification concrète avant de monter à l'étape suivante
 

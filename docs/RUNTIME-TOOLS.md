@@ -11,31 +11,32 @@ read_when:
 
 ## But
 
-Donner au coach FitMAS quelques tools runtime cibles sans passer a un systeme agentique libre.
+Donner au coach FitMAS des tools runtime cibles sans passer a un systeme agentique libre.
 
 Objectifs :
 - lire une verite metier ponctuelle quand le prompt statique ne suffit pas
 - garder un seul orchestrateur LLM
 - rester auditables
 - mesurer l'impact reel avant d'augmenter la liberte du modele
-- reduire le contexte injecte avant de multiplier les tools
+- permettre la composition de quelques tools atomiques quand le modele en a besoin
 
 ## Ce qu'on fait
 
-- tools `read-only`
+- tools LLM-facing `read-only` ou validation-only
 - whitelist par pipeline
 - 1 registre explicite
-- 1 executor borne
+- 1 executor borne, qui doit maintenant supporter plusieurs tool calls read-only / validation-only par tour
 - metriques systematiques a chaque appel tool
+- skills metier documentees quand un workflow se repete
 
 ## Ce qu'on ne fait pas
 
 - pas de multi-agent
 - pas d'acces DB brut donne au modele
-- pas de write tool
-- pas de boucle infinie de tool calls
-- pas de `multi_mutate` pour l'instant
-- pas de skill system formel tant qu'on n'a pas assez de workflows repetes
+- pas de write tool DB libre expose directement au modele
+- pas de boucle infinie de tool calls : max tools et max round-trips par policy
+- pas de `multi_mutate` DB libre pour l'instant ; le batch passe par `PlanPatch` valide puis orchestrateur
+- pas de skill qui commit directement en DB
 
 ## Ce qu'on distingue
 
@@ -57,12 +58,13 @@ Elles peuvent etre nombreuses et atomiques.
 
 Ils doivent rester :
 
-- peu nombreux
+- assez peu nombreux pour etre navigables
 - semantiques
 - auditables
 - bornes
 
 Le registre runtime est volontairement **plus petit** que le nombre de capacités metier du repo.
+Le bon grain est atomique mais metier : `get_plan_window` est bon, `get_everything_blob` est suspect, `run_swim_specific_replan_v7` est trop specifique.
 
 ### 3. Orchestrateurs de write / side effects
 
@@ -79,6 +81,11 @@ Contrat minimal :
 - `ToolContext`
 - `ToolSpec`
 
+Evolution V2 :
+- typer chaque tool : `read`, `validation`, `candidate`, `write`
+- ajouter une policy par intent : max tools, max round-trips, categories autorisees
+- garder les writes interdits dans le runtime LLM conversationnel
+
 ### `tool_registry.py`
 
 Registry V1 :
@@ -89,10 +96,18 @@ Registry V1 :
 - `get_activity_highlights`
 - `get_recent_reality_window`
 - `get_load_context`
+- `get_user_constraints`
 - `get_relevant_facts`
+- `propose_replan` (a reclasser en `suggest_replan_candidates`)
 
 Tous ces tools lisent des objets deja charges par l'orchestrateur.
 Le registre actuel reste volontairement tres compact.
+
+Direction V2 :
+- conserver les tools atomiques utiles
+- enrichir leurs descriptions et leurs payloads
+- ajouter `validate_plan_patch` comme tool validation-only
+- ajouter `get_coach_state` seulement comme macro-tool read-only optionnel, pas comme remplacement des tools atomiques
 
 ### `tool_runtime.py`
 
@@ -101,6 +116,17 @@ Role :
 - verifier qu'il est autorise pour le pipeline
 - executer
 - produire une trace metrique
+
+Etat actuel :
+- `execute_tool_call()` execute un seul tool pour compatibilite et tests unitaires
+- `execute_tool_calls()` execute un batch borne, conserve l'ordre, et renvoie un resultat par call
+- `llm.py` accepte plusieurs `tool_use` dans le meme tour et renvoie un `tool_result` pour chaque id
+
+Cible V2 :
+- max 3 tools executes par tour conversationnel
+- tous les `tool_use_id` recoivent un `tool_result`
+- les surplus / interdits recoivent une erreur actionnable (`tool_budget_exceeded`, tool inconnu, pipeline interdit)
+- aucun tool `write` ne s'execute dans la conversation
 
 ### `tool_routing.py`
 
@@ -126,6 +152,11 @@ Categories d'intent :
 | `load_review` | load_context, recent_reality_window |
 | `fact_recall` | relevant_facts |
 | `generic_question` | today_context, plan_window, recent_activities |
+
+V2 :
+- le routing ne choisit pas "le tool" ; il choisit une **surface autorisee**
+- l'execution decide ensuite combien de tools demandes sont acceptes selon la policy
+- `plan_negotiation` doit accepter plusieurs reads dans le meme tour, typiquement plan + contraintes + load
 
 ### `conversation_prompting.py`
 
@@ -211,6 +242,14 @@ Trace minimale :
 - `total_duration_ms`
 - `response_stop_reason`
 
+Trace V2 a ajouter :
+- `requested_tools`
+- `executed_tools`
+- `blocked_tools`
+- `tool_result_count`
+- `tool_loop_round_trips`
+- `tool_budget_exceeded`
+
 V1 :
 - logs structures uniquement
 - pas de table SQL dediee pour l'instant
@@ -235,7 +274,9 @@ Le chat reste sur son pipeline actuel :
 Les tools sont une extension future, pas un remplacement.
 
 Etat actuel :
-- le chat peut maintenant faire **1 tool call max** sur certaines requetes de lecture evidentes
+- le chat peut maintenant executer plusieurs tools read-only / validation-only dans un meme tour
+- compat DeepSeek : si le modele emet plusieurs `tool_use`, tous les ids recoivent un `tool_result`
+- budget actuel : max 3 tools executes ; les tools au-dela du budget recoivent `tool_budget_exceeded`
 - activation bornee par `tool_routing.py`
 - le prompt du chat passe maintenant par `conversation_prompting.py` + `prompt_layers.py` sur le chemin live
 - puis reponse finale JSON comme avant
@@ -257,8 +298,62 @@ Cas futur prepare :
 
 Ce que le chat ne fait pas encore :
 - pas de tool call pour les mutations simples
-- pas de tool call en boucle
-- pas de write tool
+- pas de boucle outillee au-dela du premier follow-up
+- pas de write tool DB libre
+
+Mise a jour 24 avril 2026 :
+
+- le produit a besoin de capacites d'action plus fortes, mais pas d'un write tool DB libre expose directement au modele
+- la bonne forme d'action est `PlanPatch` :
+  - le LLM lit la verite
+  - le LLM draft un patch structure
+  - `validate_plan_patch` classe le patch
+  - l'orchestrateur commit via `PlanMutationService`
+- slice 1 livre : `backend/src/fitmas/plan_patch.py` + `PlanMutationService.apply_patch_for_user`
+- `commit_plan_patch` reste donc une capacite orchestrateur, pas un runtime tool Anthropic executant des writes pendant le tool call
+- le tool runtime peut exposer `get_coach_state`, `suggest_replan_candidates` et `validate_plan_patch` car ils sont read-only / validation-only
+- le passage a un vrai write tool ne devra arriver qu'apres permissions explicites, transactions, replay tests et audit events robustes
+
+Recalage produit :
+- la cible court terme n'est pas un coach sportivement parfait
+- la cible est un agent fiable pour planifier, reagir aux questions/remarques/contraintes et ne jamais mentir sur les actions
+- les regles sportives sont des garde-fous gradues, pas le coeur du raisonnement conversationnel
+- le succes se mesure d'abord par : comprend le contexte, lit la verite, repond au bon fil, applique ou refuse proprement
+
+Recalage multi-tool DeepSeek :
+- DeepSeek V4 via l'endpoint Anthropic-compatible peut demander plusieurs tools dans une seule reponse
+- `disable_parallel_tool_use` est ignore cote DeepSeek
+- donc FitMAS ne doit pas compter sur "un seul tool demande" comme invariance provider
+- la bonne invariance devient : **tous les tools demandes sont soit executes si autorises, soit explicitement bloques, et tous les ids ont un result**
+
+Recalage stabilite DeepSeek :
+- les smokes reels du 24 avril valident l'API DeepSeek, mais pas encore la stabilite du format final
+- le pattern fragile est : tool-use OK, puis reponse finale en prose au lieu de JSON
+- le fallback actuel recupere, mais ce doit devenir un contrat explicite :
+  - `message_json`
+  - repair pass structuree courte
+  - fallback Claude si repair impossible
+  - metrics provider et repair visibles
+- avant de donner plus d'autonomie au runtime multi-tool, FitMAS doit garantir qu'une decision finale non-JSON n'est jamais acceptee silencieusement
+
+Spike OpenAI SDK 24 avril :
+- `scripts/spike_deepseek_openai_sdk.py` teste DeepSeek via `openai.OpenAI(base_url="https://api.deepseek.com")`
+- `deepseek-v4-flash` :
+  - JSON direct OK avec `response_format=json_object` et budget de sortie suffisant
+  - tool-use puis JSON final OK si on rejoue `reasoning_content`
+  - enums FitMAS pas garanties sans validation locale
+  - final function call possible, a confirmer en matrice plus large
+- `deepseek-chat` :
+  - final function call possible
+  - tool-use puis JSON final moins stable dans le spike
+- `deepseek-v4-pro` :
+  - probe JSON OpenAI-compatible local non concluant
+- decision : ajouter un adapter OpenAI-compatible comme capability ciblee, pas remplacer tout le gateway d'un bloc
+- garde-fou complexite :
+  - `llm_gateway` reste la seule frontiere provider
+  - les modules tools/conversation manipulent un contrat structure, jamais un SDK
+  - l'adapter OpenAI-compatible est active par capability, pas par migration globale
+  - le spike reste un outil de mesure ; le code produit doit rester petit et testable
 
 ### Heartbeat
 
@@ -279,6 +374,20 @@ Le bon ordre :
 4. tool use borne dans `decide()` pour quelques questions de lecture
 5. transcript structure de session avant toute sophistication plus large
 
+Addendum 24 avril :
+
+6. ✅ `PlanPatch` comme langage d'action du coach (contrat pur pose, branchement LLM a suivre)
+7. ✅ `validate_plan_patch` comme validation training graduee (premier wrapper pre-hooks pose)
+8. ✅ commit par orchestrateur seulement (`PlanMutationService.apply_patch_for_user`, commit seulement si `valid`)
+9. ✅ stabilisation DeepSeek structured-output + fallback Claude trace
+10. ✅ runtime tools V2 multi-tool borne, car le smoke DeepSeek a prouve que le single-call coupe une intention outillee correcte
+11. skill metier `replan_after_constraint` pour encoder le workflow, sans write DB libre
+
+Addendum 25 avril :
+
+12. ✅ `create_session` entre dans le langage d'action : le LLM peut demander une creation de seance future, validee par `PlanPatch`, puis committee par `PlanMutationService` avec event audite
+13. prochain cap immediat : brancher `CoachDecision` / `PlanPatch` comme sortie principale de `decide()`, sans exposer de write tool libre
+
 ## Direction pour la prochaine tranche
 
 Le prochain chantier tools doit partir de la question :
@@ -289,9 +398,25 @@ et non :
 
 `quel tool par sport veut-on exposer au modele ?`
 
-Direction recommandee :
+Direction recommandee, recalee :
 
-### 1. Substrate partage par capacite
+### 0. Stabilisation provider / structured output
+
+- DeepSeek-first, Claude fallback
+- repair JSON obligatoire apres tool-use si la reponse finale est en prose
+- aucune decision finale non-JSON acceptee silencieusement
+- metrics `provider / model / json_repair_used / provider_fallback_used`
+- matrice smoke reelle avant/apres sur les cas dogfood
+
+### 1. Runtime multi-tool borne
+
+- max 3 tools executes par tour conversationnel
+- max 2 round-trips LLM outilles
+- execute uniquement `read`, `candidate`, `validation`
+- bloque `write`
+- trace tout
+
+### 2. Substrate partage par capacite
 
 Premieres familles candidates :
 
@@ -301,7 +426,7 @@ Premieres familles candidates :
 - `session_analysis`
 - `plan_review`
 
-### 2. Adapters par sport derriere ce substrate
+### 3. Adapters par sport derriere ce substrate
 
 Les sports implementent les memes contrats, par exemple :
 
@@ -313,7 +438,7 @@ Les sports implementent les memes contrats, par exemple :
 
 On ne donne pas directement au modele un catalogue `run_* / swim_* / bike_*`.
 
-### 3. Wrappers runtime eventuels ensuite
+### 4. Wrappers runtime eventuels ensuite
 
 Si une capacite est utile au LLM, on expose ensuite un wrapper borne, par exemple :
 
@@ -321,13 +446,35 @@ Si une capacite est utile au LLM, on expose ensuite un wrapper borne, par exempl
 - `review_current_week`
 - `build_session_draft`
 - `analyze_completed_activity`
+- `get_coach_state`
+- `validate_plan_patch`
+- `suggest_replan_candidates`
+
+### 5. Skills metier
+
+Une skill est un workflow outille et borne, pas un nouveau cerveau deterministe.
+
+Premiere skill :
+
+`replan_after_constraint`
+
+Role :
+- reconnaitre les contraintes d'indisponibilite / sport ferme / voyage / continuation de replan
+- appeler les tools atomiques utiles
+- produire un `PlanPatch` ou un `no_change` justifie
+- demander confirmation seulement pour les vrais trade-offs
+
+Interdits :
+- aucun commit DB
+- aucun texte final promettant une action avant validation/commit
+- pas de menu d'options si les tools suffisent pour trancher
 
 Notes de sequencing :
 
 - `transcript structure > compaction` a ce stade
 - les tools doivent rester etroits : plan, reel recent, charge, contraintes, contrat seance
 - decomposition par capacite avant decomposition par sport
-- pas de write tools avant d'avoir des permission tiers propres sur les mutations
+- pas de write tools directs avant d'avoir des permission tiers propres sur les mutations ; commit via orchestrateur en attendant
 
 Pas de liberte large du modele avant d'avoir :
 - mesure

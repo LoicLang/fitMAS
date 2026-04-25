@@ -8,6 +8,48 @@ from fitmas import repository as repo, schema as s
 from fitmas.time_context import DAY_KEYS, day_label_fr
 
 
+def create_session(
+    db: Session,
+    *,
+    user: s.User,
+    target_date: date,
+    sport_type: str,
+    session_type: str = "easy",
+    title: str,
+    goal: str = "",
+    duration_min: int | None = None,
+    intensity: str = "easy",
+    description: str = "",
+    rationale: str | None = None,
+    source_plan_created_at: datetime | None = None,
+) -> s.ScheduledSession:
+    day_key = DAY_KEYS[target_date.weekday()]
+    session = s.ScheduledSession(
+        user_id=user.id,
+        day=day_key,
+        label=day_label_fr(day_key, capitalize=True),
+        scheduled_date=datetime.combine(target_date, time.min),
+        source_plan_created_at=source_plan_created_at,
+        sport_type=sport_type,
+        session_type=session_type or "easy",
+        session_title=title,
+        session_goal=goal or title,
+        session_note=rationale or "",
+        session_description=description or "",
+        duration_min=duration_min,
+        intensity=intensity or "easy",
+        load_score=_load_score_for_intensity(intensity),
+        priority="Normal",
+        nutrition_focus="",
+        flexibility="stable",
+        completion_status="planned",
+    )
+    db.add(session)
+    db.commit()
+    db.refresh(session)
+    return session
+
+
 def complete_session(db: Session, *, user: s.User, session_id: int) -> s.ScheduledSession | None:
     session = repo.get_scheduled_session(db, user.id, session_id)
     if session is None:
@@ -357,6 +399,15 @@ def _apply_light_session_fields(session: s.ScheduledSession, *, rationale: str |
     session.nutrition_focus = "Reste simple. Le but est surtout de recuperer."
     session.flexibility = "flexible"
     session.completion_status = "adapted"
+
+
+def _load_score_for_intensity(intensity: str | None) -> int:
+    value = str(intensity or "").strip().lower()
+    if value == "hard":
+        return 4
+    if value == "moderate":
+        return 3
+    return 1
 
 
 def _estimate_load_score(intensity: str | None, duration_min: int | None) -> int:

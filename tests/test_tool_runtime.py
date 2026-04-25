@@ -5,7 +5,7 @@ from datetime import datetime
 
 from fitmas.tool_contract import ToolCall, ToolContext
 from fitmas.tool_registry import build_tool_registry, list_tools_for_pipeline
-from fitmas.tool_runtime import execute_tool_call
+from fitmas.tool_runtime import execute_tool_call, execute_tool_calls
 
 
 class ToolRuntimeTest(unittest.TestCase):
@@ -114,6 +114,28 @@ class ToolRuntimeTest(unittest.TestCase):
         self.assertEqual(result.status, "error")
         self.assertIn("not allowed", result.error)
         self.assertFalse(trace.tool_called)
+
+    def test_execute_tool_calls_runs_batch_and_blocks_surplus(self) -> None:
+        results = execute_tool_calls(
+            [
+                ToolCall(tool_name="get_today_context"),
+                ToolCall(tool_name="get_plan_window"),
+                ToolCall(tool_name="get_recent_activities"),
+                ToolCall(tool_name="get_load_context"),
+            ],
+            context=self.context,
+            max_tools=3,
+        )
+
+        self.assertEqual([item.result.tool_name for item in results], [
+            "get_today_context",
+            "get_plan_window",
+            "get_recent_activities",
+            "get_load_context",
+        ])
+        self.assertEqual([item.result.status for item in results], ["ok", "ok", "ok", "error"])
+        self.assertEqual(results[-1].result.error, "tool_budget_exceeded")
+        self.assertFalse(results[-1].trace.tool_called)
 
     def test_activity_highlights_returns_best_efforts(self) -> None:
         registry = build_tool_registry()

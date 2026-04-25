@@ -98,6 +98,23 @@ def assess_mutation_impact(
             summary=summary,
         )
 
+    if decision.mutation_type == "create_session":
+        duration = int(decision.new_duration_min or 0)
+        intensity = str(decision.new_intensity or "").strip().lower()
+        if duration > 60 or intensity == "hard":
+            return MutationImpactAssessment(
+                level="high",
+                requires_confirmation=True,
+                reason="create_session_high_load",
+                summary=summary,
+            )
+        return MutationImpactAssessment(
+            level="low",
+            requires_confirmation=False,
+            reason="create_session_low_load",
+            summary=summary,
+        )
+
     return MutationImpactAssessment(
         level="low",
         requires_confirmation=False,
@@ -176,6 +193,13 @@ def summarize_mutation(
 
     if decision.mutation_type == "lighten_day":
         return f"alleger {_session_title(target_session, fallback='la journee')}"
+
+    if decision.mutation_type == "create_session":
+        sport = str(decision.new_sport_type or "sport").strip()
+        target_date = _decision_target_date(decision)
+        if target_date:
+            return f"ajouter une seance {sport} le {target_date}"
+        return f"ajouter une seance {sport}"
 
     return decision.fitmas_message or decision.rationale or "modifier le plan"
 

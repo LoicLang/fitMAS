@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+from dataclasses import dataclass
 from time import perf_counter
 
 from fitmas.tools.contract import ToolCall, ToolContext, ToolResult
@@ -8,6 +9,12 @@ from fitmas.tools.metrics import ToolTrace, build_tool_trace, log_tool_trace
 from fitmas.tools.registry import build_tool_registry
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True, slots=True)
+class ToolExecution:
+    result: ToolResult
+    trace: ToolTrace
 
 
 def execute_tool_call(
@@ -110,6 +117,55 @@ def execute_tool_call(
         )
         log_tool_trace(trace, logger=logger)
         return result, trace
+
+
+def execute_tool_calls(
+    calls: list[ToolCall],
+    *,
+    context: ToolContext,
+    max_tools: int = 3,
+    fallback_used: bool = False,
+    llm_round_trips: int = 1,
+    prompt_tokens_estimate: int | None = None,
+    response_tokens_estimate: int | None = None,
+) -> list[ToolExecution]:
+    """Execute a bounded batch of tools and preserve one result per call."""
+    executions: list[ToolExecution] = []
+    budget = max(0, max_tools)
+    for index, call in enumerate(calls):
+        if index >= budget:
+            result = ToolResult(
+                tool_name=call.tool_name,
+                status="error",
+                error="tool_budget_exceeded",
+                summary=f"Tool non execute: budget de {budget} tools atteint.",
+            )
+            trace = build_tool_trace(
+                pipeline=context.pipeline,
+                tool_name=call.tool_name,
+                tool_requested=True,
+                tool_called=False,
+                tool_success=False,
+                tool_error=result.error,
+                fallback_used=fallback_used,
+                llm_round_trips=llm_round_trips,
+                prompt_tokens_estimate=prompt_tokens_estimate,
+                response_tokens_estimate=response_tokens_estimate,
+            )
+            log_tool_trace(trace, logger=logger)
+            executions.append(ToolExecution(result=result, trace=trace))
+            continue
+
+        result, trace = execute_tool_call(
+            call,
+            context=context,
+            fallback_used=fallback_used,
+            llm_round_trips=llm_round_trips,
+            prompt_tokens_estimate=prompt_tokens_estimate,
+            response_tokens_estimate=response_tokens_estimate,
+        )
+        executions.append(ToolExecution(result=result, trace=trace))
+    return executions
 
 
 # ---------------------------------------------------------------------------

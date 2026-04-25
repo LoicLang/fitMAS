@@ -94,7 +94,7 @@ Exemples:
 - "J'ai nage vendredi regarde mes seances reel" + tools activite dispo -> lis d'abord les activites recentes avant de dire que tu ne vois pas la seance
 - "Piscine fermee 2 semaines" + outil `propose_replan` retourne un remplacement valide -> tranche a partir de ce remplacement, ne repropose pas un menu running/renfo
 - apres "oui" puis "Running" puis "Mercredi" dans le meme fil -> interprete ca comme autorisation + preference sport + preference jour, pas comme trois nouvelles clarifications independantes
-- apres "oui" puis "Running" puis "Mercredi" sans autre precision -> prends running easy/steady le mercredi comme hypothese de travail la plus sure, annonce-la, puis ajuste si le user corrige
+- apres "oui" puis "Running" puis "Mercredi" sans autre precision et sans session existante a remplacer -> create_session avec running easy/steady le mercredi comme hypothese la plus sure
 - n'ecris pas "Tu as acces a une autre piscine, ou on pivote completement ?" puis attends "oui/non" ; demande directement "autre piscine ou pivot complet ?"
 - "ok ca me va" -> no_change
 - "on est quel jour exactement ?" -> no_change
@@ -116,6 +116,10 @@ Tu reponds UNIQUEMENT avec un JSON valide contenant exactement ces champs:
 - new_description
 - rationale
 - fitmas_message
+
+Types autorises:
+- move_session, lighten_day, swap_sessions, update_session, replace_session, create_session, no_change
+- create_session exige target_date, new_sport_type, new_title, new_duration_min
 
 Pas de markdown. Pas de texte autour du JSON.\
 """

@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import re
+import unicodedata
 from time import perf_counter
 from typing import Any
 
@@ -20,7 +22,7 @@ from fitmas.tools.contract import ToolCall, ToolContext
 from fitmas.tools.metrics import build_tool_trace, log_tool_trace
 from fitmas.tools.registry import list_tools_for_pipeline
 from fitmas.tools.routing import IntentCategory, route_tools_for_query
-from fitmas.tools.runtime import execute_tool_call
+from fitmas.tools.runtime import ToolExecution, execute_tool_calls
 
 logger = logging.getLogger(__name__)
 
@@ -44,7 +46,7 @@ Tu aides a construire une relation de coaching credible des la premiere interact
 
 
 class MutationDecision(BaseModel):
-    mutation_type: str        # "move_session" | "lighten_day" | "swap_sessions" | "update_session" | "replace_session" | "no_change"
+    mutation_type: str        # "move_session" | "lighten_day" | "swap_sessions" | "update_session" | "replace_session" | "create_session" | "no_change"
     target_session_id: int | None = None
     second_session_id: int | None = None
     target_date: str | None = None
@@ -94,6 +96,57 @@ _TURN_INTENT_TOOL_BUDGETS = {
         "get_recent_activities",
     ),
 }
+_ALLOWED_MUTATION_TYPES = {
+    "move_session",
+    "lighten_day",
+    "swap_sessions",
+    "update_session",
+    "replace_session",
+    "create_session",
+    "no_change",
+}
+_MUTATIONS_REQUIRING_TARGET_SESSION = {
+    "move_session",
+    "lighten_day",
+    "update_session",
+    "replace_session",
+}
+_NO_CHANGE_ACTION_CLAIM_PATTERNS = (
+    "le plan sera ajuste",
+    "calendrier sera ajuste",
+    "planning sera ajuste",
+    "sera reprogramme",
+    "je vais ajuster",
+    "je vais modifier",
+    "je vais construire",
+    "je construis",
+    "je vais creer",
+    "je vais devoir creer",
+    "je dois creer",
+    "je cree",
+    "j ajoute",
+    "j ajoute la seance",
+    "je pose",
+    "je place",
+    "je modifie le plan",
+    "je modifie le calendrier",
+    "je deplace",
+    "je libere",
+    "je mets a jour",
+    "j ai mis a jour",
+    "a ete enregistre",
+    "est enregistre",
+    "est enregistree",
+    "nouveau plan coherent",
+    "nouvelle seance",
+)
+_TRUNCATED_MESSAGE_SUFFIXES = (
+    "confirme que c est bien",
+    "dis moi si",
+    "a quelle intensite",
+    "ou tu veux",
+    "si tu veux",
+)
 
 
 def _normalize_day(raw: str | None) -> str | None:
@@ -150,6 +203,49 @@ def _request_json(*, system: str, prompt: str, model: str = "claude-haiku-4-5-20
     if not raw:
         return None
     return gw._robust_json_loads(raw)
+
+
+def _request_structured_json(
+    *,
+    system: str,
+    messages: list[dict[str, Any]],
+    model: str = "claude-haiku-4-5-20251001",
+    max_tokens: int = 1024,
+) -> dict | None:
+    """Request structured JSON through the gateway, preserving test patchability.
+
+    In local/unit contexts without DeepSeek configured, keep the old Anthropic
+    path so existing tests can patch `_request_message`. With DeepSeek, use the
+    gateway's structured-output path and provider fallback.
+    """
+    if _use_deepseek_openai_structured_output() and os.getenv("DEEPSEEK_API_KEY"):
+        result = gw.request_structured_json(
+            system=system,
+            messages=messages,
+            model=model,
+            max_tokens=max_tokens,
+        )
+        if result.provider_fallback_used:
+            logger.info(
+                "structured_json.provider_fallback provider=%s model=%s error=%s",
+                result.provider,
+                result.model,
+                result.error,
+            )
+        return result.data
+    if len(messages) == 1 and messages[0].get("role") == "user":
+        return _request_json(system=system, prompt=str(messages[0].get("content") or ""), model=model, max_tokens=max_tokens)
+    raw = _request_text(
+        system=system,
+        prompt="\n\n".join(str(message.get("content") or "") for message in messages if message.get("role") == "user"),
+        model=model,
+        max_tokens=max_tokens,
+    )
+    return gw._robust_json_loads(raw or "") if raw else None
+
+
+def _use_deepseek_openai_structured_output() -> bool:
+    return str(os.getenv("FITMAS_USE_DEEPSEEK_OPENAI_STRUCTURED") or "").strip().lower() in {"1", "true", "yes", "on"}
 
 
 def decide(
@@ -210,6 +306,7 @@ def decide(
     system_prompt = prompt_bundle.system
 
     try:
+        _remember_invalid_decision(None)
         data = None
         if tool_context is not None and tool_names:
             data = _request_json_with_tools(
@@ -221,13 +318,25 @@ def decide(
                 history_messages_used=history_messages_used,
             )
         if data is None:
-            data = _request_json(system=system_prompt, prompt=prompt)
+            data = _request_structured_json(
+                system=system_prompt,
+                messages=[{"role": "user", "content": prompt}],
+            )
         if not data:
             return None
 
         # Normalize French day names to English
         data["from_day"] = _normalize_day(data.get("from_day"))
         data["to_day"] = _normalize_day(data.get("to_day"))
+        data = _validate_decision_payload(data)
+        if data is None:
+            data = _repair_invalid_decision_payload(data=_last_invalid_decision_payload, system=system_prompt, prompt=prompt)
+            data = _validate_decision_payload(data)
+        if data is None:
+            data = _request_claude_decision_fallback(system=system_prompt, prompt=prompt)
+            data = _validate_decision_payload(data)
+        if data is None:
+            return None
 
         decision = MutationDecision(**data)
         logger.info(
@@ -248,6 +357,158 @@ def decide(
         return None
 
 
+def _validate_decision_payload(data: dict[str, Any] | None) -> dict[str, Any] | None:
+    """Accept only canonical FitMAS decision payloads.
+
+    Provider JSON mode guarantees syntax, not business contract. This guard
+    prevents unknown mutation labels or incomplete write decisions from reaching
+    the mutation layer.
+    """
+    if not isinstance(data, dict):
+        _remember_invalid_decision(data)
+        logger.warning("llm.decision_invalid reason=not_dict")
+        return None
+    mutation_type = str(data.get("mutation_type") or "").strip()
+    if mutation_type not in _ALLOWED_MUTATION_TYPES:
+        _remember_invalid_decision(data)
+        logger.warning("llm.decision_invalid reason=unknown_mutation_type mutation_type=%r", mutation_type)
+        return None
+    if not str(data.get("rationale") or "").strip():
+        _remember_invalid_decision(data)
+        logger.warning("llm.decision_invalid reason=missing_rationale mutation_type=%s", mutation_type)
+        return None
+    fitmas_message = str(data.get("fitmas_message") or "").strip()
+    if not fitmas_message:
+        _remember_invalid_decision(data)
+        logger.warning("llm.decision_invalid reason=missing_fitmas_message mutation_type=%s", mutation_type)
+        return None
+    if mutation_type == "no_change" and _message_claims_plan_action_without_mutation(fitmas_message):
+        _remember_invalid_decision(data)
+        logger.warning("llm.decision_invalid reason=no_change_action_claim mutation_type=%s", mutation_type)
+        return None
+    if _message_violates_coach_voice(fitmas_message):
+        _remember_invalid_decision(data)
+        logger.warning("llm.decision_invalid reason=coach_voice_violation mutation_type=%s", mutation_type)
+        return None
+    if _looks_truncated_fitmas_message(fitmas_message):
+        _remember_invalid_decision(data)
+        logger.warning("llm.decision_invalid reason=truncated_fitmas_message mutation_type=%s", mutation_type)
+        return None
+    if mutation_type in _MUTATIONS_REQUIRING_TARGET_SESSION and data.get("target_session_id") is None:
+        _remember_invalid_decision(data)
+        logger.warning("llm.decision_invalid reason=missing_target_session mutation_type=%s", mutation_type)
+        return None
+    if mutation_type == "swap_sessions" and (data.get("target_session_id") is None or data.get("second_session_id") is None):
+        _remember_invalid_decision(data)
+        logger.warning("llm.decision_invalid reason=missing_swap_sessions")
+        return None
+    if mutation_type == "create_session" and _missing_create_session_fields(data):
+        _remember_invalid_decision(data)
+        logger.warning("llm.decision_invalid reason=missing_create_session_fields")
+        return None
+    _remember_invalid_decision(None)
+    return data
+
+
+def _missing_create_session_fields(data: dict[str, Any]) -> bool:
+    return (
+        not str(data.get("target_date") or "").strip()
+        or not str(data.get("new_sport_type") or "").strip()
+        or not str(data.get("new_title") or "").strip()
+        or data.get("new_duration_min") is None
+    )
+
+
+def _message_claims_plan_action_without_mutation(message: str) -> bool:
+    normalized = _normalize_for_guard(message)
+    return any(pattern in normalized for pattern in _NO_CHANGE_ACTION_CLAIM_PATTERNS)
+
+
+def _looks_truncated_fitmas_message(message: str) -> bool:
+    normalized = _normalize_for_guard(message).rstrip(".!?;:")
+    if normalized.endswith(_TRUNCATED_MESSAGE_SUFFIXES):
+        return True
+    if "confirme" in normalized and message.strip()[-1:] not in {".", "!", "?"}:
+        return True
+    if message.strip()[-1:] not in {".", "!", "?"} and len(message.strip()) >= 40:
+        return True
+    return False
+
+
+def _message_violates_coach_voice(message: str) -> bool:
+    normalized = _normalize_for_guard(message)
+    return " vos " in f" {normalized} " or " votre " in f" {normalized} "
+
+
+def _normalize_for_guard(value: str) -> str:
+    normalized = unicodedata.normalize("NFKD", value)
+    ascii_value = normalized.encode("ascii", "ignore").decode("ascii")
+    return re.sub(r"\s+", " ", ascii_value.lower().replace("'", " ")).strip()
+
+
+_last_invalid_decision_payload: dict[str, Any] | None = None
+
+
+def _remember_invalid_decision(data: dict[str, Any] | None) -> None:
+    global _last_invalid_decision_payload
+    _last_invalid_decision_payload = dict(data) if isinstance(data, dict) else None
+
+
+def _repair_invalid_decision_payload(*, data: dict[str, Any] | None, system: str, prompt: str) -> dict | None:
+    """Retry once with the invalid payload and the FitMAS decision contract."""
+    if not data:
+        return None
+    repair_prompt = (
+        "Le payload LLM suivant est invalide pour FitMAS.\n"
+        "Repare-le en JSON FitMAS canonique sans inventer de session id.\n"
+        "Si tu ne peux pas produire une mutation valide, retourne no_change.\n\n"
+        "CONTRAT:\n"
+        "- mutation_type autorises: move_session, lighten_day, swap_sessions, update_session, replace_session, create_session, no_change\n"
+        "- rationale et fitmas_message obligatoires et non vides\n"
+        "- move_session/lighten_day/update_session/replace_session exigent target_session_id\n"
+        "- swap_sessions exige target_session_id et second_session_id\n"
+        "- create_session exige target_date, new_sport_type, new_title, new_duration_min\n"
+        "- mapping utile: downgrade/unplanned_skip/replace sans session claire -> lighten_day seulement si target_session_id existe, sinon no_change\n\n"
+        "GARDE-FOUS MESSAGE:\n"
+        "- si mutation_type=no_change, ne promets jamais que le plan est ajuste, deplace, libere ou mis a jour\n"
+        "- si mutation_type=no_change, ne dis pas que tu vas construire un plan ou creer une seance\n"
+        "- si mutation_type=no_change, fitmas_message doit rester neutre: comprehension, clarification, ou besoin de lire le plan\n"
+        "- tutoie toujours l'utilisateur: jamais vous/vos/votre\n"
+        "- ne laisse jamais fitmas_message tronque ou fini sur une demande incomplete comme \"confirme que c'est bien\"\n"
+        "- ne rajoute pas une question si la reponse peut etre une clarification courte\n\n"
+        f"PAYLOAD_INVALIDE:\n{json.dumps(data, ensure_ascii=False)}\n\n"
+        "CONTEXTE_ORIGINAL:\n"
+        f"{prompt}\n\n"
+        "Retourne uniquement le JSON repare."
+    )
+    return _request_structured_json(
+        system=system,
+        messages=[{"role": "user", "content": repair_prompt}],
+        max_tokens=1024,
+    )
+
+
+def _request_claude_decision_fallback(*, system: str, prompt: str) -> dict | None:
+    """Use Claude as a schema fallback after a structured DeepSeek payload failed validation."""
+    if not os.getenv("ANTHROPIC_API_KEY"):
+        return None
+    result = gw.request_structured_json(
+        system=system,
+        messages=[{"role": "user", "content": prompt}],
+        model="claude-haiku-4-5-20251001",
+        fallback_model="claude-haiku-4-5-20251001",
+        provider="claude",
+    )
+    logger.info(
+        "structured_json.schema_fallback provider=%s model=%s ok=%s error=%s",
+        result.provider,
+        result.model,
+        result.data is not None,
+        result.error,
+    )
+    return result.data
+
+
 def _classify_llm_exception(exc: BaseException) -> str:
     """Classify a raised exception so operators can triage failures.
 
@@ -255,26 +516,7 @@ def _classify_llm_exception(exc: BaseException) -> str:
     `auth`, `connection`, `api_other`, `json_parse`, `unknown`). The
     labels are log-only — `decide()` still returns None for every case.
     """
-    try:
-        import anthropic as _anthropic
-    except Exception:
-        _anthropic = None
-    if _anthropic is not None:
-        if isinstance(exc, _anthropic.APITimeoutError):
-            return "timeout"
-        if isinstance(exc, _anthropic.RateLimitError):
-            return "rate_limit"
-        if isinstance(exc, _anthropic.BadRequestError):
-            return "bad_request"
-        if isinstance(exc, _anthropic.AuthenticationError):
-            return "auth"
-        if isinstance(exc, _anthropic.APIConnectionError):
-            return "connection"
-        if isinstance(exc, _anthropic.APIError):
-            return "api_other"
-    if isinstance(exc, json.JSONDecodeError):
-        return "json_parse"
-    return "unknown"
+    return gw.classify_llm_exception(exc)
 
 
 def _request_json_with_tools(
@@ -301,7 +543,7 @@ def _request_json_with_tools(
         model=model,
         max_tokens=max_tokens,
         tools=tools,
-        tool_choice={"type": "auto", "disable_parallel_tool_use": True},
+        tool_choice={"type": "auto"},
     )
     if response is None:
         _log_tool_session_trace(
@@ -344,7 +586,8 @@ def _request_json_with_tools(
         )
         return data
 
-    tool_use_block = _first_tool_use_block(response)
+    tool_use_blocks = _tool_use_blocks(response)
+    tool_use_block = tool_use_blocks[0] if tool_use_blocks else None
     if tool_use_block is None:
         data = _message_json(response)
         _log_tool_session_trace(
@@ -367,33 +610,25 @@ def _request_json_with_tools(
         )
         return data
 
-    tool_result, tool_trace = execute_tool_call(
-        ToolCall(tool_name=str(getattr(tool_use_block, "name", "")), arguments=dict(getattr(tool_use_block, "input", {}) or {})),
+    tool_calls = [
+        ToolCall(tool_name=str(getattr(block, "name", "")), arguments=dict(getattr(block, "input", {}) or {}))
+        for block in tool_use_blocks
+    ]
+    tool_executions = execute_tool_calls(
+        tool_calls,
         context=tool_context,
+        max_tools=3,
         llm_round_trips=2,
         prompt_tokens_estimate=initial_prompt_tokens,
         response_tokens_estimate=initial_response_tokens,
     )
     followup_messages = list(initial_messages)
     followup_messages.append({"role": "assistant", "content": _serialize_content_blocks(getattr(response, "content", []))})
+    tool_result_blocks = _tool_result_blocks(tool_use_blocks, tool_executions)
     followup_messages.append(
         {
             "role": "user",
-            "content": [
-                {
-                    "type": "tool_result",
-                    "tool_use_id": getattr(tool_use_block, "id", ""),
-                    "content": json.dumps(
-                        {
-                            "summary": tool_result.summary,
-                            "payload": tool_result.payload,
-                            "error": tool_result.error,
-                        },
-                        ensure_ascii=False,
-                    ),
-                    "is_error": tool_result.status != "ok",
-                }
-            ],
+            "content": tool_result_blocks,
         }
     )
     final_response = _request_message(
@@ -405,14 +640,14 @@ def _request_json_with_tools(
     if final_response is None:
         _log_tool_session_trace(
             pipeline=tool_context.pipeline,
-            tool_name=tool_result.tool_name,
+            tool_name=_tool_execution_names(tool_executions),
             tool_offered=True,
             context_policy=context_policy,
             tool_requested=True,
-            tool_called=tool_trace.tool_called,
-            tool_latency_ms=tool_trace.tool_latency_ms,
-            tool_success=tool_trace.tool_success,
-            tool_error=tool_result.error or "tool followup request failed",
+            tool_called=_any_tool_called(tool_executions),
+            tool_latency_ms=_sum_tool_latency(tool_executions),
+            tool_success=False,
+            tool_error=_tool_errors(tool_executions) or "tool followup request failed",
             fallback_used=True,
             llm_round_trips=2,
             tool_count_offered=tool_count_offered,
@@ -428,16 +663,18 @@ def _request_json_with_tools(
     final_prompt_tokens = _usage_value(final_response, "input_tokens")
     final_response_tokens = _usage_value(final_response, "output_tokens")
     data = _message_json(final_response)
+    if data is None:
+        data = _repair_decision_json_from_text(_message_text(final_response), model=model)
     _log_tool_session_trace(
         pipeline=tool_context.pipeline,
-        tool_name=tool_result.tool_name,
+        tool_name=_tool_execution_names(tool_executions),
         tool_offered=True,
         context_policy=context_policy,
         tool_requested=True,
-        tool_called=tool_trace.tool_called,
-        tool_latency_ms=tool_trace.tool_latency_ms,
-        tool_success=tool_trace.tool_success and data is not None,
-        tool_error=tool_result.error if data is not None else (tool_result.error or "tool followup response was not valid JSON"),
+        tool_called=_any_tool_called(tool_executions),
+        tool_latency_ms=_sum_tool_latency(tool_executions),
+        tool_success=_all_executed_tools_ok(tool_executions) and data is not None,
+        tool_error=_tool_errors(tool_executions) if data is not None else (_tool_errors(tool_executions) or "tool followup response was not valid JSON"),
         fallback_used=data is None,
         llm_round_trips=2,
         tool_count_offered=tool_count_offered,
@@ -449,6 +686,94 @@ def _request_json_with_tools(
         response_stop_reason=final_stop_reason or "end_turn",
     )
     return data
+
+
+def _tool_result_blocks(tool_use_blocks: list[Any], tool_executions: list[ToolExecution]) -> list[dict[str, Any]]:
+    blocks: list[dict[str, Any]] = []
+    for tool_use_block, execution in zip(tool_use_blocks, tool_executions):
+        result = execution.result
+        blocks.append(
+            {
+                "type": "tool_result",
+                "tool_use_id": getattr(tool_use_block, "id", ""),
+                "content": json.dumps(
+                    {
+                        "summary": result.summary,
+                        "payload": result.payload,
+                        "error": result.error,
+                    },
+                    ensure_ascii=False,
+                ),
+                "is_error": result.status != "ok",
+            }
+        )
+    return blocks
+
+
+def _tool_execution_names(tool_executions: list[ToolExecution]) -> str | None:
+    names = [execution.result.tool_name for execution in tool_executions if execution.result.tool_name]
+    return ",".join(names) if names else None
+
+
+def _any_tool_called(tool_executions: list[ToolExecution]) -> bool:
+    return any(execution.trace.tool_called for execution in tool_executions)
+
+
+def _all_executed_tools_ok(tool_executions: list[ToolExecution]) -> bool:
+    called = [execution for execution in tool_executions if execution.trace.tool_called]
+    return bool(called) and all(execution.result.status == "ok" for execution in called)
+
+
+def _sum_tool_latency(tool_executions: list[ToolExecution]) -> int | None:
+    values = [execution.trace.tool_latency_ms for execution in tool_executions if execution.trace.tool_latency_ms is not None]
+    return sum(values) if values else None
+
+
+def _tool_errors(tool_executions: list[ToolExecution]) -> str | None:
+    errors = [execution.result.error for execution in tool_executions if execution.result.error]
+    return "; ".join(errors) if errors else None
+
+
+def _repair_decision_json_from_text(raw_text: str | None, *, model: str = "claude-haiku-4-5-20251001") -> dict | None:
+    """Convert a prose decision-like answer into canonical JSON once."""
+    if not raw_text:
+        return None
+    if _looks_like_provider_tool_markup(raw_text):
+        return None
+    prompt = (
+        "Convertis cette reponse coach en JSON FitMAS canonique.\n"
+        "N'invente pas de champ, de session id, ni de mutation absente de la reponse brute.\n"
+        "Si l'action n'est pas claire, retourne no_change.\n"
+        "mutation_type autorises: move_session, lighten_day, swap_sessions, update_session, replace_session, create_session, no_change.\n"
+        "Champs requis: mutation_type, rationale, fitmas_message.\n"
+        "Pour move_session/lighten_day/update_session/replace_session, target_session_id doit etre present si la reponse parle d'une seance existante.\n\n"
+        "Pour create_session, target_date, new_sport_type, new_title et new_duration_min sont obligatoires.\n\n"
+        "GARDE-FOUS:\n"
+        "- si tu retournes no_change, ne promets pas que le plan est ajuste, modifie, deplace, libere ou mis a jour\n"
+        "- si tu retournes no_change, ne dis pas que tu vas construire un plan ou creer une seance\n"
+        "- si la reponse brute promet une action mais ne donne pas de mutation valide, reformule en clarification neutre\n"
+        "- tutoie toujours l'utilisateur: jamais vous/vos/votre\n"
+        "- fitmas_message doit etre complet, court, et ne doit pas finir sur une phrase coupee\n"
+        "- ne rajoute pas de nouvelle question sauf si la reponse brute en contient deja une claire\n\n"
+        "REPONSE_BRUTE:\n"
+        f"{raw_text}\n\n"
+        "Retourne uniquement le JSON."
+    )
+    return _request_structured_json(
+        system="Tu repars strictement des mots fournis et tu retournes un JSON valide uniquement.",
+        messages=[{"role": "user", "content": prompt}],
+        model=model,
+        max_tokens=1024,
+    )
+
+
+def _looks_like_provider_tool_markup(raw_text: str) -> bool:
+    normalized = raw_text.strip().lower()
+    return (
+        "<｜dsml｜tool_calls>" in normalized
+        or "<｜dsml｜invoke" in normalized
+        or "invoke name=" in normalized
+    )
 
 
 def make_plan_summary(days: list) -> str:
@@ -466,6 +791,14 @@ _message_text = gw.message_text
 _message_json = gw.message_json
 _first_tool_use_block = gw.first_tool_use_block
 _serialize_content_blocks = gw.serialize_content_blocks
+
+
+def _tool_use_blocks(response: Any) -> list[Any]:
+    return [
+        block
+        for block in (getattr(response, "content", []) or [])
+        if getattr(block, "type", None) == "tool_use"
+    ]
 _usage_value = gw.usage_value
 _sum_ints = gw.sum_ints
 _elapsed_ms = gw.elapsed_ms
