@@ -6,7 +6,7 @@ import os
 import re
 import unicodedata
 from time import perf_counter
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel
 from fitmas import llm_gateway as gw
@@ -61,6 +61,15 @@ class MutationDecision(BaseModel):
     new_description: str | None = None
     rationale: str            # 1 phrase, pour les change notes
     fitmas_message: str       # message envoye a l'utilisateur
+
+
+class CoachDecision(BaseModel):
+    response_type: Literal["reply", "no_change", "mutation_decision", "plan_patch", "requires_confirmation"]
+    rationale: str
+    fitmas_message: str
+    mutation_decision: MutationDecision | None = None
+    plan_patch: Any | None = None
+    confirmation_reason: str | None = None
 
 
 _DAYS_FR_TO_EN = {
@@ -147,6 +156,13 @@ _TRUNCATED_MESSAGE_SUFFIXES = (
     "ou tu veux",
     "si tu veux",
 )
+_ALLOWED_COACH_RESPONSE_TYPES = {
+    "reply",
+    "no_change",
+    "mutation_decision",
+    "plan_patch",
+    "requires_confirmation",
+}
 
 
 def _normalize_day(raw: str | None) -> str | None:
@@ -408,6 +424,103 @@ def _validate_decision_payload(data: dict[str, Any] | None) -> dict[str, Any] | 
         return None
     _remember_invalid_decision(None)
     return data
+
+
+def parse_coach_decision_payload(data: dict[str, Any] | None) -> CoachDecision | None:
+    """Validate the future coach-level decision contract.
+
+    This is intentionally not wired into `decide()` yet. It gives the next
+    PlanPatch pipeline a strict parser before the runtime starts relying on it.
+    """
+    if not isinstance(data, dict):
+        logger.warning("llm.coach_decision_invalid reason=not_dict")
+        return None
+    response_type = str(data.get("response_type") or "").strip()
+    if response_type not in _ALLOWED_COACH_RESPONSE_TYPES:
+        logger.warning("llm.coach_decision_invalid reason=unknown_response_type response_type=%r", response_type)
+        return None
+    rationale = str(data.get("rationale") or "").strip()
+    if not rationale:
+        logger.warning("llm.coach_decision_invalid reason=missing_rationale response_type=%s", response_type)
+        return None
+    fitmas_message = str(data.get("fitmas_message") or "").strip()
+    if not _valid_coach_message(fitmas_message, response_type=response_type):
+        return None
+
+    payload: dict[str, Any] = {
+        "response_type": response_type,
+        "rationale": rationale,
+        "fitmas_message": fitmas_message,
+        "confirmation_reason": _optional_str(data.get("confirmation_reason")),
+    }
+    if response_type == "mutation_decision":
+        mutation = _parse_nested_mutation_decision(data.get("mutation_decision"))
+        if mutation is None:
+            logger.warning("llm.coach_decision_invalid reason=invalid_mutation_decision")
+            return None
+        payload["mutation_decision"] = mutation
+    elif response_type == "plan_patch":
+        patch = _parse_nested_plan_patch(data.get("plan_patch"))
+        if patch is None:
+            logger.warning("llm.coach_decision_invalid reason=invalid_plan_patch")
+            return None
+        payload["plan_patch"] = patch
+    elif response_type == "requires_confirmation" and not payload["confirmation_reason"]:
+        logger.warning("llm.coach_decision_invalid reason=missing_confirmation_reason")
+        return None
+    return CoachDecision(**payload)
+
+
+def _parse_nested_mutation_decision(raw: Any) -> MutationDecision | None:
+    if not isinstance(raw, dict):
+        return None
+    validated = _validate_decision_payload(raw)
+    if validated is None:
+        return None
+    try:
+        return MutationDecision(**validated)
+    except Exception:
+        logger.warning("llm.coach_decision_invalid reason=mutation_model_validation_failed")
+        return None
+
+
+def _parse_nested_plan_patch(raw: Any) -> PlanPatch | None:
+    from fitmas.plan_patch import PlanPatch
+
+    if not isinstance(raw, dict):
+        return None
+    try:
+        patch = PlanPatch(**raw)
+    except Exception:
+        logger.warning("llm.coach_decision_invalid reason=plan_patch_model_validation_failed")
+        return None
+    if not patch.operations:
+        logger.warning("llm.coach_decision_invalid reason=empty_plan_patch")
+        return None
+    if not _valid_coach_message(patch.coach_message, response_type="plan_patch"):
+        return None
+    return patch
+
+
+def _valid_coach_message(message: str, *, response_type: str) -> bool:
+    if not message:
+        logger.warning("llm.coach_decision_invalid reason=missing_fitmas_message response_type=%s", response_type)
+        return False
+    if response_type in {"reply", "no_change", "requires_confirmation"} and _message_claims_plan_action_without_mutation(message):
+        logger.warning("llm.coach_decision_invalid reason=action_claim_without_patch response_type=%s", response_type)
+        return False
+    if _message_violates_coach_voice(message):
+        logger.warning("llm.coach_decision_invalid reason=coach_voice_violation response_type=%s", response_type)
+        return False
+    if _looks_truncated_fitmas_message(message):
+        logger.warning("llm.coach_decision_invalid reason=truncated_fitmas_message response_type=%s", response_type)
+        return False
+    return True
+
+
+def _optional_str(value: Any) -> str | None:
+    text = str(value or "").strip()
+    return text or None
 
 
 def _missing_create_session_fields(data: dict[str, Any]) -> bool:

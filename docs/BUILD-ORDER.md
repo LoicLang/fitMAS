@@ -226,6 +226,7 @@ Slicings deja livres :
 - ✅ runtime multi-tool borne : `execute_tool_calls()` execute jusqu'a 3 tools et renvoie une erreur controlee aux surplus
 - ✅ action `create_session` : decision LLM / PlanPatch peut creer une `ScheduledSession` future via orchestrateur, avec validation et `plan_mutation_event`
 - ✅ calibration/fatigue guard : correction du biais `thursday` dans le prompt calibration et suppression du court-circuit sante qui shuntait `decide()` avant fallback
+- ✅ contrat `CoachDecision` parseable : `reply/no_change/mutation_decision/plan_patch/requires_confirmation`, avec validation locale du message, du nested legacy `MutationDecision` et du `PlanPatch` ; pas encore branche comme sortie primaire de `decide()`
 - ✅ slice provider contract :
   - `DeepSeekOpenAI` structured output disponible derriere `FITMAS_USE_DEEPSEEK_OPENAI_STRUCTURED`
   - validation locale des decisions FitMAS (`mutation_type`, champs requis, targets)

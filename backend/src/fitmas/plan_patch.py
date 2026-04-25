@@ -7,7 +7,6 @@ from typing import Any, Literal, Sequence
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
-from fitmas.llm import MutationDecision
 from fitmas.mutation_hooks import run_pre_mutation_hooks
 from fitmas.time_context import get_local_now
 
@@ -166,6 +165,8 @@ def _validate_create_session_operation(
 
 
 def _operation_to_mutation_decision(operation: PlanPatchOperation, *, fitmas_message: str) -> MutationDecision:
+    from fitmas.llm import MutationDecision
+
     return MutationDecision(
         mutation_type=operation.operation_type,
         target_session_id=operation.target_session_id,

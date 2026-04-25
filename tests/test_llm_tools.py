@@ -10,6 +10,65 @@ from fitmas.tool_contract import ToolContext, ToolResult
 
 
 class LLMToolsTest(unittest.TestCase):
+    def test_parse_coach_decision_accepts_plan_patch(self) -> None:
+        decision = llm.parse_coach_decision_payload(
+            {
+                "response_type": "plan_patch",
+                "rationale": "piscine fermee, on garde du volume facile",
+                "fitmas_message": "Je pose un footing easy mercredi.",
+                "plan_patch": {
+                    "coach_message": "Je pose un footing easy mercredi.",
+                    "operations": [
+                        {
+                            "operation_type": "create_session",
+                            "target_date": "2099-04-29",
+                            "new_sport_type": "running",
+                            "new_session_type": "easy",
+                            "new_title": "Footing easy",
+                            "new_duration_min": 30,
+                            "rationale": "Remplacement conservateur sans piscine.",
+                        }
+                    ],
+                },
+            }
+        )
+
+        self.assertIsNotNone(decision)
+        self.assertEqual(decision.response_type, "plan_patch")
+        self.assertIsNotNone(decision.plan_patch)
+        self.assertEqual(decision.plan_patch.operations[0].operation_type, "create_session")
+
+    def test_parse_coach_decision_rejects_plan_patch_without_patch(self) -> None:
+        decision = llm.parse_coach_decision_payload(
+            {
+                "response_type": "plan_patch",
+                "rationale": "action annoncee sans patch",
+                "fitmas_message": "Je modifie le plan.",
+            }
+        )
+
+        self.assertIsNone(decision)
+
+    def test_parse_coach_decision_accepts_legacy_mutation_decision(self) -> None:
+        decision = llm.parse_coach_decision_payload(
+            {
+                "response_type": "mutation_decision",
+                "rationale": "legacy pendant transition",
+                "fitmas_message": "On allege.",
+                "mutation_decision": {
+                    "mutation_type": "lighten_day",
+                    "target_session_id": 42,
+                    "rationale": "fatigue signalee",
+                    "fitmas_message": "On allege.",
+                },
+            }
+        )
+
+        self.assertIsNotNone(decision)
+        self.assertEqual(decision.response_type, "mutation_decision")
+        self.assertIsNotNone(decision.mutation_decision)
+        self.assertEqual(decision.mutation_decision.mutation_type, "lighten_day")
+
     def test_decide_can_complete_single_tool_round_trip(self) -> None:
         original_client = llm._client
         original_request_message = llm._request_message
