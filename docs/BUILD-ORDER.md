@@ -228,6 +228,7 @@ Slicings deja livres :
 - ✅ calibration/fatigue guard : correction du biais `thursday` dans le prompt calibration et suppression du court-circuit sante qui shuntait `decide()` avant fallback
 - ✅ contrat `CoachDecision` actif en compat/shadow : `decide()` accepte le nouveau schema (`reply/no_change/mutation_decision/plan_patch/requires_confirmation`) et garde le vieux JSON `mutation_type` en fallback legacy
 - ✅ pipeline `PlanPatch` conversation : si le coach retourne `response_type=plan_patch`, le pipeline revalide cote serveur puis applique via `PlanMutationService.apply_patch_for_user`; la reply vient des events appliques, pas du brouillon LLM
+- ✅ confirmations `PlanPatch` : un patch `requires_confirmation` est serialise en pending confirmation complet, puis revalide et applique avec `allow_requires_confirmation=True` seulement apres un `oui` explicite
 - ✅ slice provider contract :
   - `DeepSeekOpenAI` structured output disponible derriere `FITMAS_USE_DEEPSEEK_OPENAI_STRUCTURED`
   - validation locale des decisions FitMAS (`mutation_type`, champs requis, targets)
@@ -236,7 +237,6 @@ Slicings deja livres :
 
 Reste explicitement ouvert :
 
-- pending confirmation pour `PlanPatch requires_confirmation` : aujourd'hui le patch non `valid` est refuse proprement avant write, mais il n'est pas encore serialise comme confirmation pending complete
 - durcir `validate_plan_patch` avec batch atomicite / suggested fixes / health-load-recovery fin
 
 Le plan detaille vit dans `docs/COACH-AUTONOMY-REFACTOR.md`, section "Plan d'attaque recale — Agent fiable, tools atomiques, PlanPatch audite".

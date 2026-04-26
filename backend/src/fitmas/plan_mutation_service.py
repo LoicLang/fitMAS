@@ -243,6 +243,7 @@ def apply_patch_for_user(
     trigger_type: str = "plan_patch",
     explained_to_user: bool = False,
     conversation_turn_id: int | None = None,
+    allow_requires_confirmation: bool = False,
 ) -> PlanPatchServiceResult:
     plan = repo.get_active_plan_optional(db, user.id)
     plan_id = int(getattr(plan, "id", 0) or 0)
@@ -254,7 +255,7 @@ def apply_patch_for_user(
         scheduled_sessions=scheduled_sessions,
         timezone_name=getattr(user, "timezone", None),
     )
-    if validation.status != "valid":
+    if not _validation_allows_patch_commit(validation, allow_requires_confirmation=allow_requires_confirmation):
         return PlanPatchServiceResult(validation=validation)
 
     legacy_operations = [
@@ -312,6 +313,16 @@ def apply_patch_for_user(
         blocked_events=tuple(blocked_events),
     )
     return PlanPatchServiceResult(validation=validation, mutation_result=mutation_result)
+
+
+def _validation_allows_patch_commit(
+    validation: PlanPatchValidation,
+    *,
+    allow_requires_confirmation: bool,
+) -> bool:
+    if validation.status == "valid":
+        return True
+    return bool(allow_requires_confirmation and validation.status in {"warning", "requires_confirmation"})
 
 
 def _apply_create_session_operation(

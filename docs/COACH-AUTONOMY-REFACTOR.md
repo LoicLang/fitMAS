@@ -828,15 +828,16 @@ Fichiers probables :
   - ✅ branch `CoachDecision(response_type="plan_patch")`
   - ✅ validate + `apply_patch_for_user(...)`
   - ✅ reply derivee des applied events
-  - pending confirmation patch
-- modify `backend/src/fitmas/mutation_permissions.py`
-  - serialize / deserialize patch confirmations
+  - ✅ pending confirmation patch
+- ✅ modify `backend/src/fitmas/mutation_permissions.py`
+  - ✅ serialize / deserialize patch confirmations
 - tests : `tests/test_plan_mutation_service.py`, ✅ `tests/test_core_flows.py`
 
 Gate :
 
 - ✅ patch `valid` passe par `apply_decisions_for_user`
 - ✅ patch `requires_confirmation` refuse proprement avant write
+- ✅ patch `requires_confirmation` peut etre stocke comme pending confirmation complet puis applique apres `oui`
 - ✅ `CoachDecision(plan_patch)` valide peut creer une `ScheduledSession` via le pipeline conversation et emettre un `plan_mutation_event`
 - ⏳ patch batch applique toutes ses operations ou refuse proprement avant write
 - ⏳ `event_count == applied_count`
@@ -864,7 +865,7 @@ Approche progressive :
 3. ✅ Le pipeline ignore toute promesse d'action du brouillon avant commit.
 4. ✅ Apres commit, la reply finale est reconstruite depuis event summary.
 5. ✅ Garder `MutationDecision` en fallback legacy pendant la transition.
-6. ⏳ Serialiser les confirmations pending de patch complet quand `validate_plan_patch` sort `requires_confirmation`.
+6. ✅ Serialiser les confirmations pending de patch complet quand `validate_plan_patch` sort `requires_confirmation`.
 
 Fichiers probables :
 

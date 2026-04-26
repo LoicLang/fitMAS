@@ -95,6 +95,49 @@ def test_apply_patch_for_user_does_not_commit_patch_requiring_confirmation(monke
     assert result.mutation_result is None
 
 
+def test_apply_patch_for_user_can_commit_confirmed_patch_requiring_confirmation(monkeypatch) -> None:
+    user = SimpleNamespace(id=7, timezone="Europe/Paris")
+    patch = PlanPatch(
+        operations=[
+            PlanPatchOperation(
+                operation_type="replace_session",
+                target_session_id=22,
+                new_sport_type="running",
+                new_session_type="tempo",
+                new_title="Tempo relais",
+                new_duration_min=45,
+                new_intensity="hard",
+                rationale="Remplacer la nage par une course qualite.",
+            )
+        ],
+        coach_message="Je mets un tempo a la place.",
+    )
+    sessions = [
+        SimpleNamespace(id=20, intensity="hard", completion_status="planned"),
+        SimpleNamespace(id=21, intensity="key", completion_status="planned"),
+        SimpleNamespace(id=24, intensity="hard", completion_status="planned"),
+        SimpleNamespace(id=22, intensity="easy", completion_status="planned"),
+    ]
+
+    monkeypatch.setattr("fitmas.plan_mutation_service.repo.get_active_plan_optional", lambda db, user_id: SimpleNamespace(id=42))
+    monkeypatch.setattr("fitmas.plan_mutation_service.repo.get_scheduled_sessions", lambda *args, **kwargs: sessions)
+    monkeypatch.setattr("fitmas.plan_mutation_service.repo.get_scheduled_session", lambda *args, **kwargs: None)
+    monkeypatch.setattr("fitmas.plan_mutation_service.repo.add_plan_mutation_event", lambda *args, **kwargs: None)
+    monkeypatch.setattr(
+        "fitmas.plan_mutation_service.mutations.apply",
+        lambda db, plan_id, decision, **kwargs: (
+            SimpleNamespace(allowed=True, warnings=[SimpleNamespace(message="Charge dense.")]),
+            SimpleNamespace(),
+        ),
+    )
+
+    result = apply_patch_for_user(object(), user=user, patch=patch, allow_requires_confirmation=True)
+
+    assert result.validation.status == "requires_confirmation"
+    assert result.mutation_result is not None
+    assert result.mutation_result.applied_count == 1
+
+
 def test_apply_patch_for_user_creates_session_from_create_operation(monkeypatch) -> None:
     user = SimpleNamespace(id=7, timezone="Europe/Paris")
     patch = PlanPatch(

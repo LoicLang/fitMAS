@@ -50,8 +50,10 @@ from fitmas.mutation_permissions import (
     build_confirmation_prompt,
     build_rejection_reply,
     default_confirmation_expiry,
+    deserialize_plan_patch_confirmation,
     deserialize_mutation_decision,
     parse_confirmation_reply,
+    serialize_plan_patch_confirmation,
     serialize_mutation_decision,
 )
 from fitmas.plan_mutation_service import PlanPatchServiceResult, apply_decisions_for_user, apply_patch_for_user
@@ -104,7 +106,11 @@ def run_conversation_turn(
         elif confirmation is False:
             repo.resolve_pending_mutation_confirmation(db, pending_confirmation.id, status="rejected")
             reply_text = build_rejection_reply()
-            decision = deserialize_mutation_decision(pending_confirmation.decision_json)
+            decision = (
+                None
+                if pending_confirmation.mutation_type == "plan_patch"
+                else deserialize_mutation_decision(pending_confirmation.decision_json)
+            )
             return _reply_and_record_turn(
                 db=db,
                 user_id=user.id,
@@ -113,11 +119,49 @@ def run_conversation_turn(
                 extraction=Extraction(confidence=0.98),
                 response_mode="confirmation_rejected",
                 decision=decision,
-                turn_context={"pending_confirmation": True, "pending_confirmation_id": pending_confirmation.id},
+                turn_context={
+                    "pending_confirmation": True,
+                    "pending_confirmation_id": pending_confirmation.id,
+                    "pending_confirmation_type": pending_confirmation.mutation_type,
+                },
                 memory_writes=turn_memory_writes,
             )
         else:
             repo.resolve_pending_mutation_confirmation(db, pending_confirmation.id, status="accepted")
+            if pending_confirmation.mutation_type == "plan_patch":
+                patch = deserialize_plan_patch_confirmation(pending_confirmation.decision_json)
+                service_result = apply_patch_for_user(
+                    db,
+                    user=user,
+                    patch=patch,
+                    source="conversation",
+                    trigger_type="confirmation_accepted",
+                    explained_to_user=True,
+                    allow_requires_confirmation=True,
+                )
+                applied = _patch_was_applied(service_result)
+                reply_text = (
+                    _applied_patch_summary(service_result, fallback=patch.coach_message)
+                    if applied
+                    else _blocked_plan_patch_reply(service_result)
+                )
+                if not applied:
+                    _log_plan_patch_blocked(service_result, user_id=user.id)
+                return _reply_and_record_turn(
+                    db=db,
+                    user_id=user.id,
+                    user_text=payload.text,
+                    reply_text=reply_text,
+                    extraction=Extraction(confidence=0.98),
+                    response_mode="confirmation_applied" if applied else "confirmation_blocked",
+                    mutation_applied=applied,
+                    turn_context={
+                        "pending_confirmation": True,
+                        "pending_confirmation_id": pending_confirmation.id,
+                        "pending_confirmation_type": "plan_patch",
+                    },
+                    memory_writes=turn_memory_writes,
+                )
             decision = deserialize_mutation_decision(pending_confirmation.decision_json)
             service_result = apply_decisions_for_user(
                 db,
@@ -686,19 +730,43 @@ def run_conversation_turn(
                 explained_to_user=True,
             )
             applied = _patch_was_applied(service_result)
-            reply_text = (
-                _applied_patch_summary(service_result, fallback=decision.plan_patch.coach_message)
-                if applied
-                else _blocked_plan_patch_reply(service_result)
-            )
-            if not applied:
+            if applied:
+                reply_text = _applied_patch_summary(service_result, fallback=decision.plan_patch.coach_message)
+                outcome = ConversationTurnOutcome(
+                    extraction=Extraction(confidence=0.85),
+                    reply_text=reply_text,
+                    response_mode="plan_patch_applied",
+                    mutation_applied=True,
+                )
+            elif _plan_patch_needs_confirmation(service_result):
+                pending_row = repo.create_pending_mutation_confirmation(
+                    db,
+                    user_id=user.id,
+                    impact_level="high",
+                    reason="plan_patch_requires_confirmation",
+                    mutation_type="plan_patch",
+                    summary=_plan_patch_confirmation_summary(service_result),
+                    source_text=payload.text,
+                    decision_json=serialize_plan_patch_confirmation(decision.plan_patch),
+                    expires_at=default_confirmation_expiry(),
+                )
+                reply_text = _build_plan_patch_confirmation_prompt(service_result)
+                outcome = ConversationTurnOutcome(
+                    extraction=Extraction(confidence=0.85),
+                    reply_text=reply_text,
+                    response_mode="plan_patch_confirmation",
+                    pending_confirmation=True,
+                    pending_confirmation_id=pending_row.id,
+                )
+            else:
+                reply_text = _blocked_plan_patch_reply(service_result)
                 _log_plan_patch_blocked(service_result, user_id=user.id)
-            outcome = ConversationTurnOutcome(
-                extraction=Extraction(confidence=0.85),
-                reply_text=reply_text,
-                response_mode="plan_patch_applied" if applied else "plan_patch_blocked",
-                mutation_applied=applied,
-            )
+                outcome = ConversationTurnOutcome(
+                    extraction=Extraction(confidence=0.85),
+                    reply_text=reply_text,
+                    response_mode="plan_patch_blocked",
+                    mutation_applied=False,
+                )
             logger.info("LLM coach patch reply (%s): %s", outcome.response_mode, reply_text[:120])
             decision = None
         else:
@@ -1044,6 +1112,29 @@ def _blocked_plan_patch_reply(service_result: PlanPatchServiceResult | None) -> 
     if validation.status == "requires_confirmation":
         return "Je ne l'applique pas encore: ce changement demande une confirmation claire."
     return "Je ne l'ai pas applique: le changement n'a pas ete valide par le planning."
+
+
+def _plan_patch_needs_confirmation(service_result: PlanPatchServiceResult | None) -> bool:
+    if service_result is None:
+        return False
+    return service_result.validation.status in {"warning", "requires_confirmation"}
+
+
+def _plan_patch_confirmation_summary(service_result: PlanPatchServiceResult | None) -> str:
+    if service_result is None:
+        return "patch planning a confirmer"
+    first = service_result.validation.operation_results[0] if service_result.validation.operation_results else None
+    if first is not None:
+        if first.warning_messages:
+            return first.warning_messages[0]
+        if first.block_reason:
+            return first.block_reason
+    return "ce changement modifie sensiblement la semaine"
+
+
+def _build_plan_patch_confirmation_prompt(service_result: PlanPatchServiceResult | None) -> str:
+    summary = _plan_patch_confirmation_summary(service_result)
+    return f"Je peux le faire, mais ca demande confirmation: {summary}. Tu confirmes ? Reponds oui ou non."
 
 
 def _log_plan_patch_blocked(service_result: PlanPatchServiceResult | None, *, user_id: int | None) -> None:

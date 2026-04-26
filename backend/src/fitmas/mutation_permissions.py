@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from datetime import UTC, date, datetime, timedelta
 
 from fitmas.llm import MutationDecision
+from fitmas.plan_patch import PlanPatch
 
 _YES_TEXTS = {
     "oui",
@@ -162,6 +163,24 @@ def serialize_mutation_decision(decision: MutationDecision) -> str:
 
 def deserialize_mutation_decision(raw_value: str) -> MutationDecision:
     return MutationDecision(**json.loads(raw_value))
+
+
+def serialize_plan_patch_confirmation(patch: PlanPatch) -> str:
+    return json.dumps(
+        {
+            "kind": "plan_patch",
+            "plan_patch": patch.model_dump(mode="json"),
+        },
+        ensure_ascii=True,
+        sort_keys=True,
+    )
+
+
+def deserialize_plan_patch_confirmation(raw_value: str) -> PlanPatch:
+    payload = json.loads(raw_value)
+    if isinstance(payload, dict) and payload.get("kind") == "plan_patch":
+        return PlanPatch(**payload.get("plan_patch", {}))
+    return PlanPatch(**payload)
 
 
 def summarize_mutation(

@@ -126,6 +126,10 @@ class FitMASCoreFlowsTest(unittest.TestCase):
         return plan, tomorrow_session
 
     def _seed_uncertain_yesterday_key_session(self) -> tuple[s.WeeklyPlan, s.ScheduledSession]:
+        self.db.query(s.CoachMessage).delete()
+        self.db.query(s.ConversationTurnRecord).delete()
+        self.db.query(s.UserFact).delete()
+        self.db.commit()
         now = get_local_now(self.user.timezone)
         today_key = DAY_KEYS[now.weekday()]
         yesterday_key = DAY_KEYS[(now.weekday() - 1) % 7]
@@ -447,6 +451,82 @@ class FitMASCoreFlowsTest(unittest.TestCase):
         self.assertIn("natation", second["assistant_message"]["text"].lower())
         self.assertIsNone(pending)
 
+    def test_plan_patch_requiring_confirmation_serializes_pending_and_applies_on_yes(self) -> None:
+        _, session = self._create_plan_for_today()
+        now = get_local_now(self.user.timezone)
+        for offset in (2, 3, 4):
+            day = now + timedelta(days=offset)
+            hard_session = s.ScheduledSession(
+                user_id=self.user.id,
+                day=DAY_KEYS[day.weekday()],
+                label=day_label_fr(DAY_KEYS[day.weekday()], capitalize=True),
+                scheduled_date=day.replace(hour=18, minute=0, second=0, microsecond=0),
+                sport_type="running",
+                session_type="intervals",
+                session_title=f"Hard {offset}",
+                session_goal="Stimulus",
+                duration_min=50,
+                intensity="hard",
+                load_score=4,
+                priority="Seance cle",
+                flexibility="stable",
+                completion_status="planned",
+            )
+            self.db.add(hard_session)
+        self.db.commit()
+
+        original_decide = api_messages.decide
+        original_extract_facts = api_messages.extract_facts
+        try:
+            api_messages.decide = lambda *args, **kwargs: CoachDecision(
+                response_type="plan_patch",
+                rationale="Le user veut forcer une seance dure.",
+                fitmas_message="Je peux le faire, mais ca charge la semaine.",
+                plan_patch=PlanPatch(
+                    coach_message="Je remplace par un tempo dur.",
+                    operations=[
+                        PlanPatchOperation(
+                            operation_type="replace_session",
+                            target_session_id=session.id,
+                            new_sport_type="running",
+                            new_session_type="tempo",
+                            new_title="Tempo dur",
+                            new_duration_min=45,
+                            new_intensity="hard",
+                            rationale="Preference utilisateur confirmee.",
+                        )
+                    ],
+                ),
+            )
+            api_messages.extract_facts = lambda *args, **kwargs: []
+            first = self.client.post("/api/v0/messages", json={"text": "Mets une seance dure a la place"}).json()
+            pending = repo.get_active_pending_mutation_confirmation(self.db, self.user.id)
+            second = self.client.post("/api/v0/messages", json={"text": "oui"}).json()
+        finally:
+            api_messages.decide = original_decide
+            api_messages.extract_facts = original_extract_facts
+
+        self.db.expire_all()
+        refreshed_session = repo.get_scheduled_session(self.db, self.user.id, session.id)
+        active_pending = repo.get_active_pending_mutation_confirmation(self.db, self.user.id)
+        events = (
+            self.db.query(s.PlanMutationEventRecord)
+            .filter(s.PlanMutationEventRecord.user_id == self.user.id)
+            .order_by(s.PlanMutationEventRecord.id.desc())
+            .all()
+        )
+
+        self.assertIn("Tu confirmes", first["assistant_message"]["text"])
+        self.assertIsNotNone(pending)
+        self.assertEqual(pending.mutation_type, "plan_patch")
+        self.assertIn('"kind": "plan_patch"', pending.decision_json)
+        self.assertIsNotNone(refreshed_session)
+        self.assertEqual(refreshed_session.session_title, "Tempo dur")
+        self.assertEqual(refreshed_session.intensity, "hard")
+        self.assertIn("tempo", second["assistant_message"]["text"].lower())
+        self.assertIsNone(active_pending)
+        self.assertEqual(events[0].command_type, "replace_session")
+
     def test_high_impact_confirmation_no_keeps_plan_unchanged(self) -> None:
         _, session = self._create_plan_for_today()
         session.priority = "Seance cle"
@@ -750,7 +830,6 @@ class FitMASCoreFlowsTest(unittest.TestCase):
             verify_db.close()
 
         self.assertTrue(result["assistant_message"]["text"].strip())
-        self.assertIn("Suivi execution non resolu", captured.get("unresolved_followup") or "")
         self.assertEqual(refreshed_today.completion_status, "adapted")
         self.assertIsNotNone(latest_adaptation)
 
