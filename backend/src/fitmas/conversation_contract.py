@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Callable
 
-from fitmas.llm import MutationDecision
+from fitmas.llm import CoachDecision, MutationDecision
 from fitmas.models import DayId, Extraction
 
 
@@ -39,7 +39,7 @@ class ConversationTurnOutcome:
 
 @dataclass(frozen=True, slots=True)
 class ConversationPipelineDependencies:
-    decide: Callable[..., MutationDecision | None]
+    decide: Callable[..., CoachDecision | MutationDecision | None]
     extract_facts: Callable[[str, str, list[dict[str, Any]]], list[dict[str, Any]]]
     check_and_adapt_health_facts: Callable[..., Any]
     interpret_user_indication: Callable[..., Any]

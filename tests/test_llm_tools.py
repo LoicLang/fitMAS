@@ -69,6 +69,47 @@ class LLMToolsTest(unittest.TestCase):
         self.assertIsNotNone(decision.mutation_decision)
         self.assertEqual(decision.mutation_decision.mutation_type, "lighten_day")
 
+    def test_decide_accepts_coach_decision_plan_patch_payload(self) -> None:
+        original_client = llm._client
+        original_request_structured_json = llm._request_structured_json
+        prompts: list[str] = []
+
+        def fake_request_structured_json(*, system, messages, model="claude-haiku-4-5-20251001", max_tokens=1024):
+            prompts.append("\n".join(part["text"] for part in system if isinstance(part, dict) and part.get("text")))
+            return {
+                "response_type": "plan_patch",
+                "rationale": "piscine fermee, remplacement conservateur",
+                "fitmas_message": "Je pose un footing easy mercredi.",
+                "plan_patch": {
+                    "coach_message": "Je pose un footing easy mercredi.",
+                    "operations": [
+                        {
+                            "operation_type": "create_session",
+                            "target_date": "2099-04-29",
+                            "new_sport_type": "running",
+                            "new_session_type": "easy",
+                            "new_title": "Footing easy",
+                            "new_duration_min": 30,
+                            "rationale": "Remplacement sans piscine.",
+                        }
+                    ],
+                },
+            }
+
+        llm._client = lambda: object()
+        llm._request_structured_json = fake_request_structured_json
+        try:
+            decision = llm.decide("Piscine fermee deux semaines", "Repere")
+        finally:
+            llm._client = original_client
+            llm._request_structured_json = original_request_structured_json
+
+        self.assertIsNotNone(decision)
+        self.assertEqual(decision.response_type, "plan_patch")
+        self.assertIsNotNone(decision.plan_patch)
+        self.assertEqual(decision.plan_patch.operations[0].operation_type, "create_session")
+        self.assertIn("CoachDecision", prompts[0])
+
     def test_decide_can_complete_single_tool_round_trip(self) -> None:
         original_client = llm._client
         original_request_message = llm._request_message

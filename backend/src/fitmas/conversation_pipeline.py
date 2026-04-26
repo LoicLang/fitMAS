@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+from typing import Any
 
 from sqlalchemy.orm import Session
 
@@ -24,6 +25,7 @@ from fitmas.calibration_needs import (
 from fitmas.coach_reading_digest import build_coach_reading_digest, render_digest_for_prompt
 from fitmas.coach_state_bundle import build_coach_state_bundle
 from fitmas.execution_clarification import render_unresolved_execution_followup
+from fitmas.llm import MutationDecision
 from fitmas.conversation_context import (
     activity_claim_summary_for_prompt,
     build_claim_memory_updates,
@@ -52,7 +54,7 @@ from fitmas.mutation_permissions import (
     parse_confirmation_reply,
     serialize_mutation_decision,
 )
-from fitmas.plan_mutation_service import apply_decisions_for_user
+from fitmas.plan_mutation_service import PlanPatchServiceResult, apply_decisions_for_user, apply_patch_for_user
 from fitmas.planning_window_resolution import resolve_planning_window
 from fitmas.profile_summary import build_profile_summary
 from fitmas.replan_from_life_change import (
@@ -669,7 +671,58 @@ def run_conversation_turn(
         decision = health_fallback_decision
         health_fallback_active = True
 
-    if decision:
+    outcome: ConversationTurnOutcome | None = None
+    if _is_coach_decision(decision):
+        turn_context["coach_decision"] = _coach_decision_payload(decision)
+        if decision.response_type == "mutation_decision" and decision.mutation_decision is not None:
+            decision = decision.mutation_decision
+        elif decision.response_type == "plan_patch" and decision.plan_patch is not None:
+            service_result = apply_patch_for_user(
+                db,
+                user=user,
+                patch=decision.plan_patch,
+                source="conversation",
+                trigger_type="coach_decision_plan_patch",
+                explained_to_user=True,
+            )
+            applied = _patch_was_applied(service_result)
+            reply_text = (
+                _applied_patch_summary(service_result, fallback=decision.plan_patch.coach_message)
+                if applied
+                else _blocked_plan_patch_reply(service_result)
+            )
+            if not applied:
+                _log_plan_patch_blocked(service_result, user_id=user.id)
+            outcome = ConversationTurnOutcome(
+                extraction=Extraction(confidence=0.85),
+                reply_text=reply_text,
+                response_mode="plan_patch_applied" if applied else "plan_patch_blocked",
+                mutation_applied=applied,
+            )
+            logger.info("LLM coach patch reply (%s): %s", outcome.response_mode, reply_text[:120])
+            decision = None
+        else:
+            reply_text = decision.confirmation_reason or decision.fitmas_message
+            legacy_no_change = MutationDecision(
+                mutation_type="no_change",
+                rationale=decision.rationale,
+                fitmas_message=reply_text,
+            )
+            reply_text = api_messages._sanitize_no_change_reply(
+                user_text=payload.text,
+                reply_text=reply_text,
+                decision=legacy_no_change,
+            )
+            outcome = ConversationTurnOutcome(
+                extraction=Extraction(confidence=0.85),
+                reply_text=reply_text,
+                response_mode=decision.response_type,
+                decision=legacy_no_change,
+                mutation_applied=False,
+            )
+            decision = None
+
+    if outcome is None and decision:
         extraction_confidence = (
             max(float(user_indication.confidence if user_indication else 0.0), 0.85)
             if health_fallback_active
@@ -779,14 +832,14 @@ def run_conversation_turn(
                 mutation_applied=applied,
             )
             logger.info("LLM reply (%s): %s", decision.mutation_type, reply_text[:120])
-    elif calibration_only_reply is not None:
+    elif outcome is None and calibration_only_reply is not None:
         outcome = ConversationTurnOutcome(
             extraction=Extraction(confidence=max(float(calibration_resolution.confidence or 0.0), 0.85)),
             reply_text=calibration_only_reply,
             response_mode="calibration",
         )
         logger.info("Calibration reply: %s", outcome.reply_text[:120])
-    else:
+    elif outcome is None:
         # Chantier 1 (autonomy refactor): the only remaining path here is
         # "decide() returned None and there is no deterministic adaptation
         # to fall back on" — typically the Anthropic client is unavailable.
@@ -939,6 +992,75 @@ def _mutation_was_applied(service_result) -> bool:
     return int(getattr(service_result, "applied_count", 0) or 0) > 0 and int(
         getattr(service_result, "event_count", 0) or 0
     ) > 0
+
+
+def _is_coach_decision(value: Any) -> bool:
+    return bool(
+        value is not None
+        and hasattr(value, "response_type")
+        and hasattr(value, "fitmas_message")
+    )
+
+
+def _coach_decision_payload(decision: Any) -> dict[str, Any]:
+    if hasattr(decision, "model_dump"):
+        return dict(decision.model_dump(mode="json"))
+    return {
+        "response_type": getattr(decision, "response_type", None),
+        "rationale": getattr(decision, "rationale", None),
+        "fitmas_message": getattr(decision, "fitmas_message", None),
+    }
+
+
+def _patch_was_applied(service_result: PlanPatchServiceResult | None) -> bool:
+    if service_result is None or service_result.mutation_result is None:
+        return False
+    return _mutation_was_applied(service_result.mutation_result)
+
+
+def _applied_patch_summary(service_result: PlanPatchServiceResult | None, *, fallback: str) -> str:
+    if service_result is None or service_result.mutation_result is None:
+        return fallback
+    summaries: list[str] = []
+    for event in service_result.mutation_result.applied_events:
+        summary = str(event.user_visible_summary or "").strip()
+        if summary and summary not in summaries:
+            summaries.append(summary)
+    return " ".join(summaries) if summaries else fallback
+
+
+def _blocked_plan_patch_reply(service_result: PlanPatchServiceResult | None) -> str:
+    if service_result is None:
+        return "Je ne l'ai pas applique: le patch planning est invalide."
+    validation = service_result.validation
+    first = validation.operation_results[0] if validation.operation_results else None
+    if first is not None:
+        if first.block_reason and first.block_reason in _BLOCK_REASON_REPLIES:
+            return _BLOCK_REASON_REPLIES[first.block_reason]
+        if first.warning_messages:
+            return f"Je ne l'ai pas applique: {first.warning_messages[0]}"
+        if first.block_reason:
+            return f"Je ne l'ai pas applique: {first.block_reason}"
+    if validation.status == "requires_confirmation":
+        return "Je ne l'applique pas encore: ce changement demande une confirmation claire."
+    return "Je ne l'ai pas applique: le changement n'a pas ete valide par le planning."
+
+
+def _log_plan_patch_blocked(service_result: PlanPatchServiceResult | None, *, user_id: int | None) -> None:
+    if service_result is None:
+        return
+    for result in service_result.validation.operation_results:
+        if result.status == "valid":
+            continue
+        logger.warning(
+            "plan_patch_blocked user=%s operation=%s status=%s reason=%s target=%s warnings=%s",
+            user_id,
+            result.operation_type,
+            result.status,
+            result.block_reason,
+            result.target_session_id,
+            list(result.warning_codes),
+        )
 
 
 _BLOCK_REASON_REPLIES: dict[str, str] = {

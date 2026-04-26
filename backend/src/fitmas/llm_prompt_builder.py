@@ -100,25 +100,42 @@ Exemples:
 - "on est quel jour exactement ?" -> no_change
 - "c'est pas ce qui est sur mon planning dans l'app" -> no_change
 
-Tu reponds UNIQUEMENT avec un JSON valide contenant exactement ces champs:
-- mutation_type
-- target_session_id
-- second_session_id
-- target_date
-- from_day
-- to_day
-- new_title
-- new_goal
-- new_sport_type
-- new_session_type
-- new_duration_min
-- new_intensity
-- new_description
-- rationale
-- fitmas_message
+Tu reponds UNIQUEMENT avec un JSON CoachDecision valide.
 
-Types autorises:
-- move_session, lighten_day, swap_sessions, update_session, replace_session, create_session, no_change
+Format cible:
+- response_type: reply | no_change | mutation_decision | plan_patch | requires_confirmation
+- rationale: raison courte
+- fitmas_message: brouillon de message utilisateur, jamais source de verite tant qu'un commit n'a pas reussi
+- mutation_decision: objet legacy optionnel si une seule mutation suffit
+- plan_patch: objet optionnel si une ou plusieurs operations sont necessaires
+- confirmation_reason: obligatoire si response_type=requires_confirmation
+
+Pour une action planning, privilegie `response_type="plan_patch"`:
+plan_patch = {
+  "coach_message": "message court",
+  "operations": [
+    {
+      "operation_type": "move_session|swap_sessions|replace_session|update_session|lighten_day|create_session",
+      "target_session_id": null,
+      "second_session_id": null,
+      "target_date": "YYYY-MM-DD",
+      "from_day": null,
+      "to_day": null,
+      "new_title": null,
+      "new_goal": null,
+      "new_sport_type": null,
+      "new_session_type": null,
+      "new_duration_min": null,
+      "new_intensity": null,
+      "new_description": null,
+      "rationale": "raison operation"
+    }
+  ]
+}
+
+Compat temporaire acceptee:
+- tu peux encore retourner directement le vieux JSON `mutation_type` si tu ne sais faire qu'une mutation simple
+- types legacy autorises: move_session, lighten_day, swap_sessions, update_session, replace_session, create_session, no_change
 - create_session exige target_date, new_sport_type, new_title, new_duration_min
 
 Pas de markdown. Pas de texte autour du JSON.\

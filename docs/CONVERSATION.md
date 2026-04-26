@@ -158,6 +158,12 @@ La reply utilisateur est derivee du `block_reason` via `_BLOCK_REASON_REPLIES` (
 3. Si `availability_constraint` future : resolve fenetre → le coach LLM arbitre avec tools ; la cible 24 avril est `PlanPatch` + `validate_plan_patch`, pas un replan deterministe qui parle a sa place
 4. Sinon : pipeline conversation normal
 
+Depuis le 26 avril 2026, `decide()` accepte deux formats en compat :
+- legacy `MutationDecision` root (`mutation_type`) pour les chemins existants et fallback provider
+- `CoachDecision` (`response_type`) pour les nouveaux chemins agentiques
+
+Quand `CoachDecision.response_type=plan_patch`, le pipeline ne fait confiance ni au brouillon `fitmas_message` ni au patch tel quel : il revalide avec `validate_plan_patch`, applique via `PlanMutationService.apply_patch_for_user` seulement si le statut est `valid`, puis répond depuis les `plan_mutation_events` appliqués. Un patch `requires_confirmation` ou `blocked` est refusé avant write pour l'instant ; la sérialisation d'une confirmation pending complète de patch reste à faire.
+
 Comportements importants :
 - `voyage`, `deplacement` = `availability_constraint`
 - `demain soir` sans seance cible ne doit jamais inventer une mutation sur un autre jour

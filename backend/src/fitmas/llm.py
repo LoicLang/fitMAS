@@ -277,7 +277,7 @@ def decide(
     remembered_facts: list[dict] | None = None,
     time_context: dict | None = None,
     tool_context: ToolContext | None = None,
-) -> MutationDecision | None:
+) -> CoachDecision | MutationDecision | None:
     """
     Call the LLM to extract intent and decide a plan mutation.
     Returns None if LLM is unavailable (API key missing or error) -- caller falls back to rules.
@@ -341,20 +341,25 @@ def decide(
         if not data:
             return None
 
-        # Normalize French day names to English
-        data["from_day"] = _normalize_day(data.get("from_day"))
-        data["to_day"] = _normalize_day(data.get("to_day"))
-        data = _validate_decision_payload(data)
-        if data is None:
+        parsed_decision = _parse_llm_decision_payload(data)
+        if parsed_decision is None and "response_type" not in data:
             data = _repair_invalid_decision_payload(data=_last_invalid_decision_payload, system=system_prompt, prompt=prompt)
-            data = _validate_decision_payload(data)
-        if data is None:
+            parsed_decision = _parse_llm_decision_payload(data)
+        if parsed_decision is None:
             data = _request_claude_decision_fallback(system=system_prompt, prompt=prompt)
-            data = _validate_decision_payload(data)
-        if data is None:
+            parsed_decision = _parse_llm_decision_payload(data)
+        if parsed_decision is None:
             return None
 
-        decision = MutationDecision(**data)
+        if isinstance(parsed_decision, CoachDecision):
+            logger.info(
+                "LLM coach decision: %s — %s",
+                parsed_decision.response_type,
+                parsed_decision.rationale,
+            )
+            return parsed_decision
+
+        decision = parsed_decision
         logger.info(
             "LLM decision: %s (session=%s, session2=%s, from=%s, to=%s, date=%s) — %s",
             decision.mutation_type, decision.target_session_id, decision.second_session_id, decision.from_day, decision.to_day, decision.target_date,
@@ -371,6 +376,21 @@ def decide(
             exc_info=True,
         )
         return None
+
+
+def _parse_llm_decision_payload(data: dict[str, Any] | None) -> CoachDecision | MutationDecision | None:
+    if not isinstance(data, dict):
+        return None
+    if "response_type" in data:
+        return parse_coach_decision_payload(data)
+
+    # Normalize French day names to English on the legacy wire format.
+    data["from_day"] = _normalize_day(data.get("from_day"))
+    data["to_day"] = _normalize_day(data.get("to_day"))
+    validated = _validate_decision_payload(data)
+    if validated is None:
+        return None
+    return MutationDecision(**validated)
 
 
 def _validate_decision_payload(data: dict[str, Any] | None) -> dict[str, Any] | None:

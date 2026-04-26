@@ -17,7 +17,8 @@ import fitmas.llm as llm
 from fitmas.adaptation import AdaptationResult
 from fitmas.api import app
 from fitmas.db import Base, SessionLocal, engine, init_db
-from fitmas.llm import MutationDecision
+from fitmas.llm import CoachDecision, MutationDecision
+from fitmas.plan_patch import PlanPatch, PlanPatchOperation
 from fitmas.plan_actions import move_session
 from fitmas.user_indications import (
     IndicationTimeReference,
@@ -330,6 +331,50 @@ class FitMASCoreFlowsTest(unittest.TestCase):
         self.assertEqual(result["assistant_message"]["text"], "On allège aujourd'hui. Tu récupères.")
         self.assertEqual(today["completion_status"], "adapted")
         self.assertEqual(today["sport_type"], "rest")
+
+    def test_message_flow_applies_valid_coach_decision_plan_patch(self) -> None:
+        target_date = "2099-04-29"
+        original_decide = api_messages.decide
+        original_extract_facts = api_messages.extract_facts
+        try:
+            api_messages.decide = lambda *args, **kwargs: CoachDecision(
+                response_type="plan_patch",
+                rationale="piscine fermee, on garde une charge facile",
+                fitmas_message="Je pose un footing easy mercredi.",
+                plan_patch=PlanPatch(
+                    coach_message="Je pose un footing easy mercredi.",
+                    operations=[
+                        PlanPatchOperation(
+                            operation_type="create_session",
+                            target_date=target_date,
+                            new_sport_type="running",
+                            new_session_type="easy",
+                            new_title="Footing easy",
+                            new_duration_min=30,
+                            rationale="Remplacement conservateur sans piscine.",
+                        )
+                    ],
+                ),
+            )
+            api_messages.extract_facts = lambda *args, **kwargs: []
+            result = self.client.post("/api/v0/messages", json={"text": "Piscine fermee, mets du running"}).json()
+        finally:
+            api_messages.decide = original_decide
+            api_messages.extract_facts = original_extract_facts
+
+        self.db.expire_all()
+        sessions = repo.get_scheduled_sessions(self.db, self.user.id, limit=20)
+        events = (
+            self.db.query(s.PlanMutationEventRecord)
+            .filter(s.PlanMutationEventRecord.user_id == self.user.id)
+            .order_by(s.PlanMutationEventRecord.id.desc())
+            .all()
+        )
+
+        self.assertEqual(result["assistant_message"]["text"], "Je pose un footing easy mercredi.")
+        self.assertTrue(any(session.sport_type == "running" and session.duration_min == 30 for session in sessions))
+        self.assertEqual(events[0].command_type, "create_session")
+        self.assertEqual(events[0].user_visible_summary, "Je pose un footing easy mercredi.")
 
     def test_high_impact_replace_session_requires_confirmation_before_apply(self) -> None:
         _, session = self._create_plan_for_today()

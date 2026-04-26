@@ -824,24 +824,26 @@ Fichiers probables :
 - ✅ modify `backend/src/fitmas/plan_mutation_service.py`
   - ✅ add `apply_patch_for_user(...)`
   - one event per operation au debut, puis summary patch si besoin
-- modify `backend/src/fitmas/conversation_pipeline.py`
-  - branch `PlanPatchDecision`
+- ✅ modify `backend/src/fitmas/conversation_pipeline.py`
+  - ✅ branch `CoachDecision(response_type="plan_patch")`
+  - ✅ validate + `apply_patch_for_user(...)`
+  - ✅ reply derivee des applied events
   - pending confirmation patch
-  - reply derivee des applied events
 - modify `backend/src/fitmas/mutation_permissions.py`
   - serialize / deserialize patch confirmations
-- tests : `tests/test_plan_mutation_service.py`, `tests/test_core_flows.py`
+- tests : `tests/test_plan_mutation_service.py`, ✅ `tests/test_core_flows.py`
 
 Gate :
 
 - ✅ patch `valid` passe par `apply_decisions_for_user`
 - ✅ patch `requires_confirmation` refuse proprement avant write
+- ✅ `CoachDecision(plan_patch)` valide peut creer une `ScheduledSession` via le pipeline conversation et emettre un `plan_mutation_event`
 - ⏳ patch batch applique toutes ses operations ou refuse proprement avant write
 - ⏳ `event_count == applied_count`
-- reply finale vient des events appliques
+- ✅ reply finale vient des events appliques
 - claim guard reste en defense-in-depth
 
-### Chantier 5H — Brancher le coach LLM sur PlanPatch ⏳ slice contrat livre le 25 avril 2026
+### Chantier 5H — Brancher le coach LLM sur PlanPatch ⏳ slices contrat + pipeline livres les 25-26 avril 2026
 
 But :
 
@@ -855,18 +857,22 @@ Approche progressive :
    - `plan_patch`: optionnel, valide comme `PlanPatch` non vide quand `response_type=plan_patch`
    - `mutation_decision`: optionnel, garde legacy valide quand `response_type=mutation_decision`
    - `fitmas_message`: brouillon non fiable tant que non commit
-   - parser local `parse_coach_decision_payload(...)` dans `llm.py`, non branche comme sortie primaire de `decide()` a ce stade
-2. Le pipeline ignore toute promesse d'action du brouillon avant commit.
-3. Apres commit, la reply finale est regeneree ou reconstruite depuis event summary.
-4. Garder `MutationDecision` en fallback legacy pendant la transition.
+   - parser local `parse_coach_decision_payload(...)` dans `llm.py`
+2. ✅ `decide()` parse le nouveau schema en compat/shadow :
+   - nouveau schema `CoachDecision` accepte
+   - vieux JSON root `mutation_type` encore accepte pour les tests, les smokes et le fallback provider
+3. ✅ Le pipeline ignore toute promesse d'action du brouillon avant commit.
+4. ✅ Apres commit, la reply finale est reconstruite depuis event summary.
+5. ✅ Garder `MutationDecision` en fallback legacy pendant la transition.
+6. ⏳ Serialiser les confirmations pending de patch complet quand `validate_plan_patch` sort `requires_confirmation`.
 
 Fichiers probables :
 
 - ✅ `backend/src/fitmas/llm.py`
-- `backend/src/fitmas/llm_prompt_builder.py`
-- `backend/src/fitmas/conversation_pipeline.py`
+- ✅ `backend/src/fitmas/llm_prompt_builder.py`
+- ✅ `backend/src/fitmas/conversation_pipeline.py`
 - `tests/test_llm_prompt_builder.py`
-- `tests/test_core_flows.py`
+- ✅ `tests/test_core_flows.py`
 - ✅ `tests/test_llm_tools.py`
 
 Gate :
