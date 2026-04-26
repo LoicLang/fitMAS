@@ -386,7 +386,13 @@ Addendum 24 avril :
 Addendum 25 avril :
 
 12. ✅ `create_session` entre dans le langage d'action : le LLM peut demander une creation de seance future, validee par `PlanPatch`, puis committee par `PlanMutationService` avec event audite
-13. prochain cap immediat : brancher `CoachDecision` / `PlanPatch` comme sortie principale de `decide()`, sans exposer de write tool libre
+13. ✅ cap suivant prepare : brancher `CoachDecision` / `PlanPatch` comme sortie principale de `decide()`, sans exposer de write tool libre
+
+Addendum 26 avril :
+
+14. ✅ `CoachDecision(plan_patch)` branche dans la conversation via orchestrateur
+15. ✅ confirmation pending avec `PlanPatch` complet serialise, revalidation puis apply apres `oui`
+16. ⏳ prochaine etape : skill `replan_after_constraint` formelle + reclassification de `propose_replan`
 
 ## Direction pour la prochaine tranche
 
@@ -454,7 +460,10 @@ Si une capacite est utile au LLM, on expose ensuite un wrapper borne, par exempl
 
 Une skill est un workflow outille et borne, pas un nouveau cerveau deterministe.
 
-Premiere skill :
+Etat actuel :
+- aucune skill runtime formelle n'est encore branchee comme objet separe
+- la doctrine existe dans les docs et une partie du prompt
+- le prochain slice doit la rendre explicite dans le prompt/routing, sans creer de write tool
 
 `replan_after_constraint`
 

@@ -62,6 +62,37 @@ Regle centrale :
 
 > Le coach garde le volant. Le determinisme est son harnais, pas son cerveau.
 
+## Checkpoint operationnel — 26 avril 2026
+
+Le socle technique du chantier est maintenant en place :
+
+- `DeepSeekOpenAI` structured-output est disponible derriere feature flag, avec JSON repair et fallback provider
+- DeepSeek Anthropic-compatible reste le chemin stable pour les conversations outillees deja branchees
+- le runtime supporte les multi tool calls bornes : plusieurs tools peuvent etre demandes, executes ou bloques, et tous les ids recoivent un resultat
+- `CoachDecision` est parse en compat/shadow et accepte `reply`, `no_change`, `mutation_decision`, `plan_patch`, `requires_confirmation`
+- `PlanPatch` est applique par orchestrateur : validation serveur, commit via `PlanMutationService`, reply reconstruite depuis les events reels
+- un `PlanPatch` qui sort `requires_confirmation` est stocke complet en pending confirmation, puis revalide avant application apres `oui`
+
+Etat produit :
+
+- on n'a pas encore un coach sportivement parfait
+- on a maintenant la bonne architecture pour un agent fiable de planning : LLM-first sur l'intention, tools atomiques pour lire, validation deterministe pour encadrer, orchestrateur pour appliquer
+- la prochaine preuve doit venir du dogfood reel, pas d'une nouvelle couche theorique
+
+Suite courte :
+
+1. Rejouer `golden_case_autonomy` et les captures Telegram en vraie conversation LLM-backed.
+2. Reclasser `propose_replan` en `suggest_replan_candidates` ou changer sa description/prompt pour en faire un helper de candidates, pas une autorite.
+3. Formaliser la skill `replan_after_constraint` comme workflow de prompt/routing : tools autorises, ordre conseille, sortie obligatoire `PlanPatch | no_change | requires_confirmation`.
+4. Durcir `validate_plan_patch` : atomicite batch, fixes proposes, charge/recup/sante.
+5. Nettoyer le legacy seulement apres validation dogfood.
+
+Dernier smoke reel 26 avril :
+
+- la chaine technique tient : DeepSeek, multi-tool, repair/fallback, `CoachDecision(plan_patch)`, validation, commit, event
+- le comportement produit n'est pas encore assez bon au milieu du fil : trop de clarification defensive apres `Oui` / `Running`
+- le prochain effort doit donc viser le workflow `replan_after_constraint`, pas un nouveau provider ni un nouveau gros refactor
+
 ### Niveaux de validation
 
 Toute validation training doit sortir un statut gradue :
@@ -360,7 +391,7 @@ Observation :
 
 - DeepSeek V4 demande spontanement les bons tools pour une contrainte comme "piscine fermee 2 semaines" : `get_plan_window`, `get_user_constraints`, `get_load_context`, puis parfois `propose_replan`
 - le provider Anthropic-compatible DeepSeek ignore `disable_parallel_tool_use`
-- le code a ete durci pour satisfaire tous les `tool_use_id`, mais il n'execute encore qu'un seul tool et renvoie les autres en erreur `single_tool_per_turn`
+- le code a ete durci : tous les `tool_use_id` recoivent un resultat, les tools autorises sont executes sous budget, et les surplus sont bloques proprement
 
 Conclusion :
 
@@ -578,8 +609,8 @@ Fichiers touches / probables :
   - `execute_tool_call(...)` conserve pour compat
 - `backend/src/fitmas/tools/metrics.py`
   - etendre `ToolTrace` ou ajouter `ToolSessionTrace`
-- `backend/src/fitmas/llm.py`
-  - remplacer le "premier tool uniquement" par batch borne
+- ✅ `backend/src/fitmas/llm.py`
+  - batch borne branche dans le follow-up outille
 - `tests/test_llm_tools.py`
 - `tests/test_tool_runtime.py`
 
@@ -803,7 +834,7 @@ Gate :
 - piscine fermee multi-jours produit un patch qui couvre toutes les nages impactees ou indique explicitement les restes
 - le LLM peut recevoir des `suggested_fixes` exploitables
 
-### Chantier 5G — Commit patch par orchestrateur ⏳ slice 1 livre le 24 avril 2026
+### Chantier 5G — Commit patch par orchestrateur ⏳ slices 1-2 livres les 24-26 avril 2026
 
 But :
 
@@ -839,7 +870,7 @@ Gate :
 - ✅ patch `requires_confirmation` refuse proprement avant write
 - ✅ patch `requires_confirmation` peut etre stocke comme pending confirmation complet puis applique apres `oui`
 - ✅ `CoachDecision(plan_patch)` valide peut creer une `ScheduledSession` via le pipeline conversation et emettre un `plan_mutation_event`
-- ⏳ patch batch applique toutes ses operations ou refuse proprement avant write
+- ⏳ atomicite batch stricte a durcir : aujourd'hui le patch est valide avant write, mais les operations legacy/create restent appliquees par chemins existants
 - ⏳ `event_count == applied_count`
 - ✅ reply finale vient des events appliques
 - claim guard reste en defense-in-depth

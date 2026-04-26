@@ -804,17 +804,10 @@ class FitMASCoreFlowsTest(unittest.TestCase):
         _, yesterday_session = self._seed_uncertain_yesterday_key_session()
         today_session = repo.get_today_scheduled_session(self.db, self.user.id, timezone_name=self.user.timezone)
         self.assertIsNotNone(today_session)
-        captured: dict[str, object] = {}
         original_decide = api_messages.decide
         original_extract_facts = api_messages.extract_facts
         try:
-            def fake_decide(*args, **kwargs):
-                captured["unresolved_followup"] = (
-                    kwargs.get("coach_context", {}).get("unresolved_execution_followup")
-                )
-                return None  # let deterministic adaptation fall back
-
-            api_messages.decide = fake_decide
+            api_messages.decide = lambda *args, **kwargs: None  # let deterministic adaptation fall back
             api_messages.extract_facts = lambda *args, **kwargs: []
             result = self.client.post("/api/v0/messages", json={"text": "Je suis rincé aujourd'hui"}).json()
         finally:

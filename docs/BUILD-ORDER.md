@@ -28,7 +28,42 @@ Si un autre doc diverge :
 
 **Un premier coach que Loïc reconnaît, comprend, et a envie de rouvrir demain.**
 
-## État actuel — 20 avril 2026
+## Checkpoint courant — 26 avril 2026
+
+Le tunnel DeepSeek / tools / `PlanPatch` a livre le socle attendu pour un agent de planning fiable :
+
+- DeepSeek est le provider principal configure, avec fallback Claude possible si le schema final casse
+- le chemin OpenAI-compatible DeepSeek pour structured output existe derriere `FITMAS_USE_DEEPSEEK_OPENAI_STRUCTURED`
+- le runtime tools accepte maintenant plusieurs `tool_use` dans un meme tour et renvoie un `tool_result` pour chaque id demande
+- `CoachDecision` est le nouveau contrat de decision, avec fallback legacy `MutationDecision`
+- `PlanPatch -> validate_plan_patch -> PlanMutationService.apply_patch_for_user` est branche cote conversation
+- les confirmations pending serialisent maintenant le `PlanPatch` complet, puis revalident/appliquent seulement apres `oui`
+
+Ce que ca change produit :
+
+- le coach peut enfin proposer une action structuree sans que le code lui mette une phrase deterministe dans la bouche
+- l'orchestrateur reste proprietaire du commit, des events et des confirmations
+- les regex restent des signaux de prompt, pas des classifieurs d'intention
+
+Suite prioritaire :
+
+1. Dogfood reel sur Telegram avec `golden_case_autonomy`, `piscine fermee`, continuations courtes (`oui`, `running`, `mercredi`) et contraintes simples type `demain soir`.
+2. Reclasser `propose_replan` en helper de candidates (`suggest_replan_candidates`) ou, au minimum, durcir sa description pour qu'il ne soit pas une autorite de decision.
+3. Formaliser la skill `replan_after_constraint` dans le prompt / routing : workflow borne, tools autorises, sortie `PlanPatch | no_change | requires_confirmation`.
+4. Durcir `validate_plan_patch` : atomicite batch, suggested fixes, charge/recup/sante plus fines.
+5. Nettoyer ensuite les chemins legacy seulement quand le dogfood confirme que le nouveau pipeline tient.
+
+Smoke reel 26 avril (`FITMAS_USE_DEEPSEEK_OPENAI_STRUCTURED=1 ./scripts/smoke-real-conversations --scenario golden_case_autonomy --scenario today_unavailability`) :
+
+- ✅ pas de crash API
+- ✅ DeepSeek tape bien l'API et demande plusieurs tools coherents
+- ✅ le dernier tour `Mercredi` produit un `CoachDecision(plan_patch)` puis un event reel : creation d'un footing easy mercredi 22 avril
+- ✅ pas de 400 tool-use
+- ⚠️ sorties non-JSON apres tools encore observees ; repair/fallback rattrape, mais la stabilite JSON reste a blinder
+- ⚠️ le milieu du golden case reste trop defensif/passif (`Oui`, `Running`) ; prochaine tranche = skill `replan_after_constraint` + reclassification `propose_replan`
+- ⚠️ classification memoire bruitée observee (`Running` -> health general running) ; a traiter comme signal de dogfood, pas comme blocker deploy
+
+## Historique du refactor — 20 avril 2026
 
 ### Diagnostic dogfood (19-20 avril)
 
@@ -149,8 +184,8 @@ Etat code au 24 avril :
 - `validate_plan_patch` existe en premier wrapper gradue autour des pre-hooks
 - `PlanMutationService.apply_patch_for_user` existe et commit seulement les patchs `valid`
 - `PlanMutationService` sait accepter une sequence, mais le pipeline conversation applique surtout une decision unique
-- le runtime LLM offre deja plusieurs tools par intent, mais n'execute encore qu'un seul tool par tour
-- DeepSeek V4 peut demander plusieurs tools dans la meme reponse et ignore `disable_parallel_tool_use` cote Anthropic-compatible ; le runtime satisfait les ids en erreur controlee, mais ne tire pas encore parti du multi-tool
+- le runtime LLM offre plusieurs tools par intent et execute maintenant un batch borne de tools demandes par le modele
+- DeepSeek V4 peut demander plusieurs tools dans la meme reponse et ignore `disable_parallel_tool_use` cote Anthropic-compatible ; le runtime execute les tools autorises sous budget et satisfait tous les ids en `tool_result`
 - les smokes reels DeepSeek du 24 avril montrent une API stable, mais un format final fragile apres tool-use :
   - `tests/test_integration_real.py` : 15 tests + 5 subtests passent
   - `smoke-real-conversations` : 22 tours reels, aucun crash, aucun 400 tool-use
@@ -237,7 +272,11 @@ Slicings deja livres :
 
 Reste explicitement ouvert :
 
+- dogfood reel avant nouvelle couche d'autonomie
+- reclasser `propose_replan` en candidate helper, pas decision helper
+- formaliser `replan_after_constraint` comme skill metier reusable
 - durcir `validate_plan_patch` avec batch atomicite / suggested fixes / health-load-recovery fin
+- enrichir les traces tools session-level (`requested/executed/blocked`, round trips, fallback provider)
 
 Le plan detaille vit dans `docs/COACH-AUTONOMY-REFACTOR.md`, section "Plan d'attaque recale — Agent fiable, tools atomiques, PlanPatch audite".
 
