@@ -201,6 +201,28 @@ class ConversationPromptBuilderTest(unittest.TestCase):
         self.assertIn("free_flexible", system_text)
         self.assertIn("la recuperation migre", system_text)
 
+    def test_system_prompt_explains_completion_status_semantics(self) -> None:
+        bundle = build_conversation_prompt_bundle(
+            user_text="Redonne moi le plan actuel",
+            prompt_policy=ConversationPromptPolicy(name="test", history_limit=0, include_plan_summary=False),
+            time_block="Nous sommes lundi 2026-04-27.",
+            plan_summary="",
+            timeline_summary="- id=36 | date=2026-04-27 | status=adapted | Renfo",
+            execution_summary="Execution: planned_pending.",
+            temporal_summary="Repere temporel: aujourd'hui = 2026-04-27.",
+            activity_claim_summary=None,
+            signal_summary="Signal: aucun.",
+            conversation_history=[],
+            coach_context=None,
+            selected_facts=[],
+        )
+
+        system_text = "\n".join(part["text"] for part in bundle.system)
+        self.assertIn("`adapted` = seance modifiee", system_text)
+        self.assertIn("ce n'est PAS une preuve d'execution", system_text)
+        self.assertIn("N'ecris jamais \"marque comme fait\"", system_text)
+        self.assertIn("activite reelle aujourd'hui", system_text)
+
 
 class CoachPostureTest(unittest.TestCase):
     """Chantier 3: posture rule must be in the conversation system prompt so

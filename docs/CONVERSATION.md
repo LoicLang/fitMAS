@@ -172,6 +172,15 @@ Comportements importants :
 - si un message combine un claim d'execution et une demande explicite de mutation (`swap`, `echange`, `decale`, `deplace`, `remplace`, `change`), le claim enrichit le contexte mais ne produit pas de reply finale et ne doit pas muter la seance avant arbitrage LLM
 - les contestations d'execution pures peuvent encore etre resolues par l'orchestrateur, mais les messages composes donnent la priorite a l'intention de mutation
 
+Semantique des statuts calendrier dans les prompts :
+- `planned` = prevu, pas encore fait
+- `adapted` = modifie/remplace/deplace par FitMAS, pas une preuve d'execution
+- `done` = fait, seulement avec activite reelle, claim utilisateur explicite ou commit d'execution
+- `skipped` = manque/annule
+- `rest` = repos planifie
+
+Le coach ne doit jamais transformer `adapted` en "tu as fait / marque comme fait". Pour dire qu'une seance est faite aujourd'hui, il faut une activite ou une preuve d'execution explicite.
+
 ---
 
 ## Modules de grounding
