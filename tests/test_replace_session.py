@@ -102,6 +102,28 @@ class TestApplyReplacementFields:
         )
         assert s.sport_type == "running"  # unchanged
 
+    def test_replacement_clears_stale_description_when_sport_changes_without_new_description(self):
+        s = FakeSession(
+            sport_type="swimming",
+            session_type="technique",
+            session_description="200m echauffement\n4x100m crawl",
+        )
+        _apply_replacement_fields(
+            s,
+            new_sport_type="strength/general",
+            new_session_type="training",
+            new_duration_min=34,
+            new_intensity="moderate",
+            new_description=None,
+            new_title="Renfo general",
+            new_goal="Socle musculaire",
+            rationale="Piscine fermee.",
+        )
+
+        assert s.sport_type == "strength/general"
+        assert s.session_type == "training"
+        assert s.session_description == ""
+
 
 class TestMutationDecisionFields:
     def test_replace_session_fields_exist(self):

@@ -26,6 +26,12 @@ class SessionTemplatesTest(unittest.TestCase):
         self.assertIn("retour", description.lower())
         self.assertIn("\n", description)
 
+    def test_select_template_normalizes_composite_sport_type(self) -> None:
+        template = select_session_template(sport_type="strength/general", session_type="training")
+
+        self.assertEqual(template.sport_type, "strength")
+        self.assertEqual(template.session_type, "general")
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -296,7 +296,7 @@ def list_session_templates() -> tuple[SessionTemplate, ...]:
 
 
 def select_session_template(*, sport_type: str, session_type: str) -> SessionTemplate:
-    sport_key = (sport_type or "running").strip().lower()
+    sport_key = (sport_type or "running").strip().lower().split("/", 1)[0]
     type_key = (session_type or "easy").strip().lower()
     fallback: SessionTemplate | None = None
     for template in _TEMPLATES:

@@ -40,6 +40,24 @@ def test_strength_content_falls_back_to_actionable_execution() -> None:
     assert any("pont fessier" in step.lower() or "wall slides" in step.lower() for step in content.execution)
 
 
+def test_strength_content_normalizes_composite_sport_and_ignores_stale_swim_description() -> None:
+    content = build_workout_content(
+        {
+            "sport_type": "strength/general",
+            "session_type": "training",
+            "session_goal": "Poser les fondations musculaires.",
+            "session_note": "Natation impossible, on remplace par renfo.",
+            "session_description": "200m echauffement nage libre\n4x100m crawl technique",
+            "duration_min": 34,
+        }
+    )
+
+    assert content.objective == "Poser les fondations musculaires."
+    assert content.rationale == "Natation impossible, on remplace par renfo."
+    assert len(content.execution) >= 3
+    assert not any("crawl" in step.lower() or "nage" in step.lower() for step in content.execution)
+
+
 def test_strength_content_uses_recent_signals_for_compressed_prescription() -> None:
     content = build_workout_content(
         {

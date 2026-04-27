@@ -431,6 +431,8 @@ def _apply_replacement_fields(
     new_goal: str | None,
     rationale: str | None,
 ) -> None:
+    sport_changed = bool(new_sport_type and new_sport_type != getattr(target, "sport_type", None))
+    type_changed = bool(new_session_type and new_session_type != getattr(target, "session_type", None))
     if new_sport_type is not None:
         target.sport_type = new_sport_type
     if new_session_type is not None:
@@ -442,6 +444,8 @@ def _apply_replacement_fields(
     if new_description is not None:
         desc_attr = "session_description" if hasattr(target, "session_description") else "session_description"
         setattr(target, desc_attr, new_description)
+    elif sport_changed or type_changed:
+        target.session_description = ""
     if new_title is not None:
         target.session_title = new_title
     if new_goal is not None:
