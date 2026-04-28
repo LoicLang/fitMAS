@@ -3,8 +3,9 @@ from __future__ import annotations
 import unittest
 from types import SimpleNamespace
 
-from fitmas.conversation_pipeline import _blocked_mutation_reply
-from fitmas.plan_mutation_service import PlanBlockedMutationEvent, PlanMutationServiceResult
+from fitmas.conversation_pipeline import _blocked_mutation_reply, _blocked_plan_patch_reply
+from fitmas.plan_mutation_service import PlanBlockedMutationEvent, PlanMutationServiceResult, PlanPatchServiceResult
+from fitmas.plan_patch import PlanPatchOperationValidation, PlanPatchValidation
 
 
 def _service_result_with(event: PlanBlockedMutationEvent) -> PlanMutationServiceResult:
@@ -94,6 +95,27 @@ class BlockedMutationReplyTest(unittest.TestCase):
         reply = _blocked_mutation_reply(decision, None)
 
         self.assertIn("creneau cible n'est pas assez sur", reply)
+
+    def test_plan_patch_block_uses_suggested_fix_before_internal_reason(self) -> None:
+        result = PlanPatchServiceResult(
+            validation=PlanPatchValidation(
+                status="blocked",
+                operation_results=(
+                    PlanPatchOperationValidation(
+                        operation_type="replace_session",
+                        status="blocked",
+                        target_session_id=999,
+                        block_reason="target_session_not_found",
+                        suggested_fix="Relire le planning actuel et cibler une session active.",
+                    ),
+                ),
+            )
+        )
+
+        reply = _blocked_plan_patch_reply(result)
+
+        self.assertIn("Relire le planning actuel", reply)
+        self.assertNotIn("target_session_not_found", reply)
 
 
 if __name__ == "__main__":

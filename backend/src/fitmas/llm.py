@@ -234,7 +234,16 @@ def _request_structured_json(
     path so existing tests can patch `_request_message`. With DeepSeek, use the
     gateway's structured-output path and provider fallback.
     """
-    if _use_deepseek_openai_structured_output() and os.getenv("DEEPSEEK_API_KEY"):
+    gateway_is_patched = gw.request_structured_json is not _DEFAULT_GATEWAY_STRUCTURED_JSON
+    local_json_path_is_patched = (
+        _request_json is not _DEFAULT_REQUEST_JSON
+        or _request_message is not _DEFAULT_REQUEST_MESSAGE
+    )
+    if (
+        _use_deepseek_openai_structured_output()
+        and os.getenv("DEEPSEEK_API_KEY")
+        and (gateway_is_patched or not local_json_path_is_patched)
+    ):
         result = gw.request_structured_json(
             system=system,
             messages=messages,
@@ -260,8 +269,16 @@ def _request_structured_json(
     return gw._robust_json_loads(raw or "") if raw else None
 
 
+_DEFAULT_REQUEST_MESSAGE = _request_message
+_DEFAULT_REQUEST_JSON = _request_json
+_DEFAULT_GATEWAY_STRUCTURED_JSON = gw.request_structured_json
+
+
 def _use_deepseek_openai_structured_output() -> bool:
-    return str(os.getenv("FITMAS_USE_DEEPSEEK_OPENAI_STRUCTURED") or "").strip().lower() in {"1", "true", "yes", "on"}
+    raw = os.getenv("FITMAS_USE_DEEPSEEK_OPENAI_STRUCTURED")
+    if raw is None:
+        return True
+    return str(raw).strip().lower() in {"1", "true", "yes", "on"}
 
 
 def decide(
@@ -409,6 +426,13 @@ def _validate_decision_payload(data: dict[str, Any] | None) -> dict[str, Any] | 
         _remember_invalid_decision(data)
         logger.warning("llm.decision_invalid reason=unknown_mutation_type mutation_type=%r", mutation_type)
         return None
+    if _looks_like_targetless_replace_create(data, mutation_type=mutation_type):
+        data["mutation_type"] = "create_session"
+        mutation_type = "create_session"
+    if not str(data.get("rationale") or "").strip() and mutation_type != "no_change":
+        message_rationale = str(data.get("fitmas_message") or "").strip()
+        if message_rationale:
+            data["rationale"] = message_rationale[:180]
     if not str(data.get("rationale") or "").strip():
         _remember_invalid_decision(data)
         logger.warning("llm.decision_invalid reason=missing_rationale mutation_type=%s", mutation_type)
@@ -474,7 +498,11 @@ def parse_coach_decision_payload(data: dict[str, Any] | None) -> CoachDecision |
         "confirmation_reason": _optional_str(data.get("confirmation_reason")),
     }
     if response_type == "mutation_decision":
-        mutation = _parse_nested_mutation_decision(data.get("mutation_decision"))
+        mutation = _parse_nested_mutation_decision(
+            data.get("mutation_decision"),
+            fallback_rationale=rationale,
+            fallback_fitmas_message=fitmas_message,
+        )
         if mutation is None:
             logger.warning("llm.coach_decision_invalid reason=invalid_mutation_decision")
             return None
@@ -491,10 +519,20 @@ def parse_coach_decision_payload(data: dict[str, Any] | None) -> CoachDecision |
     return CoachDecision(**payload)
 
 
-def _parse_nested_mutation_decision(raw: Any) -> MutationDecision | None:
+def _parse_nested_mutation_decision(
+    raw: Any,
+    *,
+    fallback_rationale: str | None = None,
+    fallback_fitmas_message: str | None = None,
+) -> MutationDecision | None:
     if not isinstance(raw, dict):
         return None
-    validated = _validate_decision_payload(raw)
+    payload = dict(raw)
+    if fallback_rationale and not str(payload.get("rationale") or "").strip():
+        payload["rationale"] = fallback_rationale
+    if fallback_fitmas_message and not str(payload.get("fitmas_message") or "").strip():
+        payload["fitmas_message"] = fallback_fitmas_message
+    validated = _validate_decision_payload(payload)
     if validated is None:
         return None
     try:
@@ -552,6 +590,14 @@ def _missing_create_session_fields(data: dict[str, Any]) -> bool:
     )
 
 
+def _looks_like_targetless_replace_create(data: dict[str, Any], *, mutation_type: str) -> bool:
+    return (
+        mutation_type == "replace_session"
+        and data.get("target_session_id") is None
+        and not _missing_create_session_fields(data)
+    )
+
+
 def _message_claims_plan_action_without_mutation(message: str) -> bool:
     normalized = _normalize_for_guard(message)
     return any(pattern in normalized for pattern in _NO_CHANGE_ACTION_CLAIM_PATTERNS)
@@ -570,7 +616,14 @@ def _looks_truncated_fitmas_message(message: str) -> bool:
 
 def _message_violates_coach_voice(message: str) -> bool:
     normalized = _normalize_for_guard(message)
-    return " vos " in f" {normalized} " or " votre " in f" {normalized} "
+    padded = f" {normalized} "
+    return (
+        " vos " in padded
+        or " votre " in padded
+        or padded.startswith(" le coach ")
+        or " le coach te " in padded
+        or " le coach vous " in padded
+    )
 
 
 def _normalize_for_guard(value: str) -> str:

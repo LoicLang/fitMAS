@@ -9,7 +9,14 @@ from sqlalchemy.orm import Session
 from fitmas import mutations, plan_actions, repository as repo, schema as s
 from fitmas.llm import MutationDecision
 from fitmas.mutation_hooks import run_pre_mutation_hooks
-from fitmas.plan_patch import PlanPatch, PlanPatchOperation, PlanPatchValidation, adapt_plan_patch_to_mutation_decisions, validate_plan_patch
+from fitmas.plan_patch import (
+    PlanPatch,
+    PlanPatchOperation,
+    PlanPatchOperationValidation,
+    PlanPatchValidation,
+    adapt_plan_patch_to_mutation_decisions,
+    validate_plan_patch,
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -248,6 +255,10 @@ def apply_patch_for_user(
     plan = repo.get_active_plan_optional(db, user.id)
     plan_id = int(getattr(plan, "id", 0) or 0)
     scheduled_sessions = repo.get_scheduled_sessions(db, user.id, limit=84)
+    if plan is None:
+        patch = _normalize_targetless_replace_to_create(patch)
+    if plan is None and any(operation.operation_type != "create_session" for operation in patch.operations):
+        return PlanPatchServiceResult(validation=_blocked_no_active_plan_validation(patch))
     validation = validate_plan_patch(
         db,
         plan_id=plan_id,
@@ -313,6 +324,49 @@ def apply_patch_for_user(
         blocked_events=tuple(blocked_events),
     )
     return PlanPatchServiceResult(validation=validation, mutation_result=mutation_result)
+
+
+def _normalize_targetless_replace_to_create(patch: PlanPatch) -> PlanPatch:
+    operations: list[PlanPatchOperation] = []
+    changed = False
+    for operation in patch.operations:
+        if (
+            operation.operation_type == "replace_session"
+            and operation.target_session_id is None
+            and operation.target_date
+            and operation.new_sport_type
+            and operation.new_title
+            and operation.new_duration_min
+        ):
+            operations.append(operation.model_copy(update={"operation_type": "create_session"}))
+            changed = True
+        else:
+            operations.append(operation)
+    if not changed:
+        return patch
+    return PlanPatch(
+        operations=operations,
+        coach_message=patch.coach_message,
+        confirmation_reason=patch.confirmation_reason,
+    )
+
+
+def _blocked_no_active_plan_validation(patch: PlanPatch) -> PlanPatchValidation:
+    operation_results = tuple(
+        PlanPatchOperationValidation(
+            operation_type=operation.operation_type,
+            status="valid" if operation.operation_type == "create_session" else "blocked",
+            target_session_id=operation.target_session_id,
+            block_reason=None if operation.operation_type == "create_session" else "no_active_plan",
+            suggested_fix=None if operation.operation_type == "create_session" else "Creer une nouvelle seance datee ou regenerer un plan actif avant de modifier une ancienne seance.",
+        )
+        for operation in patch.operations
+    )
+    return PlanPatchValidation(
+        status="blocked",
+        operation_results=operation_results,
+        summary="Patch bloque: aucun plan actif pour modifier une seance existante.",
+    )
 
 
 def _validation_allows_patch_commit(

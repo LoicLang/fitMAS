@@ -74,6 +74,134 @@ class LLMGatewayJsonTest(unittest.TestCase):
         self.assertIsNotNone(data)
         self.assertEqual(data["mutation_type"], "no_change")
 
+    def test_message_json_repairs_deepseek_key_value_reply(self) -> None:
+        response = _fake_text_response(
+            '_type=reply, rationale="Réponse sociale sans action.", '
+            'fitmas_message="Ça va, prêt à bosser."'
+        )
+
+        data = gw.message_json(response)
+
+        self.assertIsNotNone(data)
+        self.assertEqual(data["mutation_type"], "no_change")
+        self.assertEqual(data["response_type"], "reply")
+        self.assertEqual(data["fitmas_message"], "Ça va, prêt à bosser.")
+
+    def test_message_json_repairs_deepseek_multiline_equals_shape(self) -> None:
+        response = _fake_text_response(
+            '_type=no_change\n'
+            'rationale="Salutation sans demande d action."\n'
+            'fitmas_message="Ça va, prêt pour le fractionné."'
+        )
+
+        data = gw.message_json(response)
+
+        self.assertIsNotNone(data)
+        self.assertEqual(data["mutation_type"], "no_change")
+        self.assertEqual(data["fitmas_message"], "Ça va, prêt pour le fractionné.")
+
+    def test_message_json_normalizes_valid_coach_decision_json_for_legacy_callers(self) -> None:
+        response = _fake_text_response(
+            '{"response_type":"no_change","rationale":"ok","fitmas_message":"On garde."}'
+        )
+
+        data = gw.message_json(response)
+
+        self.assertIsNotNone(data)
+        self.assertEqual(data["response_type"], "no_change")
+        self.assertEqual(data["mutation_type"], "no_change")
+
+    def test_message_json_repairs_deepseek_plan_patch_yaml_shape_for_legacy_tests(self) -> None:
+        response = _fake_text_response(
+            "_type: plan_patch\n"
+            "rationale: Déplacement simple vers vendredi.\n"
+            "fitmas_message: Ok. Le fractionné est déplacé vendredi.\n"
+            "plan_patch:\n"
+            "  operations:\n"
+            "    - operation_type: move_session\n"
+            "      target_session_id: 42\n"
+            "      target_date: 2026-04-04\n"
+            "      rationale: fatigue\n"
+        )
+
+        data = gw.message_json(response)
+
+        self.assertIsNotNone(data)
+        self.assertEqual(data["response_type"], "plan_patch")
+        self.assertEqual(data["mutation_type"], "move_session")
+        self.assertEqual(data["target_session_id"], 42)
+        self.assertEqual(data["target_date"], "2026-04-04")
+
+    def test_message_json_repairs_deepseek_plan_patch_embedded_json(self) -> None:
+        response = _fake_text_response(
+            '_type: plan_patch\n'
+            'rationale: Déplacement simple vers vendredi.\n'
+            'fitmas_message: Ok, le fractionné passe à vendredi.\n'
+            'plan_patch: {\n'
+            '  "coach_message": "Ok, le fractionné passe à vendredi.",\n'
+            '  "operations": [\n'
+            '    {"operation_type": "move_session", "target_session_id": 42, "target_date": "2026-04-04", "rationale": "fatigue"}\n'
+            '  ]\n'
+            '}'
+        )
+
+        data = gw.message_json(response)
+
+        self.assertIsNotNone(data)
+        self.assertEqual(data["response_type"], "plan_patch")
+        self.assertEqual(data["mutation_type"], "move_session")
+        self.assertEqual(data["target_session_id"], 42)
+        self.assertEqual(data["plan_patch"]["operations"][0]["operation_type"], "move_session")
+
+    def test_message_json_repairs_deepseek_inline_type_with_plan_patch_tail(self) -> None:
+        response = _fake_text_response(
+            '_type: "plan_patch" plan_patch={'
+            '"coach_message":"Ok.",'
+            '"operations":[{"operation_type":"move_session","target_session_id":42,"target_date":"2026-04-04","rationale":"fatigue"}]'
+            '}'
+        )
+
+        data = gw.message_json(response)
+
+        self.assertIsNotNone(data)
+        self.assertEqual(data["response_type"], "plan_patch")
+        self.assertEqual(data["mutation_type"], "move_session")
+
+    def test_message_json_repairs_deepseek_equals_type_with_plan_patch_tail(self) -> None:
+        response = _fake_text_response(
+            '_type=plan_patch plan_patch={'
+            '"coach_message":"Ok.",'
+            '"operations":[{"operation_type":"move_session","target_session_id":42,"target_date":"2026-04-04","rationale":"fatigue"}]'
+            '}'
+        )
+
+        data = gw.message_json(response)
+
+        self.assertIsNotNone(data)
+        self.assertEqual(data["response_type"], "plan_patch")
+        self.assertEqual(data["mutation_type"], "move_session")
+
+    def test_message_json_flattens_deepseek_mutation_decision_wrapper(self) -> None:
+        response = _fake_text_response(
+            '_type=mutation_decision\n'
+            'rationale=Déplacement simple.\n'
+            'fitmas_message=OK, je bascule vendredi.\n'
+            'mutation_decision={'
+            '"mutation_type":"move_session",'
+            '"target_session_id":42,'
+            '"target_date":"2026-04-04",'
+            '"rationale":"Déplacement simple.",'
+            '"fitmas_message":"OK, je bascule vendredi."'
+            '}'
+        )
+
+        data = gw.message_json(response)
+
+        self.assertIsNotNone(data)
+        self.assertEqual(data["response_type"], "mutation_decision")
+        self.assertEqual(data["mutation_type"], "move_session")
+        self.assertEqual(data["target_session_id"], 42)
+
 
 class LLMGatewayProviderTest(unittest.TestCase):
     def test_client_prefers_deepseek_v4_when_deepseek_key_is_configured(self) -> None:

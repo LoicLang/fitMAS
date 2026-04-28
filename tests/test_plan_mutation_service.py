@@ -42,7 +42,10 @@ def test_apply_patch_for_user_commits_only_valid_patch(monkeypatch) -> None:
     )
 
     monkeypatch.setattr("fitmas.plan_mutation_service.repo.get_active_plan_optional", lambda db, user_id: SimpleNamespace(id=42))
-    monkeypatch.setattr("fitmas.plan_mutation_service.repo.get_scheduled_sessions", lambda *args, **kwargs: [])
+    monkeypatch.setattr(
+        "fitmas.plan_mutation_service.repo.get_scheduled_sessions",
+        lambda *args, **kwargs: [SimpleNamespace(id=22, intensity="easy", completion_status="planned")],
+    )
     monkeypatch.setattr("fitmas.plan_mutation_service.repo.get_scheduled_session", lambda *args, **kwargs: None)
     monkeypatch.setattr("fitmas.plan_mutation_service.repo.add_plan_mutation_event", lambda *args, **kwargs: None)
     monkeypatch.setattr(
@@ -93,6 +96,86 @@ def test_apply_patch_for_user_does_not_commit_patch_requiring_confirmation(monke
 
     assert result.validation.status == "requires_confirmation"
     assert result.mutation_result is None
+
+
+def test_apply_patch_for_user_blocks_existing_session_operations_without_active_plan(monkeypatch) -> None:
+    user = SimpleNamespace(id=7, timezone="Europe/Paris")
+    patch = PlanPatch(
+        operations=[
+            PlanPatchOperation(
+                operation_type="replace_session",
+                target_session_id=22,
+                new_sport_type="running",
+                new_session_type="easy",
+                new_title="Running relais",
+                new_duration_min=40,
+                new_intensity="easy",
+                rationale="Piscine fermee.",
+            )
+        ],
+        coach_message="Je remplace par un running facile.",
+    )
+
+    monkeypatch.setattr("fitmas.plan_mutation_service.repo.get_active_plan_optional", lambda db, user_id: None)
+    monkeypatch.setattr(
+        "fitmas.plan_mutation_service.repo.get_scheduled_sessions",
+        lambda *args, **kwargs: [SimpleNamespace(id=22, intensity="easy", completion_status="planned")],
+    )
+
+    def _apply(*args, **kwargs):
+        raise AssertionError("patch without active plan must not reach mutations.apply")
+
+    monkeypatch.setattr("fitmas.plan_mutation_service.mutations.apply", _apply)
+
+    result = apply_patch_for_user(object(), user=user, patch=patch)
+
+    assert result.validation.status == "blocked"
+    assert result.validation.operation_results[0].block_reason == "no_active_plan"
+    assert result.mutation_result is None
+
+
+def test_apply_patch_for_user_normalizes_targetless_replace_to_create_without_active_plan(monkeypatch) -> None:
+    user = SimpleNamespace(id=7, timezone="Europe/Paris")
+    patch = PlanPatch(
+        operations=[
+            PlanPatchOperation(
+                operation_type="replace_session",
+                target_session_id=None,
+                target_date="2099-04-29",
+                new_sport_type="running",
+                new_session_type="easy",
+                new_title="Running easy",
+                new_duration_min=35,
+                new_intensity="easy",
+                rationale="Piscine fermee.",
+            )
+        ],
+        coach_message="Je pose un running mercredi.",
+    )
+    created_session = SimpleNamespace(
+        id=89,
+        day="wednesday",
+        scheduled_date=date(2099, 4, 29),
+        sport_type="running",
+        session_type="easy",
+        session_title="Running easy",
+        duration_min=35,
+        completion_status="planned",
+    )
+    events: list[dict] = []
+
+    monkeypatch.setattr("fitmas.plan_mutation_service.repo.get_active_plan_optional", lambda db, user_id: None)
+    monkeypatch.setattr("fitmas.plan_mutation_service.repo.get_scheduled_sessions", lambda *args, **kwargs: [])
+    monkeypatch.setattr("fitmas.plan_mutation_service.plan_actions.create_session", lambda *args, **kwargs: created_session)
+    monkeypatch.setattr("fitmas.plan_mutation_service.repo.add_plan_mutation_event", lambda *args, **kwargs: events.append(kwargs) or SimpleNamespace(id=124))
+
+    result = apply_patch_for_user(object(), user=user, patch=patch)
+
+    assert result.validation.status == "valid"
+    assert result.mutation_result is not None
+    assert result.mutation_result.applied_count == 1
+    assert result.mutation_result.applied_events[0].command_type == "create_session"
+    assert events[0]["command_type"] == "create_session"
 
 
 def test_apply_patch_for_user_can_commit_confirmed_patch_requiring_confirmation(monkeypatch) -> None:

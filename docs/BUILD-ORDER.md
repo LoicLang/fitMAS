@@ -33,7 +33,7 @@ Si un autre doc diverge :
 Le tunnel DeepSeek / tools / `PlanPatch` a livre le socle attendu pour un agent de planning fiable :
 
 - DeepSeek est le provider principal configure, avec fallback Claude possible si le schema final casse
-- le chemin OpenAI-compatible DeepSeek pour structured output existe derriere `FITMAS_USE_DEEPSEEK_OPENAI_STRUCTURED`
+- le chemin OpenAI-compatible DeepSeek pour structured output est le defaut quand `DEEPSEEK_API_KEY` existe ; `FITMAS_USE_DEEPSEEK_OPENAI_STRUCTURED=0` permet de le desactiver temporairement
 - le runtime tools accepte maintenant plusieurs `tool_use` dans un meme tour et renvoie un `tool_result` pour chaque id demande
 - `CoachDecision` est le nouveau contrat de decision, avec fallback legacy `MutationDecision`
 - `PlanPatch -> validate_plan_patch -> PlanMutationService.apply_patch_for_user` est branche cote conversation
@@ -51,8 +51,8 @@ Ce que ca change produit :
 Suite prioritaire :
 
 1. Dogfood reel sur Telegram avec `golden_case_autonomy`, `piscine fermee`, continuations courtes (`oui`, `running`, `mercredi`) et contraintes simples type `demain soir`.
-2. Durcir `validate_plan_patch` : atomicite batch, suggested fixes, charge/recup/sante plus fines.
-3. Ajouter un smoke reel cible `replan_after_constraint` sur continuation courte et indisponibilite multi-jours.
+2. Durcir `validate_plan_patch` : atomicite batch, suggested fixes, charge/recup/sante plus fines. Slice en cours : `PlanPatchValidation` expose maintenant `summary` + `suggested_fix` par operation pour les blocages/fix les plus utiles ; `PlanMutationService` bloque les mutations de seance existante sans plan actif au lieu de produire un no-op opaque.
+3. Ajouter un smoke reel cible `replan_after_constraint` sur continuation courte et indisponibilite multi-jours. Slice DeepSeek/JSON du 28 avril : JSON mode OpenAI-compatible par defaut, repair syntaxique des sorties `_type...` pseudo-JSON, propagation de `rationale` quand elle est au mauvais niveau du payload, normalisation `replace_session` sans cible + champs de creation -> `create_session`, prompt renforcé sur reschedule explicite depuis fatigue et sur `Running` seul = preference sport, pas creation par defaut.
 4. Nettoyer ensuite les chemins legacy seulement quand le dogfood confirme que le nouveau pipeline tient.
 
 ### Phase B en reflexion — refonte planning / progression

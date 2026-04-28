@@ -1107,6 +1107,8 @@ def _blocked_plan_patch_reply(service_result: PlanPatchServiceResult | None) -> 
             return _BLOCK_REASON_REPLIES[first.block_reason]
         if first.warning_messages:
             return f"Je ne l'ai pas applique: {first.warning_messages[0]}"
+        if first.suggested_fix:
+            return f"Je ne l'ai pas applique: {first.suggested_fix}"
         if first.block_reason:
             return f"Je ne l'ai pas applique: {first.block_reason}"
     if validation.status == "requires_confirmation":

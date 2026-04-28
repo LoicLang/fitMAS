@@ -49,6 +49,17 @@ class LLMToolsTest(unittest.TestCase):
 
         self.assertIsNone(decision)
 
+    def test_parse_coach_decision_rejects_third_person_coach_voice(self) -> None:
+        decision = llm.parse_coach_decision_payload(
+            {
+                "response_type": "no_change",
+                "rationale": "voix indirecte invalide",
+                "fitmas_message": "Le coach te demande de choisir entre natation technique et natation CSS.",
+            }
+        )
+
+        self.assertIsNone(decision)
+
     def test_parse_coach_decision_accepts_legacy_mutation_decision(self) -> None:
         decision = llm.parse_coach_decision_payload(
             {
@@ -68,6 +79,62 @@ class LLMToolsTest(unittest.TestCase):
         self.assertEqual(decision.response_type, "mutation_decision")
         self.assertIsNotNone(decision.mutation_decision)
         self.assertEqual(decision.mutation_decision.mutation_type, "lighten_day")
+
+    def test_parse_coach_decision_reuses_top_level_rationale_for_nested_mutation(self) -> None:
+        decision = llm.parse_coach_decision_payload(
+            {
+                "response_type": "mutation_decision",
+                "rationale": "continuation courte, creation running mercredi",
+                "fitmas_message": "Je pose un footing easy mercredi.",
+                "mutation_decision": {
+                    "mutation_type": "create_session",
+                    "target_date": "2099-04-29",
+                    "new_sport_type": "running",
+                    "new_session_type": "easy",
+                    "new_title": "Footing easy",
+                    "new_duration_min": 30,
+                    "fitmas_message": "Je pose un footing easy mercredi.",
+                },
+            }
+        )
+
+        self.assertIsNotNone(decision)
+        self.assertIsNotNone(decision.mutation_decision)
+        self.assertEqual(decision.mutation_decision.rationale, "continuation courte, creation running mercredi")
+
+    def test_legacy_create_session_can_reuse_message_as_rationale(self) -> None:
+        decision = llm._parse_llm_decision_payload(
+            {
+                "mutation_type": "create_session",
+                "target_date": "2099-04-29",
+                "new_sport_type": "running",
+                "new_session_type": "easy",
+                "new_title": "Footing easy",
+                "new_duration_min": 30,
+                "fitmas_message": "Je pose un footing easy mercredi.",
+            }
+        )
+
+        self.assertIsNotNone(decision)
+        self.assertEqual(decision.rationale, "Je pose un footing easy mercredi.")
+
+    def test_legacy_targetless_replace_with_create_fields_becomes_create_session(self) -> None:
+        decision = llm._parse_llm_decision_payload(
+            {
+                "mutation_type": "replace_session",
+                "target_date": "2099-04-29",
+                "new_sport_type": "running",
+                "new_session_type": "easy",
+                "new_title": "Footing easy",
+                "new_duration_min": 30,
+                "rationale": "piscine fermee, course de remplacement",
+                "fitmas_message": "Je pose un footing easy mercredi.",
+            }
+        )
+
+        self.assertIsNotNone(decision)
+        self.assertEqual(decision.mutation_type, "create_session")
+        self.assertIsNone(decision.target_session_id)
 
     def test_decide_accepts_coach_decision_plan_patch_payload(self) -> None:
         original_client = llm._client
@@ -824,6 +891,41 @@ class LLMToolsTest(unittest.TestCase):
         self.assertIsNotNone(decision)
         self.assertNotIn("pas reçu", decision.fitmas_message)
         self.assertEqual(calls["structured"], 1)
+
+    def test_deepseek_structured_path_is_default_when_key_exists(self) -> None:
+        original_request_message = llm._request_message
+        structured_calls: list[dict[str, object]] = []
+
+        def fake_request_message(*args, **kwargs):
+            raise AssertionError("DeepSeek structured decisions should not use text JSON path")
+
+        def fake_gateway_structured_json(**kwargs):
+            structured_calls.append(kwargs)
+            return SimpleNamespace(
+                data={
+                    "mutation_type": "no_change",
+                    "rationale": "continuation courte traitee par JSON mode",
+                    "fitmas_message": "Je garde le cap.",
+                },
+                provider="deepseek_openai",
+                model="deepseek-v4-flash",
+                error=None,
+                provider_fallback_used=False,
+            )
+
+        llm._request_message = fake_request_message
+        with patch.object(llm.gw, "request_structured_json", side_effect=fake_gateway_structured_json):
+            with patch.dict("os.environ", {"DEEPSEEK_API_KEY": "sk-ds-test"}, clear=True):
+                try:
+                    data = llm._request_structured_json(
+                        system="system",
+                        messages=[{"role": "user", "content": "Oui"}],
+                    )
+                finally:
+                    llm._request_message = original_request_message
+
+        self.assertEqual(data["mutation_type"], "no_change")
+        self.assertEqual(len(structured_calls), 1)
 
     def test_decide_default_prompt_does_not_anchor_on_legacy_week_plan(self) -> None:
         original_client = llm._client

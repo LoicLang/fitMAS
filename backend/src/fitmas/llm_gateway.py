@@ -451,13 +451,20 @@ def _robust_json_loads(raw: str) -> dict | None:
     truncated tails, or leading noise don't drop valid JSON payloads.
     Returns the first candidate that parses to a dict, else None."""
     cleaned = _strip_json_fences(raw)
+    if cleaned.lstrip().startswith("_type"):
+        repaired = _repair_deepseek_pseudo_json(cleaned)
+        if repaired is not None:
+            return repaired
     for candidate in _json_parse_candidates(cleaned):
         try:
             loaded = json.loads(candidate)
         except Exception:
             continue
         if isinstance(loaded, dict):
-            return loaded
+            return _normalize_parsed_decision_payload(loaded)
+    repaired = _repair_deepseek_pseudo_json(cleaned)
+    if repaired is not None:
+        return repaired
     logger.warning("Failed to decode LLM JSON: %s", cleaned[:200])
     return None
 
@@ -562,6 +569,244 @@ def _repair_truncated_json(raw: str) -> str | None:
     if stack:
         repaired += "".join("}" if opener == "{" else "]" for opener in reversed(stack))
     return repaired.strip()
+
+
+def _repair_deepseek_pseudo_json(raw: str) -> dict | None:
+    """Repair DeepSeek's common `_type: value` pseudo-JSON into a dict.
+
+    This is syntax repair only. It copies explicit fields and normalizes
+    `_type` into the existing FitMAS response contract; it does not infer
+    intent from the user text.
+    """
+    text = raw.strip()
+    if "_type" not in text and "mutation_type" not in text:
+        return None
+    prefixed_type = _extract_prefixed_type(text)
+    if "=" in text and (":" not in text.splitlines()[0]):
+        data = _parse_inline_key_values(text)
+    else:
+        data = _parse_yamlish_key_values(text)
+    if prefixed_type:
+        data["_type"] = prefixed_type
+    embedded_plan_patch = _extract_embedded_plan_patch(text)
+    if embedded_plan_patch is not None:
+        data["plan_patch"] = embedded_plan_patch
+        if isinstance(embedded_plan_patch.get("operations"), list):
+            data["operations"] = embedded_plan_patch["operations"]
+    embedded_mutation_decision = _extract_embedded_mutation_decision(text)
+    if embedded_mutation_decision is not None:
+        data["mutation_decision"] = embedded_mutation_decision
+    if not data:
+        return None
+    return _normalize_repaired_decision_payload(data)
+
+
+def _parse_inline_key_values(text: str) -> dict[str, Any]:
+    data: dict[str, Any] = {}
+    chunks: list[str] = []
+    for line in text.splitlines():
+        chunks.extend(_split_top_level_commas(line))
+    for chunk in chunks:
+        if "=" not in chunk:
+            continue
+        key, value = chunk.split("=", 1)
+        key = key.strip()
+        if not key:
+            continue
+        data[key] = _coerce_pseudo_json_scalar(value)
+    return data
+
+
+def _extract_prefixed_type(text: str) -> str | None:
+    stripped = text.strip()
+    if not stripped.startswith("_type"):
+        return None
+    separator = "=" if stripped.startswith("_type=") else ":" if stripped.startswith("_type:") else None
+    if separator is None:
+        return None
+    remainder = stripped.split(separator, 1)[1].strip()
+    if not remainder:
+        return None
+    return _normalize_response_type_token(remainder.split(maxsplit=1)[0])
+
+
+def _split_top_level_commas(text: str) -> list[str]:
+    chunks: list[str] = []
+    buffer: list[str] = []
+    quote: str | None = None
+    escape = False
+    for char in text:
+        if escape:
+            buffer.append(char)
+            escape = False
+            continue
+        if char == "\\" and quote:
+            buffer.append(char)
+            escape = True
+            continue
+        if char in {"'", '"'}:
+            buffer.append(char)
+            quote = None if quote == char else char if quote is None else quote
+            continue
+        if char == "," and quote is None:
+            chunks.append("".join(buffer).strip())
+            buffer = []
+            continue
+        buffer.append(char)
+    if buffer:
+        chunks.append("".join(buffer).strip())
+    return chunks
+
+
+def _parse_yamlish_key_values(text: str) -> dict[str, Any]:
+    data: dict[str, Any] = {}
+    operations: list[dict[str, Any]] = []
+    current_operation: dict[str, Any] | None = None
+    for raw_line in text.splitlines():
+        line = raw_line.rstrip()
+        stripped = line.strip()
+        if not stripped or stripped in {"plan_patch:", "operations:"}:
+            continue
+        if stripped.startswith("- "):
+            current_operation = {}
+            operations.append(current_operation)
+            remainder = stripped[2:].strip()
+            if ":" in remainder:
+                key, value = remainder.split(":", 1)
+                current_operation[key.strip()] = _coerce_pseudo_json_scalar(value)
+            continue
+        if ":" not in stripped:
+            continue
+        key, value = stripped.split(":", 1)
+        key = key.strip()
+        if line.startswith(" ") and current_operation is not None:
+            current_operation[key] = _coerce_pseudo_json_scalar(value)
+        elif key not in {"plan_patch", "operations"}:
+            data[key] = _coerce_pseudo_json_scalar(value)
+    if operations:
+        data["operations"] = operations
+    return data
+
+
+def _extract_embedded_plan_patch(text: str) -> dict[str, Any] | None:
+    return _extract_embedded_object(text, field_name="plan_patch")
+
+
+def _extract_embedded_mutation_decision(text: str) -> dict[str, Any] | None:
+    return _extract_embedded_object(text, field_name="mutation_decision")
+
+
+def _extract_embedded_object(text: str, *, field_name: str) -> dict[str, Any] | None:
+    colon_marker = f"{field_name}:"
+    equals_marker = f"{field_name}="
+    marker_index = text.find(colon_marker)
+    marker_length = len(colon_marker)
+    if marker_index < 0:
+        marker_index = text.find(equals_marker)
+        marker_length = len(equals_marker)
+    if marker_index < 0:
+        return None
+    raw_json = text[marker_index + marker_length:].strip()
+    if not raw_json.startswith("{"):
+        return None
+    for candidate in _json_parse_candidates(raw_json):
+        try:
+            loaded = json.loads(candidate)
+        except Exception:
+            continue
+        if isinstance(loaded, dict):
+            return loaded
+    return None
+
+
+def _coerce_pseudo_json_scalar(value: Any) -> Any:
+    raw = str(value).strip()
+    if len(raw) >= 2 and raw[0] == raw[-1] and raw[0] in {"'", '"'}:
+        raw = raw[1:-1]
+    lowered = raw.lower()
+    if lowered in {"null", "none", "~"}:
+        return None
+    if lowered == "true":
+        return True
+    if lowered == "false":
+        return False
+    if raw.isdigit():
+        return int(raw)
+    return raw
+
+
+def _normalize_repaired_decision_payload(data: dict[str, Any]) -> dict | None:
+    payload = _normalize_parsed_decision_payload(data)
+    if payload is None:
+        return None
+    raw_type = str(payload.get("response_type") or payload.get("mutation_type") or "").strip()
+    if not payload.get("mutation_type") and not raw_type:
+        return None
+    return payload
+
+
+def _normalize_parsed_decision_payload(data: dict[str, Any]) -> dict:
+    payload = dict(data)
+    explicit_type = payload.pop("_type", None)
+    response_type = payload.get("response_type")
+    raw_type = _normalize_response_type_token(explicit_type if explicit_type is not None else response_type or payload.get("mutation_type") or "")
+    if not raw_type and "plan_patch" not in payload:
+        return payload
+    if raw_type and (explicit_type is not None or response_type is not None):
+        payload["response_type"] = raw_type
+    operations = payload.pop("operations", None)
+    existing_plan_patch = payload.get("plan_patch") if isinstance(payload.get("plan_patch"), dict) else None
+    if operations is None and existing_plan_patch is not None:
+        operations = existing_plan_patch.get("operations")
+    if raw_type in {"reply", "no_change", "requires_confirmation"}:
+        payload.setdefault("mutation_type", "no_change")
+    elif raw_type == "mutation_decision" and isinstance(payload.get("mutation_decision"), dict):
+        mutation = payload["mutation_decision"]
+        payload.setdefault("mutation_type", mutation.get("mutation_type"))
+        for key, value in mutation.items():
+            payload.setdefault(key, value)
+    elif raw_type == "plan_patch":
+        operation_list = [op for op in (operations or []) if isinstance(op, dict)]
+        if operation_list:
+            first_operation = operation_list[0]
+            payload.setdefault("mutation_type", first_operation.get("operation_type"))
+            for key, value in first_operation.items():
+                if key != "operation_type":
+                    payload.setdefault(key, value)
+            payload["plan_patch"] = {
+                "coach_message": str((existing_plan_patch or {}).get("coach_message") or payload.get("fitmas_message") or ""),
+                "operations": operation_list,
+            }
+        else:
+            payload.setdefault("mutation_type", "no_change")
+    elif raw_type:
+        payload.setdefault("mutation_type", raw_type)
+    if not payload.get("mutation_type"):
+        return None
+    payload.setdefault("rationale", "")
+    payload.setdefault("fitmas_message", "")
+    return payload
+
+
+def _normalize_response_type_token(raw: Any) -> str:
+    value = str(raw or "").strip().strip('"').strip("'")
+    known_types = (
+        "plan_patch",
+        "mutation_decision",
+        "requires_confirmation",
+        "no_change",
+        "reply",
+        "move_session",
+        "lighten_day",
+        "swap_sessions",
+        "update_session",
+        "replace_session",
+        "create_session",
+    )
+    for known_type in known_types:
+        if known_type in value:
+            return known_type
+    return value
 
 
 # ---------------------------------------------------------------------------

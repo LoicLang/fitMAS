@@ -139,6 +139,91 @@ def test_plan_patch_validation_blocks_impossible_operations() -> None:
     assert validation.status == "blocked"
     assert validation.operation_results[0].status == "blocked"
     assert validation.operation_results[0].block_reason == "same_sport_proximity"
+    assert validation.operation_results[0].suggested_fix == "Choisir une date a plus de 48h de l'autre running/tempo."
+    assert validation.summary == "Patch bloque: move_session same_sport_proximity."
+
+
+def test_plan_patch_validation_blocks_missing_target_session_before_commit() -> None:
+    patch = PlanPatch(
+        operations=[
+            PlanPatchOperation(
+                operation_type="replace_session",
+                target_session_id=999,
+                new_sport_type="running",
+                new_session_type="easy",
+                new_title="Footing easy",
+                new_duration_min=35,
+                new_intensity="easy",
+                rationale="Remplacer une ancienne natation.",
+            )
+        ],
+        coach_message="Je remplace.",
+    )
+    sessions = [
+        SimpleNamespace(
+            id=10,
+            scheduled_date=date(2026, 4, 22),
+            sport_type="running",
+            session_type="easy",
+            completion_status="planned",
+        )
+    ]
+
+    validation = validate_plan_patch(
+        object(),
+        plan_id=0,
+        patch=patch,
+        scheduled_sessions=sessions,
+        timezone_name="Europe/Paris",
+    )
+
+    assert validation.status == "blocked"
+    assert validation.operation_results[0].block_reason == "target_session_not_found"
+    assert validation.operation_results[0].suggested_fix == "Relire le planning actuel et cibler une session active."
+
+
+def test_plan_patch_validation_surfaces_protected_recovery_fix() -> None:
+    patch = PlanPatch(
+        operations=[
+            PlanPatchOperation(
+                operation_type="move_session",
+                target_session_id=10,
+                target_date="2026-04-15",
+                rationale="Deplacer le tempo sur le jour de repos.",
+            )
+        ],
+        coach_message="Je deplace.",
+    )
+    sessions = [
+        SimpleNamespace(
+            id=10,
+            scheduled_date=date(2026, 4, 13),
+            sport_type="running",
+            session_type="tempo",
+            completion_status="planned",
+        ),
+        SimpleNamespace(
+            id=11,
+            scheduled_date=date(2026, 4, 15),
+            sport_type="rest",
+            session_type="rest",
+            session_title="Repos protecteur",
+            flexibility="stable",
+            completion_status="planned",
+        ),
+    ]
+
+    validation = validate_plan_patch(
+        object(),
+        plan_id=0,
+        patch=patch,
+        scheduled_sessions=sessions,
+        timezone_name="Europe/Paris",
+    )
+
+    assert validation.status == "blocked"
+    assert validation.operation_results[0].block_reason == "protected_recovery_target"
+    assert validation.operation_results[0].suggested_fix == "Utiliser swap_sessions pour conserver la recuperation dans la semaine."
 
 
 def test_plan_patch_validation_accepts_low_risk_create_session() -> None:

@@ -265,6 +265,12 @@ class CoachPostureTest(unittest.TestCase):
         self.assertIn("utilise les tools activite disponibles", system_text)
         self.assertIn("option la plus conservative", system_text)
         self.assertIn("running easy/steady le mercredi", system_text)
+        self.assertIn("Repos\" n'est pas automatiquement protege", system_text)
+        self.assertIn("slot=protected_recovery", system_text)
+        self.assertIn("je suis claque, je bascule la seance d'aujourd'hui a demain", system_text)
+        self.assertIn("move_session si demain est slot=free_flexible", system_text)
+        self.assertIn("apres \"oui\" puis \"Running\" seul, sans jour connu", system_text)
+        self.assertIn("ne cree pas une seance lundi par defaut", system_text)
         self.assertIn("question ambiguë", system_text)
         self.assertIn("autre piscine ou pivot complet", system_text)
 

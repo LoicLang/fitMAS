@@ -52,12 +52,14 @@ class PlanPatchOperationValidation:
     block_reason: str | None = None
     warning_codes: tuple[str, ...] = ()
     warning_messages: tuple[str, ...] = ()
+    suggested_fix: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
 class PlanPatchValidation:
     status: PlanPatchValidationStatus
     operation_results: tuple[PlanPatchOperationValidation, ...]
+    summary: str = ""
 
 
 def adapt_plan_patch_to_mutation_decisions(patch: PlanPatch) -> list[MutationDecision]:
@@ -88,6 +90,10 @@ def validate_plan_patch(
                 )
             )
             continue
+        target_validation = _validate_existing_session_targets(operation, scheduled_sessions=scheduled_sessions)
+        if target_validation is not None:
+            operation_results.append(target_validation)
+            continue
         decision = _operation_to_mutation_decision(operation, fitmas_message=patch.coach_message)
         pre_result = run_pre_mutation_hooks(
             db,
@@ -106,11 +112,19 @@ def validate_plan_patch(
                 block_reason=pre_result.block_reason,
                 warning_codes=warning_codes,
                 warning_messages=warning_messages,
+                suggested_fix=_suggested_fix_for_operation(
+                    operation,
+                    block_reason=pre_result.block_reason,
+                    warning_codes=warning_codes,
+                    scheduled_sessions=scheduled_sessions,
+                ),
             )
         )
+    results = tuple(operation_results)
     return PlanPatchValidation(
-        status=_aggregate_status(tuple(result.status for result in operation_results)),
-        operation_results=tuple(operation_results),
+        status=_aggregate_status(tuple(result.status for result in results)),
+        operation_results=results,
+        summary=_build_validation_summary(results),
     )
 
 
@@ -126,6 +140,7 @@ def _validate_create_session_operation(
             operation_type=operation.operation_type,
             status="blocked",
             block_reason="missing_target_date",
+            suggested_fix="Renseigner target_date au format YYYY-MM-DD.",
         )
     local_today = get_local_now(timezone_name).date()
     if target_date < local_today:
@@ -133,35 +148,80 @@ def _validate_create_session_operation(
             operation_type=operation.operation_type,
             status="blocked",
             block_reason="past_target_date",
+            suggested_fix="Choisir une date future.",
         )
     if not str(operation.new_sport_type or "").strip():
         return PlanPatchOperationValidation(
             operation_type=operation.operation_type,
             status="blocked",
             block_reason="missing_sport_type",
+            suggested_fix="Renseigner new_sport_type.",
         )
     if not str(operation.new_title or "").strip():
         return PlanPatchOperationValidation(
             operation_type=operation.operation_type,
             status="blocked",
             block_reason="missing_title",
+            suggested_fix="Renseigner new_title.",
         )
     if operation.new_duration_min is None or int(operation.new_duration_min or 0) <= 0:
         return PlanPatchOperationValidation(
             operation_type=operation.operation_type,
             status="blocked",
             block_reason="missing_duration",
+            suggested_fix="Renseigner new_duration_min avec une duree positive.",
         )
     if _has_occupied_training_target(scheduled_sessions, target_date=target_date, timezone_name=timezone_name):
         return PlanPatchOperationValidation(
             operation_type=operation.operation_type,
             status="blocked",
             block_reason="occupied_training_target",
+            suggested_fix="Utiliser swap_sessions ou choisir un jour sans seance stable.",
         )
     return PlanPatchOperationValidation(
         operation_type=operation.operation_type,
         status="valid",
     )
+
+
+def _validate_existing_session_targets(
+    operation: PlanPatchOperation,
+    *,
+    scheduled_sessions: Sequence[Any],
+) -> PlanPatchOperationValidation | None:
+    if operation.target_session_id is None:
+        return PlanPatchOperationValidation(
+            operation_type=operation.operation_type,
+            status="blocked",
+            block_reason="missing_target_session_id",
+            suggested_fix="Relire le planning actuel et renseigner target_session_id.",
+        )
+    if _find_scheduled_session(scheduled_sessions, operation.target_session_id) is None:
+        return PlanPatchOperationValidation(
+            operation_type=operation.operation_type,
+            status="blocked",
+            target_session_id=operation.target_session_id,
+            block_reason="target_session_not_found",
+            suggested_fix="Relire le planning actuel et cibler une session active.",
+        )
+    if operation.operation_type == "swap_sessions":
+        if operation.second_session_id is None:
+            return PlanPatchOperationValidation(
+                operation_type=operation.operation_type,
+                status="blocked",
+                target_session_id=operation.target_session_id,
+                block_reason="missing_second_session_id",
+                suggested_fix="Relire le planning actuel et renseigner second_session_id.",
+            )
+        if _find_scheduled_session(scheduled_sessions, operation.second_session_id) is None:
+            return PlanPatchOperationValidation(
+                operation_type=operation.operation_type,
+                status="blocked",
+                target_session_id=operation.target_session_id,
+                block_reason="second_session_not_found",
+                suggested_fix="Relire le planning actuel et cibler deux sessions actives.",
+            )
+    return None
 
 
 def _operation_to_mutation_decision(operation: PlanPatchOperation, *, fitmas_message: str) -> MutationDecision:
@@ -228,6 +288,66 @@ def _value(obj: Any, key: str) -> Any:
     if isinstance(obj, dict):
         return obj.get(key)
     return getattr(obj, key, None)
+
+
+def _suggested_fix_for_operation(
+    operation: PlanPatchOperation,
+    *,
+    block_reason: str | None,
+    warning_codes: tuple[str, ...],
+    scheduled_sessions: Sequence[Any],
+) -> str | None:
+    codes = set(warning_codes)
+    if block_reason == "protected_recovery_target":
+        return "Utiliser swap_sessions pour conserver la recuperation dans la semaine."
+    if block_reason == "same_sport_proximity":
+        target = _find_scheduled_session(scheduled_sessions, operation.target_session_id)
+        sport_type = str(_value(target, "sport_type") or "meme sport").strip().lower()
+        session_type = str(_value(target, "session_type") or "meme type").strip().lower()
+        return f"Choisir une date a plus de 48h de l'autre {sport_type}/{session_type}."
+    if block_reason == "occupied_training_target":
+        return "Utiliser swap_sessions ou choisir un jour sans seance stable."
+    if block_reason in {
+        "missing_target_session_id",
+        "target_session_not_found",
+        "missing_second_session_id",
+        "second_session_not_found",
+    }:
+        return "Relire le planning actuel et cibler une session active."
+    if "hard_session_limit" in codes:
+        return "Transformer la seance en easy ou deplacer une autre seance intense."
+    if "hard_session_collision" in codes:
+        return "Choisir un jour sans autre seance intense."
+    if "move_to_past" in codes:
+        return "Choisir une date future."
+    return None
+
+
+def _find_scheduled_session(scheduled_sessions: Sequence[Any], session_id: int | None) -> Any | None:
+    if session_id is None:
+        return None
+    for session in scheduled_sessions:
+        if _value(session, "id") == session_id:
+            return session
+    return None
+
+
+def _build_validation_summary(results: tuple[PlanPatchOperationValidation, ...]) -> str:
+    if not results:
+        return "Patch vide."
+    blocked = next((result for result in results if result.status == "blocked"), None)
+    if blocked is not None:
+        reason = blocked.block_reason or ",".join(blocked.warning_codes) or "blocked"
+        return f"Patch bloque: {blocked.operation_type} {reason}."
+    confirmation = next((result for result in results if result.status == "requires_confirmation"), None)
+    if confirmation is not None:
+        reason = confirmation.block_reason or ",".join(confirmation.warning_codes) or "requires_confirmation"
+        return f"Patch a confirmer: {confirmation.operation_type} {reason}."
+    warning = next((result for result in results if result.status == "warning"), None)
+    if warning is not None:
+        reason = warning.block_reason or ",".join(warning.warning_codes) or "warning"
+        return f"Patch avec avertissement: {warning.operation_type} {reason}."
+    return "Patch valide."
 
 
 def _status_from_pre_result(*, allowed: bool, warning_codes: tuple[str, ...]) -> PlanPatchValidationStatus:

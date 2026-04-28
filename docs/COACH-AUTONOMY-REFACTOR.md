@@ -67,6 +67,7 @@ Regle centrale :
 Le socle technique du chantier est maintenant en place :
 
 - `DeepSeekOpenAI` structured-output est disponible derriere feature flag, avec JSON repair et fallback provider
+- Addendum 28 avril : `DeepSeekOpenAI` structured-output est active par defaut quand `DEEPSEEK_API_KEY` existe ; le flag `FITMAS_USE_DEEPSEEK_OPENAI_STRUCTURED=0` reste un kill switch temporaire
 - DeepSeek Anthropic-compatible reste le chemin stable pour les conversations outillees deja branchees
 - le runtime supporte les multi tool calls bornes : plusieurs tools peuvent etre demandes, executes ou bloques, et tous les ids recoivent un resultat
 - `CoachDecision` est parse en compat/shadow et accepte `reply`, `no_change`, `mutation_decision`, `plan_patch`, `requires_confirmation`
@@ -823,6 +824,8 @@ Slice livre :
 - `allowed=False` des pre-hooks -> `blocked`
 - warnings pre-hooks -> `requires_confirmation`
 - aucun commit quand le statut global n'est pas `valid`
+- slice 28 avril : sortie enrichie avec `summary` de batch et `suggested_fix` par operation pour `protected_recovery_target`, `same_sport_proximity`, `occupied_training_target`, cible de session absente/obsolete, hard-session warnings et create-session invalide ; les patchs modifiant une seance existante sont bloques proprement quand aucun plan actif ne permet le chemin legacy
+- slice DeepSeek/JSON 28 avril : les continuations courtes passent par JSON mode OpenAI-compatible par defaut ; le parser repare uniquement les erreurs de forme avant validation schema (`_type=...`, `_type: ...`, `plan_patch={...}`, `rationale` placee au mauvais niveau, `replace_session` sans cible mais avec champs complets de creation), sans classifier `oui` ni creer d'action deterministe. Le prompt precise aussi que `Running` seul est une preference sport et ne doit pas creer une seance lundi par defaut.
 
 Fichiers probables :
 
