@@ -28,7 +28,7 @@ Si un autre doc diverge :
 
 **Un premier coach que Loïc reconnaît, comprend, et a envie de rouvrir demain.**
 
-## Checkpoint courant — 26 avril 2026
+## Checkpoint courant — 28 avril 2026
 
 Le tunnel DeepSeek / tools / `PlanPatch` a livre le socle attendu pour un agent de planning fiable :
 
@@ -38,6 +38,9 @@ Le tunnel DeepSeek / tools / `PlanPatch` a livre le socle attendu pour un agent 
 - `CoachDecision` est le nouveau contrat de decision, avec fallback legacy `MutationDecision`
 - `PlanPatch -> validate_plan_patch -> PlanMutationService.apply_patch_for_user` est branche cote conversation
 - les confirmations pending serialisent maintenant le `PlanPatch` complet, puis revalident/appliquent seulement apres `oui`
+- le briefing matin a maintenant un catch-up borne jusqu'a 10h locale si le creneau jitter est rate et qu'aucun proactif n'a deja ete envoye
+- `suggest_replan_candidates` est le tool principal de candidate replan ; `propose_replan` reste alias compat, non route par defaut
+- le prompt formalise le workflow `replan_after_constraint` : tools atomiques -> candidate optionnelle -> `PlanPatch | no_change | requires_confirmation`
 
 Ce que ca change produit :
 
@@ -48,10 +51,52 @@ Ce que ca change produit :
 Suite prioritaire :
 
 1. Dogfood reel sur Telegram avec `golden_case_autonomy`, `piscine fermee`, continuations courtes (`oui`, `running`, `mercredi`) et contraintes simples type `demain soir`.
-2. Reclasser `propose_replan` en helper de candidates (`suggest_replan_candidates`) ou, au minimum, durcir sa description pour qu'il ne soit pas une autorite de decision.
-3. Formaliser la skill `replan_after_constraint` dans le prompt / routing : workflow borne, tools autorises, sortie `PlanPatch | no_change | requires_confirmation`.
-4. Durcir `validate_plan_patch` : atomicite batch, suggested fixes, charge/recup/sante plus fines.
-5. Nettoyer ensuite les chemins legacy seulement quand le dogfood confirme que le nouveau pipeline tient.
+2. Durcir `validate_plan_patch` : atomicite batch, suggested fixes, charge/recup/sante plus fines.
+3. Ajouter un smoke reel cible `replan_after_constraint` sur continuation courte et indisponibilite multi-jours.
+4. Nettoyer ensuite les chemins legacy seulement quand le dogfood confirme que le nouveau pipeline tient.
+
+### Phase B en reflexion — refonte planning / progression
+
+Discussion en cours (27 avril 2026) sur une refonte de la planification : passer de "planner hebdo deterministe + texte LLM" a "moteur de progression + LLM coach contextualisant". Pas encore de chantier ouvert. A garder en tete pendant la fin de Phase A pour ne pas creer de dette refactor evitable.
+
+Idee centrale (a confirmer par dogfood Phase A + design pose) :
+
+- separer `placement` (deja deterministe), `prescription` (blocs exacts, zones, cut rule) et `rendering` (LLM explique)
+- introduire un `ProgressionArc` par type de seance (ex: `running_intervals_400m`) qui memorise l'axe de progression (`current_reps`, `last_completion`, `next_target`) et applique une regle bornee
+- introduire une table `SessionExecution` (planned vs actual + completion ratio + subjective) que le ProgressionEngine consomme
+- LLM ne **decide** jamais le contenu des blocs ; il peut **proposer** une variante quand l'espace est riche (strength, climbing) sous validation deterministe
+- session_description en DB devient le **rendu** d'une prescription structuree, pas la verite
+
+Pourquoi c'est coherent avec Phase A :
+
+- `PlanPatch`, `validate_plan_patch`, `PlanMutationService`, `plan_mutation_events`, multi-tool runtime, tools read-only, posture coach, claim_guard, memoire contraintes : tout survit. Phase A construit le **commit pipeline**, Phase B construit le **content engine**. Axes orthogonaux.
+- Phase A est un prerequis : sans le commit pipeline durci, ajouter une couche progression sur un commit fragile ne tient pas.
+
+Discipline pour finir Phase A sans dette envers Phase B :
+
+- **`suggest_replan_candidates`** : interface = `(slot, sport_type, session_type, intensity_hint, reason)` seulement, **pas** de blocks/zones/duration figee. Le contenu se compose downstream (templates aujourd'hui, ProgressionArc demain).
+- **`replan_after_constraint` skill** : prescrire l'ordre des tools, **pas** de few-shots content-aware ("si jeudi nage tombe alors easy run") qui encodent du metier qui vivra dans les arcs.
+- **`validate_plan_patch` hardening** : charge / sante / recup / atomicite / suggested fixes oui ; regles intra-seance (`8x400 trop lourd`, `tempo trop long`) **non** — elles vivront dans le ProgressionEngine.
+- **`session_templates.py`** : freeze, pas d'ajout. Module sur la sellette pour Phase B.
+- **`propose_replan` actuel** : garder l'implementation derriere la nouvelle interface jusqu'a Phase B, pas de reecriture maintenant.
+- **Capture exécution dogfood** : verifier que ce qu'on logge (`ExecutionEvidence`, `RecentRealityWindow`) est un sur-ensemble de ce que `SessionExecution` exigera (planned vs actual prescription, completion_ratio, subjective). Si gap (ex: pas de subjective structure), noter pour Phase B sans bloquer Phase A.
+
+Regle d'or :
+
+> Si la decision depend du contenu intra-seance (reps, blocks, zones), c'est Phase B. Tout le reste est Phase A.
+
+Phase B ne s'ouvre qu'apres :
+
+- dogfood Phase A confirme que le pipeline coach autonomy tient
+- `suggest_replan_candidates`, `replan_after_constraint`, `validate_plan_patch` durci sont livres
+- design Phase B est ecrit dans un doc dedie (probable `docs/PROGRESSION.md` ou section dans `PLANNING.md`)
+
+Etat Phase A 28 avril :
+
+- ✅ `suggest_replan_candidates` livre comme surface canonique, `propose_replan` garde la compat
+- ✅ `replan_after_constraint` formalise dans le prompt comme workflow, pas comme write tool
+- ✅ heartbeat matin plus fiable pour dogfood grace au catch-up et aux logs de skip
+- ⏳ reste : validation patch plus riche + smoke reel dedie avant de basculer en dogfood semaine complete
 
 Smoke reel 26 avril (`FITMAS_USE_DEEPSEEK_OPENAI_STRUCTURED=1 ./scripts/smoke-real-conversations --scenario golden_case_autonomy --scenario today_unavailability`) :
 

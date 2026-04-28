@@ -68,6 +68,69 @@ def _within_daily_send_window(
     return target <= now <= (target + timedelta(minutes=grace_minutes))
 
 
+def _morning_briefing_window_status(
+    *,
+    now: datetime,
+    already_sent_today: bool,
+    base_hour: int = 7,
+    base_minute: int = 30,
+    spread_minutes: int = 30,
+    grace_minutes: int = 12,
+    catchup_until_hour: int = 10,
+) -> str:
+    """Return why the morning briefing should run or be skipped.
+
+    The normal target window stays narrow, but dogfood should not lose the
+    briefing completely if the interval scheduler misses the jittered window.
+    """
+    target = _daily_target_time(
+        now=now,
+        label="morning_briefing",
+        base_hour=base_hour,
+        base_minute=base_minute,
+        spread_minutes=spread_minutes,
+    )
+    window_end = target + timedelta(minutes=grace_minutes)
+    if target <= now <= window_end:
+        return "target_window"
+    if already_sent_today:
+        return "already_sent"
+    catchup_until = now.replace(hour=catchup_until_hour, minute=0, second=0, microsecond=0)
+    if window_end < now <= catchup_until:
+        return "catchup"
+    return "outside_window"
+
+
+def _has_proactive_message_today(timezone_name: str) -> bool:
+    from datetime import timezone as dt_timezone
+
+    from fitmas import repository as repo, schema as s
+    from fitmas.db import SessionLocal
+
+    timezone = pytz.timezone(timezone_name)
+    local_now = datetime.now(timezone)
+    local_midnight = local_now.replace(hour=0, minute=0, second=0, microsecond=0)
+    utc_midnight = local_midnight.astimezone(dt_timezone.utc).replace(tzinfo=None)
+    db = SessionLocal()
+    try:
+        user = repo.get_user_optional(db)
+        if user is None:
+            return False
+        return (
+            db.query(s.CoachMessage)
+            .filter(
+                s.CoachMessage.user_id == user.id,
+                s.CoachMessage.role == "agent",
+                s.CoachMessage.proactive.is_(True),
+                s.CoachMessage.created_at >= utc_midnight,
+            )
+            .count()
+            > 0
+        )
+    finally:
+        db.close()
+
+
 async def _send_serialized_draft(
     context: ContextTypes.DEFAULT_TYPE,
     *,
@@ -168,15 +231,15 @@ async def send_morning_briefing(context: ContextTypes.DEFAULT_TYPE) -> None:
 
     timezone = pytz.timezone(os.getenv("TZ", "Europe/Paris"))
     local_now = datetime.now(timezone)
-    if not _within_daily_send_window(
+    window_status = _morning_briefing_window_status(
         now=local_now,
-        label="morning_briefing",
-        base_hour=7,
-        base_minute=30,
-        spread_minutes=30,
-        grace_minutes=12,
-    ):
+        already_sent_today=_has_proactive_message_today(str(timezone)),
+    )
+    if window_status not in {"target_window", "catchup"}:
+        logger.info("Morning briefing scheduler skipped — %s", window_status)
         return
+    if window_status == "catchup":
+        logger.warning("Morning briefing catch-up window active; target window was missed")
 
     try:
         from fitmas.heartbeat import morning_briefing

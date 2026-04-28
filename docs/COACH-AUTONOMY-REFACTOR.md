@@ -82,10 +82,15 @@ Etat produit :
 Suite courte :
 
 1. Rejouer `golden_case_autonomy` et les captures Telegram en vraie conversation LLM-backed.
-2. Reclasser `propose_replan` en `suggest_replan_candidates` ou changer sa description/prompt pour en faire un helper de candidates, pas une autorite.
-3. Formaliser la skill `replan_after_constraint` comme workflow de prompt/routing : tools autorises, ordre conseille, sortie obligatoire `PlanPatch | no_change | requires_confirmation`.
-4. Durcir `validate_plan_patch` : atomicite batch, fixes proposes, charge/recup/sante.
-5. Nettoyer le legacy seulement apres validation dogfood.
+2. Durcir `validate_plan_patch` : atomicite batch, fixes proposes, charge/recup/sante.
+3. Ajouter un smoke reel dedie `replan_after_constraint`.
+4. Nettoyer le legacy seulement apres validation dogfood.
+
+Addendum 28 avril :
+
+- `suggest_replan_candidates` remplace `propose_replan` dans le routing canonique ; `propose_replan` reste alias compat
+- `replan_after_constraint` est formalise dans le prompt : tools atomiques utiles, candidate optionnelle, sortie obligatoire `PlanPatch | no_change | requires_confirmation`
+- le briefing matin a un catch-up jusqu'a 10h locale pour eviter de perdre un dogfood si le scheduler rate la fenetre jitteree
 
 Dernier smoke reel 26 avril :
 

@@ -252,7 +252,11 @@ class CoachPostureTest(unittest.TestCase):
         # The posture must explicitly reject the menu-of-options pattern.
         self.assertIn("Tu ne renvoies pas la balle", system_text)
         self.assertIn("Imprevu", system_text)
-        self.assertIn("utilise `propose_replan`", system_text)
+        self.assertIn("utilise `suggest_replan_candidates`", system_text)
+        self.assertIn("candidate", system_text)
+        self.assertIn("Workflow replan_after_constraint", system_text)
+        self.assertIn("PlanPatch | no_change | requires_confirmation", system_text)
+        self.assertIn("La candidate n'est pas une decision", system_text)
         self.assertIn("ne repropose pas un menu running/renfo", system_text)
         self.assertIn("autorisation d'ajuster", system_text)
         self.assertIn("\"demain soir\"", system_text)

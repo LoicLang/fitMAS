@@ -70,6 +70,7 @@ class ToolRuntimeTest(unittest.TestCase):
         names = {tool["name"] for tool in list_tools_for_pipeline("conversation")}
 
         self.assertIn("get_today_context", names)
+        self.assertIn("suggest_replan_candidates", names)
         self.assertIn("propose_replan", names)
         self.assertIn("resolve_planning_window", names)
         self.assertIn("get_recent_activities", names)
@@ -283,7 +284,7 @@ class ToolRuntimeTest(unittest.TestCase):
         keys = {item["key"] for item in result.payload["constraints"]}
         self.assertEqual(keys, {"b"})
 
-    def test_propose_replan_returns_valid_replacement_for_active_swim_constraint(self) -> None:
+    def test_suggest_replan_candidates_returns_valid_replacement_for_active_swim_constraint(self) -> None:
         context = ToolContext(
             pipeline="conversation",
             user_id=1,
@@ -336,7 +337,7 @@ class ToolRuntimeTest(unittest.TestCase):
         )
 
         registry = build_tool_registry()
-        result = registry["propose_replan"].handler(context, {})
+        result = registry["suggest_replan_candidates"].handler(context, {})
 
         self.assertEqual(result.status, "ok")
         self.assertEqual(result.payload["constraint"]["sport_type"], "swimming")
@@ -345,6 +346,13 @@ class ToolRuntimeTest(unittest.TestCase):
         self.assertTrue(result.payload["validation"]["is_valid"])
         self.assertTrue(result.payload["scope"]["covers_all_impacted_sessions"])
         self.assertEqual(result.payload["scope"]["covered_session_ids"], [22])
+
+    def test_propose_replan_alias_remains_for_compatibility(self) -> None:
+        registry = build_tool_registry()
+
+        self.assertIn("propose_replan", registry)
+        self.assertIn("compat", registry["propose_replan"].description.lower())
+        self.assertIn("suggest_replan_candidates", registry["propose_replan"].description)
 
 
 if __name__ == "__main__":

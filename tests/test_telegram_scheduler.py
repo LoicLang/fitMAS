@@ -5,7 +5,11 @@ from datetime import datetime, timedelta
 
 import pytz
 
-from fitmas.telegram_scheduler import _daily_target_time, _within_daily_send_window
+from fitmas.telegram_scheduler import (
+    _daily_target_time,
+    _morning_briefing_window_status,
+    _within_daily_send_window,
+)
 
 
 class TelegramSchedulerTest(unittest.TestCase):
@@ -62,6 +66,49 @@ class TelegramSchedulerTest(unittest.TestCase):
                 base_hour=7,
                 base_minute=30,
             )
+        )
+
+    def test_morning_briefing_catches_up_when_window_was_missed(self) -> None:
+        timezone = pytz.timezone("Europe/Paris")
+        anchor = timezone.localize(datetime(2026, 4, 28, 7, 5))
+        target = _daily_target_time(
+            now=anchor,
+            label="morning_briefing",
+            base_hour=7,
+            base_minute=30,
+        )
+
+        self.assertEqual(
+            _morning_briefing_window_status(
+                now=target + timedelta(minutes=30),
+                already_sent_today=False,
+            ),
+            "catchup",
+        )
+
+    def test_morning_briefing_does_not_catch_up_after_sent_or_after_cutoff(self) -> None:
+        timezone = pytz.timezone("Europe/Paris")
+        anchor = timezone.localize(datetime(2026, 4, 28, 7, 5))
+        target = _daily_target_time(
+            now=anchor,
+            label="morning_briefing",
+            base_hour=7,
+            base_minute=30,
+        )
+
+        self.assertEqual(
+            _morning_briefing_window_status(
+                now=target + timedelta(minutes=30),
+                already_sent_today=True,
+            ),
+            "already_sent",
+        )
+        self.assertEqual(
+            _morning_briefing_window_status(
+                now=timezone.localize(datetime(2026, 4, 28, 10, 1)),
+                already_sent_today=False,
+            ),
+            "outside_window",
         )
         self.assertFalse(
             _within_daily_send_window(

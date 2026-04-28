@@ -92,7 +92,7 @@ _TURN_INTENT_TOOL_BUDGETS = {
         "get_plan_window",
         "get_load_context",
         "get_user_constraints",
-        "propose_replan",
+        "suggest_replan_candidates",
         "get_relevant_facts",
     ),
     IntentCategory.PLAN_LOOKUP: (

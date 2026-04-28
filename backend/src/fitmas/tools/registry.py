@@ -145,8 +145,24 @@ def build_tool_registry() -> dict[str, ToolSpec]:
             handler=_get_user_constraints,
         ),
         ToolSpec(
+            name="suggest_replan_candidates",
+            description="Suggere des candidates de replan pour une contrainte temporelle ou sportive active, sans ecrire en base. Ce tool n'est pas une autorite de decision: le coach doit transformer la candidate utile en PlanPatch puis laisser le backend valider/commit.",
+            input_schema={
+                "type": "object",
+                "properties": {
+                    "start_date": {"type": "string", "description": "Date debut ISO YYYY-MM-DD si l'user vient d'annoncer la contrainte."},
+                    "end_date": {"type": "string", "description": "Date fin ISO YYYY-MM-DD si connue."},
+                    "sport_type": {"type": "string", "description": "Sport bloque si connu, ex: swimming."},
+                    "preferred_replacement_sport": {"type": "string", "description": "Sport de remplacement prefere si le user l'a deja dit."},
+                },
+                "required": [],
+            },
+            allowed_pipelines=("conversation", "planning"),
+            handler=_suggest_replan_candidates,
+        ),
+        ToolSpec(
             name="propose_replan",
-            description="Propose une mutation de replan validee pour une contrainte temporelle ou sportive active, sans ecrire en base. Utilisable aussi pour une fenetre simple inferable comme demain soir si tu passes start_date/end_date.",
+            description="Compat legacy: utilise suggest_replan_candidates. Retourne une candidate de replan read-only, pas une decision finale.",
             input_schema={
                 "type": "object",
                 "properties": {
@@ -338,7 +354,24 @@ def _get_activity_highlights(context: ToolContext, arguments: dict[str, Any]) ->
     )
 
 
+def _suggest_replan_candidates(context: ToolContext, arguments: dict[str, Any]) -> ToolResult:
+    return _build_replan_candidate_result(
+        context,
+        arguments,
+        tool_name="suggest_replan_candidates",
+    )
+
+
 def _propose_replan(context: ToolContext, arguments: dict[str, Any]) -> ToolResult:
+    return _build_replan_candidate_result(context, arguments, tool_name="propose_replan")
+
+
+def _build_replan_candidate_result(
+    context: ToolContext,
+    arguments: dict[str, Any],
+    *,
+    tool_name: str,
+) -> ToolResult:
     proposal = build_replan_proposal(
         scheduled_sessions=context.scheduled_sessions,
         active_facts=context.active_facts,
@@ -351,10 +384,10 @@ def _propose_replan(context: ToolContext, arguments: dict[str, Any]) -> ToolResu
     )
     if proposal is None:
         return ToolResult(
-            tool_name="propose_replan",
+            tool_name=tool_name,
             status="ok",
             payload={},
-            summary="Aucune contrainte exploitable pour proposer un replan.",
+            summary="Aucune contrainte exploitable pour suggerer une candidate de replan.",
         )
 
     mutation = proposal.get("recommended_mutation")
@@ -363,7 +396,7 @@ def _propose_replan(context: ToolContext, arguments: dict[str, Any]) -> ToolResu
     impacted_sessions = proposal.get("impacted_sessions") or []
     if not mutation:
         return ToolResult(
-            tool_name="propose_replan",
+            tool_name=tool_name,
             status="ok",
             payload=proposal,
             summary="Contrainte comprise, mais aucune mutation candidate propre n'a ete trouvee.",
@@ -384,10 +417,10 @@ def _propose_replan(context: ToolContext, arguments: dict[str, Any]) -> ToolResu
         remaining = ", ".join(str(item) for item in (scope.get("remaining_session_ids") or []))
         scope_suffix = f" Cette recommandation ne couvre que la seance cible; autres seances encore ouvertes: {remaining or 'oui'}."
     return ToolResult(
-        tool_name="propose_replan",
+        tool_name=tool_name,
         status="ok",
         payload=proposal,
-        summary=f"Replan {validity}: remplacer {target_title} par {replacement_title}.{scope_suffix}",
+        summary=f"Candidate replan {validity}: remplacer {target_title} par {replacement_title}.{scope_suffix}",
     )
 
 

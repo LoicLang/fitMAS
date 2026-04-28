@@ -392,7 +392,7 @@ Addendum 26 avril :
 
 14. ✅ `CoachDecision(plan_patch)` branche dans la conversation via orchestrateur
 15. ✅ confirmation pending avec `PlanPatch` complet serialise, revalidation puis apply apres `oui`
-16. ⏳ prochaine etape : skill `replan_after_constraint` formelle + reclassification de `propose_replan`
+16. ✅ skill `replan_after_constraint` formalisee dans le prompt + reclassification de `propose_replan`
 
 ## Direction pour la prochaine tranche
 
@@ -462,8 +462,9 @@ Une skill est un workflow outille et borne, pas un nouveau cerveau deterministe.
 
 Etat actuel :
 - aucune skill runtime formelle n'est encore branchee comme objet separe
-- la doctrine existe dans les docs et une partie du prompt
-- le prochain slice doit la rendre explicite dans le prompt/routing, sans creer de write tool
+- la doctrine existe dans les docs et dans le prompt conversationnel
+- `suggest_replan_candidates` est le tool canonique route pour les candidates ; `propose_replan` reste alias compat
+- le workflow est explicite dans le prompt/routing, sans write tool
 
 `replan_after_constraint`
 

@@ -21,6 +21,13 @@ class ToolRoutingTest(unittest.TestCase):
             ("get_today_context", "get_plan_window", "get_user_constraints"),
         )
 
+    def test_routes_plan_negotiation_to_candidate_replan_helper(self) -> None:
+        decision = route_tools_for_query("Je ne peux pas nager pendant deux semaines", pipeline="conversation")
+
+        self.assertEqual(decision.intent, IntentCategory.PLAN_NEGOTIATION)
+        self.assertIn("suggest_replan_candidates", decision.tool_names)
+        self.assertNotIn("propose_replan", decision.tool_names)
+
     def test_routes_plan_dispute_queries_to_plan_tools(self) -> None:
         decision = route_tools_for_query("C'est pas ce qui est sur mon planning dans l'app", pipeline="conversation")
 
