@@ -31,6 +31,67 @@ Use chat history for recent context.
 Use the repository for durable knowledge.
 
 
+# FitMAS Essential Memory
+
+Current durable direction:
+
+- We are finishing **Phase A: reliable planning agent for real dogfood**.
+- Do **not** open Phase B progression/prescription work unless Loic explicitly asks.
+- Phase B long term = structured progression engine, prescription as source of truth, rendering after. It is documented but not the active build lane.
+- Current Phase A next steps live in `docs/BUILD-ORDER.md`.
+
+Core coach doctrine:
+
+- LLM-first for fuzzy user intent.
+- Determinism owns truth, validation, permissions, commit, audit.
+- Determinism is a safety rail / last resort, not the coach brain.
+- Regex and keywords are signal highlighters, never intent classifiers for fuzzy language.
+- No helper should produce a final conversational reply unless it is outage, pending confirmation, or a summary of a real committed event.
+
+Current action architecture:
+
+- `CoachDecision` is the preferred decision contract.
+- `PlanPatch` is the preferred planning action language.
+- `PlanMutationService` is the writer for visible planning mutations.
+- `validate_plan_patch` must run before commit.
+- `requires_confirmation` stores the full `PlanPatch`, then revalidates before applying after explicit confirmation.
+- Never expose a free write DB tool to the LLM.
+
+Runtime tools / skill direction:
+
+- Keep tools atomic and bounded.
+- Multi-tool calls are expected; DeepSeek may request several tools in one turn.
+- Every requested tool id must receive a result or explicit block.
+- `suggest_replan_candidates` is the canonical candidate helper.
+- `propose_replan` is legacy compat only.
+- `replan_after_constraint` is a workflow in prompt/routing: read atomic tools -> optional candidate -> `PlanPatch | no_change | requires_confirmation`.
+
+Provider reality:
+
+- DeepSeek is the main provider path for cost/dogfood.
+- Claude/Anthropic remains fallback where schema stability needs it.
+- DeepSeek may still output prose after tool-use; JSON repair/fallback is expected, but never accept an invalid final decision silently.
+
+Dogfood focus:
+
+- Priority is a coach Loic can test all week on Telegram.
+- Test real paths, not only unit tests:
+  - "redonne le plan actuel"
+  - "echange mardi et mercredi"
+  - "je ne peux pas nager 2 semaines"
+  - "j'ai fait X aujourd'hui"
+  - short continuations: "oui", "running", "mercredi"
+- Morning heartbeat has catch-up until 10h local if the jitter window was missed and no proactive message was sent.
+
+High-risk regressions to avoid:
+
+- Claiming a mutation happened without a committed `plan_mutation_event`.
+- Treating `adapted` as proof that a session was done.
+- Letting stale `session_description` drive the visible workout after sport/type replacement.
+- Asking menus when tools are enough to decide.
+- Reintroducing deterministic canned replies for availability, fatigue, pain, or short continuation turns.
+
+
 # Workflow
 
 Before coding:
