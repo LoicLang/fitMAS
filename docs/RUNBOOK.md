@@ -42,8 +42,8 @@ Minimum local utile :
 `ANTHROPIC_API_KEY` reste accepte comme fallback temporaire si `DEEPSEEK_API_KEY` est absent.
 
 Provider LLM / stabilisation :
-- `FITMAS_USE_DEEPSEEK_OPENAI_STRUCTURED=1` active le chemin DeepSeek OpenAI-compatible pour les sorties structurees de conversation
-- par defaut, garder `0` hors smoke/stabilisation tant que la matrice conversationnelle n'est pas stable
+- le chemin DeepSeek OpenAI-compatible pour les sorties structurees de conversation est actif par defaut quand `DEEPSEEK_API_KEY` existe
+- `FITMAS_USE_DEEPSEEK_OPENAI_STRUCTURED=0` sert de kill switch temporaire si le dogfood revele une regression provider
 - si ce flag est actif, garder `ANTHROPIC_API_KEY` disponible pour le fallback schema Claude
 
 Pour Strava :
