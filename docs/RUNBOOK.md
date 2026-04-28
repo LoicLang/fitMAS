@@ -142,7 +142,7 @@ Smoke conversations reelles :
 Usage :
 - utilise une DB temporaire dediee au smoke
 - charge `.env` si besoin
-- joue une batterie de scenarios conversationnels avec vraie API Anthropic
+- joue une batterie de scenarios conversationnels avec vraie API LLM
 - utile si on touche `api_messages.py`, `heartbeat.py`, `llm.py`, `user_indication_llm.py`, `adaptation.py`
 
 Smoke DeepSeek OpenAI-compatible structured output :
@@ -157,8 +157,37 @@ Smoke conversation avec le flag structured output :
 set -a; source .env; set +a
 FITMAS_USE_DEEPSEEK_OPENAI_STRUCTURED=1 \
 ANTHROPIC_API_KEY="${ANTHROPIC_API_KEY:-$DEEPSEEK_API_KEY}" \
-./scripts/smoke-real-conversations --scenario info_query --scenario today_unavailability
+./scripts/smoke-real-conversations --scenario golden_case_autonomy --scenario today_unavailability
 ```
+
+Smoke Phase A avant dogfood reel :
+
+```bash
+set -a; source .env; set +a
+FITMAS_USE_DEEPSEEK_OPENAI_STRUCTURED=1 \
+ANTHROPIC_API_KEY="${ANTHROPIC_API_KEY:-$DEEPSEEK_API_KEY}" \
+./scripts/smoke-real-conversations --scenario golden_case_autonomy --scenario today_unavailability
+```
+
+Checks attendus :
+- pas de crash API
+- pas de 400 tool-use
+- les continuations courtes (`Oui`, `Running`, `Mercredi`) appellent bien le LLM et peuvent produire mutation/event reel
+- les tool traces peuvent montrer un fallback JSON apres tool-use ; c'est connu, mais ne doit pas devenir une action silencieuse fausse
+
+Debug briefing matin prod :
+
+```bash
+fly logs -a fitmas --no-tail | rg "morning_briefing|Morning briefing|sendMessage|Cooldown|Daily proactive"
+fly ssh console -a fitmas -C "/bin/sh -lc 'python - <<\"PY\"
+from fitmas.heartbeat import morning_briefing
+draft = morning_briefing()
+print(bool(draft))
+print(draft.text[:500] if draft else \"no draft\")
+PY'"
+```
+
+Depuis le 28 avril, le scheduler a un catch-up jusqu'a 10h locale si le creneau jitter du briefing matin a ete rate et qu'aucun proactif n'a deja ete envoye.
 
 Smoke ton sur profil reel :
 

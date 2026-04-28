@@ -21,7 +21,7 @@ Le sujet est de lui donner une verite structuree et parcimonieuse.
 ## Priorite relative
 
 Le gros du grounding conversationnel est pose.
-La priorite repo-wide a bouge vers substrate partage et weekly reality digest.
+La priorite repo-wide est maintenant la fin de Phase A : coach fiable pour dogfood reel avant toute Phase B progression.
 Voir `BUILD-ORDER.md`.
 
 ---
@@ -164,6 +164,11 @@ Depuis le 26 avril 2026, `decide()` accepte deux formats en compat :
 
 Quand `CoachDecision.response_type=plan_patch`, le pipeline ne fait confiance ni au brouillon `fitmas_message` ni au patch tel quel : il revalide avec `validate_plan_patch`, applique via `PlanMutationService.apply_patch_for_user` seulement si le statut est `valid`, puis répond depuis les `plan_mutation_events` appliqués. Un patch `requires_confirmation` est stocké comme pending confirmation complet et ne peut être appliqué qu'après `oui` explicite ; il est alors revalidé puis commit avec `allow_requires_confirmation=True`. Un patch `blocked` reste refusé avant write.
 
+Depuis le 28 avril 2026 :
+- `suggest_replan_candidates` est la surface canonique quand le coach a besoin d'une candidate de replan ; `propose_replan` reste alias compat
+- `replan_after_constraint` est un workflow de prompt, pas un write tool : tools atomiques utiles → candidate optionnelle → sortie `PlanPatch | no_change | requires_confirmation`
+- la candidate ne decide jamais a la place du coach, et le coach ne commit jamais directement
+
 Comportements importants :
 - `voyage`, `deplacement` = `availability_constraint`
 - `demain soir` sans seance cible ne doit jamais inventer une mutation sur un autre jour
@@ -227,7 +232,7 @@ Non :
 
 1. ~~**Digest hebdo**~~ — pose le 19 avril (`coach_reading_digest.py`, 12b4bf8) : faits offplan-aware + lens pre-pass, injecte briefing + `decide()` sur intents lookup/report/availability. A observer : qualite du lens Haiku sur semaine longue (les 3 champs coherents avec les faits ?).
 2. **Referents** — a dogfooder : est-ce que `30 min`, `celle de demain`, `la piscine` restent ambigus ?
-3. **Tools** — prochaine tranche : `get_coach_state`, `validate_plan_patch`, `suggest_replan_candidates`. Le commit reste orchestre par `PlanMutationService`, pas par un write tool libre.
+3. **Tools** — `suggest_replan_candidates` est branche comme candidate helper. Prochaines surfaces utiles : `validate_plan_patch` comme validation-only visible au LLM et, plus tard, `get_coach_state` comme macro read-only optionnelle.
 4. **Claims temporels** — observer si d'autres claims meritent la meme approche que les claims d'activite
 5. **Chemins compat** — `WeeklyPlan`/`DayPlan` ne doivent plus etre lus comme verite runtime
 6. **Turn planner fragile quand LLM indispo** — en cas de `llm=unavailable`, seule l'heuristique lexicale decide. Les intentions implicites (`vendredi a la place ?`) peuvent etre ratees. Envisager retry borne ou cache de decisions sur phrasings recurrents.

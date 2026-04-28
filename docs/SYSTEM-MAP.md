@@ -94,16 +94,19 @@ Exemples actuels / cibles :
 - `get_recent_reality_window`
 - `get_load_context`
 - `get_relevant_facts`
-- `review_current_week`
-- `resolve_target_session`
+- `get_user_constraints`
+- `suggest_replan_candidates`
+- `validate_plan_patch` (validation-only cible)
+- `get_coach_state` (macro read-only optionnelle, plus tard)
 
 Regles :
 
-- read-only
+- read-only, candidate ou validation-only
 - whitelist par pipeline
 - peu nombreux
 - semantiques
 - audites via metrics
+- jamais de write DB libre expose au modele
 
 ### Skills
 
@@ -112,6 +115,7 @@ Une skill produit est un workflow borne qui combine plusieurs capacites.
 Exemple actuel :
 
 - `skills/heartbeat/` pour briefing, reminder, review et signal check
+- `replan_after_constraint` formalise comme workflow de prompt : tools atomiques -> candidate optionnelle -> `PlanPatch | no_change | requires_confirmation`
 
 Exemples futurs :
 

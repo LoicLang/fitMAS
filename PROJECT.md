@@ -2,7 +2,7 @@
 
 Coach IA multisport proactif qui ajuste ton entraînement selon ta vraie vie.
 
-## Statut — 13 avril 2026
+## Statut — 28 avril 2026
 
 **Déployé et fonctionnel sur https://the deployed app/**
 
@@ -15,11 +15,14 @@ Ce qui tourne en prod :
 - Détail séance en page dédiée : `/workout/:sessionId`
 - Read models backend dédiés aux écrans app : `overview`, `calendar`, `evolution`, `session detail`
 - Activités manuelles + Strava OAuth + import + synchro automatique
-- Heartbeat proactif avec cooldowns (briefing matin, rappel pré-séance, revue dimanche, nouveau plan lundi)
+- Heartbeat proactif avec cooldowns + catch-up matin borné (briefing matin, rappel pré-séance, revue dimanche, nouveau plan lundi)
 - Mémoire V2 base : `profile / working / patterns`
-- Runtime tools V1 read-only bornés pour certaines questions de lecture
+- Runtime tools multi-tool borné : read-only / candidate / validation-only, aucun write DB libre
 - Runtime conversationnel désormais branché sur les prompt layers live
-- Substrate de décision planning V1 renforcé pour mieux respecter l'intention de déplacement
+- `CoachDecision` + `PlanPatch` branchés sur la conversation : validation serveur, confirmation pending, commit via `PlanMutationService`
+- DeepSeek principal avec fallback Claude possible sur sorties structurées fragiles
+- `suggest_replan_candidates` est le helper canonique de candidates replan ; `propose_replan` reste alias compat
+- Workflow `replan_after_constraint` formalisé dans le prompt : tools atomiques → candidate optionnelle → `PlanPatch | no_change | requires_confirmation`
 - Revue hebdomadaire + régénération automatique du plan le lundi matin
 - Bot Telegram avec commandes (/start, /plan, /today, /newweek, /sync, /log)
 
@@ -28,8 +31,9 @@ La vérité "état réel + suite" vit dans `docs/BUILD-ORDER.md`.
 Cap produit actuel :
 - Telegram = coach conversationnel
 - App = cockpit performance
-- priorité immédiate : meilleure lecture du réel, meilleure adaptation, mémoire plus propre, moins de duplication métier
-- ordre courant : substrate de capacités partagé, weekly reality digest, split progressif des hotspots, heartbeat plus contextuel
+- priorité immédiate : dogfood réel Phase A toute la semaine, coach fiable pour lire / répondre / appliquer / confirmer / refuser proprement
+- ordre courant : durcir `validate_plan_patch`, ajouter un smoke réel `replan_after_constraint`, puis nettoyer le legacy après validation dogfood
+- Phase B long terme : progression/prescription structurée, pas ouverte tant que Phase A n'est pas stable
 
 ## Stack
 
@@ -93,10 +97,12 @@ Stabilisation LLM :
 
 ## Principes
 
-- Déterminisme avant LLM
-- Un seul appel LLM bien prompté tant que le domaine n'exige pas mieux
+- LLM-first pour l'intention floue ; déterminisme pour vérité, validation, permissions, commit et audit
+- Pas de reply conversationnelle finale depuis un helper déterministe, sauf outage, confirmation pending ou résumé d'event réel
+- Regex / keywords = surligneurs de prompt, jamais classifieurs d'intention floue
+- Tools atomiques et bornés avant gros tool magique
+- `PlanPatch` est le langage d'action ; le write reste orchestré par `PlanMutationService`
 - Mono-agent propre avant toute tentation multi-agent
-- Heuristiques d'entraînement en dur, LLM pour personnaliser et formuler
 - Telegram pour valider la proactivité, WhatsApp quand prouvé
 - Telegram = relation coach, app = tableau de bord performance
 - Build perso d'abord : single-user, multisport, usage quotidien réel
