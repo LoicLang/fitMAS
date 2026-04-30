@@ -955,8 +955,8 @@ class HeartbeatGroundingTest(unittest.TestCase):
         self.assertNotIn("Legacy yesterday swim", captured["prompt"])
 
     def test_weekly_review_surfaces_offplan_swimming_entry(self) -> None:
-        """Chantier 2bis: weekly_review pre-digests via coach_reading_digest so
-        the LLM gets the offplan swim by sport+day instead of zero-natation."""
+        """Chantier 2bis: weekly_review pre-digests deterministic facts so the
+        LLM gets the offplan swim by sport+day instead of zero-natation."""
         now = get_local_now(self.user.timezone)
         today_key = DAY_KEYS[now.weekday()]
         repo.replace_plan(

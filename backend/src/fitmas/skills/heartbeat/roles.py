@@ -39,8 +39,12 @@ from fitmas.execution_evidence import classify_execution_evidence
 from fitmas.fact_memory import fact_is_current
 from fitmas.knowledge import load_sport_knowledge
 from fitmas.planning_contract import build_availability_state
-from fitmas.recent_reality import RecentRealityWindow
 from fitmas.signals import collect_signals, format_signals_for_prompt
+from fitmas.skills.heartbeat.context import (
+    HeartbeatCapabilityBudget,
+    HeartbeatContextBundle,
+    render_heartbeat_context_bundle,
+)
 from fitmas.time_context import DAY_LABELS_FR, build_time_context, get_local_now, render_time_context
 
 logger = logging.getLogger(__name__)
@@ -152,11 +156,18 @@ def select_calibration_need(
 
 @dataclass(frozen=True, slots=True)
 class HeartbeatRole:
-    """Declares the capabilities and constraints of a heartbeat role."""
+    """Declares the capabilities and constraints of a heartbeat role.
+
+    `capability` prefigures the conversation TurnScope: read-only by default,
+    no plan_patch, no candidate. Heartbeat call-sites enforce this by virtue
+    of never invoking the mutation pipeline; the explicit field makes the
+    contract greppable and ready to plug into TurnScope.
+    """
     name: str
     can_read: tuple[str, ...]    # what data sources this role can access
     can_write: tuple[str, ...]   # what side effects this role can trigger
     max_output_sentences: int
+    capability: HeartbeatCapabilityBudget = HeartbeatCapabilityBudget()
 
 
 BRIEFING_ROLE = HeartbeatRole(
@@ -164,6 +175,7 @@ BRIEFING_ROLE = HeartbeatRole(
     can_read=("plan", "signals", "facts", "yesterday_status", "calibration"),
     can_write=("message",),
     max_output_sentences=4,
+    capability=HeartbeatCapabilityBudget(read_only=True),
 )
 
 REMINDER_ROLE = HeartbeatRole(
@@ -171,6 +183,7 @@ REMINDER_ROLE = HeartbeatRole(
     can_read=("plan", "signals", "facts", "calibration"),
     can_write=("message",),
     max_output_sentences=2,
+    capability=HeartbeatCapabilityBudget(read_only=True),
 )
 
 REVIEW_ROLE = HeartbeatRole(
@@ -178,6 +191,7 @@ REVIEW_ROLE = HeartbeatRole(
     can_read=("plan", "activities", "completion_stats", "facts"),
     can_write=("message", "trigger_regeneration"),
     max_output_sentences=5,
+    capability=HeartbeatCapabilityBudget(read_only=True),
 )
 
 SIGNAL_ROLE = HeartbeatRole(
@@ -185,6 +199,7 @@ SIGNAL_ROLE = HeartbeatRole(
     can_read=("signals", "facts", "adaptation"),
     can_write=("message", "trigger_adaptation"),
     max_output_sentences=3,
+    capability=HeartbeatCapabilityBudget(read_only=True),
 )
 
 
@@ -198,18 +213,22 @@ def build_briefing_prompt(
     today_session: Any,
     day: Any | None,
     time_context: dict[str, str],
-    yesterday_context: str,
+    bundle: HeartbeatContextBundle,
     clarification: Any | None,
     calibration_need: Any | None,
     signals_block: str,
     facts_block: str,
     sport_knowledge: str,
     recent_proactive_context: str = "",
-    recent_reality: RecentRealityWindow | None = None,
-    digest: CoachReadingDigest | None = None,
+    coach_lens: Any | None = None,
     pending_open_question: str | None = None,
 ) -> tuple[str, str]:
-    """Build system + user prompt for morning briefing. Returns (system, prompt)."""
+    """Build system + user prompt for morning briefing. Returns (system, prompt).
+
+    The prompt is structured into atomic Truth blocks (yesterday/today/week)
+    via `bundle` — root cause fix for the 2026-04-29 incident where the LLM
+    projected the 7d offplan count onto "hier".
+    """
     label = today_session.label or DAY_LABELS[time_context["day_key"]]
 
     system = (
@@ -235,14 +254,22 @@ def build_briefing_prompt(
         "\n- Ne dis JAMAIS : \"zero realisees\" si des sorties offplan existent, \"oublie la culpabilite\", \"presque parfait\", des conseils sommeil/assiette sans signal explicite, des listings TSS/CTL/volume abstraits, des formules vides style \"calendrier et realite se sont perdus\"."
         "\n- Pas de moralisation, pas de feliciter-pour-feliciter, pas de recitation des chiffres bruts."
     )
-    # Anti-hallucination rule — unconditional, defense in depth. Applies even
-    # when recent_reality isn't supplied (legacy callers) so the LLM never
-    # fabricates a weekly count.
+    # Hierarchy of sources — Truth blocks are authoritative. Defends against
+    # weekly aggregates leaking into yesterday-specific claims.
+    system += (
+        "\n\nHierarchie des sources :"
+        "\n- Les blocs YesterdayTruth, TodayTruth, WeekDigest sont la verite. "
+        "Tu raisonnes a partir d'eux, dans cet ordre, et tu ne les contredis jamais."
+        "\n- WeekDigest est un agregat 7 jours. N'applique JAMAIS un chiffre WeekDigest a un jour specifique "
+        "(hier/aujourd'hui/demain). Pour parler d'hier, n'utilise que YesterdayTruth."
+        "\n- Pour qualifier hier, pars de YesterdayTruth.status : planned_done = seance planifiee executee, "
+        "planned_partial = une partie executee, offplan_done = activite hors plan, planned_missed = seance prevue sans trace."
+    )
+    # Anti-hallucination rule — unconditional, defense in depth.
     system += (
         "\n\nQuand tu mentionnes un decompte de la semaine (seances faites, volume, "
-        "regularite, streak), utilise EXACTEMENT les chiffres du bloc \"Lecture de la "
-        "semaine\" ou \"Execution reelle semaine\" du contexte. N'invente jamais un "
-        "comptage hebdomadaire: si le bloc est absent ou n'a pas l'info, reste qualitatif "
+        "regularite, streak), utilise EXACTEMENT les chiffres de WeekDigest. N'invente jamais "
+        "un comptage hebdomadaire: si le bloc n'a pas l'info, reste qualitatif "
         "(ex: \"cette semaine\") sans citer de nombre."
     )
     if signals_block:
@@ -274,18 +301,8 @@ def build_briefing_prompt(
         f"Objectif: {today_session.session_goal}\n"
         f"Priorite: {today_session.priority}\n"
         f"Note: {(day.session_note if day else today_session.session_note) or ''}"
-        f"{yesterday_context}"
     )
-    if digest is not None:
-        prompt += "\n\n" + render_digest_for_prompt(digest)
-    elif recent_reality is not None:
-        prompt += (
-            "\n\nExecution reelle semaine (7 jours glissants, verite terrain):\n"
-            f"- {recent_reality.planned_sessions_7d} seances planifiees\n"
-            f"- {recent_reality.confirmed_sessions_7d} seances confirmees (faites + trace Strava/manuelle)\n"
-            f"- {recent_reality.claimed_sessions_7d} seances revendiquees sans trace forte\n"
-            f"- {recent_reality.missed_streak_days} jours consecutifs sans seance realisee"
-        )
+    prompt += "\n\n" + render_heartbeat_context_bundle(bundle)
     if clarification is not None:
         prompt += (
             "\n\nClarification prioritaire:\n"

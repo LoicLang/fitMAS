@@ -10,18 +10,25 @@ read_when:
 
 # FitMAS Architecture
 
+> Mise a jour doctrine — 30 avril 2026 : pour toute conversation utilisateur,
+> `docs/LLM-FIRST-CONVERSATION.md` gagne sur les sections historiques ci-dessous.
+> Aucun regex, keyword, parser, classifieur deterministe ou `oui/non`
+> deterministe ne peut lire le texte utilisateur libre pour decider l'intention.
+
 ## Principe directeur
 
-Déterminisme avant LLM. Le LLM propose, formule et adapte le ton.
-Les garde-fous, la planification, les permissions, les cooldowns et la persistance sont déterministes.
+LLM-first pour la langue utilisateur ; determinisme-first pour la verite et les effets de bord.
+
+Le LLM comprend, choisit les read-tools utiles, propose et formule.
+Les garde-fous, la planification, les permissions, les cooldowns, la persistance et l'audit sont deterministes.
 
 ## Principes de harness
 
 ### Comprendre puis decider
 
-Le LLM ne doit pas comprendre, choisir et agir en un seul bloc.
-Le bon flux : message → extraction structuree → scoring de scenarios → choix → explication.
-Le LLM aide a comprendre et expliquer. Le moteur protege la coherence.
+Le texte utilisateur libre va au LLM, pas a des parseurs locaux.
+Le bon flux conversation : message → `CoachDecision` structure par le LLM → validation schema / permissions / coherence → writers bornes → explication fondee sur le resultat reel.
+Le moteur protege la coherence apres comprehension LLM.
 
 ### Contexte en couches
 
@@ -122,7 +129,7 @@ Les tools restent read-only. Les orchestrateurs possedent les writes.
 - Tool mémoire partagé : `fact_memory.py`
 - Socle runtime tools posé : `tool_contract.py`, `tool_registry.py`, `tool_runtime.py`, `tool_metrics.py`, `tool_routing.py`, `conversation_prompting.py`
 - Le chat peut maintenant faire un unique tool call read-only borne pour certaines questions de lecture
-- Les tools offerts au chat sont maintenant choisis par routing déterministe selon le type de question
+- Les tools offerts au chat sont encore partiellement choisis par routing déterministe selon le type de question ; dette a remplacer par une policy de capacites + choix de tools par le LLM
 - Le prompt conversationnel commence aussi a se compacter selon la requete, au lieu d'injecter toujours les memes blocs
 - Le prompt conversationnel est maintenant splitte en 2 zones avec une partie `system` stable cachee cote Anthropic
 - Le chemin live `llm.decide()` passe maintenant par `prompt_layers.py` / `llm_prompt_builder.py`
@@ -130,7 +137,7 @@ Les tools restent read-only. Les orchestrateurs possedent les writes.
 - Les metrics tools couvrent aussi maintenant les branches `tools offerts sans appel`, `tool loop complete` et `fallback de la boucle`
 - Les metrics tools remontent aussi un volume de prompt exploitable (`prompt_char_count`, `history_messages_used`, `tool_count_offered`)
 - La boucle coach reçoit maintenant un résumé structuré `prévu vs réel`, une résolution temporelle, des claims d'activité récents, une mémoire utile sélectionnée et quelques signaux filtrés
-- Les mutations structurantes passent maintenant par une policy d'impact explicite avec confirmation `oui/non`
+- Les mutations structurantes passent maintenant par une policy d'impact explicite ; la confirmation `oui/non` deterministe est une dette a remplacer par `CoachDecision.pending_resolution`
 - Chaque tour de conversation est maintenant persisté dans `conversation_turns` avec contexte, décision et memory writes
 - Le hotspot `repository.py` commence a se vider via un premier slice `repo_conversation.py`
 - `signals.py` et `heartbeat.py` lisent mieux les activités réelles hors plan au lieu de s'appuyer uniquement sur le plan
@@ -142,7 +149,7 @@ Les tools restent read-only. Les orchestrateurs possedent les writes.
 - l'onboarding et la régénération hebdo passent maintenant par `planning_state.py`
 
 - **Mutation middleware** : `mutation_hooks.py` — pre/post hooks autour des mutations. Les pre-hooks valident plausibilité (date passée, collision séance intense, limite hard/week). Les post-hooks calculent l'impact (delta charge, séances clé affectées, recovery perdu) et déclenchent une recalibration si seuil franchi.
-- **Intent-based tool routing** : `tool_routing.py` refactoré — classification d'intent déterministe (9 catégories : casual_chat, execution_report, plan_negotiation, plan_lookup, activity_review, activity_highlights, load_review, fact_recall, generic_question) avec budget de tools explicite par catégorie. Remplace le matching regex par mots-clés.
+- **Intent-based tool routing historique** : `tool_routing.py` classe encore des intents deterministes avec budget de tools explicite. Depuis le 30 avril, cette logique est dette conversationnelle : le routing cible doit exposer une surface autorisee, pas comprendre le texte user.
 - **Heartbeat par rôles** : `heartbeat_roles.py` — 4 rôles bornés (BriefingRole, ReminderRole, ReviewRole, SignalRole) avec capabilities déclarées (can_read, can_write, max_output_sentences). Chaque rôle a son propre prompt builder. `heartbeat.py` reste la façade qui gère le gating et la livraison.
 - **Prompt layers** : `prompt_layers.py` — assemblage structuré du prompt en 5 couches (L0: identité coach, L1: profil athlète, L2: état plan, L3: contexte immédiat, L4: mémoire épisodique) avec budgets token par couche et cache breakpoints pour prompt caching Anthropic.
 - **Ops plane** : `api_ops.py` — endpoints `/ops/` séparés du tool plane conversationnel. Inspection signaux, mémoire, mutations récentes, stats tools. Auth debug distincte.
@@ -154,9 +161,13 @@ Les tools restent read-only. Les orchestrateurs possedent les writes.
 
 ### Durcissement conversation — 15-17 avril 2026
 
-- **Turn planner LLM** (`conversation_turn_planner.py`, e79d734) : classifieur read-only (Haiku) execute avant les side-effects du pipeline conversation. Sort un `ConversationTurnPlan` avec `primary_intent`, `secondary_intents`, `has_plan_mutation`. Le pipeline arbitre `plan_mutation_request = heuristic OR llm` — aucun des deux ne peut silencieusement supprimer l'intention (failles A/C closures).
+> Historique. Ce bloc explique l'etat 15-17 avril, mais ne constitue plus
+> une architecture cible. `heuristic OR LLM`, low-signal, rich-signal et
+> parsing pending deterministe sont supersedes par `docs/LLM-FIRST-CONVERSATION.md`.
+
+- **Turn planner LLM** (`conversation_turn_planner.py`, e79d734) : classifieur read-only (Haiku) execute avant les side-effects du pipeline conversation. Sort un `ConversationTurnPlan` avec `primary_intent`, `secondary_intents`, `has_plan_mutation`. Depuis le 30 avril, le pipeline ne fait plus `heuristic OR llm` : le flag mutation vient du LLM ou reste false.
 - **LLM gateway unifie** (`llm_gateway.py`, eea74e7) : toutes les routes LLM passent par un client partage et un parseur JSON robuste (strip fences, balanced prefix, truncated repair). Les queues tronquees et le prose residuel ne droppent plus les payloads valides.
-- **Force LLM arbitrage sur mutation** (af54eda, faille B) : quand l'heuristique flagge `plan_mutation`, le contexte availability / adaptation / health est route au LLM au lieu d'etre applique en early-exit deterministe. Les clarifications execution et contestations sont aussi skippees.
+- **Force LLM arbitrage sur mutation** (af54eda, faille B) : quand l'heuristique flagge `plan_mutation`, le contexte availability / adaptation / health est route au LLM au lieu d'etre applique en early-exit deterministe. Depuis le 30 avril, la cible est plus stricte : aucune heuristique ne lit le texte user pour flagger la mutation.
 - **Block_reason typed** (199a40e) : `PlanMutationService` expose `PlanBlockedMutationEvent.block_reason`. La reply utilisateur est derivee du code (`protected_recovery_target`, `same_sport_proximity`, `occupied_training_target`), jamais improvisee par le LLM. Chaque blocage loggue un `mutation_blocked` structure.
 - **Observabilite LLM failures** (e81c3da, faille D) : `_classify_llm_exception` retourne des labels stables (`timeout / rate_limit / bad_request / auth / connection / api_other / json_parse / unknown`). Le pipeline distingue `llm=unavailable` (crash) de `llm=False` (classifieur propre) pour le WARNING de divergence heuristique.
 - **Protected recovery guards** (b39c712, 216bf11, 605eb5f) : `mutation_hooks` etend `protected_recovery_target` aux mutations `replace / update / lighten / move` et autorise `swap_sessions` meme si la seance de recuperation est impliquee (c'est un satellite).
@@ -283,7 +294,7 @@ backend/src/fitmas/
 ├── llm.py                 (~630 lignes) — Anthropic client, decisions, extraction, formulation
 ├── memory_profile.py      (~15 lignes) — facade explicite profile memory au-dessus de UserFact
 ├── memory_routing.py      (~40 lignes) — split profile vs working memory selon TTL
-├── memory_patterns.py     (~200 lignes) — promotion deterministe des patterns depuis messages, activites, adaptations
+├── memory_patterns.py     (~200 lignes) — promotion deterministe des patterns depuis signaux structures, activites, adaptations
 ├── memory_maintenance.py  (~40 lignes) — boucle maintenance memoire : purge working + sync patterns
 ├── load_projection.py     (~90 lignes) — projection de charge backend sur 4 semaines
 ├── repository.py          (469 lignes) — CRUD + convertisseurs Pydantic
@@ -465,16 +476,16 @@ StravaConnection
 ### Flux message entrant
 1. User envoie un message (Telegram ou webapp)
 2. Backend persiste CoachMessage(role=user)
-3. Interpreter : `user_indication_llm` produit un `UserIndication` structure
-4. Turn planner : `conversation_turn_planner` classe `primary_intent` + `secondary_intents` (Haiku, read-only)
-5. Gates deterministes : confirmation pending, low-signal, calibration, clarification — skippes si `plan_mutation_request == true`
-6. Grounding : claims activite / non-completion, contexte adaptation / availability routes au LLM selon le turn plan
-7. `llm.decide()` : Haiku avec prompt layers + tool budget route par `primary_intent` — sort une `MutationDecision`
-8. Validation : `mutation_permissions.assess_mutation_impact` → confirmation pending si requires_confirmation
-9. `PlanMutationService` : pre-hooks coherence → writer → events (ou `blocked_events` avec `block_reason` typed)
-10. Reply finale derivee de l'event applique ou du `block_reason`
-11. Persistance `CoachMessage(role=agent)` + `conversation_turns`
-12. Extraction facts stables a memoriser, promotion patterns
+3. Le coach LLM recoit le texte libre + contexte machine borne
+4. Le LLM choisit les read-tools utiles dans le budget autorise
+5. Le LLM sort un `CoachDecision` unique : `reply_text`, `memory_actions`, `execution_actions`, `plan_action`, `pending_resolution`
+6. Validation backend : schema strict, permissions, coherence, confirmation si necessaire
+7. Writers bornes : `PlanMutationService` aujourd'hui, `MemoryMutationService` cible
+8. DB/events deviennent la verite auditable
+9. Reply finale envoyee au user, fondee sur la decision LLM et le resultat reel valide
+10. Persistance `CoachMessage(role=agent)` + `conversation_turns`
+
+Dette active restante : fusionner le pre-step `user_indication_llm` et le `conversation_turn_planner` dans une sortie `CoachDecision` unique avec `memory_actions`, `execution_actions` et `pending_resolution`. Phase 0 a retire du runtime conversation : fallback user indication, pending `oui/non`, low-signal, rich-signal, claim/non-completion extractors et `heuristic OR LLM`.
 
 
 ### Contexte temporel partagé

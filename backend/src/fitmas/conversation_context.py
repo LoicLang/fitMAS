@@ -4,18 +4,6 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Sequence
 
-from fitmas.activity_claims import (
-    ActivityClaim,
-    NonCompletionClaim,
-    build_claim_correction_payloads,
-    build_claim_fact_payloads,
-    extract_activity_claim,
-    extract_non_completion_claim,
-    extract_recent_activity_claim,
-    format_activity_claim_for_prompt,
-    format_non_completion_claim_for_prompt,
-    is_activity_claim_correction,
-)
 from fitmas.execution_context import (
     TodayExecutionContext,
     build_today_execution_context,
@@ -36,10 +24,6 @@ class ConversationContextBundle:
     time_context: dict[str, str]
     temporal_resolution: TemporalResolution
     execution_context: TodayExecutionContext
-    previous_activity_claim: ActivityClaim | None
-    current_activity_claim: ActivityClaim | None
-    recent_activity_claim: ActivityClaim | None
-    non_completion_claim: NonCompletionClaim | None
     active_facts: tuple[dict[str, Any], ...]
     selected_facts: tuple[str, ...]
     selected_signals: tuple[Signal, ...]
@@ -61,7 +45,7 @@ def build_conversation_context(
     return ConversationContextBundle(
         time_context=build_time_context(timezone_name, now=now),
         temporal_resolution=resolve_temporal_context(
-            user_text,
+            "",
             timezone_name=timezone_name,
             now=now,
         ),
@@ -69,28 +53,6 @@ def build_conversation_context(
             timezone_name=timezone_name,
             scheduled_sessions=scheduled_sessions,
             activities=activities,
-            now=now,
-        ),
-        previous_activity_claim=extract_recent_activity_claim(
-            conversation_history,
-            current_text="",
-            timezone_name=timezone_name,
-            now=now,
-        ),
-        current_activity_claim=extract_activity_claim(
-            user_text,
-            timezone_name=timezone_name,
-            now=now,
-        ),
-        recent_activity_claim=extract_recent_activity_claim(
-            conversation_history,
-            current_text=user_text,
-            timezone_name=timezone_name,
-            now=now,
-        ),
-        non_completion_claim=extract_non_completion_claim(
-            user_text,
-            timezone_name=timezone_name,
             now=now,
         ),
         active_facts=normalized_facts,
@@ -106,22 +68,7 @@ def build_claim_memory_updates(
     timezone_name: str | None,
     user_text: str,
 ) -> list[dict[str, Any]]:
-    if context.current_activity_claim is None:
-        return []
-
-    updates = build_claim_fact_payloads(
-        context.recent_activity_claim,
-        activities=activities,
-        timezone_name=timezone_name,
-    )
-    if is_activity_claim_correction(user_text, timezone_name=timezone_name):
-        updates.extend(
-            build_claim_correction_payloads(
-                context.previous_activity_claim,
-                context.recent_activity_claim,
-            )
-        )
-    return updates
+    return []
 
 
 def execution_summary_for_prompt(context: ConversationContextBundle) -> str:
@@ -133,11 +80,11 @@ def temporal_summary_for_prompt(context: ConversationContextBundle) -> str:
 
 
 def activity_claim_summary_for_prompt(context: ConversationContextBundle) -> str:
-    return format_activity_claim_for_prompt(context.recent_activity_claim)
+    return ""
 
 
 def non_completion_summary_for_prompt(context: ConversationContextBundle) -> str:
-    return format_non_completion_claim_for_prompt(context.non_completion_claim)
+    return ""
 
 
 def signal_summary_for_prompt(context: ConversationContextBundle) -> str:

@@ -194,12 +194,13 @@ FitMAS cherche :
 
 Pipeline :
 1. Stocker message brut
-2. LLM → MutationDecision (intent, mutation, message coach)
-3. LLM → extraction de facts stables
-4. Décision : action directe / clarification / no-op
+2. Coach LLM → `CoachDecision` structure (`reply_text`, actions memoire/execution, action planning, resolution pending)
+3. Backend → validation / dedup / permissions / writers bornes
+4. Décision visible : action appliquée, confirmation ciblée, clarification, ou no-op honnête
 
 Règle : ne pas transformer automatiquement chaque phrase en mémoire durable.
 Seulement si c'est stable, personnel, actionnable et confirmé.
+Jamais par regex ou keyword sur texte utilisateur libre.
 
 ## Copy de référence
 

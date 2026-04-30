@@ -28,14 +28,15 @@ from fitmas.activity_helpers import (
     claimed_activities_on_local_date as _claimed_activities_on_local_date,
 )
 from fitmas.calibration_needs import CalibrationNeedType, looks_like_clarification_message
-from fitmas.coach_reading_digest import build_coach_reading_digest
+from fitmas.coach_reading_digest import CoachReadingDigest, build_coach_reading_facts
 from fitmas.coach_state_bundle import build_coach_state_bundle
 from fitmas.coach_messages import CoachDraft
 from fitmas.db import SessionLocal
 from fitmas.execution_clarification import build_execution_clarification
-from fitmas.execution_evidence import classify_execution_evidence
 from fitmas.skills.heartbeat import evaluation as heartbeat_evaluation
+from fitmas.skills.heartbeat.context import build_heartbeat_context_bundle
 from fitmas.skills.heartbeat.roles import (
+    BRIEFING_ROLE,
     DAY_LABELS,
     NEXT_DAY,
     build_briefing_prompt,
@@ -98,13 +99,19 @@ def morning_briefing() -> CoachDraft | None:
             source="heartbeat_morning",
         )
 
-        # Build yesterday context
+        # Yesterday-specific data — feeds YesterdayTruth in the bundle and
+        # the execution clarification helper.
         yesterday_date = local_now.date() - timedelta(days=1)
-        yesterday_context, clarification_session = _build_yesterday_context(
-            db, user, time_context, yesterday_date,
+        yesterday_sessions = repo.get_scheduled_sessions_for_date(
+            db, user.id, target_date=yesterday_date,
+        )
+        yesterday_activities = _activities_on_local_date(db, user, target_date=yesterday_date)
+        yesterday_claims = list(_claimed_activities_on_local_date(db, user, target_date=yesterday_date))
+        clarification_session = next(
+            (session for session in yesterday_sessions if session.sport_type != "rest"),
+            None,
         )
 
-        # Build execution clarification
         recent_sessions = repo.get_scheduled_sessions_between_dates(
             db, user.id,
             start_date=local_now.date() - timedelta(days=13),
@@ -144,17 +151,26 @@ def morning_briefing() -> CoachDraft | None:
             logger.warning("Morning briefing: failed to build recent reality window", exc_info=True)
             recent_reality = None
 
-        # Pre-digested coach context: facts (deterministic) + lens (LLM pre-pass).
-        # The lens degrades gracefully to None on LLM failure — facts still ship.
-        try:
-            digest = build_coach_reading_digest(
-                db, user,
+        # Structured truth bundle. Replaces the free-form yesterday_context
+        # string + raw recent_reality counters in the prompt. Without this
+        # the LLM was projecting weekly aggregates onto "hier" (incident
+        # 2026-04-29: claimed yesterday was offplan while the activity was
+        # actually linked to a planned session).
+        bundle = build_heartbeat_context_bundle(
+            today=local_now.date(),
+            today_planned_session=today_session,
+            yesterday_planned_sessions=yesterday_sessions,
+            yesterday_activities=yesterday_activities,
+            yesterday_claims=yesterday_claims,
+            week_recent_reality=recent_reality or build_recent_reality_window(
                 today=local_now.date(),
-                recent_reality=recent_reality,
-            )
-        except Exception:
-            logger.warning("Morning briefing: failed to build coach reading digest", exc_info=True)
-            digest = None
+                scheduled_sessions=recent_sessions,
+                activities=recent_activities,
+                claims=list(recent_claims),
+            ),
+            week_activities=recent_activities,
+            capability=BRIEFING_ROLE.capability,
+        )
 
         # Build prompt via BriefingRole
         system, prompt = build_briefing_prompt(
@@ -162,15 +178,13 @@ def morning_briefing() -> CoachDraft | None:
             today_session=today_session,
             day=day,
             time_context=time_context,
-            yesterday_context=yesterday_context,
+            bundle=bundle,
             clarification=clarification,
             calibration_need=effective_calibration_need,
             signals_block=format_signals_for_prompt(signals),
             facts_block=format_active_facts_for_prompt(db, user),
             sport_knowledge=load_sport_knowledge({today_session.sport_type}, max_tokens=500),
             recent_proactive_context=_recent_proactive_context(db, user, limit=2),
-            recent_reality=recent_reality,
-            digest=digest,
             pending_open_question=_pending_open_question_for_user(db, user),
         )
 
@@ -189,8 +203,9 @@ def morning_briefing() -> CoachDraft | None:
             f"Bonjour. {label} — {today_session.session_title}.\n"
             f"{today_session.session_goal}. Priorite: {today_session.priority}."
         )
-        if yesterday_context:
-            msg += f"\n{yesterday_context.strip()}"
+        yesterday_summary = _yesterday_fallback_summary(bundle.yesterday)
+        if yesterday_summary:
+            msg += f"\n{yesterday_summary}"
         fact_lines = get_active_fact_lines(db, user)
         if fact_lines:
             msg += "\nA noter: " + "; ".join(line.lstrip("- ") for line in fact_lines[:2]) + "."
@@ -330,9 +345,8 @@ def weekly_review() -> CoachDraft | None:
 
         time_context = build_time_context(user.timezone)
 
-        # Recent reality + digest: same pre-digestion morning_briefing uses,
-        # so weekly_review can name offplan sorties (sport + day) instead of
-        # only emitting aggregate counters that hide what really happened.
+        # Recent reality + deterministic facts, so weekly_review can name
+        # offplan sorties (sport + day) without an extra LLM lens pre-pass.
         try:
             recent_reality = build_recent_reality_window(
                 today=local_today,
@@ -345,13 +359,14 @@ def weekly_review() -> CoachDraft | None:
             recent_reality = None
 
         try:
-            digest = build_coach_reading_digest(
+            facts = build_coach_reading_facts(
                 db, user,
                 today=local_today,
                 recent_reality=recent_reality,
             )
+            digest = CoachReadingDigest(facts=facts, lens=None)
         except Exception:
-            logger.warning("Weekly review: failed to build coach reading digest", exc_info=True)
+            logger.warning("Weekly review: failed to build deterministic reading facts", exc_info=True)
             digest = None
 
         # Build prompt via ReviewRole
@@ -460,67 +475,27 @@ def signal_check() -> CoachDraft | None:
 
 
 # ---------------------------------------------------------------------------
-# Yesterday context builder (used by BriefingRole)
+# Fallback summary (LLM outage path)
 # ---------------------------------------------------------------------------
 
-def _build_yesterday_context(
-    db: Session,
-    user: s.User,
-    time_context: dict,
-    yesterday_date,
-) -> tuple[str, object | None]:
-    """Build yesterday status string and return clarification target session."""
-    yesterday_sessions = repo.get_scheduled_sessions_for_date(db, user.id, target_date=yesterday_date)
-
-    yesterday_context = ""
-    clarification_session = None
-    yesterday_activities = _activities_on_local_date(db, user, target_date=yesterday_date)
-    yesterday_claims = _claimed_activities_on_local_date(db, user, target_date=yesterday_date)
-
-    if yesterday_sessions:
-        yesterday_label = yesterday_sessions[0].label or yesterday_date.isoformat()
-        non_rest_sessions = [s for s in yesterday_sessions if s.sport_type != "rest"]
-        pending_sessions = [s for s in non_rest_sessions if s.completion_status == "planned"]
-        adapted_sessions = [s for s in non_rest_sessions if s.completion_status in ("skipped", "adapted")]
-        titles = ", ".join(s.session_title for s in non_rest_sessions[:2])
-        primary_session = non_rest_sessions[0] if non_rest_sessions else None
-        clarification_session = primary_session
-        evidence = classify_execution_evidence(
-            planned_session=primary_session,
-            activities=yesterday_activities,
-            claims=list(yesterday_claims),
-        )
-
-        if evidence.display_status == "confirmed_done":
-            yesterday_context = f"\nHier ({yesterday_label}): {titles} — fait confirme."
-        elif evidence.display_status == "offplan_done" and yesterday_activities:
-            sports = ", ".join(sorted({a.sport_type for a in yesterday_activities}))
-            total_duration = sum(a.duration_min or 0 for a in yesterday_activities)
-            yesterday_context = (
-                f"\nHier ({yesterday_label}): seance prevue non validee, "
-                f"mais activite reelle detectee ({sports}, {total_duration} min)."
-            )
-        elif evidence.display_status == "claimed_done" and yesterday_claims:
-            sports = ", ".join(sorted({c.sport_type or 'sport inconnu' for c in yesterday_claims}))
-            total_duration = sum(c.duration_min or 0 for c in yesterday_claims)
-            yesterday_context = (
-                f"\nHier ({yesterday_label}): seance prevue non validee, "
-                f"mais activite declaree non loggee detectee ({sports}, {total_duration} min)."
-            )
-        elif evidence.display_status == "uncertain":
-            yesterday_context = (
-                f"\nHier ({yesterday_label}): {titles} — statut a verifier, "
-                "pas de trace assez forte pour dire que c'etait fait."
-            )
-        elif pending_sessions:
-            yesterday_context = (
-                f"\nHier ({yesterday_label}): {titles} — "
-                f"pas marque comme fait. A noter."
-            )
-        elif adapted_sessions:
-            yesterday_context = f"\nHier ({yesterday_label}): adapte/saute. On avance."
-
-    return yesterday_context, clarification_session
+def _yesterday_fallback_summary(yesterday) -> str:
+    """One-line plain-text summary of yesterday's truth for the LLM-outage
+    fallback path. The LLM-driven prompt now consumes the structured bundle
+    directly (see `build_briefing_prompt`); this helper only fires when the
+    LLM call returned nothing."""
+    if yesterday.status in ("rest", "no_plan_no_activity"):
+        return ""
+    chunks: list[str] = []
+    if yesterday.activities:
+        for activity in yesterday.activities:
+            link = "lié au plan" if activity.linked_to_plan else "hors plan"
+            chunks.append(f"{activity.sport} {activity.duration_min}min ({link})")
+    if not chunks and yesterday.planned_sessions:
+        for session in yesterday.planned_sessions:
+            chunks.append(f"{session.sport} prévu — pas de trace")
+    if not chunks:
+        return ""
+    return f"Hier ({yesterday.day_label}): " + ", ".join(chunks) + "."
 
 
 def _weekly_review_highlights(db: Session, user: s.User, *, start_date) -> str:

@@ -11,6 +11,11 @@ read_when:
 
 État au 20 avril 2026. Inventaires produits avant de démarrer le refactor `COACH-AUTONOMY-REFACTOR.md`.
 
+> Statut — historique. Depuis le 30 avril 2026,
+> `docs/LLM-FIRST-CONVERSATION.md` supersede toute recommandation qui
+> garderait low-signal, heuristic OR, parsing `oui/non`, extracteurs regex
+> ou replies canned sur texte utilisateur libre.
+
 ## 1. System prompts en jeu
 
 ### Pipeline conversation
@@ -51,7 +56,7 @@ read_when:
 
 Total trouvé : **9**, dont **4 transactionnels** (à garder) et **5 non-transactionnels** (à réécrire en contexte de prompt).
 
-### Transactionnels (à garder)
+### Transactionnels (statut historique)
 
 | # | Fonction | Fichier:ligne | Trigger | Wired | Type |
 |---|----------|---------------|---------|-------|------|
@@ -60,7 +65,9 @@ Total trouvé : **9**, dont **4 transactionnels** (à garder) et **5 non-transac
 | T3 | `build_confirmation_prompt()` | `mutation_permissions.py:118` | Mutation appliquée ou bloquée | `conversation_pipeline.py:134, 764` | Ack post-apply |
 | T4 | `generate_calibration_ack()` | `calibration_llm.py:78` | Réponse calibration standalone | `conversation_pipeline.py:202` | Ack calibration (LLM 1-2 phrases) |
 
-Justification "garder" : ce sont des transactions binaires (oui/non) ou des acks immédiats post-mutation. Pas d'arbitrage à faire.
+Ancienne justification : transactions binaires ou acks immédiats post-mutation.
+Doctrine 30 avril : la resolution d'un pending vient du LLM via
+`CoachDecision.pending_resolution`, puis le backend valide et applique.
 
 ### Non-transactionnels (réécrits — Chantier 1 fait au 20 avril 2026)
 

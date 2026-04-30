@@ -28,7 +28,14 @@ Si un autre doc diverge :
 
 **Un premier coach que Loïc reconnaît, comprend, et a envie de rouvrir demain.**
 
-## Checkpoint courant — 28 avril 2026
+## Checkpoint courant — 30 avril 2026
+
+La suite de Phase A est recadree par l'incident heartbeat / conversation du 30 avril :
+
+> Aucun texte utilisateur libre ne passe par regex, keyword, classifieur
+> deterministe, parser maison ou short-circuit avant le coach LLM.
+
+Doc canonique : `docs/LLM-FIRST-CONVERSATION.md`.
 
 Le tunnel DeepSeek / tools / `PlanPatch` a livre le socle attendu pour un agent de planning fiable :
 
@@ -36,24 +43,29 @@ Le tunnel DeepSeek / tools / `PlanPatch` a livre le socle attendu pour un agent 
 - le chemin OpenAI-compatible DeepSeek pour structured output est le defaut quand `DEEPSEEK_API_KEY` existe ; `FITMAS_USE_DEEPSEEK_OPENAI_STRUCTURED=0` permet de le desactiver temporairement
 - le runtime tools accepte maintenant plusieurs `tool_use` dans un meme tour et renvoie un `tool_result` pour chaque id demande
 - `CoachDecision` est le nouveau contrat de decision, avec fallback legacy `MutationDecision`
+- `CoachDecision` porte maintenant les champs Phase 1A `memory_actions`, `execution_actions` et `pending_resolution` ; ils sont valides par schema mais pas encore executes
 - `PlanPatch -> validate_plan_patch -> PlanMutationService.apply_patch_for_user` est branche cote conversation
-- les confirmations pending serialisent maintenant le `PlanPatch` complet, puis revalident/appliquent seulement apres `oui`
+- les confirmations pending serialisent maintenant le `PlanPatch` complet ; la resolution deterministe `oui/non` a ete retiree du runtime et reste a remplacer par `CoachDecision.pending_resolution`
 - le briefing matin a maintenant un catch-up borne jusqu'a 10h locale si le creneau jitter est rate et qu'aucun proactif n'a deja ete envoye
 - `suggest_replan_candidates` est le tool principal de candidate replan ; `propose_replan` reste alias compat, non route par defaut
 - le prompt formalise le workflow `replan_after_constraint` : tools atomiques -> candidate optionnelle -> `PlanPatch | no_change | requires_confirmation`
+- Phase 0 LLM-first est passee sur le chemin conversation : plus de `low_signal`, `rich_signal`, `heuristic OR LLM`, pending `oui/non`, `_sanitize_no_change_reply`, extracteurs claim/non-completion ou fallback regex `user_indications.py` dans le runtime conversation
 
 Ce que ca change produit :
 
 - le coach peut enfin proposer une action structuree sans que le code lui mette une phrase deterministe dans la bouche
 - l'orchestrateur reste proprietaire du commit, des events et des confirmations
-- les regex restent des signaux de prompt, pas des classifieurs d'intention
+- le coach LLM est le seul detecteur d'intention, de negation, de confirmation, de sante, de disponibilite, d'execution et de preference
+- le determinisme intervient apres la decision LLM : schema, permissions, validation, commit, audit, dedup, integrite
 
 Suite prioritaire :
 
-1. Dogfood reel sur Telegram avec `golden_case_autonomy`, `piscine fermee`, continuations courtes (`oui`, `running`, `mercredi`) et contraintes simples type `demain soir`.
-2. Durcir `validate_plan_patch` : atomicite batch, suggested fixes, charge/recup/sante plus fines. Slice en cours : `PlanPatchValidation` expose maintenant `summary` + `suggested_fix` par operation pour les blocages/fix les plus utiles ; `PlanMutationService` bloque les mutations de seance existante sans plan actif au lieu de produire un no-op opaque.
-3. Ajouter un smoke reel cible `replan_after_constraint` sur continuation courte et indisponibilite multi-jours. Slice DeepSeek/JSON du 28 avril : JSON mode OpenAI-compatible par defaut, repair syntaxique des sorties `_type...` pseudo-JSON, propagation de `rationale` quand elle est au mauvais niveau du payload, normalisation `replace_session` sans cible + champs de creation -> `create_session`, prompt renforcé sur reschedule explicite depuis fatigue et sur `Running` seul = preference sport, pas creation par defaut.
-4. Nettoyer ensuite les chemins legacy seulement quand le dogfood confirme que le nouveau pipeline tient.
+1. Creer les writers bornes `MemoryMutationService` / execution writer et les brancher apres validation de `CoachDecision`.
+2. Faire passer le scenario heartbeat "je n'ai pas eu le temps hier" par `execution_actions` puis writer borne.
+3. Rejouer les smokes reels : `golden_case_autonomy`, `piscine fermee`, continuations courtes (`oui`, `running`, `mercredi`) et contraintes simples type `demain soir`.
+4. Durcir `validate_plan_patch` : atomicite batch, suggested fixes, charge/recup/sante plus fines.
+5. Dogfood reel Telegram sur la semaine, en classant chaque echec : trust blocker, bug Phase A, besoin Phase A+, besoin Phase B, polish.
+6. Nettoyer les chemins legacy restants seulement quand le dogfood confirme que le nouveau pipeline tient.
 
 ### Phase B en reflexion — refonte planning / progression
 
@@ -164,7 +176,7 @@ Tools de lecture brute pour le coach LLM, livré le 20 avril 2026. Scope recalib
 ### Chantier 2bis du refactor — fait
 
 Heartbeat utilise les mêmes capacités que la conversation pour la lecture de la semaine, livré le 21 avril 2026 :
-- ✅ `weekly_review()` (`backend/src/fitmas/skills/heartbeat/heartbeat.py`) construit `recent_reality` via `build_recent_reality_window` puis `coach_reading_digest` via `build_coach_reading_digest` — même pattern que `morning_briefing` — avec dégradation gracieuse en log warning si l'un échoue
+- ✅ `weekly_review()` (`backend/src/fitmas/skills/heartbeat/heartbeat.py`) construit `recent_reality` via `build_recent_reality_window` puis les faits deterministes `build_coach_reading_facts(..., lens=None)` — pas de pre-pass LLM heartbeat — avec degradation gracieuse en log warning si l'un echoue
 - ✅ `build_review_prompt()` (`backend/src/fitmas/skills/heartbeat/roles.py`) accepte `digest: CoachReadingDigest | None` et l'injecte via `render_digest_for_prompt(digest)` après les compteurs agrégés (qui restent pour compat des tests existants)
 - ✅ Anti-hallu rule miroir du briefing matin ajoutée dans le system prompt review : "N'invente jamais un comptage hebdomadaire et ne dis pas 'zero <sport>' si une sortie de ce sport apparait dans le bloc, meme hors plan"
 - ✅ Le digest expose déjà `real_entries` détaillés (`RealEntry` avec `linked_to_plan`) — `render_digest_for_prompt` produit `swimming 45' jeu (offplan)` lisible par le LLM
@@ -216,7 +228,8 @@ Nouvelle doctrine :
 
 - le coach LLM arbitre l'intention, garde le fil conversationnel et decide quoi faire
 - le determinisme tient la verite, la validation training, les permissions, le commit et l'audit
-- aucune reponse conversationnelle finale ne doit venir d'un helper deterministe, sauf outage LLM, confirmation pending ou resume d'un event reel
+- aucune reponse conversationnelle finale ne doit venir d'un helper deterministe, sauf outage LLM minimal ou resume d'un event reel
+- une confirmation pending est resolue par le LLM via `pending_resolution`, puis validee par le backend
 - les contraintes training sortent en `valid / warning / requires_confirmation / blocked`, pas en mur binaire par defaut
 
 Etat code au 24 avril :
@@ -358,9 +371,9 @@ Ce qui est vrai dans le code aujourd'hui :
   - prompt layers
   - prompt caching sur la partie stable
   - debounce Telegram
-  - routing déterministe des tools
+  - runtime tools V2 ; dette 30 avril : le routing ne doit plus classifier le texte user, seulement borner les tools autorises
   - runtime tools V2 : plusieurs tools read-only / validation-only executes dans un meme tour, budget actuel max 3
-  - confirmations `oui/non` pour mutations à impact fort
+  - confirmations pending serialisees ; dette 30 avril : resolution par `CoachDecision.pending_resolution`, pas parser `oui/non`
   - transcript structuré persisté dans `conversation_turns`
 - couche réalité déjà posée :
   - `ExecutionEvidence`
@@ -413,7 +426,8 @@ Ce qui est vrai dans le code aujourd'hui :
 - guard `same_sport_proximity` sur moves datés
 - guard `protected_recovery_target` sur repos/récupération stable
 - `SYSTEM-MAP.md` comme carte d'architecture pour les agents
-- `coach_reading_digest` : contexte pré-digéré (facts déterministes + lens Haiku JSON) injecté dans briefing matin et `decide()` sur intents lookup/report/availability, avec voice rules anti-bullshit (12b4bf8)
+- `skills/heartbeat/context.py` : `HeartbeatContextBundle` injecte `YesterdayTruth` / `TodayTruth` / `WeekDigest` dans le briefing matin ; pas de lens LLM dans heartbeat
+- `coach_reading_digest` : contexte pré-digéré (facts déterministes + lens Haiku JSON) injecté dans `decide()` sur intents lookup/report/availability, avec voice rules anti-bullshit (12b4bf8)
 
 ### Dette technique vivante
 

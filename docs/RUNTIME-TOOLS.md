@@ -19,6 +19,7 @@ Objectifs :
 - rester auditables
 - mesurer l'impact reel avant d'augmenter la liberte du modele
 - permettre la composition de quelques tools atomiques quand le modele en a besoin
+- laisser le LLM choisir les tools utiles ; le code fixe seulement les capacites autorisees
 
 ## Ce qu'on fait
 
@@ -131,16 +132,22 @@ Cible V2 :
 ### `tool_routing.py`
 
 Role :
-- classifier l'intent utilisateur en 9 categories deterministes
-- mapper chaque intent a un budget de tools borne
-- eviter d'offrir tout le registry a chaque question
+- exposer une surface de tools autorisee par pipeline / scope / prompt policy
+- borner le nombre de tools et les categories executables
+- refuser les tools inconnus, hors budget ou hors pipeline
 
-Architecture V2 (intent-based) :
-- `classify_intent()` → `IntentCategory` (enum)
-- `route_tools_for_query()` → `ToolRoutingDecision` avec intent + tool_names
-- plus de matching regex fragile : classification par heuristiques layered
+Dette actuelle :
+- `classify_intent()` et les categories deterministes sont historiques
+- ils ne doivent plus etre utilises pour comprendre un texte utilisateur libre
+- toute classification d'intention, de confirmation, de sante, de disponibilite, d'execution ou de preference doit venir du LLM dans `CoachDecision`
 
-Categories d'intent :
+Cible Phase A :
+- `route_tools_for_query()` devient une policy de capacites, pas un lecteur du message user
+- l'orchestrateur fournit au LLM une whitelist de tools read-only / validation-only
+- le LLM demande les tools pertinents
+- `execute_tool_calls()` accepte ou bloque chaque demande selon budget
+
+Categories historiques a ne pas reproduire comme classifieur user-text :
 | Intent | Tools offerts |
 |--------|--------------|
 | `casual_chat` | aucun |
@@ -154,7 +161,7 @@ Categories d'intent :
 | `generic_question` | today_context, plan_window, recent_activities |
 
 V2 :
-- le routing ne choisit pas "le tool" ; il choisit une **surface autorisee**
+- le routing ne choisit pas l'intention ; il choisit une **surface autorisee**
 - l'execution decide ensuite combien de tools demandes sont acceptes selon la policy
 - `plan_negotiation` doit accepter plusieurs reads dans le meme tour, typiquement plan + contraintes + load
 
@@ -369,7 +376,7 @@ Le planner V2 doit d'abord passer par `planning_state.py` et `PlanningDecision`.
 
 Le bon ordre :
 1. prompt 2 zones + caching sur la partie stable
-2. routing deterministe vers tres peu de tools offres
+2. policy de capacites : tres peu de tools offerts, sans classifier le texte user
 3. runtime tools read-only semantiques + metrics
 4. tool use borne dans `decide()` pour quelques questions de lecture
 5. transcript structure de session avant toute sophistication plus large
@@ -391,8 +398,13 @@ Addendum 25 avril :
 Addendum 26 avril :
 
 14. ✅ `CoachDecision(plan_patch)` branche dans la conversation via orchestrateur
-15. ✅ confirmation pending avec `PlanPatch` complet serialise, revalidation puis apply apres `oui`
+15. ✅ confirmation pending avec `PlanPatch` complet serialise ; dette 30 avril : remplacer le parsing `oui` par `CoachDecision.pending_resolution`
 16. ✅ skill `replan_after_constraint` formalisee dans le prompt + reclassification de `propose_replan`
+
+Addendum 30 avril :
+
+17. `docs/LLM-FIRST-CONVERSATION.md` devient le contrat conversation : le LLM choisit les tools utiles, le routing borne seulement la surface autorisee.
+18. Aucun router, classifier ou fallback local ne doit lire le texte utilisateur libre pour determiner intention, confirmation, sante, disponibilite, execution ou preference.
 
 ## Direction pour la prochaine tranche
 

@@ -9,7 +9,13 @@ from fitmas.planning_window_resolution import resolve_planning_window
 from fitmas import schema as s
 from fitmas.replan_from_life_change import maybe_replan_from_life_change, maybe_replan_from_user_indication
 from fitmas.time_context import build_time_context
-from fitmas.user_indications import fallback_interpret_user_indication
+from fitmas.user_indications import (
+    IndicationTimeReference,
+    UserIndication,
+    UserIndicationKind,
+    UserIndicationPolarity,
+    UserIndicationScope,
+)
 
 
 def _profile() -> AthleteProfileSnapshot:
@@ -292,12 +298,20 @@ class ReplanFromLifeChangeTest(unittest.TestCase):
                 "rationale": ("stabilite suffisante",),
             },
         )()
-        indication = fallback_interpret_user_indication(
-            "Je ne suis pas dispo demain soir",
-            timezone_name="Europe/Paris",
-            now=datetime(2026, 3, 29, 8, 0),
+        indication = UserIndication(
+            kind=UserIndicationKind.AVAILABILITY_CONSTRAINT,
+            confidence=0.9,
+            source_text="Je ne suis pas dispo demain soir",
+            scope=UserIndicationScope.SINGLE_WINDOW,
+            polarity=UserIndicationPolarity.UNAVAILABLE,
+            time_reference=IndicationTimeReference(
+                label="demain soir",
+                resolved_date=date(2026, 3, 30),
+                day_key="monday",
+                relative_reference="tomorrow",
+                window="evening",
+            ),
         )
-        self.assertIsNotNone(indication)
         resolution = resolve_planning_window(
             indication=indication,
             scheduled_sessions=[tomorrow_session],
@@ -365,12 +379,21 @@ class ReplanFromLifeChangeTest(unittest.TestCase):
             athlete_identity_summary="Loic nage.",
             onboarding_completed=True,
         )
-        indication = fallback_interpret_user_indication(
-            "Je peux pas nager aujourd'hui, tu peux mettre ca samedi ou dimanche ?",
-            timezone_name="Europe/Paris",
-            now=datetime(2026, 4, 2, 6, 30),
+        indication = UserIndication(
+            kind=UserIndicationKind.AVAILABILITY_CONSTRAINT,
+            confidence=0.9,
+            source_text="Je peux pas nager aujourd'hui, tu peux mettre ca samedi ou dimanche ?",
+            scope=UserIndicationScope.SINGLE_DAY,
+            polarity=UserIndicationPolarity.UNAVAILABLE,
+            time_reference=IndicationTimeReference(
+                label="aujourd'hui",
+                resolved_date=date(2026, 4, 2),
+                day_key="thursday",
+                relative_reference="today",
+                window=None,
+            ),
+            requested_days=("saturday", "sunday"),
         )
-        self.assertIsNotNone(indication)
         resolution = resolve_planning_window(
             indication=indication,
             scheduled_sessions=[today_session],

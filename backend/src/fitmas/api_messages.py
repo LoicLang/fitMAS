@@ -9,52 +9,22 @@ from sqlalchemy.orm import Session
 
 from fitmas import repository as repo
 from fitmas.adaptation import check_and_adapt_health_facts
-from fitmas.adaptation_log import build_adaptation_log_entry
 from fitmas.activity_helpers import claimed_activities_last_days
 from fitmas.activity_claims import (
     ActivityClaim,
     NonCompletionClaim,
-    build_claim_fact_payloads,
-    build_execution_conflict_archive_payloads,
-    build_non_completion_fact_payloads,
-    format_activity_claim_for_prompt,
-    format_non_completion_claim_for_prompt,
 )
 from fitmas.execution_clarification import ExecutionClarification, build_execution_clarification
 from fitmas.execution_evidence import classify_execution_evidence
-from fitmas.athlete_profile import build_athlete_profile
 from fitmas.api_payloads import IncomingMessage
-from fitmas.calibration_llm import extract_calibration_resolution, generate_calibration_ack
-from fitmas.calibration_needs import (
-    build_resolution_memory_updates,
-    find_open_calibration_need,
-    is_standalone_calibration_answer,
-    should_apply_calibration_resolution,
-)
-from fitmas.conversation_context import (
-    activity_claim_summary_for_prompt,
-    build_claim_memory_updates,
-    build_conversation_context,
-    execution_summary_for_prompt,
-    non_completion_summary_for_prompt,
-    signal_summary_for_prompt,
-    temporal_summary_for_prompt,
-)
 from fitmas.conversation_contract import ConversationPipelineDependencies, ConversationTurnInput, ConversationUserNotFoundError
 from fitmas.conversation_turn_planner import plan_conversation_turn
 from fitmas.db import get_db
-from fitmas.llm import MutationDecision, decide, extract_facts, make_plan_summary, make_timeline_summary, select_prompt_facts
+from fitmas.llm import MutationDecision, decide, extract_facts, make_timeline_summary, select_prompt_facts
 from fitmas.memory_profile import upsert_profile_memory
 from fitmas.memory_routing import split_memory_payloads
-from fitmas.models import DayId, Extraction, Message, MessageReply, MessageRole
+from fitmas.models import DayId, MessageReply
 from fitmas.plan_mutation_service import skip_session_for_user
-from fitmas.planning_window_resolution import resolve_planning_window
-from fitmas.replan_from_life_change import (
-    maybe_replan_from_life_change,
-    maybe_replan_from_user_indication,
-)
-from fitmas.signals import collect_signals
-from fitmas.tools.contract import ToolContext
 from fitmas.user_indication_llm import interpret_user_indication
 from fitmas.user_indications import (
     UserIndication,
@@ -65,7 +35,6 @@ from fitmas.user_indications import (
     build_health_fact_payloads_from_indication,
     looks_like_execution_clarification_prompt,
     parse_availability_fact_key,
-    supports_planning_resolution,
 )
 from fitmas.time_context import DAY_LABELS_FR, MONTH_LABELS_FR, get_timezone
 
@@ -74,158 +43,6 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 _DAY_VALUES = {d.value for d in DayId}
-_ACK_TEXTS = {"ok", "ok merci", "merci", "ca marche", "c est bon", "c'est bon", "top merci", "bien recu"}
-_GREETING_TEXTS = {"salut", "bonjour", "hello", "yo"}
-_MOTIVATION_TEXTS = {
-    "je suis motive",
-    "je suis motive cette semaine",
-    "je suis motive en ce moment",
-    "je suis chaud",
-    "je suis chaud cette semaine",
-}
-_POST_REPLY_HEALTH_TEXT_MARKERS = (
-    "j ai mal",
-    "j'ai mal",
-    "douleur",
-    "gene",
-    "gêne",
-    "ca tire",
-    "ça tire",
-    "fatigue",
-    "crame",
-    "cramé",
-    "rince",
-    "rincé",
-)
-_NO_CHANGE_MUTATION_MARKERS = (
-    "j annule",
-    "j'oublie",
-    "on oublie",
-    "j annule",
-    "on annule",
-    "je deplace",
-    "on decale",
-    "je remplace",
-    "on remplace",
-    "je te mets",
-    "on te met",
-    "on y va sur",
-    "on met pas",
-)
-_LOAD_RECALIBRATION_MARKERS = (
-    "loup",
-    "rate",
-    "raté",
-    "charges",
-    "charge",
-    "semaine derniere",
-)
-_FUTURE_CONFIRMATION_MARKERS = (
-    "j y serai",
-    "j'y serai",
-    "sans faute",
-    "je serai la",
-    "je serai là",
-    "je la fais",
-    "je le fais",
-    "je la ferai",
-    "je le ferai",
-    "on la garde",
-    "on le garde",
-    "laisse la",
-    "laisse le",
-    "garde la",
-    "garde le",
-)
-_FUTURE_MUTATION_MARKERS = (
-    "je peux pas",
-    "je ne peux pas",
-    "pas dispo",
-    "indispo",
-    "annule",
-    "decale",
-    "décale",
-    "deplace",
-    "déplace",
-    "remplace",
-    "echange",
-    "échange",
-    "swap",
-    "pas demain",
-)
-_SWAP_REQUEST_MARKERS = (
-    "echange",
-    "echanger",
-    "swap",
-    "switch",
-)
-# Markers that signal the message carries real conversational payload the LLM
-# must arbitrate. Used as a defense-in-depth guard against deterministic
-# early-exits (low-signal fast-path, standalone calibration ack) swallowing
-# compound messages.
-_RICH_SIGNAL_MARKERS = (
-    # plan mutation
-    "decale",
-    "decaler",
-    "deplace",
-    "deplacer",
-    "bascule",
-    "basculer",
-    "remplace",
-    "remplacer",
-    "swap",
-    "switch",
-    "echange",
-    "echanger",
-    "permute",
-    "intervert",
-    "a la place",
-    # non-completion / execution claim
-    "oublie",
-    "oublier",
-    "pas fait",
-    "ai pas fait",
-    "n ai pas",
-    "impossible",
-    "pas pu",
-    "loupe",
-    "loup",
-    # health
-    "mal",
-    "douleur",
-    "fatigue",
-    "malade",
-    "gene",
-    "gêne",
-    "blesse",
-    "courbature",
-    # availability constraints
-    "peux pas",
-    "ne peux pas",
-    "pas dispo",
-    "indispo",
-    "empeche",
-    "absent",
-)
-
-
-def _has_rich_signal_marker(text: str) -> bool:
-    """True if the message carries any marker the LLM should arbitrate.
-
-    Used to protect deterministic early-exits from swallowing compound
-    messages. Intentionally conservative: false positives (routing to LLM
-    when the message was trivial after all) are cheap; false negatives
-    (missing a real signal) are the bug class we refactored to eliminate.
-    """
-    normalized = _normalize_text(text)
-    return any(marker in normalized for marker in _RICH_SIGNAL_MARKERS)
-_SPORT_KEYWORDS = {
-    "running": ("course", "courir", "run", "footing"),
-    "swimming": ("natation", "piscine", "nage"),
-    "cycling": ("velo", "vélo", "bike", "roule"),
-    "strength": ("renfo", "muscu", "gainage"),
-    "climbing": ("escalade", "grimpe", "bloc"),
-}
 
 
 def _resolve_day_updated(decision: MutationDecision) -> DayId | None:
@@ -259,69 +76,6 @@ def _to_mutation_decision(proposed, *, fitmas_message: str) -> MutationDecision:
 def _normalize_text(text: str) -> str:
     folded = unicodedata.normalize("NFKD", text or "").encode("ascii", "ignore").decode("ascii")
     return " ".join(folded.lower().strip().split())
-
-
-def _looks_like_swap_request(text: str) -> bool:
-    normalized = _normalize_text(text)
-    return any(marker in normalized for marker in _SWAP_REQUEST_MARKERS)
-
-
-def _looks_like_plan_mutation_request(text: str) -> bool:
-    normalized = _normalize_text(text)
-    mutation_markers = (
-        "decale",
-        "decaler",
-        "deplace",
-        "deplacer",
-        "bascule",
-        "basculer",
-        "remplace",
-        "remplacer",
-        "change",
-        "changer",
-    )
-    return _looks_like_swap_request(text) or any(marker in normalized for marker in mutation_markers)
-
-
-def _maybe_low_signal_label(text: str, *, has_open_calibration_need: bool) -> str | None:
-    """Classify a user message as a low-signal conversational filler so the
-    LLM can adapt its tone (sober ack, no phantom action, no closing
-    statement). Returns one of "ack" / "greeting" / "motivation" or None.
-
-    Chantier 1 (autonomy refactor): this used to short-circuit the LLM with
-    a templated reply ("Bien recu." / "Salut." / "On garde cette energie,
-    rien a changer pour l'instant"). The motivation case in particular
-    asserted a phantom decision ("rien a changer") without arbitration. We
-    now expose only the label so decide() can arbitrate the response."""
-    if has_open_calibration_need:
-        return None
-    # Defense-in-depth: if the message carries any rich signal marker, we
-    # refuse to label as low-signal even when the normalized text would
-    # otherwise match an ACK / greeting / motivation phrase.
-    if _has_rich_signal_marker(text):
-        return None
-    normalized = _normalize_text(text)
-    if normalized in _ACK_TEXTS:
-        return "ack"
-    if normalized in _GREETING_TEXTS:
-        return "greeting"
-    if normalized in _MOTIVATION_TEXTS:
-        return "motivation"
-    return None
-
-
-def _should_run_post_reply_health_adaptation(
-    *,
-    user_text: str,
-    extracted_facts: list[dict],
-    user_indication: UserIndication | None,
-) -> bool:
-    if user_indication is not None and user_indication.kind is UserIndicationKind.HEALTH_SIGNAL:
-        return True
-    if not any(str(fact.get("category") or "") in {"health", "fatigue"} for fact in extracted_facts):
-        return False
-    normalized = _normalize_text(user_text)
-    return any(marker in normalized for marker in _POST_REPLY_HEALTH_TEXT_MARKERS)
 
 
 def _week_scope_reply(indication: UserIndication | None, resolution) -> str | None:
@@ -388,63 +142,6 @@ def _no_candidate_constraint_reply(indication: UserIndication | None, resolution
     return f"OK. Je n'ai rien de sensible planifie {_human_time_label(indication, resolution)}. Rien a bouger pour l'instant."
 
 
-def _maybe_future_session_confirmation_reply(
-    *,
-    user_text: str,
-    conversation_context,
-    scheduled_sessions,
-    timezone_name: str | None,
-) -> str | None:
-    normalized = _normalize_text(user_text)
-    if not any(marker in normalized for marker in _FUTURE_CONFIRMATION_MARKERS):
-        return None
-    if any(marker in normalized for marker in _FUTURE_MUTATION_MARKERS):
-        return None
-
-    temporal = conversation_context.temporal_resolution
-    resolved_date = temporal.resolved_date
-    if resolved_date is None or resolved_date <= temporal.local_date:
-        return None
-
-    sessions_on_date = [
-        session
-        for session in scheduled_sessions
-        if _coerce_local_date(_value(session, "scheduled_date"), timezone_name=timezone_name) == resolved_date
-        and str(_value(session, "sport_type") or "").lower() not in {"rest", "off"}
-        and str(_value(session, "completion_status") or "").lower() in {"planned", "adapted"}
-    ]
-    if not sessions_on_date:
-        return None
-
-    mentioned_sport = _mentioned_sport_type(normalized)
-    target_session = next(
-        (
-            session
-            for session in sessions_on_date
-            if mentioned_sport
-            and str(_value(session, "sport_type") or "").strip().lower() == mentioned_sport
-        ),
-        sessions_on_date[0] if len(sessions_on_date) == 1 else None,
-    )
-    if target_session is None:
-        return None
-
-    target_title = str(_value(target_session, "session_title") or _value(target_session, "sport_type") or "cette seance").strip().lower()
-    target_label = _format_day_date_fr(resolved_date)
-    if temporal.explicit_day_matches_resolved_date is False:
-        today_label = _format_day_date_fr(temporal.local_date)
-        explicit_day = DAY_LABELS_FR.get(str(temporal.explicit_day_key or ""), str(temporal.explicit_day_key or ""))
-        return (
-            f"On se cale: aujourd'hui c'est {today_label}. "
-            f"Demain, c'est {target_label}. "
-            f"Si tu visais {explicit_day}, ce n'est pas la meme date. "
-            "Je ne bouge rien tant que ce n'est pas clair."
-        )
-    if temporal.explicit_day_key is not None or "on est " in normalized:
-        return f"Oui. Aujourd'hui c'est {_format_day_date_fr(temporal.local_date)}. Demain, c'est {target_label}. Je garde {target_title} comme prevu."
-    return f"Parfait. On garde {target_title} demain, {target_label}, comme prevu."
-
-
 def _active_memory_payloads(db: Session, user_id: int) -> tuple[list[object], list[dict]]:
     rows = repo.get_active_memory_items(
         db,
@@ -494,13 +191,6 @@ def _coerce_local_date(value, *, timezone_name: str | None) -> date | None:
         if parsed.tzinfo is None:
             return parsed.date()
         return parsed.astimezone(get_timezone(timezone_name)).date()
-    return None
-
-
-def _mentioned_sport_type(normalized_text: str) -> str | None:
-    for sport_type, keywords in _SPORT_KEYWORDS.items():
-        if any(keyword in normalized_text for keyword in keywords):
-            return sport_type
     return None
 
 
@@ -763,24 +453,6 @@ def _apply_non_completion_resolution(
         user=user,
         session_id=int(_value(target_session, "id")),
         source="conversation_non_completion",
-    )
-
-
-def _sanitize_no_change_reply(*, user_text: str, reply_text: str, decision: MutationDecision) -> str:
-    if decision.mutation_type != "no_change":
-        return reply_text
-    normalized_reply = _normalize_text(reply_text)
-    if not any(marker in normalized_reply for marker in _NO_CHANGE_MUTATION_MARKERS):
-        return reply_text
-    normalized_user = _normalize_text(user_text)
-    if any(marker in normalized_user for marker in _LOAD_RECALIBRATION_MARKERS):
-        return (
-            "Tu as raison. Vu la semaine reelle, on ne repart pas comme si tout avait ete encaisse. "
-            "On doit recalibrer la suite plus simple avant de recharger."
-        )
-    return (
-        "Je reste propre sur les faits: tant qu'un changement n'est pas applique au planning, "
-        "je n'en parle pas comme si c'etait deja fait."
     )
 
 

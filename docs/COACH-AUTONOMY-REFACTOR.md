@@ -12,6 +12,11 @@ read_when:
 
 # FitMAS — Coach Autonomy Refactor
 
+> Statut — historique utile, mais doctrine conversation supersedee le
+> 30 avril 2026 par `docs/LLM-FIRST-CONVERSATION.md`.
+> Les passages qui autorisent regex comme "surligneur", parsing `oui/non`,
+> fallbacks deterministes ou replies canned ne sont plus des consignes.
+
 ## Pourquoi ce chantier
 
 Le coach actuel **ne voit pas la réalité** et **ne décide pas**. Trois pathologies convergent :
@@ -120,26 +125,24 @@ Souvent, le bon comportement est `requires_confirmation` ou une alternative stru
 Aucun module deterministe ne doit produire une reponse conversationnelle finale, sauf :
 
 - indisponibilite LLM
-- demande de confirmation pending deja construite par l'orchestrateur
 - resume d'un event reel deja applique
+- rendu strict d'une demande de confirmation deja produite par le LLM et stockee comme pending
 
 Les helpers deterministes peuvent produire du contexte, des candidates, des validations ou des summaries d'event.
 Ils ne doivent pas jouer l'interlocuteur.
 
 ### Regex et heuristiques
 
-Les regex ne sont pas fiables a 100% sur l'intention utilisateur.
-Elles ne doivent donc jamais devenir le juge d'une intention floue.
+Doctrine mise a jour le 30 avril 2026 :
 
-Regle produit :
-- keyword / regex = surligneur de contexte
-- LLM = extraction structuree de l'intention
-- determinisme = validation, permission, safety rail, commit, audit
+- regex / keyword / parser maison / classifieur deterministe = interdits sur texte utilisateur libre
+- LLM = seul detecteur d'intention, negation, confirmation, sante, disponibilite, execution, preference
+- determinisme = validation, permission, safety rail, commit, audit apres sortie LLM structuree
 
 Exemples :
 - `top pas de douleur` ne doit pas creer un fait sante parce que le mot `douleur` apparait
 - `plutot le soir` ne doit etre resolu que par extraction LLM dans le contexte d'un besoin actif, pas par fallback lexical global
-- les seules exceptions deterministes directes sont les protocoles fermes deja actifs (`oui/non` sur confirmation pending, clarification execution explicite)
+- un `oui` avec pending actif doit etre resolu par `CoachDecision.pending_resolution`, pas par parser deterministe
 
 ## Sources d'inspiration
 
@@ -949,12 +952,12 @@ Gate :
 
 ## Guardrails pendant le refactor
 
-- **Confirmations writes maintenues** : tout `apply_plan` ou `set_completion_status` initié par le coach demande encore une confirmation oui/non Telegram. Filet de sécurité pendant la montée en autonomie.
+- **Confirmations writes** : tout `apply_plan` ou `set_completion_status` a impact doit rester confirme quand le risque l'exige. Cible Phase A : resolution par `CoachDecision.pending_resolution`, pas par parser deterministe `oui/non`.
 - **Latence acceptée** : un tour peut passer de 3s à 8-12s. Le gain en autonomie/fiabilité justifie le coût.
 - **Validation stricte mais graduee** : le validator refuse seulement les vrais dangers / impossibilites. Les bons compromis imparfaits remontent en `warning` ou `requires_confirmation`, puis le coach decide.
 - **Pas de write libre dans un runtime tool LLM au premier slice** : le LLM peut proposer et valider un `PlanPatch`; le commit reste possede par `conversation_pipeline.py` / `PlanMutationService` pour garder transaction, events et permissions.
 - **Dual-write surveillé** : pendant la migration, `plan_actions.py` mute encore `DayPlan` en parallèle. Tout nouveau tool de lecture doit lire la source canonique `ScheduledSession` via `CoachStateBundle` pour éviter divergence.
-- **Determinisme en fond seulement** : pas de nouveau template conversationnel, pas de helper qui choisit a la place du coach et parle ensuite a l'utilisateur.
+- **Determinisme en fond seulement** : pas de nouveau template conversationnel, pas de helper qui lit le texte user, choisit a la place du coach et parle ensuite a l'utilisateur.
 
 ## Définition de done
 

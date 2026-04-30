@@ -176,6 +176,9 @@ class LLMToolsTest(unittest.TestCase):
         self.assertIsNotNone(decision.plan_patch)
         self.assertEqual(decision.plan_patch.operations[0].operation_type, "create_session")
         self.assertIn("CoachDecision", prompts[0])
+        self.assertIn("memory_actions", prompts[0])
+        self.assertIn("execution_actions", prompts[0])
+        self.assertIn("pending_resolution", prompts[0])
 
     def test_decide_can_complete_single_tool_round_trip(self) -> None:
         original_client = llm._client
@@ -191,7 +194,16 @@ class LLMToolsTest(unittest.TestCase):
             prompts.append(messages[0]["content"] if isinstance(messages[0]["content"], str) else "")
             if captured["calls"] == 1:
                 self.assertIsNotNone(tools)
-                self.assertEqual([tool["name"] for tool in tools], ["get_activity_highlights", "get_recent_activities"])
+                self.assertEqual(
+                    [tool["name"] for tool in tools],
+                    [
+                        "get_today_context",
+                        "get_plan_window",
+                        "get_recent_activities",
+                        "get_activity_highlights",
+                        "get_user_constraints",
+                    ],
+                )
                 return SimpleNamespace(
                     stop_reason="tool_use",
                     content=[
@@ -248,6 +260,7 @@ class LLMToolsTest(unittest.TestCase):
                     activities=[],
                     active_facts=[],
                 ),
+                coach_context={"turn_primary_intent": "plan_lookup"},
             )
         finally:
             llm._client = original_client
@@ -264,8 +277,8 @@ class LLMToolsTest(unittest.TestCase):
         self.assertTrue(traces[0].tool_called)
         self.assertEqual(traces[0].tool_name, "get_activity_highlights")
         self.assertEqual(traces[0].llm_round_trips, 2)
-        self.assertEqual(traces[0].context_policy, "activity_highlights_compact")
-        self.assertEqual(traces[0].tool_count_offered, 2)
+        self.assertEqual(traces[0].context_policy, "plan_lookup_compact")
+        self.assertEqual(traces[0].tool_count_offered, 5)
         self.assertGreaterEqual(traces[0].prompt_char_count, 1)
         self.assertNotIn("Repere legacy semaine courante", prompts[0])
         self.assertNotIn("Calendrier date reel", prompts[0])
@@ -281,7 +294,13 @@ class LLMToolsTest(unittest.TestCase):
             self.assertIsNotNone(tools)
             self.assertEqual(
                 [tool["name"] for tool in tools],
-                ["get_today_context", "get_plan_window", "get_user_constraints"],
+                [
+                    "get_today_context",
+                    "get_plan_window",
+                    "get_recent_activities",
+                    "get_activity_highlights",
+                    "get_user_constraints",
+                ],
             )
             prompts.append(messages[0]["content"] if isinstance(messages[0]["content"], str) else "")
             return SimpleNamespace(
@@ -310,6 +329,7 @@ class LLMToolsTest(unittest.TestCase):
                     activities=[],
                     active_facts=[],
                 ),
+                coach_context={"turn_primary_intent": "plan_lookup"},
             )
         finally:
             llm._client = original_client
@@ -325,7 +345,7 @@ class LLMToolsTest(unittest.TestCase):
         self.assertEqual(traces[0].response_stop_reason, "end_turn")
         self.assertFalse(traces[0].fallback_used)
         self.assertEqual(traces[0].context_policy, "plan_lookup_compact")
-        self.assertEqual(traces[0].tool_count_offered, 3)
+        self.assertEqual(traces[0].tool_count_offered, 5)
         self.assertGreaterEqual(traces[0].prompt_char_count, 1)
         self.assertNotIn("Repere legacy semaine courante", prompts[0])
         self.assertIn("Source de vérité planning conversationnelle", prompts[0])
@@ -972,7 +992,13 @@ class LLMToolsTest(unittest.TestCase):
             self.assertIsNotNone(tools)
             self.assertEqual(
                 [tool["name"] for tool in tools],
-                ["get_today_context", "get_plan_window", "get_user_constraints"],
+                [
+                    "get_today_context",
+                    "get_plan_window",
+                    "get_recent_activities",
+                    "get_activity_highlights",
+                    "get_user_constraints",
+                ],
             )
             return SimpleNamespace(
                 stop_reason="end_turn",
@@ -1001,6 +1027,7 @@ class LLMToolsTest(unittest.TestCase):
                     activities=[],
                     active_facts=[],
                 ),
+                coach_context={"turn_primary_intent": "plan_lookup"},
             )
         finally:
             llm._client = original_client
@@ -1012,7 +1039,7 @@ class LLMToolsTest(unittest.TestCase):
         self.assertEqual(len(traces), 1)
         self.assertTrue(traces[0].tool_offered)
         self.assertEqual(traces[0].context_policy, "plan_lookup_compact")
-        self.assertEqual(traces[0].tool_count_offered, 3)
+        self.assertEqual(traces[0].tool_count_offered, 5)
 
     def test_turn_plan_intent_overrides_keyword_tool_routing(self) -> None:
         original_client = llm._client

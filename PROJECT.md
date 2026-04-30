@@ -2,7 +2,7 @@
 
 Coach IA multisport proactif qui ajuste ton entraînement selon ta vraie vie.
 
-## Statut — 28 avril 2026
+## Statut — 30 avril 2026
 
 **Déployé et fonctionnel sur https://the deployed app/**
 
@@ -20,6 +20,7 @@ Ce qui tourne en prod :
 - Runtime tools multi-tool borné : read-only / candidate / validation-only, aucun write DB libre
 - Runtime conversationnel désormais branché sur les prompt layers live
 - `CoachDecision` + `PlanPatch` branchés sur la conversation : validation serveur, confirmation pending, commit via `PlanMutationService`
+- Doctrine conversation renforcee : zero determinisme sur texte utilisateur libre ; le LLM est le seul detecteur d'intention
 - DeepSeek principal avec fallback Claude possible sur sorties structurées fragiles
 - `suggest_replan_candidates` est le helper canonique de candidates replan ; `propose_replan` reste alias compat
 - Workflow `replan_after_constraint` formalisé dans le prompt : tools atomiques → candidate optionnelle → `PlanPatch | no_change | requires_confirmation`
@@ -31,8 +32,8 @@ La vérité "état réel + suite" vit dans `docs/BUILD-ORDER.md`.
 Cap produit actuel :
 - Telegram = coach conversationnel
 - App = cockpit performance
-- priorité immédiate : dogfood réel Phase A toute la semaine, coach fiable pour lire / répondre / appliquer / confirmer / refuser proprement
-- ordre courant : durcir `validate_plan_patch`, ajouter un smoke réel `replan_after_constraint`, puis nettoyer le legacy après validation dogfood
+- priorité immédiate : Phase A LLM-first, puis dogfood réel Telegram sur la semaine
+- ordre courant : purge du déterminisme sur texte user libre, smokes réels, puis durcir `validate_plan_patch` et nettoyer le legacy après validation dogfood
 - Phase B long terme : progression/prescription structurée, pas ouverte tant que Phase A n'est pas stable
 
 ## Stack
@@ -52,19 +53,20 @@ Cap produit actuel :
 2. `PROJECT.md` — ce fichier
 3. `docs/README.md` — carte des docs
 4. `docs/BUILD-ORDER.md` — source de verite sur l'etat reel et la suite
-5. `docs/ARCHITECTURE.md` — stack, principes de harness, modele de donnees, flux
-6. `docs/PRODUCT.md` — vision, scope, parcours utilisateur
-7. `docs/COACH-COHERENCE-REFACTOR.md` — gouvernance state/mutations
-8. `docs/PLANNING.md` — contrat + moteur planning
-9. `docs/CONVERSATION.md` — grounding + indications utilisateur
-10. `docs/SOUL.md` — voix, heartbeat, messagerie
+5. `docs/LLM-FIRST-CONVERSATION.md` — doctrine zero determinisme sur texte user + plan de migration
+6. `docs/ARCHITECTURE.md` — stack, principes de harness, modele de donnees, flux
+7. `docs/PRODUCT.md` — vision, scope, parcours utilisateur
+8. `docs/COACH-COHERENCE-REFACTOR.md` — gouvernance state/mutations
+9. `docs/PLANNING.md` — contrat + moteur planning
+10. `docs/CONVERSATION.md` — grounding + indications utilisateur
+11. `docs/SOUL.md` — voix, heartbeat, messagerie
 
 ## Structure du repo
 
 ```
 AGENTS.md            — regles agentiques
 PROJECT.md           — point d'entree
-docs/                — 12 docs actifs + README (anciens docs en docs/archive/)
+docs/                — docs actifs + README (anciens docs en docs/archive/ si besoin)
 backend/src/fitmas/  — API + bot + domaines partages
 backend/src/fitmas/tools/ — tools runtime read-only et routing associes
 backend/src/fitmas/skills/heartbeat/ — cluster heartbeat (evaluation, roles, generation)
@@ -90,16 +92,17 @@ DB : `fitmas.db` à la racine. Supprimer pour re-seeder.
 Variables : `DEEPSEEK_API_KEY`, `TELEGRAM_BOT_TOKEN`, `STRAVA_CLIENT_ID`, `STRAVA_CLIENT_SECRET`
 
 Stabilisation LLM :
-- `FITMAS_USE_DEEPSEEK_OPENAI_STRUCTURED=1` active le chemin DeepSeek OpenAI-compatible pour les sorties structurees conversationnelles
-- garder `0` par defaut tant que le smoke provider n'est pas suffisamment stable
+- le chemin DeepSeek OpenAI-compatible structured output est le defaut quand `DEEPSEEK_API_KEY` existe
+- `FITMAS_USE_DEEPSEEK_OPENAI_STRUCTURED=0` sert de kill switch temporaire
 - `ANTHROPIC_API_KEY` sert de fallback schema Claude quand DeepSeek retourne un JSON invalide metier
 `ANTHROPIC_API_KEY` reste un fallback temporaire pendant la migration provider.
 
 ## Principes
 
 - LLM-first pour l'intention floue ; déterminisme pour vérité, validation, permissions, commit et audit
-- Pas de reply conversationnelle finale depuis un helper déterministe, sauf outage, confirmation pending ou résumé d'event réel
-- Regex / keywords = surligneurs de prompt, jamais classifieurs d'intention floue
+- Zero determinisme sur texte utilisateur libre : pas de regex, keyword, classifieur, parsing oui/non, extraction sante/dispo/execution/preference ou routing de tools hors LLM
+- Le LLM produit des actions structurees ; le backend valide, resout, ecrit et audite
+- Pas de reply conversationnelle finale depuis un helper déterministe, sauf outage minimal ou résumé d'event réel
 - Tools atomiques et bornés avant gros tool magique
 - `PlanPatch` est le langage d'action ; le write reste orchestré par `PlanMutationService`
 - Mono-agent propre avant toute tentation multi-agent

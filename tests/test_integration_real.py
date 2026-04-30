@@ -42,6 +42,8 @@ from fitmas.time_context import build_time_context
 
 
 def _skip_if_no_key():
+    if os.getenv("FITMAS_RUN_REAL_LLM_TESTS") != "1":
+        raise unittest.SkipTest("Set FITMAS_RUN_REAL_LLM_TESTS=1 to run real API tests")
     if not (os.getenv("DEEPSEEK_API_KEY") or os.getenv("ANTHROPIC_API_KEY")):
         raise unittest.SkipTest("No DEEPSEEK_API_KEY or ANTHROPIC_API_KEY — skipping real API tests")
 

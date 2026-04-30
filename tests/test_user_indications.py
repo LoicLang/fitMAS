@@ -16,15 +16,28 @@ from fitmas.user_indications import (
     UserIndicationScope,
     build_availability_fact_payloads_from_indication,
     build_health_fact_payloads_from_indication,
-    fallback_interpret_user_indication,
+    indication_from_payload,
     parse_availability_fact_key,
 )
 
 
 class UserIndicationsTest(unittest.TestCase):
-    def test_fallback_interprets_future_availability_constraint(self) -> None:
-        indication = fallback_interpret_user_indication(
-            "Je ne suis pas dispo demain soir",
+    def test_structured_payload_builds_future_availability_constraint(self) -> None:
+        indication = indication_from_payload(
+            {
+                "kind": "availability_constraint",
+                "confidence": 0.9,
+                "scope": "single_window",
+                "polarity": "unavailable",
+                "time_reference": {
+                    "label": "demain soir",
+                    "resolved_date": "2026-03-30",
+                    "day_key": "monday",
+                    "relative_reference": "tomorrow",
+                    "window": "evening",
+                },
+            },
+            source_text="Je ne suis pas dispo demain soir",
             timezone_name="Europe/Paris",
             now=datetime(2026, 3, 29, 8, 0),
         )
@@ -35,9 +48,22 @@ class UserIndicationsTest(unittest.TestCase):
         self.assertEqual(indication.time_reference.resolved_date, date(2026, 3, 30))
         self.assertEqual(indication.time_reference.window, "evening")
 
-    def test_fallback_interprets_health_signal_and_builds_fact(self) -> None:
-        indication = fallback_interpret_user_indication(
-            "J'ai mal a l'epaule quand je nage, ca tire",
+    def test_structured_payload_builds_health_signal_and_fact(self) -> None:
+        indication = indication_from_payload(
+            {
+                "kind": "health_signal",
+                "confidence": 0.92,
+                "scope": "single_day",
+                "polarity": "signal",
+                "time_reference": {"label": "today", "resolved_date": "2026-03-29"},
+                "health": {
+                    "body_zone": "shoulder",
+                    "trigger_activity": "swimming",
+                    "symptom_type": "pain_tightness",
+                    "severity": "moderate",
+                },
+            },
+            source_text="J'ai mal a l'epaule quand je nage, ca tire",
             timezone_name="Europe/Paris",
             now=datetime(2026, 3, 29, 8, 0),
         )
@@ -82,8 +108,9 @@ class UserIndicationsTest(unittest.TestCase):
                 )
 
         self.assertIsNone(indication)
-        self.assertIn("Signal lexical non conclusif", prompts[0])
-        self.assertIn("Verifie negation", prompts[0])
+        self.assertNotIn("Signal lexical non conclusif", prompts[0])
+        self.assertNotIn("Verifie negation", prompts[0])
+        self.assertIn("Retourne UNIQUEMENT un JSON", prompts[0])
 
     def test_calibration_resolution_does_not_use_keyword_fallback_without_llm(self) -> None:
         need = calibration_needs.CalibrationNeed(
@@ -109,14 +136,33 @@ class UserIndicationsTest(unittest.TestCase):
 
         self.assertIsNone(resolution)
 
-    def test_fallback_interprets_general_illness_and_clarification_answer(self) -> None:
-        indication = fallback_interpret_user_indication(
-            "Je suis malade comme un chien j'ai rien fait",
+    def test_structured_payload_can_carry_health_and_execution_update(self) -> None:
+        indication = indication_from_payload(
+            {
+                "kind": "health_signal",
+                "confidence": 0.95,
+                "scope": "single_day",
+                "polarity": "signal",
+                "time_reference": {
+                    "label": "clarification",
+                    "resolved_date": "2026-03-31",
+                    "day_key": "tuesday",
+                    "relative_reference": "yesterday",
+                },
+                "health": {
+                    "body_zone": "general",
+                    "trigger_activity": "general",
+                    "symptom_type": "illness",
+                    "severity": "moderate",
+                },
+                "execution": {
+                    "sport_type": "strength",
+                    "status": "not_done",
+                },
+            },
+            source_text="Je suis malade comme un chien j'ai rien fait",
             timezone_name="Europe/Paris",
             now=datetime(2026, 4, 1, 8, 0),
-            recent_agent_text="Je ne vois pas de trace de ton renfo hier. Tu l'as faite ou non ?",
-            clarification_date=date(2026, 3, 31),
-            clarification_sport_type="strength",
         )
 
         self.assertIsNotNone(indication)
@@ -127,9 +173,22 @@ class UserIndicationsTest(unittest.TestCase):
         self.assertIsNotNone(indication.time_reference)
         self.assertEqual(indication.time_reference.resolved_date, date(2026, 3, 31))
 
-    def test_fallback_interprets_week_travel_constraint(self) -> None:
-        indication = fallback_interpret_user_indication(
-            "Cette semaine je voyage de mercredi a vendredi",
+    def test_structured_payload_builds_week_travel_constraint(self) -> None:
+        indication = indication_from_payload(
+            {
+                "kind": "availability_constraint",
+                "confidence": 0.95,
+                "scope": "week",
+                "polarity": "unavailable",
+                "time_reference": {
+                    "label": "mercredi a vendredi",
+                    "resolved_date": "2026-04-01",
+                    "day_key": "wednesday",
+                    "relative_reference": "this_week",
+                    "window_end_date": "2026-04-03",
+                },
+            },
+            source_text="Cette semaine je voyage de mercredi a vendredi",
             timezone_name="Europe/Paris",
             now=datetime(2026, 3, 29, 8, 0),
         )
@@ -141,12 +200,20 @@ class UserIndicationsTest(unittest.TestCase):
         self.assertEqual(indication.time_reference.resolved_date, date(2026, 4, 1))
 
     def test_resolve_planning_window_matches_single_future_session(self) -> None:
-        indication = fallback_interpret_user_indication(
-            "Je ne suis pas dispo demain soir",
-            timezone_name="Europe/Paris",
-            now=datetime(2026, 3, 29, 8, 0),
+        indication = UserIndication(
+            kind=UserIndicationKind.AVAILABILITY_CONSTRAINT,
+            confidence=0.9,
+            source_text="Je ne suis pas dispo demain soir",
+            scope=UserIndicationScope.SINGLE_WINDOW,
+            polarity=UserIndicationPolarity.UNAVAILABLE,
+            time_reference=IndicationTimeReference(
+                label="demain soir",
+                resolved_date=date(2026, 3, 30),
+                day_key="monday",
+                relative_reference="tomorrow",
+                window="evening",
+            ),
         )
-        self.assertIsNotNone(indication)
 
         resolution = resolve_planning_window(
             indication=indication,
@@ -171,11 +238,23 @@ class UserIndicationsTest(unittest.TestCase):
 
 
 class AvailabilityConstraintDurationTest(unittest.TestCase):
-    """Chantier 4 : contraintes multi-jours → window_end_date + fact persistant."""
+    """Chantier 4 now trusts the LLM-provided window_end_date."""
 
-    def test_fallback_captures_two_weeks_duration(self) -> None:
-        indication = fallback_interpret_user_indication(
-            "Imprevu, je voyage pendant 2 semaines a partir de demain",
+    def test_structured_payload_carries_two_weeks_window_end(self) -> None:
+        indication = indication_from_payload(
+            {
+                "kind": "availability_constraint",
+                "confidence": 0.9,
+                "scope": "week",
+                "polarity": "unavailable",
+                "time_reference": {
+                    "label": "2 semaines a partir de demain",
+                    "resolved_date": "2026-04-20",
+                    "relative_reference": "tomorrow",
+                    "window_end_date": "2026-05-03",
+                },
+            },
+            source_text="Imprevu, je voyage pendant 2 semaines a partir de demain",
             timezone_name="Europe/Paris",
             now=datetime(2026, 4, 19, 8, 0),
         )
@@ -183,12 +262,23 @@ class AvailabilityConstraintDurationTest(unittest.TestCase):
         self.assertEqual(indication.kind, UserIndicationKind.AVAILABILITY_CONSTRAINT)
         self.assertIsNotNone(indication.time_reference)
         self.assertEqual(indication.time_reference.resolved_date, date(2026, 4, 20))
-        # 14 jours inclusifs : start + 13
         self.assertEqual(indication.time_reference.window_end_date, date(2026, 5, 3))
 
-    def test_fallback_captures_fifteen_days_duration(self) -> None:
-        indication = fallback_interpret_user_indication(
-            "Imprevu, je suis absent 15 jours a partir de demain",
+    def test_structured_payload_carries_fifteen_days_window_end(self) -> None:
+        indication = indication_from_payload(
+            {
+                "kind": "availability_constraint",
+                "confidence": 0.9,
+                "scope": "week",
+                "polarity": "unavailable",
+                "time_reference": {
+                    "label": "15 jours a partir de demain",
+                    "resolved_date": "2026-04-20",
+                    "relative_reference": "tomorrow",
+                    "window_end_date": "2026-05-04",
+                },
+            },
+            source_text="Imprevu, je suis absent 15 jours a partir de demain",
             timezone_name="Europe/Paris",
             now=datetime(2026, 4, 19, 8, 0),
         )
@@ -197,9 +287,21 @@ class AvailabilityConstraintDurationTest(unittest.TestCase):
         self.assertEqual(indication.time_reference.resolved_date, date(2026, 4, 20))
         self.assertEqual(indication.time_reference.window_end_date, date(2026, 5, 4))
 
-    def test_fallback_leaves_window_end_none_when_no_duration(self) -> None:
-        indication = fallback_interpret_user_indication(
-            "Je ne suis pas dispo demain soir",
+    def test_structured_payload_leaves_window_end_none_when_absent(self) -> None:
+        indication = indication_from_payload(
+            {
+                "kind": "availability_constraint",
+                "confidence": 0.9,
+                "scope": "single_window",
+                "polarity": "unavailable",
+                "time_reference": {
+                    "label": "demain soir",
+                    "resolved_date": "2026-03-30",
+                    "relative_reference": "tomorrow",
+                    "window": "evening",
+                },
+            },
+            source_text="Je ne suis pas dispo demain soir",
             timezone_name="Europe/Paris",
             now=datetime(2026, 3, 29, 8, 0),
         )
@@ -216,6 +318,7 @@ class AvailabilityFactBuilderTest(unittest.TestCase):
         start: date,
         end: date,
         polarity: UserIndicationPolarity = UserIndicationPolarity.UNAVAILABLE,
+        trigger_activity: str | None = None,
     ) -> UserIndication:
         return UserIndication(
             kind=UserIndicationKind.AVAILABILITY_CONSTRAINT,
@@ -231,6 +334,7 @@ class AvailabilityFactBuilderTest(unittest.TestCase):
                 window=None,
                 window_end_date=end,
             ),
+            trigger_activity=trigger_activity,
         )
 
     def test_builder_produces_fact_with_expires_at_anchored_on_window_end(self) -> None:
@@ -238,6 +342,7 @@ class AvailabilityFactBuilderTest(unittest.TestCase):
             source_text="Je n'ai pas acces a la piscine pendant 2 semaines",
             start=date(2026, 4, 20),
             end=date(2026, 5, 3),
+            trigger_activity="swimming",
         )
         payloads = build_availability_fact_payloads_from_indication(indication)
         self.assertEqual(len(payloads), 1)
@@ -248,9 +353,9 @@ class AvailabilityFactBuilderTest(unittest.TestCase):
         # expires_at ancré à J+1 minuit (le fact reste actif tout le dernier jour)
         self.assertEqual(payload["expires_at"], datetime(2026, 5, 4, 0, 0))
 
-    def test_builder_fallbacks_to_general_when_no_activity_keyword(self) -> None:
+    def test_builder_does_not_infer_activity_from_source_text(self) -> None:
         indication = self._make(
-            source_text="Je suis indisponible pendant deux semaines",
+            source_text="Je n'ai pas acces a la piscine pendant 2 semaines",
             start=date(2026, 4, 20),
             end=date(2026, 5, 3),
         )

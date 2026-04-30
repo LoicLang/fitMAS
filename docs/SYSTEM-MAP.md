@@ -14,13 +14,15 @@ read_when:
 
 FitMAS n'est pas "un LLM qui fait un plan".
 
-FitMAS est un systeme de coaching deterministe et adaptatif :
+FitMAS est un systeme de coaching LLM-first, encadre par du determinisme :
 
-- le backend porte la verite, les garde-fous et les effets de bord
-- le LLM comprend l'ambiguite, propose et formule
+- le LLM comprend le texte utilisateur libre, l'ambiguite, la negation et l'intention
 - les tools lisent des slices bornees
-- les skills orchestrent des workflows limites
+- le backend porte la verite, les garde-fous, les validations, les permissions, les effets de bord et l'audit
+- les skills orchestrent des workflows limites sans devenir des cerveaux conversationnels caches
 - `PlanMutationService` est le point de commit des changements planning visibles
+
+Regle canonique : aucun regex, keyword, parser maison, classifieur deterministe ou short-circuit ne lit le texte utilisateur libre pour decider l'intention. Voir `docs/LLM-FIRST-CONVERSATION.md`.
 
 ## Flux principal
 
@@ -32,36 +34,23 @@ Orchestrateurs
 api_messages.py / api_plan.py / api_activities.py / heartbeat
         |
         v
-Capacites metier deterministes
-reality / planning / readiness / analysis / drafting
-        |
-        v
-Turn planner (LLM read-only, conversation seulement)
-conversation_turn_planner.plan_conversation_turn()
-primary_intent + secondary_intents + has_plan_mutation
-        |
-        v
-Arbitrage heuristique OR LLM
-plan_mutation_request = heuristic OR llm
-divergence logguee, llm=unavailable toleree
-        |
-        v
-LLM decide()
-comprehension, proposition, formulation
-tool budget route par primary_intent
+Coach LLM unique
+comprend le tour, garde le fil, choisit les read-tools utiles
+sort CoachDecision structure
         |
         v
 Validation backend
-permissions, hooks, confirmations, coherence guards
+schema, permissions, hooks, confirmations, coherence guards
         |
         v
-PlanMutationService
+Writers bornes
+PlanMutationService / MemoryMutationService cible
         |
         v
-DB + plan_mutation_events (+ blocked_events typed)
+DB + events d'audit
         |
         v
-Reply derivee de l'event applique ou block_reason typed
+Reply derivee de la decision LLM + resultat reel valide
 ```
 
 ## Frontieres
@@ -212,36 +201,38 @@ Regle :
 ### Conversation
 
 - `conversation_pipeline.py` : tour de conversation, orchestrateur principal
-- `conversation_context.py` : grounding temps / claims / activites
-- `conversation_turn_planner.py` : classifieur LLM read-only pour intention primaire / intentions secondaires (e79d734)
+- `conversation_context.py` : contexte machine seulement ; ne parse plus claims / non-completion depuis `user_text`
+- `conversation_turn_planner.py` : legacy / transition ; la cible Phase A est une sortie `CoachDecision` unique plutot qu'un pre-classifieur qui repond deja a la question
 - `conversation_prompting.py` : politique de prompt
 - `llm_prompt_builder.py` / `prompt_layers.py` : prompt structure
 - `llm_gateway.py` : client LLM + parseur JSON robuste partage (eea74e7)
-- `user_indications.py` / `user_indication_llm.py` : message user -> indication structuree
+- `user_indications.py` / `user_indication_llm.py` : types + pre-step LLM transitoire. Plus de fallback deterministe ; cible = actions structurees dans `CoachDecision`
 - `mutation_hooks.py` : pre-hooks de coherence avec `block_reason` typed
 - `coach_reading_digest.py` : contexte pre-digere (faits + lens Haiku JSON) injecte dans briefing matin et `decide()` sur intents lookup/report/availability (12b4bf8)
 
-Regle de routage :
+Regle conversation :
 
-- pour un message non trivial ou compose, le LLM arbitre l'intention principale
-- le routeur de tour ne fait aucun write; il ne sert qu'a proteger les gates du pipeline
-- l'intention du routeur peut surclasser la classification deterministe pour choisir la prompt policy et le budget de tools (`_TURN_INTENT_TO_PROMPT_INTENT` dans `llm.py`)
-- les extracteurs deterministes ajoutent du contexte, mais ne doivent pas produire de reply finale quand une intention planning explicite est presente
-- les replies deterministes de disponibilite large / absence de candidat sont du grounding LLM quand le routeur reconnait une contrainte de planning, avec fallback deterministe si le LLM echoue
-- les signaux sante restent prioritaires comme faits de contexte, mais une demande composee sante + mutation ne doit pas lancer d'adaptation sante automatique avant l'arbitrage LLM
-- aucun side-effect planning ne doit arriver avant l'arbitrage du tour si le message contient une demande de mutation (`swap`, `echange`, `decale`, `deplace`, `remplace`, `change`)
-- `plan_mutation_request = heuristic OR llm` — divergence → WARNING (`pipeline.intent_divergence`), `llm=unavailable` accepte sans downgrade
+- le texte utilisateur libre va d'abord au coach LLM
+- le LLM choisit les read-tools utiles dans le budget autorise
+- le LLM sort une decision structuree unique : reply, actions memoire/execution, `PlanPatch | no_change | requires_confirmation`, resolution pending eventuelle
+- le backend valide et applique seulement des artefacts machine-generes par le LLM
+- aucun side-effect planning ou memoire ne doit arriver depuis un regex/keyword/parser sur le texte user
+- `plan_mutation_request = heuristic OR llm`, `low_signal`, `rich_signal`, pending `oui/non` deterministe et `_sanitize_no_change_reply` sont retires du runtime conversation. Ne pas les recreer.
 
 ### Feedback bloquant mutations
 
 Quand un pre-hook bloque une mutation, `PlanMutationService` expose un `PlanBlockedMutationEvent` avec un `block_reason` typed (`protected_recovery_target`, `same_sport_proximity`, `occupied_training_target`).
 
 Regle :
-- la reply utilisateur est derivee du `block_reason` via un dict `_BLOCK_REASON_REPLIES` — jamais improvisee par le LLM
+- le blocage est une verite machine post-validation
+- la cible Phase A est une reponse coach issue du LLM ou d'un rendu d'event reel strictement auditable
+- les dictionnaires de replies canned (`_BLOCK_REASON_REPLIES`) sont acceptables comme filet provisoire, mais ne doivent pas devenir le cerveau conversationnel
 - chaque blocage emit `logger.info("mutation_blocked ...")` pour audit
-- ajouter une nouvelle raison implique d'ajouter la reply associee
+- ajouter une nouvelle raison implique d'ajouter un rendu auditable ou une explication LLM fondee sur le `block_reason`
 
 ### Failles conversation documentees
+
+Historique 15-17 avril : ces closures expliquent le code existant, pas la cible 30 avril.
 
 | Faille | Closure | Ref |
 |--------|---------|-----|

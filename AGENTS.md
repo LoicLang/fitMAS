@@ -42,11 +42,12 @@ Current durable direction:
 
 Core coach doctrine:
 
-- LLM-first for fuzzy user intent.
-- Determinism owns truth, validation, permissions, commit, audit.
-- Determinism is a safety rail / last resort, not the coach brain.
-- Regex and keywords are signal highlighters, never intent classifiers for fuzzy language.
-- No helper should produce a final conversational reply unless it is outage, pending confirmation, or a summary of a real committed event.
+- Hard rule: **no deterministic parsing of free user text in conversation runtime**.
+- The LLM is the only detector of user intent, negation, health/fatigue, availability, execution, preference, confirmation, target sport/date/window, and planning intent.
+- Determinism only applies after the LLM, on machine artifacts: typed JSON, IDs, DB keys, schemas, permissions, validation, commit, dedup, TTL, audit.
+- Regex/keywords on free user text are forbidden in conversation runtime. They are not "hints", not "fallbacks", not "closed protocol" helpers.
+- No helper should produce a final conversational reply unless it is outage or a summary of a real committed event. Pending confirmations must be resolved by the LLM through a structured contract, not by deterministic yes/no parsing.
+- Canonical doctrine and migration plan: `docs/LLM-FIRST-CONVERSATION.md`.
 
 Current action architecture:
 
@@ -89,7 +90,7 @@ High-risk regressions to avoid:
 - Treating `adapted` as proof that a session was done.
 - Letting stale `session_description` drive the visible workout after sport/type replacement.
 - Asking menus when tools are enough to decide.
-- Reintroducing deterministic canned replies for availability, fatigue, pain, or short continuation turns.
+- Reintroducing deterministic understanding or canned replies for any free user message, including availability, fatigue, pain, execution updates, confirmations, or short continuation turns.
 
 
 # Workflow
@@ -125,12 +126,11 @@ For long-term evolvability:
   - message persistence
   - signal derivation
 - debug endpoints and admin surfaces must be **disabled by default in production** unless explicitly enabled
-- do not "solve" autonomy gaps by forcing deterministic paths when a prompt/tool/few-shot improvement can teach the model the right behavior
-- determinism is a **safety rail** or **last resort**, never the long-term primary solution for coach reasoning
-- regex / keyword heuristics must be treated as **signal highlighters**, not intent classifiers
-- never create facts, mutate plans, or short-circuit coach reasoning from regex alone when user input is fuzzy (`douleur`, `soir`, `fatigue`, etc.)
-- for fuzzy intent, inject detected signals into the LLM prompt with cautions about negation/context, let the LLM extract structured intent, then use deterministic code only for validation, permissions, safety rails, commit, and audit
-- direct deterministic parsing is acceptable only for closed protocol replies with an active pending contract, e.g. explicit `oui/non` confirmation
+- do not "solve" autonomy gaps by forcing deterministic paths; the LLM must understand the user and emit structured actions
+- determinism is validation / permissions / commit / audit on LLM-produced or DB-produced artifacts, never user-text understanding
+- regex / keyword heuristics on free user text are forbidden in conversation runtime, including as prompt highlighters
+- never create facts, mutate plans, resolve pending confirmations, choose tools, or short-circuit coach reasoning from regex or keywords on user input
+- pending confirmation replies (`oui`, `non`, "oui mais...") must be interpreted by the LLM in context through a structured `pending_resolution`
 
 
 # Tool / Skill Thinking (mandatory)
@@ -144,7 +144,7 @@ Before implementing a feature, ask:
 3. Can this capability be reused by CLI + API + interactive chat?  
    -> centralize in a shared module.
 4. Is user input fuzzy/approximate (typos, partial names, ambiguity)?  
-   -> design tolerant matching + safe fallback/confirmation.
+   -> make the LLM extract typed intent/references first; deterministic matching only resolves those typed references against DB truth.
 5. What will be needed later for cloud execution?  
    -> avoid local-only assumptions in interfaces.
 

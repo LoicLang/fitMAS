@@ -1,22 +1,30 @@
 """Morning briefing must carry ground-truth execution numbers.
 
-Symptom: on a Friday morning, the coach told the user "tu as sorti 4
-seances cette semaine" when only one real workout had happened. Root
-cause: `build_briefing_prompt` passed today's session + yesterday
-context + signals + facts, but never the week execution counters from
-`recent_reality`. With no ground truth, the LLM confabulated a plausible
-weekly count.
+Symptom (2026 spring): on a Friday morning, the coach told the user "tu as
+sorti 4 seances cette semaine" when only one real workout had happened.
+Root cause: `build_briefing_prompt` had today's session + yesterday context
++ signals + facts, but no week execution counters. With no ground truth,
+the LLM confabulated a plausible weekly count.
 
-Fix A: inject a structured "Execution reelle semaine" block carrying
-the counters from `RecentRealityWindow`, and add an explicit system-
-prompt rule forbidding invention of weekly counts.
+Symptom (2026-04-29): the briefing claimed "hier t'as sorti du offplan"
+while yesterday's activity was actually linked to a planned session. Root
+cause: the prompt mixed yesterday-specific context with weekly aggregates,
+so the LLM projected the 7d offplan count onto "hier".
+
+    Both fixes are now structural: the prompt receives a `HeartbeatContextBundle`
+    with three atomic Truth blocks (yesterday/today/week) plus a source hierarchy
+    that makes YesterdayTruth authoritative for yesterday-specific claims.
 """
 from __future__ import annotations
 
 import unittest
+from datetime import date
+from pathlib import Path
 from types import SimpleNamespace
 
+from fitmas.coach_reading_digest import CoachReadingLens
 from fitmas.recent_reality import RecentRealityWindow
+from fitmas.skills.heartbeat.context import HeartbeatContextBundle, build_heartbeat_context_bundle
 from fitmas.skills.heartbeat.roles import build_briefing_prompt
 
 
@@ -30,12 +38,15 @@ def _user() -> SimpleNamespace:
 
 def _today_session() -> SimpleNamespace:
     return SimpleNamespace(
+        id=99,
         label="Vendredi",
         session_title="Recuperation",
         sport_type="rest",
         session_goal="Absorber",
         priority="Recovery",
         session_note="",
+        duration_min=30,
+        completion_status="planned",
     )
 
 
@@ -72,86 +83,141 @@ def _recent_reality(
     )
 
 
+def _bundle(
+    *,
+    today: date = date(2026, 4, 17),
+    today_session=None,
+    yesterday_planned=(),
+    yesterday_activities=(),
+    week_recent_reality: RecentRealityWindow | None = None,
+    week_activities=(),
+) -> HeartbeatContextBundle:
+    return build_heartbeat_context_bundle(
+        today=today,
+        today_planned_session=today_session if today_session is not None else _today_session(),
+        yesterday_planned_sessions=yesterday_planned,
+        yesterday_activities=yesterday_activities,
+        yesterday_claims=(),
+        week_recent_reality=week_recent_reality or _recent_reality(),
+        week_activities=week_activities,
+    )
+
+
 class BriefingPromptExecutionTruthTest(unittest.TestCase):
-    def test_prompt_includes_execution_truth_block_with_counters(self) -> None:
-        system, prompt = build_briefing_prompt(
-            user=_user(),
-            today_session=_today_session(),
-            day=None,
-            time_context=_time_context(),
-            yesterday_context="",
-            clarification=None,
-            calibration_need=None,
-            signals_block="",
-            facts_block="",
-            sport_knowledge="",
-            recent_reality=_recent_reality(planned=4, confirmed=1, claimed=0),
+    def test_prompt_includes_week_digest_with_counters(self) -> None:
+        bundle = _bundle(
+            week_recent_reality=_recent_reality(planned=4, confirmed=1, claimed=0),
         )
-
-        self.assertIn("Execution reelle semaine", prompt)
-        self.assertIn("4", prompt)
-        self.assertIn("1", prompt)
-        self.assertIn("planifiees", prompt.lower())
-        self.assertIn("confirmees", prompt.lower())
-
-    def test_system_prompt_forbids_invented_weekly_counts(self) -> None:
-        system, _ = build_briefing_prompt(
-            user=_user(),
-            today_session=_today_session(),
-            day=None,
-            time_context=_time_context(),
-            yesterday_context="",
-            clarification=None,
-            calibration_need=None,
-            signals_block="",
-            facts_block="",
-            sport_knowledge="",
-            recent_reality=_recent_reality(),
-        )
-
-        # The rule must be present unconditionally so it applies even
-        # when recent_reality is omitted (defense in depth).
-        self.assertIn("Execution reelle semaine", system)
-        self.assertIn("N'invente", system)
-
-    def test_system_prompt_forbids_invented_counts_even_without_reality_block(self) -> None:
-        """Even when `recent_reality` isn't passed (legacy callers), the
-        LLM must be instructed not to make up weekly counts."""
-        system, prompt = build_briefing_prompt(
-            user=_user(),
-            today_session=_today_session(),
-            day=None,
-            time_context=_time_context(),
-            yesterday_context="",
-            clarification=None,
-            calibration_need=None,
-            signals_block="",
-            facts_block="",
-            sport_knowledge="",
-            # no recent_reality kwarg
-        )
-
-        self.assertIn("N'invente", system)
-        self.assertNotIn("Execution reelle semaine", prompt)
-
-    def test_execution_block_reports_claimed_and_missed_streak(self) -> None:
         _, prompt = build_briefing_prompt(
             user=_user(),
             today_session=_today_session(),
             day=None,
             time_context=_time_context(),
-            yesterday_context="",
+            bundle=bundle,
             clarification=None,
             calibration_need=None,
             signals_block="",
             facts_block="",
             sport_knowledge="",
-            recent_reality=_recent_reality(planned=5, confirmed=2, claimed=1, missed_streak_days=2),
         )
 
-        self.assertIn("2", prompt)  # confirmed
-        self.assertIn("5", prompt)  # planned
-        self.assertIn("revendiqu", prompt.lower())
+        self.assertIn("WeekDigest", prompt)
+        self.assertIn("planned: 4", prompt)
+        self.assertIn("confirmed: 1", prompt)
+
+    def test_system_prompt_ground_weekly_counts_in_week_digest(self) -> None:
+        bundle = _bundle()
+        system, _ = build_briefing_prompt(
+            user=_user(),
+            today_session=_today_session(),
+            day=None,
+            time_context=_time_context(),
+            bundle=bundle,
+            clarification=None,
+            calibration_need=None,
+            signals_block="",
+            facts_block="",
+            sport_knowledge="",
+        )
+
+        self.assertIn("WeekDigest", system)
+        self.assertIn("N'invente", system)
+
+    def test_system_prompt_uses_yesterday_truth_for_yesterday_claims(self) -> None:
+        """Root-cause guardrail for the 2026-04-29 incident: aggregates
+        from WeekDigest must never be projected onto a specific day."""
+        bundle = _bundle()
+        system, _ = build_briefing_prompt(
+            user=_user(),
+            today_session=_today_session(),
+            day=None,
+            time_context=_time_context(),
+            bundle=bundle,
+            clarification=None,
+            calibration_need=None,
+            signals_block="",
+            facts_block="",
+            sport_knowledge="",
+        )
+
+        lowered = system.lower()
+        self.assertIn("agregat", lowered)
+        self.assertIn("jour specifique", lowered)
+        self.assertIn("yesterdaytruth", lowered)
+        self.assertIn("status", lowered)
+
+    def test_week_digest_reports_claimed_and_missed_streak(self) -> None:
+        bundle = _bundle(
+            week_recent_reality=_recent_reality(
+                planned=5, confirmed=2, claimed=1, missed_streak_days=2,
+            ),
+        )
+        _, prompt = build_briefing_prompt(
+            user=_user(),
+            today_session=_today_session(),
+            day=None,
+            time_context=_time_context(),
+            bundle=bundle,
+            clarification=None,
+            calibration_need=None,
+            signals_block="",
+            facts_block="",
+            sport_knowledge="",
+        )
+
+        self.assertIn("planned: 5", prompt)
+        self.assertIn("confirmed: 2", prompt)
+        self.assertIn("claimed: 1", prompt)
+        self.assertIn("missed_streak_days: 2", prompt)
+
+    def test_briefing_prompt_ignores_editorial_lens(self) -> None:
+        bundle = _bundle()
+        _, prompt = build_briefing_prompt(
+            user=_user(),
+            today_session=_today_session(),
+            day=None,
+            time_context=_time_context(),
+            bundle=bundle,
+            clarification=None,
+            calibration_need=None,
+            signals_block="",
+            facts_block="",
+            sport_knowledge="",
+            coach_lens=CoachReadingLens(
+                sens_du_jour="Angle externe",
+                angle="Dire que hier etait offplan",
+                ne_pas_faire="",
+            ),
+        )
+
+        self.assertNotIn("CoachReadingLens", prompt)
+        self.assertNotIn("Angle externe", prompt)
+
+    def test_heartbeat_proactive_runtime_does_not_call_coach_reading_digest(self) -> None:
+        root = Path(__file__).resolve().parents[1]
+        heartbeat_source = (root / "backend/src/fitmas/skills/heartbeat/heartbeat.py").read_text()
+
+        self.assertNotIn("build_coach_reading_digest", heartbeat_source)
 
 
 if __name__ == "__main__":

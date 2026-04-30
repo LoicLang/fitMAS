@@ -415,7 +415,7 @@ class FitMASCoreFlowsTest(unittest.TestCase):
         self.assertIsNotNone(pending)
         self.assertEqual(pending.mutation_type, "replace_session")
 
-    def test_high_impact_confirmation_yes_applies_pending_mutation(self) -> None:
+    def test_high_impact_confirmation_yes_does_not_auto_apply_without_llm_resolution(self) -> None:
         _, session = self._create_plan_for_today()
         session.priority = "Seance cle"
         self.db.commit()
@@ -447,11 +447,11 @@ class FitMASCoreFlowsTest(unittest.TestCase):
 
         self.assertIn("Tu confirmes", first["assistant_message"]["text"])
         self.assertIsNotNone(refreshed_session)
-        self.assertEqual(refreshed_session.sport_type, "swimming")
-        self.assertIn("natation", second["assistant_message"]["text"].lower())
-        self.assertIsNone(pending)
+        self.assertEqual(refreshed_session.sport_type, "running")
+        self.assertIn("confirmes", second["assistant_message"]["text"].lower())
+        self.assertIsNotNone(pending)
 
-    def test_plan_patch_requiring_confirmation_serializes_pending_and_applies_on_yes(self) -> None:
+    def test_plan_patch_pending_yes_does_not_auto_apply_without_llm_resolution(self) -> None:
         _, session = self._create_plan_for_today()
         now = get_local_now(self.user.timezone)
         for offset in (2, 3, 4):
@@ -521,11 +521,11 @@ class FitMASCoreFlowsTest(unittest.TestCase):
         self.assertEqual(pending.mutation_type, "plan_patch")
         self.assertIn('"kind": "plan_patch"', pending.decision_json)
         self.assertIsNotNone(refreshed_session)
-        self.assertEqual(refreshed_session.session_title, "Tempo dur")
-        self.assertEqual(refreshed_session.intensity, "hard")
-        self.assertIn("tempo", second["assistant_message"]["text"].lower())
-        self.assertIsNone(active_pending)
-        self.assertEqual(events[0].command_type, "replace_session")
+        self.assertEqual(refreshed_session.session_title, "Footing facile")
+        self.assertNotEqual(refreshed_session.intensity, "hard")
+        self.assertIn("confirmes", second["assistant_message"]["text"].lower())
+        self.assertIsNotNone(active_pending)
+        self.assertEqual(events, [])
 
     def test_high_impact_confirmation_no_keeps_plan_unchanged(self) -> None:
         _, session = self._create_plan_for_today()
@@ -534,18 +534,27 @@ class FitMASCoreFlowsTest(unittest.TestCase):
         original_decide = api_messages.decide
         original_extract_facts = api_messages.extract_facts
         try:
-            api_messages.decide = lambda *args, **kwargs: MutationDecision(
-                mutation_type="replace_session",
-                target_session_id=session.id,
-                new_sport_type="swimming",
-                new_session_type="easy",
-                new_duration_min=35,
-                new_intensity="easy",
-                new_title="Natation souple",
-                new_goal="Faire tourner sans impact",
-                rationale="On bascule sans impact.",
-                fitmas_message="Je te bascule la seance en natation souple.",
-            )
+            def fake_decide(user_text, *args, **kwargs):
+                if str(user_text).strip().lower() == "non":
+                    return MutationDecision(
+                        mutation_type="no_change",
+                        rationale="Refus du pending compris par le LLM.",
+                        fitmas_message="Je ne touche pas au planning.",
+                    )
+                return MutationDecision(
+                    mutation_type="replace_session",
+                    target_session_id=session.id,
+                    new_sport_type="swimming",
+                    new_session_type="easy",
+                    new_duration_min=35,
+                    new_intensity="easy",
+                    new_title="Natation souple",
+                    new_goal="Faire tourner sans impact",
+                    rationale="On bascule sans impact.",
+                    fitmas_message="Je te bascule la seance en natation souple.",
+                )
+
+            api_messages.decide = fake_decide
             api_messages.extract_facts = lambda *args, **kwargs: []
             first = self.client.post("/api/v0/messages", json={"text": "Tu peux remplacer ma seance ?"}).json()
             second = self.client.post("/api/v0/messages", json={"text": "non"}).json()
@@ -702,7 +711,7 @@ class FitMASCoreFlowsTest(unittest.TestCase):
 
         self.assertIn("2026-04-02T07:30:00", row.memory_writes_json)
 
-    def test_message_flow_can_replan_simple_unavailability_without_llm(self) -> None:
+    def test_message_flow_does_not_replan_simple_unavailability_without_llm(self) -> None:
         _, session = self._create_plan_for_today()
         next_day_key = DAY_KEYS[(session.scheduled_date.date().weekday() + 1) % 7]
         self.user.weekly_structure_notes = f"{day_label_fr(next_day_key, capitalize=True)} matin dispo."
@@ -710,9 +719,6 @@ class FitMASCoreFlowsTest(unittest.TestCase):
         original_decide = api_messages.decide
         original_extract_facts = api_messages.extract_facts
         try:
-            # Chantier 1 (autonomy refactor): decide() must run on every
-            # conversational turn. When the LLM returns None the deterministic
-            # adaptation falls back to apply, so the data outcome is unchanged.
             api_messages.decide = lambda *args, **kwargs: None
             api_messages.extract_facts = lambda *args, **kwargs: []
             result = self.client.post("/api/v0/messages", json={"text": "Merde imprévu je peux pas ce soir"}).json()
@@ -727,24 +733,19 @@ class FitMASCoreFlowsTest(unittest.TestCase):
         overview = self.client.get("/api/v0/app/overview").json()
         calendar = self.client.get(f"/api/v0/app/calendar?month={session.scheduled_date.date().isoformat()[:7]}").json()
 
-        self.assertIn("Le cap de la semaine ne bouge pas", result["assistant_message"]["text"])
-        self.assertEqual(len(sessions), 2)
+        self.assertIn("Reessaie", result["assistant_message"]["text"])
+        self.assertEqual(len(sessions), 1)
         self.assertEqual(len(planned_sessions), 1)
-        self.assertGreater(planned_sessions[0].scheduled_date.date(), session.scheduled_date.date())
-        self.assertIsNotNone(latest_adaptation)
-        self.assertEqual(latest_adaptation.mutation_type, "move_session")
-        self.assertEqual(overview["last_adaptation"]["mutation_type"], "move_session")
-        self.assertEqual(overview["last_adaptation"]["adaptation_level"], "micro")
-        self.assertTrue(any(item["status"] == "adapted" for item in calendar["feed"]))
+        self.assertEqual(planned_sessions[0].scheduled_date.date(), session.scheduled_date.date())
+        self.assertIsNone(latest_adaptation)
+        self.assertIsNone(overview["last_adaptation"])
+        self.assertFalse(any(item["status"] == "adapted" for item in calendar["feed"]))
 
-    def test_message_flow_can_handle_fatigue_without_llm(self) -> None:
+    def test_message_flow_does_not_handle_fatigue_without_llm(self) -> None:
         _, session = self._create_plan_for_today()
         original_decide = api_messages.decide
         original_extract_facts = api_messages.extract_facts
         try:
-            # Chantier 1 (autonomy refactor): decide() must run on every
-            # conversational turn. With the LLM returning None the deterministic
-            # fatigue adaptation falls back to apply unchanged.
             api_messages.decide = lambda *args, **kwargs: None
             api_messages.extract_facts = lambda *args, **kwargs: []
             result = self.client.post("/api/v0/messages", json={"text": "Je suis rincé aujourd'hui, jambes lourdes"}).json()
@@ -757,12 +758,9 @@ class FitMASCoreFlowsTest(unittest.TestCase):
 
         self.assertTrue(result["assistant_message"]["text"].strip())
         self.assertIsNotNone(adapted_session)
-        self.assertEqual(adapted_session.completion_status, "adapted")
-        normalized_title = api_messages._normalize_text(adapted_session.session_title)
-        self.assertTrue(any(token in normalized_title for token in ("version courte", "mobilit", "recup")))
+        self.assertEqual(adapted_session.completion_status, "planned")
         events = self.db.query(s.PlanMutationEventRecord).all()
-        self.assertEqual(len(events), 1)
-        self.assertIn(events[0].trigger_type, {"health_adaptation", "life_change_adaptation"})
+        self.assertEqual(events, [])
 
     def test_message_flow_surfaces_targeted_clarification_as_prompt_context_to_llm(self) -> None:
         """Chantier 3bis (autonomy refactor): the targeted execution
@@ -797,17 +795,15 @@ class FitMASCoreFlowsTest(unittest.TestCase):
         self.assertIn("Suivi execution non resolu", followup)
         self.assertIn("Tu l'as faite ou pas", followup)
 
-    def test_targeted_clarification_does_not_block_fatigue_adaptation_anymore(self) -> None:
-        """Chantier 3bis: the canned clarification used to swallow the
-        fatigue request. It must now coexist as soft context — decide() runs
-        and can apply the deterministic fatigue adaptation."""
+    def test_targeted_clarification_does_not_trigger_fatigue_adaptation_without_llm(self) -> None:
+        """Phase 0: fatigue text is not auto-adapted when the LLM decision is unavailable."""
         _, yesterday_session = self._seed_uncertain_yesterday_key_session()
         today_session = repo.get_today_scheduled_session(self.db, self.user.id, timezone_name=self.user.timezone)
         self.assertIsNotNone(today_session)
         original_decide = api_messages.decide
         original_extract_facts = api_messages.extract_facts
         try:
-            api_messages.decide = lambda *args, **kwargs: None  # let deterministic adaptation fall back
+            api_messages.decide = lambda *args, **kwargs: None
             api_messages.extract_facts = lambda *args, **kwargs: []
             result = self.client.post("/api/v0/messages", json={"text": "Je suis rincé aujourd'hui"}).json()
         finally:
@@ -823,8 +819,8 @@ class FitMASCoreFlowsTest(unittest.TestCase):
             verify_db.close()
 
         self.assertTrue(result["assistant_message"]["text"].strip())
-        self.assertEqual(refreshed_today.completion_status, "adapted")
-        self.assertIsNotNone(latest_adaptation)
+        self.assertEqual(refreshed_today.completion_status, "planned")
+        self.assertIsNone(latest_adaptation)
 
     def test_targeted_clarification_followup_breaks_loop_after_first_turn(self) -> None:
         """Chantier 3bis: anti-loop guard — once the LLM asked the
@@ -861,10 +857,10 @@ class FitMASCoreFlowsTest(unittest.TestCase):
         # phrasing, so the helper returns None and no block is injected.
         self.assertIsNone(captured_followups[1])
 
-    def test_contextual_non_answer_resolves_clarification_via_decide(self) -> None:
-        """Chantier 3bis: when the LLM picks up the soft followup context
-        and asks the question itself, a "Non" on the next turn must still
-        resolve the session as skipped via execution contestation."""
+    def test_contextual_non_answer_stays_llm_only_without_parser_side_effect(self) -> None:
+        """Phase 0 LLM-first: a short "Non" after a clarification is handled
+        by the LLM reply path, not by a deterministic non-completion parser
+        that mutates the session behind the coach's back."""
         _, yesterday_session = self._seed_uncertain_yesterday_key_session()
         replies = iter([
             # Turn 1: LLM uses the soft followup and asks the question.
@@ -889,11 +885,9 @@ class FitMASCoreFlowsTest(unittest.TestCase):
 
         self.db.expire_all()
         refreshed_yesterday = repo.get_scheduled_session(self.db, self.user.id, yesterday_session.id)
-        facts = self.client.get("/api/v0/facts").json()
 
         self.assertIn("Je ne compte pas", second["assistant_message"]["text"])
-        self.assertEqual(refreshed_yesterday.completion_status, "skipped")
-        self.assertTrue(any("claimed_non_completion_2026" in fact["key"] for fact in facts if fact["category"] == "execution"))
+        self.assertEqual(refreshed_yesterday.completion_status, "planned")
 
     def test_health_reply_after_clarification_is_ingested_normally(self) -> None:
         """Chantier 3bis: an illness reply on the second turn must still
@@ -961,10 +955,10 @@ class FitMASCoreFlowsTest(unittest.TestCase):
         facts = self.client.get("/api/v0/facts").json()
 
         self.assertIn("malade", second["assistant_message"]["text"].lower())
-        self.assertEqual(refreshed_yesterday.completion_status, "skipped")
+        self.assertEqual(refreshed_yesterday.completion_status, "planned")
         self.assertTrue(any(fact["category"] == "health" for fact in facts))
 
-    def test_message_flow_can_replan_future_availability_constraint_without_llm(self) -> None:
+    def test_message_flow_does_not_replan_future_availability_constraint_without_llm(self) -> None:
         _, tomorrow_session = self._create_plan_with_tomorrow_session()
         original_date = tomorrow_session.scheduled_date.date()
         next_open_key = DAY_KEYS[(tomorrow_session.scheduled_date.date().weekday() + 2) % 7]
@@ -973,9 +967,6 @@ class FitMASCoreFlowsTest(unittest.TestCase):
         original_decide = api_messages.decide
         original_extract_facts = api_messages.extract_facts
         try:
-            # Chantier 1 (autonomy refactor): decide() must run on every
-            # conversational turn. The deterministic future-availability
-            # adaptation falls back when the LLM returns None.
             api_messages.decide = lambda *args, **kwargs: None
             api_messages.extract_facts = lambda *args, **kwargs: []
             result = self.client.post("/api/v0/messages", json={"text": "Je ne suis pas dispo demain soir"}).json()
@@ -990,8 +981,8 @@ class FitMASCoreFlowsTest(unittest.TestCase):
             if scheduled.sport_type == "running" and scheduled.session_title == "Tempo demain"
         )
 
-        self.assertIn("Le cap de la semaine ne bouge pas", result["assistant_message"]["text"])
-        self.assertGreater(moved_tomorrow_session.scheduled_date.date(), original_date)
+        self.assertIn("Reessaie", result["assistant_message"]["text"])
+        self.assertEqual(moved_tomorrow_session.scheduled_date.date(), original_date)
 
     def test_grounded_availability_adaptation_routes_candidate_to_llm(self) -> None:
         _, tomorrow_session = self._create_plan_with_tomorrow_session()
@@ -1071,7 +1062,7 @@ class FitMASCoreFlowsTest(unittest.TestCase):
         self.assertIn("epaule", result["assistant_message"]["text"].lower())
         self.assertTrue(any(fact["category"] == "health" for fact in facts))
 
-    def test_health_adaptation_suggestion_requires_confirmation(self) -> None:
+    def test_health_adaptation_suggestion_is_not_used_when_llm_unavailable(self) -> None:
         _, session = self._create_plan_for_today()
         original_decide = api_messages.decide
         original_extract_facts = api_messages.extract_facts
@@ -1109,10 +1100,8 @@ class FitMASCoreFlowsTest(unittest.TestCase):
         pending = repo.get_active_pending_mutation_confirmation(self.db, self.user.id)
 
         self.assertEqual(decide_calls["count"], 1)
-        self.assertIsNotNone(pending)
-        self.assertIn("confirmes", result["assistant_message"]["text"].lower())
-        self.assertEqual(pending.mutation_type, "replace_session")
-        self.assertEqual(pending.status, "pending")
+        self.assertIsNone(pending)
+        self.assertIn("Reessaie", result["assistant_message"]["text"])
 
     def test_compound_health_and_plan_mutation_reaches_llm_before_health_adaptation(self) -> None:
         _, session = self._create_plan_for_today()
@@ -1179,7 +1168,7 @@ class FitMASCoreFlowsTest(unittest.TestCase):
         self.assertTrue(any(fact["category"] == "health" for fact in facts))
         self.assertTrue(any("epaule" in str(fact).lower() or "shoulder" in str(fact).lower() for fact in captured["selected_facts"]))
 
-    def test_health_indication_is_not_reprocessed_after_reply(self) -> None:
+    def test_health_indication_is_not_reprocessed_by_post_reply_adapter(self) -> None:
         self._create_plan_for_today()
         original_decide = api_messages.decide
         original_extract_facts = api_messages.extract_facts
@@ -1213,7 +1202,7 @@ class FitMASCoreFlowsTest(unittest.TestCase):
             api_messages.extract_facts = original_extract_facts
             api_messages.check_and_adapt_health_facts = original_health
 
-        self.assertEqual(call_count["health"], 1)
+        self.assertEqual(call_count["health"], 0)
 
     def test_message_flow_passes_grounding_context_to_llm(self) -> None:
         _, session = self._create_plan_for_today()
@@ -1259,11 +1248,10 @@ class FitMASCoreFlowsTest(unittest.TestCase):
             api_messages.extract_facts = original_extract_facts
 
         self.assertIn("execution_status: off_plan_done", captured["execution_summary"])
-        self.assertIn("reference principale: today", captured["temporal_summary"])
-        self.assertIn("sport: running", captured["activity_claim_summary"])
-        self.assertIn("duree_min: 30", captured["activity_claim_summary"])
+        self.assertIn("reference principale: unspecified", captured["temporal_summary"])
+        self.assertEqual(captured["activity_claim_summary"], "")
         self.assertIn("big_session_done", captured["signal_summary"])
-        self.assertIn("Activite declaree par l'utilisateur", captured["selected_facts"])
+        self.assertNotIn("Activite declaree par l'utilisateur", captured["selected_facts"])
 
     def test_current_user_message_is_not_duplicated_in_history_passed_to_llm(self) -> None:
         self._create_plan_for_today()
@@ -1288,11 +1276,10 @@ class FitMASCoreFlowsTest(unittest.TestCase):
 
         self.assertEqual(captured["conversation_history"], [])
 
-    def test_low_signal_ack_routes_label_context_to_llm(self) -> None:
-        """Chantier 1 (autonomy refactor): low-signal acks no longer
-        short-circuit decide() with a templated reply. The classifier
-        produces a label that is injected as prompt context, and the LLM
-        arbitrates a short, plain answer.
+    def test_short_ack_goes_to_llm_without_low_signal_context(self) -> None:
+        """Phase 0 LLM-first: even a short ack is not classified by a
+        deterministic low-signal helper. The LLM receives the raw turn and
+        decides the answer itself.
         """
         self._create_plan_for_today()
         original_decide = api_messages.decide
@@ -1312,7 +1299,7 @@ class FitMASCoreFlowsTest(unittest.TestCase):
             api_messages.decide = original_decide
 
         self.assertEqual(result["assistant_message"]["text"], "Bien recu.")
-        self.assertIn("low-signal", captured["temporal_summary"])
+        self.assertNotIn("low-signal", captured["temporal_summary"])
 
     def test_claim_without_mutation_is_demoted_at_pipeline_egress(self) -> None:
         """Chantier 1bis (anti-mensonge "dire = faire"): si le LLM affirme
@@ -1857,14 +1844,8 @@ class FitMASCoreFlowsTest(unittest.TestCase):
         )
         self.assertNotIn("hier", result["assistant_message"]["text"].lower())
 
-    def test_intent_divergence_between_heuristic_and_llm_logs_warning(self) -> None:
-        """Observability: when the deterministic heuristic and the LLM turn
-        planner disagree on whether the user wants a plan mutation, the
-        pipeline must emit a structured WARNING so we can audit drift.
-
-        Behavior is unchanged (OR of both signals still drives routing);
-        this test exists solely to prevent regressions of the warning.
-        """
+    def test_removed_intent_heuristic_does_not_log_divergence_with_llm(self) -> None:
+        """Phase 0: no deterministic mutation heuristic runs beside the LLM."""
         self._create_plan_for_today()
         original_decide = api_messages.decide
         original_extract_facts = api_messages.extract_facts
@@ -1889,36 +1870,16 @@ class FitMASCoreFlowsTest(unittest.TestCase):
                 rationale="routage conservateur",
                 fitmas_message="Bien recu.",
             )
-            # Heuristic says: YES (message carries "deplace").
-            with self.assertLogs("fitmas.conversation_pipeline", level="WARNING") as captured:
-                self.client.post(
-                    "/api/v0/messages",
-                    json={"text": "deplace la seance de jeudi a vendredi"},
-                )
+            with self.assertNoLogs("fitmas.conversation_pipeline", level="WARNING"):
+                self.client.post("/api/v0/messages", json={"text": "deplace la seance de jeudi a vendredi"})
         finally:
             api_messages.decide = original_decide
             api_messages.extract_facts = original_extract_facts
             api_messages.interpret_user_indication = original_interpret
             api_messages.plan_conversation_turn = original_plan_turn
 
-        divergence_records = [r for r in captured.records if "intent_divergence" in r.getMessage()]
-        self.assertTrue(
-            divergence_records,
-            f"expected pipeline.intent_divergence warning, got records: {[r.getMessage() for r in captured.records]}",
-        )
-        message = divergence_records[0].getMessage()
-        self.assertIn("heuristic=True", message)
-        self.assertIn("llm=False", message)
-
-    def test_intent_divergence_logs_llm_unavailable_when_turn_plan_missing(self) -> None:
-        """Observability: when the LLM turn planner returned None (classifier
-        crash, timeout, rate limit), the divergence log must distinguish
-        `llm=unavailable` from `llm=False` (classifier returned a clean no).
-
-        Both failure modes push the pipeline onto the deterministic heuristic
-        alone, but they are different signals: `unavailable` is a platform
-        incident to watch; `False` is a genuine disagreement worth auditing.
-        """
+    def test_turn_plan_missing_does_not_fall_back_to_intent_heuristic(self) -> None:
+        """Phase 0: classifier outage no longer activates a regex mutation heuristic."""
         self._create_plan_for_today()
         original_decide = api_messages.decide
         original_extract_facts = api_messages.extract_facts
@@ -1926,28 +1887,22 @@ class FitMASCoreFlowsTest(unittest.TestCase):
         try:
             api_messages.extract_facts = lambda *args, **kwargs: []
             api_messages.interpret_user_indication = lambda *args, **kwargs: None
-            # plan_conversation_turn stays set to None via setUp -> classifier unavailable.
             api_messages.decide = lambda *args, **kwargs: MutationDecision(
                 mutation_type="no_change",
                 rationale="routage conservateur",
                 fitmas_message="Bien recu.",
             )
-            # Heuristic fires (message carries "deplace").
-            with self.assertLogs("fitmas.conversation_pipeline", level="WARNING") as captured:
-                self.client.post(
+            with self.assertNoLogs("fitmas.conversation_pipeline", level="WARNING"):
+                result = self.client.post(
                     "/api/v0/messages",
                     json={"text": "deplace la seance de jeudi a vendredi"},
-                )
+                ).json()
         finally:
             api_messages.decide = original_decide
             api_messages.extract_facts = original_extract_facts
             api_messages.interpret_user_indication = original_interpret
 
-        divergence_records = [r for r in captured.records if "intent_divergence" in r.getMessage()]
-        self.assertTrue(divergence_records, "expected pipeline.intent_divergence warning")
-        message = divergence_records[0].getMessage()
-        self.assertIn("heuristic=True", message)
-        self.assertIn("llm=unavailable", message)
+        self.assertEqual(result["assistant_message"]["text"], "Bien recu.")
 
     def test_calibration_standalone_ack_skipped_on_compound_mutation(self) -> None:
         """Open calibration + compound mutation in same message.
@@ -2024,31 +1979,8 @@ class FitMASCoreFlowsTest(unittest.TestCase):
             "Je note le creneau et je traite la demande de swap.",
         )
 
-    def test_low_signal_label_refuses_rich_signal(self) -> None:
-        """The low-signal classifier is defense-in-depth: if any rich signal
-        marker appears in the message, it must refuse to label as low-signal
-        so decide() arbitrates the response (Chantier 1 autonomy refactor:
-        the classifier no longer short-circuits the LLM).
-        """
-        # Baseline: pure ack is labelled "ack".
-        self.assertEqual(
-            api_messages._maybe_low_signal_label("merci", has_open_calibration_need=False),
-            "ack",
-        )
-        # Defense-in-depth: simulate a hypothetical compound where normalize
-        # happens to equal an ACK phrase AND contains a rich marker.
-        original_ack_texts = api_messages._ACK_TEXTS
-        try:
-            api_messages._ACK_TEXTS = original_ack_texts | {"merci decale"}
-            self.assertIsNone(
-                api_messages._maybe_low_signal_label(
-                    "merci decale",
-                    has_open_calibration_need=False,
-                ),
-                "Classifier must refuse when a rich mutation marker is present",
-            )
-        finally:
-            api_messages._ACK_TEXTS = original_ack_texts
+    def test_low_signal_classifier_removed_from_runtime(self) -> None:
+        self.assertFalse(hasattr(api_messages, "_maybe_low_signal_label"))
 
     def test_future_constraint_without_candidate_routes_context_to_llm(self) -> None:
         self._create_plan_for_today()
@@ -2087,7 +2019,7 @@ class FitMASCoreFlowsTest(unittest.TestCase):
         self.assertIn("Rien a bouger", result["assistant_message"]["text"])
         self.assertIn("Rien a bouger", captured["signal_summary"])
 
-    def test_message_flow_persists_unlogged_activity_claim_fact(self) -> None:
+    def test_message_flow_does_not_persist_unlogged_activity_claim_fact_without_llm_action(self) -> None:
         self._create_plan_for_today()
         original_decide = api_messages.decide
         original_extract_facts = api_messages.extract_facts
@@ -2105,12 +2037,9 @@ class FitMASCoreFlowsTest(unittest.TestCase):
 
         facts = self.client.get("/api/v0/facts").json()
 
-        self.assertEqual(len(facts), 1)
-        self.assertEqual(facts[0]["category"], "execution")
-        self.assertEqual(facts[0]["ttl"], "immediate")
-        self.assertIn("30 min", facts[0]["value"])
+        self.assertEqual(facts, [])
 
-    def test_message_flow_archives_superseded_claim_after_temporal_correction(self) -> None:
+    def test_message_flow_does_not_archive_superseded_claim_after_temporal_correction_without_llm_action(self) -> None:
         self._create_plan_for_today()
         original_decide = api_messages.decide
         original_extract_facts = api_messages.extract_facts
@@ -2129,10 +2058,9 @@ class FitMASCoreFlowsTest(unittest.TestCase):
 
         facts = self.client.get("/api/v0/facts").json()
 
-        self.assertEqual(len(facts), 1)
-        self.assertEqual(facts[0]["category"], "execution")
+        self.assertEqual(facts, [])
 
-    def test_explicit_non_completion_correction_skips_llm_and_downgrades_unverified_done(self) -> None:
+    def test_explicit_non_completion_correction_stays_llm_only_without_side_effect(self) -> None:
         _, session = self._create_plan_for_today()
         session.scheduled_date = session.scheduled_date - timedelta(days=1)
         session.day = DAY_KEYS[session.scheduled_date.weekday()]
@@ -2143,11 +2071,6 @@ class FitMASCoreFlowsTest(unittest.TestCase):
         original_extract_facts = api_messages.extract_facts
         captured: dict[str, str] = {}
         try:
-            # Chantier 1 (autonomy refactor): the execution contestation
-            # grounding is now passed to decide() as prompt context. We assert
-            # decide() runs and receives the contestation context, and we stub
-            # it to produce the canonical wording so we can still verify the
-            # downgrade side effect (handled before the LLM call).
             def fake_decide(*args, **kwargs):
                 captured["activity_claim_summary"] = kwargs.get("activity_claim_summary") or ""
                 return MutationDecision(
@@ -2171,8 +2094,8 @@ class FitMASCoreFlowsTest(unittest.TestCase):
             verify_db.close()
 
         self.assertIn("Je ne compte pas", result["assistant_message"]["text"])
-        self.assertIn("contestation", captured["activity_claim_summary"].lower())
-        self.assertEqual(updated.completion_status, "skipped")
+        self.assertEqual(captured["activity_claim_summary"], "")
+        self.assertEqual(updated.completion_status, "done")
 
     def test_execution_fact_correction_archives_conflicting_working_memory(self) -> None:
         self._create_plan_for_today()
@@ -2233,8 +2156,8 @@ class FitMASCoreFlowsTest(unittest.TestCase):
         archived_keys = {row.key for row in rows if not row.active}
 
         self.assertIn(completed_key, active_keys)
-        self.assertNotIn(skipped_key, active_keys)
-        self.assertIn(skipped_key, archived_keys)
+        self.assertIn(skipped_key, active_keys)
+        self.assertEqual(archived_keys, set())
 
     def test_replace_session_reply_is_aligned_with_applied_duration(self) -> None:
         _, session = self._create_plan_for_today()
@@ -2309,7 +2232,7 @@ class FitMASCoreFlowsTest(unittest.TestCase):
         self.assertFalse(called["health"])
         self.assertIn("plus leger", result["assistant_message"]["text"])
 
-    def test_no_change_reply_does_not_promise_unapplied_load_recalibration(self) -> None:
+    def test_no_change_reply_is_not_rewritten_by_removed_sanitizer(self) -> None:
         self._create_plan_for_today()
         original_decide = api_messages.decide
         original_extract_facts = api_messages.extract_facts
@@ -2325,10 +2248,10 @@ class FitMASCoreFlowsTest(unittest.TestCase):
             api_messages.decide = original_decide
             api_messages.extract_facts = original_extract_facts
 
-        self.assertNotIn("40min", result["assistant_message"]["text"])
-        self.assertIn("recalibrer", result["assistant_message"]["text"])
+        self.assertIn("40min", result["assistant_message"]["text"])
+        self.assertNotIn("recalibrer", result["assistant_message"]["text"])
 
-    def test_message_flow_can_consume_hidden_calibration_answer_without_llm(self) -> None:
+    def test_message_flow_consumes_structured_calibration_resolution_then_calls_llm(self) -> None:
         self._create_plan_for_today()
         now = get_local_now(self.user.timezone)
         need = calibration_needs.CalibrationNeed(
@@ -2350,22 +2273,37 @@ class FitMASCoreFlowsTest(unittest.TestCase):
         repo.upsert_working_memory(self.db, self.user.id, [need.as_memory_update()])
         original_decide = api_messages.decide
         original_extract_facts = api_messages.extract_facts
+        original_calibration_extract = conversation_pipeline.extract_calibration_resolution
         try:
-            def should_not_run(*args, **kwargs):
-                raise AssertionError("LLM decide should not run for standalone calibration answers")
-
-            api_messages.decide = should_not_run
+            api_messages.decide = lambda *args, **kwargs: MutationDecision(
+                mutation_type="no_change",
+                rationale="Calibration integree, pas de mutation.",
+                fitmas_message="OK, je note.",
+            )
             api_messages.extract_facts = lambda *args, **kwargs: []
+            conversation_pipeline.extract_calibration_resolution = lambda *args, **kwargs: calibration_needs.CalibrationResolution(
+                need_id=need.id,
+                resolved=True,
+                normalized_value={
+                    "day": "thursday",
+                    "windows": ["evening"],
+                    "hard_blocked": ["morning"],
+                },
+                confidence=0.93,
+                followup_needed=False,
+                raw_summary="Plutot le soir",
+            )
             result = self.client.post("/api/v0/messages", json={"text": "Plutot le soir"}).json()
         finally:
             api_messages.decide = original_decide
             api_messages.extract_facts = original_extract_facts
+            conversation_pipeline.extract_calibration_resolution = original_calibration_extract
 
         facts = self.client.get("/api/v0/facts").json()
         categories = {(fact["category"], fact["key"]) for fact in facts}
 
         self.assertTrue(result["assistant_message"]["text"].strip())
-        self.assertIn("jeudi", result["assistant_message"]["text"].lower())
+        self.assertEqual(result["assistant_message"]["text"], "OK, je note.")
         self.assertIn(("availability", "weekly_slot_thursday"), categories)
         self.assertNotIn(("calibration_need", "availability:thursday"), categories)
 
@@ -2401,12 +2339,12 @@ class FitMASCoreFlowsTest(unittest.TestCase):
         original_extract_facts = api_messages.extract_facts
         original_interpret = api_messages.interpret_user_indication
         original_calibration_extract = conversation_pipeline.extract_calibration_resolution
-        original_calibration_ack = conversation_pipeline.generate_calibration_ack
         try:
-            def should_not_run(*args, **kwargs):
-                raise AssertionError("LLM decide should not run for standalone calibration answers")
-
-            api_messages.decide = should_not_run
+            api_messages.decide = lambda *args, **kwargs: MutationDecision(
+                mutation_type="no_change",
+                rationale="Calibration integree par le LLM.",
+                fitmas_message=f"OK, je note {expected_day_label}: plutot le soir.",
+            )
             api_messages.extract_facts = lambda *args, **kwargs: []
             api_messages.interpret_user_indication = lambda *args, **kwargs: UserIndication(
                 kind=UserIndicationKind.AVAILABILITY_CONSTRAINT,
@@ -2434,16 +2372,12 @@ class FitMASCoreFlowsTest(unittest.TestCase):
                 followup_needed=False,
                 raw_summary="Plutot le soir",
             )
-            conversation_pipeline.generate_calibration_ack = (
-                lambda **kwargs: f"OK, je note {expected_day_label}: plutot le soir."
-            )
             result = self.client.post("/api/v0/messages", json={"text": "Plutot le soir"}).json()
         finally:
             api_messages.decide = original_decide
             api_messages.extract_facts = original_extract_facts
             api_messages.interpret_user_indication = original_interpret
             conversation_pipeline.extract_calibration_resolution = original_calibration_extract
-            conversation_pipeline.generate_calibration_ack = original_calibration_ack
 
         self.db.expire_all()
         updated = repo.get_scheduled_session(self.db, self.user.id, session.id)
@@ -2475,6 +2409,7 @@ class FitMASCoreFlowsTest(unittest.TestCase):
         original_client = llm._client
         original_request_message = llm._request_message
         original_extract_facts = api_messages.extract_facts
+        original_plan_turn = api_messages.plan_conversation_turn
         calls = {"count": 0}
         try:
             def fake_request_message(*, system, messages, model="claude-haiku-4-5-20251001", max_tokens=512, tools=None, tool_choice=None):
@@ -2499,11 +2434,22 @@ class FitMASCoreFlowsTest(unittest.TestCase):
             llm._client = lambda: object()
             llm._request_message = fake_request_message
             api_messages.extract_facts = lambda *args, **kwargs: []
+            api_messages.plan_conversation_turn = lambda *args, **kwargs: SimpleNamespace(
+                primary_intent="plan_lookup",
+                secondary_intents=(),
+                has_plan_mutation=False,
+                model_dump=lambda mode="json": {
+                    "primary_intent": "plan_lookup",
+                    "secondary_intents": [],
+                    "has_plan_mutation": False,
+                },
+            )
             result = self.client.post("/api/v0/messages", json={"text": "C'etait quoi ma plus longue sortie recente ?"}).json()
         finally:
             llm._client = original_client
             llm._request_message = original_request_message
             api_messages.extract_facts = original_extract_facts
+            api_messages.plan_conversation_turn = original_plan_turn
 
         self.assertIn("Velo long 90 min", result["assistant_message"]["text"])
         self.assertGreaterEqual(calls["count"], 2)
@@ -2556,6 +2502,7 @@ class FitMASCoreFlowsTest(unittest.TestCase):
                     window=None,
                     window_end_date=end,
                 ),
+                trigger_activity="swimming",
             )
             api_messages.plan_conversation_turn = lambda *args, **kwargs: None
             api_messages.decide = lambda *args, **kwargs: MutationDecision(

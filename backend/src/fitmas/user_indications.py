@@ -3,105 +3,13 @@ from __future__ import annotations
 import re
 import unicodedata
 from dataclasses import dataclass
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from enum import StrEnum
 from typing import Any
 
-from datetime import timedelta
-
-from fitmas.activity_claims import extract_activity_claim, extract_non_completion_claim
-from fitmas.temporal_resolver import TemporalResolution, resolve_temporal_context
+from fitmas.temporal_resolver import resolve_temporal_context
 from fitmas.time_context import DAY_KEYS
 
-_UNAVAILABLE_PATTERNS = (
-    "je peux pas",
-    "je ne peux pas",
-    "pas possible",
-    "pas dispo",
-    "indispo",
-    "c est mort",
-    "c'est mort",
-    "imprevu",
-    "imprévu",
-)
-_LIMITED_PATTERNS = (
-    "je peux faire court",
-    "pas longtemps",
-    "juste 20 min",
-    "juste 30 min",
-    "pas intense",
-)
-_TRAVEL_PATTERNS = (
-    "voyage",
-    "travel",
-    "deplacement",
-    "déplacement",
-    "je bouge",
-)
-_HEALTH_PATTERNS = (
-    "j ai mal",
-    "j'ai mal",
-    "douleur",
-    "gêne",
-    "gene",
-    "ca tire",
-    "ça tire",
-    "ca coince",
-    "ça coince",
-    "sensible",
-    "tendon",
-    "malade",
-    "maladie",
-    "virus",
-    "fievre",
-    "fièvre",
-    "grippe",
-    "creve",
-    "crevé",
-    "hs",
-)
-_SEVERE_HEALTH_PATTERNS = (
-    "blessure",
-    "bloque",
-    "bloqué",
-    "impossible",
-    "vive douleur",
-    "aigu",
-    "aigue",
-    "aiguë",
-)
-_BODY_ZONE_PATTERNS = {
-    "shoulder": ("epaule", "épaule", "deltoide", "deltoïde"),
-    "knee": ("genou", "rotule"),
-    "achilles": ("achille",),
-    "back": ("dos", "lombaire", "lombaires"),
-    "hip": ("hanche",),
-    "calf": ("mollet", "mollets"),
-    "ankle": ("cheville",),
-}
-_TRIGGER_ACTIVITY_PATTERNS = {
-    "swimming": ("nage", "nager", "natation", "piscine"),
-    "running": ("course", "courir", "couru", "run", "footing"),
-    "cycling": ("velo", "vélo", "bike", "rouler", "roule"),
-    "strength": ("muscu", "renfo", "gainage"),
-    "climbing": ("escalade", "grimpe", "bloc"),
-}
-_EXECUTION_PATTERNS = (
-    "j ai fait",
-    "j'ai fait",
-    "j ai couru",
-    "j'ai couru",
-    "j ai nage",
-    "j'ai nagé",
-    "j ai roule",
-    "j'ai roulé",
-    "j ai rien fait",
-    "j'ai rien fait",
-    "rien fait",
-    "pas fait",
-)
-_SHORT_NEGATIVE_ANSWERS = {"non", "nope", "nan"}
-_SHORT_POSITIVE_ANSWERS = {"oui", "ouais", "yes", "ok oui", "si"}
 _DAY_ALIASES = {
     "monday": ("lundi", "monday"),
     "tuesday": ("mardi", "tuesday"),
@@ -201,6 +109,7 @@ def indication_from_payload(
         except ValueError:
             polarity = None
     time_reference = _time_reference_from_payload(payload.get("time_reference"), timezone_name=timezone_name, now=now)
+    availability = dict(payload.get("availability") or {})
     health = dict(payload.get("health") or {})
     execution = dict(payload.get("execution") or {})
     severity = None
@@ -224,7 +133,10 @@ def indication_from_payload(
         needs_followup=bool(payload.get("followup_needed", False)),
         followup_reason=str(payload.get("followup_reason") or "").strip() or None,
         body_zone=str(health.get("body_zone") or "").strip() or None,
-        trigger_activity=str(health.get("trigger_activity") or "").strip() or None,
+        trigger_activity=(
+            str(availability.get("trigger_activity") or health.get("trigger_activity") or payload.get("trigger_activity") or "").strip()
+            or None
+        ),
         symptom_type=str(health.get("symptom_type") or "").strip() or None,
         health_severity=severity,
         execution_sport_type=str(execution.get("sport_type") or "").strip() or None,
@@ -238,102 +150,6 @@ def indication_from_payload(
         ),
         earliest_day=(str(payload.get("earliest_day") or "").strip() or None),
     )
-
-
-def fallback_interpret_user_indication(
-    text: str,
-    *,
-    timezone_name: str | None,
-    now: datetime | None = None,
-    recent_agent_text: str | None = None,
-    clarification_date: date | None = None,
-    clarification_sport_type: str | None = None,
-) -> UserIndication | None:
-    normalized = _normalize(text)
-    temporal = resolve_temporal_context(text, timezone_name=timezone_name, now=now)
-    clarification_active = looks_like_execution_clarification_prompt(recent_agent_text)
-
-    availability = _fallback_availability_indication(text, normalized=normalized, temporal=temporal)
-    if availability is not None:
-        return availability
-
-    non_completion = extract_non_completion_claim(
-        text,
-        timezone_name=timezone_name,
-        now=now,
-        default_date=clarification_date if clarification_active else None,
-        default_sport_type=clarification_sport_type if clarification_active else None,
-        allow_contextual_short_answer=clarification_active,
-    )
-    health = _fallback_health_indication(text, normalized=normalized, temporal=temporal)
-    if health is not None:
-        if non_completion is not None:
-            return _with_execution_resolution(
-                health,
-                completed=False,
-                resolved_date=date.fromisoformat(non_completion.resolved_date_iso) if non_completion.resolved_date_iso else None,
-                sport_type=non_completion.sport_type,
-            )
-        return health
-
-    if non_completion is not None:
-        return UserIndication(
-            kind=UserIndicationKind.EXECUTION_UPDATE,
-            confidence=min(0.95, non_completion.confidence),
-            source_text=text.strip(),
-            scope=UserIndicationScope.SINGLE_DAY,
-            polarity=UserIndicationPolarity.SIGNAL,
-            time_reference=IndicationTimeReference(
-                label=temporal.primary_reference if temporal.primary_reference != "unspecified" else "clarification",
-                resolved_date=date.fromisoformat(non_completion.resolved_date_iso) if non_completion.resolved_date_iso else None,
-                day_key=_day_key_from_date(date.fromisoformat(non_completion.resolved_date_iso)) if non_completion.resolved_date_iso else None,
-                relative_reference=temporal.primary_reference if temporal.primary_reference != "unspecified" else None,
-                window=temporal.part_of_day,
-            ),
-            execution_sport_type=non_completion.sport_type,
-            execution_completed=False,
-        )
-
-    claim = extract_activity_claim(text, timezone_name=timezone_name, now=now)
-    if claim is not None and (
-        any(token in normalized for token in _EXECUTION_PATTERNS)
-        or (clarification_active and normalized in _SHORT_POSITIVE_ANSWERS)
-    ):
-        return UserIndication(
-            kind=UserIndicationKind.EXECUTION_UPDATE,
-            confidence=min(0.95, claim.confidence),
-            source_text=text.strip(),
-            scope=UserIndicationScope.SINGLE_DAY,
-            polarity=UserIndicationPolarity.SIGNAL,
-            time_reference=IndicationTimeReference(
-                label=claim.temporal_reference,
-                resolved_date=date.fromisoformat(claim.resolved_date_iso) if claim.resolved_date_iso else None,
-                day_key=_day_key_from_date(date.fromisoformat(claim.resolved_date_iso)) if claim.resolved_date_iso else None,
-                relative_reference=claim.temporal_reference,
-                window=temporal.part_of_day,
-            ),
-            execution_sport_type=claim.sport_type,
-            execution_duration_min=claim.duration_min,
-            execution_completed=True,
-        )
-    if clarification_active and normalized in _SHORT_POSITIVE_ANSWERS and clarification_date is not None:
-        return UserIndication(
-            kind=UserIndicationKind.EXECUTION_UPDATE,
-            confidence=0.86,
-            source_text=text.strip(),
-            scope=UserIndicationScope.SINGLE_DAY,
-            polarity=UserIndicationPolarity.SIGNAL,
-            time_reference=IndicationTimeReference(
-                label="clarification",
-                resolved_date=clarification_date,
-                day_key=_day_key_from_date(clarification_date),
-                relative_reference="yesterday",
-                window=temporal.part_of_day,
-            ),
-            execution_sport_type=clarification_sport_type,
-            execution_completed=True,
-        )
-    return None
 
 
 def should_attempt_indication_interpretation(text: str) -> bool:
@@ -375,14 +191,7 @@ def build_availability_fact_payloads_from_indication(
         return []
     if end < start:
         return []
-    # Choisir un label de sport : le pattern trigger ou un fallback générique.
-    trigger_activity: str | None = None
-    source_text_normalized = _normalize(indication.source_text or "")
-    for activity_key, aliases in _TRIGGER_ACTIVITY_PATTERNS.items():
-        if any(alias in source_text_normalized for alias in aliases):
-            trigger_activity = activity_key
-            break
-    scope_label = trigger_activity or "general"
+    scope_label = indication.trigger_activity or "general"
     value_text = (
         f"Indispo {scope_label} du {start.isoformat()} au {end.isoformat()} "
         f"(source: {indication.source_text.strip()})"
@@ -475,123 +284,6 @@ def build_health_fact_payloads_from_indication(indication: UserIndication | None
     ]
 
 
-def _fallback_availability_indication(
-    text: str,
-    *,
-    normalized: str,
-    temporal: TemporalResolution,
-) -> UserIndication | None:
-    if not any(token in normalized for token in _UNAVAILABLE_PATTERNS + _LIMITED_PATTERNS + _TRAVEL_PATTERNS):
-        return None
-    if temporal.resolved_date is None:
-        return None
-    scope = UserIndicationScope.SINGLE_WINDOW if temporal.part_of_day else UserIndicationScope.SINGLE_DAY
-    if "semaine" in normalized or "plusieurs jours" in normalized:
-        scope = UserIndicationScope.WEEK
-    polarity = (
-        UserIndicationPolarity.LIMITED
-        if any(token in normalized for token in _LIMITED_PATTERNS)
-        else UserIndicationPolarity.UNAVAILABLE
-    )
-    confidence = 0.92 if temporal.part_of_day else 0.87
-    time_reference = _time_reference_from_temporal(temporal)
-    duration_days = _extract_constraint_duration_days(normalized)
-    if duration_days is not None and temporal.resolved_date is not None:
-        window_end = temporal.resolved_date + timedelta(days=max(0, duration_days - 1))
-        time_reference = _with_window_end(time_reference, window_end)
-        scope = UserIndicationScope.WEEK
-    return UserIndication(
-        kind=UserIndicationKind.AVAILABILITY_CONSTRAINT,
-        confidence=confidence,
-        source_text=text.strip(),
-        scope=scope,
-        polarity=polarity,
-        time_reference=time_reference,
-        requested_days=_extract_requested_days(normalized),
-        earliest_day=_extract_earliest_day(normalized),
-    )
-
-
-# Chantier 4 : patterns pour parser une durée de contrainte multi-jours.
-# Matches sur texte normalisé (accents supprimés, lowercase). Le capture
-# group `n` donne le nombre ; les bornes basses (`\b`) évitent de matcher
-# "12 semaines" sur "12 semainesabc" par exemple.
-_DURATION_PATTERNS = (
-    # "2 semaines", "pendant 2 semaines", "pour 2 semaines"
-    (re.compile(r"\b(?P<n>\d{1,2})\s*semaines?\b"), 7),
-    # "15 jours", "pendant 15 jours"
-    (re.compile(r"\b(?P<n>\d{1,2})\s*jours?\b"), 1),
-    # "une semaine", "la semaine prochaine entiere"
-    (re.compile(r"\bune semaine\b"), 7),
-    (re.compile(r"\bla semaine\b"), 7),
-)
-
-
-def _extract_constraint_duration_days(normalized: str) -> int | None:
-    """Extrait une durée en jours depuis un texte normalisé.
-
-    Retourne None si aucun pattern reconnu. Retourne un `int` quand la
-    contrainte porte sur plusieurs jours ("2 semaines" → 14, "15 jours" → 15).
-    Utilisé pour calculer `window_end_date` et ancrer `expires_at` sur la
-    fin de fenêtre réelle plutôt que sur un TTL fixe."""
-    for pattern, multiplier in _DURATION_PATTERNS:
-        match = pattern.search(normalized)
-        if match is None:
-            continue
-        groups = match.groupdict()
-        count = 1
-        if "n" in groups and groups["n"] is not None:
-            try:
-                count = max(1, int(groups["n"]))
-            except ValueError:
-                continue
-        days = count * multiplier
-        if days >= 2:
-            return days
-    return None
-
-
-def _with_window_end(
-    time_reference: IndicationTimeReference,
-    window_end: date,
-) -> IndicationTimeReference:
-    return IndicationTimeReference(
-        label=time_reference.label,
-        resolved_date=time_reference.resolved_date,
-        day_key=time_reference.day_key,
-        relative_reference=time_reference.relative_reference,
-        window=time_reference.window,
-        window_end_date=window_end,
-    )
-
-
-def _fallback_health_indication(
-    text: str,
-    *,
-    normalized: str,
-    temporal: TemporalResolution,
-) -> UserIndication | None:
-    if not any(token in normalized for token in _HEALTH_PATTERNS):
-        return None
-    body_zone = _match_mapping(normalized, _BODY_ZONE_PATTERNS)
-    trigger_activity = _match_mapping(normalized, _TRIGGER_ACTIVITY_PATTERNS)
-    severity = HealthSeverity.HIGH if any(token in normalized for token in _SEVERE_HEALTH_PATTERNS) else HealthSeverity.MODERATE
-    confidence = 0.9 if body_zone or trigger_activity else 0.8
-    symptom = "illness" if any(token in normalized for token in ("malade", "maladie", "virus", "fievre", "fièvre", "grippe", "creve", "crevé", "hs")) else ("pain_tightness" if "tire" in normalized else "pain")
-    return UserIndication(
-        kind=UserIndicationKind.HEALTH_SIGNAL,
-        confidence=confidence,
-        source_text=text.strip(),
-        scope=UserIndicationScope.SINGLE_DAY if temporal.resolved_date else UserIndicationScope.UNKNOWN,
-        polarity=UserIndicationPolarity.SIGNAL,
-        time_reference=_time_reference_from_temporal(temporal),
-        body_zone=body_zone or ("general" if symptom == "illness" else None),
-        trigger_activity=trigger_activity or ("general" if symptom == "illness" else None),
-        symptom_type=symptom,
-        health_severity=severity,
-    )
-
-
 def _time_reference_from_payload(
     payload: Any,
     *,
@@ -629,95 +321,11 @@ def _time_reference_from_payload(
     )
 
 
-def _time_reference_from_temporal(temporal: TemporalResolution) -> IndicationTimeReference:
-    return IndicationTimeReference(
-        label=_temporal_label(temporal),
-        resolved_date=temporal.resolved_date,
-        day_key=_day_key_from_date(temporal.resolved_date),
-        relative_reference=temporal.primary_reference if temporal.primary_reference != "unspecified" else None,
-        window=temporal.part_of_day,
-    )
-
-
-def _temporal_label(temporal: TemporalResolution) -> str:
-    if temporal.primary_reference == "tomorrow" and temporal.part_of_day:
-        return f"demain {temporal.part_of_day}"
-    if temporal.primary_reference == "today" and temporal.part_of_day:
-        return f"aujourd'hui {temporal.part_of_day}"
-    if temporal.primary_reference != "unspecified":
-        return temporal.primary_reference
-    if temporal.resolved_date is not None:
-        return temporal.resolved_date.isoformat()
-    return "reference_inconnue"
-
-
 def _normalize(text: str) -> str:
     folded = unicodedata.normalize("NFKD", text or "").encode("ascii", "ignore").decode("ascii")
     folded = folded.lower().replace("’", "'")
     folded = re.sub(r"\s+", " ", folded)
     return folded.strip()
-
-
-def _extract_requested_days(normalized: str) -> tuple[str, ...]:
-    earliest_spans = _earliest_day_spans(normalized)
-    positions: list[tuple[int, str]] = []
-    for day_key, aliases in _DAY_ALIASES.items():
-        for alias in aliases:
-            index = normalized.find(alias)
-            if index == -1:
-                continue
-            if any(start <= index < end for start, end in earliest_spans):
-                continue
-            positions.append((index, day_key))
-            break
-    if ("weekend" in normalized or "week end" in normalized) and not any(
-        day in {key for _, key in positions} for day in ("saturday", "sunday")
-    ):
-        weekend_index = normalized.find("weekend")
-        if weekend_index == -1:
-            weekend_index = normalized.find("week end")
-        positions.extend(((weekend_index, "saturday"), (weekend_index + 1, "sunday")))
-    ordered: list[str] = []
-    for _, day_key in sorted(positions, key=lambda item: item[0]):
-        if day_key not in ordered:
-            ordered.append(day_key)
-    return tuple(ordered)
-
-
-def _earliest_day_spans(normalized: str) -> list[tuple[int, int]]:
-    patterns = (
-        r"pas avant (?P<day>lundi|mardi|mercredi|jeudi|vendredi|samedi|dimanche)",
-        r"a partir de (?P<day>lundi|mardi|mercredi|jeudi|vendredi|samedi|dimanche)",
-        r"apres (?P<day>lundi|mardi|mercredi|jeudi|vendredi|samedi|dimanche)",
-    )
-    spans: list[tuple[int, int]] = []
-    for pattern in patterns:
-        for match in re.finditer(pattern, normalized):
-            spans.append(match.span("day"))
-    return spans
-
-
-def _extract_earliest_day(normalized: str) -> str | None:
-    for pattern in (
-        r"pas avant (?P<day>lundi|mardi|mercredi|jeudi|vendredi|samedi|dimanche)",
-        r"a partir de (?P<day>lundi|mardi|mercredi|jeudi|vendredi|samedi|dimanche)",
-        r"apres (?P<day>lundi|mardi|mercredi|jeudi|vendredi|samedi|dimanche)",
-    ):
-        match = re.search(pattern, normalized)
-        if not match:
-            continue
-        token = match.group("day")
-        for day_key, aliases in _DAY_ALIASES.items():
-            if token in aliases:
-                return day_key
-    return None
-
-
-def _match_mapping(text: str, mapping: dict[str, tuple[str, ...]]) -> str | None:
-    for key, aliases in mapping.items():
-        if any(alias in text for alias in aliases):
-            return key
-    return None
 
 
 def _coerce_date(value: Any) -> date | None:
@@ -760,39 +368,4 @@ def looks_like_execution_clarification_prompt(text: str | None) -> bool:
         or "tu l'as faite ou non" in normalized
         or "tu l as faite ou pas" in normalized
         or "tu l'as faite ou pas" in normalized
-    )
-
-
-def _with_execution_resolution(
-    indication: UserIndication,
-    *,
-    completed: bool,
-    resolved_date: date | None,
-    sport_type: str | None,
-) -> UserIndication:
-    time_reference = indication.time_reference
-    if resolved_date is not None and (time_reference is None or time_reference.resolved_date is None):
-        time_reference = IndicationTimeReference(
-            label="clarification",
-            resolved_date=resolved_date,
-            day_key=_day_key_from_date(resolved_date),
-            relative_reference="yesterday",
-            window=time_reference.window if time_reference is not None else None,
-        )
-    return UserIndication(
-        kind=indication.kind,
-        confidence=indication.confidence,
-        source_text=indication.source_text,
-        scope=indication.scope,
-        polarity=indication.polarity,
-        time_reference=time_reference,
-        needs_followup=indication.needs_followup,
-        followup_reason=indication.followup_reason,
-        body_zone=indication.body_zone,
-        trigger_activity=indication.trigger_activity,
-        symptom_type=indication.symptom_type,
-        health_severity=indication.health_severity,
-        execution_sport_type=sport_type or indication.execution_sport_type,
-        execution_duration_min=indication.execution_duration_min,
-        execution_completed=completed,
     )

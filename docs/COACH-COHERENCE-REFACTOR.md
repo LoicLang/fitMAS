@@ -10,6 +10,11 @@ read_when:
 
 # Coach Coherence Refactor
 
+> Note doctrine conversation — 30 avril 2026 :
+> ce refactor reste valide pour la coherence d'etat, mais toute mention
+> d'heuristique sur texte utilisateur libre est supersedee par
+> `docs/LLM-FIRST-CONVERSATION.md`.
+
 ## But
 
 Remettre FitMAS sur une base simple, lisible et fiable avant toute sophistication supplementaire.

@@ -109,6 +109,7 @@ Regles :
 - jamais ecrite brut depuis une phrase unique
 - promotion lente depuis le reel
 - deterministe avant tout
+- jamais depuis un regex/keyword sur texte utilisateur libre ; les signaux memoire conversationnels viennent d'une action structuree LLM puis d'un writer borne
 
 ## Mapping technique
 
@@ -135,12 +136,25 @@ Etat :
 
 - fait
 - promotion deterministe actuelle :
-  - creneau recurrentement indisponible depuis messages user + adaptations logistiques
+  - creneau recurrentement indisponible depuis signaux memoire structures + adaptations logistiques
   - fenetre d'entrainement preferentielle depuis les activites reelles
 - endpoint lecture : `/api/v0/patterns`
 - cron maintenance : toutes les 6h cote scheduler Telegram
 
 ## Regles d'ecriture
+
+Depuis le 30 avril 2026, une ecriture memoire issue d'une conversation doit suivre :
+
+```text
+texte user libre
+  -> Coach LLM
+  -> memory_actions structurees
+  -> validation / dedup / TTL / permissions
+  -> writer memoire borne
+  -> audit
+```
+
+Interdit : creer une fatigue, douleur, disponibilite, preference ou contrainte depuis un pattern lexical local sur le texte user.
 
 ### Ecrit dans profile memory
 

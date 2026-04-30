@@ -14,7 +14,7 @@ from fitmas.conversation_context import (
 
 
 class ConversationContextTest(unittest.TestCase):
-    def test_builds_grounded_context_bundle(self) -> None:
+    def test_builds_context_without_parsing_user_text(self) -> None:
         context = build_conversation_context(
             user_text="J'ai fait 30 min mais c'etait hier",
             conversation_history=[{"role": "user", "text": "J'ai couru aujourd'hui"}],
@@ -48,16 +48,16 @@ class ConversationContextTest(unittest.TestCase):
             now=datetime.fromisoformat("2026-03-22T19:56:00+01:00"),
         )
 
-        self.assertEqual(context.temporal_resolution.primary_reference, "yesterday")
-        self.assertEqual(context.recent_activity_claim.sport_type, "running")
-        self.assertEqual(context.recent_activity_claim.duration_min, 30)
+        self.assertEqual(context.temporal_resolution.primary_reference, "unspecified")
+        self.assertFalse(hasattr(context, "recent_activity_claim"))
+        self.assertFalse(hasattr(context, "non_completion_claim"))
         self.assertIn("Retrouver mon niveau running", "\n".join(context.selected_facts))
         self.assertEqual(context.selected_signals[0]["kind"], "missed_key_session")
         self.assertIn("execution_status: planned_pending", execution_summary_for_prompt(context))
-        self.assertIn("reference principale: yesterday", temporal_summary_for_prompt(context))
-        self.assertIn("sport: running", activity_claim_summary_for_prompt(context))
+        self.assertIn("reference principale: unspecified", temporal_summary_for_prompt(context))
+        self.assertEqual(activity_claim_summary_for_prompt(context), "")
 
-    def test_build_claim_memory_updates_archives_previous_claim_on_correction(self) -> None:
+    def test_build_claim_memory_updates_noops_in_llm_first_phase0(self) -> None:
         context = build_conversation_context(
             user_text="Non c'etait hier",
             conversation_history=[{"role": "user", "text": "J'ai couru aujourd'hui 30 min"}],
@@ -75,11 +75,9 @@ class ConversationContextTest(unittest.TestCase):
             user_text="Non c'etait hier",
         )
 
-        self.assertEqual(len(updates), 2)
-        actions = {payload["action"] for payload in updates}
-        self.assertEqual(actions, {"upsert", "archive"})
+        self.assertEqual(updates, [])
 
-    def test_non_completion_summary_is_exposed_for_prompt(self) -> None:
+    def test_non_completion_summary_noops_in_llm_first_phase0(self) -> None:
         context = build_conversation_context(
             user_text="Je n'ai pas couru hier",
             conversation_history=[],
@@ -92,9 +90,7 @@ class ConversationContextTest(unittest.TestCase):
 
         summary = non_completion_summary_for_prompt(context)
 
-        self.assertIn("non realise", summary)
-        self.assertIn("running", summary)
-        self.assertIn("2026-03-29", summary)
+        self.assertEqual(summary, "")
 
 
 if __name__ == "__main__":

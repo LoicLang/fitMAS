@@ -9,7 +9,6 @@ from fitmas.calibration_needs import (
     CalibrationNeedType,
     CalibrationResolution,
     fallback_ack_text,
-    fallback_resolve_calibration_need,
 )
 from fitmas.time_context import build_time_context, render_time_context
 
@@ -29,7 +28,6 @@ def extract_calibration_resolution(
     timezone_name: str | None,
     coach_context: dict[str, Any] | None = None,
 ) -> CalibrationResolution | None:
-    fallback = fallback_resolve_calibration_need(user_text, need)
     if not gw.client():
         return None
 

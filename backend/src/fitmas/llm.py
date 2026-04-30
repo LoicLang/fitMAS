@@ -6,9 +6,9 @@ import os
 import re
 import unicodedata
 from time import perf_counter
-from typing import Any, Literal
+from typing import Annotated, Any, Literal
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict, Field
 from fitmas import llm_gateway as gw
 from fitmas.conversation_prompting import select_conversation_prompt_policy
 from fitmas.fact_memory import normalize_fact_payload as normalize_fact_memory_payload
@@ -21,7 +21,7 @@ from fitmas.time_context import build_time_context, render_time_context
 from fitmas.tools.contract import ToolCall, ToolContext
 from fitmas.tools.metrics import build_tool_trace, log_tool_trace
 from fitmas.tools.registry import list_tools_for_pipeline
-from fitmas.tools.routing import IntentCategory, route_tools_for_query
+from fitmas.tools.routing import IntentCategory
 from fitmas.tools.runtime import ToolExecution, execute_tool_calls
 
 logger = logging.getLogger(__name__)
@@ -63,13 +63,118 @@ class MutationDecision(BaseModel):
     fitmas_message: str       # message envoye a l'utilisateur
 
 
+class HealthSignalAction(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+    type: Literal["record_health_signal"]
+    health_signal: str
+    body_area: str | None = None
+    severity: Literal["mild", "moderate", "severe", "unknown"] = "unknown"
+    status: Literal["new", "ongoing", "improving", "worsening", "resolved", "unknown"] = "unknown"
+    confidence: float = Field(ge=0.0, le=1.0)
+    evidence: str | None = None
+
+
+class AvailabilityConstraintAction(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+    type: Literal["record_availability"]
+    window_text: str
+    availability: Literal["unavailable", "limited", "available", "unknown"]
+    starts_on: str | None = None
+    ends_on: str | None = None
+    recurrence: str | None = None
+    confidence: float = Field(ge=0.0, le=1.0)
+    evidence: str | None = None
+
+
+class PreferenceSignalAction(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+    type: Literal["record_preference"]
+    preference: str
+    polarity: Literal["prefer", "avoid", "like", "dislike", "neutral", "unknown"]
+    scope: str | None = None
+    confidence: float = Field(ge=0.0, le=1.0)
+    evidence: str | None = None
+
+
+class ExecutionUpdateAction(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+    type: Literal["record_execution_update"]
+    target_ref: str
+    status: Literal["completed", "not_completed", "partially_completed", "unknown"]
+    completed: bool | None = None
+    sport_type: str | None = None
+    duration_min: int | None = Field(default=None, ge=0)
+    confidence: float = Field(ge=0.0, le=1.0)
+    evidence: str | None = None
+
+
+class AcceptPendingResolution(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+    type: Literal["accept_pending"]
+    reason: str | None = None
+
+
+class RejectPendingResolution(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+    type: Literal["reject_pending"]
+    reason: str | None = None
+
+
+class ModifyPendingResolution(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+    type: Literal["modify_pending"]
+    reason: str
+    requested_changes: str
+
+
+class IgnorePendingResolution(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+    type: Literal["ignore"]
+    reason: str | None = None
+
+
+class NeedsClarificationPendingResolution(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+    type: Literal["needs_clarification"]
+    reason: str
+    question: str
+
+
+MemoryAction = Annotated[
+    HealthSignalAction | AvailabilityConstraintAction | PreferenceSignalAction,
+    Field(discriminator="type"),
+]
+PendingResolution = Annotated[
+    AcceptPendingResolution
+    | RejectPendingResolution
+    | ModifyPendingResolution
+    | IgnorePendingResolution
+    | NeedsClarificationPendingResolution,
+    Field(discriminator="type"),
+]
+
+
 class CoachDecision(BaseModel):
+    model_config = ConfigDict(extra="forbid", arbitrary_types_allowed=True)
+
     response_type: Literal["reply", "no_change", "mutation_decision", "plan_patch", "requires_confirmation"]
     rationale: str
     fitmas_message: str
     mutation_decision: MutationDecision | None = None
     plan_patch: Any | None = None
     confirmation_reason: str | None = None
+    memory_actions: tuple[MemoryAction, ...] = ()
+    execution_actions: tuple[ExecutionUpdateAction, ...] = ()
+    pending_resolution: PendingResolution | None = None
 
 
 _DAYS_FR_TO_EN = {
@@ -98,6 +203,8 @@ _TURN_INTENT_TOOL_BUDGETS = {
     IntentCategory.PLAN_LOOKUP: (
         "get_today_context",
         "get_plan_window",
+        "get_recent_activities",
+        "get_activity_highlights",
         "get_user_constraints",
     ),
     IntentCategory.EXECUTION_REPORT: (
@@ -304,17 +411,16 @@ def decide(
         return None
 
     resolved_time_context = time_context or build_time_context((coach_context or {}).get("timezone"))
-    routing = route_tools_for_query(user_text, pipeline=tool_context.pipeline) if tool_context is not None else None
     turn_prompt_intent = _prompt_intent_from_turn_context(coach_context)
-    effective_intent = turn_prompt_intent or (routing.intent if routing is not None else None)
+    effective_intent = turn_prompt_intent
     prompt_policy = select_conversation_prompt_policy(
-        routing_reason=routing.reason if routing is not None else None,
+        routing_reason=None,
         intent=effective_intent,
     )
     tool_names = (
         _TURN_INTENT_TOOL_BUDGETS.get(turn_prompt_intent, ())
         if turn_prompt_intent is not None
-        else (routing.tool_names if routing is not None else ())
+        else ()
     )
     selected_facts = (coach_context or {}).get("selected_facts") or select_prompt_facts(remembered_facts or [])
     unresolved_execution_followup = (coach_context or {}).get("unresolved_execution_followup")
@@ -450,6 +556,8 @@ def _validate_decision_payload(data: dict[str, Any] | None) -> dict[str, Any] | 
         _remember_invalid_decision(data)
         logger.warning("llm.decision_invalid reason=coach_voice_violation mutation_type=%s", mutation_type)
         return None
+    if _message_looks_receipt_style(fitmas_message):
+        logger.warning("llm.coach_voice_receipt_style mutation_type=%s message=%r", mutation_type, fitmas_message[:120])
     if _looks_truncated_fitmas_message(fitmas_message):
         _remember_invalid_decision(data)
         logger.warning("llm.decision_invalid reason=truncated_fitmas_message mutation_type=%s", mutation_type)
@@ -496,6 +604,9 @@ def parse_coach_decision_payload(data: dict[str, Any] | None) -> CoachDecision |
         "rationale": rationale,
         "fitmas_message": fitmas_message,
         "confirmation_reason": _optional_str(data.get("confirmation_reason")),
+        "memory_actions": data.get("memory_actions") or (),
+        "execution_actions": data.get("execution_actions") or (),
+        "pending_resolution": data.get("pending_resolution"),
     }
     if response_type == "mutation_decision":
         mutation = _parse_nested_mutation_decision(
@@ -516,7 +627,11 @@ def parse_coach_decision_payload(data: dict[str, Any] | None) -> CoachDecision |
     elif response_type == "requires_confirmation" and not payload["confirmation_reason"]:
         logger.warning("llm.coach_decision_invalid reason=missing_confirmation_reason")
         return None
-    return CoachDecision(**payload)
+    try:
+        return CoachDecision(**payload)
+    except Exception:
+        logger.warning("llm.coach_decision_invalid reason=coach_decision_model_validation_failed")
+        return None
 
 
 def _parse_nested_mutation_decision(
@@ -570,6 +685,8 @@ def _valid_coach_message(message: str, *, response_type: str) -> bool:
     if _message_violates_coach_voice(message):
         logger.warning("llm.coach_decision_invalid reason=coach_voice_violation response_type=%s", response_type)
         return False
+    if _message_looks_receipt_style(message):
+        logger.warning("llm.coach_voice_receipt_style response_type=%s message=%r", response_type, message[:120])
     if _looks_truncated_fitmas_message(message):
         logger.warning("llm.coach_decision_invalid reason=truncated_fitmas_message response_type=%s", response_type)
         return False
@@ -624,6 +741,25 @@ def _message_violates_coach_voice(message: str) -> bool:
         or " le coach te " in padded
         or " le coach vous " in padded
     )
+
+
+_RECEIPT_PATTERNS = (
+    re.compile(r"^\s*(swap|mutation|operation|plan|action|changement)\s+applique"),
+    re.compile(r"^\s*plan\s+modifie\b"),
+    re.compile(r"^\s*mutation\s+(enregistree|effectuee)"),
+    re.compile(r"^\s*operation\s+effectuee"),
+    re.compile(r"\bj['\s]?ai bien (deplace|echange|modifie|enregistre|applique)\b"),
+    re.compile(r"\bton coach a (ajuste|modifie|deplace)\b"),
+)
+
+
+def _message_looks_receipt_style(message: str) -> bool:
+    """Detect bot/receipt-style replies. Log-only, does not invalidate.
+
+    Used to measure voice quality post-Phase-1 prompt update without blocking
+    decisions. Promote to hard guard once dogfood confirms low false-positive."""
+    normalized = _normalize_for_guard(message)
+    return any(p.search(normalized) for p in _RECEIPT_PATTERNS)
 
 
 def _normalize_for_guard(value: str) -> str:
@@ -1405,60 +1541,11 @@ Si rien d'utile: {{"facts": []}}"""
     data = _request_json(system=_COACH_SOUL, prompt=prompt, max_tokens=900)
     if data and isinstance(data.get("facts"), list):
         return [_normalize_fact_payload(fact) for fact in data["facts"] if isinstance(fact, dict)]
-    return _fallback_extract_facts(user_text)
+    return []
 
 
 def select_prompt_facts(facts: list[dict]) -> list[str]:
     return select_relevant_facts([normalize_fact_memory_payload(fact) for fact in facts], affects=["conversation"], limit=6)
-
-
-def _fallback_extract_facts(user_text: str) -> list[dict]:
-    text = user_text.strip()
-    lowered = text.lower()
-    facts: list[dict] = []
-
-    if any(token in lowered for token in ("prefere", "préfère", "j'aime", "j aime")):
-        facts.append(
-            {
-                "category": "preference",
-                "key": _slugify(text[:48]),
-                "value": text,
-                "confidence": 0.72,
-                "confirmed": True,
-                "source": "conversation",
-                "action": "upsert",
-            }
-        )
-
-    if any(day in lowered for day in ("mardi", "jeudi", "lundi", "mercredi", "vendredi", "samedi", "dimanche")) and any(
-        token in lowered for token in ("fragile", "pas dispo", "indispo", "jamais", "souvent", "complique", "compliqué")
-    ):
-        facts.append(
-            {
-                "category": "constraint",
-                "key": _slugify(text[:48]),
-                "value": text,
-                "confidence": 0.76,
-                "confirmed": True,
-                "source": "conversation",
-                "action": "upsert",
-            }
-        )
-
-    if "escalade" in lowered and any(token in lowered for token in ("lourd", "lourde", "fatigue", "crame", "cramé")):
-        facts.append(
-            {
-                "category": "pattern",
-                "key": "escalade_charge_lendemain",
-                "value": text,
-                "confidence": 0.7,
-                "confirmed": True,
-                "source": "conversation",
-                "action": "upsert",
-            }
-        )
-
-    return [_normalize_fact_payload(fact) for fact in facts]
 
 
 def _normalize_fact_payload(fact: dict) -> dict:

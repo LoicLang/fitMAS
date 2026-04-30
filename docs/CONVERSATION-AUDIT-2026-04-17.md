@@ -9,6 +9,11 @@ read_when:
 
 # Audit conversation + contexte — 17 avril 2026
 
+> Statut — audit historique. Depuis le 30 avril 2026,
+> `docs/LLM-FIRST-CONVERSATION.md` supersede toute option qui conserve
+> `_looks_like_plan_mutation_request`, `low_signal`, `rich_signal`,
+> fallback deterministe ou parsing pending `oui/non` sur texte utilisateur libre.
+
 ## Cadre
 
 Post-passe de fiabilite (15-17 avril). Le pipeline conversationnel est passe de "heuristiques lexicales → decide LLM" a "heuristiques + classifieur LLM d'intention → arbitrage OR → decide LLM avec contexte route". Les failles identifiees (A/B/C/D) sont closes. Cet audit regarde ce qui reste.
@@ -59,13 +64,11 @@ Pattern actuel : 10 marqueurs lexicaux (`decale`, `deplace`, `bascule`, `remplac
 - En l'etat, elle a donc une double fonction : (a) detecteur de mutation secondaire, (b) declencheur du forcage LLM quand elle flagge True et que le planner dit False.
 - **Risque** : cette heuristique est un pattern qui pourrit avec le temps. Chaque nouveau phrasing utilisateur (`on inverse mardi et jeudi ?`, `bouge la de 2h ?`) demande un ajout manuel.
 
-**Options** :
+**Decision 30 avril** :
 
-1. **Statu quo + dashboard divergence** : garder l'heuristique, mais lire periodiquement les WARNINGs `pipeline.intent_divergence` pour decider si elle reste pertinente.
-2. **Retrait progressif** : apres N semaines sans WARNING non-trivial, retirer l'heuristique et faire confiance au planner seul. Le filet devient les tests + la metrique.
-3. **Inversion** : remplacer l'heuristique par un fallback deterministe limite aux verbes strictement univoques (swap / echange), et considerer tout le reste comme "LLM decide". C'est la direction naturelle.
-
-Recommendation : option 2 ou 3 d'ici 2-3 semaines, apres accumulation de WARNINGs reels.
+Ces options sont closes. On ne garde pas l'heuristique en filet, on ne l'inverse
+pas, et on ne la remplace pas par un fallback plus petit. Le LLM est le seul
+detecteur d'intention ; le backend valide ensuite la decision structuree.
 
 ### 3. Le turn planner est un single-point-of-failure muet
 
@@ -83,11 +86,10 @@ Et continue. Consequences :
 - Pas de retry, pas de cache.
 - Pas de metrique compteur (juste un WARNING sur divergence).
 
-**Options** :
+**Decision 30 avril** :
 
-1. **Retry borne** (1 tentative courte) avant fallback — coute 200-400 ms max.
-2. **Cache LRU sur (user_text normalise, recent signals digest)** pour eviter de repayer le classifieur sur phrases similaires (`rien pu faire aujourd'hui`, `trop crevee`, etc.).
-3. **Fallback deterministe minimal** : si `llm=unavailable`, elargir temporairement la whitelist de marqueurs mutation (incluant verbe + jour).
+Si le LLM est indisponible, on degrade en clarification / outage minimal.
+On ne cree pas de fallback deterministe qui lit le texte user.
 4. **Metrique `turn_planner_unavailable_rate`** — si ça depasse 1 %, c'est un incident a traiter.
 
 Recommendation : (4) d'abord pour mesurer l'ampleur reelle. Puis (2) si le taux justifie.

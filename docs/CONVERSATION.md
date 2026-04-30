@@ -1,5 +1,5 @@
 ---
-summary: grounding conversationnel, hierarchie de verite, pipeline indications utilisateur et modules de contexte
+summary: grounding conversationnel, doctrine LLM-first et frontieres de validation pour les messages utilisateur
 read_when:
   - corriger un bug de contexte conversationnel
   - modifier api_messages.py
@@ -31,13 +31,12 @@ Voir `BUILD-ORDER.md`.
 Ordre strict pour le coach :
 
 1. activite reelle persistee (`Activity`)
-2. declaration explicite utilisateur dans le message courant
-3. correction explicite recente dans la conversation
+2. declaration explicite utilisateur comprise par le LLM et sortie en action structuree
+3. correction explicite recente dans la conversation, comprise par le LLM
 4. seance planifiee (`ScheduledSession`)
-5. heuristique faible
 
 Regle :
-- le coach ne presente jamais 4 ou 5 comme un fait si 1, 2 ou 3 disent autre chose
+- le coach ne presente jamais 4 comme un fait si 1, 2 ou 3 disent autre chose
 - une confirmation future (`demain piscine j'y serai`) ne declenche pas de mutation si le planning est deja coherent
 - si l'utilisateur aligne `demain` avec un jour explicite, le systeme repond avec la date absolue
 
@@ -56,83 +55,71 @@ Regle :
 ## Pipeline indications utilisateur
 
 Un message utilisateur n'est pas une instruction directe.
-Avant toute mutation, FitMAS produit un objet structure.
+Il doit d'abord etre compris par le LLM.
 
-### Flux
+Regle canonique : voir `LLM-FIRST-CONVERSATION.md`.
 
-1. **Interpreter** — `user_indication_llm.py` produit un `UserIndication` structure via LLM
-2. **Grounder** — `planning_window_resolution.py` ancre la contrainte contre le vrai planning
-3. **Decider** — `replan_from_life_change.py` ou `adaptation.py` produisent des actions autorisees
-4. **Expliquer** — `llm.py` formule la reponse naturelle
+### Flux cible
 
-### Triage du tour
+1. **Coach LLM unique** — comprend le tour, lit les tools read-only si besoin,
+   puis sort un `CoachDecision` structure.
+2. **Validation backend** — parse le JSON LLM, valide schema, resout les refs
+   contre la DB, refuse si ambigu.
+3. **Writers bornes** — `PlanMutationService`, puis `MemoryMutationService` /
+   execution writer quand ils seront poses.
+4. **Audit** — events de mutation / memoire / execution.
+5. **Reply** — issue du LLM, ou reconstruite depuis un event reel. Aucun helper
+   deterministe ne parle a la place du coach.
 
-`conversation_turn_planner.py` est un classifieur LLM read-only (`claude-haiku-4-5`) invoque avant les side-effects d'execution. Il produit un `ConversationTurnPlan` structure.
+### Interdits runtime
 
-Entrees bornees :
-- `user_text`
-- `temporal_summary`, `execution_summary`, `activity_claim_summary`, `signal_summary`
+- pas de regex / keyword / parser sur texte utilisateur libre
+- pas de classifieur `low_signal`, `rich_signal`, `ack`, `motivation`
+- pas de parsing deterministe `oui/non` sur pending
+- pas d'extraction sante / disponibilite / execution / preference hors LLM
+- pas de write memoire declenche par pattern texte
+- pas de `_sanitize_no_change_reply` ou phrase canned de reparation
+- pas de `heuristic OR LLM`
 
-Sortie (`ConversationTurnPlan`) :
-- `primary_intent` — whitelist `{trivial_ack, casual_chat, plan_lookup, plan_mutation, execution_report, availability_constraint, health_signal, calibration_answer, preference_signal, needs_clarification}`
-- `secondary_intents` — whitelist `{non_completion_claim, activity_claim, availability_constraint, health_signal, plan_mutation, preference_signal, calibration_answer}`
-- `mutation_signal`, `execution_claim`, `needs_clarification`, `clarification_question`, `confidence`
-- propriete derivee `has_plan_mutation = mutation_signal OR primary=plan_mutation OR 'plan_mutation' in secondary`
+### Actions structurees
 
-Role :
-- detecter l'intention principale du tour
-- conserver les intentions secondaires quand le message est compose
-- proteger les demandes de mutation implicites (`vendredi a la place ?`) que les marqueurs deterministes ne savent pas fiabiliser
+Le `CoachDecision` cible porte :
 
-Interdits :
-- aucun write DB
-- aucune reply finale
-- aucune mutation planning
-- le parseur JSON cascade (`llm_gateway._robust_json_loads`) absorbe les queues tronquees et les prose residuels; un payload ambigu retourne None
-- les regex / keywords ne classent pas l'intention floue ; elles injectent seulement un `Signal lexical non conclusif` dans le prompt d'extraction avec rappel negation/contexte
+- `memory_actions[]` : sante, disponibilite, preference, contexte utile
+- `execution_actions[]` : fait / pas fait, cible a resoudre contre le calendrier
+- `plan_action` : `PlanPatch | no_change | requires_confirmation`
+- `pending_resolution` : `accept_pending | reject_pending | modify_pending | ignore | needs_clarification`
 
-### Arbitrage heuristique vs LLM
+Le LLM propose ces actions.
+Le backend les valide et les applique via services officiels.
 
-Pour `plan_mutation`, deux signaux sont combines :
-- `heuristic_plan_mutation_request` — marqueurs lexicaux (`decale`, `swap`, `remplace`, `echange`, etc.) dans `api_messages._looks_like_plan_mutation_request()`
-- `llm_plan_mutation_request` — `turn_plan.has_plan_mutation`
+### Etat actuel
 
-Regle (closure faille A + B) :
-- `plan_mutation_request = heuristic OR llm` — aucun des deux ne peut silencieusement supprimer l'intention
-- divergence (`heuristic != llm`) → `logger.warning("pipeline.intent_divergence ...")` avec etat `True|False|unavailable` pour audit offline
-- `llm=unavailable` (timeout / JSON vide) ne dowgrade pas le flag a False : l'heuristique seule suffit a declencher l'arbitrage LLM
+Phase 0 du chantier LLM-first a retire les plus gros chemins user-text du
+runtime conversation :
 
-Consequences sur les early-exits deterministes quand `plan_mutation_request == true` :
-- pas de resolution auto de `non_completion_claim` (le claim reste du contexte)
-- pas de `targeted_execution_clarification`
-- pas de `execution_contestation_reply`
-- pas d'adaptation sante silencieuse — le fait est persiste, le LLM arbitre
-- `week_scope_reply` et `no_candidate_reply` deviennent du grounding injecte dans le prompt decide, avec fallback deterministe si le LLM echoue
-- `adaptation` candidate devient du contexte passe a decide plutot que d'etre appliquee directement
+- `conversation_context.py` ne parse plus claims / non-completion depuis `user_text`
+- `user_indication_llm.py` n'a plus de fallback deterministe ni hint lexical
+- `user_indications.py` n'expose plus `fallback_interpret_user_indication`
+- `conversation_pipeline.py` ne combine plus `heuristic OR LLM`, ne parse plus
+  les confirmations pending en `oui/non`, et ne route plus les tools depuis le
+  texte user brut
+- `_sanitize_no_change_reply` et les classifieurs `low_signal` / `rich_signal`
+  ont ete retires
+- Phase 1A a ajoute le schema strict dans `CoachDecision` pour
+  `memory_actions`, `execution_actions` et `pending_resolution`. Ces champs sont
+  acceptes/valides par le parser et visibles dans le prompt, mais les writers ne
+  sont pas encore branches.
 
-Pour les messages composes `health_signal + plan_mutation`, le fait sante est persiste et injecte dans le contexte, mais l'adaptation sante automatique ne court-circuite pas le tour.
+Dettes restantes :
 
-### Heuristiques lexicales
-
-Les heuristiques lexicales (`douleur`, `soir`, `fatigue`, etc.) ne sont pas une source de verite.
-Elles servent uniquement a attirer l'attention du LLM extracteur.
-
-Regle :
-- un keyword peut produire un hint de prompt
-- seul le LLM extracteur peut produire un `UserIndication` flou
-- le determinisme peut ensuite valider, bloquer, demander confirmation, committer et auditer
-- exception : protocoles fermes deja actifs (`oui/non` sur confirmation pending, reponse courte a clarification execution explicite)
-
-Exemple : `top pas de douleur` doit etre classe par le LLM comme absence de signal sante, pas transforme en fait `health` par regex.
-
-### Failles conversation documentees (15-17 avril 2026)
-
-| Faille | Symptome | Closure | Ref commit |
-|--------|---------|---------|-----------|
-| A | Heuristique et LLM peuvent diverger sur `plan_mutation` | `OR` des deux flags + WARNING structure sur divergence | b78db28 |
-| B | Heuristique flagge mutation, LLM l'ignore silencieusement | Force le routage LLM des contextes availability/adaptation/health quand heuristic=True | af54eda |
-| C | Aucun classifieur d'intention avant decide() | `conversation_turn_planner` — classifieur read-only dedie | e79d734 |
-| D | Erreurs LLM masquees (logs generiques) | `_classify_llm_exception` → labels stables `timeout / rate_limit / bad_request / auth / connection / api_other / json_parse / unknown` + `llm_plan_mutation_state = unavailable\|True\|False` | e81c3da |
+- `user_indication_llm.py` reste un pre-step LLM separe. Cible Phase 2 : une
+  seule sortie `CoachDecision` porte aussi l'extraction aujourd'hui faite par ce
+  pre-step.
+- Les confirmations pending ne s'appliquent plus par parser deterministe.
+  Cible Phase 2 : appliquer `pending_resolution` via writer borne.
+- `claim_guard` bloque encore en sortie si une reply promet une mutation sans
+  event. Cible : repair LLM contraint puis outage minimal.
 
 ### Feedback block_reason typed
 
@@ -141,28 +128,28 @@ Quand `PlanMutationService` rejette une mutation via un pre-hook, l'event bloque
 - `same_sport_proximity` — quasi-doublon meme sport < 48h
 - `occupied_training_target` — jour cible a deja une vraie seance
 
-La reply utilisateur est derivee du `block_reason` via `_BLOCK_REASON_REPLIES` (conversation_pipeline.py), pas improvisee par le LLM. Chaque blocage alimente aussi `logger.info("mutation_blocked ...")` pour audit.
+La reply utilisateur doit etre derivee d'un resultat valide ou reparee par le LLM sous contrainte. Les anciennes replies canned par `_BLOCK_REASON_REPLIES` restent de la dette a retirer pour eviter qu'un helper parle a la place du coach. Chaque blocage alimente aussi `logger.info("mutation_blocked ...")` pour audit.
 
 ### Types d'indication
 
 | Type | Exemples | Comportement |
 |------|----------|-------------|
-| `availability_constraint` | Indispo ponctuelle, voyage, creneau impossible | Resolve planning window → replan si seance cible claire. Si multi-jours (durée "X semaines/jours" détectée) → `build_availability_fact_payloads_from_indication` persiste un `UserFact` category=availability avec key `unavailable_<sport|general>_<start>_<end>` et `expires_at = end + 1 jour`. Le fait est ensuite filtré par `fact_is_current` et consulté par `_targeted_execution_clarification` pour sauter "tu l'as faite ou pas ?" sur les séances couvertes |
-| `health_signal` | Douleur, gene, fatigue locale | Le LLM normalise le signal → ecrit fait sante → le coach arbitre ; adaptation protective seulement en fallback si le LLM principal ne tranche pas |
-| `execution_update` | Activite faite, correction | Reconcile le reel → claims d'activite / memoire courte |
+| `availability_constraint` | Indispo ponctuelle, voyage, creneau impossible | Le LLM emet `memory_actions` / `plan_action`; le backend resout la fenetre contre le planning reel puis valide avant write |
+| `health_signal` | Douleur, gene, fatigue locale | Le LLM emet une action sante structuree; le backend valide et enregistre via writer borne |
+| `execution_update` | Activite faite, pas faite, correction | Le LLM emet `execution_actions`; le backend resout la cible et applique seulement si unique |
 
 ### Implementation dans api_messages.py
 
-1. Presque tous les messages non triviaux passent par le parseur structure
-2. Si `health_signal` fort : ecrit fait sante → injecte au coach LLM ; adaptation protective seulement comme fallback conservateur si le LLM principal ne sort rien de propre
-3. Si `availability_constraint` future : resolve fenetre → le coach LLM arbitre avec tools ; la cible 24 avril est `PlanPatch` + `validate_plan_patch`, pas un replan deterministe qui parle a sa place
-4. Sinon : pipeline conversation normal
+1. Le chemin actuel ne doit plus ajouter de parseur user-text en runtime.
+2. La cible est un `CoachDecision` unique qui porte reply, memory actions, execution actions, plan action et pending resolution.
+3. Les tools lus par le LLM restent read-only / validation-only.
+4. Les writes passent apres validation par services bornes.
 
 Depuis le 26 avril 2026, `decide()` accepte deux formats en compat :
 - legacy `MutationDecision` root (`mutation_type`) pour les chemins existants et fallback provider
 - `CoachDecision` (`response_type`) pour les nouveaux chemins agentiques
 
-Quand `CoachDecision.response_type=plan_patch`, le pipeline ne fait confiance ni au brouillon `fitmas_message` ni au patch tel quel : il revalide avec `validate_plan_patch`, applique via `PlanMutationService.apply_patch_for_user` seulement si le statut est `valid`, puis répond depuis les `plan_mutation_events` appliqués. Un patch `requires_confirmation` est stocké comme pending confirmation complet et ne peut être appliqué qu'après `oui` explicite ; il est alors revalidé puis commit avec `allow_requires_confirmation=True`. Un patch `blocked` reste refusé avant write.
+Quand `CoachDecision.response_type=plan_patch`, le pipeline ne fait confiance ni au brouillon `fitmas_message` ni au patch tel quel : il revalide avec `validate_plan_patch`, applique via `PlanMutationService.apply_patch_for_user` seulement si le statut est `valid`, puis répond depuis les `plan_mutation_events` appliqués. Un patch `requires_confirmation` est stocké comme pending confirmation complet. Cible migration : la reponse au pending est resolue par `pending_resolution` LLM, pas par parsing deterministe `oui/non`.
 
 Depuis le 28 avril 2026 :
 - `suggest_replan_candidates` est la surface canonique quand le coach a besoin d'une candidate de replan ; `propose_replan` reste alias compat
@@ -170,12 +157,10 @@ Depuis le 28 avril 2026 :
 - la candidate ne decide jamais a la place du coach, et le coach ne commit jamais directement
 
 Comportements importants :
-- `voyage`, `deplacement` = `availability_constraint`
 - `demain soir` sans seance cible ne doit jamais inventer une mutation sur un autre jour
-- `douleur epaule + natation` force adaptation hors natation
-- reponse courte a clarification (`oui`/`non`) interpretee dans le contexte de la question precedente
-- si un message combine un claim d'execution et une demande explicite de mutation (`swap`, `echange`, `decale`, `deplace`, `remplace`, `change`), le claim enrichit le contexte mais ne produit pas de reply finale et ne doit pas muter la seance avant arbitrage LLM
-- les contestations d'execution pures peuvent encore etre resolues par l'orchestrateur, mais les messages composes donnent la priorite a l'intention de mutation
+- `douleur epaule + natation` doit etre compris par le LLM comme sante + contexte sport, puis valide avant write
+- reponse courte a clarification (`oui`, `non`, `pas eu le temps`) doit etre interpretee par le LLM dans le contexte de la question precedente
+- si un message combine execution, sante et mutation, le LLM porte toutes les actions structurees dans la meme decision
 
 Semantique des statuts calendrier dans les prompts :
 - `planned` = prevu, pas encore fait
@@ -195,17 +180,18 @@ Le coach ne doit jamais transformer `adapted` en "tu as fait / marque comme fait
 | `execution_context.py` | Resume prevu vs reel sur la journee | Pose, pur, teste |
 | `execution_evidence.py` | Preuve prudente (observed/claimed/candidate/none) | Pose, utilise par heartbeat |
 | `execution_clarification.py` | Demande `faite ou non ?` quand l'incertitude est structurante | Pose |
-| `temporal_resolver.py` | Resout aujourd'hui/demain/hier/ce soir depuis timezone user | Pose, pur, teste |
-| `activity_claims.py` | Extrait sport/duree/date/certitude des messages | Pose, fusionne claims, teste |
-| `conversation_context.py` | Assemble minimum utile pour le LLM | Pose, utilise par api_messages |
+| `temporal_resolver.py` | Resout des references temporelles structurees | Dette si appele directement sur texte user libre dans le runtime conversation |
+| `activity_claims.py` | Ancien extracteur claims depuis texte user | Dette runtime ; doit etre remplace par `execution_actions` LLM |
+| `conversation_context.py` | Assemble minimum utile pour le LLM | Dette partielle : ne doit plus parser `user_text` pour claims/non-completion |
 | `calibration_needs.py` | Detecte trous d'info qui changent la qualite du plan | Pose, branche heartbeat + messages |
-| `user_indications.py` | Contrat ferme des signaux user | Pose |
-| `user_indication_llm.py` | Extraction structuree LLM | Pose |
+| `user_indications.py` | Types historiques de signaux user | A fusionner dans `CoachDecision.memory_actions` / `execution_actions` |
+| `user_indication_llm.py` | Extraction structuree LLM separee | A fusionner dans le LLM coach unique |
 | `planning_window_resolution.py` | Grounding contrainte future contre planning reel | Pose, aussi tool read-only |
-| `conversation_turn_planner.py` | Classifieur LLM read-only intent primaire + secondaires | Pose (e79d734), gate orchestration pipeline |
+| `conversation_turn_planner.py` | Classifieur LLM read-only intent primaire + secondaires | Dette cible : fusion dans le Coach LLM unique, pas un pre-cerveau separe |
 | `llm_gateway.py` | Parseur JSON robuste (strip fences, balanced prefix, truncated repair) partage par tous les chemins LLM | Pose (eea74e7) |
 | `recent_reality.py` | Compteurs `planned / confirmed / claimed / missed_streak` semaine | Injecte dans briefing matin (910f47a) — empeche confabulation de decompte hebdo |
-| `coach_reading_digest.py` | Contexte pre-digere (faits + lens Haiku JSON `sens_du_jour / angle / ne_pas_faire`) | Pose (12b4bf8). Injecte dans briefing matin et dans `decide()` quand `primary_intent in {plan_lookup, execution_report, availability_constraint}`. Remplace le bloc compteurs bruts par une lecture offplan-aware. Fallback gracieux sur `recent_reality` si le digest foire. |
+| `skills/heartbeat/context.py` | Bundle verite heartbeat (`YesterdayTruth` / `TodayTruth` / `WeekDigest`) | Injecte dans briefing matin. Separe hier d'un agregat 7j pour eviter de projeter des sorties offplan hebdo sur "hier". |
+| `coach_reading_digest.py` | Contexte pre-digere (faits + lens Haiku JSON `sens_du_jour / angle / ne_pas_faire`) | Utilise par `decide()` quand `primary_intent in {plan_lookup, execution_report, availability_constraint}`. Le heartbeat n'appelle plus le lens LLM ; la revue hebdo reutilise seulement les faits deterministes (`lens=None`) pour les sorties offplan detaillees. |
 
 ## Ce que le LLM recoit
 
@@ -216,10 +202,10 @@ Oui :
 - `relevant_timeline_context`
 - `recent_user_corrections`
 - `calibration_need` eventuel (comme doute interne, pas question formulaire)
-- `turn_primary_intent` + `turn_secondary_intents` depuis le planner (pour router la prompt policy et le budget de tools dans `llm.decide()`)
-- contexte `availability` (week_scope / no_candidate) injecte si `primary_intent in {availability_constraint, plan_mutation}`
-- contexte `adaptation` candidate injecte si `turn_plan.has_plan_mutation` et une adaptation deterministe existe
-- dans le briefing matin ET dans `decide()` pour `plan_lookup / execution_report / availability_constraint` : `coach_reading_digest` (faits offplan-aware + lens pre-pass `sens_du_jour / angle / ne_pas_faire`). Ne recoit PAS le digest pour les intents mutation (leur prompt a deja son grounding)
+- contexte systeme borne : calendrier, execution verifiee, facts actifs, derniers tours utiles
+- tools read-only disponibles selon capability budget, sans classification deterministe du texte user
+- dans le briefing matin : `HeartbeatContextBundle` (`YesterdayTruth`, `TodayTruth`, `WeekDigest`) sans lens LLM
+- dans `decide()` pour `plan_lookup / execution_report / availability_constraint` : `coach_reading_digest` (faits offplan-aware + lens pre-pass `sens_du_jour / angle / ne_pas_faire`). Ne recoit PAS le digest pour les intents mutation (leur prompt a deja son grounding)
 
 Non :
 - tout l'historique brut
@@ -230,14 +216,16 @@ Non :
 
 ## Trous restants
 
-1. ~~**Digest hebdo**~~ — pose le 19 avril (`coach_reading_digest.py`, 12b4bf8) : faits offplan-aware + lens pre-pass, injecte briefing + `decide()` sur intents lookup/report/availability. A observer : qualite du lens Haiku sur semaine longue (les 3 champs coherents avec les faits ?).
+1. ~~**Digest hebdo**~~ — pose le 19 avril (`coach_reading_digest.py`, 12b4bf8), puis resserre le 29 avril : `decide()` garde les faits offplan-aware + lens pre-pass ; heartbeat morning utilise maintenant `HeartbeatContextBundle` sans lens LLM ; weekly review reutilise les faits deterministes avec `lens=None`.
 2. **Referents** — a dogfooder : est-ce que `30 min`, `celle de demain`, `la piscine` restent ambigus ?
 3. **Tools** — `suggest_replan_candidates` est branche comme candidate helper. Prochaines surfaces utiles : `validate_plan_patch` comme validation-only visible au LLM et, plus tard, `get_coach_state` comme macro read-only optionnelle.
-4. **Claims temporels** — observer si d'autres claims meritent la meme approche que les claims d'activite
+4. **Actions execution** — remplacer claims temporels par `execution_actions` LLM + writer borne
 5. **Chemins compat** — `WeeklyPlan`/`DayPlan` ne doivent plus etre lus comme verite runtime
-6. **Turn planner fragile quand LLM indispo** — en cas de `llm=unavailable`, seule l'heuristique lexicale decide. Les intentions implicites (`vendredi a la place ?`) peuvent etre ratees. Envisager retry borne ou cache de decisions sur phrasings recurrents.
-7. **Block_reason tied to hardcoded replies** — l'ajout d'une raison pre-hook impose d'editer le dict `_BLOCK_REASON_REPLIES`. Le chantier `PlanPatch` doit plutot remonter `valid / warning / requires_confirmation / blocked` au coach, puis deriver la reply finale depuis validation ou event reel.
-8. **Couche health_signal secondaire non arbitree** — un `health_signal` en intention secondaire d'un tour `plan_mutation` est injecte comme fact, mais il n'existe pas encore de contrat clair sur la facon dont le LLM doit trancher (prioriser sante ? refuser la mutation ?).
+6. ~~**Purge zero-determinisme Phase 0**~~ — parseurs user-text runtime,
+   low_signal, pending oui/non, `_sanitize_no_change_reply`, `heuristic OR LLM`
+   retires. Reste a fusionner les pre-steps LLM dans `CoachDecision`.
+7. **Block_reason tied to hardcoded replies** — l'ajout d'une raison pre-hook impose d'editer le dict `_BLOCK_REASON_REPLIES`. Le chantier `PlanPatch` doit plutot remonter `valid / warning / requires_confirmation / blocked` au coach, puis deriver la reply finale depuis validation ou repair LLM.
+8. **Actions sante/dispo/preference** — remplacer facts ecrits depuis extracteurs par `memory_actions` LLM + `MemoryMutationService`.
 
 ## Regles non negociables
 
@@ -247,12 +235,13 @@ Non :
 - un prompt ne remplace pas un tool de verite
 - le LLM n'ecrit jamais directement en memoire
 - les mutations passent toujours par les orchestrateurs
-- les detecteurs de claims ne doivent pas voler le tour quand le message contient aussi une intention planning explicite
+- aucun detecteur deterministe ne lit le texte user libre pour comprendre le tour
 
 ## Anti-patterns
 
 - laisser le LLM choisir seul la seance du futur sans grounding
 - parser toute la langue naturelle avec des regex
+- utiliser des regex comme "hints" sur texte utilisateur libre dans le runtime conversation
 - muter le plan directement depuis une extraction LLM
 - ecrire un signal utilisateur flou en memoire durable
 - appliquer un side-effect DB avant que l'intention principale du tour soit arbitree
