@@ -125,9 +125,10 @@ Les tools restent read-only. Les orchestrateurs possedent les writes.
 - Strava callback redirige vers webapp (plus de JSON brut)
 - `/help` Telegram
 - Grounding conversationnel pose : `execution_context.py`, `temporal_resolver.py`, `activity_claims.py`, `conversation_context.py`
-- Nouveau bounded context `user indications` : interpretation LLM bornee, resolution planning future et routing metier (`user_indications.py`, `user_indication_llm.py`, `planning_window_resolution.py`)
+- Les anciens modules `user_indications.py`, `user_indication_llm.py` et `replan_from_life_change.py` ont ete supprimes apres migration vers `CoachDecision.memory_actions` / `execution_actions` / `PlanPatch`.
+- `planning_window_resolution.py` reste comme resolution de references deja structurees par le LLM.
 - Tool mémoire partagé : `fact_memory.py`
-- Socle runtime tools posé : `tool_contract.py`, `tool_registry.py`, `tool_runtime.py`, `tool_metrics.py`, `tool_routing.py`, `conversation_prompting.py`
+- Socle runtime tools posé : `tool_contract.py`, `tool_registry.py`, `tool_runtime.py`, `tool_metrics.py`, `conversation_prompting.py`
 - Le chat peut maintenant faire un unique tool call read-only borne pour certaines questions de lecture
 - Les tools offerts au chat sont encore partiellement choisis par routing déterministe selon le type de question ; dette a remplacer par une policy de capacites + choix de tools par le LLM
 - Le prompt conversationnel commence aussi a se compacter selon la requete, au lieu d'injecter toujours les memes blocs
@@ -149,7 +150,7 @@ Les tools restent read-only. Les orchestrateurs possedent les writes.
 - l'onboarding et la régénération hebdo passent maintenant par `planning_state.py`
 
 - **Mutation middleware** : `mutation_hooks.py` — pre/post hooks autour des mutations. Les pre-hooks valident plausibilité (date passée, collision séance intense, limite hard/week). Les post-hooks calculent l'impact (delta charge, séances clé affectées, recovery perdu) et déclenchent une recalibration si seuil franchi.
-- **Intent-based tool routing historique** : `tool_routing.py` classe encore des intents deterministes avec budget de tools explicite. Depuis le 30 avril, cette logique est dette conversationnelle : le routing cible doit exposer une surface autorisee, pas comprendre le texte user.
+- **Tool routing deterministic supprime** : plus de `classify_intent(user_text)` ni de `route_tools_for_query`. Le LLM recoit un budget canonique de read-tools et choisit lui-meme.
 - **Heartbeat par rôles** : `heartbeat_roles.py` — 4 rôles bornés (BriefingRole, ReminderRole, ReviewRole, SignalRole) avec capabilities déclarées (can_read, can_write, max_output_sentences). Chaque rôle a son propre prompt builder. `heartbeat.py` reste la façade qui gère le gating et la livraison.
 - **Prompt layers** : `prompt_layers.py` — assemblage structuré du prompt en 5 couches (L0: identité coach, L1: profil athlète, L2: état plan, L3: contexte immédiat, L4: mémoire épisodique) avec budgets token par couche et cache breakpoints pour prompt caching Anthropic.
 - **Ops plane** : `api_ops.py` — endpoints `/ops/` séparés du tool plane conversationnel. Inspection signaux, mémoire, mutations récentes, stats tools. Auth debug distincte.
@@ -280,8 +281,7 @@ backend/src/fitmas/
 ├── api_support.py         (137 lignes) — normalisation onboarding + garde-fous debug
 ├── api_payloads.py        (38 lignes) — payloads Pydantic
 ├── app_views.py           (~250 lignes) — composition read models app
-├── user_indications.py    (~180 lignes) — contrat ferme des signaux user (dispo, sante, execution)
-├── user_indication_llm.py (~70 lignes) — extraction structuree d'indications utilisateur
+├── availability_constraints.py — decode les cles availability stockees en DB
 ├── planning_window_resolution.py (~120 lignes) — grounding planning date pour contraintes futures
 ├── calendar_resolution.py (~140 lignes) — résolution planning vs réel pour le calendrier
 ├── telegram_bot.py        (48 lignes) — bootstrap bot
@@ -306,7 +306,6 @@ backend/src/fitmas/
 ├── time_context.py        (122 lignes) — timezone + helpers UTC
 ├── tool_contract.py       — wrapper de compat vers `tools/contract.py`
 ├── tool_registry.py       — wrapper de compat vers `tools/registry.py`
-├── tool_routing.py        — wrapper de compat vers `tools/routing.py`
 ├── tool_runtime.py        — wrapper de compat vers `tools/runtime.py`
 ├── tool_metrics.py        — wrapper de compat vers `tools/metrics.py`
 ├── coach_messages.py      (31 lignes) — draft coach + persistance centralisée
@@ -485,7 +484,7 @@ StravaConnection
 9. Reply finale envoyee au user, fondee sur la decision LLM et le resultat reel valide
 10. Persistance `CoachMessage(role=agent)` + `conversation_turns`
 
-Dette active restante : fusionner le pre-step `user_indication_llm` et le `conversation_turn_planner` dans une sortie `CoachDecision` unique avec `memory_actions`, `execution_actions` et `pending_resolution`. Phase 0 a retire du runtime conversation : fallback user indication, pending `oui/non`, low-signal, rich-signal, claim/non-completion extractors et `heuristic OR LLM`.
+Dette active restante : finir de reduire `conversation_turn_planner` si le dogfood montre qu'un pre-step LLM se comporte comme un second cerveau. Les anciens extracteurs deterministes user indication, pending `oui/non`, low-signal, rich-signal, claim/non-completion et `heuristic OR LLM` sont retires du runtime conversation; les modules legacy `user_indications.py`, `user_indication_llm.py`, `replan_from_life_change.py` et `tool_routing.py` sont supprimes.
 
 
 ### Contexte temporel partagé

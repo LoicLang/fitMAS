@@ -16,7 +16,7 @@ from dotenv import load_dotenv
 load_dotenv(Path(__file__).resolve().parents[1] / ".env")
 
 from fitmas.llm_gateway import client, request_text, request_json, request_message, message_text, message_json
-from fitmas.tool_routing import IntentCategory, classify_intent, route_tools_for_query
+from fitmas.tools.routing import IntentCategory
 from fitmas.conversation_prompting import select_conversation_prompt_policy
 from fitmas.prompt_layers import assemble_layered_prompt, build_identity_layer
 from fitmas.llm_prompt_builder import (
@@ -162,35 +162,6 @@ class TestConversationDecide(unittest.TestCase):
         )
         print(f"  Decision: {parsed['mutation_type']}")
         print(f"  Message: {parsed.get('fitmas_message', '')[:100]}")
-
-
-# ---------------------------------------------------------------------------
-# 3. Intent routing + prompt policy integration
-# ---------------------------------------------------------------------------
-
-class TestIntentRoutingIntegration(unittest.TestCase):
-    def test_intent_to_policy_to_prompt_chain(self):
-        """Full chain: user text → intent → policy → prompt assembly."""
-        test_cases = [
-            ("Salut ca va ?", IntentCategory.CASUAL_CHAT, "casual_compact"),
-            ("J'ai couru 10km ce matin", IntentCategory.EXECUTION_REPORT, "execution_report"),
-            ("Je bascule la seance a demain", IntentCategory.PLAN_NEGOTIATION, "plan_negotiation_full"),
-            ("C'est quoi ma plus longue sortie ?", IntentCategory.ACTIVITY_HIGHLIGHTS, "activity_highlights_compact"),
-            ("La charge cette semaine ?", IntentCategory.LOAD_REVIEW, "load_review"),
-        ]
-
-        for user_text, expected_intent, expected_policy_name in test_cases:
-            with self.subTest(user_text=user_text):
-                intent = classify_intent(user_text)
-                self.assertEqual(intent, expected_intent)
-
-                routing = route_tools_for_query(user_text, pipeline="conversation")
-                self.assertEqual(routing.intent, expected_intent)
-
-                policy = select_conversation_prompt_policy(intent=intent)
-                self.assertEqual(policy.name, expected_policy_name)
-
-                print(f"  '{user_text}' → {intent.value} → {policy.name} → tools={routing.tool_names}")
 
 
 # ---------------------------------------------------------------------------
@@ -398,21 +369,17 @@ class TestFullPipelineSimulation(unittest.TestCase):
         """A casual message should use minimal prompt context and no tools."""
         user_text = "Ca va bien et toi ?"
 
-        # Step 1: classify intent
-        intent = classify_intent(user_text)
-        self.assertEqual(intent, IntentCategory.CASUAL_CHAT)
+        # Step 1: use explicit machine intent. Free user text is not routed
+        # through a deterministic classifier anymore.
+        intent = IntentCategory.CASUAL_CHAT
 
-        # Step 2: get tool budget
-        routing = route_tools_for_query(user_text, pipeline="conversation")
-        self.assertEqual(len(routing.tool_names), 0)
-
-        # Step 3: get prompt policy
+        # Step 2: get prompt policy
         policy = select_conversation_prompt_policy(intent=intent)
         self.assertFalse(policy.include_timeline)
         self.assertFalse(policy.include_signals)
         self.assertFalse(policy.include_facts)
 
-        # Step 4: build prompt
+        # Step 3: build prompt
         bundle = build_conversation_prompt_bundle(
             user_text=user_text,
             prompt_policy=policy,
@@ -428,7 +395,7 @@ class TestFullPipelineSimulation(unittest.TestCase):
             selected_facts=[],
         )
 
-        # Step 5: call LLM
+        # Step 4: call LLM
         response = request_message(
             system=bundle.system,
             messages=[{"role": "user", "content": bundle.prompt}],
@@ -447,11 +414,7 @@ class TestFullPipelineSimulation(unittest.TestCase):
         """A plan negotiation should use full context and produce a real mutation."""
         user_text = "Je deplace la seance de jeudi a vendredi"
 
-        intent = classify_intent(user_text)
-        self.assertEqual(intent, IntentCategory.PLAN_NEGOTIATION)
-
-        routing = route_tools_for_query(user_text, pipeline="conversation")
-        self.assertGreater(len(routing.tool_names), 0)
+        intent = IntentCategory.PLAN_NEGOTIATION
 
         policy = select_conversation_prompt_policy(intent=intent)
         self.assertTrue(policy.include_timeline)

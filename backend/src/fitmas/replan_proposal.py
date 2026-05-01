@@ -4,8 +4,8 @@ from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 from typing import Any, Sequence
 
+from fitmas.availability_constraints import parse_availability_fact_key
 from fitmas.plan_validator import validate_week_plan
-from fitmas.user_indications import parse_availability_fact_key
 
 DAY_ORDER = ("monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday")
 REST_DAY = {

@@ -79,6 +79,9 @@ class User(Base):
     plan_mutation_events: Mapped[list[PlanMutationEventRecord]] = relationship(
         back_populates="user", cascade="all, delete-orphan"
     )
+    memory_mutation_events: Mapped[list[MemoryMutationEventRecord]] = relationship(
+        back_populates="user", cascade="all, delete-orphan"
+    )
 
 
 class UserConstraint(Base):
@@ -420,6 +423,24 @@ class PlanMutationEventRecord(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
     user: Mapped[User] = relationship(back_populates="plan_mutation_events")
+
+
+class MemoryMutationEventRecord(Base):
+    __tablename__ = "memory_mutation_events"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
+    source: Mapped[str] = mapped_column(String(48), default="conversation")
+    action_type: Mapped[str] = mapped_column(String(48), default="")
+    target_type: Mapped[str] = mapped_column(String(48), default="")
+    target_key: Mapped[str] = mapped_column(String(128), default="")
+    status: Mapped[str] = mapped_column(String(16), default="applied")
+    reason: Mapped[str] = mapped_column(String(64), default="")
+    payload_json: Mapped[str] = mapped_column(Text, default="{}")
+    conversation_turn_id: Mapped[int | None] = mapped_column(nullable=True, default=None)
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+
+    user: Mapped[User] = relationship(back_populates="memory_mutation_events")
 
 
 class AdaptationEventRecord(Base):

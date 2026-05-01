@@ -123,7 +123,7 @@ Tests backend app/read-models :
 Smoke backend conversation/tools :
 
 ```bash
-./scripts/test-backend -q tests/test_conversation_prompting.py tests/test_tool_routing.py tests/test_llm_json.py tests/test_llm_tools.py tests/test_conversation_context.py tests/test_execution_context.py tests/test_tool_runtime.py tests/test_user_indications.py tests/test_memory_routing.py tests/test_memory_patterns.py tests/test_core_flows.py
+./scripts/test-backend -q tests/test_conversation_prompting.py tests/test_llm_first_conversation_contract.py tests/test_llm_json.py tests/test_llm_tools.py tests/test_conversation_context.py tests/test_execution_context.py tests/test_tool_runtime.py tests/test_memory_mutation_service.py tests/test_memory_routing.py tests/test_memory_patterns.py tests/test_core_flows.py
 ```
 
 Smoke API minimal :
@@ -143,7 +143,7 @@ Usage :
 - utilise une DB temporaire dediee au smoke
 - charge `.env` si besoin
 - joue une batterie de scenarios conversationnels avec vraie API LLM
-- utile si on touche `api_messages.py`, `heartbeat.py`, `llm.py`, `user_indication_llm.py`, `adaptation.py`
+- utile si on touche `api_messages.py`, `heartbeat.py`, `llm.py`, `conversation_pipeline.py`, `adaptation.py`
 
 Smoke DeepSeek OpenAI-compatible structured output :
 
@@ -375,7 +375,7 @@ Si le changement touche :
 - `api_messages.py`
 - `heartbeat.py`
 - `adaptation.py`
-- `user_indication_llm.py`
+- `conversation_pipeline.py`
 - `planning_window_resolution.py`
 
 Et si `DEEPSEEK_API_KEY` ou `ANTHROPIC_API_KEY` est dispo via `.env` ou l'environnement :

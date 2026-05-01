@@ -4,7 +4,6 @@ read_when:
   - modifier conversation_pipeline.py
   - modifier api_messages.py
   - modifier conversation_context.py
-  - modifier user_indications.py ou user_indication_llm.py
   - modifier conversation_turn_planner.py
   - ajouter une action memoire, sante, disponibilite, execution ou preference
   - corriger un bug de comprehension du message utilisateur
@@ -94,6 +93,7 @@ Il ne write jamais directement.
     {
       "type": "record_execution_update",
       "target_ref": "yesterday strength session",
+      "target_session_id": 123,
       "status": "not_completed",
       "completed": false,
       "confidence": 0.94,
@@ -186,8 +186,7 @@ Fichiers principaux :
 - `backend/src/fitmas/conversation_pipeline.py`
 - `backend/src/fitmas/api_messages.py`
 - `backend/src/fitmas/conversation_context.py`
-- `backend/src/fitmas/user_indication_llm.py`
-- `backend/src/fitmas/user_indications.py`
+- anciens modules `user_indication_llm.py` / `user_indications.py`
 - `backend/src/fitmas/claim_guard.py`
 - `tests/test_core_flows.py`
 - nouveau test possible : `tests/test_llm_first_conversation_contract.py`
@@ -204,11 +203,11 @@ Etat Phase 0 au 30 avril 2026 :
 - [x] Retirer `current_activity_claim`, `recent_activity_claim` et
   `non_completion_claim` de `ConversationContextBundle` tant qu'ils viennent du
   texte user par regex.
-- [x] Supprimer le fallback regex historique de `user_indications.py`. Les tests
-  creent maintenant des `UserIndication` structurees, comme une sortie LLM.
+- [x] Supprimer le fallback regex historique de `user_indications.py`; le module
+  entier a ensuite ete supprime pendant le cleanup repo.
 - [x] Remplacer `_sanitize_no_change_reply` par le bloc de sortie `claim_guard`
   post-LLM. Il ne lit pas le texte user.
-- [ ] Faire passer le scenario du matin par le contrat cible :
+- [x] Faire passer le scenario du matin par le contrat cible :
   heartbeat demande "renfo faite ou pas ?", user repond "J'ai pas eu le temps
   hier malheureusement", le LLM sort `execution_actions=[completed=false]`, le
   backend marque la seance comme `skipped`, la reply reste humaine.
@@ -243,12 +242,14 @@ Taches :
   `PreferenceSignalAction`, `ExecutionUpdateAction`.
 - [x] Etendre `CoachDecision` avec `memory_actions`, `execution_actions` et
   `pending_resolution`.
-- [ ] Creer `MemoryMutationService` :
+- [x] Creer `MemoryMutationService` :
   validation, dedoublonnage, TTL, write UserFact / working memory, audit.
-- [ ] Creer ou isoler le writer execution :
+- [x] Creer ou isoler le writer execution :
   resolution cible DB, `skipped/done` seulement si cible unique, audit.
-- [ ] Ajouter `memory_mutation_events` ou une table audit equivalente.
-- [ ] Ne brancher aucun write tant que les tests schema/service ne sont pas verts.
+- [x] Ajouter `memory_mutation_events` ou une table audit equivalente.
+- [x] Brancher les writes `memory_actions` / `execution_actions` apres validation
+  de `CoachDecision`; les inputs restent des artefacts LLM structures, jamais le
+  texte user libre.
 
 ### Phase 2 - Bascule LLM
 
@@ -260,22 +261,33 @@ Fichiers principaux :
 - `backend/src/fitmas/prompt_layers.py`
 - `backend/src/fitmas/llm.py`
 - `backend/src/fitmas/conversation_pipeline.py`
-- `backend/src/fitmas/tools/routing.py`
+- `backend/src/fitmas/tools/routing.py` (enum seulement, pas de classifieur texte)
 
 Taches :
 
-- [ ] Enrichir le system prompt : le coach doit emettre des actions structurees
+- [x] Enrichir le system prompt : le coach doit emettre des actions structurees
   pour sante, dispo, execution, preference et pending.
-- [ ] Ajouter few-shots pour :
+- [x] Ajouter few-shots pour :
   "j'ai pas eu le temps hier", "j'ai mal au genou", "je peux pas nager 2 semaines",
   "oui mais finalement vendredi", "running", "mercredi".
-- [ ] Brancher les writers apres validation de `CoachDecision`.
-- [ ] Remplacer `parse_confirmation_reply` par `pending_resolution`.
-- [ ] Laisser le LLM choisir les read-tools ; le routing deterministe ne doit plus
+- [x] Brancher les writers apres validation de `CoachDecision`.
+- [x] Remplacer `parse_confirmation_reply` par `pending_resolution` pour les
+  confirmations pending : `accept_pending` applique l'artefact pending apres
+  revalidation, `reject_pending` le ferme sans mutation, `modify_pending` ne
+  commit rien en V1.
+- [x] Laisser le LLM choisir les read-tools ; le routing deterministe ne doit plus
   classer le texte user.
-- [ ] Ajouter metriques :
+- [x] Ajouter metriques :
   `memory_actions_per_turn`, `execution_actions_per_turn`,
   `pending_resolution_per_turn`, `llm_understanding_missing_action`.
+- [x] Durcir le parsing des artefacts LLM `CoachDecision` :
+  repair JSON des decisions invalides, normalisation de `confidence="high"`,
+  `completed="false"` et `operation_type=record_execution_update`, drop des
+  actions connues incompletes sans perdre les actions valides, rejet des actions
+  inconnues.
+- [x] Interdire `requires_confirmation` libre sans `PlanPatch` /
+  `mutation_decision`; une question de clarification doit sortir en `no_change`,
+  pas rouvrir un protocole de confirmation.
 
 ### Phase 3 - Purge
 
@@ -295,6 +307,32 @@ Fichiers a supprimer ou degrader hors runtime :
 
 Regle : si une fonction lit `user_text` et retourne une intention, elle sort du
 runtime conversation ou devient un outil de test/diagnostic explicitement non-prod.
+
+Etat Phase 3 au 1 mai 2026 :
+
+- [x] `conversation_pipeline.py` n'appelle plus `interpret_user_indication` avant
+  `decide()`.
+- [x] `ConversationPipelineDependencies` n'expose plus de pre-step
+  `interpret_user_indication`.
+- [x] `api_messages.post_message` ne branche plus `interpret_user_indication`
+  dans le runtime conversation.
+- [x] Le pipeline ne persiste plus de facts sante/dispo depuis
+  `UserIndication`; ces writes viennent de `CoachDecision.memory_actions`.
+- [x] Le pipeline ne produit plus d'adaptation/replan depuis
+  `maybe_replan_from_user_indication`; les mutations viennent de
+  `CoachDecision` / `PlanPatch`.
+- [x] Le pipeline ne route plus de contexte final depuis `_week_scope_reply`,
+  `_no_candidate_constraint_reply` ou `_execution_contestation_reply`.
+- [x] Garde-fous statiques ajoutes dans
+  `tests/test_llm_first_conversation_contract.py`.
+- [x] Cleanup repo : suppression physique de `user_indication_llm.py`,
+  `user_indications.py`, `replan_from_life_change.py` et du wrapper
+  `tool_routing.py`.
+- [x] `tools/routing.py` ne contient plus de `classify_intent` ni de
+  `route_tools_for_query`; il ne garde que l'enum `IntentCategory` pour les
+  policies de prompt deja produites par artefacts LLM.
+- [x] Les tests historiques de ces modules ont ete supprimes; le verrouillage se
+  fait maintenant par `test_llm_first_conversation_contract.py`.
 
 ### Phase 4 - Verrouillage
 

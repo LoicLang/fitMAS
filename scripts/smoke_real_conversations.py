@@ -21,7 +21,7 @@ from fastapi.testclient import TestClient
 import fitmas.heartbeat as heartbeat
 from fitmas import repository as repo, schema as s
 from fitmas.api import app
-from fitmas.coach_messages import persist_draft
+from fitmas.coach_messages import CoachDraft, persist_draft
 from fitmas.db import Base, SessionLocal, engine, init_db
 from fitmas.time_context import DAY_KEYS, day_label_fr, get_local_now
 
@@ -251,6 +251,7 @@ def _print_turn(label: str, response: dict, before: dict, after: dict) -> None:
 def _post_message(client: TestClient, db: SessionLocal, user: s.User, text: str) -> None:
     before = _snapshot(db, user.id)
     response = client.post("/api/v0/messages", json={"text": text})
+    response.raise_for_status()
     payload = response.json()
     db.expire_all()
     after = _snapshot(db, user.id)
@@ -644,6 +645,68 @@ def scenario_heartbeat_calibration(db: SessionLocal, client: TestClient, user: s
     _post_message(client, db, user, "Plutot le soir")
 
 
+def _setup_heartbeat_non_completion(db: SessionLocal) -> s.User:
+    now = datetime.fromisoformat("2026-04-30T08:02:00+02:00")
+    user = _create_user(
+        db,
+        weekly_structure_notes="Semaine simple : renfo support hier, footing facile ce matin.",
+        current_state_notes="charge basse, semaine a tenir proprement",
+    )
+
+    yesterday = (now - timedelta(days=1)).replace(hour=7, minute=0, second=0, microsecond=0)
+    today = now.replace(hour=8, minute=30, second=0, microsecond=0)
+    for scheduled_date, sport_type, session_type, title, duration, intensity in [
+        (yesterday, "strength", "strength", "Renfo support", 34, "moderate"),
+        (today, "running", "easy", "Footing Z2", 28, "easy"),
+    ]:
+        day_key = DAY_KEYS[scheduled_date.weekday()]
+        db.add(
+            s.ScheduledSession(
+                user_id=user.id,
+                day=day_key,
+                label=day_label_fr(day_key, capitalize=True),
+                scheduled_date=scheduled_date,
+                source_plan_created_at=now - timedelta(days=3),
+                sport_type=sport_type,
+                session_type=session_type,
+                session_title=title,
+                session_goal="Support" if sport_type == "strength" else "Aerobie",
+                session_note="",
+                session_description=f"{duration} min",
+                duration_min=duration,
+                intensity=intensity,
+                load_score=3 if intensity != "easy" else 2,
+                priority="Normal",
+                nutrition_focus="",
+                flexibility="stable",
+                completion_status="planned",
+            )
+        )
+    db.commit()
+    db.refresh(user)
+    return user
+
+
+def scenario_heartbeat_non_completion(db: SessionLocal, client: TestClient, user: s.User) -> None:
+    with _override_now("2026-04-30T08:03:00+02:00"):
+        persist_draft(
+            user.id,
+            CoachDraft(
+                text="Hier, renfo 34min : tu l'as faite ou pas ? Ce matin, c'est footing Z2 28min.",
+                proactive=True,
+            ),
+            db=db,
+        )
+        _post_message(client, db, user, "J'ai pas eu le temps hier malheureusement, petit imprevu au travail")
+
+    yesterday = datetime.fromisoformat("2026-04-29T07:00:00+02:00").date()
+    sessions = repo.get_scheduled_sessions_for_date(db, user.id, target_date=yesterday)
+    strength = [session for session in sessions if session.sport_type == "strength"]
+    if len(strength) != 1 or strength[0].completion_status != "skipped":
+        status = strength[0].completion_status if strength else "missing"
+        raise AssertionError(f"Expected yesterday strength to be skipped via execution_actions, got {status}")
+
+
 SCENARIOS: list[Scenario] = [
     Scenario("empty_ack", "Petit ack sans info utile", scenario_empty_ack),
     Scenario("greeting", "Petit message social", scenario_greeting),
@@ -657,6 +720,11 @@ SCENARIOS: list[Scenario] = [
     Scenario("week_scope_constraint", "Contrainte large sur la semaine", scenario_week_scope_constraint),
     Scenario("motivation_signal", "Signal motivation vague", scenario_motivation_signal),
     Scenario("heartbeat_calibration", "Question naturelle de calibration puis reponse", scenario_heartbeat_calibration),
+    Scenario(
+        "heartbeat_non_completion",
+        "Reponse naturelle a une question heartbeat: pas fait hier -> execution_actions -> skipped",
+        scenario_heartbeat_non_completion,
+    ),
     Scenario(
         "compound_non_completion_swap",
         "Bug originel: non-completion implicite + swap dans le meme message",
@@ -678,6 +746,8 @@ def _run_scenario(scenario: Scenario) -> None:
             user = _setup_base(db, strong_next_day_hint=True)
         elif scenario.name == "heartbeat_calibration":
             user = _setup_base(db, vague_week=True)
+        elif scenario.name == "heartbeat_non_completion":
+            user = _setup_heartbeat_non_completion(db)
         elif scenario.name == "compound_non_completion_swap":
             user = _setup_compound_swap(db)
         elif scenario.name == "golden_case_autonomy":
@@ -694,13 +764,13 @@ def _run_scenario(scenario: Scenario) -> None:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Run real FitMAS conversation smokes against the Anthropic API.")
+    parser = argparse.ArgumentParser(description="Run real FitMAS conversation smokes against the configured LLM provider.")
     parser.add_argument("--scenario", action="append", dest="scenarios", help="Run only the named scenario. Repeatable.")
     parser.add_argument("--keep-db", action="store_true", help="Keep the temporary smoke DB file.")
     args = parser.parse_args()
 
-    if not os.getenv("ANTHROPIC_API_KEY"):
-        print("ANTHROPIC_API_KEY missing. Load .env or export the key first.", file=sys.stderr)
+    if not (os.getenv("DEEPSEEK_API_KEY") or os.getenv("ANTHROPIC_API_KEY")):
+        print("DEEPSEEK_API_KEY or ANTHROPIC_API_KEY missing. Load .env or export a key first.", file=sys.stderr)
         return 2
 
     selected = {name.strip() for name in (args.scenarios or []) if name.strip()}

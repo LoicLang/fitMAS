@@ -43,13 +43,22 @@ Le tunnel DeepSeek / tools / `PlanPatch` a livre le socle attendu pour un agent 
 - le chemin OpenAI-compatible DeepSeek pour structured output est le defaut quand `DEEPSEEK_API_KEY` existe ; `FITMAS_USE_DEEPSEEK_OPENAI_STRUCTURED=0` permet de le desactiver temporairement
 - le runtime tools accepte maintenant plusieurs `tool_use` dans un meme tour et renvoie un `tool_result` pour chaque id demande
 - `CoachDecision` est le nouveau contrat de decision, avec fallback legacy `MutationDecision`
-- `CoachDecision` porte maintenant les champs Phase 1A `memory_actions`, `execution_actions` et `pending_resolution` ; ils sont valides par schema mais pas encore executes
+- `CoachDecision` porte maintenant `memory_actions`, `execution_actions` et `pending_resolution` ; les actions memoire/execution sont executees par writers bornes post-validation, et `pending_resolution` accepte/refuse les pending sans parser `oui/non`
+- le parsing `CoachDecision` tolere maintenant les petites derives de schema LLM sur les artefacts structures (`confidence="high"`, `completed="false"`, `operation_type=record_execution_update`) sans relire le texte utilisateur ; les actions inconnues restent refusees
 - `PlanPatch -> validate_plan_patch -> PlanMutationService.apply_patch_for_user` est branche cote conversation
-- les confirmations pending serialisent maintenant le `PlanPatch` complet ; la resolution deterministe `oui/non` a ete retiree du runtime et reste a remplacer par `CoachDecision.pending_resolution`
+- les confirmations pending serialisent maintenant le `PlanPatch` complet ; la resolution deterministe `oui/non` a ete retiree du runtime et remplacee par `CoachDecision.pending_resolution`
 - le briefing matin a maintenant un catch-up borne jusqu'a 10h locale si le creneau jitter est rate et qu'aucun proactif n'a deja ete envoye
 - `suggest_replan_candidates` est le tool principal de candidate replan ; `propose_replan` reste alias compat, non route par defaut
 - le prompt formalise le workflow `replan_after_constraint` : tools atomiques -> candidate optionnelle -> `PlanPatch | no_change | requires_confirmation`
 - Phase 0 LLM-first est passee sur le chemin conversation : plus de `low_signal`, `rich_signal`, `heuristic OR LLM`, pending `oui/non`, `_sanitize_no_change_reply`, extracteurs claim/non-completion ou fallback regex `user_indications.py` dans le runtime conversation
+- Phase 3 a retire le pre-step `UserIndication` du runtime conversation :
+  `conversation_pipeline.py` ne l'appelle plus, ne persiste plus de facts depuis
+  cet objet et ne declenche plus `maybe_replan_from_user_indication`
+- Cleanup repo du 1 mai 2026 : `user_indication_llm.py`,
+  `user_indications.py`, `replan_from_life_change.py`, le wrapper
+  `tool_routing.py` et leurs tests historiques ont ete supprimes. Le fichier
+  `tools/routing.py` ne contient plus de classifieur texte; il garde seulement
+  l'enum `IntentCategory`.
 
 Ce que ca change produit :
 
@@ -60,12 +69,13 @@ Ce que ca change produit :
 
 Suite prioritaire :
 
-1. Creer les writers bornes `MemoryMutationService` / execution writer et les brancher apres validation de `CoachDecision`.
-2. Faire passer le scenario heartbeat "je n'ai pas eu le temps hier" par `execution_actions` puis writer borne.
-3. Rejouer les smokes reels : `golden_case_autonomy`, `piscine fermee`, continuations courtes (`oui`, `running`, `mercredi`) et contraintes simples type `demain soir`.
-4. Durcir `validate_plan_patch` : atomicite batch, suggested fixes, charge/recup/sante plus fines.
-5. Dogfood reel Telegram sur la semaine, en classant chaque echec : trust blocker, bug Phase A, besoin Phase A+, besoin Phase B, polish.
-6. Nettoyer les chemins legacy restants seulement quand le dogfood confirme que le nouveau pipeline tient.
+1. Rejouer les smokes reels : `golden_case_autonomy`, `piscine fermee`, continuations courtes (`oui`, `running`, `mercredi`) et contraintes simples type `demain soir`.
+2. Durcir `validate_plan_patch` : atomicite batch, suggested fixes, charge/recup/sante plus fines.
+3. Dogfood reel Telegram sur la semaine, en classant chaque echec : trust blocker, bug Phase A, besoin Phase A+, besoin Phase B, polish.
+
+Smoke reel DeepSeek du 1 mai 2026 :
+
+- ✅ `heartbeat_non_completion` : heartbeat demande "renfo 34min faite ou pas ?", user repond "J'ai pas eu le temps hier...", `execution_actions` applique `skipped` sur la seance d'hier et la reply reste conversationnelle.
 
 ### Phase B en reflexion — refonte planning / progression
 
@@ -169,7 +179,7 @@ Anti-mensonge "dire = faire", livré le 20 avril 2026 :
 Tools de lecture brute pour le coach LLM, livré le 20 avril 2026. Scope recalibré : 3 des 4 tools du plan existaient déjà, le vrai gap était `get_user_constraints` (manquant) et l'enrichissement ATL/CTL/TSB de `get_load_context`.
 - ✅ `get_user_constraints` créé (`backend/src/fitmas/tools/registry.py`) : filtre `active_facts` par catégories (availability/schedule/constraint/health/fatigue), exclut inactifs et expirés via `fact_is_current`, retourne payload structuré JSON-strict
 - ✅ `get_load_context` enrichi avec `ctl`/`atl`/`tsb` + label `frais`/`neutre`/`fatigue` via `compute_ctl_atl_tsb` (TSS estimé à la volée si absent)
-- ✅ Routing budgets enrichis (`tools/routing.py` + `llm.py:_TURN_INTENT_TOOL_BUDGETS`) : `PLAN_NEGOTIATION` reçoit 5 tools dont `get_user_constraints` ; `PLAN_LOOKUP` reçoit 3 tools dont `get_user_constraints`. L'intent `availability_constraint` du turn_planner mappe sur PLAN_NEGOTIATION
+- ✅ Historique : les routing budgets par intent ont ete poses ici, puis supersedes le 30 avril par Phase 2 LLM-first. `llm.decide()` offre maintenant un budget conversationnel canonique stable et laisse le LLM choisir les read-tools.
 - ✅ Tests : 3 nouveaux unit tests + tests routing/llm_tools mis à jour. 443 tests passent
 - ⏳ Hors scope chantier 2 : que l'extracteur d'indications pose un `expires_at` cohérent avec la durée annoncée ("2 semaines", "demain", "ce mois") — couvert par chantier 4
 
@@ -181,7 +191,7 @@ Heartbeat utilise les mêmes capacités que la conversation pour la lecture de l
 - ✅ Anti-hallu rule miroir du briefing matin ajoutée dans le system prompt review : "N'invente jamais un comptage hebdomadaire et ne dis pas 'zero <sport>' si une sortie de ce sport apparait dans le bloc, meme hors plan"
 - ✅ Le digest expose déjà `real_entries` détaillés (`RealEntry` avec `linked_to_plan`) — `render_digest_for_prompt` produit `swimming 45' jeu (offplan)` lisible par le LLM
 - ✅ Tests : nouveau `test_weekly_review_surfaces_offplan_swimming_entry` qui ajoute une nage offplan et vérifie que le prompt contient "Lecture de la semaine", "swimming", "(offplan)" + system prompt contient l'anti-hallu rule. 444 tests passent
-- ⏳ Hors scope 2bis : faire passer weekly_review et morning_briefing par `route_tools_for_query` + `execute_tool_call` (aujourd'hui ils consomment les builders directement, pas le tool runtime — étape ultérieure)
+- ⏳ Hors scope 2bis historique : faire passer weekly_review et morning_briefing par des bundles de contexte explicites ou tools read-only bornes. Ne pas recreer `route_tools_for_query` depuis texte user.
 
 ### Chantier 3 du refactor — fait
 
@@ -209,13 +219,13 @@ Court-circuit `clarification` du pipeline converti en contexte soft pour `decide
 
 Mémoire des contraintes temporelles avec `expires_at` ancré sur la fin de fenêtre, livré le 21 avril 2026 :
 - ✅ Symptôme dogfood (screenshot Telegram) : après "imprevu, piscine fermee 2 semaines", le coach continuait de reposer "tu l'as faite ou pas ?" sur la natation couverte par la contrainte, et au tour suivant il ne se souvenait plus de la fenêtre. Zéro persistence des contraintes multi-jours.
-- ✅ Schéma : `IndicationTimeReference.window_end_date: date | None` ajouté (`user_indications.py`), propagé dans `_time_reference_from_payload` pour les parses LLM.
+- ✅ Historique : `IndicationTimeReference.window_end_date` avait servi a ancrer les contraintes multi-jours. Ce chemin est maintenant remplace par `CoachDecision.memory_actions`.
 - ✅ Parser durée (`_extract_constraint_duration_days`) : "2 semaines", "15 jours", "une/la semaine". Branché dans `_fallback_availability_indication` → `window_end = resolved_date + (duration - 1)`, scope upgradé à WEEK.
 - ✅ Builder `build_availability_fact_payloads_from_indication` : produit un `UserFact` category=`availability`, key `unavailable_<sport|general>_<start-iso>_<end-iso>` (sport détecté via `_TRIGGER_ACTIVITY_PATTERNS`), `expires_at = datetime.combine(end + 1 jour, time.min)`. Skippe single-day + polarités non-UNAVAILABLE.
 - ✅ Parse inverse `parse_availability_fact_key` : retrouve sport + start + end depuis la clé, sans relire l'indication d'origine.
 - ✅ Pipeline (`conversation_pipeline.py`) : persiste les availability facts AVANT le flux health, refresh `_active_memory_payloads`.
 - ✅ Garde clarification (`_yesterday_session_covered_by_active_constraint` dans `api_messages.py`) : parcourt `repo.get_active_facts` (filtré par `fact_is_current`), retourne True si hier ∈ fenêtre ET (sport match ou contrainte générale). Wiré dans `_targeted_execution_clarification` après le check `yesterday_sessions`.
-- ✅ Tests `test_user_indications.py` : 3 duration parser + 7 builder/parser inverse. Tests pipeline `test_core_flows.py` : `test_availability_constraint_persists_as_fact_with_window_anchored_expires_at` + `test_execution_clarification_skipped_when_active_availability_fact_covers_yesterday`. **472 tests passent**.
+- ✅ Les tests historiques `test_user_indications.py` ont ete retires avec le module. Les garanties actives sont dans `test_llm_first_conversation_contract.py`, `test_memory_mutation_service.py` et `test_core_flows.py`.
 
 ### Recalage du 24 avril 2026 — coach libre, cadre strict
 

@@ -11,10 +11,34 @@ def _source(relative_path: str) -> str:
     return (SRC / relative_path).read_text(encoding="utf-8")
 
 
+def test_legacy_user_indication_modules_are_removed() -> None:
+    removed = (
+        "user_indication_llm.py",
+        "user_indications.py",
+        "replan_from_life_change.py",
+        "tool_routing.py",
+    )
+
+    for relative_path in removed:
+        assert not (SRC / relative_path).exists()
+
+
 def test_conversation_pipeline_has_no_deterministic_user_text_gates() -> None:
     source = _source("conversation_pipeline.py")
 
     forbidden = (
+        "interpret_user_indication",
+        "user_indication",
+        "UserIndicationKind",
+        "supports_planning_resolution",
+        "maybe_replan_from_user_indication",
+        "build_availability_fact_payloads_from_indication",
+        "build_health_fact_payloads_from_indication",
+        "_resolved_non_completion_from_indication",
+        "_resolved_activity_from_indication",
+        "_execution_contestation_reply",
+        "_week_scope_reply",
+        "_no_candidate_constraint_reply",
         "parse_confirmation_reply(",
         "_maybe_low_signal_label(",
         "_has_rich_signal_marker(",
@@ -49,44 +73,51 @@ def test_conversation_context_does_not_parse_free_user_text() -> None:
         assert symbol not in source
 
 
-def test_user_indication_llm_has_no_deterministic_fallback_or_lexical_hints() -> None:
-    source = _source("user_indication_llm.py")
-
-    forbidden = (
-        "fallback_interpret_user_indication",
-        "_closed_protocol_fallback",
-        "_lexical_hint_block",
-        "_prefer_richer_indication",
-    )
-
-    for symbol in forbidden:
-        assert symbol not in source
-
-
-def test_user_indications_module_has_no_free_text_fallback_parser() -> None:
-    source = _source("user_indications.py")
-
-    forbidden = (
-        "fallback_interpret_user_indication",
-        "extract_activity_claim",
-        "extract_non_completion_claim",
-        "_fallback_availability_indication",
-        "_fallback_health_indication",
-        "_UNAVAILABLE_PATTERNS",
-        "_HEALTH_PATTERNS",
-        "source_text_normalized",
-    )
-
-    for symbol in forbidden:
-        assert symbol not in source
-
-
 def test_llm_decide_does_not_route_tools_from_raw_user_text() -> None:
     source = _source("llm.py")
 
     forbidden = (
         "route_tools_for_query(user_text",
         "_fallback_extract_facts(user_text",
+    )
+
+    for symbol in forbidden:
+        assert symbol not in source
+
+
+def test_tools_routing_has_no_user_text_classifier() -> None:
+    source = _source("tools/routing.py")
+
+    forbidden = (
+        "classify_intent",
+        "route_tools_for_query",
+        "user_text",
+        "_matches_any",
+    )
+
+    for symbol in forbidden:
+        assert symbol not in source
+
+
+def test_api_messages_runtime_dependencies_do_not_include_user_indication_prestep() -> None:
+    source = _source("api_messages.py")
+
+    forbidden = (
+        "from fitmas.user_indications",
+        "from fitmas.user_indication_llm import interpret_user_indication",
+        "def interpret_user_indication",
+        "interpret_user_indication=interpret_user_indication",
+    )
+
+    for symbol in forbidden:
+        assert symbol not in source
+
+
+def test_conversation_dependencies_do_not_expose_user_indication_prestep() -> None:
+    source = _source("conversation_contract.py")
+
+    forbidden = (
+        "interpret_user_indication",
     )
 
     for symbol in forbidden:

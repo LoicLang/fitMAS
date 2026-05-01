@@ -42,7 +42,6 @@ class ConversationPipelineDependencies:
     decide: Callable[..., CoachDecision | MutationDecision | None]
     extract_facts: Callable[[str, str, list[dict[str, Any]]], list[dict[str, Any]]]
     check_and_adapt_health_facts: Callable[..., Any]
-    interpret_user_indication: Callable[..., Any]
     plan_turn: Callable[..., Any]
 
 

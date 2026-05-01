@@ -99,25 +99,52 @@ Phase 0 du chantier LLM-first a retire les plus gros chemins user-text du
 runtime conversation :
 
 - `conversation_context.py` ne parse plus claims / non-completion depuis `user_text`
-- `user_indication_llm.py` n'a plus de fallback deterministe ni hint lexical
-- `user_indications.py` n'expose plus `fallback_interpret_user_indication`
+- les anciens modules `user_indication_llm.py` et `user_indications.py` ont ete
+  supprimes du repo apres migration vers `CoachDecision`
 - `conversation_pipeline.py` ne combine plus `heuristic OR LLM`, ne parse plus
   les confirmations pending en `oui/non`, et ne route plus les tools depuis le
   texte user brut
 - `_sanitize_no_change_reply` et les classifieurs `low_signal` / `rich_signal`
   ont ete retires
 - Phase 1A a ajoute le schema strict dans `CoachDecision` pour
-  `memory_actions`, `execution_actions` et `pending_resolution`. Ces champs sont
-  acceptes/valides par le parser et visibles dans le prompt, mais les writers ne
-  sont pas encore branches.
+  `memory_actions`, `execution_actions` et `pending_resolution`.
+- Phase 1B branche `memory_actions` et `execution_actions` vers
+  `MemoryMutationService` / `ExecutionMutationService` apres validation du
+  `CoachDecision`. Les writers resolvent uniquement des artefacts structures LLM
+  contre la DB, jamais le texte user libre.
+- Phase 2 branche `pending_resolution` pour accepter ou refuser un pending. Un
+  `accept_pending` reapplique l'artefact stocke apres revalidation; un
+  `reject_pending` ferme le pending sans mutation; un `modify_pending` ne commit
+  rien en V1.
+- Phase 2 offre aussi au LLM un budget conversationnel stable de read-tools, au
+  lieu de choisir une sous-liste depuis le texte user. Les compteurs
+  `memory_actions_per_turn`, `execution_actions_per_turn`,
+  `pending_resolution_per_turn` et `llm_understanding_missing_action` sont loggues
+  dans `fitmas.conversation_metrics`.
+- Phase 2 durcit aussi la validation des artefacts LLM : normalisation des petites
+  derives de schema (`confidence="high"`, `completed="false"`,
+  `operation_type=record_execution_update`), drop d'actions connues incompletes,
+  rejet des actions inconnues et repair LLM contraint si le provider rend de la
+  prose apres tools.
+- Smoke reel DeepSeek `heartbeat_non_completion` passe : le message "J'ai pas eu
+  le temps hier" apres une question heartbeat produit une `execution_action`, et
+  la seance cible devient `skipped`.
+- Phase 3 retire l'ancien pre-step `UserIndication` du runtime conversation :
+  plus d'appel a `interpret_user_indication`, plus de write sante/dispo depuis
+  `UserIndication`, plus de replan depuis `maybe_replan_from_user_indication`.
+  Les faits utilisateur viennent de `CoachDecision.memory_actions`, les updates
+  d'execution de `CoachDecision.execution_actions`.
+- Cleanup repo du 1 mai 2026 :
+  `user_indication_llm.py`, `user_indications.py`, `replan_from_life_change.py`
+  et le wrapper `tool_routing.py` sont supprimes. `tools/routing.py` ne contient
+  plus de classifieur ni de budget de tools depuis le texte user; il garde
+  seulement l'enum `IntentCategory` pour les policies de prompt.
 
 Dettes restantes :
 
-- `user_indication_llm.py` reste un pre-step LLM separe. Cible Phase 2 : une
-  seule sortie `CoachDecision` porte aussi l'extraction aujourd'hui faite par ce
-  pre-step.
 - Les confirmations pending ne s'appliquent plus par parser deterministe.
-  Cible Phase 2 : appliquer `pending_resolution` via writer borne.
+  Elles passent maintenant par `pending_resolution`; reste a dogfooder les cas
+  `modify_pending`.
 - `claim_guard` bloque encore en sortie si une reply promet une mutation sans
   event. Cible : repair LLM contraint puis outage minimal.
 
@@ -181,11 +208,10 @@ Le coach ne doit jamais transformer `adapted` en "tu as fait / marque comme fait
 | `execution_evidence.py` | Preuve prudente (observed/claimed/candidate/none) | Pose, utilise par heartbeat |
 | `execution_clarification.py` | Demande `faite ou non ?` quand l'incertitude est structurante | Pose |
 | `temporal_resolver.py` | Resout des references temporelles structurees | Dette si appele directement sur texte user libre dans le runtime conversation |
-| `activity_claims.py` | Ancien extracteur claims depuis texte user | Dette runtime ; doit etre remplace par `execution_actions` LLM |
+| `activity_claims.py` | Dataclasses + parsing historique de claims stockes | Hors chemin conversation user-text ; ne pas appeler sur message utilisateur libre |
 | `conversation_context.py` | Assemble minimum utile pour le LLM | Dette partielle : ne doit plus parser `user_text` pour claims/non-completion |
 | `calibration_needs.py` | Detecte trous d'info qui changent la qualite du plan | Pose, branche heartbeat + messages |
-| `user_indications.py` | Types historiques de signaux user | A fusionner dans `CoachDecision.memory_actions` / `execution_actions` |
-| `user_indication_llm.py` | Extraction structuree LLM separee | A fusionner dans le LLM coach unique |
+| `availability_constraints.py` | Decode les cles availability stockees en DB | Pose ; lit des artefacts machine, pas du texte user |
 | `planning_window_resolution.py` | Grounding contrainte future contre planning reel | Pose, aussi tool read-only |
 | `conversation_turn_planner.py` | Classifieur LLM read-only intent primaire + secondaires | Dette cible : fusion dans le Coach LLM unique, pas un pre-cerveau separe |
 | `llm_gateway.py` | Parseur JSON robuste (strip fences, balanced prefix, truncated repair) partage par tous les chemins LLM | Pose (eea74e7) |

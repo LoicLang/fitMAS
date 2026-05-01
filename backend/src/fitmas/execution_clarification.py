@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import re
+import unicodedata
 from dataclasses import dataclass
 from datetime import date
 from typing import Any, Sequence
@@ -25,6 +27,16 @@ class ExecutionClarification:
     reason: str
     impact_flags: tuple[str, ...]
     session_id: int | None
+
+
+def looks_like_execution_clarification_prompt(text: str | None) -> bool:
+    normalized = _normalize_for_prompt_guard(text or "")
+    return (
+        "tu l as faite ou non" in normalized
+        or "tu l'as faite ou non" in normalized
+        or "tu l as faite ou pas" in normalized
+        or "tu l'as faite ou pas" in normalized
+    )
 
 
 def render_unresolved_execution_followup(
@@ -176,6 +188,13 @@ def _value(obj: Any, key: str) -> Any:
     if isinstance(obj, dict):
         return obj.get(key)
     return getattr(obj, key, None)
+
+
+def _normalize_for_prompt_guard(text: str) -> str:
+    folded = unicodedata.normalize("NFKD", text or "").encode("ascii", "ignore").decode("ascii")
+    folded = folded.lower().replace("’", "'")
+    folded = re.sub(r"\s+", " ", folded)
+    return folded.strip()
 
 
 def _int(value: Any) -> int | None:

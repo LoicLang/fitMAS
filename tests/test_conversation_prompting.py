@@ -3,7 +3,7 @@ from __future__ import annotations
 import unittest
 
 from fitmas.conversation_prompting import select_conversation_prompt_policy
-from fitmas.tool_routing import IntentCategory
+from fitmas.tools.routing import IntentCategory
 
 
 class ConversationPromptingTest(unittest.TestCase):

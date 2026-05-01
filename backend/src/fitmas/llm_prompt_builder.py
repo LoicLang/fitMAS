@@ -167,10 +167,22 @@ Format cible:
   - record_availability: window_text, availability=unavailable|limited|available|unknown, starts_on?, ends_on?, recurrence?, confidence, evidence?
   - record_preference: preference, polarity=prefer|avoid|like|dislike|neutral|unknown, scope?, confidence, evidence?
 - execution_actions: liste optionnelle d'actions execution proposees.
-  Type autorise: record_execution_update avec target_ref, status=completed|not_completed|partially_completed|unknown, completed?, sport_type?, duration_min?, confidence, evidence?
+  Type autorise: record_execution_update avec target_ref, target_session_id?, status=completed|not_completed|partially_completed|unknown, completed?, sport_type?, duration_min?, confidence, evidence?
 - pending_resolution: optionnel, uniquement si un pending existe ou si le tour y fait reference.
   Types autorises: accept_pending | reject_pending | modify_pending | ignore | needs_clarification.
   modify_pending exige requested_changes et ne peut modifier que le pending existant, jamais forger un patch neuf.
+  Tu ne parses jamais "oui/non" hors contexte: tu lis le message entier et le pending injecte.
+  Exemples:
+  - pending actif + "oui" clair -> pending_resolution.type=accept_pending
+  - pending actif + "non" clair -> pending_resolution.type=reject_pending
+  - pending actif + "oui mais finalement vendredi" -> pending_resolution.type=modify_pending, requested_changes="deplacer/adapter vers vendredi"
+  - pending actif + "j'ai pas eu le temps hier" -> pending_resolution.type=ignore + execution_actions si pertinent
+
+Few-shots actions structurees:
+- "j'ai pas eu le temps hier" -> execution_actions=[record_execution_update status=not_completed, completed=false, target_ref="seance d'hier"]
+- "j'ai mal au genou" -> memory_actions=[record_health_signal health_signal="douleur genou", severity=unknown, confidence elevee]
+- "je peux pas nager 2 semaines" -> memory_actions=[record_availability window_text="natation impossible 2 semaines", availability=unavailable] + plan_patch si une seance nage est touchee
+- "running" ou "mercredi" en continuation courte -> lis le contexte precedent, puis complete l'action en cours; ne reponds pas par un raccourci canned
 
 Pour une action planning, privilegie `response_type="plan_patch"`:
 plan_patch = {

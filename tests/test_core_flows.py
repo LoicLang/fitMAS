@@ -20,13 +20,6 @@ from fitmas.db import Base, SessionLocal, engine, init_db
 from fitmas.llm import CoachDecision, MutationDecision
 from fitmas.plan_patch import PlanPatch, PlanPatchOperation
 from fitmas.plan_actions import move_session
-from fitmas.user_indications import (
-    IndicationTimeReference,
-    UserIndication,
-    UserIndicationKind,
-    UserIndicationPolarity,
-    UserIndicationScope,
-)
 from fitmas.training_load import compute_ctl_atl_tsb, estimate_tss
 from fitmas import repository as repo, schema as s
 from fitmas.time_context import DAY_KEYS, day_label_fr, get_local_now
@@ -527,6 +520,91 @@ class FitMASCoreFlowsTest(unittest.TestCase):
         self.assertIsNotNone(active_pending)
         self.assertEqual(events, [])
 
+    def test_plan_patch_pending_accept_resolution_applies_pending_patch(self) -> None:
+        _, session = self._create_plan_for_today()
+        now = get_local_now(self.user.timezone)
+        for offset in (2, 3, 4):
+            day = now + timedelta(days=offset)
+            hard_session = s.ScheduledSession(
+                user_id=self.user.id,
+                day=DAY_KEYS[day.weekday()],
+                label=day_label_fr(DAY_KEYS[day.weekday()], capitalize=True),
+                scheduled_date=day.replace(hour=18, minute=0, second=0, microsecond=0),
+                sport_type="running",
+                session_type="intervals",
+                session_title=f"Hard {offset}",
+                session_goal="Stimulus",
+                duration_min=50,
+                intensity="hard",
+                load_score=4,
+                priority="Seance cle",
+                flexibility="stable",
+                completion_status="planned",
+            )
+            self.db.add(hard_session)
+        self.db.commit()
+
+        original_decide = api_messages.decide
+        original_extract_facts = api_messages.extract_facts
+        try:
+            def fake_decide(user_text, *args, **kwargs):
+                if str(user_text).strip().lower() == "oui":
+                    return CoachDecision(
+                        response_type="no_change",
+                        rationale="acceptation pending comprise par le LLM",
+                        fitmas_message="C'est confirme. Je l'applique.",
+                        pending_resolution=llm.AcceptPendingResolution(type="accept_pending"),
+                    )
+                return CoachDecision(
+                    response_type="plan_patch",
+                    rationale="Le user veut forcer une seance dure.",
+                    fitmas_message="Je peux le faire, mais ca charge la semaine.",
+                    plan_patch=PlanPatch(
+                        coach_message="Je remplace par un tempo dur.",
+                        operations=[
+                            PlanPatchOperation(
+                                operation_type="replace_session",
+                                target_session_id=session.id,
+                                new_sport_type="running",
+                                new_session_type="tempo",
+                                new_title="Tempo dur",
+                                new_duration_min=45,
+                                new_intensity="hard",
+                                rationale="Preference utilisateur confirmee.",
+                            )
+                        ],
+                    ),
+                )
+
+            api_messages.decide = fake_decide
+            api_messages.extract_facts = lambda *args, **kwargs: []
+            first = self.client.post("/api/v0/messages", json={"text": "Mets une seance dure a la place"}).json()
+            pending = repo.get_active_pending_mutation_confirmation(self.db, self.user.id)
+            second = self.client.post("/api/v0/messages", json={"text": "oui"}).json()
+        finally:
+            api_messages.decide = original_decide
+            api_messages.extract_facts = original_extract_facts
+
+        self.db.expire_all()
+        refreshed_session = repo.get_scheduled_session(self.db, self.user.id, session.id)
+        active_pending = repo.get_active_pending_mutation_confirmation(self.db, self.user.id)
+        all_pending = self.db.query(s.PendingMutationConfirmation).order_by(s.PendingMutationConfirmation.id).all()
+        events = (
+            self.db.query(s.PlanMutationEventRecord)
+            .filter(s.PlanMutationEventRecord.user_id == self.user.id)
+            .order_by(s.PlanMutationEventRecord.id.desc())
+            .all()
+        )
+
+        self.assertIn("Tu confirmes", first["assistant_message"]["text"])
+        self.assertIsNotNone(pending)
+        self.assertIn("tempo dur", second["assistant_message"]["text"].lower())
+        self.assertEqual(refreshed_session.session_title, "Tempo dur")
+        self.assertEqual(refreshed_session.intensity, "hard")
+        self.assertIsNone(active_pending)
+        self.assertEqual(all_pending[0].status, "accepted")
+        self.assertEqual(events[0].command_type, "replace_session")
+
     def test_high_impact_confirmation_no_keeps_plan_unchanged(self) -> None:
         _, session = self._create_plan_for_today()
         session.priority = "Seance cle"
@@ -571,6 +649,51 @@ class FitMASCoreFlowsTest(unittest.TestCase):
         self.assertEqual(refreshed_session.sport_type, "running")
         self.assertIn("Je ne touche pas", second["assistant_message"]["text"])
         self.assertIsNone(pending)
+
+    def test_pending_reject_resolution_closes_pending_without_mutation(self) -> None:
+        _, session = self._create_plan_for_today()
+        session.priority = "Seance cle"
+        self.db.commit()
+        original_decide = api_messages.decide
+        original_extract_facts = api_messages.extract_facts
+        try:
+            def fake_decide(user_text, *args, **kwargs):
+                if str(user_text).strip().lower() == "non":
+                    return CoachDecision(
+                        response_type="no_change",
+                        rationale="refus pending compris par le LLM",
+                        fitmas_message="OK. Je ne touche pas au planning.",
+                        pending_resolution=llm.RejectPendingResolution(type="reject_pending"),
+                    )
+                return MutationDecision(
+                    mutation_type="replace_session",
+                    target_session_id=session.id,
+                    new_sport_type="swimming",
+                    new_session_type="easy",
+                    new_duration_min=35,
+                    new_intensity="easy",
+                    new_title="Natation souple",
+                    new_goal="Faire tourner sans impact",
+                    rationale="On bascule sans impact.",
+                    fitmas_message="Je te bascule la seance en natation souple.",
+                )
+
+            api_messages.decide = fake_decide
+            api_messages.extract_facts = lambda *args, **kwargs: []
+            self.client.post("/api/v0/messages", json={"text": "Tu peux remplacer ma seance ?"})
+            self.client.post("/api/v0/messages", json={"text": "non"})
+        finally:
+            api_messages.decide = original_decide
+            api_messages.extract_facts = original_extract_facts
+
+        self.db.expire_all()
+        refreshed_session = repo.get_scheduled_session(self.db, self.user.id, session.id)
+        active_pending = repo.get_active_pending_mutation_confirmation(self.db, self.user.id)
+        all_pending = self.db.query(s.PendingMutationConfirmation).order_by(s.PendingMutationConfirmation.id).all()
+
+        self.assertEqual(refreshed_session.sport_type, "running")
+        self.assertIsNone(active_pending)
+        self.assertEqual(all_pending[0].status, "rejected")
 
     def test_conversation_turn_records_applied_mutation(self) -> None:
         _, session = self._create_plan_for_today()
@@ -897,14 +1020,24 @@ class FitMASCoreFlowsTest(unittest.TestCase):
         original_decide = api_messages.decide
         original_extract_facts = api_messages.extract_facts
         original_health = api_messages.check_and_adapt_health_facts
-        original_interpret = api_messages.interpret_user_indication
         try:
             def fake_decide(user_text, *args, **kwargs):
                 if "malade" in user_text:
-                    return MutationDecision(
-                        mutation_type="no_change",
+                    return CoachDecision(
+                        response_type="no_change",
                         rationale="Maladie signalee, le coach arbitre sans fallback deterministe.",
                         fitmas_message="Tu es malade, donc on ne force rien aujourd'hui.",
+                        memory_actions=[
+                            llm.HealthSignalAction(
+                                type="record_health_signal",
+                                health_signal="maladie",
+                                body_area="general",
+                                severity="unknown",
+                                status="new",
+                                confidence=0.95,
+                                evidence="Je suis malade",
+                            )
+                        ],
                     )
                 return MutationDecision(
                     mutation_type="no_change",
@@ -919,36 +1052,12 @@ class FitMASCoreFlowsTest(unittest.TestCase):
                 message="Repos. Tu es malade, on coupe propre.",
                 applied=True,
             )
-            api_messages.interpret_user_indication = lambda text, **kwargs: (
-                UserIndication(
-                    kind=UserIndicationKind.HEALTH_SIGNAL,
-                    confidence=0.95,
-                    source_text=text,
-                    scope=UserIndicationScope.SINGLE_DAY,
-                    polarity=UserIndicationPolarity.SIGNAL,
-                    time_reference=IndicationTimeReference(
-                        label="hier",
-                        resolved_date=yesterday_session.scheduled_date.date(),
-                        day_key=yesterday_session.day,
-                        relative_reference="yesterday",
-                        window=None,
-                    ),
-                    body_zone="general",
-                    trigger_activity="general",
-                    symptom_type="illness",
-                    execution_sport_type=yesterday_session.sport_type,
-                    execution_completed=False,
-                )
-                if "malade" in text
-                else None
-            )
             self.client.post("/api/v0/messages", json={"text": "Tu me conseilles quoi aujourd'hui ?"}).json()
             second = self.client.post("/api/v0/messages", json={"text": "Je suis malade comme un chien j'ai rien fait"}).json()
         finally:
             api_messages.decide = original_decide
             api_messages.extract_facts = original_extract_facts
             api_messages.check_and_adapt_health_facts = original_health
-            api_messages.interpret_user_indication = original_interpret
 
         self.db.expire_all()
         refreshed_yesterday = repo.get_scheduled_session(self.db, self.user.id, yesterday_session.id)
@@ -1026,7 +1135,7 @@ class FitMASCoreFlowsTest(unittest.TestCase):
         unchanged_session = repo.get_scheduled_session(self.db, self.user.id, tomorrow_session.id)
         self.assertEqual(result["assistant_message"]["text"], "Je vois une option de report, tu confirmes ?")
         self.assertEqual(unchanged_session.scheduled_date.date(), original_date)
-        self.assertIn("Adaptation candidate", captured["temporal_summary"])
+        self.assertNotIn("Adaptation candidate", captured["temporal_summary"])
 
     def test_health_indication_reaches_decide_before_protective_fallback(self) -> None:
         self._create_plan_for_today()
@@ -1037,10 +1146,20 @@ class FitMASCoreFlowsTest(unittest.TestCase):
         try:
             def fake_decide(*args, **kwargs):
                 decide_calls["count"] += 1
-                return MutationDecision(
-                    mutation_type="no_change",
+                return CoachDecision(
+                    response_type="no_change",
                     rationale="Signal sante arbitre par le coach.",
                     fitmas_message="Je prends l'epaule au serieux avant de toucher au plan.",
+                    memory_actions=[
+                        llm.HealthSignalAction(
+                            type="record_health_signal",
+                            health_signal="douleur epaule quand il nage",
+                            body_area="epaule",
+                            severity="unknown",
+                            status="new",
+                            evidence="J'ai mal a l'epaule quand je nage",
+                        )
+                    ],
                 )
 
             api_messages.decide = fake_decide
@@ -1108,7 +1227,6 @@ class FitMASCoreFlowsTest(unittest.TestCase):
         original_decide = api_messages.decide
         original_extract_facts = api_messages.extract_facts
         original_health = api_messages.check_and_adapt_health_facts
-        original_interpret = api_messages.interpret_user_indication
         original_plan_turn = api_messages.plan_conversation_turn
         captured: dict[str, object] = {}
         try:
@@ -1118,17 +1236,6 @@ class FitMASCoreFlowsTest(unittest.TestCase):
                 raise AssertionError("health adaptation should not run before LLM on compound mutation turns")
 
             api_messages.check_and_adapt_health_facts = should_not_run_health
-            api_messages.interpret_user_indication = lambda *args, **kwargs: UserIndication(
-                kind=UserIndicationKind.HEALTH_SIGNAL,
-                confidence=0.95,
-                source_text="J'ai mal a l'epaule quand je nage, mets piscine vendredi a la place",
-                scope=UserIndicationScope.SINGLE_DAY,
-                polarity=UserIndicationPolarity.SIGNAL,
-                body_zone="shoulder",
-                trigger_activity="swimming",
-                symptom_type="pain",
-                health_severity=None,
-            )
             api_messages.plan_conversation_turn = lambda *args, **kwargs: SimpleNamespace(
                 primary_intent="plan_mutation",
                 secondary_intents=("health_signal",),
@@ -1142,10 +1249,21 @@ class FitMASCoreFlowsTest(unittest.TestCase):
 
             def fake_decide(*args, **kwargs):
                 captured["selected_facts"] = kwargs.get("coach_context", {}).get("selected_facts", [])
-                return MutationDecision(
-                    mutation_type="no_change",
+                return CoachDecision(
+                    response_type="no_change",
                     rationale="Signal sante + demande de mutation a arbitrer ensemble.",
                     fitmas_message="Je tiens compte de l'epaule avant de bouger la piscine.",
+                    memory_actions=[
+                        llm.HealthSignalAction(
+                            type="record_health_signal",
+                            health_signal="douleur epaule en nageant",
+                            body_area="epaule",
+                            severity="unknown",
+                            status="new",
+                            confidence=0.95,
+                            evidence="J'ai mal a l'epaule quand je nage",
+                        )
+                    ],
                 )
 
             api_messages.decide = fake_decide
@@ -1157,7 +1275,6 @@ class FitMASCoreFlowsTest(unittest.TestCase):
             api_messages.decide = original_decide
             api_messages.extract_facts = original_extract_facts
             api_messages.check_and_adapt_health_facts = original_health
-            api_messages.interpret_user_indication = original_interpret
             api_messages.plan_conversation_turn = original_plan_turn
 
         self.db.expire_all()
@@ -1166,7 +1283,6 @@ class FitMASCoreFlowsTest(unittest.TestCase):
         self.assertEqual(result["assistant_message"]["text"], "Je tiens compte de l'epaule avant de bouger la piscine.")
         self.assertEqual(updated.completion_status, "planned")
         self.assertTrue(any(fact["category"] == "health" for fact in facts))
-        self.assertTrue(any("epaule" in str(fact).lower() or "shoulder" in str(fact).lower() for fact in captured["selected_facts"]))
 
     def test_health_indication_is_not_reprocessed_by_post_reply_adapter(self) -> None:
         self._create_plan_for_today()
@@ -1389,25 +1505,10 @@ class FitMASCoreFlowsTest(unittest.TestCase):
 
         original_decide = api_messages.decide
         original_extract_facts = api_messages.extract_facts
-        original_interpret = api_messages.interpret_user_indication
         original_plan_turn = api_messages.plan_conversation_turn
         captured: dict[str, str] = {}
         try:
             api_messages.extract_facts = lambda *args, **kwargs: []
-            api_messages.interpret_user_indication = lambda *args, **kwargs: UserIndication(
-                kind=UserIndicationKind.AVAILABILITY_CONSTRAINT,
-                confidence=0.95,
-                source_text="Cette semaine je voyage de mercredi a vendredi",
-                scope=UserIndicationScope.WEEK,
-                polarity=UserIndicationPolarity.UNAVAILABLE,
-                time_reference=IndicationTimeReference(
-                    label="mercredi a vendredi",
-                    resolved_date=wednesday.date(),
-                    day_key=DAY_KEYS[wednesday.weekday()],
-                    relative_reference="this_week",
-                    window=None,
-                ),
-            )
             api_messages.plan_conversation_turn = lambda *args, **kwargs: SimpleNamespace(
                 primary_intent="availability_constraint",
                 secondary_intents=(),
@@ -1432,42 +1533,14 @@ class FitMASCoreFlowsTest(unittest.TestCase):
         finally:
             api_messages.decide = original_decide
             api_messages.extract_facts = original_extract_facts
-            api_messages.interpret_user_indication = original_interpret
             api_messages.plan_conversation_turn = original_plan_turn
 
         self.assertEqual(result["assistant_message"]["text"], "Je vois les seances touchees. Tu confirmes off complet ?")
-        self.assertIn("Natation hotel", captured["signal_summary"])
-        self.assertIn("Renfo hotel", captured["signal_summary"])
+        self.assertNotIn("Natation hotel", captured["signal_summary"])
+        self.assertNotIn("Renfo hotel", captured["signal_summary"])
         self.assertNotIn("this_week", captured["signal_summary"])
 
-    def test_week_scope_grounding_never_exposes_internal_reference_labels(self) -> None:
-        indication = UserIndication(
-            kind=UserIndicationKind.AVAILABILITY_CONSTRAINT,
-            confidence=0.95,
-            source_text="Cette semaine je voyage",
-            scope=UserIndicationScope.WEEK,
-            polarity=UserIndicationPolarity.UNAVAILABLE,
-            time_reference=IndicationTimeReference(
-                label="this_week",
-                resolved_date=get_local_now(self.user.timezone).date(),
-                day_key=None,
-                relative_reference="this_week",
-                window=None,
-            ),
-        )
-        resolution = SimpleNamespace(
-            reference_label="this_week",
-            matched_session_id=None,
-            candidate_sessions=[],
-        )
-
-        reply = api_messages._week_scope_reply(indication, resolution)
-
-        self.assertIsNotNone(reply)
-        self.assertNotIn("this_week", reply)
-        self.assertIn("cette semaine", reply.lower())
-
-    def test_swap_wording_bypasses_availability_week_scope_reply(self) -> None:
+    def test_swap_wording_reaches_llm_without_availability_shortcut(self) -> None:
         self._create_plan_for_today()
         now = get_local_now(self.user.timezone)
         wednesday = now + timedelta(days=(2 - now.weekday()) % 7)
@@ -1517,23 +1590,8 @@ class FitMASCoreFlowsTest(unittest.TestCase):
 
         original_decide = api_messages.decide
         original_extract_facts = api_messages.extract_facts
-        original_interpret = api_messages.interpret_user_indication
         try:
             api_messages.extract_facts = lambda *args, **kwargs: []
-            api_messages.interpret_user_indication = lambda *args, **kwargs: UserIndication(
-                kind=UserIndicationKind.AVAILABILITY_CONSTRAINT,
-                confidence=0.95,
-                source_text="On peut echanger mercredi et jeudi ?",
-                scope=UserIndicationScope.WEEK,
-                polarity=UserIndicationPolarity.UNAVAILABLE,
-                time_reference=IndicationTimeReference(
-                    label="mercredi et jeudi",
-                    resolved_date=wednesday.date(),
-                    day_key=DAY_KEYS[wednesday.weekday()],
-                    relative_reference="this_week",
-                    window=None,
-                ),
-            )
 
             def fake_decide(*args, **kwargs):
                 return MutationDecision(
@@ -1549,7 +1607,6 @@ class FitMASCoreFlowsTest(unittest.TestCase):
         finally:
             api_messages.decide = original_decide
             api_messages.extract_facts = original_extract_facts
-            api_messages.interpret_user_indication = original_interpret
 
         self.assertNotIn("off complet", result["assistant_message"]["text"].lower())
         self.assertIn("echanger", result["assistant_message"]["text"].lower())
@@ -1609,26 +1666,9 @@ class FitMASCoreFlowsTest(unittest.TestCase):
 
         original_decide = api_messages.decide
         original_extract_facts = api_messages.extract_facts
-        original_interpret = api_messages.interpret_user_indication
         captured: dict[str, object] = {}
         try:
             api_messages.extract_facts = lambda *args, **kwargs: []
-            api_messages.interpret_user_indication = lambda *args, **kwargs: UserIndication(
-                kind=UserIndicationKind.EXECUTION_UPDATE,
-                confidence=0.95,
-                source_text="Mince j'ai oublie piscine, swap avec vendredi",
-                scope=UserIndicationScope.SINGLE_DAY,
-                polarity=UserIndicationPolarity.SIGNAL,
-                time_reference=IndicationTimeReference(
-                    label="aujourd'hui",
-                    resolved_date=today.date(),
-                    day_key=DAY_KEYS[today.weekday()],
-                    relative_reference="today",
-                    window=None,
-                ),
-                execution_sport_type="swimming",
-                execution_completed=False,
-            )
 
             def fake_decide(*args, **kwargs):
                 captured["timeline_summary"] = kwargs["timeline_summary"]
@@ -1646,7 +1686,6 @@ class FitMASCoreFlowsTest(unittest.TestCase):
         finally:
             api_messages.decide = original_decide
             api_messages.extract_facts = original_extract_facts
-            api_messages.interpret_user_indication = original_interpret
 
         self.assertEqual(result["assistant_message"]["text"], "Je garde la demande de swap comme intention principale.")
         self.assertIn(f"id={swim.id}", str(captured.get("timeline_summary")))
@@ -1709,26 +1748,9 @@ class FitMASCoreFlowsTest(unittest.TestCase):
 
         original_decide = api_messages.decide
         original_extract_facts = api_messages.extract_facts
-        original_interpret = api_messages.interpret_user_indication
         original_plan_turn = api_messages.plan_conversation_turn
         try:
             api_messages.extract_facts = lambda *args, **kwargs: []
-            api_messages.interpret_user_indication = lambda *args, **kwargs: UserIndication(
-                kind=UserIndicationKind.EXECUTION_UPDATE,
-                confidence=0.95,
-                source_text="Piscine impossible ce matin, vendredi a la place ?",
-                scope=UserIndicationScope.SINGLE_DAY,
-                polarity=UserIndicationPolarity.SIGNAL,
-                time_reference=IndicationTimeReference(
-                    label="aujourd'hui",
-                    resolved_date=today.date(),
-                    day_key=DAY_KEYS[today.weekday()],
-                    relative_reference="today",
-                    window=None,
-                ),
-                execution_sport_type="swimming",
-                execution_completed=False,
-            )
             api_messages.plan_conversation_turn = lambda *args, **kwargs: SimpleNamespace(
                 primary_intent="plan_mutation",
                 secondary_intents=("non_completion_claim",),
@@ -1752,7 +1774,6 @@ class FitMASCoreFlowsTest(unittest.TestCase):
         finally:
             api_messages.decide = original_decide
             api_messages.extract_facts = original_extract_facts
-            api_messages.interpret_user_indication = original_interpret
             api_messages.plan_conversation_turn = original_plan_turn
 
         self.assertEqual(
@@ -1800,13 +1821,10 @@ class FitMASCoreFlowsTest(unittest.TestCase):
 
         original_decide = api_messages.decide
         original_extract_facts = api_messages.extract_facts
-        original_interpret = api_messages.interpret_user_indication
         original_plan_turn = api_messages.plan_conversation_turn
         captured: dict[str, object] = {}
         try:
             api_messages.extract_facts = lambda *args, **kwargs: []
-            # Ambiguous interpretation: nothing tying the message to yesterday.
-            api_messages.interpret_user_indication = lambda *args, **kwargs: None
             api_messages.plan_conversation_turn = lambda *args, **kwargs: SimpleNamespace(
                 primary_intent="plan_mutation",
                 secondary_intents=(),
@@ -1834,7 +1852,6 @@ class FitMASCoreFlowsTest(unittest.TestCase):
         finally:
             api_messages.decide = original_decide
             api_messages.extract_facts = original_extract_facts
-            api_messages.interpret_user_indication = original_interpret
             api_messages.plan_conversation_turn = original_plan_turn
 
         self.assertTrue(captured.get("called"), "decide() must be called on mutation intent")
@@ -1849,11 +1866,9 @@ class FitMASCoreFlowsTest(unittest.TestCase):
         self._create_plan_for_today()
         original_decide = api_messages.decide
         original_extract_facts = api_messages.extract_facts
-        original_interpret = api_messages.interpret_user_indication
         original_plan_turn = api_messages.plan_conversation_turn
         try:
             api_messages.extract_facts = lambda *args, **kwargs: []
-            api_messages.interpret_user_indication = lambda *args, **kwargs: None
             # LLM says: NOT a plan mutation.
             api_messages.plan_conversation_turn = lambda *args, **kwargs: SimpleNamespace(
                 primary_intent="information_request",
@@ -1875,7 +1890,6 @@ class FitMASCoreFlowsTest(unittest.TestCase):
         finally:
             api_messages.decide = original_decide
             api_messages.extract_facts = original_extract_facts
-            api_messages.interpret_user_indication = original_interpret
             api_messages.plan_conversation_turn = original_plan_turn
 
     def test_turn_plan_missing_does_not_fall_back_to_intent_heuristic(self) -> None:
@@ -1883,10 +1897,8 @@ class FitMASCoreFlowsTest(unittest.TestCase):
         self._create_plan_for_today()
         original_decide = api_messages.decide
         original_extract_facts = api_messages.extract_facts
-        original_interpret = api_messages.interpret_user_indication
         try:
             api_messages.extract_facts = lambda *args, **kwargs: []
-            api_messages.interpret_user_indication = lambda *args, **kwargs: None
             api_messages.decide = lambda *args, **kwargs: MutationDecision(
                 mutation_type="no_change",
                 rationale="routage conservateur",
@@ -1900,7 +1912,6 @@ class FitMASCoreFlowsTest(unittest.TestCase):
         finally:
             api_messages.decide = original_decide
             api_messages.extract_facts = original_extract_facts
-            api_messages.interpret_user_indication = original_interpret
 
         self.assertEqual(result["assistant_message"]["text"], "Bien recu.")
 
@@ -1933,12 +1944,10 @@ class FitMASCoreFlowsTest(unittest.TestCase):
 
         original_decide = api_messages.decide
         original_extract_facts = api_messages.extract_facts
-        original_interpret = api_messages.interpret_user_indication
         original_plan_turn = api_messages.plan_conversation_turn
         captured: dict[str, object] = {}
         try:
             api_messages.extract_facts = lambda *args, **kwargs: []
-            api_messages.interpret_user_indication = lambda *args, **kwargs: None
             api_messages.plan_conversation_turn = lambda *args, **kwargs: SimpleNamespace(
                 primary_intent="plan_mutation",
                 secondary_intents=("calibration_answer",),
@@ -1967,7 +1976,6 @@ class FitMASCoreFlowsTest(unittest.TestCase):
         finally:
             api_messages.decide = original_decide
             api_messages.extract_facts = original_extract_facts
-            api_messages.interpret_user_indication = original_interpret
             api_messages.plan_conversation_turn = original_plan_turn
 
         self.assertTrue(
@@ -2017,7 +2025,7 @@ class FitMASCoreFlowsTest(unittest.TestCase):
             api_messages.plan_conversation_turn = original_plan_turn
 
         self.assertIn("Rien a bouger", result["assistant_message"]["text"])
-        self.assertIn("Rien a bouger", captured["signal_summary"])
+        self.assertNotIn("Rien a bouger", captured["signal_summary"])
 
     def test_message_flow_does_not_persist_unlogged_activity_claim_fact_without_llm_action(self) -> None:
         self._create_plan_for_today()
@@ -2096,6 +2104,123 @@ class FitMASCoreFlowsTest(unittest.TestCase):
         self.assertIn("Je ne compte pas", result["assistant_message"]["text"])
         self.assertEqual(captured["activity_claim_summary"], "")
         self.assertEqual(updated.completion_status, "done")
+
+    def test_coach_decision_execution_action_marks_session_skipped(self) -> None:
+        _, session = self._create_plan_for_today()
+        session.scheduled_date = session.scheduled_date - timedelta(days=1)
+        session.day = DAY_KEYS[session.scheduled_date.weekday()]
+        session.sport_type = "strength"
+        session.session_title = "Renfo 34min"
+        self.db.commit()
+        self.db.refresh(session)
+
+        original_decide = api_messages.decide
+        original_extract_facts = api_messages.extract_facts
+        try:
+            api_messages.decide = lambda *args, **kwargs: CoachDecision(
+                response_type="no_change",
+                rationale="execution manquee comprise par le LLM",
+                fitmas_message="Note pour hier. On garde ce matin simple et on avance.",
+                execution_actions=[
+                    llm.ExecutionUpdateAction(
+                        type="record_execution_update",
+                        target_ref="renfo d'hier",
+                        target_session_id=session.id,
+                        status="not_completed",
+                        completed=False,
+                        confidence=0.95,
+                        evidence="pas eu le temps hier",
+                    )
+                ],
+            )
+            api_messages.extract_facts = lambda *args, **kwargs: []
+
+            with self.assertLogs("fitmas.conversation_metrics", level="INFO") as logs:
+                result = self.client.post("/api/v0/messages", json={"text": "J'ai pas eu le temps hier malheureusement"}).json()
+        finally:
+            api_messages.decide = original_decide
+            api_messages.extract_facts = original_extract_facts
+
+        self.db.expire_all()
+        updated = repo.get_scheduled_session(self.db, self.user.id, session.id)
+        events = self.db.query(s.MemoryMutationEventRecord).order_by(s.MemoryMutationEventRecord.id).all()
+        turns = repo.get_recent_conversation_turns(self.db, self.user.id, limit=1)
+
+        self.assertIn("Note pour hier", result["assistant_message"]["text"])
+        self.assertEqual(updated.completion_status, "skipped")
+        self.assertEqual(len(events), 1)
+        self.assertEqual(events[0].action_type, "record_execution_update")
+        self.assertIn('"category": "execution"', turns[0].memory_writes_json)
+        self.assertIn('"key": "record_execution_update"', turns[0].memory_writes_json)
+        metric_line = "\n".join(logs.output)
+        self.assertIn("execution_actions_per_turn=1", metric_line)
+        self.assertIn("memory_actions_per_turn=0", metric_line)
+        self.assertIn("pending_resolution_per_turn=0", metric_line)
+
+    def test_execution_action_survives_blocked_plan_patch_reply(self) -> None:
+        now = get_local_now(self.user.timezone)
+        yesterday = (now - timedelta(days=1)).replace(hour=7, minute=0, second=0, microsecond=0)
+        session = s.ScheduledSession(
+            user_id=self.user.id,
+            day=DAY_KEYS[yesterday.weekday()],
+            label=day_label_fr(DAY_KEYS[yesterday.weekday()], capitalize=True),
+            scheduled_date=yesterday,
+            sport_type="strength",
+            session_type="strength",
+            session_title="Renfo 34min",
+            session_goal="Support",
+            duration_min=34,
+            intensity="moderate",
+            load_score=3,
+            priority="Normal",
+            flexibility="stable",
+            completion_status="planned",
+        )
+        self.db.add(session)
+        self.db.commit()
+        self.db.refresh(session)
+
+        original_decide = api_messages.decide
+        original_extract_facts = api_messages.extract_facts
+        try:
+            api_messages.decide = lambda *args, **kwargs: CoachDecision(
+                response_type="plan_patch",
+                rationale="execution manquee et patch planning non essentiel",
+                fitmas_message="Renfo d'hier note non fait. On garde ce matin simple.",
+                execution_actions=[
+                    llm.ExecutionUpdateAction(
+                        type="record_execution_update",
+                        target_ref="renfo d'hier",
+                        target_session_id=session.id,
+                        status="not_completed",
+                        completed=False,
+                        evidence="pas eu le temps hier",
+                    )
+                ],
+                plan_patch=PlanPatch(
+                    coach_message="On garde ce matin simple.",
+                    operations=[
+                        PlanPatchOperation(
+                            operation_type="lighten_day",
+                            target_session_id=session.id,
+                            rationale="Ne pas rattraper le renfo manque.",
+                        )
+                    ],
+                ),
+            )
+            api_messages.extract_facts = lambda *args, **kwargs: []
+            result = self.client.post("/api/v0/messages", json={"text": "J'ai pas eu le temps hier malheureusement"}).json()
+        finally:
+            api_messages.decide = original_decide
+            api_messages.extract_facts = original_extract_facts
+
+        self.db.expire_all()
+        updated = repo.get_scheduled_session(self.db, self.user.id, session.id)
+
+        self.assertEqual(updated.completion_status, "skipped")
+        self.assertIn("Renfo 34min", result["assistant_message"]["text"])
+        self.assertIn("non faite", result["assistant_message"]["text"])
+        self.assertNotIn("Je ne l'ai pas applique", result["assistant_message"]["text"])
 
     def test_execution_fact_correction_archives_conflicting_working_memory(self) -> None:
         self._create_plan_for_today()
@@ -2337,7 +2462,6 @@ class FitMASCoreFlowsTest(unittest.TestCase):
 
         original_decide = api_messages.decide
         original_extract_facts = api_messages.extract_facts
-        original_interpret = api_messages.interpret_user_indication
         original_calibration_extract = conversation_pipeline.extract_calibration_resolution
         try:
             api_messages.decide = lambda *args, **kwargs: MutationDecision(
@@ -2346,20 +2470,6 @@ class FitMASCoreFlowsTest(unittest.TestCase):
                 fitmas_message=f"OK, je note {expected_day_label}: plutot le soir.",
             )
             api_messages.extract_facts = lambda *args, **kwargs: []
-            api_messages.interpret_user_indication = lambda *args, **kwargs: UserIndication(
-                kind=UserIndicationKind.AVAILABILITY_CONSTRAINT,
-                confidence=0.9,
-                source_text="Plutot le soir",
-                scope=UserIndicationScope.SINGLE_DAY,
-                polarity=UserIndicationPolarity.UNAVAILABLE,
-                time_reference=IndicationTimeReference(
-                    label="soir",
-                    resolved_date=target_date,
-                    day_key=DAY_KEYS[target_date.weekday()],
-                    relative_reference="tomorrow",
-                    window="evening",
-                ),
-            )
             conversation_pipeline.extract_calibration_resolution = lambda *args, **kwargs: calibration_needs.CalibrationResolution(
                 need_id=need.id,
                 resolved=True,
@@ -2376,7 +2486,6 @@ class FitMASCoreFlowsTest(unittest.TestCase):
         finally:
             api_messages.decide = original_decide
             api_messages.extract_facts = original_extract_facts
-            api_messages.interpret_user_indication = original_interpret
             conversation_pipeline.extract_calibration_resolution = original_calibration_extract
 
         self.db.expire_all()
@@ -2472,8 +2581,8 @@ class FitMASCoreFlowsTest(unittest.TestCase):
         self.assertGreater(len(load["series"]), 0)
 
     def test_availability_constraint_persists_as_fact_with_window_anchored_expires_at(self) -> None:
-        """Chantier 4: a multi-day AVAILABILITY_CONSTRAINT surfaced by
-        interpret_user_indication must be persisted as a UserFact with
+        """Phase 3: a multi-day availability constraint emitted by
+        CoachDecision.memory_actions must be persisted as a UserFact with
         category=availability, a key encoding start/end dates, and
         expires_at anchored on window_end + 1 day so it stays active for
         the whole constraint and is auto-filtered out afterwards."""
@@ -2484,31 +2593,25 @@ class FitMASCoreFlowsTest(unittest.TestCase):
 
         original_decide = api_messages.decide
         original_extract_facts = api_messages.extract_facts
-        original_interpret = api_messages.interpret_user_indication
         original_plan_turn = api_messages.plan_conversation_turn
         try:
             api_messages.extract_facts = lambda *args, **kwargs: []
-            api_messages.interpret_user_indication = lambda *args, **kwargs: UserIndication(
-                kind=UserIndicationKind.AVAILABILITY_CONSTRAINT,
-                confidence=0.9,
-                source_text="je n'ai pas acces a la piscine pendant 2 semaines",
-                scope=UserIndicationScope.WEEK,
-                polarity=UserIndicationPolarity.UNAVAILABLE,
-                time_reference=IndicationTimeReference(
-                    label="window",
-                    resolved_date=start,
-                    day_key=None,
-                    relative_reference=None,
-                    window=None,
-                    window_end_date=end,
-                ),
-                trigger_activity="swimming",
-            )
             api_messages.plan_conversation_turn = lambda *args, **kwargs: None
-            api_messages.decide = lambda *args, **kwargs: MutationDecision(
-                mutation_type="no_change",
+            api_messages.decide = lambda *args, **kwargs: CoachDecision(
+                response_type="no_change",
                 rationale="note prise",
                 fitmas_message="Bien note.",
+                memory_actions=[
+                    llm.AvailabilityConstraintAction(
+                        type="record_availability",
+                        window_text="piscine indisponible pendant 2 semaines",
+                        availability="unavailable",
+                        starts_on=start.isoformat(),
+                        ends_on=end.isoformat(),
+                        confidence=0.9,
+                        evidence="je n'ai pas acces a la piscine pendant 2 semaines",
+                    )
+                ],
             )
             self.client.post(
                 "/api/v0/messages",
@@ -2517,19 +2620,18 @@ class FitMASCoreFlowsTest(unittest.TestCase):
         finally:
             api_messages.decide = original_decide
             api_messages.extract_facts = original_extract_facts
-            api_messages.interpret_user_indication = original_interpret
             api_messages.plan_conversation_turn = original_plan_turn
 
         facts = (
-            self.db.query(s.UserFact)
-            .filter(s.UserFact.user_id == self.user.id, s.UserFact.category == "availability")
+            self.db.query(s.WorkingMemoryEntry)
+            .filter(s.WorkingMemoryEntry.user_id == self.user.id, s.WorkingMemoryEntry.category == "availability")
             .all()
         )
         self.assertEqual(len(facts), 1, f"expected 1 availability fact, got {[(f.category, f.key) for f in facts]}")
         fact = facts[0]
         self.assertEqual(
             fact.key,
-            f"unavailable_swimming_{start.isoformat()}_{end.isoformat()}",
+            f"availability_{start.isoformat()}_{end.isoformat()}",
         )
         self.assertTrue(fact.active)
         # expires_at = end + 1 day at midnight (stays active through the last day).
@@ -2622,9 +2724,6 @@ class FitMASCoreFlowsTest(unittest.TestCase):
             db=self.db,
             user=self.user,
             conversation_context=context,
-            user_indication=None,
-            resolved_non_completion_claim=None,
-            resolved_activity_claim=None,
             previous_agent_text=None,
         )
         self.assertIsNone(

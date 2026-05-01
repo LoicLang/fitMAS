@@ -21,6 +21,7 @@ Ce qui tourne en prod :
 - Runtime conversationnel désormais branché sur les prompt layers live
 - `CoachDecision` + `PlanPatch` branchés sur la conversation : validation serveur, confirmation pending, commit via `PlanMutationService`
 - Doctrine conversation renforcee : zero determinisme sur texte utilisateur libre ; le LLM est le seul detecteur d'intention
+- Anciens chemins `UserIndication`, replan legacy et tool routing deterministe supprimes du repo
 - DeepSeek principal avec fallback Claude possible sur sorties structurées fragiles
 - `suggest_replan_candidates` est le helper canonique de candidates replan ; `propose_replan` reste alias compat
 - Workflow `replan_after_constraint` formalisé dans le prompt : tools atomiques → candidate optionnelle → `PlanPatch | no_change | requires_confirmation`
@@ -33,7 +34,7 @@ Cap produit actuel :
 - Telegram = coach conversationnel
 - App = cockpit performance
 - priorité immédiate : Phase A LLM-first, puis dogfood réel Telegram sur la semaine
-- ordre courant : purge du déterminisme sur texte user libre, smokes réels, puis durcir `validate_plan_patch` et nettoyer le legacy après validation dogfood
+- ordre courant : smokes réels + dogfood Telegram, puis durcir `validate_plan_patch`
 - Phase B long terme : progression/prescription structurée, pas ouverte tant que Phase A n'est pas stable
 
 ## Stack
@@ -68,7 +69,7 @@ AGENTS.md            — regles agentiques
 PROJECT.md           — point d'entree
 docs/                — docs actifs + README (anciens docs en docs/archive/ si besoin)
 backend/src/fitmas/  — API + bot + domaines partages
-backend/src/fitmas/tools/ — tools runtime read-only et routing associes
+backend/src/fitmas/tools/ — tools runtime read-only + contrats ; pas de routing deterministe depuis le texte user
 backend/src/fitmas/skills/heartbeat/ — cluster heartbeat (evaluation, roles, generation)
 frontend/            — webapp React/Vite/Tailwind (3 tabs + detail seance)
 scripts/             — dev, dev-web, start-prod, docs:list

@@ -9,6 +9,20 @@ from fitmas import llm_gateway as gw
 from fitmas.tool_contract import ToolContext, ToolResult
 
 
+CANONICAL_CONVERSATION_TOOLS = [
+    "get_today_context",
+    "get_plan_window",
+    "resolve_planning_window",
+    "get_recent_activities",
+    "get_activity_highlights",
+    "get_recent_reality_window",
+    "get_load_context",
+    "get_relevant_facts",
+    "get_user_constraints",
+    "suggest_replan_candidates",
+]
+
+
 class LLMToolsTest(unittest.TestCase):
     def test_parse_coach_decision_accepts_plan_patch(self) -> None:
         decision = llm.parse_coach_decision_payload(
@@ -102,6 +116,102 @@ class LLMToolsTest(unittest.TestCase):
         self.assertIsNotNone(decision.mutation_decision)
         self.assertEqual(decision.mutation_decision.rationale, "continuation courte, creation running mercredi")
 
+    def test_parse_coach_decision_defaults_missing_action_confidence(self) -> None:
+        decision = llm.parse_coach_decision_payload(
+            {
+                "response_type": "no_change",
+                "rationale": "execution manquee sans mutation planning",
+                "fitmas_message": "Note. Le renfo d'hier n'est pas fait; ce matin on garde le footing facile.",
+                "execution_actions": [
+                    {
+                        "type": "record_execution_update",
+                        "target_ref": "seance d'hier",
+                        "status": "not_completed",
+                        "completed": False,
+                        "sport_type": "strength",
+                        "evidence": "J'ai pas eu le temps hier",
+                    }
+                ],
+            }
+        )
+
+        self.assertIsNotNone(decision)
+        self.assertEqual(len(decision.execution_actions), 1)
+        self.assertGreater(decision.execution_actions[0].confidence, 0)
+
+    def test_parse_coach_decision_drops_malformed_memory_but_keeps_execution_action(self) -> None:
+        decision = llm.parse_coach_decision_payload(
+            {
+                "response_type": "no_change",
+                "rationale": "execution manquee sans mutation planning",
+                "fitmas_message": "Note. Le renfo d'hier n'est pas fait; ce matin on garde le footing facile.",
+                "memory_actions": [
+                    {
+                        "type": "record_health_signal",
+                        "source": {"kind": "message utilisateur"},
+                    }
+                ],
+                "execution_actions": [
+                    {
+                        "operation_type": "record_execution_update",
+                        "target_ref": "seance d'hier",
+                        "status": "skipped",
+                        "completed": False,
+                        "sport_type": "strength",
+                        "evidence": "J'ai pas eu le temps hier",
+                    }
+                ],
+            }
+        )
+
+        self.assertIsNotNone(decision)
+        self.assertEqual(len(decision.memory_actions), 0)
+        self.assertEqual(len(decision.execution_actions), 1)
+        self.assertEqual(decision.execution_actions[0].status, "not_completed")
+
+    def test_parse_coach_decision_normalizes_string_confidence(self) -> None:
+        decision = llm.parse_coach_decision_payload(
+            {
+                "response_type": "no_change",
+                "rationale": "execution manquee sans mutation planning",
+                "fitmas_message": "Note. Le renfo d'hier n'est pas fait; ce matin on garde le footing facile.",
+                "execution_actions": [
+                    {
+                        "type": "record_execution_update",
+                        "target_ref": "seance d'hier",
+                        "status": "not_completed",
+                        "completed": False,
+                        "confidence": "high",
+                    }
+                ],
+            }
+        )
+
+        self.assertIsNotNone(decision)
+        self.assertEqual(decision.execution_actions[0].confidence, 0.85)
+
+    def test_parse_coach_decision_accepts_execution_target_id_without_ref(self) -> None:
+        decision = llm.parse_coach_decision_payload(
+            {
+                "response_type": "reply",
+                "rationale": "execution manquee sans mutation planning",
+                "fitmas_message": "Renfo d'hier note non fait.",
+                "execution_actions": [
+                    {
+                        "type": "record_execution_update",
+                        "target_session_id": 123,
+                        "completed": "false",
+                        "confidence": "high",
+                    }
+                ],
+            }
+        )
+
+        self.assertIsNotNone(decision)
+        self.assertEqual(decision.execution_actions[0].target_ref, "session_id:123")
+        self.assertEqual(decision.execution_actions[0].status, "not_completed")
+        self.assertIs(decision.execution_actions[0].completed, False)
+
     def test_legacy_create_session_can_reuse_message_as_rationale(self) -> None:
         decision = llm._parse_llm_decision_payload(
             {
@@ -194,16 +304,7 @@ class LLMToolsTest(unittest.TestCase):
             prompts.append(messages[0]["content"] if isinstance(messages[0]["content"], str) else "")
             if captured["calls"] == 1:
                 self.assertIsNotNone(tools)
-                self.assertEqual(
-                    [tool["name"] for tool in tools],
-                    [
-                        "get_today_context",
-                        "get_plan_window",
-                        "get_recent_activities",
-                        "get_activity_highlights",
-                        "get_user_constraints",
-                    ],
-                )
+                self.assertEqual([tool["name"] for tool in tools], CANONICAL_CONVERSATION_TOOLS)
                 return SimpleNamespace(
                     stop_reason="tool_use",
                     content=[
@@ -278,7 +379,7 @@ class LLMToolsTest(unittest.TestCase):
         self.assertEqual(traces[0].tool_name, "get_activity_highlights")
         self.assertEqual(traces[0].llm_round_trips, 2)
         self.assertEqual(traces[0].context_policy, "plan_lookup_compact")
-        self.assertEqual(traces[0].tool_count_offered, 5)
+        self.assertEqual(traces[0].tool_count_offered, len(CANONICAL_CONVERSATION_TOOLS))
         self.assertGreaterEqual(traces[0].prompt_char_count, 1)
         self.assertNotIn("Repere legacy semaine courante", prompts[0])
         self.assertNotIn("Calendrier date reel", prompts[0])
@@ -292,16 +393,7 @@ class LLMToolsTest(unittest.TestCase):
 
         def fake_request_message(*, system, messages, model="claude-haiku-4-5-20251001", max_tokens=512, tools=None, tool_choice=None):
             self.assertIsNotNone(tools)
-            self.assertEqual(
-                [tool["name"] for tool in tools],
-                [
-                    "get_today_context",
-                    "get_plan_window",
-                    "get_recent_activities",
-                    "get_activity_highlights",
-                    "get_user_constraints",
-                ],
-            )
+            self.assertEqual([tool["name"] for tool in tools], CANONICAL_CONVERSATION_TOOLS)
             prompts.append(messages[0]["content"] if isinstance(messages[0]["content"], str) else "")
             return SimpleNamespace(
                 stop_reason="end_turn",
@@ -345,10 +437,64 @@ class LLMToolsTest(unittest.TestCase):
         self.assertEqual(traces[0].response_stop_reason, "end_turn")
         self.assertFalse(traces[0].fallback_used)
         self.assertEqual(traces[0].context_policy, "plan_lookup_compact")
-        self.assertEqual(traces[0].tool_count_offered, 5)
+        self.assertEqual(traces[0].tool_count_offered, len(CANONICAL_CONVERSATION_TOOLS))
         self.assertGreaterEqual(traces[0].prompt_char_count, 1)
         self.assertNotIn("Repere legacy semaine courante", prompts[0])
         self.assertIn("Source de vérité planning conversationnelle", prompts[0])
+
+    def test_decide_offers_canonical_conversation_tools_without_intent_budget(self) -> None:
+        original_client = llm._client
+        original_request_message = llm._request_message
+        original_request_structured_json = llm._request_structured_json
+        original_log_tool_trace = llm.log_tool_trace
+        offered_tool_names: list[str] = []
+
+        def fake_request_message(*, system, messages, model="claude-haiku-4-5-20251001", max_tokens=512, tools=None, tool_choice=None):
+            offered_tool_names.extend(tool["name"] for tool in (tools or []))
+            return SimpleNamespace(
+                stop_reason="end_turn",
+                content=[
+                    SimpleNamespace(
+                        type="text",
+                        text='{"mutation_type":"no_change","rationale":"lecture outillee","fitmas_message":"Je lis le planning avant de trancher."}',
+                    )
+                ],
+                usage=SimpleNamespace(input_tokens=120, output_tokens=32),
+            )
+
+        llm._client = lambda: object()
+        llm._request_message = fake_request_message
+        llm._request_structured_json = lambda **kwargs: {
+            "mutation_type": "no_change",
+            "rationale": "fallback sans tools",
+            "fitmas_message": "Fallback.",
+        }
+        llm.log_tool_trace = lambda trace: None
+        try:
+            decision = llm.decide(
+                "Je ne peux pas demain soir",
+                "Repere",
+                tool_context=ToolContext(
+                    pipeline="conversation",
+                    user_id=1,
+                    timezone_name="Europe/Paris",
+                    scheduled_sessions=[],
+                    activities=[],
+                    active_facts=[],
+                ),
+            )
+        finally:
+            llm._client = original_client
+            llm._request_message = original_request_message
+            llm._request_structured_json = original_request_structured_json
+            llm.log_tool_trace = original_log_tool_trace
+
+        self.assertIsNotNone(decision)
+        self.assertEqual(
+            offered_tool_names,
+            CANONICAL_CONVERSATION_TOOLS,
+        )
+        self.assertNotIn("propose_replan", offered_tool_names)
 
     def test_tool_followup_satisfies_every_tool_use_block(self) -> None:
         original_client = llm._client
@@ -651,6 +797,273 @@ class LLMToolsTest(unittest.TestCase):
         self.assertNotIn("j'ajoute", decision.fitmas_message)
         self.assertIn("PAYLOAD_INVALIDE", prompts[1])
 
+    def test_decide_repairs_invalid_coach_decision_and_preserves_execution_action(self) -> None:
+        original_client = llm._client
+        original_request_structured_json = llm._request_structured_json
+        prompts: list[str] = []
+
+        def fake_request_structured_json(*, system, messages, model="claude-haiku-4-5-20251001", max_tokens=1024):
+            prompts.append(str(messages[0]["content"]))
+            if len(prompts) == 1:
+                return {
+                    "response_type": "requires_confirmation",
+                    "fitmas_message": "Je note que le renfo d'hier n'est pas fait. On garde le footing facile ce matin.",
+                    "execution_actions": [
+                        {
+                            "type": "record_execution_update",
+                            "target_ref": "seance d'hier",
+                            "status": "not_completed",
+                            "completed": False,
+                            "sport_type": "strength",
+                            "confidence": 0.93,
+                            "evidence": "J'ai pas eu le temps hier",
+                        }
+                    ],
+                }
+            return {
+                "response_type": "no_change",
+                "rationale": "execution manquee comprise sans mutation planning",
+                "fitmas_message": "Note. Le renfo d'hier n'est pas fait; ce matin on garde le footing facile.",
+                "execution_actions": [
+                    {
+                        "type": "record_execution_update",
+                        "target_ref": "seance d'hier",
+                        "status": "not_completed",
+                        "completed": False,
+                        "sport_type": "strength",
+                        "confidence": 0.93,
+                        "evidence": "J'ai pas eu le temps hier",
+                    }
+                ],
+            }
+
+        llm._client = lambda: object()
+        llm._request_structured_json = fake_request_structured_json
+        with patch.dict("os.environ", {}, clear=True):
+            try:
+                decision = llm.decide("J'ai pas eu le temps hier", "Repere")
+            finally:
+                llm._client = original_client
+                llm._request_structured_json = original_request_structured_json
+
+        self.assertIsInstance(decision, llm.CoachDecision)
+        self.assertEqual(decision.response_type, "no_change")
+        self.assertEqual(len(decision.execution_actions), 1)
+        self.assertEqual(decision.execution_actions[0].status, "not_completed")
+        self.assertIn("CoachDecision", prompts[1])
+        self.assertIn("execution_actions", prompts[1])
+
+    def test_decide_repairs_free_requires_confirmation_into_execution_action(self) -> None:
+        original_client = llm._client
+        original_request_structured_json = llm._request_structured_json
+        prompts: list[str] = []
+
+        def fake_request_structured_json(*, system, messages, model="claude-haiku-4-5-20251001", max_tokens=1024):
+            prompts.append(str(messages[0]["content"]))
+            if len(prompts) == 1:
+                return {
+                    "response_type": "requires_confirmation",
+                    "rationale": "renfo non fait hier, il faut savoir si footing aujourd'hui ou demain",
+                    "fitmas_message": "Tu peux aujourd'hui ou il faut reporter demain ?",
+                    "confirmation_reason": "Savoir si tu peux aujourd'hui ou demain.",
+                }
+            return {
+                "response_type": "no_change",
+                "rationale": "renfo non fait hier sans mutation planning immediate",
+                "fitmas_message": "Renfo d'hier note non fait. On garde le footing en option simple.",
+                "execution_actions": [
+                    {
+                        "type": "record_execution_update",
+                        "target_ref": "seance d'hier",
+                        "status": "not_completed",
+                        "completed": False,
+                        "confidence": "high",
+                    }
+                ],
+            }
+
+        llm._client = lambda: object()
+        llm._request_structured_json = fake_request_structured_json
+        with patch.dict("os.environ", {}, clear=True):
+            try:
+                decision = llm.decide("J'ai pas eu le temps hier", "Repere")
+            finally:
+                llm._client = original_client
+                llm._request_structured_json = original_request_structured_json
+
+        self.assertIsInstance(decision, llm.CoachDecision)
+        self.assertEqual(decision.response_type, "no_change")
+        self.assertEqual(len(decision.execution_actions), 1)
+        self.assertIn("requires_confirmation", prompts[1])
+
+    def test_decide_repairs_execution_receipt_without_execution_action(self) -> None:
+        original_client = llm._client
+        original_request_structured_json = llm._request_structured_json
+        prompts: list[str] = []
+
+        def fake_request_structured_json(*, system, messages, model="claude-haiku-4-5-20251001", max_tokens=1024):
+            prompts.append(str(messages[0]["content"]))
+            if len(prompts) == 1:
+                return {
+                    "response_type": "no_change",
+                    "rationale": "Message information sur la seance d'hier",
+                    "fitmas_message": "C'est note pour hier. Ce matin, le footing Z2 t'attend toujours.",
+                }
+            return {
+                "response_type": "no_change",
+                "rationale": "execution manquee hier sans mutation planning",
+                "fitmas_message": "C'est note pour hier. Le footing Z2 reste au planning ce matin.",
+                "execution_actions": [
+                    {
+                        "type": "record_execution_update",
+                        "target_ref": "seance d'hier",
+                        "status": "not_completed",
+                        "completed": False,
+                        "confidence": 0.8,
+                        "evidence": "C'est note pour hier",
+                    }
+                ],
+            }
+
+        llm._client = lambda: object()
+        llm._request_structured_json = fake_request_structured_json
+        with patch.dict("os.environ", {}, clear=True):
+            try:
+                decision = llm.decide("J'ai pas eu le temps hier", "Repere")
+            finally:
+                llm._client = original_client
+                llm._request_structured_json = original_request_structured_json
+
+        self.assertIsInstance(decision, llm.CoachDecision)
+        self.assertEqual(len(decision.execution_actions), 1)
+        self.assertIn("execution_actions", prompts[1])
+
+    def test_decide_repairs_vu_pour_hier_missing_execution_action(self) -> None:
+        original_client = llm._client
+        original_request_structured_json = llm._request_structured_json
+        prompts: list[str] = []
+
+        def fake_request_structured_json(*, system, messages, model="claude-haiku-4-5-20251001", max_tokens=1024):
+            prompts.append(str(messages[0]["content"]))
+            if len(prompts) == 1:
+                return {
+                    "response_type": "no_change",
+                    "rationale": "Utilisateur signale avoir manque la seance d'hier pour raison pro. Pas de demande de modification du plan.",
+                    "fitmas_message": "Vu pour hier. Comment tu te sens ce matin pour le footing Z2 28min ?",
+                }
+            return {
+                "response_type": "no_change",
+                "rationale": "execution manquee hier sans mutation planning",
+                "fitmas_message": "Hier saute, compris. Le footing Z2 reste au planning ce matin.",
+                "execution_actions": [
+                    {
+                        "type": "record_execution_update",
+                        "target_ref": "seance d'hier",
+                        "status": "not_completed",
+                        "completed": False,
+                        "confidence": 0.85,
+                        "evidence": "seance d'hier manquee",
+                    }
+                ],
+            }
+
+        llm._client = lambda: object()
+        llm._request_structured_json = fake_request_structured_json
+        with patch.dict("os.environ", {}, clear=True):
+            try:
+                decision = llm.decide("J'ai pas eu le temps hier", "Repere")
+            finally:
+                llm._client = original_client
+                llm._request_structured_json = original_request_structured_json
+
+        self.assertIsInstance(decision, llm.CoachDecision)
+        self.assertEqual(len(decision.execution_actions), 1)
+        self.assertIn("execution_actions", prompts[1])
+
+    def test_decide_rejects_legacy_no_change_execution_receipt(self) -> None:
+        original_client = llm._client
+        original_request_structured_json = llm._request_structured_json
+        prompts: list[str] = []
+
+        def fake_request_structured_json(*, system, messages, model="claude-haiku-4-5-20251001", max_tokens=1024):
+            prompts.append(str(messages[0]["content"]))
+            if len(prompts) == 1:
+                return {
+                    "mutation_type": "no_change",
+                    "rationale": "Seance de mercredi non realisee, mais plan inchange pour aujourd'hui",
+                    "fitmas_message": "Vu pour hier, le travail avant tout. On garde le footing Z2 ce matin comme prevu, 28min.",
+                }
+            return {
+                "response_type": "no_change",
+                "rationale": "execution manquee hier sans mutation planning",
+                "fitmas_message": "Hier saute, compris. Le footing Z2 reste au planning ce matin.",
+                "execution_actions": [
+                    {
+                        "type": "record_execution_update",
+                        "target_ref": "seance d'hier",
+                        "status": "not_completed",
+                        "completed": False,
+                        "confidence": 0.85,
+                        "evidence": "seance d'hier non realisee",
+                    }
+                ],
+            }
+
+        llm._client = lambda: object()
+        llm._request_structured_json = fake_request_structured_json
+        with patch.dict("os.environ", {}, clear=True):
+            try:
+                decision = llm.decide("J'ai pas eu le temps hier", "Repere")
+            finally:
+                llm._client = original_client
+                llm._request_structured_json = original_request_structured_json
+
+        self.assertIsInstance(decision, llm.CoachDecision)
+        self.assertEqual(len(decision.execution_actions), 1)
+        self.assertIn("execution_actions", prompts[1])
+
+    def test_decide_rejects_legacy_no_change_imprevu_yesterday_receipt(self) -> None:
+        original_client = llm._client
+        original_request_structured_json = llm._request_structured_json
+        prompts: list[str] = []
+
+        def fake_request_structured_json(*, system, messages, model="claude-haiku-4-5-20251001", max_tokens=1024):
+            prompts.append(str(messages[0]["content"]))
+            if len(prompts) == 1:
+                return {
+                    "mutation_type": "no_change",
+                    "rationale": "Utilisateur signale imprevu pour la seance d'hier seulement.",
+                    "fitmas_message": "Pas grave, la vie. Rien a changer pour aujourd'hui.",
+                }
+            return {
+                "response_type": "no_change",
+                "rationale": "execution manquee hier sans mutation planning",
+                "fitmas_message": "Hier saute, compris. Le footing Z2 reste au planning ce matin.",
+                "execution_actions": [
+                    {
+                        "type": "record_execution_update",
+                        "target_ref": "seance d'hier",
+                        "status": "not_completed",
+                        "completed": False,
+                        "confidence": 0.85,
+                        "evidence": "imprevu pour la seance d'hier",
+                    }
+                ],
+            }
+
+        llm._client = lambda: object()
+        llm._request_structured_json = fake_request_structured_json
+        with patch.dict("os.environ", {}, clear=True):
+            try:
+                decision = llm.decide("J'ai pas eu le temps hier", "Repere")
+            finally:
+                llm._client = original_client
+                llm._request_structured_json = original_request_structured_json
+
+        self.assertIsInstance(decision, llm.CoachDecision)
+        self.assertEqual(len(decision.execution_actions), 1)
+        self.assertIn("execution_actions", prompts[1])
+
     def test_decide_rejects_truncated_confirmation_message_and_repairs(self) -> None:
         original_client = llm._client
         original_request_structured_json = llm._request_structured_json
@@ -838,6 +1251,9 @@ class LLMToolsTest(unittest.TestCase):
         self.assertEqual(decision.mutation_type, "lighten_day")
         self.assertEqual(repair_prompts, [repair_prompts[0]])
         self.assertIn("Je libere le footing", repair_prompts[0])
+        self.assertIn("CONTEXTE_ORIGINAL", repair_prompts[0])
+        self.assertIn("Je ne peux pas ce soir", repair_prompts[0])
+        self.assertIn("execution_actions", repair_prompts[0])
 
     def test_tool_followup_dsml_tool_markup_is_not_repaired_as_user_message(self) -> None:
         original_client = llm._client
@@ -990,16 +1406,7 @@ class LLMToolsTest(unittest.TestCase):
 
         def fake_request_message(*, system, messages, model="claude-haiku-4-5-20251001", max_tokens=512, tools=None, tool_choice=None):
             self.assertIsNotNone(tools)
-            self.assertEqual(
-                [tool["name"] for tool in tools],
-                [
-                    "get_today_context",
-                    "get_plan_window",
-                    "get_recent_activities",
-                    "get_activity_highlights",
-                    "get_user_constraints",
-                ],
-            )
+            self.assertEqual([tool["name"] for tool in tools], CANONICAL_CONVERSATION_TOOLS)
             return SimpleNamespace(
                 stop_reason="end_turn",
                 content=[
@@ -1039,9 +1446,9 @@ class LLMToolsTest(unittest.TestCase):
         self.assertEqual(len(traces), 1)
         self.assertTrue(traces[0].tool_offered)
         self.assertEqual(traces[0].context_policy, "plan_lookup_compact")
-        self.assertEqual(traces[0].tool_count_offered, 5)
+        self.assertEqual(traces[0].tool_count_offered, len(CANONICAL_CONVERSATION_TOOLS))
 
-    def test_turn_plan_intent_overrides_keyword_tool_routing(self) -> None:
+    def test_turn_plan_intent_does_not_narrow_canonical_tool_budget(self) -> None:
         original_client = llm._client
         original_request_message = llm._request_message
         original_log_tool_trace = llm.log_tool_trace
@@ -1051,10 +1458,7 @@ class LLMToolsTest(unittest.TestCase):
 
         def fake_request_message(*, system, messages, model="claude-haiku-4-5-20251001", max_tokens=512, tools=None, tool_choice=None):
             self.assertIsNotNone(tools)
-            self.assertEqual(
-                [tool["name"] for tool in tools],
-                ["get_today_context", "get_plan_window", "get_load_context", "get_user_constraints", "suggest_replan_candidates", "get_relevant_facts"],
-            )
+            self.assertEqual([tool["name"] for tool in tools], CANONICAL_CONVERSATION_TOOLS)
             prompts.append(messages[0]["content"] if isinstance(messages[0]["content"], str) else "")
             systems.append("\n".join(part["text"] for part in system) if isinstance(system, list) else str(system))
             return SimpleNamespace(

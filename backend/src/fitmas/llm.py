@@ -71,7 +71,7 @@ class HealthSignalAction(BaseModel):
     body_area: str | None = None
     severity: Literal["mild", "moderate", "severe", "unknown"] = "unknown"
     status: Literal["new", "ongoing", "improving", "worsening", "resolved", "unknown"] = "unknown"
-    confidence: float = Field(ge=0.0, le=1.0)
+    confidence: float = Field(default=0.75, ge=0.0, le=1.0)
     evidence: str | None = None
 
 
@@ -84,7 +84,7 @@ class AvailabilityConstraintAction(BaseModel):
     starts_on: str | None = None
     ends_on: str | None = None
     recurrence: str | None = None
-    confidence: float = Field(ge=0.0, le=1.0)
+    confidence: float = Field(default=0.75, ge=0.0, le=1.0)
     evidence: str | None = None
 
 
@@ -95,7 +95,7 @@ class PreferenceSignalAction(BaseModel):
     preference: str
     polarity: Literal["prefer", "avoid", "like", "dislike", "neutral", "unknown"]
     scope: str | None = None
-    confidence: float = Field(ge=0.0, le=1.0)
+    confidence: float = Field(default=0.75, ge=0.0, le=1.0)
     evidence: str | None = None
 
 
@@ -104,11 +104,12 @@ class ExecutionUpdateAction(BaseModel):
 
     type: Literal["record_execution_update"]
     target_ref: str
+    target_session_id: int | None = None
     status: Literal["completed", "not_completed", "partially_completed", "unknown"]
     completed: bool | None = None
     sport_type: str | None = None
     duration_min: int | None = Field(default=None, ge=0)
-    confidence: float = Field(ge=0.0, le=1.0)
+    confidence: float = Field(default=0.75, ge=0.0, le=1.0)
     evidence: str | None = None
 
 
@@ -191,27 +192,18 @@ _TURN_INTENT_TO_PROMPT_INTENT = {
     "health_signal": IntentCategory.PLAN_NEGOTIATION,
     "preference_signal": IntentCategory.PLAN_NEGOTIATION,
 }
-_TURN_INTENT_TOOL_BUDGETS = {
-    IntentCategory.PLAN_NEGOTIATION: (
-        "get_today_context",
-        "get_plan_window",
-        "get_load_context",
-        "get_user_constraints",
-        "suggest_replan_candidates",
-        "get_relevant_facts",
-    ),
-    IntentCategory.PLAN_LOOKUP: (
-        "get_today_context",
-        "get_plan_window",
-        "get_recent_activities",
-        "get_activity_highlights",
-        "get_user_constraints",
-    ),
-    IntentCategory.EXECUTION_REPORT: (
-        "get_today_context",
-        "get_recent_activities",
-    ),
-}
+_CONVERSATION_READ_TOOL_BUDGET = (
+    "get_today_context",
+    "get_plan_window",
+    "resolve_planning_window",
+    "get_recent_activities",
+    "get_activity_highlights",
+    "get_recent_reality_window",
+    "get_load_context",
+    "get_relevant_facts",
+    "get_user_constraints",
+    "suggest_replan_candidates",
+)
 _ALLOWED_MUTATION_TYPES = {
     "move_session",
     "lighten_day",
@@ -417,11 +409,7 @@ def decide(
         routing_reason=None,
         intent=effective_intent,
     )
-    tool_names = (
-        _TURN_INTENT_TOOL_BUDGETS.get(turn_prompt_intent, ())
-        if turn_prompt_intent is not None
-        else ()
-    )
+    tool_names = _tool_budget_for_context(tool_context)
     selected_facts = (coach_context or {}).get("selected_facts") or select_prompt_facts(remembered_facts or [])
     unresolved_execution_followup = (coach_context or {}).get("unresolved_execution_followup")
     prompt_bundle = build_layered_conversation_prompt(
@@ -465,7 +453,7 @@ def decide(
             return None
 
         parsed_decision = _parse_llm_decision_payload(data)
-        if parsed_decision is None and "response_type" not in data:
+        if parsed_decision is None:
             data = _repair_invalid_decision_payload(data=_last_invalid_decision_payload, system=system_prompt, prompt=prompt)
             parsed_decision = _parse_llm_decision_payload(data)
         if parsed_decision is None:
@@ -552,6 +540,13 @@ def _validate_decision_payload(data: dict[str, Any] | None) -> dict[str, Any] | 
         _remember_invalid_decision(data)
         logger.warning("llm.decision_invalid reason=no_change_action_claim mutation_type=%s", mutation_type)
         return None
+    if mutation_type == "no_change" and _message_claims_execution_receipt_without_action(
+        fitmas_message,
+        rationale=str(data.get("rationale") or ""),
+    ):
+        _remember_invalid_decision(data)
+        logger.warning("llm.decision_invalid reason=no_change_execution_receipt_without_action")
+        return None
     if _message_violates_coach_voice(fitmas_message):
         _remember_invalid_decision(data)
         logger.warning("llm.decision_invalid reason=coach_voice_violation mutation_type=%s", mutation_type)
@@ -585,8 +580,10 @@ def parse_coach_decision_payload(data: dict[str, Any] | None) -> CoachDecision |
     PlanPatch pipeline a strict parser before the runtime starts relying on it.
     """
     if not isinstance(data, dict):
+        _remember_invalid_decision(data)
         logger.warning("llm.coach_decision_invalid reason=not_dict")
         return None
+    _remember_invalid_decision(data)
     response_type = str(data.get("response_type") or "").strip()
     if response_type not in _ALLOWED_COACH_RESPONSE_TYPES:
         logger.warning("llm.coach_decision_invalid reason=unknown_response_type response_type=%r", response_type)
@@ -598,14 +595,26 @@ def parse_coach_decision_payload(data: dict[str, Any] | None) -> CoachDecision |
     fitmas_message = str(data.get("fitmas_message") or "").strip()
     if not _valid_coach_message(fitmas_message, response_type=response_type):
         return None
+    if _has_unknown_memory_action(data.get("memory_actions")):
+        logger.warning("llm.coach_decision_invalid reason=unknown_memory_action")
+        return None
+    if _has_unknown_execution_action(data.get("execution_actions")):
+        logger.warning("llm.coach_decision_invalid reason=unknown_execution_action")
+        return None
+
+    memory_actions = _normalize_memory_actions(data.get("memory_actions"))
+    execution_actions = _normalize_execution_actions(data.get("execution_actions"))
+    if not execution_actions and _message_claims_execution_receipt_without_action(fitmas_message, rationale=rationale):
+        logger.warning("llm.coach_decision_invalid reason=execution_receipt_without_action")
+        return None
 
     payload: dict[str, Any] = {
         "response_type": response_type,
         "rationale": rationale,
         "fitmas_message": fitmas_message,
         "confirmation_reason": _optional_str(data.get("confirmation_reason")),
-        "memory_actions": data.get("memory_actions") or (),
-        "execution_actions": data.get("execution_actions") or (),
+        "memory_actions": memory_actions,
+        "execution_actions": execution_actions,
         "pending_resolution": data.get("pending_resolution"),
     }
     if response_type == "mutation_decision":
@@ -624,13 +633,19 @@ def parse_coach_decision_payload(data: dict[str, Any] | None) -> CoachDecision |
             logger.warning("llm.coach_decision_invalid reason=invalid_plan_patch")
             return None
         payload["plan_patch"] = patch
-    elif response_type == "requires_confirmation" and not payload["confirmation_reason"]:
-        logger.warning("llm.coach_decision_invalid reason=missing_confirmation_reason")
-        return None
+    elif response_type == "requires_confirmation":
+        if not payload["confirmation_reason"]:
+            logger.warning("llm.coach_decision_invalid reason=missing_confirmation_reason")
+            return None
+        if not isinstance(data.get("plan_patch"), dict) and not isinstance(data.get("mutation_decision"), dict):
+            logger.warning("llm.coach_decision_invalid reason=free_requires_confirmation_without_action")
+            return None
     try:
-        return CoachDecision(**payload)
-    except Exception:
-        logger.warning("llm.coach_decision_invalid reason=coach_decision_model_validation_failed")
+        decision = CoachDecision(**payload)
+        _remember_invalid_decision(None)
+        return decision
+    except Exception as exc:
+        logger.warning("llm.coach_decision_invalid reason=coach_decision_model_validation_failed error=%s", str(exc)[:240])
         return None
 
 
@@ -696,6 +711,167 @@ def _valid_coach_message(message: str, *, response_type: str) -> bool:
 def _optional_str(value: Any) -> str | None:
     text = str(value or "").strip()
     return text or None
+
+
+def _normalize_memory_actions(raw: Any) -> tuple[dict[str, Any], ...]:
+    if not isinstance(raw, (list, tuple)):
+        return ()
+    normalized: list[dict[str, Any]] = []
+    allowed_fields = {
+        "record_health_signal": {"type", "health_signal", "body_area", "severity", "status", "confidence", "evidence"},
+        "record_availability": {"type", "window_text", "availability", "starts_on", "ends_on", "recurrence", "confidence", "evidence"},
+        "record_preference": {"type", "preference", "polarity", "scope", "confidence", "evidence"},
+    }
+    required_fields = {
+        "record_health_signal": {"health_signal"},
+        "record_availability": {"window_text", "availability"},
+        "record_preference": {"preference", "polarity"},
+    }
+    for item in raw:
+        if not isinstance(item, dict):
+            continue
+        action_type = str(item.get("type") or item.get("operation_type") or "").strip()
+        if action_type not in allowed_fields:
+            continue
+        cleaned = {key: value for key, value in item.items() if key in allowed_fields[action_type]}
+        cleaned["type"] = action_type
+        if any(not str(cleaned.get(field) or "").strip() for field in required_fields[action_type]):
+            logger.warning("llm.coach_decision_action_dropped action_type=%s reason=missing_required_field", action_type)
+            continue
+        if "confidence" in cleaned:
+            cleaned["confidence"] = _normalize_confidence(cleaned.get("confidence"))
+        normalized.append(cleaned)
+    return tuple(normalized)
+
+
+def _has_unknown_memory_action(raw: Any) -> bool:
+    if not isinstance(raw, (list, tuple)):
+        return False
+    allowed = {"record_health_signal", "record_availability", "record_preference"}
+    for item in raw:
+        if not isinstance(item, dict):
+            continue
+        action_type = str(item.get("type") or item.get("operation_type") or "").strip()
+        if action_type and action_type not in allowed:
+            return True
+    return False
+
+
+def _normalize_execution_actions(raw: Any) -> tuple[dict[str, Any], ...]:
+    if not isinstance(raw, (list, tuple)):
+        return ()
+    normalized: list[dict[str, Any]] = []
+    allowed_fields = {
+        "type",
+        "target_ref",
+        "target_session_id",
+        "status",
+        "completed",
+        "sport_type",
+        "duration_min",
+        "confidence",
+        "evidence",
+    }
+    for item in raw:
+        if not isinstance(item, dict):
+            continue
+        action_type = str(item.get("type") or item.get("operation_type") or "").strip()
+        if action_type != "record_execution_update":
+            continue
+        cleaned = {key: value for key, value in item.items() if key in allowed_fields}
+        cleaned["type"] = "record_execution_update"
+        completed = _normalize_bool(cleaned.get("completed"))
+        if completed is not None:
+            cleaned["completed"] = completed
+        if not str(cleaned.get("target_ref") or "").strip() and cleaned.get("target_session_id") is not None:
+            cleaned["target_ref"] = f"session_id:{cleaned['target_session_id']}"
+        cleaned["status"] = _normalize_execution_status(cleaned.get("status"), completed=completed)
+        if "confidence" in cleaned:
+            cleaned["confidence"] = _normalize_confidence(cleaned.get("confidence"))
+        if not str(cleaned.get("target_ref") or "").strip() or cleaned["status"] is None:
+            logger.warning("llm.coach_decision_action_dropped action_type=record_execution_update reason=missing_target_or_status")
+            continue
+        normalized.append(cleaned)
+    return tuple(normalized)
+
+
+def _has_unknown_execution_action(raw: Any) -> bool:
+    if not isinstance(raw, (list, tuple)):
+        return False
+    for item in raw:
+        if not isinstance(item, dict):
+            continue
+        action_type = str(item.get("type") or item.get("operation_type") or "").strip()
+        if action_type and action_type != "record_execution_update":
+            return True
+    return False
+
+
+def _normalize_execution_status(raw: Any, *, completed: Any = None) -> str | None:
+    value = str(raw or "").strip().lower()
+    if value in {"completed", "done"} or completed is True:
+        return "completed"
+    if value in {"not_completed", "not done", "not_done", "skipped", "missed", "cancelled", "canceled"} or completed is False:
+        return "not_completed"
+    if value in {"partially_completed", "partial", "partially done"}:
+        return "partially_completed"
+    if value == "unknown":
+        return "unknown"
+    return None
+
+
+def _message_claims_execution_receipt_without_action(message: str, *, rationale: str) -> bool:
+    normalized = _normalize_for_guard(" ".join([message, rationale]))
+    if not any(marker in normalized for marker in ("hier", "seance d hier", "seance dhier")):
+        return False
+    receipt_markers = (
+        "c est note",
+        "vu pour hier",
+        "note pour hier",
+        "bien note",
+        "je note",
+        "non fait",
+        "ne pas avoir fait",
+        "pas avoir fait",
+        "pas fait",
+        "n est pas fait",
+        "n a pas tenu",
+        "annule hier",
+        "manquee hier",
+        "manque la seance",
+        "avoir manque",
+        "imprevu",
+        "pas eu le temps",
+        "execution manquee",
+    )
+    return any(marker in normalized for marker in receipt_markers)
+
+
+def _normalize_bool(raw: Any) -> bool | None:
+    if isinstance(raw, bool):
+        return raw
+    value = str(raw or "").strip().lower()
+    if value in {"true", "yes", "oui", "1"}:
+        return True
+    if value in {"false", "no", "non", "0"}:
+        return False
+    return None
+
+
+def _normalize_confidence(raw: Any) -> float:
+    if isinstance(raw, (int, float)):
+        return max(0.0, min(1.0, float(raw)))
+    value = str(raw or "").strip().lower()
+    if value in {"high", "elevee", "elevée", "strong"}:
+        return 0.85
+    if value in {"medium", "moyenne", "moderate"}:
+        return 0.65
+    if value in {"low", "faible"}:
+        return 0.4
+    try:
+        return max(0.0, min(1.0, float(value)))
+    except ValueError:
+        return 0.75
 
 
 def _missing_create_session_fields(data: dict[str, Any]) -> bool:
@@ -782,11 +958,18 @@ def _repair_invalid_decision_payload(*, data: dict[str, Any] | None, system: str
         return None
     repair_prompt = (
         "Le payload LLM suivant est invalide pour FitMAS.\n"
-        "Repare-le en JSON FitMAS canonique sans inventer de session id.\n"
-        "Si tu ne peux pas produire une mutation valide, retourne no_change.\n\n"
+        "Repare-le en JSON FitMAS canonique sans inventer de session id, de seance ou de fait.\n"
+        "Preserve les actions memoire/execution deja justes si elles sont compatibles avec le contexte.\n"
+        "Si le message utilisateur indique seulement qu'une seance n'a pas ete faite, retourne response_type=\"no_change\" + execution_actions, pas requires_confirmation.\n"
+        "Si tu ne peux pas produire une mutation planning valide, retourne no_change.\n\n"
         "CONTRAT:\n"
+        "- format prefere: CoachDecision avec response_type=reply|no_change|mutation_decision|plan_patch|requires_confirmation\n"
         "- mutation_type autorises: move_session, lighten_day, swap_sessions, update_session, replace_session, create_session, no_change\n"
         "- rationale et fitmas_message obligatoires et non vides\n"
+        "- execution_actions autorise record_execution_update: target_ref, target_session_id?, status=completed|not_completed|partially_completed|unknown, completed?, sport_type?, duration_min?, confidence, evidence?\n"
+        "- memory_actions autorise record_health_signal, record_availability, record_preference\n"
+        "- pending_resolution autorise accept_pending, reject_pending, modify_pending, ignore, needs_clarification\n"
+        "- requires_confirmation exige confirmation_reason et sert aux mutations planning risquees, pas aux updates execution simples\n"
         "- move_session/lighten_day/update_session/replace_session exigent target_session_id\n"
         "- swap_sessions exige target_session_id et second_session_id\n"
         "- create_session exige target_date, new_sport_type, new_title, new_duration_min\n"
@@ -839,6 +1022,14 @@ def _classify_llm_exception(exc: BaseException) -> str:
     labels are log-only — `decide()` still returns None for every case.
     """
     return gw.classify_llm_exception(exc)
+
+
+def _tool_budget_for_context(tool_context: ToolContext | None) -> tuple[str, ...]:
+    if tool_context is None:
+        return ()
+    if tool_context.pipeline == "conversation":
+        return _CONVERSATION_READ_TOOL_BUDGET
+    return ()
 
 
 def _request_json_with_tools(
@@ -986,7 +1177,12 @@ def _request_json_with_tools(
     final_response_tokens = _usage_value(final_response, "output_tokens")
     data = _message_json(final_response)
     if data is None:
-        data = _repair_decision_json_from_text(_message_text(final_response), model=model)
+        data = _repair_decision_json_from_text(
+            _message_text(final_response),
+            model=model,
+            context_prompt=prompt,
+            tool_result_summary=_repair_tool_result_summary(tool_executions),
+        )
     _log_tool_session_trace(
         pipeline=tool_context.pipeline,
         tool_name=_tool_execution_names(tool_executions),
@@ -1056,18 +1252,32 @@ def _tool_errors(tool_executions: list[ToolExecution]) -> str | None:
     return "; ".join(errors) if errors else None
 
 
-def _repair_decision_json_from_text(raw_text: str | None, *, model: str = "claude-haiku-4-5-20251001") -> dict | None:
+def _repair_decision_json_from_text(
+    raw_text: str | None,
+    *,
+    model: str = "claude-haiku-4-5-20251001",
+    context_prompt: str | None = None,
+    tool_result_summary: str | None = None,
+) -> dict | None:
     """Convert a prose decision-like answer into canonical JSON once."""
     if not raw_text:
         return None
     if _looks_like_provider_tool_markup(raw_text):
         return None
+    context_block = f"\nCONTEXTE_ORIGINAL:\n{context_prompt}\n" if context_prompt else ""
+    tools_block = f"\nRESULTATS_TOOLS:\n{tool_result_summary}\n" if tool_result_summary else ""
     prompt = (
         "Convertis cette reponse coach en JSON FitMAS canonique.\n"
         "N'invente pas de champ, de session id, ni de mutation absente de la reponse brute.\n"
-        "Si l'action n'est pas claire, retourne no_change.\n"
+        "Format prefere: CoachDecision avec response_type, rationale, fitmas_message, memory_actions, execution_actions et pending_resolution si utile.\n"
+        "Si l'action planning n'est pas claire, retourne response_type=\"no_change\".\n"
+        "Si la reponse brute dit qu'une seance n'a pas ete faite, retourne no_change + execution_actions record_execution_update.\n"
+        "Ne retourne jamais un simple mutation_type=no_change quand la reponse brute reconnait une execution faite/non faite: cela perdrait l'action execution.\n"
+        "N'ajoute sport_type dans execution_actions que si le contexte le rend certain.\n"
+        "execution_actions.record_execution_update: type, target_ref, target_session_id?, status=completed|not_completed|partially_completed|unknown, completed?, sport_type?, duration_min?, confidence?, evidence?.\n"
         "mutation_type autorises: move_session, lighten_day, swap_sessions, update_session, replace_session, create_session, no_change.\n"
-        "Champs requis: mutation_type, rationale, fitmas_message.\n"
+        "Compat legacy autorisee seulement si aucune action memoire/execution/pending n'est necessaire.\n"
+        "Champs requis: response_type, rationale, fitmas_message.\n"
         "Pour move_session/lighten_day/update_session/replace_session, target_session_id doit etre present si la reponse parle d'une seance existante.\n\n"
         "Pour create_session, target_date, new_sport_type, new_title et new_duration_min sont obligatoires.\n\n"
         "GARDE-FOUS:\n"
@@ -1077,6 +1287,11 @@ def _repair_decision_json_from_text(raw_text: str | None, *, model: str = "claud
         "- tutoie toujours l'utilisateur: jamais vous/vos/votre\n"
         "- fitmas_message doit etre complet, court, et ne doit pas finir sur une phrase coupee\n"
         "- ne rajoute pas de nouvelle question sauf si la reponse brute en contient deja une claire\n\n"
+        "EXEMPLE OBLIGATOIRE:\n"
+        "REPONSE_BRUTE: \"Hier n'a pas tenu, compris. Le footing de ce matin est toujours en place.\"\n"
+        "JSON: {\"response_type\":\"no_change\",\"rationale\":\"execution manquee comprise sans mutation planning\",\"fitmas_message\":\"Hier n'a pas tenu, compris. Le footing de ce matin reste en place.\",\"execution_actions\":[{\"type\":\"record_execution_update\",\"target_ref\":\"seance d'hier\",\"status\":\"not_completed\",\"completed\":false,\"confidence\":0.8,\"evidence\":\"Hier n'a pas tenu\"}]}\n\n"
+        f"{context_block}"
+        f"{tools_block}"
         "REPONSE_BRUTE:\n"
         f"{raw_text}\n\n"
         "Retourne uniquement le JSON."
@@ -1087,6 +1302,15 @@ def _repair_decision_json_from_text(raw_text: str | None, *, model: str = "claud
         model=model,
         max_tokens=1024,
     )
+
+
+def _repair_tool_result_summary(tool_executions: list[ToolExecution]) -> str | None:
+    lines = []
+    for execution in tool_executions:
+        result = execution.result
+        if result.summary:
+            lines.append(f"- {result.tool_name}: {result.summary}")
+    return "\n".join(lines) or None
 
 
 def _looks_like_provider_tool_markup(raw_text: str) -> bool:

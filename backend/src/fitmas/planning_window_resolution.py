@@ -5,7 +5,6 @@ from datetime import date, datetime, timedelta
 from typing import Any, Sequence
 
 from fitmas.time_context import DAY_KEYS, get_local_now, get_timezone
-from fitmas.user_indications import UserIndication
 
 
 @dataclass(frozen=True, slots=True)
@@ -31,31 +30,6 @@ class PlanningWindowResolution:
     exact_match: bool
     needs_clarification: bool
     clarification_reason: str | None = None
-
-
-def resolve_planning_window(
-    *,
-    indication: UserIndication,
-    scheduled_sessions: Sequence[Any],
-    timezone_name: str | None,
-    now: datetime | None = None,
-    horizon_days: int = 7,
-    limit: int = 8,
-) -> PlanningWindowResolution | None:
-    if indication.time_reference is None:
-        return None
-    return resolve_planning_window_inputs(
-        reference_label=indication.time_reference.label,
-        resolved_date=indication.time_reference.resolved_date,
-        day_key=indication.time_reference.day_key,
-        window=indication.time_reference.window,
-        scope=indication.scope.value,
-        scheduled_sessions=scheduled_sessions,
-        timezone_name=timezone_name,
-        now=now,
-        horizon_days=horizon_days,
-        limit=limit,
-    )
 
 
 def resolve_planning_window_inputs(
