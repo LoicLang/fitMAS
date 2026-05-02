@@ -559,19 +559,22 @@ class HeartbeatGroundingTest(unittest.TestCase):
         _, _ = self._create_plan_with_today_session()
         self.db.add_all(
             [
+                # Chantier 0 (2 mai 2026): TTL 48h applique a `_recent_proactive_context`.
+                # `hours=30` => dans la fenetre 48h (donc injecte) mais hors today
+                # local midnight (donc pas compte par le daily cap a 2 proactives).
                 s.CoachMessage(
                     user_id=self.user.id,
                     role="agent",
                     text="Bonjour. Journee flexible. Priorite: souplesse.",
                     proactive=True,
-                    created_at=(datetime.now(dt_timezone.utc) - timedelta(days=2)).replace(tzinfo=None),
+                    created_at=(datetime.now(dt_timezone.utc) - timedelta(hours=30)).replace(tzinfo=None),
                 ),
                 s.CoachMessage(
                     user_id=self.user.id,
                     role="agent",
                     text="Bonjour. Je garde de l'air a la semaine.",
                     proactive=True,
-                    created_at=(datetime.now(dt_timezone.utc) - timedelta(days=2, minutes=5)).replace(tzinfo=None),
+                    created_at=(datetime.now(dt_timezone.utc) - timedelta(hours=30, minutes=5)).replace(tzinfo=None),
                 ),
             ]
         )

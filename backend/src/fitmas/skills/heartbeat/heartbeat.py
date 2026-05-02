@@ -16,7 +16,7 @@ This module handles gating, data loading, LLM calls, and fallback generation.
 from __future__ import annotations
 
 import logging
-from datetime import timedelta
+from datetime import timedelta, timezone as dt_timezone
 
 from sqlalchemy.orm import Session
 
@@ -532,13 +532,36 @@ def _weekly_review_highlights(db: Session, user: s.User, *, start_date) -> str:
     return "\n".join(highlights)
 
 
-def _recent_proactive_context(db: Session, user: s.User, *, limit: int = 2) -> str:
+RECENT_PROACTIVE_TTL_HOURS = 48
+
+
+def _recent_proactive_context(
+    db: Session,
+    user: s.User,
+    *,
+    limit: int = 2,
+    ttl_hours: int = RECENT_PROACTIVE_TTL_HOURS,
+) -> str:
+    """Recent proactive messages, bounded by TTL to avoid stale chiffres injection.
+
+    Bug 2026-05-02: without TTL filter, an old briefing from a previous week
+    resurfaced in today's prompt, and the LLM copied its weekly stats as if
+    they applied to the current week. The cutoff ensures only proactives
+    recent enough to be relevant context can leak in.
+
+    TTL = 48h covers "yesterday + today" for novelty avoidance (don't recycle
+    the same opening formula day-to-day) while excluding any briefing >2 days
+    old whose chiffres semaine could leak.
+    """
+    local_now = get_local_now(user.timezone)
+    utc_cutoff = (local_now - timedelta(hours=ttl_hours)).astimezone(dt_timezone.utc).replace(tzinfo=None)
     rows = (
         db.query(s.CoachMessage)
         .filter(
             s.CoachMessage.user_id == user.id,
             s.CoachMessage.role == "agent",
             s.CoachMessage.proactive.is_(True),
+            s.CoachMessage.created_at >= utc_cutoff,
         )
         .order_by(s.CoachMessage.created_at.desc(), s.CoachMessage.id.desc())
         .limit(limit)
