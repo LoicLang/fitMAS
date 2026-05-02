@@ -15,6 +15,93 @@ read_when:
 > d'heuristique sur texte utilisateur libre est supersedee par
 > `docs/LLM-FIRST-CONVERSATION.md`.
 
+> Note plan 2 mai 2026 — Chantier 2 :
+> l'incident d'hallucination factuelle du briefing matin a confirme que
+> Phase 3 ("Retire legacy runtime reads") est encore *partiellement* fermee.
+> La nouvelle section **Plan 2 mai 2026 — Chantier 2** ci-dessous detaille
+> la cloture definitive : tuer le dual-write `plan_actions.py`, refactor
+> `signals.py` sur `ScheduledSession`, audit complet des 12 fichiers source
+> qui touchent encore `DayPlan/WeeklyPlan`. Source de verite plan : `docs/BUILD-ORDER.md`.
+
+## Plan 2 mai 2026 — Chantier 2
+
+### Etat reel post-incident 2 mai
+
+Audit du 2 mai (apres incident hallucination briefing) confirme que la dette truth source identifiee dans Phase 3 + dual-write n'a pas progresse depuis la mise a jour du 13 avril :
+
+- **`plan_actions.py` dual-write actif** sur 6 chemins ([plan_actions.py](../backend/src/fitmas/plan_actions.py)) :
+  - `lighten_session()` mute `DayPlan` + `ScheduledSession`
+  - `modify_session()` idem
+  - `replace_session()` idem
+  - `swap_sessions()` idem
+  - `move_session_to_date()` idem
+  - `set_completion_status()` idem
+- **`signals.py` lit `WeeklyPlan/DayPlan`** sur 5 detecteurs ([signals.py:70, 74, 125, 169, 235, 331](../backend/src/fitmas/signals.py)) ; consomme par conversation_pipeline ET heartbeat.
+- **`activities.py`** matche les activites Strava contre `DayPlan` via `match_activity_to_day()`.
+- **`plan_mutation_service.py`** appelle `repo.mark_day_completed()` a chaque completion.
+- **`strava.py`, `api_activities.py`** marquent `DayPlan.completion_status = "done"` via `mark_day_completed_for_user()`.
+- **12 fichiers** source touchent encore `DayPlan/WeeklyPlan` directement (audit grep) : `models.py`, `api_onboarding.py`, `activities.py`, `api_ops.py`, `signals.py`, `repository.py`, `state.py`, `api_read.py`, `plan_actions.py`, `seed.py`, `api_debug.py`, `schema.py`.
+
+L'incident hallucination du 2 mai n'a pas ete *cause* par cette dette (cause exacte = `_recent_proactive_context` sans TTL, traite par Chantier 0). Mais cette dette **continue de produire d'autres bugs de divergence** (`signals.py` peut classer une seance `adapted` comme une autre realite que `ScheduledSession.completion_status` actuel) et bloque le ground truth unique necessaire pour Chantier 3 (tool-use loop unifie).
+
+### Decoupe
+
+**Etape A — Tuer le dual-write `plan_actions.py` (1.5j)**
+
+- Pour chacun des 6 chemins : retirer toute ecriture sur `DayPlan` ; ne muter que `ScheduledSession` via `PlanMutationService`.
+- Vérifier que les events `plan_mutation_event` portent bien tout l'etat necessaire pour les surfaces qui lisaient `DayPlan` apres mutation.
+- Tester que les surfaces aval (timeline, app, briefing) lisent toujours la bonne info post-mutation.
+
+Risque : si une surface dependait silencieusement de `DayPlan.completion_status` ecrit par `plan_actions`, elle peut afficher du stale. Audit avant rip.
+
+**Etape B — Refactor `signals.py` sur `ScheduledSession` (1.5j)**
+
+- Reecrire les 5 detecteurs `_detect_*` ([signals.py:70-330](../backend/src/fitmas/signals.py)) pour lire `ScheduledSession` (par date) + `Activity` + `ExecutionEvidence`, plus jamais `WeeklyPlan/DayPlan`.
+- Verifier que `signals.collect_signals()` produit le meme jeu de signaux qu'avant (regression test obligatoire).
+- Cibles de lecture : `ScheduledSession.status`, `ScheduledSession.completion_status`, `ScheduledSession.scheduled_date`, et `Activity.scheduled_session_id` pour offplan.
+
+**Etape C — Refactor `activities.py` matching (0.5j)**
+
+- `match_activity_to_day()` lit `DayPlan`. Reecrire pour matcher contre `ScheduledSession` directement (par date locale + sport_type proximite).
+- Backfill / migration des `Activity.scheduled_session_id` historiques si necessaire (probablement pas).
+
+**Etape D — Audit fichier par fichier des 12 readers (1j)**
+
+- Pour chaque fichier de la liste : determiner si le read `DayPlan/WeeklyPlan` est runtime (a migrer) ou template/onboarding/admin (a conserver).
+- Categoriser :
+  - **A migrer (runtime)** : tout ce qui sert app/conversation/heartbeat/Telegram en lecture live
+  - **A conserver (template)** : `seed.py`, `api_onboarding.py` (creation initiale), `models.py`/`schema.py` (definition tables)
+  - **A archiver/supprimer** : code mort si trouve
+- Documenter la decision par fichier dans cette section.
+
+**Etape E — Tests + verrouillage (0.5j)**
+
+- Test statique : interdire l'import direct de `WeeklyPlan/DayPlan` depuis les modules runtime listes en migration.
+- Test d'integration : un mutation chain complete (conversation → `PlanMutationService` → `plan_mutation_event` → surfaces aval) ne doit lire que `ScheduledSession` apres l'ecriture.
+- Verrouiller la freeze matrix (Phase 0 du present doc) avec les nouveaux modules : aucun chemin background ne peut ecrire `DayPlan` runtime.
+
+### Gates Chantier 2
+
+Cloture acceptee quand :
+
+- [ ] `plan_actions.py` ne mute plus `DayPlan` (ni directement, ni via `mark_day_completed`)
+- [ ] `signals.py` ne lit plus `WeeklyPlan/DayPlan`
+- [ ] `activities.py.match_activity_to_day()` ne lit plus `DayPlan`
+- [ ] `plan_mutation_service.mark_day_completed()` retire ou degrade hors runtime
+- [ ] Les readers `DayPlan/WeeklyPlan` restants sont uniquement template/onboarding/admin, documentes dans ce doc
+- [ ] Tests statiques + integration verrouilles
+- [ ] Aucune regression sur les 5 scenarios doctrine (`echange jeudi/vendredi`, `je suis claque`, etc.)
+
+### Migration vers le modele cible
+
+Une fois Chantier 2 cloture, le contrat (`PlanTemplate` vs `SessionInstance`) du present doc devient *vraiment* enforced :
+
+- `WeeklyPlan/DayPlan` = `PlanTemplate` (planner output, onboarding, regen)
+- `ScheduledSession` = `SessionInstance` (seul runtime truth)
+- `plan_mutation_events` = audit canonique des mutations runtime
+- Toute lecture runtime hors de ce contrat est un bug a fixer immediatement
+
+
 ## But
 
 Remettre FitMAS sur une base simple, lisible et fiable avant toute sophistication supplementaire.

@@ -28,7 +28,140 @@ Si un autre doc diverge :
 
 **Un premier coach que Loïc reconnaît, comprend, et a envie de rouvrir demain.**
 
-## Checkpoint courant — 30 avril 2026
+## Checkpoint courant — 2 mai 2026
+
+### Incident dogfood briefing matin
+
+Le briefing du 2 mai a hallucine des chiffres factuels (`"2 sorties offplan cette semaine"` alors que zero offplan existe en DB pour la semaine en cours). Pas un bug de voix, un bug de **grounding factuel**.
+
+Cause racine identifiee : `_recent_proactive_context()` (`backend/src/fitmas/skills/heartbeat/heartbeat.py:535-553`) reinjecte les 2 derniers messages proactifs **sans aucun TTL** — un briefing d'une semaine anterieure ressort dans le prompt actuel, et le LLM recopie ses chiffres perimes au lieu de lire le bundle Truth (qui dit `offplan_count=0`).
+
+L'audit declenche par cet incident a confirme 3 failles structurelles connexes :
+
+- **Voix coach fragmentee entre pipelines** : Phase 1 voix conversation a durci `_CONVERSATION_SYSTEM_TEXT` mais le briefing/reminder/weekly review gardent leurs propres regles, sans few-shots BONS/MAUVAIS, sans detecteur receipt-style. Pas de source unique de doctrine voix en code.
+- **Dual-source de verite runtime non resolue** : `signals.py` lit encore `WeeklyPlan/DayPlan` (lignes 70, 74, 125, 169, 235, 331) et `signals.collect_signals` est consomme par conversation_pipeline ET heartbeat. `plan_actions.py` dual-write `DayPlan + ScheduledSession` dans 6 chemins (`lighten_session`, `modify_session`, `replace_session`, `swap_sessions`, `move_session_to_date`, `set_completion_status`). Doctrine "ScheduledSession seul en runtime" reste aspirationnelle.
+- **12 fichiers source** touchent encore `DayPlan/WeeklyPlan` directement (`models.py`, `api_onboarding.py`, `activities.py`, `api_ops.py`, `signals.py`, `repository.py`, `state.py`, `api_read.py`, `plan_actions.py`, `seed.py`, `api_debug.py`, `schema.py`).
+
+### Acquis recents — Phase A LLM-first
+
+- Phase 1 voix conversation : ✅ shippe 30 avril 2026 — bloc "Voix coach (regles imperatives sur fitmas_message)" + 8 few-shots BONS et 9 MAUVAIS dans `_CONVERSATION_SYSTEM_TEXT` (`backend/src/fitmas/llm_prompt_builder.py`), detecteur `_message_looks_receipt_style` log-only avec 6 patterns dans `backend/src/fitmas/llm.py`.
+- Phase 2 `pending_resolution` typed + `memory_actions` + `execution_actions` : ✅ shippe 1 mai 2026 (commits anterieurs) — confirmations resolues structurellement par le LLM (`accept_pending` / `reject_pending` / `modify_pending` / `ignore`), plus de re-decision sauvage. Memory/execution actions executees par writers bornes post-validation.
+
+### Plan en cours — 5 chantiers
+
+| # | Chantier | Effort | Doc canonique |
+|---|---|---|---|
+| 0 | ✅ Fix TTL `_recent_proactive_context` (heartbeat) — shippe 2 mai 2026 | 1h | section ci-dessous |
+| 1 | Voix coach unifiee (module `coach_voice.py` partage tous pipelines) | 1.5j | `docs/SOUL.md` section "Voix unifiee partagee" |
+| 2 | Truth source unifie runtime (cloture definitive Phase 3 coherence + tuer dual-write) | 4-5j | `docs/COACH-COHERENCE-REFACTOR.md` section "Plan 2 mai 2026" |
+| 3 | Tool-use loop unifie conversation + heartbeat (vraie boucle agentique multi-rounds, prose terminale, action-tools) | 6-7j | `docs/LLM-FIRST-CONVERSATION.md` section "Phase 5 - Tool-use loop unifie" |
+| 4 | Observabilite briefing (endpoint debug dump bundle + prompt + response) | 1j | section ci-dessous |
+| **A+** | **Phase A+ Weekly Coherence Review** (apres Chantier 3, avant Phase B) | 3-4j | section "Phase A+" ci-dessous |
+
+**Total : ~16-19 jours** (incluant Phase A+). Couvre cloture definitive Phase A LLM-first + dette truth source + refactor archi cible + couche raisonnement week-level avant Phase B.
+
+### Chantier 0 — Fix TTL `_recent_proactive_context` ✅ shippe 2 mai 2026
+
+Symptome : briefing du 2 mai a recopie les chiffres d'un proactif anterieur.
+
+Cause exacte (`heartbeat.py:535-553`) : query sur `CoachMessage` sans `filter(created_at >= cutoff)`. Un briefing J-7 etait reinjecte tel quel et le LLM recopiait ses chiffres comme s'ils s'appliquaient a la semaine en cours.
+
+Fix livre :
+- TTL de **48 heures** ajoute a `_recent_proactive_context` (`backend/src/fitmas/skills/heartbeat/heartbeat.py`) ; constante exposee `RECENT_PROACTIVE_TTL_HOURS = 48`, parametrable via kwarg `ttl_hours`
+- Le choix 48h couvre "hier + aujourd'hui" pour novelty avoidance (eviter de recycler la meme attaque jour apres jour) tout en excluant les chiffres > 2 jours
+- Cutoff calcule en UTC naive depuis `get_local_now(user.timezone)` pour match le shape `created_at` en DB
+- Nouveau test `tests/test_briefing_proactive_context.py` : 6 cas (within TTL inclus / older excluded / mixed only recent kept / boundary +1h excluded / parametrable / non-proactive ignores)
+- Test existant `test_morning_briefing_includes_recent_proactive_messages_for_novelty` ajuste : utilise `hours=30` (dans 48h TTL, hors today daily cap)
+
+Garanties verrouillees :
+- aucun message proactif > 48h n'apparait dans le prompt heartbeat
+- les chiffres presents dans le bundle (YesterdayTruth, TodayTruth, WeekDigest) restent l'unique source des stats hebdo
+- regression test verrouille : retirer le TTL fait echouer le test
+
+Bug isole au briefing matin (verifie : `_recent_proactive_context` est seulement utilise dans `heartbeat.py:187`, pas dans conversation/reminder/weekly review).
+
+A faire en suivi (audit similaire) :
+- recherche systematique des injections texte dans des prompts sans TTL (autres helpers `recent_*` / `pending_*` / `latest_*`)
+
+### Chantier 4 — Observabilite briefing
+
+Endpoint debug `POST /api/v0/debug/heartbeat/morning?dump=true` qui retourne :
+
+- bundle complet (`YesterdayTruth`, `TodayTruth`, `WeekDigest`, `recent_activities`, `recent_proactive_context`)
+- prompt systeme rendu
+- prompt user rendu
+- response LLM brut
+- message final rendu
+
+Permet diagnostic d'incident en 5 minutes au lieu de 2h d'audit. Active uniquement quand `FITMAS_ENABLE_DEBUG_ENDPOINTS` est set.
+
+Tests : un debug endpoint ne devrait pas etre actif en prod par defaut (deja la regle). Verifier que le dump n'expose pas de PII / API keys.
+
+### Ordre propose
+
+1. ~~**Maintenant** : Chantier 0~~ ✅ shippe 2 mai 2026
+2. **Cette semaine** : Chantier 1 (1.5j) — regle aussi le briefing matin pendant le dogfood Phase 1
+3. **Decision a prendre** : Chantier 2 avant ou apres Chantier 3 ? Reco = **avant** (truth source d'abord, tool-use loop construit dessus, et c'est aussi prerequis Phase A+). Mais 4-5j sans feature visible.
+4. **En parallele** : Chantier 4 (1j) pose pour le futur, peut s'attaquer en marge de 2 ou 3
+5. **Apres Chantier 3** : Phase A+ Weekly Coherence Review (3-4j) — l'apport produit le plus visible, transforme le coach reactif local en coach strategique week-level
+
+### Phase A — etat apres chantiers 0+1+2
+
+Apres ces 3 chantiers, Phase A est *vraiment* fermee :
+
+- doctrine LLM-first runtime ✅ (deja fait)
+- voix coach uniforme tous pipelines ✅ (chantier 1)
+- verite runtime unique ✅ (chantier 2 ferme la dette truth source)
+- aucune classe de bug "hallucination factuelle" residuelle
+
+A ce moment-la, on peut soit attaquer Chantier 3 (tool-use loop unifie comme refactor archi cible) puis Phase A+, soit ouvrir Phase A+ direct si la dette tool-use loop n'est pas bloquante. Phase B reste differee.
+
+### Phase A+ — Weekly Coherence Review
+
+Concept inspire d'un brainstorm strategique du 2 mai 2026 (apport externe). Pas dans le scope Phase A initial, pas Phase B non plus — c'est une couche intermediaire.
+
+**Probleme adressé** : aujourd'hui le coach est bon en *reaction locale* (constraint -> mutation locale -> validate -> commit). Il ne raisonne pas au niveau *semaine entiere*. Il sait swap mardi/jeudi, il ne sait pas dire "ce swap surcharge ta fin de semaine, je propose plutot X".
+
+**Exemple produit** :
+
+| Niveau | User says | Coach reaction |
+|---|---|---|
+| Aujourd'hui (Phase A) | "Je ne peux pas courir mercredi" | move Wed -> Thu, commit |
+| Phase A+ | "Je ne peux pas courir mercredi" | "Move Wed->Thu cree trop d'intensite fin de semaine. Je preserve samedi key, convertis jeudi en easy, drop le support optionnel." |
+
+C'est de la **qualite de decision week-level**, distinct de la fiabilite (Phase A) et de la prescription intra-seance (Phase B).
+
+**Triggers Phase A+** (la review week-level ne se declenche pas a chaque petit move) :
+- contrainte user touche une seance cle
+- contrainte couvre plusieurs jours
+- contrainte impacte une seance dure
+- user rapporte fatigue / douleur / maladie
+- user a manque plusieurs seances
+- user demande swap entre seances distantes
+- patch local genere des warnings (`validate_plan_patch` -> warning)
+- mission de la semaine est compromise
+
+**Capacites cibles a livrer** :
+
+| Tool | Role |
+|---|---|
+| `get_session_detail(session_id)` | inspecter une seance en profondeur (titre, objectif, type, intensite, priority, completion) — manque aujourd'hui |
+| `resolve_target_session(query)` | resoudre une ref floue ("la sortie longue", "le fractionne") en `session_id` ou candidates |
+| `get_planning_contract()` | lire week_mission, key_sessions, protected_sessions, change_budget |
+| `validate_week_coherence(patch)` | "si on applique ce patch, la semaine fait-elle encore sens ?" — distinct de `validate_plan_patch` (legalite) ; couvre `too_many_hard_sessions`, `recovery_gap_too_short`, `key_session_lost`, `weekly_load_too_high`, `mission_not_preserved`, etc. |
+
+**Skill enrichie** :
+- `replan_after_constraint` recoit le branchement Phase A+ : si scope multi-session OU key session impactee OU multi-day, le LLM passe par `validate_week_coherence` avant de finaliser le `PlanPatch`
+
+**Effort total : 3-4 jours**.
+
+**Dependances** :
+- Chantier 3 (tool-use loop unifie) facilite l'ajout de tools mutants/lecture (mais Phase A+ peut se livrer sur le shape actuel si Chantier 3 est differe)
+- Chantier 2 (truth source unifie) est **prerequis** pour `get_planning_contract` et `validate_week_coherence` — sans ScheduledSession seul truth, le scoring week donne des resultats incoherents
+
+**Differentiateur produit** : Phase A+ est ce qui transforme FitMAS d'un "outil qui swap" en "coach qui sauve la semaine". C'est probablement le wedge produit le plus important a moyen terme. Pas urgent, mais dimensionnant.
+
+## Historique — 30 avril 2026
 
 La suite de Phase A est recadree par l'incident heartbeat / conversation du 30 avril :
 

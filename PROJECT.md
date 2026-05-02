@@ -2,7 +2,7 @@
 
 Coach IA multisport proactif qui ajuste ton entraînement selon ta vraie vie.
 
-## Statut — 30 avril 2026
+## Statut — 2 mai 2026
 
 **Déployé et fonctionnel sur https://the deployed app/**
 
@@ -21,6 +21,8 @@ Ce qui tourne en prod :
 - Runtime conversationnel désormais branché sur les prompt layers live
 - `CoachDecision` + `PlanPatch` branchés sur la conversation : validation serveur, confirmation pending, commit via `PlanMutationService`
 - Doctrine conversation renforcee : zero determinisme sur texte utilisateur libre ; le LLM est le seul detecteur d'intention
+- Phase 1 voix conversation shippée 30 avril : règles "Voix coach" + few-shots BONS/MAUVAIS sur `fitmas_message`, détecteur receipt-style log-only
+- Phase 2 `pending_resolution` typed + `memory_actions` + `execution_actions` shippée 1 mai : confirmations résolues structurellement, plus de re-décision sauvage
 - Anciens chemins `UserIndication`, replan legacy et tool routing deterministe supprimes du repo
 - DeepSeek principal avec fallback Claude possible sur sorties structurées fragiles
 - `suggest_replan_candidates` est le helper canonique de candidates replan ; `propose_replan` reste alias compat
@@ -30,12 +32,19 @@ Ce qui tourne en prod :
 
 La vérité "état réel + suite" vit dans `docs/BUILD-ORDER.md`.
 
+Chantiers en cours (suite incident hallucination factuelle briefing 2 mai) :
+- ✅ **Chantier 0** — TTL `_recent_proactive_context` (heartbeat) — shippé 2 mai 2026 — fix hallucination + 6 tests
+- **Chantier 1** — Voix coach unifiée `coach_voice.py` partagée tous pipelines (1.5j) — `docs/SOUL.md`
+- **Chantier 2** — Truth source unifié runtime (4-5j) — clôture définitive Phase 3 cohérence + tuer dual-write — `docs/COACH-COHERENCE-REFACTOR.md`
+- **Chantier 3** — Tool-use loop unifié conversation + heartbeat (6-7j) — vraie boucle agentique multi-rounds, prose terminale — `docs/LLM-FIRST-CONVERSATION.md`
+- **Chantier 4** — Observabilité briefing (1j) — endpoint debug dump bundle + prompt + response
+- **Phase A+** — Weekly Coherence Review (3-4j, après Chantier 3) — couche raisonnement week-level, transforme coach réactif local en coach stratégique — `docs/BUILD-ORDER.md` section dédiée
+
 Cap produit actuel :
 - Telegram = coach conversationnel
 - App = cockpit performance
-- priorité immédiate : Phase A LLM-first, puis dogfood réel Telegram sur la semaine
-- ordre courant : smokes réels + dogfood Telegram, puis durcir `validate_plan_patch`
-- Phase B long terme : progression/prescription structurée, pas ouverte tant que Phase A n'est pas stable
+- priorité immédiate : Chantier 1 (voix unifiée) puis Chantiers 2+3 pour clôturer Phase A LLM-first et préparer Phase A+
+- Phase B long terme : progression/prescription structurée, pas ouverte tant que Phase A + Chantiers 1+2 + Phase A+ ne sont pas clos
 
 ## Stack
 

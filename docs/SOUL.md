@@ -21,6 +21,104 @@ Aider des sportifs motivés à mieux performer avec moins de charge mentale.
 - adaptation à la vraie vie
 - aide concrète plutôt que discours générique
 
+## Voix unifiee partagee — Chantier 1 du plan 2 mai 2026
+
+### Diagnostic
+
+Phase 1 voix conversation a ete shippee le 30 avril 2026 :
+
+- bloc "Voix coach (regles imperatives sur fitmas_message)" dans `_CONVERSATION_SYSTEM_TEXT` ([backend/src/fitmas/llm_prompt_builder.py](../backend/src/fitmas/llm_prompt_builder.py))
+- 8 few-shots BONS et 9 MAUVAIS sur `fitmas_message`
+- detecteur `_message_looks_receipt_style` log-only avec 6 patterns dans `backend/src/fitmas/llm.py`
+
+Limite identifiee : **ces regles vivent uniquement dans le prompt conversation**. Le briefing matin (`backend/src/fitmas/skills/heartbeat/roles.py` `build_briefing_prompt`), le rappel pre-seance, la revue dimanche et la regen lundi gardent leurs propres regles voix anciennes, **sans few-shots BONS/MAUVAIS, sans detecteur receipt-style**.
+
+Verification 2 mai 2026 : grep "few-shot\|Exemples\|BONS\|MAUVAIS\|fitmas_message" sur `roles.py` retourne zero match. La voix briefing reste calibrée par des regles abstraites ("pas de recitation des chiffres bruts", "pas de cliche generique") sans exemples concrets, et continue de driver vers du receipt / clichetisme / defensif (cf. incident 2 mai message *"On ne refait pas le debat sur le offplan, c'est acte..."*).
+
+Doctrine voix de ce doc reste correcte. Le probleme est l'**ecart entre doctrine et code** : la voix existe en doc partagee, mais sa traduction technique (regles + few-shots + detecteur) n'est faite qu'une fois pour la conversation, et dupliquee au minimum partout ailleurs.
+
+### Cible Chantier 1 — module `coach_voice.py` partage
+
+Creer `backend/src/fitmas/coach_voice.py` qui exporte :
+
+```python
+COACH_VOICE_RULES: str = """\
+Voix coach (regles imperatives sur les messages envoyes au user) :
+- ...
+"""
+
+COACH_VOICE_FEW_SHOTS_GOOD: str = """\
+Exemples BONS :
+- ...
+"""
+
+COACH_VOICE_FEW_SHOTS_BAD: str = """\
+Exemples A NE JAMAIS ECRIRE :
+- ...
+"""
+
+RECEIPT_PATTERNS: tuple[re.Pattern, ...] = (
+    re.compile(r"^\s*(swap|mutation|operation|plan)\s+applique"),
+    # ...
+)
+
+def message_looks_receipt_style(message: str) -> bool:
+    """Log-only detecteur receipt-style/voix bot. Reutilisable par tous pipelines."""
+```
+
+Importe par tous les builders de prompt :
+
+- `backend/src/fitmas/llm_prompt_builder.py` (conversation) — remplace les blocs inline actuels par les imports
+- `backend/src/fitmas/skills/heartbeat/roles.py` (briefing, reminder, weekly review, new_plan)
+- tout futur builder de prompt user-facing
+
+Le detecteur receipt-style devient utilise sur **toutes les sorties LLM user-facing** (conversation + heartbeat + reminder), log-only en V1.
+
+### Decoupe
+
+**Etape A — Extraction (0.5j)**
+- creer `coach_voice.py` avec rules + few-shots + receipt patterns + helper detecteur
+- copier le contenu actuel du bloc voix conversation et l'adapter pour etre pipeline-agnostic (pas de mention specifique `fitmas_message`, parler de "message envoye au user")
+
+**Etape B — Branchement conversation (0.25j)**
+- `llm_prompt_builder.py` importe les blocs depuis `coach_voice.py` au lieu de les inliner
+- aucune regression fonctionnelle ; tests existants passent
+
+**Etape C — Branchement heartbeat (0.5j)**
+- `roles.py` `build_briefing_prompt`, `build_reminder_prompt`, `build_review_prompt`, `build_new_plan_intro_prompt` importent les memes blocs
+- adapter les few-shots pour couvrir les cas heartbeat (briefing matin, rappel pre-seance, revue dimanche)
+- ajouter quelques few-shots specifiques heartbeat (ex : briefing matin BON vs receipt) si necessaire
+
+**Etape D — Detecteur log-only generalise (0.25j)**
+- chaque sortie LLM user-facing (heartbeat envoie, conversation reply) passe par `message_looks_receipt_style` en log-only
+- log structure : `coach_voice_receipt_style pipeline=heartbeat_briefing user_id=... message=...`
+- aucun blocage en V1 ; permet de mesurer le taux de violation par pipeline avant de durcir
+
+**Etape E — Tests + audit (0.5j)**
+- test : meme texte input -> meme detection sur tous les pipelines
+- regression : un message receipt-style genere par n'importe quel pipeline est detecte
+- doc inline pointant ce module comme source unique de la voix coach
+
+**Total Chantier 1 : ~1.5 jours.**
+
+### Gates Chantier 1
+
+Cloture acceptee quand :
+
+- [ ] `backend/src/fitmas/coach_voice.py` existe et exporte rules + few-shots + detecteur
+- [ ] `llm_prompt_builder.py` n'a plus de bloc voix inline ; il importe depuis `coach_voice.py`
+- [ ] `roles.py` (heartbeat) importe les memes blocs ; les builders ont les regles voix + few-shots
+- [ ] Detecteur receipt-style log-only branche sur conversation + heartbeat
+- [ ] Tests verrouillent : un changement de regle voix se propage automatiquement a tous les pipelines
+- [ ] Aucune regression sur les 5 scenarios doctrine (`echange jeudi/vendredi`, `je suis claque`, etc.)
+
+### Effet attendu
+
+- voix coach uniforme sur tous les messages user-facing (conversation, briefing, reminder, weekly review)
+- diagnostic d'incident voix simplifie : un seul fichier a regarder
+- detecteur receipt-style devient mesurable cross-pipeline, permet de promouvoir en hard guard quand le taux est sous controle
+- doctrine voix reifiee en code, plus en doublon doc/code
+
 ## Comment FitMAS parle
 
 - clair

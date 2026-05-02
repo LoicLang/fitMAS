@@ -353,6 +353,119 @@ Taches :
   que le user mentionne sante/dispo/execution. Cette revue est diagnostic, pas un
   nouveau parser runtime.
 
+### Phase 5 - Tool-use loop unifie (Chantier 3 du plan 2 mai 2026)
+
+Objectif : passer le runtime conversation **et** le runtime heartbeat d'un modele "structured output JSON terminal" vers un **vrai tool-use loop multi-rounds** ou les actions deviennent des tools natifs et la reponse finale au user est de la prose libre.
+
+Source canonique du plan : `docs/BUILD-ORDER.md` section "Plan en cours — 5 chantiers". Le present doc detaille la migration cote LLM-first.
+
+#### Etat actuel verifie le 2 mai 2026
+
+Le tool-use loop ([llm.py:732-875](../backend/src/fitmas/llm.py:732)) existe mais est borne :
+
+- max 3 tools par tour (`max_tools=3`)
+- 1 seul round de tools : la requete followup ne renvoie pas `tools=`, donc le LLM ne peut pas demander un autre tool apres avoir vu un resultat
+- terminaison forcee en JSON `CoachDecision` parse par le pipeline ; le `fitmas_message` est un *champ* du JSON, pas une emission texte libre
+- toutes les actions planning sont encodees en JSON `PlanPatch` (un artefact de donnees) et appliquees par `validate_plan_patch -> PlanMutationService.apply_patch_for_user`
+
+Le briefing matin (heartbeat) est un appel LLM **one-shot sans tools** — pas de grounding tool-use, le LLM doit decider sur la base du seul contexte injecte dans le prompt. C'est ce qui a permis l'hallucination factuelle du 2 mai (LLM recopie un texte injecte au lieu de verifier).
+
+#### Architecture cible Phase 5
+
+Pour les **deux pipelines** (conversation + heartbeat) :
+
+```text
+Round 1 : LLM voit prompt + read-tools + action-tools dispo
+         -> peut emettre N tool_use blocks dans un meme tour (read OU action)
+
+Backend : execute les tools demandes (cap par-round, jusqu'a ~3 tools)
+         -> chaque tool valide, commit si action, retourne payload structure
+
+Round 2 : LLM voit les results
+         -> peut redemander d'autres tools (read pour grounding, OU action)
+         -> OU emettre du texte libre = reponse finale au user
+
+[ ... boucle jusqu'a stop_reason="end_turn", hard cap 5-6 rounds ... ]
+
+Round N : LLM emet texte libre = message final envoye TEL QUEL au user
+         -> plus de wrapper JSON, plus de fitmas_message field
+```
+
+Action-tools cibles (ce qui etait jusque-la dans `PlanPatch`) :
+
+- planning : `swap_sessions`, `move_session`, `replace_session`, `lighten_day`, `update_session`, `create_session`, `cancel_session`
+- pending : `confirm_pending`, `dismiss_pending` (alternatives a `pending_resolution` typed)
+- memory / execution : possiblement exposes comme tools si le pattern le justifie ; sinon restent traites par writers internes apres validation `CoachDecision` (pattern actuel Phase 1)
+
+Chaque action-tool :
+
+- valide ses args (logique actuelle de `validate_plan_patch`)
+- commit via `PlanMutationService` (writer unique conserve)
+- emet `plan_mutation_event`
+- retourne au LLM `{status: "committed", session_after: {...}, summary: "..."}` ou `{status: "blocked", reason: "..."}`
+
+#### Bug classes resolues par Phase 5
+
+- **Voix structurellement libre** : plus de wrapper JSON terminal -> la voix coach n'est plus contrainte cognitive ("remplir un champ"). Phase 1 calibre la voix dans le wrapper, Phase 5 supprime le wrapper.
+- **Hallucination factuelle briefing** : le briefing peut grounder ses claims via tools (`get_recent_activities`, `get_load_context`...) avant de parler. *"J'allais dire offplan=2, je verifie via tool... payload dit 0... je corrige."*
+- **Multi-step reasoning** : `read -> reason -> read encore -> mutate -> voir result -> respond`. Aujourd'hui impossible (1 round only).
+- **Pushback structure** : le coach peut refuser une mutation en lisant le contexte via tools puis en repondant en prose ("non, ton long run dimanche encaisse mal — propose plutot X"). Aujourd'hui pas de chemin propre (no_change ou requires_confirmation, deux statuts qui ne correspondent pas).
+- **Confirmation pending propre** : `confirm_pending` / `dismiss_pending` deviennent des tools comme les autres. `pending_resolution` typed (Phase 2 deja livree) reste utilisable mais devient redondant.
+- **Provider portability** : tool-use est primitive standard (Anthropic, OpenAI, DeepSeek). Plus de quirks structured output.
+- **Foundation Phase B** : prescription/progression engine se branche directement sur le tool-use loop (`prescribe_week`, `apply_progression`, etc.) sans refondre l'archi.
+
+#### Decoupe Phase 5
+
+**Etape A — Refactor LLM client (1j)**
+- retirer `max_tools=3` (ou passer a un cap par-round)
+- garder `tools=` dans la requete followup
+- boucler tant que `stop_reason="tool_use"`, hard-cap 5 rounds, fail-safe en `no_change` reply en cas de loop
+- accepter terminaison en **texte libre** (pas en JSON)
+
+**Etape B — Action-tools planning (1.5j)**
+- definir les ~9 tools mutants, schemas + delegate vers `PlanMutationService`
+- chaque tool valide / commit / event / retourne payload
+- tests unit par tool
+
+**Etape C — Pipeline conversation (1j)**
+- retirer parse `CoachDecision` terminal -> reply = last assistant text content
+- retirer `fitmas_message` field et templates `_BLOCK_REASON_REPLIES`
+- compatibilite : garder un fallback JSON parser pendant migration au cas ou le LLM regresse vers JSON
+
+**Etape D — Pipeline heartbeat (1j)**
+- exposer un sous-set read-tools au briefing/reminder/weekly review
+- meme loop refactor
+- terminaison texte libre
+
+**Etape E — Refonte prompt (1j)**
+- voice rules Phase 1 conservees (ils s'appliquent universellement)
+- remplacer la sematique JSON `CoachDecision` par la semantique tools
+- few-shots adaptes au pattern tool-call (quand swap vs move vs replace, comment rediger `reason`)
+
+**Etape F — Tests + telemetrie (1.5j)**
+- E2E sur 5 scenarios doctrine + edge cases
+- metriques par-loop : rounds/turn, tokens/turn, tool failure rate, fallback usage
+- fallback Claude si DeepSeek tool-use casse (pattern deja en place pour structured output, a etendre au tool-use loop)
+
+**Total Phase 5 : ~6-7 jours.**
+
+#### Risques + mitigations
+
+- **LLM boucle infiniment** -> cap dur 5 rounds, fail-safe en `no_change` reply
+- **LLM call action sans lire d'abord** -> regle prompt + detecteur log
+- **DeepSeek tool-use casse en prod** -> fallback Claude deja en place pour structured, a etendre au tool-use loop
+- **Cout explose** -> telemetry par-loop cost, alerte si moyenne > seuil
+
+#### Quand declencher Phase 5
+
+Pas speculativement. Trois signaux qui declenchent :
+
+1. **Apres dogfood Phase 1** : la voix sonne encore wrapper-contrainte malgre le prompt -> preuve que le wrapper EST le blocker
+2. **Avant Phase B** : prescription engine se branche naturellement sur tool-use loop ; autant ne pas faire Phase B sur l'ancien shape
+3. **Bug recurrent grounding heartbeat** : tools de lecture deviennent necessaires pour eviter d'autres hallucinations comme celle du 2 mai
+
+L'incident du 2 mai est un signal partiel pour (3), mais Chantier 0 (TTL fix) est le fix immediat ; Phase 5 reste justifiee sur le moyen-long terme.
+
 ## Acceptation
 
 La migration est terminee quand :
@@ -363,3 +476,10 @@ La migration est terminee quand :
 - les writes passent par services bornes et auditables
 - le scenario du heartbeat du 30 avril passe en smoke reel
 - les docs ne recommandent plus "regex comme hint" sur texte utilisateur libre
+
+Cloture Phase 5 acceptee quand :
+
+- les actions planning sortent en tool calls natifs, pas en JSON `PlanPatch` terminal
+- la reponse finale user est du texte libre, pas un champ d'un JSON wrapper
+- briefing matin et conversation partagent le meme loop tool-use
+- aucune hallucination factuelle observee sur 14 jours de dogfood post-Phase 5
