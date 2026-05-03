@@ -46,7 +46,7 @@ Phase A status (2 mai 2026):
 - ✅ Phase 2 `pending_resolution` typed + `memory_actions` + `execution_actions` : confirmations resolved structurally, plus de re-decision sauvage
 - 🔥 Open chantiers (planning hallucination factuelle briefing 2 mai a confirmé 3 dettes structurelles) :
   - ✅ **Chantier 0** TTL `_recent_proactive_context` (heartbeat) — shippé 2 mai 2026 (TTL 48h, 6 tests)
-  - **Chantier 1** voix coach unifiee module `coach_voice.py` partage tous pipelines — `docs/SOUL.md`
+  - ✅ **Chantier 1** voix coach unifiée module `coach_voice.py` partagé tous pipelines (conversation + briefing + reminder + review + signal) — shippé 3 mai 2026 (5 commits atomiques étapes A-E)
   - **Chantier 2** truth source unifie runtime — kill dual-write `plan_actions.py` + refactor `signals.py` — `docs/COACH-COHERENCE-REFACTOR.md`
   - **Chantier 3** tool-use loop unifie conversation + heartbeat — `docs/LLM-FIRST-CONVERSATION.md`
   - **Chantier 4** observabilite briefing (debug endpoint dump)
@@ -54,9 +54,9 @@ Phase A status (2 mai 2026):
 
 Connu et non resolu :
 
-- voix coach **fragmentee** entre pipelines : Phase 1 a durci la conversation seulement ; briefing/reminder/weekly review gardent leurs propres regles voix sans few-shots ni detecteur (Chantier 1 cible).
 - doctrine **"ScheduledSession seul en runtime" reste aspirationnelle** : `signals.py` lit encore `WeeklyPlan/DayPlan`, `plan_actions.py` dual-write `DayPlan + ScheduledSession` dans 6 chemins, 12 fichiers source touchent encore ces tables (Chantier 2 cible).
-- contextes texte injectes dans des prompts **sans TTL** sont une classe de bug ; l'incident 2 mai vient de la (Chantier 0 fix immediat, audit similaire restant a faire).
+- audit similaire au TTL de Chantier 0 reste a faire sur autres helpers `recent_*` / `pending_*` / `latest_*` qui injectent du texte ancien dans des prompts.
+- ancienne dette voix fragmentee entre pipelines (Phase 1 conversation only) : ✅ resolue par Chantier 1 (3 mai 2026), module partage `coach_voice.py` source unique sur tous pipelines.
 
 Core coach doctrine:
 

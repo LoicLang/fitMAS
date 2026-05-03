@@ -34,7 +34,7 @@ La vérité "état réel + suite" vit dans `docs/BUILD-ORDER.md`.
 
 Chantiers en cours (suite incident hallucination factuelle briefing 2 mai) :
 - ✅ **Chantier 0** — TTL `_recent_proactive_context` (heartbeat) — shippé 2 mai 2026 — fix hallucination + 6 tests
-- **Chantier 1** — Voix coach unifiée `coach_voice.py` partagée tous pipelines (1.5j) — `docs/SOUL.md`
+- ✅ **Chantier 1** — Voix coach unifiée `coach_voice.py` partagée tous pipelines (conversation + briefing + reminder + review + signal) — shippé 3 mai 2026 — 5 commits atomiques (étapes A-E), 36 tests nouveaux
 - **Chantier 2** — Truth source unifié runtime (4-5j) — clôture définitive Phase 3 cohérence + tuer dual-write — `docs/COACH-COHERENCE-REFACTOR.md`
 - **Chantier 3** — Tool-use loop unifié conversation + heartbeat (6-7j) — vraie boucle agentique multi-rounds, prose terminale — `docs/LLM-FIRST-CONVERSATION.md`
 - **Chantier 4** — Observabilité briefing (1j) — endpoint debug dump bundle + prompt + response
@@ -43,8 +43,8 @@ Chantiers en cours (suite incident hallucination factuelle briefing 2 mai) :
 Cap produit actuel :
 - Telegram = coach conversationnel
 - App = cockpit performance
-- priorité immédiate : Chantier 1 (voix unifiée) puis Chantiers 2+3 pour clôturer Phase A LLM-first et préparer Phase A+
-- Phase B long terme : progression/prescription structurée, pas ouverte tant que Phase A + Chantiers 1+2 + Phase A+ ne sont pas clos
+- priorité immédiate : dogfood Telegram + briefings réels pour valider voix unifiée, puis Chantiers 2+3 pour clôturer Phase A LLM-first et préparer Phase A+
+- Phase B long terme : progression/prescription structurée, pas ouverte tant que Phase A + Chantiers 2+3 + Phase A+ ne sont pas clos
 
 ## Stack
 

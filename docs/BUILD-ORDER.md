@@ -52,7 +52,7 @@ L'audit declenche par cet incident a confirme 3 failles structurelles connexes :
 | # | Chantier | Effort | Doc canonique |
 |---|---|---|---|
 | 0 | ✅ Fix TTL `_recent_proactive_context` (heartbeat) — shippe 2 mai 2026 | 1h | section ci-dessous |
-| 1 | Voix coach unifiee (module `coach_voice.py` partage tous pipelines) | 1.5j | `docs/SOUL.md` section "Voix unifiee partagee" |
+| 1 | ✅ Voix coach unifiee (module `coach_voice.py` partage tous pipelines) — shippe 3 mai 2026 | 1.5j | `docs/SOUL.md` section "Voix unifiee partagee" |
 | 2 | Truth source unifie runtime (cloture definitive Phase 3 coherence + tuer dual-write) | 4-5j | `docs/COACH-COHERENCE-REFACTOR.md` section "Plan 2 mai 2026" |
 | 3 | Tool-use loop unifie conversation + heartbeat (vraie boucle agentique multi-rounds, prose terminale, action-tools) | 6-7j | `docs/LLM-FIRST-CONVERSATION.md` section "Phase 5 - Tool-use loop unifie" |
 | 4 | Observabilite briefing (endpoint debug dump bundle + prompt + response) | 1j | section ci-dessous |
@@ -100,7 +100,7 @@ Tests : un debug endpoint ne devrait pas etre actif en prod par defaut (deja la 
 ### Ordre propose
 
 1. ~~**Maintenant** : Chantier 0~~ ✅ shippe 2 mai 2026
-2. **Cette semaine** : Chantier 1 (1.5j) — regle aussi le briefing matin pendant le dogfood Phase 1
+2. ~~**Cette semaine** : Chantier 1~~ ✅ shippe 3 mai 2026 — voix coach unifiee tous pipelines (briefing matin inclus)
 3. **Decision a prendre** : Chantier 2 avant ou apres Chantier 3 ? Reco = **avant** (truth source d'abord, tool-use loop construit dessus, et c'est aussi prerequis Phase A+). Mais 4-5j sans feature visible.
 4. **En parallele** : Chantier 4 (1j) pose pour le futur, peut s'attaquer en marge de 2 ou 3
 5. **Apres Chantier 3** : Phase A+ Weekly Coherence Review (3-4j) — l'apport produit le plus visible, transforme le coach reactif local en coach strategique week-level

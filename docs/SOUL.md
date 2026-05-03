@@ -21,7 +21,13 @@ Aider des sportifs motivés à mieux performer avec moins de charge mentale.
 - adaptation à la vraie vie
 - aide concrète plutôt que discours générique
 
-## Voix unifiee partagee — Chantier 1 du plan 2 mai 2026
+## Voix unifiee partagee — Chantier 1 du plan 2 mai 2026 ✅ shippe 3 mai 2026
+
+> Status : livre en 5 commits atomiques (etapes A-E) sur la branche main.
+> Module canonique : `backend/src/fitmas/coach_voice.py`.
+> Tests : 36 nouveaux + 17 fakes mis a jour + 569 existants verts.
+> Pipelines branches : conversation runtime + briefing matin + reminder
+> pre-seance + revue dimanche + signal-driven proactive.
 
 ### Diagnostic
 
@@ -105,12 +111,12 @@ Le detecteur receipt-style devient utilise sur **toutes les sorties LLM user-fac
 
 Cloture acceptee quand :
 
-- [ ] `backend/src/fitmas/coach_voice.py` existe et exporte rules + few-shots + detecteur
-- [ ] `llm_prompt_builder.py` n'a plus de bloc voix inline ; il importe depuis `coach_voice.py`
-- [ ] `roles.py` (heartbeat) importe les memes blocs ; les builders ont les regles voix + few-shots
-- [ ] Detecteur receipt-style log-only branche sur conversation + heartbeat
-- [ ] Tests verrouillent : un changement de regle voix se propage automatiquement a tous les pipelines
-- [ ] Aucune regression sur les 5 scenarios doctrine (`echange jeudi/vendredi`, `je suis claque`, etc.)
+- [x] `backend/src/fitmas/coach_voice.py` existe et exporte rules + few-shots + detecteur
+- [x] `llm_prompt_builder.py` n'a plus de bloc voix inline ; il importe depuis `coach_voice.py`
+- [x] `roles.py` (heartbeat) importe les memes blocs ; les builders ont les regles voix + few-shots
+- [x] Detecteur receipt-style log-only branche sur conversation + heartbeat (4 sub-pipelines : briefing, reminder, review, signal)
+- [x] Tests verrouillent : un changement de regle voix se propage automatiquement a tous les pipelines (`tests/test_coach_voice_cross_pipeline.py`)
+- [x] Aucune regression sur la suite : 569 tests passent (full suite minus integration_real)
 
 ### Effet attendu
 
