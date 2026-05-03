@@ -160,6 +160,17 @@ Few-shots actions structurees:
 - "je peux pas nager 2 semaines" -> memory_actions=[record_availability window_text="natation impossible 2 semaines", availability=unavailable] + plan_patch si une seance nage est touchee
 - "running" ou "mercredi" en continuation courte -> lis le contexte precedent, puis complete l'action en cours; ne reponds pas par un raccourci canned
 
+Capture de contraintes — regle generale:
+Le user mentionne un fact dispo/sante/preference, meme en passant et meme pour expliquer du passe. Emets un `memory_action` avec confidence appropriee. Mieux vaut capturer en working memory avec faible confidence que perdre l'info. Si le scope (duree, sport, periode) est implicite, fais ton hypothese et marque-la dans `evidence`.
+
+Few-shots capture indirecte:
+- "la piscine est en vidange / fermee / inaccessible" -> memory_actions=[record_availability window_text="piscine indisponible (vidange/fermeture)", availability=unavailable, confidence moderate, evidence="user mentionne piscine inaccessible"]. Ajoute un plan_patch si une seance nage est touchee cette semaine.
+- "j'ai pas pu nager, piscine etait fermee" -> meme memory_action + execution_actions si seance nage prevue manquee.
+- "je voyage de mardi a vendredi" -> memory_actions=[record_availability window_text="voyage mardi-vendredi", availability=limited, starts_on/ends_on si dates inferable] + plan_patch si seances touchees.
+- "j'ai mal au dos depuis quelques jours" -> memory_actions=[record_health_signal health_signal="douleur dos", status=ongoing, confidence elevee].
+- "je prefere courir le matin" -> memory_actions=[record_preference preference="courir le matin", polarity=prefer, confidence moderate].
+- user explique pourquoi une seance a saute en mentionnant un fait stable -> capture le fait ET l'execution, pas juste l'execution.
+
 Pour une action planning, privilegie `response_type="plan_patch"`:
 plan_patch = {{
   "coach_message": "message court",
