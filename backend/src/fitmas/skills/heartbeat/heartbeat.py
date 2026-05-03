@@ -20,7 +20,7 @@ from datetime import timedelta, timezone as dt_timezone
 
 from sqlalchemy.orm import Session
 
-from fitmas import repository as repo, schema as s
+from fitmas import coach_voice, repository as repo, schema as s
 from fitmas.activity_helpers import (
     activities_last_days as _activities_last_days,
     activities_on_local_date as _activities_on_local_date,
@@ -67,8 +67,24 @@ def _reserve_module_guard(user_id: int, *, now=None) -> None:
     heartbeat_evaluation.reserve_module_guard(user_id, now=now)
 
 
-def _llm_generate(system: str, prompt: str, *, allow_no_send: bool = True) -> str | None:
-    return generate_heartbeat_text(system, prompt, allow_no_send=allow_no_send)
+def _llm_generate(
+    system: str,
+    prompt: str,
+    *,
+    allow_no_send: bool = True,
+    pipeline: str = "heartbeat",
+) -> str | None:
+    text = generate_heartbeat_text(system, prompt, allow_no_send=allow_no_send)
+    # Chantier 1 - Etape D : log-only receipt-style detection sur les outputs
+    # heartbeat (briefing / reminder / review / signal). Permet de mesurer le
+    # taux de violation par pipeline avant de promouvoir en hard guard.
+    if text and coach_voice.message_looks_receipt_style(text):
+        logger.warning(
+            "coach_voice.receipt_style pipeline=%s message=%r",
+            pipeline,
+            text[:160],
+        )
+    return text
 
 
 # ---------------------------------------------------------------------------
@@ -188,7 +204,7 @@ def morning_briefing() -> CoachDraft | None:
             pending_open_question=_pending_open_question_for_user(db, user),
         )
 
-        llm_msg = _llm_generate(system, prompt)
+        llm_msg = _llm_generate(system, prompt, pipeline="heartbeat_briefing")
         if llm_msg:
             memory_updates = []
             if effective_calibration_need is not None and looks_like_clarification_message(llm_msg):
@@ -274,7 +290,7 @@ def pre_session_reminder() -> CoachDraft | None:
             calibration_need=calibration_need,
         )
 
-        llm_msg = _llm_generate(system, prompt)
+        llm_msg = _llm_generate(system, prompt, pipeline="heartbeat_reminder")
         if llm_msg:
             memory_updates = []
             if calibration_need is not None and looks_like_clarification_message(llm_msg):
@@ -386,7 +402,7 @@ def weekly_review() -> CoachDraft | None:
             digest=digest,
         )
 
-        llm_msg = _llm_generate(system, prompt, allow_no_send=False)
+        llm_msg = _llm_generate(system, prompt, allow_no_send=False, pipeline="heartbeat_review")
         if llm_msg:
             return CoachDraft(text=llm_msg, proactive=True)
 
@@ -448,7 +464,7 @@ def signal_check() -> CoachDraft | None:
             facts_block=format_active_facts_for_prompt(db, user),
         )
 
-        llm_msg = _llm_generate(system, prompt)
+        llm_msg = _llm_generate(system, prompt, pipeline="heartbeat_signal")
         if llm_msg:
             return CoachDraft(text=llm_msg, proactive=True)
 

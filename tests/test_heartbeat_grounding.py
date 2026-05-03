@@ -87,7 +87,7 @@ class HeartbeatGroundingTest(unittest.TestCase):
         captured: dict[str, str] = {}
         original_llm = heartbeat._llm_generate
         try:
-            def fake_llm(system: str, prompt: str, *, allow_no_send: bool = True):
+            def fake_llm(system: str, prompt: str, *, allow_no_send: bool = True, **_kwargs):
                 captured["prompt"] = prompt
                 return "ok"
 
@@ -168,7 +168,7 @@ class HeartbeatGroundingTest(unittest.TestCase):
         captured: dict[str, str] = {}
         original_llm = heartbeat._llm_generate
         try:
-            def fake_llm(system: str, prompt: str, *, allow_no_send: bool = True):
+            def fake_llm(system: str, prompt: str, *, allow_no_send: bool = True, **_kwargs):
                 captured["prompt"] = prompt
                 return "ok"
 
@@ -245,7 +245,7 @@ class HeartbeatGroundingTest(unittest.TestCase):
         captured: dict[str, str] = {}
         original_llm = heartbeat._llm_generate
         try:
-            def fake_llm(system: str, prompt: str, *, allow_no_send: bool = True):
+            def fake_llm(system: str, prompt: str, *, allow_no_send: bool = True, **_kwargs):
                 captured["prompt"] = prompt
                 return "ok"
 
@@ -307,7 +307,7 @@ class HeartbeatGroundingTest(unittest.TestCase):
         captured: dict[str, str] = {}
         original_llm = heartbeat._llm_generate
         try:
-            def fake_llm(system: str, prompt: str, *, allow_no_send: bool = True):
+            def fake_llm(system: str, prompt: str, *, allow_no_send: bool = True, **_kwargs):
                 captured["prompt"] = prompt
                 return "ok"
 
@@ -414,7 +414,7 @@ class HeartbeatGroundingTest(unittest.TestCase):
         captured: dict[str, str] = {}
         original_llm = heartbeat._llm_generate
         try:
-            def fake_llm(system: str, prompt: str, *, allow_no_send: bool = True):
+            def fake_llm(system: str, prompt: str, *, allow_no_send: bool = True, **_kwargs):
                 captured["prompt"] = prompt
                 return "ok"
 
@@ -543,7 +543,7 @@ class HeartbeatGroundingTest(unittest.TestCase):
         captured: dict[str, str] = {}
         original_llm = heartbeat._llm_generate
         try:
-            def fake_llm(system: str, prompt: str, *, allow_no_send: bool = True):
+            def fake_llm(system: str, prompt: str, *, allow_no_send: bool = True, **_kwargs):
                 captured["system"] = system
                 return "ok"
 
@@ -583,7 +583,7 @@ class HeartbeatGroundingTest(unittest.TestCase):
         captured: dict[str, str] = {}
         original_llm = heartbeat._llm_generate
         try:
-            def fake_llm(system: str, prompt: str, *, allow_no_send: bool = True):
+            def fake_llm(system: str, prompt: str, *, allow_no_send: bool = True, **_kwargs):
                 captured["system"] = system
                 captured["prompt"] = prompt
                 return "ok"
@@ -645,7 +645,7 @@ class HeartbeatGroundingTest(unittest.TestCase):
         captured: dict[str, str] = {}
         original_llm = heartbeat._llm_generate
         try:
-            def fake_llm(system: str, prompt: str, *, allow_no_send: bool = True):
+            def fake_llm(system: str, prompt: str, *, allow_no_send: bool = True, **_kwargs):
                 captured["prompt"] = prompt
                 return "ok"
 
@@ -705,7 +705,7 @@ class HeartbeatGroundingTest(unittest.TestCase):
         captured: dict[str, str] = {}
         original_llm = heartbeat._llm_generate
         try:
-            def fake_llm(system: str, prompt: str, *, allow_no_send: bool = True):
+            def fake_llm(system: str, prompt: str, *, allow_no_send: bool = True, **_kwargs):
                 captured["system"] = system
                 captured["prompt"] = prompt
                 return "ok"
@@ -767,7 +767,7 @@ class HeartbeatGroundingTest(unittest.TestCase):
         captured: dict[str, str] = {}
         original_llm = heartbeat._llm_generate
         try:
-            def fake_llm(system: str, prompt: str, *, allow_no_send: bool = True):
+            def fake_llm(system: str, prompt: str, *, allow_no_send: bool = True, **_kwargs):
                 captured["prompt"] = prompt
                 return "ok"
 
@@ -834,7 +834,7 @@ class HeartbeatGroundingTest(unittest.TestCase):
         captured: dict[str, str] = {}
         original_llm = heartbeat._llm_generate
         try:
-            def fake_llm(system: str, prompt: str, *, allow_no_send: bool = True):
+            def fake_llm(system: str, prompt: str, *, allow_no_send: bool = True, **_kwargs):
                 captured["prompt"] = prompt
                 return "ok"
 
@@ -856,7 +856,7 @@ class HeartbeatGroundingTest(unittest.TestCase):
         captured: dict[str, str] = {}
         original_llm = heartbeat._llm_generate
         try:
-            def fake_llm(system: str, prompt: str, *, allow_no_send: bool = True):
+            def fake_llm(system: str, prompt: str, *, allow_no_send: bool = True, **_kwargs):
                 captured["prompt"] = prompt
                 return "ok"
 
@@ -881,7 +881,7 @@ class HeartbeatGroundingTest(unittest.TestCase):
         captured: dict[str, str] = {}
         original_llm = heartbeat._llm_generate
         try:
-            def fake_llm(system: str, prompt: str, *, allow_no_send: bool = True):
+            def fake_llm(system: str, prompt: str, *, allow_no_send: bool = True, **_kwargs):
                 captured["prompt"] = prompt
                 return "ok"
 
@@ -945,7 +945,7 @@ class HeartbeatGroundingTest(unittest.TestCase):
         captured: dict[str, str] = {}
         original_llm = heartbeat._llm_generate
         try:
-            def fake_llm(system: str, prompt: str, *, allow_no_send: bool = True):
+            def fake_llm(system: str, prompt: str, *, allow_no_send: bool = True, **_kwargs):
                 captured["prompt"] = prompt
                 return "ok"
 
@@ -1010,7 +1010,7 @@ class HeartbeatGroundingTest(unittest.TestCase):
         captured: dict[str, str] = {}
         original_llm = heartbeat._llm_generate
         try:
-            def fake_llm(system: str, prompt: str, *, allow_no_send: bool = True):
+            def fake_llm(system: str, prompt: str, *, allow_no_send: bool = True, **_kwargs):
                 captured["system"] = system
                 captured["prompt"] = prompt
                 return "ok"
@@ -1048,7 +1048,7 @@ class HeartbeatGroundingTest(unittest.TestCase):
         captured: dict[str, str] = {}
         original_llm = heartbeat._llm_generate
         try:
-            def fake_llm(system: str, prompt: str, *, allow_no_send: bool = True):
+            def fake_llm(system: str, prompt: str, *, allow_no_send: bool = True, **_kwargs):
                 captured["prompt"] = prompt
                 return "ok"
 
@@ -1087,7 +1087,7 @@ class HeartbeatGroundingTest(unittest.TestCase):
         captured: dict[str, str] = {}
         original_llm = heartbeat._llm_generate
         try:
-            def fake_llm(system: str, prompt: str, *, allow_no_send: bool = True):
+            def fake_llm(system: str, prompt: str, *, allow_no_send: bool = True, **_kwargs):
                 captured["prompt"] = prompt
                 return "ok"
 

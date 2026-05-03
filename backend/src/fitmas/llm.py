@@ -9,7 +9,7 @@ from time import perf_counter
 from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
-from fitmas import llm_gateway as gw
+from fitmas import coach_voice, llm_gateway as gw
 from fitmas.conversation_prompting import select_conversation_prompt_policy
 from fitmas.fact_memory import normalize_fact_payload as normalize_fact_memory_payload
 from fitmas.fact_memory import select_relevant_facts
@@ -907,41 +907,13 @@ def _looks_truncated_fitmas_message(message: str) -> bool:
     return False
 
 
-def _message_violates_coach_voice(message: str) -> bool:
-    normalized = _normalize_for_guard(message)
-    padded = f" {normalized} "
-    return (
-        " vos " in padded
-        or " votre " in padded
-        or padded.startswith(" le coach ")
-        or " le coach te " in padded
-        or " le coach vous " in padded
-    )
-
-
-_RECEIPT_PATTERNS = (
-    re.compile(r"^\s*(swap|mutation|operation|plan|action|changement)\s+applique"),
-    re.compile(r"^\s*plan\s+modifie\b"),
-    re.compile(r"^\s*mutation\s+(enregistree|effectuee)"),
-    re.compile(r"^\s*operation\s+effectuee"),
-    re.compile(r"\bj['\s]?ai bien (deplace|echange|modifie|enregistre|applique)\b"),
-    re.compile(r"\bton coach a (ajuste|modifie|deplace)\b"),
-)
-
-
-def _message_looks_receipt_style(message: str) -> bool:
-    """Detect bot/receipt-style replies. Log-only, does not invalidate.
-
-    Used to measure voice quality post-Phase-1 prompt update without blocking
-    decisions. Promote to hard guard once dogfood confirms low false-positive."""
-    normalized = _normalize_for_guard(message)
-    return any(p.search(normalized) for p in _RECEIPT_PATTERNS)
-
-
-def _normalize_for_guard(value: str) -> str:
-    normalized = unicodedata.normalize("NFKD", value)
-    ascii_value = normalized.encode("ascii", "ignore").decode("ascii")
-    return re.sub(r"\s+", " ", ascii_value.lower().replace("'", " ")).strip()
+# Voice guards (`message_violates_coach_voice`, `message_looks_receipt_style`,
+# `normalize_for_voice_guard`) live in `coach_voice` since Chantier 1 — Étape D.
+# This module just re-exports them under their legacy private names for callers
+# inside this file; new code should import from `fitmas.coach_voice` directly.
+_message_violates_coach_voice = coach_voice.message_violates_coach_voice
+_message_looks_receipt_style = coach_voice.message_looks_receipt_style
+_normalize_for_guard = coach_voice.normalize_for_voice_guard
 
 
 _last_invalid_decision_payload: dict[str, Any] | None = None
