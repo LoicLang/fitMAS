@@ -312,6 +312,8 @@ Note DeepSeek 3 mai 2026 :
 - DeepSeek Anthropic API supporte `tools`, `tool_use`, `tool_result`; `disable_parallel_tool_use` est ignore, donc FitMAS doit accepter plusieurs tool calls en un tour.
 - FitMAS desactive `thinking` par defaut sur DeepSeek. Si thinking est reactive, les blocs assistant `thinking` sont preserves dans le replay de tool loop pour respecter la contrainte DeepSeek de renvoyer le contenu assistant complet entre tool calls.
 - En smoke reel, DeepSeek peut encore tenter de repartir en prose / syntaxe tool texte apres plusieurs rounds. Le backend garde donc une instruction JSON terminale stricte et une repair qui recoit les payloads tools compacts.
+- Micro-chantier experimental : `FITMAS_DEEPSEEK_TOOL_THINKING=1` active `thinking={"type":"enabled"}` uniquement sur la boucle tools conversation. `FITMAS_DEEPSEEK_TOOL_THINKING_EFFORT=high|max` pilote `output_config.effort`. Par defaut, rien ne change.
+- Smoke reel du 3 mai 2026 : `thinking=high` ameliore parfois la prudence factuelle mais augmente fortement la latence sur les tours planning (30-56s observes) et ne supprime pas les repairs JSON. Garder en flag de bench, pas en defaut Telegram.
 
 Mise a jour 24 avril 2026 :
 

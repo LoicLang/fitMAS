@@ -283,6 +283,28 @@ class LLMGatewayProviderTest(unittest.TestCase):
 
         self.assertEqual(calls[0]["thinking"], {"type": "disabled"})
 
+    def test_request_message_can_enable_deepseek_thinking_with_effort(self) -> None:
+        calls: list[dict[str, object]] = []
+
+        class FakeMessages:
+            def create(self, **kwargs):
+                calls.append(kwargs)
+                return _fake_text_response("ok")
+
+        fake_client = SimpleNamespace(messages=FakeMessages())
+
+        with patch.object(gw, "client", lambda: fake_client):
+            with patch.dict(os.environ, {"DEEPSEEK_API_KEY": "sk-ds-test"}, clear=True):
+                gw.request_message(
+                    system="system",
+                    messages=[{"role": "user", "content": "hello"}],
+                    thinking={"type": "enabled"},
+                    output_config={"effort": "high"},
+                )
+
+        self.assertEqual(calls[0]["thinking"], {"type": "enabled"})
+        self.assertEqual(calls[0]["output_config"], {"effort": "high"})
+
     def test_serialize_content_blocks_preserves_deepseek_thinking_blocks(self) -> None:
         blocks = [
             SimpleNamespace(type="thinking", thinking="Je dois lire le planning.", signature="sig_123"),

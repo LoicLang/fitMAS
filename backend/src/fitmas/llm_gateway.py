@@ -118,6 +118,7 @@ def request_message(
     tool_choice: dict[str, Any] | None = None,
     cache_control: dict[str, Any] | None = None,
     thinking: dict[str, Any] | None = None,
+    output_config: dict[str, Any] | None = None,
 ):
     """Send a message to the Anthropic API. Returns response or None."""
     c = client()
@@ -140,6 +141,8 @@ def request_message(
             kwargs["thinking"] = thinking
         elif _using_deepseek():
             kwargs["thinking"] = {"type": "disabled"}
+        if output_config is not None:
+            kwargs["output_config"] = output_config
         return c.messages.create(**kwargs)
     except Exception:
         logger.exception("LLM message call failed")

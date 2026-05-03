@@ -301,11 +301,13 @@ def _request_message(
     max_tokens: int = 512,
     tools: list[dict[str, Any]] | None = None,
     tool_choice: dict[str, Any] | None = None,
+    thinking: dict[str, Any] | None = None,
+    output_config: dict[str, Any] | None = None,
 ):
     """Send message — delegates to gateway. Tests monkey-patch this function."""
     return gw.request_message(
         system=system, messages=messages, model=model, max_tokens=max_tokens,
-        tools=tools, tool_choice=tool_choice,
+        tools=tools, tool_choice=tool_choice, thinking=thinking, output_config=output_config,
     )
 
 
@@ -1030,6 +1032,21 @@ def _tool_budget_for_context(tool_context: ToolContext | None) -> tuple[str, ...
     return ()
 
 
+def _deepseek_tool_thinking_kwargs() -> dict[str, dict[str, str]]:
+    if not os.getenv("DEEPSEEK_API_KEY"):
+        return {}
+    raw_enabled = str(os.getenv("FITMAS_DEEPSEEK_TOOL_THINKING") or "").strip().lower()
+    if raw_enabled not in {"1", "true", "yes", "on", "enabled"}:
+        return {}
+    effort = str(os.getenv("FITMAS_DEEPSEEK_TOOL_THINKING_EFFORT") or "high").strip().lower()
+    if effort not in {"high", "max"}:
+        effort = "high"
+    return {
+        "thinking": {"type": "enabled"},
+        "output_config": {"effort": effort},
+    }
+
+
 def _request_json_with_tools(
     *,
     system: str,
@@ -1062,6 +1079,7 @@ def _request_json_with_tools(
         max_tokens=max_tokens,
         tools=tools,
         tool_choice={"type": "auto"},
+        **_deepseek_tool_thinking_kwargs(),
     )
     if response is None:
         _log_tool_session_trace(
@@ -1175,6 +1193,7 @@ def _request_json_with_tools(
             max_tokens=max_tokens,
             tools=tools if allow_more_tools else None,
             tool_choice={"type": "auto"} if allow_more_tools else None,
+            **_deepseek_tool_thinking_kwargs(),
         )
         round_trips += 1
         if response is None:

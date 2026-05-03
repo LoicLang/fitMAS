@@ -698,6 +698,86 @@ class LLMToolsTest(unittest.TestCase):
         self.assertEqual(executed_batches, [["get_plan_window"], ["validate_plan_patch"]])
         self.assertEqual(tool_result_ids_by_round, [["toolu_1"], ["toolu_2"]])
 
+    def test_tool_loop_can_enable_deepseek_thinking_experiment(self) -> None:
+        original_client = llm._client
+        original_request_message = llm._request_message
+        original_execute_tool_calls = llm.execute_tool_calls
+        original_log_tool_trace = llm.log_tool_trace
+        thinking_calls: list[tuple[object, object]] = []
+
+        def fake_request_message(
+            *,
+            system,
+            messages,
+            model="claude-haiku-4-5-20251001",
+            max_tokens=512,
+            tools=None,
+            tool_choice=None,
+            thinking=None,
+            output_config=None,
+        ):
+            thinking_calls.append((thinking, output_config))
+            if len(thinking_calls) == 1:
+                return SimpleNamespace(
+                    stop_reason="tool_use",
+                    content=[SimpleNamespace(type="tool_use", id="toolu_1", name="get_plan_window", input={})],
+                    usage=SimpleNamespace(input_tokens=120, output_tokens=32),
+                )
+            return SimpleNamespace(
+                stop_reason="end_turn",
+                content=[
+                    SimpleNamespace(
+                        type="text",
+                        text='{"response_type":"no_change","rationale":"lecture outillee","fitmas_message":"Je relis avant de toucher au plan."}',
+                    )
+                ],
+                usage=SimpleNamespace(input_tokens=180, output_tokens=48),
+            )
+
+        def fake_execute_tool_calls(calls, *, context, **kwargs):
+            return [
+                SimpleNamespace(
+                    result=ToolResult(tool_name="get_plan_window", status="ok", payload={}, summary="Plan lu."),
+                    trace=SimpleNamespace(tool_success=True, tool_called=True, tool_latency_ms=1),
+                )
+            ]
+
+        llm._client = lambda: object()
+        llm._request_message = fake_request_message
+        llm.execute_tool_calls = fake_execute_tool_calls
+        llm.log_tool_trace = lambda trace: None
+        try:
+            with patch.dict(
+                "os.environ",
+                {
+                    "DEEPSEEK_API_KEY": "sk-ds-test",
+                    "FITMAS_DEEPSEEK_TOOL_THINKING": "1",
+                    "FITMAS_DEEPSEEK_TOOL_THINKING_EFFORT": "max",
+                },
+                clear=True,
+            ):
+                decision = llm.decide(
+                    "Je ne peux pas demain, relis avant d'adapter",
+                    "Repere",
+                    coach_context={"turn_primary_intent": "availability_constraint"},
+                    tool_context=ToolContext(
+                        pipeline="conversation",
+                        user_id=1,
+                        timezone_name="Europe/Paris",
+                        scheduled_sessions=[],
+                        activities=[],
+                        active_facts=[],
+                    ),
+                )
+        finally:
+            llm._client = original_client
+            llm._request_message = original_request_message
+            llm.execute_tool_calls = original_execute_tool_calls
+            llm.log_tool_trace = original_log_tool_trace
+
+        self.assertIsNotNone(decision)
+        self.assertEqual(thinking_calls, [({"type": "enabled"}, {"effort": "max"}), ({"type": "enabled"}, {"effort": "max"})])
+
     def test_decide_rejects_unknown_mutation_type_and_uses_structured_fallback(self) -> None:
         original_client = llm._client
         original_request_structured_json = llm._request_structured_json
