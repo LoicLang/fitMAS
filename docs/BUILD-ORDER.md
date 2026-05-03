@@ -53,6 +53,9 @@ L'audit declenche par cet incident a confirme 3 failles structurelles connexes :
 |---|---|---|---|
 | 0 | ✅ Fix TTL `_recent_proactive_context` (heartbeat) — shippe 2 mai 2026 | 1h | section ci-dessous |
 | 1 | ✅ Voix coach unifiee (module `coach_voice.py` partage tous pipelines) — shippe 3 mai 2026 | 1.5j | `docs/SOUL.md` section "Voix unifiee partagee" |
+| 1bis | ✅ Claim guard via LLM repair (plus de canned "Je n'ai applique aucun changement...") — shippe 3 mai 2026 | 2h | section ci-dessous |
+| 1ter | ✅ Capture indirecte de constraints dans le prompt conversation — shippe 3 mai 2026 | 1h | section ci-dessous |
+| - | ✅ Cleanup DB prod : 395 rows obsoletes purgees, memoire propre — 3 mai 2026 | 1h | section ci-dessous |
 | 2 | Truth source unifie runtime (cloture definitive Phase 3 coherence + tuer dual-write) | 4-5j | `docs/COACH-COHERENCE-REFACTOR.md` section "Plan 2 mai 2026" |
 | 3 | Tool-use loop unifie conversation + heartbeat (vraie boucle agentique multi-rounds, prose terminale, action-tools) | 6-7j | `docs/LLM-FIRST-CONVERSATION.md` section "Phase 5 - Tool-use loop unifie" |
 | 4 | Observabilite briefing (endpoint debug dump bundle + prompt + response) | 1j | section ci-dessous |
@@ -83,6 +86,61 @@ Bug isole au briefing matin (verifie : `_recent_proactive_context` est seulement
 A faire en suivi (audit similaire) :
 - recherche systematique des injections texte dans des prompts sans TTL (autres helpers `recent_*` / `pending_*` / `latest_*`)
 
+### Chantier 1bis — Claim guard via LLM repair ✅ shippe 3 mai 2026
+
+Symptome (3 mai dogfood Telegram) : conversation a affiche "Je n'ai applique aucun changement sur ce tour. Dis-moi explicitement ce que tu veux que je deplace, remplace ou liberes...". Receipt-style canned visible juste apres Chantier 1 voix unifiee — preuve que les regles voix dans le prompt ne suffisent pas si une template canned override la sortie LLM en aval.
+
+Cause exacte : `claim_guard.safe_rewrite_for_claim_without_mutation()` (`backend/src/fitmas/claim_guard.py`) retournait une chaine fixe quand `looks_like_action_claim(reply)` matchait sans qu'aucune mutation soit committee. La detection (anti-mensonge "dire = faire") est saine, l'implementation viole `LLM-FIRST-CONVERSATION` ("no helper produces a final conversational reply unless it is outage").
+
+Fix livre :
+- `claim_guard.build_claim_repair_prompt(original_reply, user_text)` construit un `(system, user_prompt)` pour repair LLM
+- `conversation_pipeline._llm_repair_claim_reply(...)` appelle `gw.request_text` + valide (non vide, longueur 5-500, plus de claim, pas de violation voix coach)
+- `claim_guard.outage_fallback_reply()` est la ligne minimale coach-voice pour le cas LLM down ("Vu — rien de bouge sur ce tour. Tu veux que je bouge quoi concretement ?") — JAMAIS la vieille canned
+- `safe_rewrite_for_claim_without_mutation` garde un alias compat qui delegue maintenant a `outage_fallback_reply`
+- Pipeline tracking : `response_mode="claim_without_mutation_repaired"` ou `"claim_without_mutation_outage_fallback"`
+
+Tests : `test_claim_without_mutation_is_repaired_via_llm` + `test_claim_without_mutation_falls_back_when_repair_fails` + `TestOutageFallback`. 583 tests verts.
+
+### Chantier 1ter — Capture indirecte de constraints ✅ shippe 3 mai 2026
+
+Symptome (3 mai dogfood) : user dit "la piscine c'est parce qu'elle etait en vidange" pour expliquer une nage manquee. Pas de `memory_actions=[record_availability]` emis — info perdue.
+
+Cause : Phase 2 capability (`memory_actions`) est branchee, mais les few-shots du prompt couvrent uniquement les annonces directes ("je peux pas nager 2 semaines"). Pas les mentions indirectes / explications.
+
+Fix livre dans `_CONVERSATION_SYSTEM_TEXT` :
+- Regle generale "capture meme en passant, meme pour expliquer le passe, mieux vaut faible confidence que perdre l'info"
+- 6 nouveaux few-shots couvrant : piscine vidange/fermee, explication seance manquee, voyage, douleur ongoing, preference, pattern explication via fait stable
+
+Tests : 82 conversation/contract/voice verts.
+
+### Cleanup DB prod ✅ 3 mai 2026
+
+Apres dogfood Telegram, 395 rows obsoletes purgees de la prod Fly :
+
+| Table | Avant | Apres | Supprime |
+|---|---|---|---|
+| `user_facts` | 104 | 34 | 70 (expires < now OR time-sensitive >14d) |
+| `working_memory_entries` | 50 | 11 | 39 (>7d) |
+| `conversation_turns` | 72 | 20 | 52 (>7d, legacy pre-step) |
+| `coach_messages` | 299 | 67 | 232 (>14d) |
+| `pending_mutation_confirmations` | 2 | 0 | 2 (status != pending) |
+
+Espace : 1560 KB -> 804 KB (754 KB reclaim, ~50%). VACUUM execute.
+
+Touche a zero (par doctrine) : `plan_mutation_events` (audit forward-only), `activities`, `scheduled_sessions`, `snapshots`, `strava_connections`, `day_plans`, `weekly_plans`.
+
+Effet : la mémoire repart propre. Plus d'observations one-shot mars/avril traitees comme patterns persistants. Plus de fact "dispersion IA" qui injectait "Avec l'energie que tu mets sur l'IA" off-tone.
+
+Cleanup principles applied :
+- **Time-sensitive facts** (constraint, execution, fatigue, health, availability, pattern) : purge si > 14j OU expires_at < now
+- **Identity / coaching style** (coaching, preference) : keep durables, purge uniquement si explicitement expires
+- **Working memory** : > 7j (court terme par contrat)
+- **Conversation turns** : > 7j (legacy)
+- **Coach messages** : > 14j (history_limit prend le recent)
+- **Pending confirmations** : drop tout sauf `status='pending'`
+
+A ré-appliquer périodiquement en mode "garbage collect prod" — peut etre un cron mensuel automatise (chantier futur si dogfood le justifie).
+
 ### Chantier 4 — Observabilite briefing
 
 Endpoint debug `POST /api/v0/debug/heartbeat/morning?dump=true` qui retourne :
@@ -100,10 +158,11 @@ Tests : un debug endpoint ne devrait pas etre actif en prod par defaut (deja la 
 ### Ordre propose
 
 1. ~~**Maintenant** : Chantier 0~~ ✅ shippe 2 mai 2026
-2. ~~**Cette semaine** : Chantier 1~~ ✅ shippe 3 mai 2026 — voix coach unifiee tous pipelines (briefing matin inclus)
-3. **Decision a prendre** : Chantier 2 avant ou apres Chantier 3 ? Reco = **avant** (truth source d'abord, tool-use loop construit dessus, et c'est aussi prerequis Phase A+). Mais 4-5j sans feature visible.
-4. **En parallele** : Chantier 4 (1j) pose pour le futur, peut s'attaquer en marge de 2 ou 3
-5. **Apres Chantier 3** : Phase A+ Weekly Coherence Review (3-4j) — l'apport produit le plus visible, transforme le coach reactif local en coach strategique week-level
+2. ~~**Cette semaine** : Chantier 1~~ ✅ shippe 3 mai 2026 — voix coach unifiee tous pipelines (+ 1bis claim_guard repair + 1ter capture indirecte + cleanup DB prod)
+3. **Dogfood 24-48h** : valider voix unifiee + DB propre sur Telegram avant gros chantier. Surveiller logs `coach_voice.receipt_style pipeline=*` et `claim_repair_*`.
+4. **Decision a prendre** : Chantier 2 avant ou apres Chantier 3 ? Reco = **avant** (truth source d'abord, tool-use loop construit dessus, et c'est aussi prerequis Phase A+). Mais 4-5j sans feature visible.
+5. **En parallele** : Chantier 4 (1j) pose pour le futur, peut s'attaquer en marge de 2 ou 3
+6. **Apres Chantier 3** : Phase A+ Weekly Coherence Review (3-4j) — l'apport produit le plus visible, transforme le coach reactif local en coach strategique week-level
 
 ### Phase A — etat apres chantiers 0+1+2
 

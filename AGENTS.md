@@ -47,6 +47,9 @@ Phase A status (2 mai 2026):
 - 🔥 Open chantiers (planning hallucination factuelle briefing 2 mai a confirmé 3 dettes structurelles) :
   - ✅ **Chantier 0** TTL `_recent_proactive_context` (heartbeat) — shippé 2 mai 2026 (TTL 48h, 6 tests)
   - ✅ **Chantier 1** voix coach unifiée module `coach_voice.py` partagé tous pipelines (conversation + briefing + reminder + review + signal) — shippé 3 mai 2026 (5 commits atomiques étapes A-E)
+  - ✅ **Chantier 1bis** claim_guard via LLM repair (suppression canned "Je n'ai applique aucun changement...") — shippé 3 mai 2026
+  - ✅ **Chantier 1ter** capture indirecte de constraints (piscine vidange, voyage, douleur ongoing) — shippé 3 mai 2026
+  - ✅ **Cleanup DB prod** 395 rows obsoletes purgees (memoire repart propre) — 3 mai 2026
   - **Chantier 2** truth source unifie runtime — kill dual-write `plan_actions.py` + refactor `signals.py` — `docs/COACH-COHERENCE-REFACTOR.md`
   - **Chantier 3** tool-use loop unifie conversation + heartbeat — `docs/LLM-FIRST-CONVERSATION.md`
   - **Chantier 4** observabilite briefing (debug endpoint dump)

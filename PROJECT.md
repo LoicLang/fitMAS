@@ -35,6 +35,9 @@ La vérité "état réel + suite" vit dans `docs/BUILD-ORDER.md`.
 Chantiers en cours (suite incident hallucination factuelle briefing 2 mai) :
 - ✅ **Chantier 0** — TTL `_recent_proactive_context` (heartbeat) — shippé 2 mai 2026 — fix hallucination + 6 tests
 - ✅ **Chantier 1** — Voix coach unifiée `coach_voice.py` partagée tous pipelines (conversation + briefing + reminder + review + signal) — shippé 3 mai 2026 — 5 commits atomiques (étapes A-E), 36 tests nouveaux
+- ✅ **Chantier 1bis** — claim_guard via LLM repair (plus de canned "Je n'ai applique aucun changement...") — shippé 3 mai 2026
+- ✅ **Chantier 1ter** — Capture indirecte de constraints dans le prompt conversation (piscine vidange, voyage, douleur ongoing) — shippé 3 mai 2026
+- ✅ **Cleanup DB prod** — 395 rows obsolètes purgées, mémoire repart propre — 3 mai 2026
 - **Chantier 2** — Truth source unifié runtime (4-5j) — clôture définitive Phase 3 cohérence + tuer dual-write — `docs/COACH-COHERENCE-REFACTOR.md`
 - **Chantier 3** — Tool-use loop unifié conversation + heartbeat (6-7j) — vraie boucle agentique multi-rounds, prose terminale — `docs/LLM-FIRST-CONVERSATION.md`
 - **Chantier 4** — Observabilité briefing (1j) — endpoint debug dump bundle + prompt + response

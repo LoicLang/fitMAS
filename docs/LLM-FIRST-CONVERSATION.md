@@ -174,6 +174,16 @@ reply LLM + events appliques
 
 Il ne doit plus produire de phrase canned comme reponse utilisateur normale.
 
+### Etat 3 mai 2026 — Chantier 1bis livre
+
+Avant 3 mai 2026 : `claim_guard.safe_rewrite_for_claim_without_mutation()` retournait une chaine fixe doctrine-violante ("Je n'ai applique aucun changement sur ce tour. Dis-moi explicitement ce que tu veux que je deplace, remplace ou liberes..."). Cette template a ete observee en prod le 3 mai et fixee dans la foulee.
+
+Apres Chantier 1bis :
+- `build_claim_repair_prompt(original_reply, user_text)` construit un repair prompt LLM avec voix coach + interdiction explicite de re-emettre la canned
+- Pipeline `_llm_repair_claim_reply` appelle `gw.request_text` + valide (non vide, longueur 5-500, plus de claim, pas de violation voix)
+- `outage_fallback_reply()` est l'outage minimal coach-voice (pas la vieille template) : "Vu — rien de bouge sur ce tour. Tu veux que je bouge quoi concretement ?"
+- Telemetrie : `response_mode="claim_without_mutation_repaired"` ou `"claim_without_mutation_outage_fallback"`
+
 ## Plan de migration
 
 ### Phase 0 - Stopper les degats
