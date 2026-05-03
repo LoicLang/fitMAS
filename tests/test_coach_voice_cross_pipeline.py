@@ -142,5 +142,36 @@ class ReceiptDetectorRegressionTest(unittest.TestCase):
             )
 
 
+class HeartbeatReadOnlyCommitClaimGuardTest(unittest.TestCase):
+    """Heartbeat read-only ne doit pas parler comme s'il commitait."""
+
+    def test_readonly_commit_claims_are_detected(self) -> None:
+        cases = [
+            "On verrouille ca : mardi 30min Z2.",
+            "Je pose mardi en Z2.",
+            "Je mets le renfo jeudi.",
+            "C'est cale pour vendredi.",
+            "C'est pose.",
+            "Je deplace la seance a mercredi.",
+        ]
+        for msg in cases:
+            self.assertTrue(
+                coach_voice.message_claims_readonly_commit(msg),
+                msg=f"Commit claim non detecte: {msg!r}",
+            )
+
+    def test_readonly_suggestions_are_allowed(self) -> None:
+        ok = [
+            "Je te proposerais de verrouiller mardi en Z2 si tu confirmes.",
+            "Je peux poser mardi en Z2 si tu veux.",
+            "On peut caler vendredi, mais je veux ton feu vert.",
+        ]
+        for msg in ok:
+            self.assertFalse(
+                coach_voice.message_claims_readonly_commit(msg),
+                msg=f"Suggestion detectee a tort: {msg!r}",
+            )
+
+
 if __name__ == "__main__":
     unittest.main()

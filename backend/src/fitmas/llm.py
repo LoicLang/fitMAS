@@ -825,11 +825,17 @@ def _message_claims_execution_receipt_without_action(message: str, *, rationale:
     if not any(marker in normalized for marker in ("hier", "seance d hier", "seance dhier")):
         return False
     receipt_markers = (
+        "vu pour",
         "c est note",
         "vu pour hier",
         "note pour hier",
         "bien note",
         "je note",
+        "renfo manque",
+        "seance manque",
+        "session manque",
+        "seance saute",
+        "session saute",
         "non fait",
         "ne pas avoir fait",
         "pas avoir fait",

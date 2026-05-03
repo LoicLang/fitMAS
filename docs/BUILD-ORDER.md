@@ -56,6 +56,7 @@ L'audit declenche par cet incident a confirme 3 failles structurelles connexes :
 | 1bis | ✅ Claim guard via LLM repair (plus de canned "Je n'ai applique aucun changement...") — shippe 3 mai 2026 | 2h | section ci-dessous |
 | 1ter | ✅ Capture indirecte de constraints dans le prompt conversation — shippe 3 mai 2026 | 1h | section ci-dessous |
 | - | ✅ Cleanup DB prod : 395 rows obsoletes purgees, memoire propre — 3 mai 2026 | 1h | section ci-dessous |
+| 1quater | ✅ Coach reliability slice 0 — final reply composer + guards backend/heartbeat + execution receipt hardening — shippe 3 mai 2026 | 1j | `docs/COACH-RELIABILITY-REFACTOR.md` |
 | 2 | Truth source unifie runtime (cloture definitive Phase 3 coherence + tuer dual-write) | 4-5j | `docs/COACH-COHERENCE-REFACTOR.md` section "Plan 2 mai 2026" |
 | 3 | Tool-use loop unifie conversation + heartbeat (vraie boucle agentique multi-rounds, prose terminale, action-tools) | 6-7j | `docs/LLM-FIRST-CONVERSATION.md` section "Phase 5 - Tool-use loop unifie" |
 | 4 | Observabilite briefing (endpoint debug dump bundle + prompt + response) | 1j | section ci-dessous |
@@ -140,6 +141,38 @@ Cleanup principles applied :
 - **Pending confirmations** : drop tout sauf `status='pending'`
 
 A ré-appliquer périodiquement en mode "garbage collect prod" — peut etre un cron mensuel automatise (chantier futur si dogfood le justifie).
+
+### Chantier 1quater — Coach reliability slice 0 ✅ shippe 3 mai 2026
+
+Symptome : le coach est inutilisable en dogfood quand il combine faits fragiles,
+recadrage trop assure et templates backend visibles. La correction `claim_guard`
+a retire la vieille phrase "Je n'ai applique aucun changement...", mais la meme
+classe reste presente dans les blocages planning, confirmations et heartbeat
+read-only qui parle comme s'il pouvait commit.
+
+Direction : **le backend garde validation / block / commit / audit, mais ne
+parle plus coach en chemin normal**.
+
+Scope immediat :
+- ✅ creer un `FinalReplyContext` mince pour les chemins bloque / confirmation ;
+- ✅ composer la phrase finale par LLM a partir du resultat reel ;
+- ✅ garder un fallback outage minimal si composer impossible ;
+- ✅ interdire au heartbeat read-only de dire "on verrouille", "je pose",
+  "c'est cale", "je deplace" sans event reel ;
+- ✅ tests anti-template et anti-fake-commit ;
+- ✅ hardening execution receipt : une reply LLM qui reconnait une seance manquee
+  hier sans `execution_actions` est invalidee/reparee au lieu d'etre acceptee.
+
+Verification locale :
+- `./scripts/test-backend -q` : 600 passed, 11 skipped, 6 subtests passed
+- `./scripts/smoke-real-conversations --scenario heartbeat_non_completion` :
+  seance renfo J-1 marquee `skipped` via `execution_actions`
+- `./scripts/smoke-real-conversations --scenario golden_case_autonomy` : passe
+
+Hors scope :
+- pas de write tools natifs ;
+- pas de Phase B ;
+- pas d'allegement massif du prompt voix avant prose finale stable.
 
 ### Chantier 4 — Observabilite briefing
 

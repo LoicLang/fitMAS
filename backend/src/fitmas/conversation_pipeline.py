@@ -5,7 +5,7 @@ from typing import Any
 
 from sqlalchemy.orm import Session
 
-from fitmas import repository as repo
+from fitmas import final_reply, repository as repo
 from fitmas.adaptation_log import build_adaptation_log_entry
 from fitmas.calibration_llm import extract_calibration_resolution
 from fitmas import coach_voice
@@ -741,14 +741,14 @@ def _apply_pending_resolution(
         repo.resolve_pending_mutation_confirmation(db, pending_confirmation.id, status="rejected")
         return ConversationTurnOutcome(
             extraction=Extraction(confidence=0.85),
-            reply_text=str(getattr(decision, "fitmas_message", "") or "OK. Je ne touche pas au plan."),
+            reply_text=str(getattr(decision, "fitmas_message", "") or "Compris. Je garde la semaine comme elle est."),
             response_mode="pending_rejected",
             mutation_applied=False,
         )
     if resolution_type in {"modify_pending", "needs_clarification"}:
         return ConversationTurnOutcome(
             extraction=Extraction(confidence=0.85),
-            reply_text=str(getattr(decision, "fitmas_message", "") or "Je garde la confirmation en attente: precise ce que tu veux modifier."),
+            reply_text=str(getattr(decision, "fitmas_message", "") or "La proposition reste en attente. Dis-moi le changement concret et je reprends."),
             response_mode=f"pending_{resolution_type}",
             mutation_applied=False,
         )
@@ -843,23 +843,44 @@ def _applied_patch_summary(service_result: PlanPatchServiceResult | None, *, fal
     return " ".join(summaries) if summaries else fallback
 
 
+def _final_reply_context_for_plan_patch_block(
+    service_result: PlanPatchServiceResult | None,
+) -> final_reply.FinalReplyContext:
+    blocked_events: list[final_reply.BlockedEvent] = []
+    if service_result is not None:
+        for result in service_result.validation.operation_results:
+            if result.status == "valid":
+                continue
+            warning = result.warning_messages[0] if result.warning_messages else None
+            blocked_events.append(
+                final_reply.BlockedEvent(
+                    command=str(result.operation_type or "plan_patch"),
+                    reason=result.block_reason,
+                    suggested_fix=result.suggested_fix,
+                    warning=warning,
+                )
+            )
+    if not blocked_events:
+        blocked_events.append(
+            final_reply.BlockedEvent(
+                command="plan_patch",
+                reason="invalid_plan_patch" if service_result is not None else "composer_context_missing",
+            )
+        )
+    return final_reply.FinalReplyContext(
+        blocked_events=tuple(blocked_events),
+        allowed_to_claim_mutation=False,
+        pipeline="conversation",
+        pipeline_capability="can_confirm",
+    )
+
+
 def _blocked_plan_patch_reply(service_result: PlanPatchServiceResult | None) -> str:
-    if service_result is None:
-        return "Je ne l'ai pas applique: le patch planning est invalide."
-    validation = service_result.validation
-    first = validation.operation_results[0] if validation.operation_results else None
-    if first is not None:
-        if first.block_reason and first.block_reason in _BLOCK_REASON_REPLIES:
-            return _BLOCK_REASON_REPLIES[first.block_reason]
-        if first.warning_messages:
-            return f"Je ne l'ai pas applique: {first.warning_messages[0]}"
-        if first.suggested_fix:
-            return f"Je ne l'ai pas applique: {first.suggested_fix}"
-        if first.block_reason:
-            return f"Je ne l'ai pas applique: {first.block_reason}"
-    if validation.status == "requires_confirmation":
-        return "Je ne l'applique pas encore: ce changement demande une confirmation claire."
-    return "Je ne l'ai pas applique: le changement n'a pas ete valide par le planning."
+    context = _final_reply_context_for_plan_patch_block(service_result)
+    composed = final_reply.compose_final_reply(context)
+    if composed:
+        return composed
+    return final_reply.outage_fallback_reply(context)
 
 
 def _execution_applied_patch_blocked_reply(
@@ -917,7 +938,16 @@ def _plan_patch_confirmation_summary(service_result: PlanPatchServiceResult | No
 
 def _build_plan_patch_confirmation_prompt(service_result: PlanPatchServiceResult | None) -> str:
     summary = _plan_patch_confirmation_summary(service_result)
-    return f"Je peux le faire, mais ca demande confirmation: {summary}. Tu confirmes ? Reponds oui ou non."
+    context = final_reply.FinalReplyContext(
+        pending_summary=summary,
+        allowed_to_claim_mutation=False,
+        pipeline="conversation",
+        pipeline_capability="can_confirm",
+    )
+    composed = final_reply.compose_final_reply(context)
+    if composed:
+        return composed
+    return final_reply.outage_fallback_reply(context)
 
 
 def _log_plan_patch_blocked(service_result: PlanPatchServiceResult | None, *, user_id: int | None) -> None:
@@ -935,24 +965,6 @@ def _log_plan_patch_blocked(service_result: PlanPatchServiceResult | None, *, us
             result.target_session_id,
             list(result.warning_codes),
         )
-
-
-_BLOCK_REASON_REPLIES: dict[str, str] = {
-    "protected_recovery_target": (
-        "Je ne l'ai pas applique: le jour cible est une recuperation protegee, "
-        "je ne pose pas de seance dessus. Donne-moi un autre jour, ou precise "
-        "un swap (deux seances a echanger) et la recuperation migrera proprement."
-    ),
-    "same_sport_proximity": (
-        "Je ne l'ai pas applique: ca mettrait deux seances du meme sport/type "
-        "a moins de 48h, ce qui casse la recuperation. Propose-moi un jour "
-        "plus eloigne ou un autre sport sur ce creneau."
-    ),
-    "occupied_training_target": (
-        "Je ne l'ai pas applique: le jour cible a deja une vraie seance. "
-        "Si tu veux les echanger, dis-le explicitement et je fais un swap."
-    ),
-}
 
 
 def _blocked_mutation_reply(decision, service_result=None) -> str:
@@ -982,16 +994,28 @@ def _blocked_mutation_reply(decision, service_result=None) -> str:
             warnings = matching.warnings or ()
             warning_hint = warnings[0] if warnings else None
 
-    if block_reason and block_reason in _BLOCK_REASON_REPLIES:
-        return _BLOCK_REASON_REPLIES[block_reason]
-    if warning_hint:
-        return f"Je ne l'ai pas applique: {warning_hint}"
-    if getattr(decision, "mutation_type", "") == "move_session":
-        return (
-            "Je ne l'ai pas applique: le creneau cible n'est pas assez sur. "
-            "Si tu veux echanger deux seances, donne-moi les deux seances ou les deux jours."
-        )
-    return "Je ne l'ai pas applique: le changement n'a pas ete valide par le planning."
+    context = final_reply.FinalReplyContext(
+        original_llm_reply=str(getattr(decision, "fitmas_message", "") or ""),
+        blocked_events=(
+            final_reply.BlockedEvent(
+                command=str(getattr(decision, "mutation_type", "") or "mutation"),
+                reason=block_reason,
+                warning=warning_hint,
+            ),
+        ) if block_reason or warning_hint else (
+            final_reply.BlockedEvent(
+                command=str(getattr(decision, "mutation_type", "") or "mutation"),
+                reason="mutation_not_validated",
+            ),
+        ),
+        allowed_to_claim_mutation=False,
+        pipeline="conversation",
+        pipeline_capability="can_confirm",
+    )
+    composed = final_reply.compose_final_reply(context)
+    if composed:
+        return composed
+    return final_reply.outage_fallback_reply(context)
 
 
 def _latest_agent_text(conversation_history: list[dict]) -> str | None:

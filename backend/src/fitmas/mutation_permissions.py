@@ -140,16 +140,16 @@ def build_confirmation_prompt(
 ) -> str:
     return (
         f"Je peux le faire, mais ca change vraiment la semaine: {assessment.summary}. "
-        "Tu confirmes ? Reponds oui ou non."
+        "Tu confirmes ?"
     )
 
 
 def build_confirmation_followup() -> str:
-    return "J'ai une proposition en attente. Reponds juste oui ou non si tu veux que je l'applique."
+    return "J'ai une proposition en attente. Tu confirmes ou tu veux la modifier ?"
 
 
 def build_rejection_reply() -> str:
-    return "OK. Je ne touche pas au plan. On garde la semaine comme elle est."
+    return "Compris. Je garde la semaine comme elle est."
 
 
 def default_confirmation_expiry(*, now: datetime | None = None) -> datetime:

@@ -84,6 +84,13 @@ def _llm_generate(
             pipeline,
             text[:160],
         )
+    if text and pipeline.startswith("heartbeat") and coach_voice.message_claims_readonly_commit(text):
+        logger.warning(
+            "coach_voice.readonly_commit_claim pipeline=%s message=%r",
+            pipeline,
+            text[:160],
+        )
+        return None
     return text
 
 

@@ -102,6 +102,18 @@ class CoachDecisionActionsTest(unittest.TestCase):
 
         self.assertIsNone(decision)
 
+    def test_parse_coach_decision_rejects_missed_yesterday_reply_without_execution_action(self) -> None:
+        decision = llm.parse_coach_decision_payload(
+            {
+                "response_type": "no_change",
+                "rationale": "hier renfo manque, aujourd'hui footing Z2 inchange",
+                "fitmas_message": "Vu pour le renfo d'hier, on passe a autre chose. Ce matin, footing Z2 28 min.",
+                "execution_actions": [],
+            }
+        )
+
+        self.assertIsNone(decision)
+
 
 if __name__ == "__main__":
     unittest.main()

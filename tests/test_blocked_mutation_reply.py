@@ -2,8 +2,10 @@ from __future__ import annotations
 
 import unittest
 from types import SimpleNamespace
+from unittest.mock import patch
 
 from fitmas.conversation_pipeline import _blocked_mutation_reply, _blocked_plan_patch_reply
+from fitmas.mutation_permissions import MutationImpactAssessment, build_confirmation_prompt
 from fitmas.plan_mutation_service import PlanBlockedMutationEvent, PlanMutationServiceResult, PlanPatchServiceResult
 from fitmas.plan_patch import PlanPatchOperationValidation, PlanPatchValidation
 
@@ -88,13 +90,12 @@ class BlockedMutationReplyTest(unittest.TestCase):
         self.assertIn("Une contrainte future bloque", reply)
 
     def test_no_service_result_falls_back_to_generic_move_reply(self) -> None:
-        """Legacy call path (no service_result passed) keeps the existing
-        move_session fallback so we don't regress existing behavior."""
         decision = SimpleNamespace(mutation_type="move_session", target_session_id=10)
 
         reply = _blocked_mutation_reply(decision, None)
 
-        self.assertIn("creneau cible n'est pas assez sur", reply)
+        self.assertNotIn("Je ne l'ai pas applique", reply)
+        self.assertIn("bouger", reply.lower())
 
     def test_plan_patch_block_uses_suggested_fix_before_internal_reason(self) -> None:
         result = PlanPatchServiceResult(
@@ -116,6 +117,90 @@ class BlockedMutationReplyTest(unittest.TestCase):
 
         self.assertIn("Relire le planning actuel", reply)
         self.assertNotIn("target_session_not_found", reply)
+
+    def test_plan_patch_block_prefers_final_reply_composer(self) -> None:
+        result = PlanPatchServiceResult(
+            validation=PlanPatchValidation(
+                status="blocked",
+                operation_results=(
+                    PlanPatchOperationValidation(
+                        operation_type="move_session",
+                        status="blocked",
+                        target_session_id=10,
+                        block_reason="protected_recovery_target",
+                        suggested_fix="echanger avec vendredi",
+                    ),
+                ),
+            )
+        )
+
+        with patch(
+            "fitmas.conversation_pipeline.final_reply.compose_final_reply",
+            return_value="Je ne l'ecrase pas : ce creneau protege ta recup. On peut echanger avec vendredi.",
+        ) as compose:
+            reply = _blocked_plan_patch_reply(result)
+
+        self.assertEqual(
+            reply,
+            "Je ne l'ecrase pas : ce creneau protege ta recup. On peut echanger avec vendredi.",
+        )
+        self.assertTrue(compose.called)
+
+    def test_mutation_block_prefers_final_reply_composer(self) -> None:
+        decision = SimpleNamespace(mutation_type="move_session", target_session_id=10)
+        result = _service_result_with(
+            PlanBlockedMutationEvent(
+                command_type="move_session",
+                block_reason="protected_recovery_target",
+                target_session_id=10,
+                warnings=("Recuperation protegee.",),
+            )
+        )
+
+        with patch(
+            "fitmas.conversation_pipeline.final_reply.compose_final_reply",
+            return_value="Je garde ce creneau en recup. Le bon move, c'est un swap avec vendredi.",
+        ) as compose:
+            reply = _blocked_mutation_reply(decision, result)
+
+        self.assertEqual(reply, "Je garde ce creneau en recup. Le bon move, c'est un swap avec vendredi.")
+        self.assertTrue(compose.called)
+
+    def test_plan_patch_confirmation_prompt_drops_yes_no_protocol(self) -> None:
+        from fitmas.conversation_pipeline import _build_plan_patch_confirmation_prompt
+
+        result = PlanPatchServiceResult(
+            validation=PlanPatchValidation(
+                status="requires_confirmation",
+                operation_results=(
+                    PlanPatchOperationValidation(
+                        operation_type="move_session",
+                        status="requires_confirmation",
+                        target_session_id=10,
+                        block_reason="recovery_tradeoff",
+                    ),
+                ),
+            )
+        )
+
+        prompt = _build_plan_patch_confirmation_prompt(result)
+
+        self.assertNotIn("Reponds oui ou non", prompt)
+        self.assertIn("confirm", prompt.lower())
+
+    def test_legacy_confirmation_prompt_drops_yes_no_protocol(self) -> None:
+        prompt = build_confirmation_prompt(
+            SimpleNamespace(mutation_type="move_session"),
+            assessment=MutationImpactAssessment(
+                level="high",
+                requires_confirmation=True,
+                reason="moves_key_session",
+                summary="deplacement d'une seance cle",
+            ),
+        )
+
+        self.assertNotIn("Reponds oui ou non", prompt)
+        self.assertIn("confirm", prompt.lower())
 
 
 if __name__ == "__main__":

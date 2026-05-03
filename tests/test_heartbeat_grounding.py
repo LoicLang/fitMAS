@@ -555,6 +555,18 @@ class HeartbeatGroundingTest(unittest.TestCase):
         self.assertEqual(draft.text, "ok")
         self.assertNotIn("Piscine fixee lundi et jeudi matin a 7h.", captured["system"])
 
+    def test_llm_generate_blocks_readonly_commit_claims(self) -> None:
+        original_generate = heartbeat.generate_heartbeat_text
+        try:
+            heartbeat.generate_heartbeat_text = (
+                lambda *args, **kwargs: "On verrouille ca : mardi 30min Z2, jeudi renfo."
+            )
+            text = heartbeat._llm_generate("system", "prompt", pipeline="heartbeat_briefing")
+        finally:
+            heartbeat.generate_heartbeat_text = original_generate
+
+        self.assertIsNone(text)
+
     def test_morning_briefing_includes_recent_proactive_messages_for_novelty(self) -> None:
         _, _ = self._create_plan_with_today_session()
         self.db.add_all(
