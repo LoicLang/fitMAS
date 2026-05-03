@@ -8,7 +8,13 @@ from sqlalchemy.orm import Session
 from fitmas import repository as repo
 from fitmas.adaptation_log import build_adaptation_log_entry
 from fitmas.calibration_llm import extract_calibration_resolution
-from fitmas.claim_guard import looks_like_action_claim, safe_rewrite_for_claim_without_mutation
+from fitmas import coach_voice
+from fitmas import llm_gateway as gw
+from fitmas.claim_guard import (
+    build_claim_repair_prompt,
+    looks_like_action_claim,
+    outage_fallback_reply,
+)
 from fitmas.calibration_needs import (
     build_resolution_memory_updates,
     find_open_calibration_need,
@@ -481,13 +487,24 @@ def run_conversation_turn(
 
     mutation_actually_committed = bool(outcome.mutation_applied or outcome.pending_confirmation)
     if not mutation_actually_committed and looks_like_action_claim(outcome.reply_text):
+        original_reply = outcome.reply_text
         logger.warning(
             "conversation_pipeline.claim_without_mutation user=%s reply=%r",
             user.id,
-            outcome.reply_text[:200],
+            original_reply[:200],
         )
-        outcome.reply_text = safe_rewrite_for_claim_without_mutation()
-        outcome.response_mode = "claim_without_mutation_blocked"
+        # Doctrine-correct path (Chantier 1bis - 3 mai 2026) : LLM repair plutot
+        # qu'une template canned. La canned "Je n'ai applique aucun changement..."
+        # produisait du receipt-style en aval de Chantier 1 voix unifiee.
+        repaired = _llm_repair_claim_reply(original_reply=original_reply, user_text=payload.text)
+        if repaired:
+            outcome.reply_text = repaired
+            outcome.response_mode = "claim_without_mutation_repaired"
+        else:
+            # Outage minimal (LLM down ou repair invalide) : ligne coach-voice
+            # courte, jamais la vieille template administrative.
+            outcome.reply_text = outage_fallback_reply()
+            outcome.response_mode = "claim_without_mutation_outage_fallback"
 
     extracted_facts = dependencies.extract_facts(payload.text, outcome.reply_text, state.active_facts)
     if extracted_facts:
@@ -1037,6 +1054,46 @@ def _reply_and_record_turn(
         assistant_message=Message(role=MessageRole.AGENT, text=reply_text),
         day_updated=day_updated,
     )
+
+
+def _llm_repair_claim_reply(*, original_reply: str, user_text: str) -> str | None:
+    """LLM repair pour un reply qui claim une action sans mutation committee.
+
+    Retourne le texte reecrit (voix coach, sans claim) si valide, sinon None.
+    Critères de validation:
+      - non vide / non whitespace
+      - ne claim plus une action (`looks_like_action_claim`)
+      - ne viole pas la voix coach (`coach_voice.message_violates_coach_voice`)
+      - longueur raisonnable (< 500 chars, anti runaway)
+
+    En cas d'echec (LLM down, output invalide), le caller doit retomber sur
+    `outage_fallback_reply()` (voir `claim_guard`).
+    """
+    if not original_reply or not original_reply.strip():
+        return None
+    system, prompt = build_claim_repair_prompt(original_reply=original_reply, user_text=user_text)
+    try:
+        repaired = gw.request_text(system=system, prompt=prompt, max_tokens=200)
+    except Exception:
+        logger.exception("conversation_pipeline.claim_repair_llm_error user_text=%r", user_text[:80])
+        return None
+    if not repaired:
+        logger.warning("conversation_pipeline.claim_repair_empty user_text=%r", user_text[:80])
+        return None
+    repaired = repaired.strip()
+    if len(repaired) < 5 or len(repaired) > 500:
+        logger.warning("conversation_pipeline.claim_repair_bad_length len=%d", len(repaired))
+        return None
+    if looks_like_action_claim(repaired):
+        logger.warning("conversation_pipeline.claim_repair_still_claims reply=%r", repaired[:160])
+        return None
+    if coach_voice.message_violates_coach_voice(repaired):
+        logger.warning("conversation_pipeline.claim_repair_voice_violation reply=%r", repaired[:160])
+        return None
+    if coach_voice.message_looks_receipt_style(repaired):
+        # Log only — pas un blocker, mais signale la regression.
+        logger.warning("conversation_pipeline.claim_repair_receipt_style reply=%r", repaired[:160])
+    return repaired
 
 
 def _fact_identity(fact: object) -> str:

@@ -1417,14 +1417,19 @@ class FitMASCoreFlowsTest(unittest.TestCase):
         self.assertEqual(result["assistant_message"]["text"], "Bien recu.")
         self.assertNotIn("low-signal", captured["temporal_summary"])
 
-    def test_claim_without_mutation_is_demoted_at_pipeline_egress(self) -> None:
-        """Chantier 1bis (anti-mensonge "dire = faire"): si le LLM affirme
-        une action ("Je libere ce creneau") sans qu'aucune mutation ne soit
-        committee ce tour, la reponse doit etre reecrite en demande de
-        clarification explicite.
+    def test_claim_without_mutation_is_repaired_via_llm(self) -> None:
+        """Chantier 1bis - 3 mai 2026 : si le LLM affirme une action
+        ("Je libere ce creneau") sans qu'aucune mutation ne soit committee
+        ce tour, le pipeline doit tenter un LLM repair pour reecrire en voix
+        coach SANS claim. C'est le path doctrine-correct (plus de canned
+        template "Je n'ai applique aucun changement...").
         """
         self._create_plan_for_today()
         original_decide = api_messages.decide
+        from fitmas import conversation_pipeline as cpipeline
+
+        original_request_text = cpipeline.gw.request_text
+        captured_repair: dict[str, str] = {}
         try:
             def fake_decide(*args, **kwargs):
                 return MutationDecision(
@@ -1433,16 +1438,67 @@ class FitMASCoreFlowsTest(unittest.TestCase):
                     fitmas_message="OK. Je libere ce creneau et je garde la suite propre.",
                 )
 
+            def fake_repair(*, system, prompt, **_kwargs):
+                captured_repair["system"] = system
+                captured_repair["prompt"] = prompt
+                return "Mercredi note. Tu veux qu'on bouge la seance ou que tu garde le creneau libre ?"
+
             api_messages.decide = fake_decide
+            cpipeline.gw.request_text = fake_repair
             result = self.client.post(
                 "/api/v0/messages", json={"text": "Mercredi"}
             ).json()
         finally:
             api_messages.decide = original_decide
+            cpipeline.gw.request_text = original_request_text
+
+        text = result["assistant_message"]["text"]
+        # Le claim 1ere personne est retire
+        self.assertNotIn("Je libere", text)
+        # Le repair LLM a ete appele avec le contexte attendu
+        self.assertIn("Je libere ce creneau", captured_repair["prompt"])
+        self.assertIn("Mercredi", captured_repair["prompt"])
+        # Plus aucune trace de la vieille canned template doctrine-violante
+        self.assertNotIn("n'ai applique aucun changement", text)
+        # Le texte vient bien du repair LLM (pas du fallback outage)
+        self.assertIn("Mercredi note", text)
+
+    def test_claim_without_mutation_falls_back_when_repair_fails(self) -> None:
+        """Chantier 1bis - 3 mai 2026 : si le LLM repair echoue (down ou
+        invalide), le pipeline retombe sur `outage_fallback_reply()` --
+        ligne minimale coach-voice, JAMAIS la vieille canned template.
+        """
+        from fitmas.claim_guard import outage_fallback_reply
+        from fitmas import conversation_pipeline as cpipeline
+
+        self._create_plan_for_today()
+        original_decide = api_messages.decide
+        original_request_text = cpipeline.gw.request_text
+        try:
+            def fake_decide(*args, **kwargs):
+                return MutationDecision(
+                    mutation_type="no_change",
+                    rationale="Phantom action emise par le LLM.",
+                    fitmas_message="OK. Je libere ce creneau.",
+                )
+
+            def fake_repair_down(*, system, prompt, **_kwargs):
+                return None  # simulate LLM outage
+
+            api_messages.decide = fake_decide
+            cpipeline.gw.request_text = fake_repair_down
+            result = self.client.post(
+                "/api/v0/messages", json={"text": "Mercredi"}
+            ).json()
+        finally:
+            api_messages.decide = original_decide
+            cpipeline.gw.request_text = original_request_text
 
         text = result["assistant_message"]["text"]
         self.assertNotIn("Je libere", text)
-        self.assertIn("n'ai applique aucun changement", text)
+        self.assertEqual(text, outage_fallback_reply())
+        # La vieille canned ne doit plus apparaitre dans aucun chemin.
+        self.assertNotIn("n'ai applique aucun changement", text)
 
     def test_neutral_reply_with_no_mutation_passes_through(self) -> None:
         """Le garde dire=faire ne doit toucher que les reponses qui affirment

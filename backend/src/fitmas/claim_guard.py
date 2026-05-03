@@ -1,13 +1,24 @@
-"""Anti-mensonge "dire = faire" — Chantier 1bis du COACH-AUTONOMY-REFACTOR.
+"""Anti-mensonge "dire = faire" — garde post-LLM contre les claims d'action
+sans mutation committee.
 
-The coach must never affirm an action ("Je libere ce creneau", "Je deplace
-cette seance") when no plan_mutation_event has been emitted on the current
-turn. This module exposes the detection of such claims and a safe rewrite
-that demotes them to an explicit proposal.
+Le coach ne doit jamais affirmer une action ("Je libere ce creneau",
+"Je deplace cette seance") quand aucun `plan_mutation_event` n'a ete emis
+sur le tour courant.
 
-Verb forms cover the main mutation lexicon. We deliberately match the
-infinitive plus 1st person singular present, with elision (j'ajoute) and
-common spellings with/without accents.
+Pipeline doctrine-correct (Chantier 1bis du plan 2 mai 2026) :
+
+1. `looks_like_action_claim(reply)` detecte un claim 1ere personne
+2. `build_claim_repair_prompt(reply, user_text)` construit un prompt repair
+3. Pipeline appelle le LLM avec ce prompt -> reecrit en voix coach SANS claim
+4. Si repair echoue (LLM down, output invalide) -> `outage_fallback_reply()`
+   produit une ligne minimale honnete (cas outage explicite, pas template
+   recurrent par design)
+
+Avant Chantier 1bis : `safe_rewrite_for_claim_without_mutation()` retournait
+une template canned doctrine-violante ("Je n'ai applique aucun changement
+sur ce tour. Dis-moi explicitement ce que tu veux que je deplace..."). Cette
+template a ete vue en prod dimanche soir 3 mai 2026, ironiquement apres
+Chantier 1 voix unifiee ; la fix vient ici.
 """
 
 from __future__ import annotations
@@ -81,13 +92,51 @@ def looks_like_action_claim(reply_text: str) -> bool:
     return False
 
 
-def safe_rewrite_for_claim_without_mutation() -> str:
-    """Reply text used when a claim_without_mutation is detected.
+_REPAIR_SYSTEM = (
+    "Tu es FitMAS. Une de tes reponses precedentes contenait un verbe "
+    "d'action 1ere personne (\"je deplace\", \"je libere\", \"j'echange\"...) "
+    "alors qu'aucune mutation planning n'a ete committee ce tour. Reecris "
+    "ta reponse SANS claim une action.\n\n"
+    "Voix coach (regles imperatives):\n"
+    "- Le message est envoye TEL QUEL au user. Voix d'un coach humain, jamais voix de bot.\n"
+    "- Pas d'etiquette technique (\"plan modifie\", \"mutation enregistree\", \"swap applique\").\n"
+    "- Pas de phrase generique du genre \"je n'ai applique aucun changement sur ce tour\".\n"
+    "- Court (1-2 phrases). Reconnais ce que le user vient de dire si pertinent.\n"
+    "- Soit tu reformules sans verbe mutation 1ere personne (\"X serait mieux\", \"je peux X si tu veux\"), "
+    "soit tu poses UNE question courte de clarification.\n"
+    "- Tu reponds UNIQUEMENT avec le texte de la nouvelle reply. Pas de JSON, pas de markdown, pas d'explication."
+)
 
-    Sober and explicit: we don't pretend to know what the user wanted.
-    The fallback asks for clarification rather than guessing."""
-    return (
-        "Je n'ai applique aucun changement sur ce tour. "
-        "Dis-moi explicitement ce que tu veux que je deplace, remplace ou liberes "
-        "et je le fais (ou je te propose une option a confirmer)."
+
+def build_claim_repair_prompt(*, original_reply: str, user_text: str) -> tuple[str, str]:
+    """Return `(system, user_prompt)` for the LLM repair call.
+
+    The repair prompt asks the LLM to rewrite its claim-bearing reply into a
+    coach-voice reply without claiming an uncommitted action. The pipeline
+    is responsible for the actual LLM call (`llm_gateway.request_text`) and
+    for handling outage via `outage_fallback_reply()`.
+    """
+    user_prompt = (
+        f"Message du user: {user_text or '(aucun)'}\n\n"
+        f"Ta reponse a reecrire (elle claim une action sans qu'aucune mutation soit committee):\n"
+        f"\"{original_reply.strip()}\"\n\n"
+        "Reecris cette reponse en respectant les regles ci-dessus."
     )
+    return _REPAIR_SYSTEM, user_prompt
+
+
+def outage_fallback_reply() -> str:
+    """Outage fallback used when the repair LLM call fails or returns invalid text.
+
+    Doctrine: "no helper produces a final conversational reply unless it is
+    outage or a summary of a real committed event". This is the outage path:
+    short, coach-voice, honest, not a recurring template by design.
+    """
+    return "Vu — rien de bouge sur ce tour. Tu veux que je bouge quoi concretement ?"
+
+
+# Backward-compat alias kept for callers we have not migrated yet. New code
+# should prefer the LLM repair flow via `build_claim_repair_prompt` +
+# `outage_fallback_reply`.
+def safe_rewrite_for_claim_without_mutation() -> str:  # pragma: no cover - shim
+    return outage_fallback_reply()

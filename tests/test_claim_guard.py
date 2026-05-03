@@ -90,11 +90,22 @@ class TestLooksLikeActionClaim:
         assert looks_like_action_claim("Je la remplace par du running.") is True
 
 
-class TestSafeRewrite:
-    def test_rewrite_does_not_assert_action(self):
-        rewrite = safe_rewrite_for_claim_without_mutation()
-        assert "n'ai applique aucun changement" in rewrite
+class TestOutageFallback:
+    """Outage fallback du Chantier 1bis (3 mai 2026).
 
-    def test_rewrite_is_not_itself_an_action_claim(self):
+    `safe_rewrite_for_claim_without_mutation` est maintenant un alias compat
+    de `outage_fallback_reply`. La vieille canned template
+    "Je n'ai applique aucun changement..." est retiree (doctrine-violante,
+    voix bot recurrent).
+    """
+
+    def test_outage_fallback_is_not_itself_an_action_claim(self):
         rewrite = safe_rewrite_for_claim_without_mutation()
         assert looks_like_action_claim(rewrite) is False
+
+    def test_outage_fallback_is_short_coach_voice(self):
+        rewrite = safe_rewrite_for_claim_without_mutation()
+        assert 0 < len(rewrite) < 200
+        # Plus aucune trace de la vieille template administrative.
+        assert "n'ai applique aucun changement" not in rewrite
+        assert "Dis-moi explicitement" not in rewrite
