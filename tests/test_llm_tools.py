@@ -1462,6 +1462,109 @@ class LLMToolsTest(unittest.TestCase):
         self.assertIn("Je ne peux pas ce soir", repair_prompts[0])
         self.assertIn("execution_actions", repair_prompts[0])
 
+    def test_tool_followup_prose_gets_format_retry_before_structured_repair(self) -> None:
+        original_client = llm._client
+        original_request_message = llm._request_message
+        original_execute_tool_calls = llm.execute_tool_calls
+        original_request_structured_json = llm._request_structured_json
+        original_log_tool_trace = llm.log_tool_trace
+        calls = {"count": 0}
+        retry_prompts: list[str] = []
+        structured_repair_calls = {"count": 0}
+
+        def fake_request_message(
+            *,
+            system,
+            messages,
+            model="claude-haiku-4-5-20251001",
+            max_tokens=512,
+            tools=None,
+            tool_choice=None,
+            **kwargs,
+        ):
+            calls["count"] += 1
+            if calls["count"] == 1:
+                return SimpleNamespace(
+                    stop_reason="tool_use",
+                    content=[
+                        SimpleNamespace(type="tool_use", id="toolu_1", name="get_plan_window", input={}),
+                    ],
+                    usage=SimpleNamespace(input_tokens=120, output_tokens=32),
+                )
+            if calls["count"] == 2:
+                return SimpleNamespace(
+                    stop_reason="end_turn",
+                    content=[
+                        SimpleNamespace(
+                            type="text",
+                            text="Il n'y a pas de seance vendredi pour swapper. Tu voulais juste deplacer la natation ?",
+                        )
+                    ],
+                    usage=SimpleNamespace(input_tokens=180, output_tokens=48),
+                )
+            retry_prompts.append(str(messages[-1]["content"]))
+            self.assertIsNone(tools)
+            return SimpleNamespace(
+                stop_reason="end_turn",
+                content=[
+                    SimpleNamespace(
+                        type="text",
+                        text='{"response_type":"no_change","rationale":"swap impossible sans seance cible vendredi","fitmas_message":"Il n’y a pas de seance vendredi pour echanger avec la natation. Tu veux plutot la deplacer a vendredi ?"}',
+                    )
+                ],
+                usage=SimpleNamespace(input_tokens=210, output_tokens=56),
+            )
+
+        def fake_execute_tool_calls(calls, *, context, **kwargs):
+            return [
+                SimpleNamespace(
+                    result=ToolResult(
+                        tool_name=calls[0].tool_name,
+                        status="ok",
+                        payload={"sessions": [{"id": 1, "date": "2099-05-08", "title": "Natation"}]},
+                        summary="Planning lu.",
+                    ),
+                    trace=SimpleNamespace(tool_success=True, tool_called=True, tool_latency_ms=1),
+                )
+            ]
+
+        def fail_structured_repair(*args, **kwargs):
+            structured_repair_calls["count"] += 1
+            return None
+
+        llm._client = lambda: object()
+        llm._request_message = fake_request_message
+        llm.execute_tool_calls = fake_execute_tool_calls
+        llm._request_structured_json = fail_structured_repair
+        llm.log_tool_trace = lambda trace: None
+        try:
+            decision = llm.decide(
+                "On peut swap la piscine de aujourd'hui avec vendredi ?",
+                "Repere",
+                coach_context={"turn_primary_intent": "availability_constraint"},
+                tool_context=ToolContext(
+                    pipeline="conversation",
+                    user_id=1,
+                    timezone_name="Europe/Paris",
+                    scheduled_sessions=[],
+                    activities=[],
+                    active_facts=[],
+                ),
+            )
+        finally:
+            llm._client = original_client
+            llm._request_message = original_request_message
+            llm.execute_tool_calls = original_execute_tool_calls
+            llm._request_structured_json = original_request_structured_json
+            llm.log_tool_trace = original_log_tool_trace
+
+        self.assertIsNotNone(decision)
+        self.assertEqual(decision.response_type, "no_change")
+        self.assertEqual(calls["count"], 3)
+        self.assertEqual(structured_repair_calls["count"], 0)
+        self.assertIn("format", retry_prompts[0].lower())
+        self.assertIn("json", retry_prompts[0].lower())
+
     def test_tool_followup_prose_repair_downgrades_free_confirmation_without_patch(self) -> None:
         original_request_structured_json = llm._request_structured_json
 
@@ -1611,6 +1714,105 @@ class LLMToolsTest(unittest.TestCase):
         self.assertIsNotNone(decision)
         self.assertNotIn("pas reçu", decision.fitmas_message)
         self.assertEqual(calls["structured"], 1)
+
+    def test_tool_followup_dsml_markup_gets_format_retry_before_structured_fallback(self) -> None:
+        original_client = llm._client
+        original_request_message = llm._request_message
+        original_execute_tool_calls = llm.execute_tool_calls
+        original_request_structured_json = llm._request_structured_json
+        original_log_tool_trace = llm.log_tool_trace
+        calls = {"messages": 0, "structured": 0}
+        retry_prompts: list[str] = []
+
+        def fake_request_message(
+            *,
+            system,
+            messages,
+            model="claude-haiku-4-5-20251001",
+            max_tokens=512,
+            tools=None,
+            tool_choice=None,
+            **kwargs,
+        ):
+            calls["messages"] += 1
+            if calls["messages"] == 1:
+                return SimpleNamespace(
+                    stop_reason="tool_use",
+                    content=[SimpleNamespace(type="tool_use", id="toolu_1", name="get_plan_window", input={})],
+                    usage=SimpleNamespace(input_tokens=120, output_tokens=32),
+                )
+            if calls["messages"] == 2:
+                return SimpleNamespace(
+                    stop_reason="end_turn",
+                    content=[
+                        SimpleNamespace(
+                            type="text",
+                            text='Vérifions plus loin.<｜DSML｜tool_calls><｜DSML｜invoke name="get_full_calendar"></｜DSML｜invoke></｜DSML｜tool_calls>',
+                        )
+                    ],
+                    usage=SimpleNamespace(input_tokens=180, output_tokens=48),
+                )
+            retry_prompts.append(str(messages[-1]["content"]))
+            return SimpleNamespace(
+                stop_reason="end_turn",
+                content=[
+                    SimpleNamespace(
+                        type="text",
+                        text='{"response_type":"no_change","rationale":"tool supplementaire non disponible, clarification sans inventer","fitmas_message":"Je ne vois pas de seance vendredi dans le calendrier lu. Tu veux plutot deplacer la natation sur ce creneau libre ?"}',
+                    )
+                ],
+                usage=SimpleNamespace(input_tokens=220, output_tokens=64),
+            )
+
+        def fake_execute_tool_calls(calls, *, context, **kwargs):
+            return [
+                SimpleNamespace(
+                    result=ToolResult(
+                        tool_name=calls[0].tool_name,
+                        status="ok",
+                        payload={"window": "week", "friday_sessions": []},
+                        summary="Aucune seance vendredi dans la fenetre lue.",
+                    ),
+                    trace=SimpleNamespace(tool_success=True, tool_called=True, tool_latency_ms=1),
+                )
+            ]
+
+        def fail_structured_repair(*args, **kwargs):
+            calls["structured"] += 1
+            return None
+
+        llm._client = lambda: object()
+        llm._request_message = fake_request_message
+        llm.execute_tool_calls = fake_execute_tool_calls
+        llm._request_structured_json = fail_structured_repair
+        llm.log_tool_trace = lambda trace: None
+        try:
+            decision = llm.decide(
+                "Swap piscine avec vendredi",
+                "Repere",
+                coach_context={"turn_primary_intent": "availability_constraint"},
+                tool_context=ToolContext(
+                    pipeline="conversation",
+                    user_id=1,
+                    timezone_name="Europe/Paris",
+                    scheduled_sessions=[],
+                    activities=[],
+                    active_facts=[],
+                ),
+            )
+        finally:
+            llm._client = original_client
+            llm._request_message = original_request_message
+            llm.execute_tool_calls = original_execute_tool_calls
+            llm._request_structured_json = original_request_structured_json
+            llm.log_tool_trace = original_log_tool_trace
+
+        self.assertIsNotNone(decision)
+        self.assertEqual(decision.response_type, "no_change")
+        self.assertEqual(calls["messages"], 3)
+        self.assertEqual(calls["structured"], 0)
+        self.assertIn("tools", retry_prompts[0].lower())
+        self.assertIn("json", retry_prompts[0].lower())
 
     def test_deepseek_structured_path_is_default_when_key_exists(self) -> None:
         original_request_message = llm._request_message

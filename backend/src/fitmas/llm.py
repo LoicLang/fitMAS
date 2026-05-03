@@ -1107,9 +1107,27 @@ def _request_json_with_tools(
 
         if stop_reason != "tool_use":
             data = _message_json(response)
+            raw_text_for_repair = _message_text(response)
+            if tool_executions and data is None:
+                retry_response = _retry_tool_followup_json_format(
+                    system=system,
+                    messages=messages,
+                    response=response,
+                    model=model,
+                    max_tokens=max_tokens,
+                )
+                if retry_response is not None:
+                    round_trips += 1
+                    prompt_token_values.append(_usage_value(retry_response, "input_tokens"))
+                    response_token_values.append(_usage_value(retry_response, "output_tokens"))
+                    retry_data = _message_json(retry_response)
+                    if retry_data is not None:
+                        data = retry_data
+                    else:
+                        raw_text_for_repair = _message_text(retry_response) or raw_text_for_repair
             if tool_executions and data is None:
                 data = _repair_decision_json_from_text(
-                    _message_text(response),
+                    raw_text_for_repair,
                     model=model,
                     context_prompt=prompt,
                     tool_result_summary=_repair_tool_result_summary(tool_executions),
@@ -1240,6 +1258,39 @@ def _request_json_with_tools(
         response_stop_reason="tool_loop_exhausted",
     )
     return None
+
+
+def _retry_tool_followup_json_format(
+    *,
+    system: str,
+    messages: list[dict[str, Any]],
+    response: Any,
+    model: str,
+    max_tokens: int,
+) -> Any | None:
+    raw_text = _message_text(response)
+    if not raw_text:
+        return None
+    retry_messages = list(messages)
+    retry_messages.append({"role": "assistant", "content": _serialize_content_blocks(getattr(response, "content", []))})
+    retry_messages.append(
+        {
+            "role": "user",
+            "content": (
+                "Ta derniere reponse a un format incorrect: ce n'est pas un JSON FitMAS valide. "
+                "Les tools sont termines pour ce tour; n'appelle aucun tool supplementaire. "
+                "Garde exactement la meme intention et les memes faits, mais retourne uniquement "
+                "un CoachDecision JSON valide. Pas de prose hors JSON. N'invente aucun id, aucune seance, aucun commit."
+            ),
+        }
+    )
+    return _request_message(
+        system=system,
+        messages=retry_messages,
+        model=model,
+        max_tokens=max_tokens,
+        **_deepseek_tool_thinking_kwargs(),
+    )
 
 
 def _tool_result_blocks(tool_use_blocks: list[Any], tool_executions: list[ToolExecution]) -> list[dict[str, Any]]:
