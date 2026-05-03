@@ -17,7 +17,7 @@ from typing import Any, Sequence
 
 from sqlalchemy.orm import Session
 
-from fitmas import repository as repo, schema as s
+from fitmas import coach_voice, repository as repo, schema as s
 from fitmas.activity_helpers import (
     activities_last_days as _activities_last_days,
     activities_on_local_date as _activities_on_local_date,
@@ -241,18 +241,14 @@ def build_briefing_prompt(
     )
     if user.coach_soul:
         system += f"\nAme du coach: {user.coach_soul}"
-    # Voice rules — banlist + positive rules. The briefing was tending to
-    # robotic dashboards ("tu as 3 seances prevues et 0 realisees… oublie la
-    # culpabilite… focalise-toi sommeil et assiette"). These rules exist to
-    # pull it back to a coach voice: reconnaitre ce qui est fait (y compris
-    # offplan), poser une question si un pourquoi manque, aligner le ton.
+    # Voix coach unifiee (Chantier 1 — 2 mai 2026) : rules + few-shots
+    # partages avec conversation/reminder/review via `coach_voice`. Adresse
+    # l'incident hallucination + receipt-style + defensive du briefing 2 mai
+    # ("On ne refait pas le debat sur le offplan...", "tient l'equilibre"...).
     system += (
-        "\n\nVoix coach — regles :"
-        "\n- Reconnais ce qui a ete fait, y compris les sorties hors plan, avant tout autre point."
-        "\n- Si un point reste non resolu (une seance sautee plusieurs semaines, un silence anormal), pose UNE question courte, sans juger."
-        "\n- Aligne ton ton sur le dernier echange visible : ne repete pas un angle deja servi, ne re-propose pas ce que l'utilisateur a deja ignore."
-        "\n- Ne dis JAMAIS : \"zero realisees\" si des sorties offplan existent, \"oublie la culpabilite\", \"presque parfait\", des conseils sommeil/assiette sans signal explicite, des listings TSS/CTL/volume abstraits, des formules vides style \"calendrier et realite se sont perdus\"."
-        "\n- Pas de moralisation, pas de feliciter-pour-feliciter, pas de recitation des chiffres bruts."
+        f"\n\n{coach_voice.COACH_VOICE_RULES}"
+        f"\n\n{coach_voice.COACH_VOICE_FEW_SHOTS_GOOD}"
+        f"\n\n{coach_voice.COACH_VOICE_FEW_SHOTS_BAD}"
     )
     # Hierarchy of sources — Truth blocks are authoritative. Defends against
     # weekly aggregates leaking into yesterday-specific claims.
@@ -348,6 +344,12 @@ def build_reminder_prompt(
     )
     if user.coach_soul:
         system += f"\nAme du coach: {user.coach_soul}"
+    # Voix coach unifiee (Chantier 1 — 2 mai 2026)
+    system += (
+        f"\n\n{coach_voice.COACH_VOICE_RULES}"
+        f"\n\n{coach_voice.COACH_VOICE_FEW_SHOTS_GOOD}"
+        f"\n\n{coach_voice.COACH_VOICE_FEW_SHOTS_BAD}"
+    )
     if signals_block:
         system += (
             f"\n\n{signals_block}\n"
@@ -394,6 +396,12 @@ def build_review_prompt(
     )
     if user.coach_soul:
         system += f"\nAme du coach: {user.coach_soul}"
+    # Voix coach unifiee (Chantier 1 — 2 mai 2026)
+    system += (
+        f"\n\n{coach_voice.COACH_VOICE_RULES}"
+        f"\n\n{coach_voice.COACH_VOICE_FEW_SHOTS_GOOD}"
+        f"\n\n{coach_voice.COACH_VOICE_FEW_SHOTS_BAD}"
+    )
     # Anti-hallucination — same defense in depth as the morning briefing.
     # Without this the review LLM regularly invents weekly counts (eg. "zero
     # natation cette semaine" while a swim was actually logged offplan).
@@ -439,6 +447,12 @@ def build_signal_prompt(
     )
     if user.coach_soul:
         system += f"Ame du coach: {user.coach_soul}\n"
+    # Voix coach unifiee (Chantier 1 — 2 mai 2026)
+    system += (
+        f"\n{coach_voice.COACH_VOICE_RULES}"
+        f"\n\n{coach_voice.COACH_VOICE_FEW_SHOTS_GOOD}"
+        f"\n\n{coach_voice.COACH_VOICE_FEW_SHOTS_BAD}\n"
+    )
     system += (
         f"\n{signals_block}\n\n"
         "Genere un message proactif base sur ces signaux. "
