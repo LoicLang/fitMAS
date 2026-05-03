@@ -12,7 +12,6 @@ from fitmas.mutation_hooks import run_pre_mutation_hooks
 from fitmas.plan_patch import (
     PlanPatch,
     PlanPatchOperation,
-    PlanPatchOperationValidation,
     PlanPatchValidation,
     adapt_plan_patch_to_mutation_decisions,
     validate_plan_patch,
@@ -110,6 +109,7 @@ def apply_decisions_for_user(
             db,
             plan_id,
             decision,
+            user=user,
             scheduled_sessions=scheduled_sessions,
             timezone_name=getattr(user, "timezone", None),
         )
@@ -257,8 +257,6 @@ def apply_patch_for_user(
     scheduled_sessions = repo.get_scheduled_sessions(db, user.id, limit=84)
     if plan is None:
         patch = _normalize_targetless_replace_to_create(patch)
-    if plan is None and any(operation.operation_type != "create_session" for operation in patch.operations):
-        return PlanPatchServiceResult(validation=_blocked_no_active_plan_validation(patch))
     validation = validate_plan_patch(
         db,
         plan_id=plan_id,
@@ -348,24 +346,6 @@ def _normalize_targetless_replace_to_create(patch: PlanPatch) -> PlanPatch:
         operations=operations,
         coach_message=patch.coach_message,
         confirmation_reason=patch.confirmation_reason,
-    )
-
-
-def _blocked_no_active_plan_validation(patch: PlanPatch) -> PlanPatchValidation:
-    operation_results = tuple(
-        PlanPatchOperationValidation(
-            operation_type=operation.operation_type,
-            status="valid" if operation.operation_type == "create_session" else "blocked",
-            target_session_id=operation.target_session_id,
-            block_reason=None if operation.operation_type == "create_session" else "no_active_plan",
-            suggested_fix=None if operation.operation_type == "create_session" else "Creer une nouvelle seance datee ou regenerer un plan actif avant de modifier une ancienne seance.",
-        )
-        for operation in patch.operations
-    )
-    return PlanPatchValidation(
-        status="blocked",
-        operation_results=operation_results,
-        summary="Patch bloque: aucun plan actif pour modifier une seance existante.",
     )
 
 
@@ -557,9 +537,8 @@ def complete_session_from_activity_for_user(
     if session is None:
         return None
     reason: dict[str, Any] = {}
-    if plan_id is not None and matched_day:
-        repo.mark_day_completed(db, plan_id, matched_day)
-        reason["legacy_day_sync"] = matched_day
+    if matched_day:
+        reason["matched_day"] = matched_day
     event = _record_session_action(
         db,
         user=user,
@@ -580,24 +559,7 @@ def mark_day_completed_for_user(
     source: str,
     user_id: int | None = None,
 ) -> bool:
-    applied = repo.mark_day_completed(db, plan_id, day)
-    if applied:
-        repo.add_plan_mutation_event(
-            db,
-            user_id=user_id or 0,
-            source=source,
-            trigger_type="activity_completed",
-            command_type="legacy_day_completed",
-            target_session_ids=[],
-            before_snapshot={"plan_id": plan_id, "day": day},
-            after_snapshot={"plan_id": plan_id, "day": day, "completion_status": "done"},
-            reason={},
-            impact={},
-            user_visible_summary="",
-            explained_to_user=False,
-            conversation_turn_id=None,
-        )
-    return applied
+    return False
 
 
 def _record_session_action(

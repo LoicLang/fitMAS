@@ -70,6 +70,7 @@ def run_pre_mutation_hooks(
         return result
 
     _check_plausibility(result, decision, scheduled_sessions=scheduled_sessions, timezone_name=timezone_name)
+    _check_completed_target(result, decision, scheduled_sessions=scheduled_sessions)
     _check_fragile_day(result, decision, scheduled_sessions=scheduled_sessions, timezone_name=timezone_name)
     _check_same_sport_proximity(result, decision, scheduled_sessions=scheduled_sessions, timezone_name=timezone_name)
     _check_protected_recovery_target(result, decision, scheduled_sessions=scheduled_sessions, timezone_name=timezone_name)
@@ -103,6 +104,34 @@ def _check_plausibility(
             message=f"La date cible {target_date.isoformat()} est dans le passe.",
             severity="warning",
         ))
+
+
+def _check_completed_target(
+    result: PreMutationResult,
+    decision: MutationDecision,
+    *,
+    scheduled_sessions: Sequence[Any],
+) -> None:
+    """Block planning mutations against already resolved execution."""
+    if decision.mutation_type == "no_change":
+        return
+    blocked_statuses = {"done", "skipped", "canceled"}
+    target = _find_session(scheduled_sessions, decision.target_session_id)
+    second = _find_session(scheduled_sessions, decision.second_session_id)
+    for session in (target, second):
+        if session is None:
+            continue
+        status = str(_value(session, "completion_status") or "").strip().lower()
+        if status not in blocked_statuses:
+            continue
+        result.allowed = False
+        result.block_reason = "completed_session_target"
+        result.warnings.append(MutationWarning(
+            code="completed_session_target",
+            message="Cette seance a deja une execution resolue; le planning ne la modifie plus.",
+            severity="warning",
+        ))
+        return
 
 
 def _check_fragile_day(

@@ -307,6 +307,8 @@ def _suggested_fix_for_operation(
         return f"Choisir une date a plus de 48h de l'autre {sport_type}/{session_type}."
     if block_reason == "occupied_training_target":
         return "Utiliser swap_sessions ou choisir un jour sans seance stable."
+    if block_reason == "completed_session_target":
+        return "Cibler une seance encore planifiee; ne pas modifier une seance deja faite ou skippee."
     if block_reason in {
         "missing_target_session_id",
         "target_session_not_found",

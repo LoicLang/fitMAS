@@ -98,7 +98,7 @@ def test_apply_patch_for_user_does_not_commit_patch_requiring_confirmation(monke
     assert result.mutation_result is None
 
 
-def test_apply_patch_for_user_blocks_existing_session_operations_without_active_plan(monkeypatch) -> None:
+def test_apply_patch_for_user_uses_runtime_sessions_without_active_plan(monkeypatch) -> None:
     user = SimpleNamespace(id=7, timezone="Europe/Paris")
     patch = PlanPatch(
         operations=[
@@ -121,17 +121,23 @@ def test_apply_patch_for_user_blocks_existing_session_operations_without_active_
         "fitmas.plan_mutation_service.repo.get_scheduled_sessions",
         lambda *args, **kwargs: [SimpleNamespace(id=22, intensity="easy", completion_status="planned")],
     )
+    monkeypatch.setattr("fitmas.plan_mutation_service.repo.get_scheduled_session", lambda *args, **kwargs: None)
+    monkeypatch.setattr("fitmas.plan_mutation_service.repo.add_plan_mutation_event", lambda *args, **kwargs: None)
 
-    def _apply(*args, **kwargs):
-        raise AssertionError("patch without active plan must not reach mutations.apply")
+    captured: list[int] = []
+
+    def _apply(db, plan_id, decision, **kwargs):
+        captured.append(plan_id)
+        return SimpleNamespace(allowed=True, warnings=[]), SimpleNamespace()
 
     monkeypatch.setattr("fitmas.plan_mutation_service.mutations.apply", _apply)
 
     result = apply_patch_for_user(object(), user=user, patch=patch)
 
-    assert result.validation.status == "blocked"
-    assert result.validation.operation_results[0].block_reason == "no_active_plan"
-    assert result.mutation_result is None
+    assert result.validation.status == "valid"
+    assert result.mutation_result is not None
+    assert result.mutation_result.applied_count == 1
+    assert captured == [0]
 
 
 def test_apply_patch_for_user_normalizes_targetless_replace_to_create_without_active_plan(monkeypatch) -> None:
@@ -806,7 +812,51 @@ def test_activity_completion_helper_records_activity_source(monkeypatch) -> None
     assert result.session is session
 
 
-def test_activity_completion_with_legacy_day_sync_records_one_event(monkeypatch) -> None:
+def test_activity_completion_does_not_sync_legacy_day_plan(monkeypatch) -> None:
+    user = SimpleNamespace(id=7)
+    session = SimpleNamespace(
+        id=10,
+        day="monday",
+        scheduled_date=None,
+        sport_type="running",
+        session_type="easy",
+        session_title="Footing",
+        duration_min=40,
+        completion_status="done",
+    )
+    events: list[dict] = []
+
+    monkeypatch.setattr(
+        "fitmas.plan_mutation_service.plan_actions.complete_session",
+        lambda db, *, user, session_id: session,
+    )
+    monkeypatch.setattr("fitmas.plan_mutation_service.repo.get_scheduled_session", lambda *args, **kwargs: session)
+
+    def _mark_day_completed(*args, **kwargs):
+        raise AssertionError("runtime activity completion must not mutate DayPlan")
+
+    monkeypatch.setattr("fitmas.plan_mutation_service.repo.mark_day_completed", _mark_day_completed)
+    monkeypatch.setattr(
+        "fitmas.plan_mutation_service.repo.add_plan_mutation_event",
+        lambda db, **kwargs: events.append(kwargs) or SimpleNamespace(id=201),
+    )
+
+    result = complete_session_from_activity_for_user(
+        object(),
+        user=user,
+        session_id=10,
+        plan_id=42,
+        matched_day="monday",
+        source="manual_activity",
+    )
+
+    assert result is not None
+    assert result.action_type == "activity_completed"
+    assert events[0]["command_type"] == "activity_completed"
+    assert events[0]["reason"] == {"matched_day": "monday"}
+
+
+def test_activity_completion_records_matched_day_without_legacy_sync(monkeypatch) -> None:
     user = SimpleNamespace(id=7)
     session = SimpleNamespace(
         id=10,
@@ -847,22 +897,22 @@ def test_activity_completion_with_legacy_day_sync_records_one_event(monkeypatch)
     assert result is not None
     assert result.action_type == "activity_completed"
     assert result.event_id == 201
-    assert day_calls == [(42, "monday")]
+    assert day_calls == []
     assert len(events) == 1
     assert events[0]["command_type"] == "activity_completed"
     assert events[0]["target_session_ids"] == [10]
-    assert events[0]["reason"] == {"legacy_day_sync": "monday"}
+    assert events[0]["reason"] == {"matched_day": "monday"}
 
 
-def test_day_completion_helper_routes_legacy_day_sync(monkeypatch) -> None:
-    calls: list[tuple[int, str]] = []
+def test_day_completion_helper_is_noop_compat(monkeypatch) -> None:
+    def _mark_day_completed(*args, **kwargs):
+        raise AssertionError("compat helper must not mutate DayPlan")
 
-    def _mark_day_completed(db, plan_id, day):
-        calls.append((plan_id, day))
-        return True
+    def _add_event(*args, **kwargs):
+        raise AssertionError("compat helper must not emit legacy day events")
 
     monkeypatch.setattr("fitmas.plan_mutation_service.repo.mark_day_completed", _mark_day_completed)
-    monkeypatch.setattr("fitmas.plan_mutation_service.repo.add_plan_mutation_event", lambda *args, **kwargs: None)
+    monkeypatch.setattr("fitmas.plan_mutation_service.repo.add_plan_mutation_event", _add_event)
 
     result = mark_day_completed_for_user(
         object(),
@@ -871,8 +921,7 @@ def test_day_completion_helper_routes_legacy_day_sync(monkeypatch) -> None:
         source="manual_activity",
     )
 
-    assert result is True
-    assert calls == [(42, "monday")]
+    assert result is False
 
 
 def test_orchestrators_do_not_call_low_level_plan_writers_directly() -> None:

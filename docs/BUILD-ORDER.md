@@ -28,9 +28,9 @@ Si un autre doc diverge :
 
 **Un premier coach que Loïc reconnaît, comprend, et a envie de rouvrir demain.**
 
-## Checkpoint courant — 2 mai 2026
+## Checkpoint courant — 3 mai 2026
 
-### Incident dogfood briefing matin
+### Incident dogfood briefing matin du 2 mai
 
 Le briefing du 2 mai a hallucine des chiffres factuels (`"2 sorties offplan cette semaine"` alors que zero offplan existe en DB pour la semaine en cours). Pas un bug de voix, un bug de **grounding factuel**.
 
@@ -39,8 +39,8 @@ Cause racine identifiee : `_recent_proactive_context()` (`backend/src/fitmas/ski
 L'audit declenche par cet incident a confirme 3 failles structurelles connexes :
 
 - **Voix coach fragmentee entre pipelines** : Phase 1 voix conversation a durci `_CONVERSATION_SYSTEM_TEXT` mais le briefing/reminder/weekly review gardent leurs propres regles, sans few-shots BONS/MAUVAIS, sans detecteur receipt-style. Pas de source unique de doctrine voix en code.
-- **Dual-source de verite runtime non resolue** : `signals.py` lit encore `WeeklyPlan/DayPlan` (lignes 70, 74, 125, 169, 235, 331) et `signals.collect_signals` est consomme par conversation_pipeline ET heartbeat. `plan_actions.py` dual-write `DayPlan + ScheduledSession` dans 6 chemins (`lighten_session`, `modify_session`, `replace_session`, `swap_sessions`, `move_session_to_date`, `set_completion_status`). Doctrine "ScheduledSession seul en runtime" reste aspirationnelle.
-- **12 fichiers source** touchent encore `DayPlan/WeeklyPlan` directement (`models.py`, `api_onboarding.py`, `activities.py`, `api_ops.py`, `signals.py`, `repository.py`, `state.py`, `api_read.py`, `plan_actions.py`, `seed.py`, `api_debug.py`, `schema.py`).
+- **Dual-source de verite runtime** : ✅ core ferme le 3 mai. `plan_actions.py` et `mutations.py` ne mutent plus `DayPlan`; `signals.py` lit `ScheduledSession`; `activities.py` matche les activites contre `ScheduledSession`; `api_activities.py` et `strava.py` ne chargent plus le plan hebdo pour matcher ou marquer une activite.
+- **Lectures `DayPlan/WeeklyPlan` restantes** : limitees au template/onboarding/admin/compat (`schema.py`, `models.py`, `repository.py`, `api_onboarding.py`, `api_read.py` endpoint legacy `/week`, `seed.py`, `state.py`, `api_debug.py`, `api_ops.py`).
 
 ### Acquis recents — Phase A LLM-first
 
@@ -57,12 +57,12 @@ L'audit declenche par cet incident a confirme 3 failles structurelles connexes :
 | 1ter | ✅ Capture indirecte de constraints dans le prompt conversation — shippe 3 mai 2026 | 1h | section ci-dessous |
 | - | ✅ Cleanup DB prod : 395 rows obsoletes purgees, memoire propre — 3 mai 2026 | 1h | section ci-dessous |
 | 1quater | ✅ Coach reliability slice 0 — final reply composer + guards backend/heartbeat + execution receipt hardening — shippe 3 mai 2026 | 1j | `docs/COACH-RELIABILITY-REFACTOR.md` |
-| 2 | Truth source unifie runtime (cloture definitive Phase 3 coherence + tuer dual-write) | 4-5j | `docs/COACH-COHERENCE-REFACTOR.md` section "Plan 2 mai 2026" |
+| 2 | ✅ Truth source runtime core — `ScheduledSession` seul pour mutations/signals/activity matching — shippe 3 mai 2026 | 1j | `docs/COACH-COHERENCE-REFACTOR.md` section "Plan 2 mai 2026" |
 | 3 | Tool-use loop unifie conversation + heartbeat (vraie boucle agentique multi-rounds, prose terminale, action-tools) | 6-7j | `docs/LLM-FIRST-CONVERSATION.md` section "Phase 5 - Tool-use loop unifie" |
 | 4 | Observabilite briefing (endpoint debug dump bundle + prompt + response) | 1j | section ci-dessous |
 | **A+** | **Phase A+ Weekly Coherence Review** (apres Chantier 3, avant Phase B) | 3-4j | section "Phase A+" ci-dessous |
 
-**Total : ~16-19 jours** (incluant Phase A+). Couvre cloture definitive Phase A LLM-first + dette truth source + refactor archi cible + couche raisonnement week-level avant Phase B.
+**Total restant : ~12-14 jours** (incluant Phase A+). Couvre tool-use loop + observabilite + couche raisonnement week-level avant Phase B.
 
 ### Chantier 0 — Fix TTL `_recent_proactive_context` ✅ shippe 2 mai 2026
 
@@ -173,6 +173,36 @@ Hors scope :
 - pas de write tools natifs ;
 - pas de Phase B ;
 - pas d'allegement massif du prompt voix avant prose finale stable.
+
+### Chantier 2 — Truth source runtime core ✅ shippe 3 mai 2026
+
+Objectif : fermer la dette "deux verites planning" sur les chemins runtime
+qui alimentent le coach, heartbeat, activites et mutations visibles.
+
+Fix livre :
+- `plan_actions.py` mute uniquement `ScheduledSession`.
+  - `complete_session` / `skip_session` ne synchronisent plus `DayPlan`.
+  - `lighten_session`, `update_session_details`, `replace_session`, `swap_sessions` ne lisent plus le plan hebdo.
+  - `move_session` garde l'ID de la seance deplacee et cree un placeholder repos flexible sur la date source quand la destination est libre.
+- `mutations.py` ne contient plus les writes legacy `from_day/to_day` vers `DayPlan`.
+  - une mutation planning doit cibler une vraie `target_session_id`.
+- `signals.py` derive les signaux depuis `ScheduledSession` + activites/claims.
+  - plus de `get_active_plan`, plus de `get_day_plan`, plus de `WeeklyPlan/DayPlan`.
+- `activities.py` matche les activites contre les `ScheduledSession` datees.
+  - `api_activities.py` et `strava.py` ne chargent plus `to_pydantic_plan`.
+- `plan_mutation_service.mark_day_completed_for_user()` devient un no-op compat.
+  - les completions d'activite completent la session runtime et gardent `matched_day` comme contexte d'event, sans write legacy.
+
+Garde-fous ajoutes :
+- test statique interdisant `WeeklyPlan/DayPlan` et les helpers legacy dans `plan_actions.py`, `mutations.py`, `signals.py`, `activities.py`.
+- test statique interdisant `repo.get_active_plan`, `repo.to_pydantic_plan`, `week_days` et `mark_day_completed_for_user` dans `api_activities.py` / `strava.py`.
+- tests comportementaux : mutation ScheduledSession sans toucher DayPlan, signal missed key sans active plan, activity matching ScheduledSession, no-op legacy day completion.
+
+Verification locale :
+- `./scripts/test-backend -q` : 608 passed, 11 skipped, 6 subtests passed
+- `./scripts/smoke-real-conversations --scenario golden_case_autonomy` : passe
+- `./scripts/smoke-real-conversations --scenario heartbeat_non_completion` : passe, renfo J-1 marque skipped
+- `./scripts/smoke-real-conversations --scenario compound_non_completion_swap` : passe, clarification quand aucune seance vendredi n'existe
 
 ### Chantier 4 — Observabilite briefing
 
@@ -634,8 +664,8 @@ Ce qui est vrai dans le code aujourd'hui :
   - `PlanMutationService` = gateway unique des mutations visibles ✓
   - `plan_mutation_events` = audit forward-only ✓
   - guards writer : `same_sport_proximity` et `protected_recovery_target` ✓
-  - **dual-write actif** : `plan_actions.py` mute `DayPlan` dans tous ses chemins en parallele de `ScheduledSession`
-  - **lectures legacy actives** : `signals.py` lit `WeeklyPlan`/`DayPlan`, `activities.py` matche contre `DayPlan`
+  - `plan_actions.py` / `mutations.py` mutent uniquement `ScheduledSession` ✓
+  - `signals.py` et `activities.py` lisent `ScheduledSession`, plus `WeeklyPlan/DayPlan` ✓
   - `adaptation.py` produit des propositions, mais certains chemins (fatigue low-impact) auto-appliquent encore via orchestrateur
   - heartbeat = suggestion-only ✓
 
@@ -666,20 +696,15 @@ Ce qui est vrai dans le code aujourd'hui :
 
 ### Dette technique vivante
 
-#### Dual-write ScheduledSession / DayPlan (critique)
+#### Truth source runtime (sous surveillance)
 
-Le systeme mute `DayPlan` et `ScheduledSession` en parallele. Ce n'est pas du compat — c'est le coeur du mutation path.
+Core ferme le 3 mai 2026 : mutations visibles, signals et matching activites
+passent par `ScheduledSession`.
 
-Writers actifs :
-- `plan_actions.py` : lighten, modify, replace, swap, move, set_completion_status — tous mutent DayPlan
-- `plan_mutation_service.py` : appelle `mark_day_completed()` a chaque completion
-- `strava.py`, `api_activities.py` : marquent DayPlan done via `mark_day_completed_for_user()`
-
-Readers actifs :
-- `signals.py` : 5 detecteurs lisent `WeeklyPlan` / `DayPlan` pour alimenter le heartbeat
-- `activities.py` : `match_activity_to_day()` matche contre DayPlan
-
-Resolution cible : migrer `plan_actions.py` pour muter uniquement `ScheduledSession`, puis retirer les readers legacy.
+Surveillance restante :
+- garder les tests statiques anti-retour legacy ;
+- ne pas rebrancher `repo.get_active_plan` / `to_pydantic_plan` dans conversation, heartbeat, app runtime, activites ou strava ;
+- separer plus tard les helpers template/compat de `repository.py` pour rendre la frontiere plus lisible.
 
 #### repository.py hotspot (1 453 lignes, 72 fonctions)
 

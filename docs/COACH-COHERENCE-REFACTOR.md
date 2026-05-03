@@ -44,6 +44,42 @@ Audit du 2 mai (apres incident hallucination briefing) confirme que la dette tru
 
 L'incident hallucination du 2 mai n'a pas ete *cause* par cette dette (cause exacte = `_recent_proactive_context` sans TTL, traite par Chantier 0). Mais cette dette **continue de produire d'autres bugs de divergence** (`signals.py` peut classer une seance `adapted` comme une autre realite que `ScheduledSession.completion_status` actuel) et bloque le ground truth unique necessaire pour Chantier 3 (tool-use loop unifie).
 
+### Mise a jour 3 mai 2026 — core runtime ferme
+
+Chantier 2 core est livre :
+
+- `plan_actions.py` ne mute plus `DayPlan`.
+- `mutations.py` ne contient plus les writes legacy `from_day/to_day` vers `DayPlan`.
+- `signals.py` lit `ScheduledSession` + activites/claims, plus `WeeklyPlan/DayPlan`.
+- `activities.py.match_activity_to_day()` matche contre les `ScheduledSession` datees.
+- `api_activities.py` et `strava.py` ne chargent plus `repo.to_pydantic_plan()` pour matcher une activite.
+- `plan_mutation_service.mark_day_completed_for_user()` est degrade en no-op compat.
+
+Semantique importante :
+
+- `move_session` garde l'identite de la seance deplacee (`ScheduledSession.id`) en destination.
+- si la destination est libre, un placeholder repos flexible est cree sur la date source.
+- si la destination contient deja un slot flexible/rest autorise, ce slot est deplace sur la date source.
+
+Verification :
+
+- `./scripts/test-backend -q` : 608 passed, 11 skipped, 6 subtests passed.
+- `./scripts/smoke-real-conversations --scenario golden_case_autonomy` : passe.
+- `./scripts/smoke-real-conversations --scenario heartbeat_non_completion` : passe.
+- `./scripts/smoke-real-conversations --scenario compound_non_completion_swap` : passe.
+
+Readers `DayPlan/WeeklyPlan` restants et role :
+
+| Fichier | Role restant |
+| --- | --- |
+| `schema.py`, `models.py` | definitions tables / schemas compat |
+| `repository.py` | converters et helpers template/compat ; hotspot a separer plus tard |
+| `api_onboarding.py` | onboarding/regeneration du template hebdo |
+| `api_read.py` | endpoint legacy `/api/v0/week`, marque template compat |
+| `seed.py`, `state.py` | seed/dev/static demo |
+| `api_debug.py`, `api_ops.py` | reset/admin/debug |
+| `plan_mutation_service.py` | lit `get_active_plan_optional` seulement pour `plan_id`/metadata de creation ; ne lit ni ne mute `DayPlan` runtime |
+
 ### Decoupe
 
 **Etape A — Tuer le dual-write `plan_actions.py` (1.5j)**
@@ -84,13 +120,13 @@ Risque : si une surface dependait silencieusement de `DayPlan.completion_status`
 
 Cloture acceptee quand :
 
-- [ ] `plan_actions.py` ne mute plus `DayPlan` (ni directement, ni via `mark_day_completed`)
-- [ ] `signals.py` ne lit plus `WeeklyPlan/DayPlan`
-- [ ] `activities.py.match_activity_to_day()` ne lit plus `DayPlan`
-- [ ] `plan_mutation_service.mark_day_completed()` retire ou degrade hors runtime
-- [ ] Les readers `DayPlan/WeeklyPlan` restants sont uniquement template/onboarding/admin, documentes dans ce doc
-- [ ] Tests statiques + integration verrouilles
-- [ ] Aucune regression sur les 5 scenarios doctrine (`echange jeudi/vendredi`, `je suis claque`, etc.)
+- [x] `plan_actions.py` ne mute plus `DayPlan` (ni directement, ni via `mark_day_completed`)
+- [x] `signals.py` ne lit plus `WeeklyPlan/DayPlan`
+- [x] `activities.py.match_activity_to_day()` ne lit plus `DayPlan`
+- [x] `plan_mutation_service.mark_day_completed()` retire ou degrade hors runtime
+- [x] Les readers `DayPlan/WeeklyPlan` restants sont uniquement template/onboarding/admin, documentes dans ce doc
+- [x] Tests statiques + integration verrouilles
+- [x] Aucune regression sur les scenarios smoke critiques (`golden_case_autonomy`, `heartbeat_non_completion`, `compound_non_completion_swap`)
 
 ### Migration vers le modele cible
 
@@ -352,6 +388,11 @@ Invariants consolides :
 - le briefing matin ne peut plus citer un decompte hebdo en l'absence de compteurs reels
 
 ### Audit du 13 avril 2026
+
+> Supersede le 3 mai 2026 pour la partie runtime truth :
+> dual-write `plan_actions.py`, completion legacy, `signals.py` et
+> `activities.py` ont ete migres dans Chantier 2. Les sections ci-dessous
+> restent conservees comme historique d'audit.
 
 Verdict franc :
 

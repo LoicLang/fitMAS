@@ -9,7 +9,7 @@ Each signal function returns a dict (or None) with:
 from __future__ import annotations
 
 import logging
-from datetime import date
+from datetime import date, datetime, timedelta
 from typing import Any
 
 from sqlalchemy.orm import Session
@@ -38,12 +38,16 @@ PREV_DAY = {
 
 def collect_signals(db: Session, user: s.User) -> list[Signal]:
     """Run all signal detectors and return any that fired."""
-    plan = repo.get_active_plan_optional(db, user.id)
-    if plan is None:
-        logger.info("collect_signals: no active plan for user=%s", user.id)
-        return []
     time_ctx = build_time_context(user.timezone)
     today_key = time_ctx["day_key"]
+    local_today = get_local_now(user.timezone).date()
+    scheduled_sessions = repo.get_scheduled_sessions_between_dates(
+        db,
+        user.id,
+        start_date=local_today - timedelta(days=7),
+        end_date=local_today + timedelta(days=14),
+        limit=84,
+    )
 
     signals: list[Signal] = []
 
@@ -55,7 +59,7 @@ def collect_signals(db: Session, user: s.User) -> list[Signal]:
         _detect_streak,
     ):
         try:
-            signal = detector(db, user, plan, today_key)
+            signal = detector(db, user, scheduled_sessions, today_key)
             if signal:
                 signals.append(signal)
         except Exception:
@@ -67,29 +71,33 @@ def collect_signals(db: Session, user: s.User) -> list[Signal]:
 # ── B2: Missed key session ──────────────────────────────────────────────────
 
 def _detect_missed_key_session(
-    db: Session, user: s.User, plan: s.WeeklyPlan, today_key: str,
+    db: Session, user: s.User, scheduled_sessions: list[s.ScheduledSession], today_key: str,
 ) -> Signal | None:
     """Fire if yesterday was a key session that wasn't completed."""
     yesterday_key = PREV_DAY[today_key]
-    day = repo.get_day_plan(db, plan.id, yesterday_key)
-    if not day:
+    yesterday_date = get_local_now(user.timezone).date() - timedelta(days=1)
+    sessions_yesterday = [
+        session for session in scheduled_sessions
+        if _session_date(session) == yesterday_date and session.day == yesterday_key
+    ]
+    if not sessions_yesterday:
         return None
 
-    # Only care about actual sport sessions (not rest)
-    if day.sport_type == "rest":
-        return None
-
-    # Only fire for key / important sessions
     key_words = ("cle", "fort", "qualite", "bloc", "longue", "long", "important")
-    is_key = any(w in (day.priority + day.session_title + day.session_type).lower() for w in key_words)
-    if not is_key:
+    missed_session = None
+    for session in sessions_yesterday:
+        if session.sport_type == "rest":
+            continue
+        is_key = any(w in (session.priority + session.session_title + session.session_type).lower() for w in key_words)
+        if not is_key:
+            continue
+        if session.completion_status == "done":
+            continue
+        missed_session = session
+        break
+    if missed_session is None:
         return None
 
-    if day.completion_status == "done":
-        return None
-
-    yesterday_date = get_local_now(user.timezone).date()
-    yesterday_date = yesterday_date.fromordinal(yesterday_date.toordinal() - 1)
     activities_yesterday = _activities_on_local_date(db, user, target_date=yesterday_date)
     claimed_yesterday = _claimed_activities_on_local_date(db, user, target_date=yesterday_date)
     actual_context = ""
@@ -105,14 +113,15 @@ def _detect_missed_key_session(
         "kind": "missed_key_session",
         "severity": "warning",
         "summary": (
-            f"Seance cle de {label} ({day.session_title}) non realisee. "
-            f"Sport: {day.sport_type}, priorite: {day.priority}.{actual_context}"
+            f"Seance cle de {label} ({missed_session.session_title}) non realisee. "
+            f"Sport: {missed_session.sport_type}, priorite: {missed_session.priority}.{actual_context}"
         ),
         "data": {
+            "session_id": missed_session.id,
             "day": yesterday_key,
-            "session_title": day.session_title,
-            "sport_type": day.sport_type,
-            "priority": day.priority,
+            "session_title": missed_session.session_title,
+            "sport_type": missed_session.sport_type,
+            "priority": missed_session.priority,
             "actual_sports": [activity.sport_type for activity in activities_yesterday],
             "claimed_sports": [claim.sport_type for claim in claimed_yesterday if claim.sport_type],
         },
@@ -122,9 +131,11 @@ def _detect_missed_key_session(
 # ── B3: Silence (no activity for N days) ────────────────────────────────────
 
 def _detect_silence(
-    db: Session, user: s.User, plan: s.WeeklyPlan, today_key: str,
+    db: Session, user: s.User, scheduled_sessions: list[s.ScheduledSession], today_key: str,
 ) -> Signal | None:
     """Fire if 3+ consecutive days have no actual activity."""
+    if not scheduled_sessions:
+        return None
     local_today = get_local_now(user.timezone).date()
 
     silent_days = 0
@@ -166,19 +177,26 @@ def _detect_silence(
 # ── B4: High cumulative load ────────────────────────────────────────────────
 
 def _detect_high_cumulative_load(
-    db: Session, user: s.User, plan: s.WeeklyPlan, today_key: str,
+    db: Session, user: s.User, scheduled_sessions: list[s.ScheduledSession], today_key: str,
 ) -> Signal | None:
     """Fire if done sessions this week already exceed safe load threshold."""
     total_load = 0
     done_count = 0
     remaining_load = 0
+    local_today = get_local_now(user.timezone).date()
+    week_start = local_today - timedelta(days=local_today.weekday())
+    week_end = week_start + timedelta(days=6)
+    week_sessions = [
+        session for session in scheduled_sessions
+        if (session_date := _session_date(session)) is not None and week_start <= session_date <= week_end
+    ]
 
-    for day_row in plan.days:
-        if day_row.completion_status == "done":
-            total_load += day_row.load_score
+    for session in week_sessions:
+        if session.completion_status == "done":
+            total_load += session.load_score
             done_count += 1
-        elif day_row.completion_status == "planned" and day_row.sport_type != "rest":
-            remaining_load += day_row.load_score
+        elif session.completion_status == "planned" and session.sport_type != "rest":
+            remaining_load += session.load_score
 
     # Also factor in actual activity duration vs planned
     recent_activities = (
@@ -193,9 +211,9 @@ def _detect_high_cumulative_load(
 
     actual_minutes = sum(a.duration_min or 0 for a in recent_activities)
     planned_done_minutes = sum(
-        d.duration_min or 0
-        for d in plan.days
-        if d.completion_status == "done" and d.duration_min
+        session.duration_min or 0
+        for session in week_sessions
+        if session.completion_status == "done" and session.duration_min
     )
 
     # Threshold: load > 18 (out of typical 20-25 weekly) or duration 30%+ over plan
@@ -232,7 +250,7 @@ def _detect_high_cumulative_load(
 # ── B5: Big session completed ───────────────────────────────────────────────
 
 def _detect_big_session_done(
-    db: Session, user: s.User, plan: s.WeeklyPlan, today_key: str,
+    db: Session, user: s.User, scheduled_sessions: list[s.ScheduledSession], today_key: str,
 ) -> Signal | None:
     """Fire if a significant session was logged in the last 6 hours."""
     cutoff = utc_cutoff(hours=6)
@@ -328,7 +346,7 @@ def _value(obj: Any, key: str) -> Any:
 
 
 def _detect_streak(
-    db: Session, user: s.User, plan: s.WeeklyPlan, today_key: str,
+    db: Session, user: s.User, scheduled_sessions: list[s.ScheduledSession], today_key: str,
 ) -> Signal | None:
     """Fire if user has 3+ consecutive local days with a substantive
     training activity (>= 20 min or unknown duration). Short walks and
@@ -384,6 +402,20 @@ def select_conversation_signals(signals: list[Signal], *, limit: int = 3) -> lis
 
 _activities_on_local_date = activities_on_local_date
 _claimed_activities_on_local_date = claimed_activities_on_local_date
+
+
+def _session_date(session: s.ScheduledSession) -> date | None:
+    raw = getattr(session, "scheduled_date", None)
+    if isinstance(raw, datetime):
+        return raw.date()
+    if isinstance(raw, date):
+        return raw
+    if raw:
+        try:
+            return date.fromisoformat(str(raw)[:10])
+        except ValueError:
+            return None
+    return None
 
 
 def _conversation_signal_sort_key(signal: Signal) -> tuple[float, float]:

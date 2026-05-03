@@ -16,7 +16,6 @@ def test_noop_move_session_does_not_run_post_hooks(monkeypatch) -> None:
         fitmas_message="OK. Je deplace.",
     )
 
-    monkeypatch.setattr("fitmas.mutations.repo.get_plan_optional", lambda *args, **kwargs: None)
     monkeypatch.setattr("fitmas.mutations.run_pre_mutation_hooks", lambda *args, **kwargs: SimpleNamespace(allowed=True))
 
     def _post_hook(*args, **kwargs):

@@ -182,6 +182,42 @@ def test_plan_patch_validation_blocks_missing_target_session_before_commit() -> 
     assert validation.operation_results[0].suggested_fix == "Relire le planning actuel et cibler une session active."
 
 
+def test_plan_patch_validation_blocks_completed_session_target() -> None:
+    patch = PlanPatch(
+        operations=[
+            PlanPatchOperation(
+                operation_type="lighten_day",
+                target_session_id=22,
+                rationale="Alleger une seance deja resolue.",
+            )
+        ],
+        coach_message="J'allege.",
+    )
+    sessions = [
+        SimpleNamespace(
+            id=22,
+            scheduled_date=date(2026, 4, 22),
+            sport_type="strength",
+            session_type="strength",
+            completion_status="skipped",
+        )
+    ]
+
+    validation = validate_plan_patch(
+        object(),
+        plan_id=0,
+        patch=patch,
+        scheduled_sessions=sessions,
+        timezone_name="Europe/Paris",
+    )
+
+    assert validation.status == "blocked"
+    assert validation.operation_results[0].block_reason == "completed_session_target"
+    assert validation.operation_results[0].suggested_fix == (
+        "Cibler une seance encore planifiee; ne pas modifier une seance deja faite ou skippee."
+    )
+
+
 def test_plan_patch_validation_surfaces_protected_recovery_fix() -> None:
     patch = PlanPatch(
         operations=[

@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 
 from fitmas import repository as repo, schema as s
 from fitmas.activities import infer_activity_title, match_activity_to_day, normalize_activity_sport
-from fitmas.plan_mutation_service import complete_session_from_activity_for_user, mark_day_completed_for_user, mark_session_completed_for_user
+from fitmas.plan_mutation_service import complete_session_from_activity_for_user, mark_session_completed_for_user
 from fitmas.training_load import estimate_tss
 
 AUTH_URL = "https://www.strava.com/oauth/authorize"
@@ -115,12 +115,10 @@ def import_recent_activities(
     *,
     user_id: int,
     connection: s.StravaConnection,
-    week_days: list,
-    plan_id: int | None = None,
-    plan_created_at: datetime | None = None,
 ) -> int:
     access_token = refresh_token_if_needed(db, connection)
     user = repo.get_user(db)
+    scheduled_sessions = repo.get_scheduled_sessions(db, user_id, limit=84)
     imported = 0
     for raw_activity in fetch_recent_activities(access_token, per_page=30):
         existing = repo.get_activity_by_external_id(db, user_id, str(raw_activity["id"]))
@@ -165,8 +163,7 @@ def import_recent_activities(
             sport_type=sport_type,
             started_at=started_at,
             duration_min=duration_min,
-            week_days=week_days,
-            plan_created_at=plan_created_at,
+            scheduled_sessions=scheduled_sessions,
         )
         estimated_tss = estimate_tss(
             {
@@ -211,15 +208,12 @@ def import_recent_activities(
             start_latlng=",".join(str(c) for c in raw_activity["start_latlng"]) if raw_activity.get("start_latlng") else None,
         )
 
-        # Only mark day done for activities from this week
-        if matched_day and match_reason != "activite hors semaine courante" and plan_id and activity.scheduled_session_id is None:
-            mark_day_completed_for_user(db, plan_id=plan_id, day=matched_day, source="strava", user_id=user.id)
         if activity.scheduled_session_id is not None:
             complete_session_from_activity_for_user(
                 db,
                 user=user,
                 session_id=activity.scheduled_session_id,
-                plan_id=plan_id if matched_day and match_reason != "activite hors semaine courante" else None,
+                plan_id=None,
                 matched_day=matched_day if match_reason != "activite hors semaine courante" else None,
                 source="strava",
             )

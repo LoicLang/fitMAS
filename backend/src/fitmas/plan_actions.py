@@ -54,18 +54,14 @@ def complete_session(db: Session, *, user: s.User, session_id: int) -> s.Schedul
     session = repo.get_scheduled_session(db, user.id, session_id)
     if session is None:
         return None
-    session = repo.set_scheduled_session_status(db, session.id, "done")
-    _sync_current_week_day_status(db, user=user, session=session, status="done")
-    return session
+    return repo.set_scheduled_session_status(db, session.id, "done")
 
 
 def skip_session(db: Session, *, user: s.User, session_id: int) -> s.ScheduledSession | None:
     session = repo.get_scheduled_session(db, user.id, session_id)
     if session is None:
         return None
-    session = repo.set_scheduled_session_status(db, session.id, "skipped")
-    _sync_current_week_day_status(db, user=user, session=session, status="skipped")
-    return session
+    return repo.set_scheduled_session_status(db, session.id, "skipped")
 
 
 def lighten_session(
@@ -80,11 +76,6 @@ def lighten_session(
         return None
 
     _apply_light_session_fields(session, rationale=rationale)
-    _, day_plan = repo.get_current_week_day_plan_for_session(db, user=user, session=session)
-    if day_plan is not None:
-        _apply_light_day_fields(day_plan, rationale=rationale)
-        repo.set_change_notes(db, day_plan.id, [("Journee allegee", rationale or "Journee allegee.")])
-
     db.commit()
     db.refresh(session)
     return session
@@ -109,16 +100,6 @@ def update_session_details(
         session.session_goal = new_goal
     if rationale:
         session.session_note = rationale
-
-    _, day_plan = repo.get_current_week_day_plan_for_session(db, user=user, session=session)
-    if day_plan is not None:
-        if new_title:
-            day_plan.session_title = new_title
-        if new_goal:
-            day_plan.session_goal = new_goal
-        if rationale:
-            day_plan.session_note = rationale
-        repo.set_change_notes(db, day_plan.id, [("Seance modifiee", rationale or "Seance ajustee.")])
 
     db.commit()
     db.refresh(session)
@@ -155,21 +136,6 @@ def replace_session(
         rationale=rationale,
     )
 
-    _, day_plan = repo.get_current_week_day_plan_for_session(db, user=user, session=session)
-    if day_plan is not None:
-        _apply_replacement_fields(
-            day_plan,
-            new_sport_type=new_sport_type,
-            new_session_type=new_session_type,
-            new_duration_min=new_duration_min,
-            new_intensity=new_intensity,
-            new_description=new_description,
-            new_title=new_title,
-            new_goal=new_goal,
-            rationale=rationale,
-        )
-        repo.set_change_notes(db, day_plan.id, [("Seance remplacee", rationale or "Seance adaptee.")])
-
     db.commit()
     db.refresh(session)
     return session
@@ -187,18 +153,6 @@ def swap_sessions(
     second = repo.get_scheduled_session(db, user.id, second_session_id)
     if first is None or second is None or first.id == second.id:
         return None
-
-    first_plan, first_day_plan = repo.get_current_week_day_plan_for_session(db, user=user, session=first)
-    _, second_day_plan = repo.get_current_week_day_plan_for_session(db, user=user, session=second)
-    if first_day_plan is not None and second_day_plan is not None and first_plan is not None:
-        _swap_day_plan_content(first_day_plan, second_day_plan)
-        db.commit()
-        repo.set_change_notes(db, first_day_plan.id, [("Seance echangee", rationale or "Seances echangees.")])
-        repo.set_change_notes(db, second_day_plan.id, [("Seance echangee", rationale or "Seances echangees.")])
-        repo.resync_plan_sessions(db, first_plan.id, timezone_name=user.timezone)
-        refreshed_first = repo.get_scheduled_session(db, user.id, first.id) or first
-        refreshed_second = repo.get_scheduled_session(db, user.id, second.id) or second
-        return refreshed_first, refreshed_second
 
     _swap_session_content(first, second)
     if rationale:
@@ -223,81 +177,16 @@ def move_session(
 
     source_date = session.scheduled_date.date()
     destination_date = target_date or _find_next_open_date(db, user_id=user.id, source_date=source_date)
-    if destination_date <= source_date:
+    if target_date is None and destination_date <= source_date:
         destination_date = source_date + timedelta(days=1)
 
-    _, source_day_plan = repo.get_current_week_day_plan_for_session(db, user=user, session=session)
-    destination_day_key = DAY_KEYS[destination_date.weekday()]
-    destination_dt = datetime.combine(destination_date, time.min)
-    destination_is_current_week = repo.get_scheduled_session_for_date(
-        db,
-        user.id,
-        day=destination_day_key,
-        scheduled_date=destination_dt,
-    ) is not None
-
-    if source_day_plan is not None and destination_is_current_week:
-        plan = repo.get_active_plan(db, user.id)
-        repo.move_session(db, plan.id, session.day, destination_day_key)
-        source_row = repo.get_day_plan(db, plan.id, session.day)
-        destination_row = repo.get_day_plan(db, plan.id, destination_day_key)
-        if source_row is not None:
-            repo.set_change_notes(db, source_row.id, [("Seance reportee", "Seance deplacee depuis l'app.")])
-        if destination_row is not None:
-            repo.set_change_notes(db, destination_row.id, [("Seance deplacee ici", "Seance replanifiee depuis l'app.")])
-        repo.resync_plan_sessions(db, plan.id, timezone_name=user.timezone)
-        moved = repo.get_scheduled_session_for_date(
-            db,
-            user.id,
-            day=destination_day_key,
-            scheduled_date=destination_dt,
-        )
-        return moved or session
-
-    if source_day_plan is not None:
-        _lighten_day_plan(db, source_day_plan)
-        moved_session = s.ScheduledSession(
-            user_id=user.id,
-            day=destination_day_key,
-            label=day_label_fr(destination_day_key, capitalize=True),
-            scheduled_date=destination_dt,
-            source_plan_created_at=session.source_plan_created_at,
-            sport_type=session.sport_type,
-            session_type=session.session_type,
-            session_title=session.session_title,
-            session_goal=session.session_goal,
-            session_note=session.session_note,
-            session_description=session.session_description,
-            duration_min=session.duration_min,
-            intensity=session.intensity,
-            load_score=session.load_score,
-            priority=session.priority,
-            nutrition_focus=session.nutrition_focus,
-            flexibility=session.flexibility,
-            completion_status="adapted",
-        )
-        db.add(moved_session)
-
-        session.sport_type = "rest"
-        session.session_type = "rest"
-        session.session_title = "Journee flexible"
-        session.session_goal = "Recuperation et disponibilite"
-        session.session_note = "Seance deplacee depuis l'app."
-        session.session_description = ""
-        session.duration_min = None
-        session.intensity = "easy"
-        session.load_score = 0
-        session.priority = "Leger"
-        session.nutrition_focus = "Reste simple. Le but est surtout de recuperer."
-        session.flexibility = "flexible"
-        session.completion_status = "adapted"
-        db.commit()
-        db.refresh(moved_session)
-        return moved_session
-
-    session.scheduled_date = destination_dt
-    session.day = destination_day_key
-    session.label = day_label_fr(destination_day_key, capitalize=True)
+    target_slot = _scheduled_session_on_date(db, user_id=user.id, target_date=destination_date, exclude_session_id=session.id)
+    if target_slot is not None:
+        _assign_session_date(target_slot, source_date)
+        target_slot.completion_status = "adapted"
+    else:
+        db.add(_build_source_placeholder(user=user, source=session, source_date=source_date))
+    _assign_session_date(session, destination_date)
     session.completion_status = "adapted"
     db.commit()
     db.refresh(session)
@@ -317,52 +206,58 @@ def _find_next_open_date(db: Session, *, user_id: int, source_date: date, horizo
     return source_date + timedelta(days=1)
 
 
-def _sync_current_week_day_status(
+def _scheduled_session_on_date(
     db: Session,
     *,
+    user_id: int,
+    target_date: date,
+    exclude_session_id: int | None = None,
+) -> s.ScheduledSession | None:
+    sessions = repo.get_scheduled_sessions_for_date(db, user_id, target_date=target_date)
+    for candidate in sessions:
+        if exclude_session_id is not None and candidate.id == exclude_session_id:
+            continue
+        return candidate
+    return None
+
+
+def _assign_session_date(session: s.ScheduledSession, target_date: date) -> None:
+    day_key = DAY_KEYS[target_date.weekday()]
+    session.scheduled_date = datetime.combine(target_date, time.min)
+    session.day = day_key
+    session.label = day_label_fr(day_key, capitalize=True)
+
+
+def _build_source_placeholder(
+    *,
     user: s.User,
-    session: s.ScheduledSession | None,
-    status: str,
-) -> None:
-    if session is None:
-        return
-    _, day_plan = repo.get_current_week_day_plan_for_session(db, user=user, session=session)
-    if day_plan is None:
-        return
-    day_plan.completion_status = status
-    db.commit()
-
-
-def _lighten_day_plan(db: Session, day: s.DayPlan) -> None:
-    _apply_light_day_fields(day, rationale="Seance deplacee depuis l'app. Garde de la fraicheur pour le nouveau creneau.")
-    db.commit()
-    repo.set_change_notes(db, day.id, [("Seance reportee", "Deplacement confirme depuis l'app.")])
+    source: s.ScheduledSession,
+    source_date: date,
+) -> s.ScheduledSession:
+    day_key = DAY_KEYS[source_date.weekday()]
+    return s.ScheduledSession(
+        user_id=user.id,
+        day=day_key,
+        label=day_label_fr(day_key, capitalize=True),
+        scheduled_date=datetime.combine(source_date, time.min),
+        source_plan_created_at=source.source_plan_created_at,
+        sport_type="rest",
+        session_type="rest",
+        session_title="Journee flexible",
+        session_goal="Recuperation et disponibilite",
+        session_note="Seance deplacee depuis l'app.",
+        session_description="",
+        duration_min=None,
+        intensity="easy",
+        load_score=0,
+        priority="Leger",
+        nutrition_focus="Reste simple. Le but est surtout de recuperer.",
+        flexibility="flexible",
+        completion_status="adapted",
+    )
 
 
 def _swap_session_content(first: s.ScheduledSession, second: s.ScheduledSession) -> None:
-    fields = (
-        "sport_type",
-        "session_type",
-        "session_title",
-        "session_goal",
-        "session_note",
-        "session_description",
-        "duration_min",
-        "intensity",
-        "load_score",
-        "priority",
-        "nutrition_focus",
-        "flexibility",
-        "completion_status",
-    )
-    for field in fields:
-        first_value = getattr(first, field)
-        second_value = getattr(second, field)
-        setattr(first, field, second_value)
-        setattr(second, field, first_value)
-
-
-def _swap_day_plan_content(first: s.DayPlan, second: s.DayPlan) -> None:
     fields = (
         "sport_type",
         "session_type",
@@ -420,7 +315,7 @@ def _estimate_load_score(intensity: str | None, duration_min: int | None) -> int
 
 
 def _apply_replacement_fields(
-    target,  # ScheduledSession or DayPlan
+    target: s.ScheduledSession,
     *,
     new_sport_type: str | None,
     new_session_type: str | None,
@@ -442,8 +337,7 @@ def _apply_replacement_fields(
     if new_intensity is not None:
         target.intensity = new_intensity
     if new_description is not None:
-        desc_attr = "session_description" if hasattr(target, "session_description") else "session_description"
-        setattr(target, desc_attr, new_description)
+        target.session_description = new_description
     elif sport_changed or type_changed:
         target.session_description = ""
     if new_title is not None:
@@ -460,19 +354,3 @@ def _apply_replacement_fields(
         target.load_score = _estimate_load_score(eff_intensity, eff_duration)
 
     target.completion_status = "adapted"
-
-
-def _apply_light_day_fields(day: s.DayPlan, *, rationale: str | None) -> None:
-    day.sport_type = "rest"
-    day.session_type = "rest"
-    day.session_title = "Journee flexible"
-    day.session_goal = "Recuperation et disponibilite"
-    day.session_note = rationale or "Journee allegee."
-    day.session_description = ""
-    day.duration_min = None
-    day.intensity = "easy"
-    day.load_score = 0
-    day.priority = "Leger"
-    day.nutrition_focus = "Reste simple. Le but est surtout de recuperer."
-    day.flexibility = "flexible"
-    day.completion_status = "adapted"

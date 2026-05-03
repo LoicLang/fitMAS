@@ -34,6 +34,57 @@ class SignalsGroundingTest(unittest.TestCase):
     def test_collect_signals_returns_empty_without_active_plan(self) -> None:
         self.assertEqual(collect_signals(self.db, self.user), [])
 
+    def test_missed_key_session_uses_scheduled_session_without_active_plan(self) -> None:
+        now = get_local_now(self.user.timezone)
+        yesterday = now - timedelta(days=1)
+        yesterday_key = DAY_KEYS[yesterday.weekday()]
+        session = s.ScheduledSession(
+            user_id=self.user.id,
+            day=yesterday_key,
+            label=day_label_fr(yesterday_key, capitalize=True),
+            scheduled_date=yesterday.replace(hour=0, minute=0, second=0, microsecond=0).replace(tzinfo=None),
+            sport_type="swimming",
+            session_type="technique",
+            session_title="Natation cle",
+            session_goal="Precision",
+            session_note="",
+            session_description="",
+            duration_min=60,
+            intensity="moderate",
+            load_score=3,
+            priority="Seance cle",
+            nutrition_focus="",
+            flexibility="stable",
+            completion_status="planned",
+        )
+        self.db.add(session)
+        self.db.commit()
+        repo.add_activity(
+            self.db,
+            user_id=self.user.id,
+            source="manual",
+            sport_type="running",
+            title="Course off-plan",
+            duration_min=30,
+            distance_m=5000,
+            elevation_m=0,
+            perceived_load=3,
+            note="",
+            started_at=now - timedelta(days=1),
+            matched_day=None,
+            match_reason="",
+            avg_hr=None,
+            avg_speed=None,
+            tss=24.0,
+        )
+
+        signals = collect_signals(self.db, self.user)
+        missed = next(signal for signal in signals if signal["kind"] == "missed_key_session")
+
+        self.assertEqual(missed["data"]["session_id"], session.id)
+        self.assertIn("running", missed["data"]["actual_sports"])
+        self.assertIn("hors seance prevue", missed["summary"])
+
     def test_silence_signal_ignores_recent_off_plan_activity(self) -> None:
         now = get_local_now(self.user.timezone)
         days = []
@@ -91,51 +142,30 @@ class SignalsGroundingTest(unittest.TestCase):
 
     def test_missed_key_session_mentions_actual_activity(self) -> None:
         now = get_local_now(self.user.timezone)
-        today_key = DAY_KEYS[now.weekday()]
-        yesterday_key = DAY_KEYS[(now.weekday() - 1) % 7]
-        repo.replace_plan(
-            self.db,
-            self.user.id,
-            intention="test",
-            summary="test",
-            timezone_name=self.user.timezone,
-            days=[
-                {
-                    "day": yesterday_key,
-                    "label": day_label_fr(yesterday_key, capitalize=True),
-                    "sport_type": "swimming",
-                    "session_type": "technique",
-                    "session_title": "Natation cle",
-                    "session_goal": "Precision",
-                    "session_note": "",
-                    "session_description": "",
-                    "duration_min": 60,
-                    "intensity": "moderate",
-                    "load_score": 3,
-                    "priority": "Seance cle",
-                    "nutrition_focus": "",
-                    "flexibility": "stable",
-                    "completion_status": "planned",
-                },
-                {
-                    "day": today_key,
-                    "label": day_label_fr(today_key, capitalize=True),
-                    "sport_type": "rest",
-                    "session_type": "rest",
-                    "session_title": "Repos",
-                    "session_goal": "Repos",
-                    "session_note": "",
-                    "session_description": "",
-                    "duration_min": None,
-                    "intensity": "easy",
-                    "load_score": 0,
-                    "priority": "Souplesse",
-                    "nutrition_focus": "",
-                    "flexibility": "stable",
-                    "completion_status": "planned",
-                },
-            ],
+        yesterday = now - timedelta(days=1)
+        yesterday_key = DAY_KEYS[yesterday.weekday()]
+        self.db.add(
+            s.ScheduledSession(
+                user_id=self.user.id,
+                day=yesterday_key,
+                label=day_label_fr(yesterday_key, capitalize=True),
+                scheduled_date=yesterday.replace(hour=0, minute=0, second=0, microsecond=0).replace(tzinfo=None),
+                sport_type="swimming",
+                session_type="technique",
+                session_title="Natation cle",
+                session_goal="Precision",
+                session_note="",
+                session_description="",
+                duration_min=60,
+                intensity="moderate",
+                load_score=3,
+                priority="Seance cle",
+                nutrition_focus="",
+                flexibility="stable",
+                completion_status="planned",
+            )
         )
+        self.db.commit()
         repo.add_activity(
             self.db,
             user_id=self.user.id,

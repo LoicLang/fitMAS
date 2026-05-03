@@ -196,11 +196,12 @@ class FitMASCoreFlowsTest(unittest.TestCase):
 
     def test_move_session_keeps_placeholder_and_creates_future_copy(self) -> None:
         _, session = self._create_plan_for_today()
+        source_date = session.scheduled_date.date()
         moved = move_session(
             self.db,
             user=self.user,
             session_id=session.id,
-            target_date=session.scheduled_date.date() + timedelta(days=8),
+            target_date=source_date + timedelta(days=8),
         )
         self.assertIsNotNone(moved)
         sessions = [repo.to_pydantic_scheduled_session(x) for x in repo.get_scheduled_sessions(self.db, self.user.id, limit=10)]
@@ -208,7 +209,8 @@ class FitMASCoreFlowsTest(unittest.TestCase):
         self.assertEqual(sessions[0].sport_type, "rest")
         self.assertEqual(sessions[0].completion_status, "adapted")
         self.assertEqual(sessions[1].session_title, "Footing facile")
-        self.assertEqual(sessions[1].scheduled_date, (session.scheduled_date.date() + timedelta(days=8)).isoformat())
+        self.assertEqual(sessions[1].id, session.id)
+        self.assertEqual(sessions[1].scheduled_date, (source_date + timedelta(days=8)).isoformat())
 
     def test_read_models_expose_load_band_and_week_meta(self) -> None:
         now = get_local_now(self.user.timezone)
