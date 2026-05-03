@@ -161,6 +161,25 @@ def build_tool_registry() -> dict[str, ToolSpec]:
             handler=_suggest_replan_candidates,
         ),
         ToolSpec(
+            name="validate_plan_patch",
+            description=(
+                "Valide un PlanPatch sans l'appliquer. Retourne valid/warning/"
+                "requires_confirmation/blocked, les raisons typees et les suggested_fix."
+            ),
+            input_schema={
+                "type": "object",
+                "properties": {
+                    "patch": {
+                        "type": "object",
+                        "description": "PlanPatch complet: coach_message + operations[].",
+                    }
+                },
+                "required": ["patch"],
+            },
+            allowed_pipelines=("conversation", "planning"),
+            handler=_validate_plan_patch_tool,
+        ),
+        ToolSpec(
             name="propose_replan",
             description="Compat legacy: utilise suggest_replan_candidates. Retourne une candidate de replan read-only, pas une decision finale.",
             input_schema={
@@ -364,6 +383,56 @@ def _suggest_replan_candidates(context: ToolContext, arguments: dict[str, Any]) 
 
 def _propose_replan(context: ToolContext, arguments: dict[str, Any]) -> ToolResult:
     return _build_replan_candidate_result(context, arguments, tool_name="propose_replan")
+
+
+def _validate_plan_patch_tool(context: ToolContext, arguments: dict[str, Any]) -> ToolResult:
+    from fitmas.plan_patch import PlanPatch, validate_plan_patch
+
+    raw_patch = arguments.get("patch")
+    if not isinstance(raw_patch, dict):
+        raw_patch = {
+            "coach_message": str(arguments.get("coach_message") or "Patch a valider."),
+            "operations": arguments.get("operations") or [],
+            "confirmation_reason": arguments.get("confirmation_reason"),
+        }
+    try:
+        patch = PlanPatch.model_validate(raw_patch)
+    except Exception as exc:
+        return ToolResult(
+            tool_name="validate_plan_patch",
+            status="error",
+            error=f"invalid_plan_patch: {exc}",
+            summary="Patch invalide: schema PlanPatch non respecte.",
+        )
+    validation = validate_plan_patch(
+        context.db,
+        plan_id=0,
+        patch=patch,
+        scheduled_sessions=context.scheduled_sessions,
+        timezone_name=context.timezone_name,
+    )
+    payload = {
+        "status": validation.status,
+        "summary": validation.summary,
+        "operation_results": [
+            {
+                "operation_type": result.operation_type,
+                "status": result.status,
+                "target_session_id": result.target_session_id,
+                "block_reason": result.block_reason,
+                "warning_codes": list(result.warning_codes),
+                "warning_messages": list(result.warning_messages),
+                "suggested_fix": result.suggested_fix,
+            }
+            for result in validation.operation_results
+        ],
+    }
+    return ToolResult(
+        tool_name="validate_plan_patch",
+        status="ok",
+        payload=payload,
+        summary=validation.summary,
+    )
 
 
 def _build_replan_candidate_result(

@@ -73,6 +73,16 @@ def test_compose_final_reply_drops_invalid_output() -> None:
     assert compose_final_reply(ctx, request_text_fn=fake_request_text) is None
 
 
+def test_validation_rejects_confirmation_question_after_committed_event() -> None:
+    ctx = FinalReplyContext(
+        committed_events=("Tempo deplace a jeudi.",),
+        allowed_to_claim_mutation=True,
+    )
+
+    assert is_valid_final_reply("Je le glisse a jeudi. Tu confirmes jeudi soir pour le tempo ?", ctx) is False
+    assert is_valid_final_reply("Je le glisse a jeudi. Meme stimulus, juste decale.", ctx) is True
+
+
 def test_outage_fallback_is_short_and_non_technical() -> None:
     fallback = outage_fallback_reply(_blocked_context())
 

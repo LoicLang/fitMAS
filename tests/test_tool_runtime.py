@@ -77,6 +77,7 @@ class ToolRuntimeTest(unittest.TestCase):
         self.assertIn("get_relevant_facts", names)
         self.assertIn("get_recent_reality_window", names)
         self.assertIn("get_load_context", names)
+        self.assertIn("validate_plan_patch", names)
 
     def test_execute_tool_call_returns_today_context(self) -> None:
         result, trace = execute_tool_call(
@@ -353,6 +354,116 @@ class ToolRuntimeTest(unittest.TestCase):
         self.assertIn("propose_replan", registry)
         self.assertIn("compat", registry["propose_replan"].description.lower())
         self.assertIn("suggest_replan_candidates", registry["propose_replan"].description)
+
+    def test_validate_plan_patch_tool_returns_valid_for_clean_move(self) -> None:
+        registry = build_tool_registry()
+        context = ToolContext(
+            pipeline="conversation",
+            user_id=1,
+            timezone_name="Europe/Paris",
+            scheduled_sessions=[
+                {
+                    "id": 41,
+                    "scheduled_date": "2099-03-23T07:00:00+01:00",
+                    "sport_type": "running",
+                    "session_type": "easy",
+                    "session_title": "Footing",
+                    "duration_min": 45,
+                    "intensity": "easy",
+                    "priority": "Normal",
+                    "completion_status": "planned",
+                },
+                {
+                    "id": 42,
+                    "scheduled_date": "2099-03-24T07:00:00+01:00",
+                    "sport_type": "rest",
+                    "session_type": "rest",
+                    "session_title": "Repos flexible",
+                    "duration_min": 0,
+                    "intensity": "easy",
+                    "priority": "Recovery",
+                    "flexibility": "flexible",
+                    "completion_status": "planned",
+                },
+            ],
+        )
+
+        result = registry["validate_plan_patch"].handler(
+            context,
+            {
+                "patch": {
+                    "coach_message": "Je peux bouger le footing a mardi.",
+                    "operations": [
+                        {
+                            "operation_type": "move_session",
+                            "target_session_id": 41,
+                            "target_date": "2099-03-24",
+                            "rationale": "Jour cible libre.",
+                        }
+                    ],
+                }
+            },
+        )
+
+        self.assertEqual(result.status, "ok")
+        self.assertEqual(result.payload["status"], "valid")
+        self.assertEqual(result.payload["operation_results"][0]["status"], "valid")
+        self.assertEqual(result.summary, "Patch valide.")
+
+    def test_validate_plan_patch_tool_blocks_occupied_target_with_suggested_fix(self) -> None:
+        registry = build_tool_registry()
+        context = ToolContext(
+            pipeline="conversation",
+            user_id=1,
+            timezone_name="Europe/Paris",
+            scheduled_sessions=[
+                {
+                    "id": 51,
+                    "scheduled_date": "2099-03-23T07:00:00+01:00",
+                    "sport_type": "running",
+                    "session_type": "easy",
+                    "session_title": "Footing",
+                    "duration_min": 45,
+                    "intensity": "easy",
+                    "priority": "Normal",
+                    "completion_status": "planned",
+                },
+                {
+                    "id": 52,
+                    "scheduled_date": "2099-03-24T07:00:00+01:00",
+                    "sport_type": "cycling",
+                    "session_type": "endurance",
+                    "session_title": "Velo endurance",
+                    "duration_min": 75,
+                    "intensity": "moderate",
+                    "priority": "Normal",
+                    "completion_status": "planned",
+                },
+            ],
+        )
+
+        result = registry["validate_plan_patch"].handler(
+            context,
+            {
+                "patch": {
+                    "coach_message": "Je bouge le footing a mardi.",
+                    "operations": [
+                        {
+                            "operation_type": "move_session",
+                            "target_session_id": 51,
+                            "target_date": "2099-03-24",
+                            "rationale": "Tester le blocage.",
+                        }
+                    ],
+                }
+            },
+        )
+
+        self.assertEqual(result.status, "ok")
+        self.assertEqual(result.payload["status"], "blocked")
+        operation = result.payload["operation_results"][0]
+        self.assertEqual(operation["block_reason"], "occupied_training_target")
+        self.assertIn("swap_sessions", operation["suggested_fix"])
 
 
 if __name__ == "__main__":

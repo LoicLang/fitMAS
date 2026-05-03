@@ -4,9 +4,18 @@ import unittest
 from types import SimpleNamespace
 from unittest.mock import patch
 
-from fitmas.conversation_pipeline import _blocked_mutation_reply, _blocked_plan_patch_reply
+from fitmas.conversation_pipeline import (
+    _blocked_mutation_reply,
+    _blocked_plan_patch_reply,
+    _execution_applied_patch_blocked_reply,
+)
 from fitmas.mutation_permissions import MutationImpactAssessment, build_confirmation_prompt
-from fitmas.plan_mutation_service import PlanBlockedMutationEvent, PlanMutationServiceResult, PlanPatchServiceResult
+from fitmas.plan_mutation_service import (
+    PlanAppliedMutationEvent,
+    PlanBlockedMutationEvent,
+    PlanMutationServiceResult,
+    PlanPatchServiceResult,
+)
 from fitmas.plan_patch import PlanPatchOperationValidation, PlanPatchValidation
 
 
@@ -145,6 +154,79 @@ class BlockedMutationReplyTest(unittest.TestCase):
             "Je ne l'ecrase pas : ce creneau protege ta recup. On peut echanger avec vendredi.",
         )
         self.assertTrue(compose.called)
+
+    def test_plan_patch_applied_prefers_final_reply_composer(self) -> None:
+        from fitmas.conversation_pipeline import _applied_plan_patch_reply
+
+        result = PlanPatchServiceResult(
+            validation=PlanPatchValidation(status="valid", operation_results=()),
+            mutation_result=PlanMutationServiceResult(
+                plan_id=1,
+                applied_count=1,
+                attempted_count=1,
+                event_count=1,
+                applied_events=(
+                    PlanAppliedMutationEvent(
+                        command_type="move_session",
+                        user_visible_summary="Footing deplace au 2099-03-24.",
+                        event_id=7,
+                        target_session_id=41,
+                    ),
+                ),
+            ),
+        )
+
+        with patch(
+            "fitmas.conversation_pipeline.final_reply.compose_final_reply",
+            return_value="C'est cale : le footing passe au 24 mars, sans toucher au reste.",
+        ) as compose:
+            reply = _applied_plan_patch_reply(result, fallback="Patch applique.")
+
+        self.assertEqual(reply, "C'est cale : le footing passe au 24 mars, sans toucher au reste.")
+        context = compose.call_args.args[0]
+        self.assertTrue(context.allowed_to_claim_mutation)
+        self.assertIn("Footing deplace", context.committed_events[0])
+
+    def test_execution_applied_patch_block_prefers_final_reply_composer(self) -> None:
+        result = PlanPatchServiceResult(
+            validation=PlanPatchValidation(
+                status="blocked",
+                operation_results=(
+                    PlanPatchOperationValidation(
+                        operation_type="move_session",
+                        status="blocked",
+                        target_session_id=10,
+                        block_reason="target_already_skipped",
+                        suggested_fix="Cibler une seance encore planifiee.",
+                    ),
+                ),
+            )
+        )
+        user = SimpleNamespace(id=1)
+        session = SimpleNamespace(session_title="Footing facile", completion_status="skipped")
+
+        with (
+            patch("fitmas.conversation_pipeline.repo.get_scheduled_session", return_value=session),
+            patch(
+                "fitmas.conversation_pipeline.final_reply.compose_final_reply",
+                return_value="Footing marque non fait. Je ne deplace rien derriere: il faut une seance encore planifiee.",
+            ) as compose,
+        ):
+            reply = _execution_applied_patch_blocked_reply(
+                SimpleNamespace(),
+                user=user,
+                action_result={"execution_updated_session_ids": [123]},
+                service_result=result,
+            )
+
+        self.assertEqual(
+            reply,
+            "Footing marque non fait. Je ne deplace rien derriere: il faut une seance encore planifiee.",
+        )
+        context = compose.call_args.args[0]
+        self.assertFalse(context.allowed_to_claim_mutation)
+        self.assertIn("Footing facile notee comme non faite", context.execution_actions_applied[0])
+        self.assertEqual(context.blocked_events[0].suggested_fix, "Cibler une seance encore planifiee.")
 
     def test_mutation_block_prefers_final_reply_composer(self) -> None:
         decision = SimpleNamespace(mutation_type="move_session", target_session_id=10)

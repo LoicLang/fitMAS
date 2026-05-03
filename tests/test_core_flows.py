@@ -809,6 +809,49 @@ class FitMASCoreFlowsTest(unittest.TestCase):
         self.assertTrue(turns[0].pending_confirmation)
         self.assertIsNotNone(turns[0].pending_confirmation_id)
 
+    def test_coach_decision_requires_confirmation_plan_patch_creates_pending(self) -> None:
+        _, session = self._create_plan_for_today()
+        original_date = session.scheduled_date.date()
+        target_date = (original_date + timedelta(days=2)).isoformat()
+        original_decide = api_messages.decide
+        original_extract_facts = api_messages.extract_facts
+        try:
+            api_messages.decide = lambda *args, **kwargs: CoachDecision(
+                response_type="requires_confirmation",
+                rationale="deplacement sensible demande par le coach",
+                fitmas_message="Je peux le faire, mais je veux ton feu vert avant de toucher la semaine.",
+                confirmation_reason="deplacement sensible",
+                plan_patch=PlanPatch(
+                    coach_message="Je peux deplacer la seance.",
+                    operations=[
+                        PlanPatchOperation(
+                            operation_type="move_session",
+                            target_session_id=session.id,
+                            target_date=target_date,
+                            rationale="Indisponibilite annoncee.",
+                        )
+                    ],
+                ),
+            )
+            api_messages.extract_facts = lambda *args, **kwargs: []
+            result = self.client.post("/api/v0/messages", json={"text": "Je ne suis pas dispo"}).json()
+        finally:
+            api_messages.decide = original_decide
+            api_messages.extract_facts = original_extract_facts
+
+        self.db.expire_all()
+        refreshed = repo.get_scheduled_session(self.db, self.user.id, session.id)
+        pending = repo.get_active_pending_mutation_confirmation(self.db, self.user.id)
+        turns = repo.get_recent_conversation_turns(self.db, self.user.id, limit=1)
+
+        self.assertIsNotNone(refreshed)
+        self.assertEqual(refreshed.scheduled_date.date(), original_date)
+        self.assertIsNotNone(pending)
+        self.assertEqual(pending.mutation_type, "plan_patch")
+        self.assertEqual(turns[0].response_mode, "plan_patch_confirmation")
+        self.assertTrue(turns[0].pending_confirmation)
+        self.assertIn("confirm", result["assistant_message"]["text"].lower())
+
     def test_conversation_turn_serializes_datetime_memory_writes(self) -> None:
         row = repo.add_conversation_turn(
             self.db,

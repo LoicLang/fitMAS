@@ -283,6 +283,20 @@ class LLMGatewayProviderTest(unittest.TestCase):
 
         self.assertEqual(calls[0]["thinking"], {"type": "disabled"})
 
+    def test_serialize_content_blocks_preserves_deepseek_thinking_blocks(self) -> None:
+        blocks = [
+            SimpleNamespace(type="thinking", thinking="Je dois lire le planning.", signature="sig_123"),
+            SimpleNamespace(type="tool_use", id="toolu_1", name="get_plan_window", input={}),
+        ]
+
+        serialized = gw.serialize_content_blocks(blocks)
+
+        self.assertEqual(
+            serialized[0],
+            {"type": "thinking", "thinking": "Je dois lire le planning.", "signature": "sig_123"},
+        )
+        self.assertEqual(serialized[1]["type"], "tool_use")
+
     def test_request_structured_json_uses_deepseek_openai_json_object(self) -> None:
         created: dict[str, object] = {}
         calls: list[dict[str, object]] = []

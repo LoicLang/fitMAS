@@ -203,6 +203,7 @@ _CONVERSATION_READ_TOOL_BUDGET = (
     "get_relevant_facts",
     "get_user_constraints",
     "suggest_replan_candidates",
+    "validate_plan_patch",
 )
 _ALLOWED_MUTATION_TYPES = {
     "move_session",
@@ -637,9 +638,27 @@ def parse_coach_decision_payload(data: dict[str, Any] | None) -> CoachDecision |
         if not payload["confirmation_reason"]:
             logger.warning("llm.coach_decision_invalid reason=missing_confirmation_reason")
             return None
-        if not isinstance(data.get("plan_patch"), dict) and not isinstance(data.get("mutation_decision"), dict):
+        raw_patch = data.get("plan_patch")
+        raw_mutation = data.get("mutation_decision")
+        if not isinstance(raw_patch, dict) and not isinstance(raw_mutation, dict):
             logger.warning("llm.coach_decision_invalid reason=free_requires_confirmation_without_action")
             return None
+        if isinstance(raw_patch, dict):
+            patch = _parse_nested_plan_patch(raw_patch)
+            if patch is None:
+                logger.warning("llm.coach_decision_invalid reason=invalid_confirmation_plan_patch")
+                return None
+            payload["plan_patch"] = patch
+        elif isinstance(raw_mutation, dict):
+            mutation = _parse_nested_mutation_decision(
+                raw_mutation,
+                fallback_rationale=rationale,
+                fallback_fitmas_message=fitmas_message,
+            )
+            if mutation is None:
+                logger.warning("llm.coach_decision_invalid reason=invalid_confirmation_mutation_decision")
+                return None
+            payload["mutation_decision"] = mutation
     try:
         decision = CoachDecision(**payload)
         _remember_invalid_decision(None)
@@ -964,11 +983,12 @@ def _repair_invalid_decision_payload(*, data: dict[str, Any] | None, system: str
         f"{prompt}\n\n"
         "Retourne uniquement le JSON repare."
     )
-    return _request_structured_json(
+    repaired = _request_structured_json(
         system=system,
         messages=[{"role": "user", "content": repair_prompt}],
         max_tokens=1024,
     )
+    return _downgrade_free_confirmation_payload(repaired)
 
 
 def _request_claude_decision_fallback(*, system: str, prompt: str) -> dict | None:
@@ -1027,10 +1047,17 @@ def _request_json_with_tools(
     started_at = perf_counter()
     prompt_char_count = len(prompt)
     tool_count_offered = len(tools)
-    initial_messages = [{"role": "user", "content": prompt}]
+    messages = [{"role": "user", "content": prompt}]
+    max_tool_rounds = 3
+    max_tool_calls_total = 6
+    tool_rounds = 0
+    tool_calls_used = 0
+    tool_executions: list[ToolExecution] = []
+    prompt_token_values: list[int | None] = []
+    response_token_values: list[int | None] = []
     response = _request_message(
         system=system,
-        messages=initial_messages,
+        messages=messages,
         model=model,
         max_tokens=max_tokens,
         tools=tools,
@@ -1053,114 +1080,126 @@ def _request_json_with_tools(
             response_stop_reason="initial_request_failed",
         )
         return None
-    initial_stop_reason = str(getattr(response, "stop_reason", "") or "")
-    initial_prompt_tokens = _usage_value(response, "input_tokens")
-    initial_response_tokens = _usage_value(response, "output_tokens")
-    if initial_stop_reason != "tool_use":
-        data = _message_json(response)
-        _log_tool_session_trace(
-            pipeline=tool_context.pipeline,
-            tool_offered=True,
-            context_policy=context_policy,
-            tool_requested=False,
-            tool_called=False,
-            tool_success=data is not None,
-            fallback_used=data is None,
-            llm_round_trips=1,
-            tool_count_offered=tool_count_offered,
-            history_messages_used=history_messages_used,
-            prompt_char_count=prompt_char_count,
-            prompt_tokens_estimate=initial_prompt_tokens,
-            response_tokens_estimate=initial_response_tokens,
-            total_duration_ms=_elapsed_ms(started_at),
-            response_stop_reason=initial_stop_reason or "end_turn",
-        )
-        return data
 
-    tool_use_blocks = _tool_use_blocks(response)
-    tool_use_block = tool_use_blocks[0] if tool_use_blocks else None
-    if tool_use_block is None:
-        data = _message_json(response)
-        _log_tool_session_trace(
-            pipeline=tool_context.pipeline,
-            tool_offered=True,
-            context_policy=context_policy,
-            tool_requested=True,
-            tool_called=False,
-            tool_success=data is not None,
-            tool_error="tool_use stop_reason without tool block",
-            fallback_used=True,
-            llm_round_trips=1,
-            tool_count_offered=tool_count_offered,
-            history_messages_used=history_messages_used,
-            prompt_char_count=prompt_char_count,
-            prompt_tokens_estimate=initial_prompt_tokens,
-            response_tokens_estimate=initial_response_tokens,
-            total_duration_ms=_elapsed_ms(started_at),
-            response_stop_reason=initial_stop_reason or "tool_use",
-        )
-        return data
+    round_trips = 1
+    while True:
+        stop_reason = str(getattr(response, "stop_reason", "") or "")
+        prompt_token_values.append(_usage_value(response, "input_tokens"))
+        response_token_values.append(_usage_value(response, "output_tokens"))
 
-    tool_calls = [
-        ToolCall(tool_name=str(getattr(block, "name", "")), arguments=dict(getattr(block, "input", {}) or {}))
-        for block in tool_use_blocks
-    ]
-    tool_executions = execute_tool_calls(
-        tool_calls,
-        context=tool_context,
-        max_tools=3,
-        llm_round_trips=2,
-        prompt_tokens_estimate=initial_prompt_tokens,
-        response_tokens_estimate=initial_response_tokens,
-    )
-    followup_messages = list(initial_messages)
-    followup_messages.append({"role": "assistant", "content": _serialize_content_blocks(getattr(response, "content", []))})
-    tool_result_blocks = _tool_result_blocks(tool_use_blocks, tool_executions)
-    followup_messages.append(
-        {
-            "role": "user",
-            "content": tool_result_blocks,
-        }
-    )
-    final_response = _request_message(
-        system=system,
-        messages=followup_messages,
-        model=model,
-        max_tokens=max_tokens,
-    )
-    if final_response is None:
-        _log_tool_session_trace(
-            pipeline=tool_context.pipeline,
-            tool_name=_tool_execution_names(tool_executions),
-            tool_offered=True,
-            context_policy=context_policy,
-            tool_requested=True,
-            tool_called=_any_tool_called(tool_executions),
-            tool_latency_ms=_sum_tool_latency(tool_executions),
-            tool_success=False,
-            tool_error=_tool_errors(tool_executions) or "tool followup request failed",
-            fallback_used=True,
-            llm_round_trips=2,
-            tool_count_offered=tool_count_offered,
-            history_messages_used=history_messages_used,
-            prompt_char_count=prompt_char_count,
-            prompt_tokens_estimate=initial_prompt_tokens,
-            response_tokens_estimate=initial_response_tokens,
-            total_duration_ms=_elapsed_ms(started_at),
-            response_stop_reason="followup_request_failed",
+        if stop_reason != "tool_use":
+            data = _message_json(response)
+            if tool_executions and data is None:
+                data = _repair_decision_json_from_text(
+                    _message_text(response),
+                    model=model,
+                    context_prompt=prompt,
+                    tool_result_summary=_repair_tool_result_summary(tool_executions),
+                )
+            _log_tool_session_trace(
+                pipeline=tool_context.pipeline,
+                tool_name=_tool_execution_names(tool_executions),
+                tool_offered=True,
+                context_policy=context_policy,
+                tool_requested=bool(tool_executions),
+                tool_called=_any_tool_called(tool_executions),
+                tool_latency_ms=_sum_tool_latency(tool_executions),
+                tool_success=(
+                    data is not None
+                    and (not tool_executions or _all_tool_results_ok(tool_executions))
+                ),
+                tool_error=(
+                    _tool_errors(tool_executions)
+                    if data is not None
+                    else (_tool_errors(tool_executions) or "tool followup response was not valid JSON")
+                ),
+                fallback_used=data is None,
+                llm_round_trips=round_trips,
+                tool_count_offered=tool_count_offered,
+                history_messages_used=history_messages_used,
+                prompt_char_count=prompt_char_count,
+                prompt_tokens_estimate=_sum_optional_ints(prompt_token_values),
+                response_tokens_estimate=_sum_optional_ints(response_token_values),
+                total_duration_ms=_elapsed_ms(started_at),
+                response_stop_reason=stop_reason or "end_turn",
+            )
+            return data
+
+        tool_use_blocks = _tool_use_blocks(response)
+        if not tool_use_blocks:
+            data = _message_json(response)
+            _log_tool_session_trace(
+                pipeline=tool_context.pipeline,
+                tool_offered=True,
+                context_policy=context_policy,
+                tool_requested=True,
+                tool_called=_any_tool_called(tool_executions),
+                tool_success=data is not None,
+                tool_error="tool_use stop_reason without tool block",
+                fallback_used=True,
+                llm_round_trips=round_trips,
+                tool_count_offered=tool_count_offered,
+                history_messages_used=history_messages_used,
+                prompt_char_count=prompt_char_count,
+                prompt_tokens_estimate=_sum_optional_ints(prompt_token_values),
+                response_tokens_estimate=_sum_optional_ints(response_token_values),
+                total_duration_ms=_elapsed_ms(started_at),
+                response_stop_reason=stop_reason or "tool_use",
+            )
+            return data
+
+        tool_rounds += 1
+        remaining_tool_budget = max(0, max_tool_calls_total - tool_calls_used)
+        tool_calls = [
+            ToolCall(tool_name=str(getattr(block, "name", "")), arguments=dict(getattr(block, "input", {}) or {}))
+            for block in tool_use_blocks
+        ]
+        round_executions = execute_tool_calls(
+            tool_calls,
+            context=tool_context,
+            max_tools=remaining_tool_budget,
+            llm_round_trips=round_trips + 1,
+            prompt_tokens_estimate=_sum_optional_ints(prompt_token_values),
+            response_tokens_estimate=_sum_optional_ints(response_token_values),
         )
-        return None
-    final_stop_reason = str(getattr(final_response, "stop_reason", "") or "")
-    final_prompt_tokens = _usage_value(final_response, "input_tokens")
-    final_response_tokens = _usage_value(final_response, "output_tokens")
-    data = _message_json(final_response)
-    if data is None:
-        data = _repair_decision_json_from_text(
-            _message_text(final_response),
+        tool_calls_used += min(len(tool_calls), remaining_tool_budget)
+        tool_executions.extend(round_executions)
+        messages.append({"role": "assistant", "content": _serialize_content_blocks(getattr(response, "content", []))})
+        messages.append({"role": "user", "content": _tool_followup_content(tool_use_blocks, round_executions)})
+
+        allow_more_tools = tool_rounds < max_tool_rounds and tool_calls_used < max_tool_calls_total
+        response = _request_message(
+            system=system,
+            messages=messages,
             model=model,
-            context_prompt=prompt,
-            tool_result_summary=_repair_tool_result_summary(tool_executions),
+            max_tokens=max_tokens,
+            tools=tools if allow_more_tools else None,
+            tool_choice={"type": "auto"} if allow_more_tools else None,
         )
+        round_trips += 1
+        if response is None:
+            _log_tool_session_trace(
+                pipeline=tool_context.pipeline,
+                tool_name=_tool_execution_names(tool_executions),
+                tool_offered=True,
+                context_policy=context_policy,
+                tool_requested=True,
+                tool_called=_any_tool_called(tool_executions),
+                tool_latency_ms=_sum_tool_latency(tool_executions),
+                tool_success=False,
+                tool_error=_tool_errors(tool_executions) or "tool followup request failed",
+                fallback_used=True,
+                llm_round_trips=round_trips,
+                tool_count_offered=tool_count_offered,
+                history_messages_used=history_messages_used,
+                prompt_char_count=prompt_char_count,
+                prompt_tokens_estimate=_sum_optional_ints(prompt_token_values),
+                response_tokens_estimate=_sum_optional_ints(response_token_values),
+                total_duration_ms=_elapsed_ms(started_at),
+                response_stop_reason="followup_request_failed",
+            )
+            return None
+
     _log_tool_session_trace(
         pipeline=tool_context.pipeline,
         tool_name=_tool_execution_names(tool_executions),
@@ -1169,19 +1208,19 @@ def _request_json_with_tools(
         tool_requested=True,
         tool_called=_any_tool_called(tool_executions),
         tool_latency_ms=_sum_tool_latency(tool_executions),
-        tool_success=_all_executed_tools_ok(tool_executions) and data is not None,
-        tool_error=_tool_errors(tool_executions) if data is not None else (_tool_errors(tool_executions) or "tool followup response was not valid JSON"),
-        fallback_used=data is None,
-        llm_round_trips=2,
+        tool_success=False,
+        tool_error=_tool_errors(tool_executions) or "tool loop exhausted",
+        fallback_used=True,
+        llm_round_trips=round_trips,
         tool_count_offered=tool_count_offered,
         history_messages_used=history_messages_used,
         prompt_char_count=prompt_char_count,
-        prompt_tokens_estimate=_sum_ints(initial_prompt_tokens, final_prompt_tokens),
-        response_tokens_estimate=_sum_ints(initial_response_tokens, final_response_tokens),
+        prompt_tokens_estimate=_sum_optional_ints(prompt_token_values),
+        response_tokens_estimate=_sum_optional_ints(response_token_values),
         total_duration_ms=_elapsed_ms(started_at),
-        response_stop_reason=final_stop_reason or "end_turn",
+        response_stop_reason="tool_loop_exhausted",
     )
-    return data
+    return None
 
 
 def _tool_result_blocks(tool_use_blocks: list[Any], tool_executions: list[ToolExecution]) -> list[dict[str, Any]]:
@@ -1206,6 +1245,20 @@ def _tool_result_blocks(tool_use_blocks: list[Any], tool_executions: list[ToolEx
     return blocks
 
 
+def _tool_followup_content(tool_use_blocks: list[Any], tool_executions: list[ToolExecution]) -> list[dict[str, Any]]:
+    return [
+        *_tool_result_blocks(tool_use_blocks, tool_executions),
+        {
+            "type": "text",
+            "text": (
+                "Tu peux appeler d'autres tools si une information manque. "
+                "Si tu as assez d'information, retourne maintenant uniquement un JSON FitMAS CoachDecision valide; "
+                "pas de prose hors JSON."
+            ),
+        },
+    ]
+
+
 def _tool_execution_names(tool_executions: list[ToolExecution]) -> str | None:
     names = [execution.result.tool_name for execution in tool_executions if execution.result.tool_name]
     return ",".join(names) if names else None
@@ -1220,6 +1273,10 @@ def _all_executed_tools_ok(tool_executions: list[ToolExecution]) -> bool:
     return bool(called) and all(execution.result.status == "ok" for execution in called)
 
 
+def _all_tool_results_ok(tool_executions: list[ToolExecution]) -> bool:
+    return bool(tool_executions) and all(execution.result.status == "ok" for execution in tool_executions)
+
+
 def _sum_tool_latency(tool_executions: list[ToolExecution]) -> int | None:
     values = [execution.trace.tool_latency_ms for execution in tool_executions if execution.trace.tool_latency_ms is not None]
     return sum(values) if values else None
@@ -1228,6 +1285,11 @@ def _sum_tool_latency(tool_executions: list[ToolExecution]) -> int | None:
 def _tool_errors(tool_executions: list[ToolExecution]) -> str | None:
     errors = [execution.result.error for execution in tool_executions if execution.result.error]
     return "; ".join(errors) if errors else None
+
+
+def _sum_optional_ints(values: list[int | None]) -> int | None:
+    present = [int(value) for value in values if value is not None]
+    return sum(present) if present else None
 
 
 def _repair_decision_json_from_text(
@@ -1259,6 +1321,8 @@ def _repair_decision_json_from_text(
         "Pour move_session/lighten_day/update_session/replace_session, target_session_id doit etre present si la reponse parle d'une seance existante.\n\n"
         "Pour create_session, target_date, new_sport_type, new_title et new_duration_min sont obligatoires.\n\n"
         "GARDE-FOUS:\n"
+        "- n'utilise jamais response_type=requires_confirmation sans plan_patch ou mutation_decision structure\n"
+        "- si la reponse brute propose une option a confirmer mais ne contient pas de patch structure, retourne no_change avec une question courte\n"
         "- si tu retournes no_change, ne promets pas que le plan est ajuste, modifie, deplace, libere ou mis a jour\n"
         "- si tu retournes no_change, ne dis pas que tu vas construire un plan ou creer une seance\n"
         "- si la reponse brute promet une action mais ne donne pas de mutation valide, reformule en clarification neutre\n"
@@ -1274,20 +1338,40 @@ def _repair_decision_json_from_text(
         f"{raw_text}\n\n"
         "Retourne uniquement le JSON."
     )
-    return _request_structured_json(
+    data = _request_structured_json(
         system="Tu repars strictement des mots fournis et tu retournes un JSON valide uniquement.",
         messages=[{"role": "user", "content": prompt}],
         model=model,
         max_tokens=1024,
     )
+    return _downgrade_free_confirmation_payload(data)
+
+
+def _downgrade_free_confirmation_payload(data: dict | None) -> dict | None:
+    if not isinstance(data, dict):
+        return data
+    if str(data.get("response_type") or "").strip() != "requires_confirmation":
+        return data
+    if isinstance(data.get("plan_patch"), dict) or isinstance(data.get("mutation_decision"), dict):
+        return data
+    repaired = dict(data)
+    repaired["response_type"] = "no_change"
+    repaired["confirmation_reason"] = None
+    return repaired
 
 
 def _repair_tool_result_summary(tool_executions: list[ToolExecution]) -> str | None:
     lines = []
     for execution in tool_executions:
         result = execution.result
-        if result.summary:
-            lines.append(f"- {result.tool_name}: {result.summary}")
+        payload_json = json.dumps(result.payload, ensure_ascii=False)
+        if len(payload_json) > 2500:
+            payload_json = payload_json[:2500] + "...[truncated]"
+        if result.summary or result.payload:
+            lines.append(
+                f"- {result.tool_name}: {result.summary or '(pas de resume)'}\n"
+                f"  payload: {payload_json}"
+            )
     return "\n".join(lines) or None
 
 

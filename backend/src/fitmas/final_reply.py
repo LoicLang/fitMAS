@@ -51,6 +51,12 @@ _FORBIDDEN_VISIBLE_FRAGMENTS = (
     "plan modifie",
     "block_reason",
 )
+_COMMITTED_CONFIRMATION_FRAGMENTS = (
+    "tu confirmes",
+    "confirme",
+    "ca te va",
+    "ça te va",
+)
 
 
 def build_final_reply_prompt(context: FinalReplyContext) -> tuple[str, str]:
@@ -72,6 +78,7 @@ def build_final_reply_prompt(context: FinalReplyContext) -> tuple[str, str]:
     if context.committed_events:
         lines.append("Evenements commits:")
         lines.extend(f"- {event}" for event in context.committed_events)
+        lines.append("Contrainte: l'action est deja commit; ne demande pas confirmation.")
     else:
         lines.append("Aucun changement planning n'a ete commit.")
     if context.blocked_events:
@@ -114,6 +121,8 @@ def is_valid_final_reply(reply: str | None, context: FinalReplyContext) -> bool:
     if coach_voice.message_violates_coach_voice(text):
         return False
     if coach_voice.message_looks_receipt_style(text):
+        return False
+    if context.committed_events and any(fragment in normalized for fragment in _COMMITTED_CONFIRMATION_FRAGMENTS):
         return False
     if not context.allowed_to_claim_mutation and looks_like_action_claim(text):
         return False

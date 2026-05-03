@@ -380,6 +380,24 @@ Le tool-use loop ([llm.py:732-875](../backend/src/fitmas/llm.py:732)) existe mai
 
 Le briefing matin (heartbeat) est un appel LLM **one-shot sans tools** — pas de grounding tool-use, le LLM doit decider sur la base du seul contexte injecte dans le prompt. C'est ce qui a permis l'hallucination factuelle du 2 mai (LLM recopie un texte injecte au lieu de verifier).
 
+#### Etat Chantier 3A au 3 mai 2026
+
+Conversation a maintenant une premiere boucle outillee 3A :
+
+- `validate_plan_patch` est expose comme tool validation-only ;
+- le LLM peut enchainer jusqu'a 3 rounds de read/candidate/validation tools ;
+- le budget total est 6 tool calls par tour ;
+- tous les `tool_use_id` demandes recoivent un `tool_result` ou un blocage explicite ;
+- `PlanPatch` reste l'artefact d'action : aucun write tool natif n'est expose ;
+- apres commit/block d'un `PlanPatch`, la reply visible peut etre composee par LLM depuis les events reels via `FinalReplyContext`.
+
+Ce n'est pas encore la Phase 5 complete :
+
+- heartbeat n'utilise pas encore la boucle tools ;
+- les actions planning ne sont pas encore des tools natifs ;
+- la decision interne reste un `CoachDecision` JSON pendant la migration ;
+- la prose libre finale est livree sur les chemins planning post-resultat, pas encore comme unique terminaison universelle.
+
 #### Architecture cible Phase 5
 
 Pour les **deux pipelines** (conversation + heartbeat) :

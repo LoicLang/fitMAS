@@ -428,6 +428,15 @@ def serialize_content_blocks(blocks: list[Any]) -> list[dict[str, Any]]:
         block_type = getattr(block, "type", None)
         if block_type == "text":
             serialized.append({"type": "text", "text": getattr(block, "text", "")})
+        elif block_type == "thinking":
+            item = {
+                "type": "thinking",
+                "thinking": getattr(block, "thinking", getattr(block, "text", "")),
+            }
+            signature = getattr(block, "signature", None)
+            if signature:
+                item["signature"] = signature
+            serialized.append(item)
         elif block_type == "tool_use":
             serialized.append(
                 {

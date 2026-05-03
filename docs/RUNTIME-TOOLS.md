@@ -100,6 +100,7 @@ Registry V1 :
 - `get_user_constraints`
 - `get_relevant_facts`
 - `propose_replan` (a reclasser en `suggest_replan_candidates`)
+- `validate_plan_patch` (validation-only, ajoute en Chantier 3A)
 
 Tous ces tools lisent des objets deja charges par l'orchestrateur.
 Le registre actuel reste volontairement tres compact.
@@ -107,7 +108,7 @@ Le registre actuel reste volontairement tres compact.
 Direction V2 :
 - conserver les tools atomiques utiles
 - enrichir leurs descriptions et leurs payloads
-- ajouter `validate_plan_patch` comme tool validation-only
+- garder `validate_plan_patch` comme tool validation-only : il aide le LLM a tester un `PlanPatch`, mais le backend revalide toujours au commit
 - ajouter `get_coach_state` seulement comme macro-tool read-only optionnel, pas comme remplacement des tools atomiques
 
 ### `tool_runtime.py`
@@ -124,7 +125,7 @@ Etat actuel :
 - `llm.py` accepte plusieurs `tool_use` dans le meme tour et renvoie un `tool_result` pour chaque id
 
 Cible V2 :
-- max 3 tools executes par tour conversationnel
+- max 3 rounds outilles et max 6 tool calls par tour conversationnel (Chantier 3A)
 - tous les `tool_use_id` recoivent un `tool_result`
 - les surplus / interdits recoivent une erreur actionnable (`tool_budget_exceeded`, tool inconnu, pipeline interdit)
 - aucun tool `write` ne s'execute dans la conversation
@@ -283,10 +284,10 @@ Les tools sont une extension future, pas un remplacement.
 Etat actuel :
 - le chat peut maintenant executer plusieurs tools read-only / validation-only dans un meme tour
 - compat DeepSeek : si le modele emet plusieurs `tool_use`, tous les ids recoivent un `tool_result`
-- budget actuel : max 3 tools executes ; les tools au-dela du budget recoivent `tool_budget_exceeded`
+- budget actuel Chantier 3A : max 3 rounds outilles et max 6 tool calls executes ; les tools au-dela du budget recoivent `tool_budget_exceeded`
 - activation bornee par `tool_routing.py`
 - le prompt du chat passe maintenant par `conversation_prompting.py` + `prompt_layers.py` sur le chemin live
-- puis reponse finale JSON comme avant
+- puis decision structuree JSON comme avant, mais les replies de commit/block passent par le final reply composer post-resultat quand possible
 - chaque tour outille produit maintenant une trace session-level exploitable pour mesurer :
   - si les tools ont ete seulement offres
   - si le modele les a effectivement demandes
@@ -304,9 +305,13 @@ Cas futur prepare :
 - il peut s'appuyer sur `resolve_planning_window`
 
 Ce que le chat ne fait pas encore :
-- pas de tool call pour les mutations simples
-- pas de boucle outillee au-dela du premier follow-up
+- pas de write tool natif pour les mutations simples
 - pas de write tool DB libre
+
+Note DeepSeek 3 mai 2026 :
+- DeepSeek Anthropic API supporte `tools`, `tool_use`, `tool_result`; `disable_parallel_tool_use` est ignore, donc FitMAS doit accepter plusieurs tool calls en un tour.
+- FitMAS desactive `thinking` par defaut sur DeepSeek. Si thinking est reactive, les blocs assistant `thinking` sont preserves dans le replay de tool loop pour respecter la contrainte DeepSeek de renvoyer le contenu assistant complet entre tool calls.
+- En smoke reel, DeepSeek peut encore tenter de repartir en prose / syntaxe tool texte apres plusieurs rounds. Le backend garde donc une instruction JSON terminale stricte et une repair qui recoit les payloads tools compacts.
 
 Mise a jour 24 avril 2026 :
 

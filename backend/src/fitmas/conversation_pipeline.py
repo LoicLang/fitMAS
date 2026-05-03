@@ -52,6 +52,7 @@ from fitmas.mutation_permissions import (
     serialize_mutation_decision,
 )
 from fitmas.plan_mutation_service import PlanPatchServiceResult, apply_decisions_for_user, apply_patch_for_user
+from fitmas.plan_patch import validate_plan_patch
 from fitmas.profile_summary import build_profile_summary
 from fitmas.signals import collect_signals
 from fitmas.tools.contract import ToolContext
@@ -292,6 +293,7 @@ def run_conversation_turn(
             pipeline="conversation",
             user_id=user.id,
             timezone_name=user.timezone,
+            db=db,
             scheduled_sessions=state.scheduled_sessions,
             activities=state.activities,
             active_facts=state.active_facts,
@@ -318,6 +320,45 @@ def run_conversation_turn(
             decision = None
         elif decision.response_type == "mutation_decision" and decision.mutation_decision is not None:
             decision = decision.mutation_decision
+        elif decision.response_type == "requires_confirmation" and decision.plan_patch is not None:
+            validation = validate_plan_patch(
+                db,
+                plan_id=0,
+                patch=decision.plan_patch,
+                scheduled_sessions=state.scheduled_sessions,
+                timezone_name=user.timezone,
+            )
+            service_result = PlanPatchServiceResult(validation=validation)
+            if validation.status == "blocked":
+                reply_text = _blocked_plan_patch_reply(service_result)
+                _log_plan_patch_blocked(service_result, user_id=user.id)
+                outcome = ConversationTurnOutcome(
+                    extraction=Extraction(confidence=0.85),
+                    reply_text=reply_text,
+                    response_mode="plan_patch_blocked",
+                    mutation_applied=False,
+                )
+            else:
+                pending_row = repo.create_pending_mutation_confirmation(
+                    db,
+                    user_id=user.id,
+                    impact_level="high",
+                    reason=decision.confirmation_reason or "llm_requires_confirmation",
+                    mutation_type="plan_patch",
+                    summary=_plan_patch_confirmation_summary(service_result),
+                    source_text=payload.text,
+                    decision_json=serialize_plan_patch_confirmation(decision.plan_patch),
+                    expires_at=default_confirmation_expiry(),
+                )
+                reply_text = _build_plan_patch_confirmation_prompt(service_result)
+                outcome = ConversationTurnOutcome(
+                    extraction=Extraction(confidence=0.85),
+                    reply_text=reply_text,
+                    response_mode="plan_patch_confirmation",
+                    pending_confirmation=True,
+                    pending_confirmation_id=pending_row.id,
+                )
+            decision = None
         elif decision.response_type == "plan_patch" and decision.plan_patch is not None:
             service_result = apply_patch_for_user(
                 db,
@@ -329,7 +370,7 @@ def run_conversation_turn(
             )
             applied = _patch_was_applied(service_result)
             if applied:
-                reply_text = _applied_patch_summary(service_result, fallback=decision.plan_patch.coach_message)
+                reply_text = _applied_plan_patch_reply(service_result, fallback=decision.plan_patch.coach_message)
                 outcome = ConversationTurnOutcome(
                     extraction=Extraction(confidence=0.85),
                     reply_text=reply_text,
@@ -843,6 +884,25 @@ def _applied_patch_summary(service_result: PlanPatchServiceResult | None, *, fal
     return " ".join(summaries) if summaries else fallback
 
 
+def _applied_plan_patch_reply(service_result: PlanPatchServiceResult | None, *, fallback: str) -> str:
+    committed_events: list[str] = []
+    if service_result is not None and service_result.mutation_result is not None:
+        for event in service_result.mutation_result.applied_events:
+            summary = str(event.user_visible_summary or "").strip()
+            if summary and summary not in committed_events:
+                committed_events.append(summary)
+    context = final_reply.FinalReplyContext(
+        committed_events=tuple(committed_events),
+        allowed_to_claim_mutation=bool(committed_events),
+        pipeline="conversation",
+        pipeline_capability="can_confirm",
+    )
+    composed = final_reply.compose_final_reply(context)
+    if composed:
+        return composed
+    return " ".join(committed_events) if committed_events else fallback
+
+
 def _final_reply_context_for_plan_patch_block(
     service_result: PlanPatchServiceResult | None,
 ) -> final_reply.FinalReplyContext:
@@ -890,6 +950,26 @@ def _execution_applied_patch_blocked_reply(
     action_result: dict,
     service_result: PlanPatchServiceResult | None,
 ) -> str:
+    context = _final_reply_context_for_execution_applied_patch_block(
+        db,
+        user=user,
+        action_result=action_result,
+        service_result=service_result,
+    )
+    composed = final_reply.compose_final_reply(context)
+    if composed:
+        return composed
+    execution_phrase = context.execution_actions_applied[0] if context.execution_actions_applied else "Execution notee."
+    return f"{execution_phrase} {final_reply.outage_fallback_reply(context)}"
+
+
+def _final_reply_context_for_execution_applied_patch_block(
+    db: Session,
+    *,
+    user,
+    action_result: dict,
+    service_result: PlanPatchServiceResult | None,
+) -> final_reply.FinalReplyContext:
     session_ids = tuple(action_result.get("execution_updated_session_ids") or ())
     session = repo.get_scheduled_session(db, user.id, int(session_ids[0])) if session_ids else None
     if session is not None:
@@ -898,24 +978,17 @@ def _execution_applied_patch_blocked_reply(
         execution_phrase = f"{title} notee comme faite." if status == "done" else f"{title} notee comme non faite."
     else:
         execution_phrase = "Execution notee."
-    reason = _short_plan_patch_block_reason(service_result)
-    return f"{execution_phrase} Je ne touche pas au planning derriere: {reason}"
-
-
-def _short_plan_patch_block_reason(service_result: PlanPatchServiceResult | None) -> str:
-    if service_result is None:
-        return "le patch planning n'est pas valide."
-    first = service_result.validation.operation_results[0] if service_result.validation.operation_results else None
-    if first is not None:
-        if first.block_reason == "no_active_plan":
-            return "pas de plan actif a modifier."
-        if first.suggested_fix:
-            return f"{first.suggested_fix}."
-        if first.warning_messages:
-            return f"{first.warning_messages[0]}."
-        if first.block_reason:
-            return f"{first.block_reason}."
-    return "le changement n'a pas ete valide par le planning."
+    block_context = _final_reply_context_for_plan_patch_block(service_result)
+    return final_reply.FinalReplyContext(
+        blocked_events=block_context.blocked_events,
+        execution_actions_applied=(execution_phrase,),
+        allowed_to_claim_mutation=False,
+        pipeline="conversation",
+        pipeline_capability="can_confirm",
+        extra_facts=(
+            "Une mise a jour d'execution a ete appliquee, mais le changement planning associe a ete bloque.",
+        ),
+    )
 
 
 def _plan_patch_needs_confirmation(service_result: PlanPatchServiceResult | None) -> bool:

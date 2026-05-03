@@ -20,6 +20,7 @@ CANONICAL_CONVERSATION_TOOLS = [
     "get_relevant_facts",
     "get_user_constraints",
     "suggest_replan_candidates",
+    "validate_plan_patch",
 ]
 
 
@@ -51,6 +52,32 @@ class LLMToolsTest(unittest.TestCase):
         self.assertEqual(decision.response_type, "plan_patch")
         self.assertIsNotNone(decision.plan_patch)
         self.assertEqual(decision.plan_patch.operations[0].operation_type, "create_session")
+
+    def test_parse_coach_decision_preserves_requires_confirmation_plan_patch(self) -> None:
+        decision = llm.parse_coach_decision_payload(
+            {
+                "response_type": "requires_confirmation",
+                "rationale": "deplacement sensible",
+                "fitmas_message": "Je peux le faire, mais je veux ton feu vert avant de toucher la semaine.",
+                "confirmation_reason": "deplacement d'une seance cle",
+                "plan_patch": {
+                    "coach_message": "Je peux deplacer le tempo a jeudi.",
+                    "operations": [
+                        {
+                            "operation_type": "move_session",
+                            "target_session_id": 2,
+                            "target_date": "2099-03-24",
+                            "rationale": "Indisponibilite lundi soir.",
+                        }
+                    ],
+                },
+            }
+        )
+
+        self.assertIsNotNone(decision)
+        self.assertEqual(decision.response_type, "requires_confirmation")
+        self.assertIsNotNone(decision.plan_patch)
+        self.assertEqual(decision.plan_patch.operations[0].target_session_id, 2)
 
     def test_parse_coach_decision_rejects_plan_patch_without_patch(self) -> None:
         decision = llm.parse_coach_decision_payload(
@@ -503,6 +530,7 @@ class LLMToolsTest(unittest.TestCase):
         original_log_tool_trace = llm.log_tool_trace
         calls = {"count": 0}
         followup_tool_results: list[dict[str, object]] = []
+        followup_text_blocks: list[str] = []
 
         def fake_request_message(*, system, messages, model="claude-haiku-4-5-20251001", max_tokens=512, tools=None, tool_choice=None):
             calls["count"] += 1
@@ -515,7 +543,12 @@ class LLMToolsTest(unittest.TestCase):
                     ],
                     usage=SimpleNamespace(input_tokens=120, output_tokens=32),
                 )
-            followup_tool_results.extend(messages[-1]["content"])
+            followup_tool_results.extend(
+                item for item in messages[-1]["content"] if item.get("type") == "tool_result"
+            )
+            followup_text_blocks.extend(
+                str(item.get("text") or "") for item in messages[-1]["content"] if item.get("type") == "text"
+            )
             return SimpleNamespace(
                 stop_reason="end_turn",
                 content=[
@@ -570,6 +603,100 @@ class LLMToolsTest(unittest.TestCase):
             ["toolu_1", "toolu_2"],
         )
         self.assertFalse(followup_tool_results[1]["is_error"])
+        self.assertTrue(any("JSON FitMAS" in text for text in followup_text_blocks))
+
+    def test_tool_loop_allows_second_round_after_results(self) -> None:
+        original_client = llm._client
+        original_request_message = llm._request_message
+        original_execute_tool_calls = llm.execute_tool_calls
+        original_log_tool_trace = llm.log_tool_trace
+        calls = {"messages": 0}
+        executed_batches: list[list[str]] = []
+        tool_result_ids_by_round: list[list[str]] = []
+
+        def fake_request_message(*, system, messages, model="claude-haiku-4-5-20251001", max_tokens=512, tools=None, tool_choice=None):
+            calls["messages"] += 1
+            if calls["messages"] == 1:
+                self.assertIsNotNone(tools)
+                return SimpleNamespace(
+                    stop_reason="tool_use",
+                    content=[SimpleNamespace(type="tool_use", id="toolu_1", name="get_plan_window", input={})],
+                    usage=SimpleNamespace(input_tokens=120, output_tokens=32),
+                )
+            if calls["messages"] == 2:
+                self.assertIsNotNone(tools)
+                tool_result_ids_by_round.append(
+                    [item["tool_use_id"] for item in messages[-1]["content"] if item.get("type") == "tool_result"]
+                )
+                return SimpleNamespace(
+                    stop_reason="tool_use",
+                    content=[
+                        SimpleNamespace(
+                            type="tool_use",
+                            id="toolu_2",
+                            name="validate_plan_patch",
+                            input={
+                                "patch": {
+                                    "coach_message": "Patch a verifier.",
+                                    "operations": [],
+                                }
+                            },
+                        )
+                    ],
+                    usage=SimpleNamespace(input_tokens=160, output_tokens=36),
+                )
+            tool_result_ids_by_round.append(
+                [item["tool_use_id"] for item in messages[-1]["content"] if item.get("type") == "tool_result"]
+            )
+            return SimpleNamespace(
+                stop_reason="end_turn",
+                content=[
+                    SimpleNamespace(
+                        type="text",
+                        text='{"response_type":"no_change","rationale":"lecture puis validation","fitmas_message":"Je valide avant de toucher au plan."}',
+                    )
+                ],
+                usage=SimpleNamespace(input_tokens=190, output_tokens=42),
+            )
+
+        def fake_execute_tool_calls(calls, *, context, **kwargs):
+            executed_batches.append([call.tool_name for call in calls])
+            return [
+                SimpleNamespace(
+                    result=ToolResult(tool_name=call.tool_name, status="ok", payload={}, summary=f"{call.tool_name} ok."),
+                    trace=SimpleNamespace(tool_success=True, tool_called=True, tool_latency_ms=1),
+                )
+                for call in calls
+            ]
+
+        llm._client = lambda: object()
+        llm._request_message = fake_request_message
+        llm.execute_tool_calls = fake_execute_tool_calls
+        llm.log_tool_trace = lambda trace: None
+        try:
+            decision = llm.decide(
+                "Je ne peux pas demain, verifie puis adapte",
+                "Repere",
+                coach_context={"turn_primary_intent": "availability_constraint"},
+                tool_context=ToolContext(
+                    pipeline="conversation",
+                    user_id=1,
+                    timezone_name="Europe/Paris",
+                    scheduled_sessions=[],
+                    activities=[],
+                    active_facts=[],
+                ),
+            )
+        finally:
+            llm._client = original_client
+            llm._request_message = original_request_message
+            llm.execute_tool_calls = original_execute_tool_calls
+            llm.log_tool_trace = original_log_tool_trace
+
+        self.assertIsNotNone(decision)
+        self.assertEqual(calls["messages"], 3)
+        self.assertEqual(executed_batches, [["get_plan_window"], ["validate_plan_patch"]])
+        self.assertEqual(tool_result_ids_by_round, [["toolu_1"], ["toolu_2"]])
 
     def test_decide_rejects_unknown_mutation_type_and_uses_structured_fallback(self) -> None:
         original_client = llm._client
@@ -1254,6 +1381,83 @@ class LLMToolsTest(unittest.TestCase):
         self.assertIn("CONTEXTE_ORIGINAL", repair_prompts[0])
         self.assertIn("Je ne peux pas ce soir", repair_prompts[0])
         self.assertIn("execution_actions", repair_prompts[0])
+
+    def test_tool_followup_prose_repair_downgrades_free_confirmation_without_patch(self) -> None:
+        original_request_structured_json = llm._request_structured_json
+
+        def fake_request_structured_json(*, system, messages, model="claude-haiku-4-5-20251001", max_tokens=1024):
+            return {
+                "response_type": "requires_confirmation",
+                "rationale": "propose une option mais aucun patch n'est structure",
+                "fitmas_message": "Je peux echanger le tempo avec le renfo si tu confirmes.",
+                "confirmation_reason": "swap a confirmer",
+            }
+
+        llm._request_structured_json = fake_request_structured_json
+        try:
+            data = llm._repair_decision_json_from_text(
+                "Je peux echanger le tempo avec le renfo si tu confirmes.",
+                context_prompt="Je ne suis pas dispo demain soir",
+                tool_result_summary="- validate_plan_patch: Patch a confirmer.",
+            )
+        finally:
+            llm._request_structured_json = original_request_structured_json
+
+        self.assertEqual(data["response_type"], "no_change")
+        self.assertIsNone(data.get("confirmation_reason"))
+        self.assertNotIn("plan_patch", data)
+
+    def test_invalid_payload_repair_downgrades_free_confirmation_without_patch(self) -> None:
+        original_request_structured_json = llm._request_structured_json
+
+        def fake_request_structured_json(*, system, messages, model="claude-haiku-4-5-20251001", max_tokens=1024):
+            return {
+                "response_type": "requires_confirmation",
+                "rationale": "aucune mutation structuree",
+                "fitmas_message": "Je peux l'echanger avec mercredi si tu confirmes.",
+                "confirmation_reason": "option a confirmer",
+            }
+
+        llm._request_structured_json = fake_request_structured_json
+        try:
+            data = llm._repair_invalid_decision_payload(
+                data={
+                    "response_type": "requires_confirmation",
+                    "rationale": "aucune mutation structuree",
+                    "fitmas_message": "Je peux l'echanger avec mercredi si tu confirmes.",
+                    "confirmation_reason": "option a confirmer",
+                },
+                system="system",
+                prompt="Je ne suis pas dispo demain soir",
+            )
+        finally:
+            llm._request_structured_json = original_request_structured_json
+
+        self.assertEqual(data["response_type"], "no_change")
+        self.assertIsNone(data.get("confirmation_reason"))
+
+    def test_tool_repair_context_includes_payloads_not_only_summaries(self) -> None:
+        executions = [
+            SimpleNamespace(
+                result=ToolResult(
+                    tool_name="get_plan_window",
+                    status="ok",
+                    summary="2 seances.",
+                    payload={
+                        "sessions": [
+                            {"id": 11, "scheduled_date": "2099-03-23", "session_title": "Tempo"},
+                            {"id": 12, "scheduled_date": "2099-03-25", "session_title": "Renfo"},
+                        ]
+                    },
+                )
+            )
+        ]
+
+        summary = llm._repair_tool_result_summary(executions)
+
+        self.assertIn('"id": 11', summary)
+        self.assertIn('"session_title": "Renfo"', summary)
+        self.assertIn("2 seances.", summary)
 
     def test_tool_followup_dsml_tool_markup_is_not_repaired_as_user_message(self) -> None:
         original_client = llm._client

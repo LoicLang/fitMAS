@@ -58,7 +58,7 @@ L'audit declenche par cet incident a confirme 3 failles structurelles connexes :
 | - | ✅ Cleanup DB prod : 395 rows obsoletes purgees, memoire propre — 3 mai 2026 | 1h | section ci-dessous |
 | 1quater | ✅ Coach reliability slice 0 — final reply composer + guards backend/heartbeat + execution receipt hardening — shippe 3 mai 2026 | 1j | `docs/COACH-RELIABILITY-REFACTOR.md` |
 | 2 | ✅ Truth source runtime core — `ScheduledSession` seul pour mutations/signals/activity matching — shippe 3 mai 2026 | 1j | `docs/COACH-COHERENCE-REFACTOR.md` section "Plan 2 mai 2026" |
-| 3 | Tool-use loop unifie conversation + heartbeat (vraie boucle agentique multi-rounds, prose terminale, action-tools) | 6-7j | `docs/LLM-FIRST-CONVERSATION.md` section "Phase 5 - Tool-use loop unifie" |
+| 3 | Tool-use loop unifie conversation + heartbeat (3A conversation partiel shippe 3 mai : multi-round read/validation + `validate_plan_patch`; heartbeat/action-tools natifs restent ouverts) | 6-7j | `docs/LLM-FIRST-CONVERSATION.md` section "Phase 5 - Tool-use loop unifie" |
 | 4 | Observabilite briefing (endpoint debug dump bundle + prompt + response) | 1j | section ci-dessous |
 | **A+** | **Phase A+ Weekly Coherence Review** (apres Chantier 3, avant Phase B) | 3-4j | section "Phase A+" ci-dessous |
 
@@ -203,6 +203,35 @@ Verification locale :
 - `./scripts/smoke-real-conversations --scenario golden_case_autonomy` : passe
 - `./scripts/smoke-real-conversations --scenario heartbeat_non_completion` : passe, renfo J-1 marque skipped
 - `./scripts/smoke-real-conversations --scenario compound_non_completion_swap` : passe, clarification quand aucune seance vendredi n'existe
+
+### Chantier 3A — Conversation tool loop partiel ✅ shippe 3 mai 2026
+
+Objectif : donner au coach plus d'agence de lecture/validation sans ouvrir les
+write tools natifs.
+
+Fix livre :
+- `validate_plan_patch` expose au runtime tools conversation/planning comme
+  validation-only.
+- La conversation peut enchainer jusqu'a 3 rounds outilles et 6 tool calls total.
+- Tous les `tool_use_id` demandes recoivent un `tool_result` ou un blocage
+  `tool_budget_exceeded`.
+- Le replay assistant preserve les blocs `thinking` si DeepSeek thinking est
+  reactive plus tard ; aujourd'hui FitMAS garde `thinking={"type":"disabled"}`
+  par defaut sur DeepSeek.
+- Les `PlanPatch` appliques passent par `FinalReplyContext` post-event quand le
+  composer LLM est disponible ; le resume d'event reste fallback auditable.
+
+Hors scope :
+- pas de write tool natif (`commit_plan_patch`, `move_session`, `swap_sessions`) ;
+- pas de boucle tools heartbeat ;
+- pas de suppression du `CoachDecision` JSON interne.
+
+Verification locale :
+- `tests/test_tool_runtime.py` : `validate_plan_patch` valid/blocked ;
+- `tests/test_llm_tools.py` : second round tool-use + canonical tools ;
+- `tests/test_llm_gateway_json.py` : preservation blocs `thinking` ;
+- `tests/test_final_reply.py` + `tests/test_blocked_mutation_reply.py` : replies
+  post-resultat.
 
 ### Chantier 4 — Observabilite briefing
 

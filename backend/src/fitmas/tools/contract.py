@@ -25,6 +25,7 @@ class ToolContext:
     pipeline: str
     user_id: int | None
     timezone_name: str | None
+    db: Any | None = None
     now: datetime | None = None
     scheduled_sessions: Sequence[Any] = ()
     activities: Sequence[Any] = ()
