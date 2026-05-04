@@ -156,7 +156,8 @@ Direction immediate :
 - Chantier 4 observe la boucle complete : contexte, prompt, response brute,
   decision `send/no_send`, judge `ALLOW/BLOCK`, message final — shippe
   via `dump=true` sur `/api/v0/debug/heartbeat/{kind}` et `/ops/heartbeat/{kind}` ;
-- Chantier 3B-A donne au heartbeat les read-tools utiles, sans write autonome :
+- Chantier 3B-A donne au heartbeat les read-tools utiles, sans write autonome
+  (implemente localement 4 mai 2026) :
   `get_plan_window`, `get_recent_activities`, `get_activity_highlights`,
   `get_recent_reality_window`, `get_load_context`, `get_user_constraints`,
   `get_relevant_facts` ;
@@ -167,6 +168,12 @@ Direction immediate :
 Regle : le heartbeat est un coach proactif, pas un cron de texte. Les tools
 servent a decider s'il y a quelque chose d'utile a dire. `NO_SEND` reste un
 resultat sain.
+
+Etat 3B-A :
+- pipeline `heartbeat` autorise seulement des tools read-only ;
+- pas de candidate tool, pas de validation tool, pas de write tool ;
+- boucle dediee `skills/heartbeat/tool_loop.py`, max 2 rounds / 4 tool calls ;
+- debug dump expose `tools.offered`, `tools.requested`, `tools.results`.
 
 Categories historiques a ne pas reproduire comme classifieur user-text :
 | Intent | Tools offerts |

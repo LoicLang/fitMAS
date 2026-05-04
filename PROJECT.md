@@ -48,13 +48,15 @@ Chantiers en cours (suite incident hallucination factuelle briefing 2 mai) :
 - ✅ **Chantier 4** — Observabilité proactive coach loop — `dump=true` expose contexte, prompt, decision `send/no_send`, judge, message final — 4 mai 2026
 - ✅ **P1 post-event reply verifier** — verifier/réparer une réponse finale post-mutation contre les events réellement commités avant envoi — implémenté localement 4 mai 2026
 - ✅ **P1 PlanPatch confirmation parity** — un `replace_session` qui change le sport d’une séance clé repasse par confirmation, comme la route `MutationDecision` — implémenté localement 4 mai 2026
+- ✅ **Chantier 3B-A** — Heartbeat read-tools read-only : plan, activités, réalité récente, charge, contraintes et mémoire avant `send/no_send` — implémenté localement 4 mai 2026
+- **P1 ouvert** — execution receipt repair : smoke réel `heartbeat_non_completion` peut encore tomber en outage si le LLM dit “pas fait hier” sans `execution_actions`
 - **Chantier 3B** — Tool-use loop proactive heartbeat + action-tools natifs bornés — `docs/LLM-FIRST-CONVERSATION.md`
 - **Phase A+** — Weekly Coherence Review (3-4j, après Chantier 3B ou si jugé non bloquant) — couche raisonnement week-level, transforme coach réactif local en coach stratégique — `docs/BUILD-ORDER.md` section dédiée
 
 Cap produit actuel :
 - Telegram = coach conversationnel
 - App = cockpit performance
-- priorité immédiate : donner au heartbeat des read-tools avant toute action autonome
+- priorité immédiate : stabiliser le repair `execution_actions`, puis proposer des `PlanPatch` proactifs avec confirmation Telegram
 - Phase B long terme : progression/prescription structurée, pas ouverte tant que Phase A + Chantiers 2+3 + Phase A+ ne sont pas clos
 
 ## Stack

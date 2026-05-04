@@ -33,7 +33,7 @@ def build_tool_registry() -> dict[str, ToolSpec]:
                 },
                 "required": [],
             },
-            allowed_pipelines=("conversation", "planning"),
+            allowed_pipelines=("conversation", "planning", "heartbeat"),
             handler=_get_plan_window,
         ),
         ToolSpec(
@@ -65,7 +65,7 @@ def build_tool_registry() -> dict[str, ToolSpec]:
                 },
                 "required": [],
             },
-            allowed_pipelines=("conversation", "planning"),
+            allowed_pipelines=("conversation", "planning", "heartbeat"),
             handler=_get_recent_activities,
         ),
         ToolSpec(
@@ -78,7 +78,7 @@ def build_tool_registry() -> dict[str, ToolSpec]:
                 },
                 "required": [],
             },
-            allowed_pipelines=("conversation",),
+            allowed_pipelines=("conversation", "heartbeat"),
             handler=_get_activity_highlights,
         ),
         ToolSpec(
@@ -92,7 +92,7 @@ def build_tool_registry() -> dict[str, ToolSpec]:
                 },
                 "required": [],
             },
-            allowed_pipelines=("conversation", "planning"),
+            allowed_pipelines=("conversation", "planning", "heartbeat"),
             handler=_get_recent_reality_window,
         ),
         ToolSpec(

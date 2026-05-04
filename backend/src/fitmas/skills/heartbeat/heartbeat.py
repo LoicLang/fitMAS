@@ -56,7 +56,12 @@ from fitmas.llm_gateway import generate_heartbeat_text, generate_heartbeat_text_
 from fitmas.llm_prompt_builder import detect_open_question
 from fitmas.recent_reality import build_recent_reality_window
 from fitmas.signals import collect_signals, format_signals_for_prompt
+from fitmas.skills.heartbeat.tool_loop import (
+    generate_heartbeat_text_with_tools_debug,
+    heartbeat_read_tools_enabled,
+)
 from fitmas.time_context import build_time_context, get_local_now
+from fitmas.tools.contract import ToolContext
 
 logger = logging.getLogger(__name__)
 
@@ -75,6 +80,7 @@ class HeartbeatDebugTrace:
     context: dict[str, Any] = field(default_factory=dict)
     prompt: dict[str, Any] = field(default_factory=dict)
     llm: dict[str, Any] = field(default_factory=dict)
+    tools: dict[str, Any] = field(default_factory=dict)
     judge: dict[str, Any] = field(default_factory=dict)
     decision: dict[str, Any] = field(default_factory=dict)
     final: dict[str, Any] = field(default_factory=lambda: {"message": None})
@@ -87,6 +93,7 @@ class HeartbeatDebugTrace:
             "context": _debug_jsonable(self.context),
             "prompt": self.prompt,
             "llm": self.llm,
+            "tools": _debug_jsonable(self.tools),
             "judge": self.judge,
             "decision": self.decision,
             "final": self.final,
@@ -116,7 +123,6 @@ _READONLY_CLAIM_JUDGE_SYSTEM = (
     "Les marqueurs de proposition explicites sont par exemple: je propose, "
     "on peut, si tu veux, si tu confirmes, tu veux qu'on, il faudra."
 )
-
 
 def _reserve_module_guard(user_id: int, *, now=None) -> None:
     heartbeat_evaluation.reserve_module_guard(user_id, now=now)
@@ -178,18 +184,49 @@ def _trace_final(message: str | None) -> None:
         trace.final = {"message": message}
 
 
+def _heartbeat_tool_context(
+    db: Session,
+    user: s.User,
+    *,
+    now: datetime | None = None,
+    scheduled_sessions: list[Any] | tuple[Any, ...] | None = None,
+    activities: list[Any] | tuple[Any, ...] | None = None,
+) -> ToolContext:
+    return ToolContext(
+        pipeline="heartbeat",
+        user_id=user.id,
+        timezone_name=user.timezone,
+        db=db,
+        now=now or get_local_now(user.timezone),
+        scheduled_sessions=tuple(scheduled_sessions if scheduled_sessions is not None else repo.get_scheduled_sessions(db, user.id, limit=120)),
+        activities=tuple(activities if activities is not None else repo.get_activities(db, user.id, limit=200)),
+        active_facts=tuple(repo.get_active_facts(db, user.id, limit=60)),
+    )
+
+
 def _llm_generate(
     system: str,
     prompt: str,
     *,
     allow_no_send: bool = True,
     pipeline: str = "heartbeat",
+    tool_context: ToolContext | None = None,
 ) -> str | None:
     trace = _trace()
+    use_tools = heartbeat_read_tools_enabled(tool_context)
     if trace is not None:
         trace.pipeline = pipeline
         trace.prompt = {"system": system, "user": prompt}
-        generation = generate_heartbeat_text_with_debug(system, prompt, allow_no_send=allow_no_send)
+        generation = (
+            generate_heartbeat_text_with_tools_debug(
+                system,
+                prompt,
+                allow_no_send=allow_no_send,
+                tool_context=tool_context,
+            )
+            if use_tools
+            else generate_heartbeat_text_with_debug(system, prompt, allow_no_send=allow_no_send)
+        )
         if isinstance(generation, dict):
             text = generation.get("text")
             trace.llm = {
@@ -198,6 +235,8 @@ def _llm_generate(
                 "reason": generation.get("reason"),
                 "allow_no_send": generation.get("allow_no_send", allow_no_send),
             }
+            if generation.get("tools") is not None:
+                trace.tools = generation.get("tools") or {}
         else:
             text = generation.text
             trace.llm = {
@@ -207,7 +246,16 @@ def _llm_generate(
                 "allow_no_send": generation.allow_no_send,
             }
     else:
-        text = generate_heartbeat_text(system, prompt, allow_no_send=allow_no_send)
+        if use_tools:
+            generation = generate_heartbeat_text_with_tools_debug(
+                system,
+                prompt,
+                allow_no_send=allow_no_send,
+                tool_context=tool_context,
+            )
+            text = str(generation.get("text") or "").strip() or None
+        else:
+            text = generate_heartbeat_text(system, prompt, allow_no_send=allow_no_send)
     # Chantier 1 - Etape D : log-only receipt-style detection sur les outputs
     # heartbeat (briefing / reminder / review / signal). Permet de mesurer le
     # taux de violation par pipeline avant de promouvoir en hard guard.
@@ -319,6 +367,7 @@ def morning_briefing() -> CoachDraft | None:
             end_date=local_now.date(),
             limit=42,
         )
+        tool_scheduled_sessions = repo.get_scheduled_sessions(db, user.id, limit=120)
         recent_activities = repo.get_activities(db, user.id, limit=120)
         recent_claims = _claimed_activities_last_days(db, user, days=14)
         clarification = build_execution_clarification(
@@ -390,7 +439,18 @@ def morning_briefing() -> CoachDraft | None:
             pending_open_question=_pending_open_question_for_user(db, user),
         )
 
-        llm_msg = _llm_generate(system, prompt, pipeline="heartbeat_briefing")
+        llm_msg = _llm_generate(
+            system,
+            prompt,
+            pipeline="heartbeat_briefing",
+            tool_context=_heartbeat_tool_context(
+                db,
+                user,
+                now=local_now,
+                scheduled_sessions=tool_scheduled_sessions,
+                activities=recent_activities,
+            ),
+        )
         if llm_msg:
             memory_updates = []
             if effective_calibration_need is not None and looks_like_clarification_message(llm_msg):
@@ -491,7 +551,16 @@ def pre_session_reminder() -> CoachDraft | None:
             calibration_need=calibration_need,
         )
 
-        llm_msg = _llm_generate(system, prompt, pipeline="heartbeat_reminder")
+        llm_msg = _llm_generate(
+            system,
+            prompt,
+            pipeline="heartbeat_reminder",
+            tool_context=_heartbeat_tool_context(
+                db,
+                user,
+                now=get_local_now(user.timezone),
+            ),
+        )
         if llm_msg:
             memory_updates = []
             if calibration_need is not None and looks_like_clarification_message(llm_msg):
@@ -610,7 +679,19 @@ def weekly_review() -> CoachDraft | None:
             digest=digest,
         )
 
-        llm_msg = _llm_generate(system, prompt, allow_no_send=False, pipeline="heartbeat_review")
+        llm_msg = _llm_generate(
+            system,
+            prompt,
+            allow_no_send=False,
+            pipeline="heartbeat_review",
+            tool_context=_heartbeat_tool_context(
+                db,
+                user,
+                now=get_local_now(user.timezone),
+                scheduled_sessions=scheduled_sessions,
+                activities=activities,
+            ),
+        )
         if llm_msg:
             _trace_decision("send", "llm_message")
             _trace_final(llm_msg)
@@ -690,7 +771,16 @@ def signal_check() -> CoachDraft | None:
             facts_block=format_active_facts_for_prompt(db, user),
         )
 
-        llm_msg = _llm_generate(system, prompt, pipeline="heartbeat_signal")
+        llm_msg = _llm_generate(
+            system,
+            prompt,
+            pipeline="heartbeat_signal",
+            tool_context=_heartbeat_tool_context(
+                db,
+                user,
+                now=get_local_now(user.timezone),
+            ),
+        )
         if llm_msg:
             _trace_decision("send", "llm_message")
             _trace_final(llm_msg)

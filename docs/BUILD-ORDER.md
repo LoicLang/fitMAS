@@ -63,12 +63,13 @@ L'audit declenche par cet incident a confirme 3 failles structurelles connexes :
 | 4 | ✅ Observabilite proactive coach loop — dump contexte, prompt, decision `send/no_send`, judge, message final — implemente localement 4 mai 2026 | 0.5j | section ci-dessous |
 | P1 | ✅ Post-event reply verifier — verifier/reparer toute phrase finale post-mutation contre `events_committed + session_changes` — implemente localement 4 mai 2026 | 0.5j | section ci-dessous |
 | P1-bis | ✅ PlanPatch confirmation parity — changement de sport sur seance cle repasse par confirmation, comme `MutationDecision` — implemente localement 4 mai 2026 | 0.5h | section ci-dessous |
-| 3B-A | Tool-use loop proactive heartbeat read-only — le coach relit la verite recente avant de parler | 2-3j | `docs/LLM-FIRST-CONVERSATION.md` section "Phase 5 - Tool-use loop unifie" |
+| 3B-A | ✅ Tool-use loop proactive heartbeat read-only — le coach relit la verite recente avant de parler — implemente localement 4 mai 2026 | 0.5j | `docs/LLM-FIRST-CONVERSATION.md` section "Phase 5 - Tool-use loop unifie" |
+| P1-ter | Execution receipt repair hardening — smoke reel `heartbeat_non_completion` peut encore tomber en outage si le LLM dit "pas fait hier" sans `execution_actions` | 0.5j | section ci-dessous |
 | 3B-B | Proactive PlanPatch propose + confirmation, pas de commit autonome | 2j | `docs/LLM-FIRST-CONVERSATION.md` |
 | 3B-C | Action-tools natifs bornes, apres preuves 3B-A/B | 2-3j | `docs/RUNTIME-TOOLS.md` |
 | **A+** | **Phase A+ Weekly Coherence Review** (apres 3B ou si 3B non bloquant, avant Phase B) | 3-4j | section "Phase A+" ci-dessous |
 
-**Total restant : ~8-11 jours** (incluant Phase A+). Couvre proactive coach loop, tool-use heartbeat et couche raisonnement week-level avant Phase B.
+**Total restant : ~7-10 jours** (incluant Phase A+). Couvre propositions proactives avec confirmation, action-tools bornes et couche raisonnement week-level avant Phase B.
 
 ### Deploiement prod — 4 mai 2026
 
@@ -456,17 +457,76 @@ Fix :
 
 Test : `test_plan_patch_validation_requires_confirmation_when_replacing_key_session_sport`.
 
+### Chantier 3B-A — Heartbeat read-tools read-only ✅ implemente localement 4 mai 2026
+
+Objectif : le heartbeat n'est plus un one-shot texte uniquement. Avant de
+parler, il peut demander des read-tools pour relire la verite recente :
+
+- `get_plan_window`
+- `get_recent_activities`
+- `get_activity_highlights`
+- `get_recent_reality_window`
+- `get_load_context`
+- `get_user_constraints`
+- `get_relevant_facts`
+
+Frontiere :
+- aucun write tool ;
+- pas de `validate_plan_patch`, `suggest_replan_candidates` ou
+  `propose_replan` dans le pipeline heartbeat ;
+- le guard read-only `ALLOW/BLOCK` reste en aval de la phrase finale ;
+- `NO_SEND` reste un resultat sain.
+
+Implementation :
+- module dedie `skills/heartbeat/tool_loop.py` ;
+- max 2 rounds tools, max 4 tool calls ;
+- `HeartbeatDebugTrace.tools` expose offered/requested/results dans
+  `dump=true` ;
+- tous les roles heartbeat (`morning`, `pre_session`, `weekly_review`,
+  `signal_check`) construisent un `ToolContext(pipeline="heartbeat")`.
+
+Tests :
+- registry heartbeat expose seulement les read-tools utiles ;
+- boucle `tool_use -> tool_result -> prose finale` ;
+- debug endpoint expose la surface tools ;
+- tests heartbeat existants conserves.
+
+### P1-ter ouvert — Execution receipt repair hardening
+
+Smoke reel du 4 mai apres 3B-A :
+
+```bash
+FITMAS_USE_DEEPSEEK_OPENAI_STRUCTURED=1 ./scripts/smoke-real-conversations --scenario heartbeat_non_completion
+```
+
+Symptome : DeepSeek/Claude peuvent produire une reply qui reconnait
+implicitement "pas fait hier" sans `execution_actions`. Le guard
+`execution_receipt_without_action` invalide correctement cette sortie, mais le
+repair/fallback peut encore finir en outage user-facing au lieu de reconstruire
+un `record_execution_update`.
+
+Frontiere doctrine :
+- ne pas parser le texte user ;
+- reparer uniquement la sortie LLM structuree / rationale / reply fautive ;
+- si la cible DB est unique dans le contexte, repair en `execution_actions` ;
+- sinon clarification courte, pas outage generique.
+
+Ce P1 est distinct de 3B-A : il touche la conversation reactive, pas le
+heartbeat read-tools. Mais il doit passer avant 3B-B, sinon l'autonomie
+proactive aura une base execution trop fragile.
+
 ### Ordre propose
 
 1. ~~**Chantier 0-3A-bis**~~ ✅ shippe/deploye 2-4 mai 2026.
 2. ~~**Chantier 4**~~ ✅ observabilite proactive coach loop.
 3. ~~**P1 post-event reply verifier + P1-bis PlanPatch confirmation parity**~~ ✅ implemente localement.
-4. **Maintenant : Chantier 3B-A** — heartbeat tool-use read-only. Le coach peut
-   verifier plan, activites, constraints, load avant de parler.
-5. **Puis : Chantier 3B-B** — PlanPatch propose + confirmation Telegram,
+4. ~~**Chantier 3B-A**~~ ✅ heartbeat tool-use read-only.
+5. **Maintenant : P1-ter execution receipt repair hardening** — fermer le smoke
+   `heartbeat_non_completion`.
+6. **Ensuite : Chantier 3B-B** — PlanPatch propose + confirmation Telegram,
    toujours sans commit autonome.
-6. **Apres preuves dogfood : Chantier 3B-C** — action-tools natifs bornes.
-7. **Apres 3B** : Phase A+ Weekly Coherence Review (3-4j) — l'apport produit
+7. **Apres preuves dogfood : Chantier 3B-C** — action-tools natifs bornes.
+8. **Apres 3B** : Phase A+ Weekly Coherence Review (3-4j) — l'apport produit
    le plus visible, transforme le coach reactif local en coach strategique
    week-level.
 

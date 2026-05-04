@@ -79,6 +79,20 @@ class ToolRuntimeTest(unittest.TestCase):
         self.assertIn("get_load_context", names)
         self.assertIn("validate_plan_patch", names)
 
+    def test_registry_exposes_heartbeat_read_tools_only(self) -> None:
+        names = {tool["name"] for tool in list_tools_for_pipeline("heartbeat")}
+
+        self.assertIn("get_plan_window", names)
+        self.assertIn("get_recent_activities", names)
+        self.assertIn("get_activity_highlights", names)
+        self.assertIn("get_recent_reality_window", names)
+        self.assertIn("get_load_context", names)
+        self.assertIn("get_user_constraints", names)
+        self.assertIn("get_relevant_facts", names)
+        self.assertNotIn("suggest_replan_candidates", names)
+        self.assertNotIn("propose_replan", names)
+        self.assertNotIn("validate_plan_patch", names)
+
     def test_execute_tool_call_returns_today_context(self) -> None:
         result, trace = execute_tool_call(
             ToolCall(tool_name="get_today_context"),

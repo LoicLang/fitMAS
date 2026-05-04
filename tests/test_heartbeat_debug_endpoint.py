@@ -4,6 +4,7 @@ import os
 import tempfile
 import unittest
 from datetime import timedelta
+from types import SimpleNamespace
 
 os.environ.setdefault("FITMAS_DB_PATH", tempfile.mktemp(prefix="fitmas-heartbeat-debug-", suffix=".db"))
 os.environ["FITMAS_ENABLE_DEBUG_ENDPOINTS"] = "1"
@@ -14,6 +15,7 @@ import fitmas.heartbeat as heartbeat
 from fitmas import repository as repo, schema as s
 from fitmas.api import app
 from fitmas.db import Base, SessionLocal, engine, init_db
+from fitmas.skills.heartbeat import tool_loop
 from fitmas.time_context import DAY_KEYS, day_label_fr, get_local_now
 
 
@@ -115,7 +117,9 @@ class HeartbeatDebugEndpointTest(unittest.TestCase):
         self._create_today_plan()
         original_generate = heartbeat.generate_heartbeat_text_with_debug
         original_request_text = heartbeat.request_text
+        original_tools = os.environ.get("FITMAS_ENABLE_HEARTBEAT_READ_TOOLS")
         try:
+            os.environ["FITMAS_ENABLE_HEARTBEAT_READ_TOOLS"] = "0"
             heartbeat.generate_heartbeat_text_with_debug = lambda *args, **kwargs: {
                 "raw_text": "Regarde ton app demain matin, j'ai ajuste le planning.",
                 "text": "Regarde ton app demain matin, j'ai ajuste le planning.",
@@ -125,6 +129,10 @@ class HeartbeatDebugEndpointTest(unittest.TestCase):
             heartbeat.request_text = lambda **kwargs: "BLOCK"
             response = self.client.post("/api/v0/debug/heartbeat/morning?dump=true&send=false")
         finally:
+            if original_tools is None:
+                os.environ.pop("FITMAS_ENABLE_HEARTBEAT_READ_TOOLS", None)
+            else:
+                os.environ["FITMAS_ENABLE_HEARTBEAT_READ_TOOLS"] = original_tools
             heartbeat.generate_heartbeat_text_with_debug = original_generate
             heartbeat.request_text = original_request_text
 
@@ -156,6 +164,29 @@ class HeartbeatDebugEndpointTest(unittest.TestCase):
         self.assertEqual(debug["decision"]["action"], "no_send")
         self.assertEqual(debug["decision"]["reason"], "no_today_session")
         self.assertIsNone(debug["final"]["message"])
+
+    def test_debug_dump_exposes_heartbeat_read_tools(self) -> None:
+        self._create_today_plan()
+        original_request_message = tool_loop.gw.request_message
+        original_request_text = heartbeat.request_text
+        try:
+            tool_loop.gw.request_message = lambda **_kwargs: SimpleNamespace(
+                stop_reason="end_turn",
+                content=[SimpleNamespace(type="text", text="On garde le footing facile ce matin.")],
+            )
+            heartbeat.request_text = lambda **_kwargs: "ALLOW"
+            response = self.client.post("/api/v0/debug/heartbeat/morning?dump=true&send=false")
+        finally:
+            tool_loop.gw.request_message = original_request_message
+            heartbeat.request_text = original_request_text
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        debug = payload["debug"]
+        self.assertIn("get_plan_window", debug["tools"]["offered"])
+        self.assertIn("get_recent_activities", debug["tools"]["offered"])
+        self.assertEqual(debug["tools"]["requested"], [])
+        self.assertEqual(debug["llm"]["raw_text"], "On garde le footing facile ce matin.")
 
 
 if __name__ == "__main__":
