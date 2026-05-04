@@ -15,7 +15,7 @@ Ce qui tourne en prod :
 - Détail séance en page dédiée : `/workout/:sessionId`
 - Read models backend dédiés aux écrans app : `overview`, `calendar`, `evolution`, `session detail`
 - Activités manuelles + Strava OAuth + import + synchro automatique
-- Heartbeat proactif avec cooldowns + catch-up matin borné (briefing matin, rappel pré-séance, revue dimanche, nouveau plan lundi)
+- Proactive coach loop avec cooldowns : le coach peut se reveiller, relire la verite recente, choisir `send/no_send`, puis envoyer un message utile sans horaire fixe obligatoire
 - Mémoire V2 base : `profile / working / patterns`
 - Runtime tools multi-tool borné : read-only / candidate / validation-only, aucun write DB libre
 - Conversation tool loop 3A : multi-round read/validation tools, `validate_plan_patch`, replay DeepSeek tool-use, retry JSON court avant repair lourd
@@ -45,14 +45,15 @@ Chantiers en cours (suite incident hallucination factuelle briefing 2 mai) :
 - ✅ **Chantier 3A** — Conversation tool loop partiel — multi-round read/validation tools + `validate_plan_patch`, `PlanPatch` conservé — shippé + déployé 4 mai 2026
 - ✅ **Correctif Telegram** — idempotence `client_message_key` + retry réponse perdue après commit — shippé + déployé 4 mai 2026
 - ✅ **Heartbeat fake-action guard** — LLM judge systématique `ALLOW/BLOCK` sur chaque sortie heartbeat read-only, sans regex fake-action — 4 mai 2026
-- **Chantier 3B** — Tool-use loop heartbeat + action-tools natifs bornés — `docs/LLM-FIRST-CONVERSATION.md`
-- **Chantier 4** — Observabilité briefing (1j) — endpoint debug dump bundle + prompt + response
+- ✅ **Chantier 4** — Observabilité proactive coach loop — `dump=true` expose contexte, prompt, decision `send/no_send`, judge, message final — 4 mai 2026
+- **Priorité P1 suivante** — post-event reply verifier : empêcher une réponse finale de contredire les events réellement commités
+- **Chantier 3B** — Tool-use loop proactive heartbeat + action-tools natifs bornés — `docs/LLM-FIRST-CONVERSATION.md`
 - **Phase A+** — Weekly Coherence Review (3-4j, après Chantier 3B ou si jugé non bloquant) — couche raisonnement week-level, transforme coach réactif local en coach stratégique — `docs/BUILD-ORDER.md` section dédiée
 
 Cap produit actuel :
 - Telegram = coach conversationnel
 - App = cockpit performance
-- priorité immédiate : terminer Chantier 3B heartbeat/tool-use puis préparer Phase A+
+- priorité immédiate : fermer le P1 reply post-event, puis donner au heartbeat des read-tools avant toute action autonome
 - Phase B long terme : progression/prescription structurée, pas ouverte tant que Phase A + Chantiers 2+3 + Phase A+ ne sont pas clos
 
 ## Stack

@@ -28,32 +28,50 @@ def get_signals(db: Session = Depends(get_db)) -> dict:
 
 
 @router.post("/api/v0/debug/heartbeat/{kind}")
-def trigger_debug_heartbeat(kind: str, send: bool = True, db: Session = Depends(get_db)) -> dict:
+def trigger_debug_heartbeat(
+    kind: str,
+    send: bool = True,
+    dump: bool = False,
+    db: Session = Depends(get_db),
+) -> dict:
     ensure_debug_enabled()
 
     user = repo.get_user_optional(db)
     if user is None:
         raise HTTPException(status_code=404, detail="No onboarded user yet")
 
-    from fitmas.heartbeat import morning_briefing, pre_session_reminder, signal_check
+    import fitmas.heartbeat as heartbeat
 
     handlers = {
-        "morning": morning_briefing,
-        "pre_session": pre_session_reminder,
-        "signal_check": signal_check,
+        "morning": heartbeat.morning_briefing,
+        "pre_session": heartbeat.pre_session_reminder,
+        "signal_check": heartbeat.signal_check,
+        "weekly_review": heartbeat.weekly_review,
     }
     handler = handlers.get(kind)
     if handler is None:
         raise HTTPException(status_code=400, detail="Unsupported heartbeat kind")
 
-    draft = handler()
+    trace = None
+    if dump:
+        with heartbeat.capture_debug_trace(kind) as captured:
+            draft = handler()
+            trace = captured
+    else:
+        draft = handler()
     if not draft:
-        return {
+        payload = {
             "kind": kind,
             "triggered": False,
             "sent": False,
             "reason": "no_op",
         }
+        if dump and trace is not None:
+            if not trace.decision:
+                trace.decision = {"action": "no_send", "reason": "no_op"}
+            trace.final = {"message": None}
+            payload["debug"] = trace.to_dict()
+        return payload
 
     sent = False
     delivery_error = None
@@ -70,13 +88,20 @@ def trigger_debug_heartbeat(kind: str, send: bool = True, db: Session = Depends(
                 logger.exception("Failed to send debug heartbeat to Telegram")
                 delivery_error = str(exc)
 
-    return {
+    payload = {
         "kind": kind,
         "triggered": True,
         "sent": sent,
         "delivery_error": delivery_error,
         "message": draft.text,
     }
+    if dump and trace is not None:
+        if not trace.decision:
+            trace.decision = {"action": "send", "reason": "draft_generated"}
+        if not trace.final.get("message"):
+            trace.final = {"message": draft.text}
+        payload["debug"] = trace.to_dict()
+    return payload
 
 
 @router.post("/api/v0/reset")

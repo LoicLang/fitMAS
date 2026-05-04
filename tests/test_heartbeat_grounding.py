@@ -603,6 +603,31 @@ class HeartbeatGroundingTest(unittest.TestCase):
 
         self.assertIsNone(text)
 
+    def test_readonly_judge_prompt_explicitly_blocks_future_replacement_claims(self) -> None:
+        original_request_text = getattr(heartbeat, "request_text", None)
+        calls: list[dict] = []
+        try:
+            def fake_judge(**kwargs):
+                calls.append(kwargs)
+                return "BLOCK"
+
+            heartbeat.request_text = fake_judge
+            blocked = heartbeat._heartbeat_readonly_judge_blocks(
+                "Pour la semaine prochaine, on replace les deux seances manquees sur lundi et mercredi.",
+                pipeline="heartbeat_review",
+            )
+        finally:
+            if original_request_text is not None:
+                heartbeat.request_text = original_request_text
+
+        self.assertTrue(blocked)
+        self.assertEqual(len(calls), 1)
+        system = calls[0]["system"]
+        prompt = calls[0]["prompt"]
+        self.assertIn("aucun event de mutation", system)
+        self.assertIn("on replace les deux seances", system)
+        self.assertIn("events_committed: []", prompt)
+
     def test_llm_generate_judges_every_heartbeat_message(self) -> None:
         original_generate = heartbeat.generate_heartbeat_text
         original_request_text = getattr(heartbeat, "request_text", None)

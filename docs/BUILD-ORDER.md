@@ -28,7 +28,7 @@ Si un autre doc diverge :
 
 **Un premier coach que Loïc reconnaît, comprend, et a envie de rouvrir demain.**
 
-## Checkpoint courant — 3 mai 2026
+## Checkpoint courant — 4 mai 2026
 
 ### Incident dogfood briefing matin du 2 mai
 
@@ -60,26 +60,31 @@ L'audit declenche par cet incident a confirme 3 failles structurelles connexes :
 | 2 | ✅ Truth source runtime core — `ScheduledSession` seul pour mutations/signals/activity matching — shippe 3 mai 2026 | 1j | `docs/COACH-COHERENCE-REFACTOR.md` section "Plan 2 mai 2026" |
 | 3A | ✅ Conversation tool loop partiel — multi-round read/validation + `validate_plan_patch`, `PlanPatch` conserve — shippe 3 mai, deploye 4 mai 2026 | 1.5j | section ci-dessous |
 | 3A-bis | ✅ Heartbeat read-only fake-action guard — LLM judge systematique `ALLOW/BLOCK` sur chaque sortie heartbeat, sans regex fake-action — 4 mai 2026 | 0.5j | section ci-dessous |
-| 3B | Tool-use loop heartbeat + action-tools natifs bornes | 4-5j | `docs/LLM-FIRST-CONVERSATION.md` section "Phase 5 - Tool-use loop unifie" |
-| 4 | Observabilite briefing (endpoint debug dump bundle + prompt + response) | 1j | section ci-dessous |
+| 4 | ✅ Observabilite proactive coach loop — dump contexte, prompt, decision `send/no_send`, judge, message final — implemente localement 4 mai 2026 | 0.5j | section ci-dessous |
+| **P1** | **Post-event reply verifier — bloquant avant 3B-A** : verifier/reparer toute phrase finale post-mutation contre `events_committed + session_changes` | **0.5-1j** | section ci-dessous |
+| 3B-A | Tool-use loop proactive heartbeat read-only — le coach relit la verite recente avant de parler | 2-3j | `docs/LLM-FIRST-CONVERSATION.md` section "Phase 5 - Tool-use loop unifie" |
+| 3B-B | Proactive PlanPatch propose + confirmation, pas de commit autonome | 2j | `docs/LLM-FIRST-CONVERSATION.md` |
+| 3B-C | Action-tools natifs bornes, apres preuves 3B-A/B | 2-3j | `docs/RUNTIME-TOOLS.md` |
 | **A+** | **Phase A+ Weekly Coherence Review** (apres 3B ou si 3B non bloquant, avant Phase B) | 3-4j | section "Phase A+" ci-dessous |
 
-**Total restant : ~8-10 jours** (incluant Phase A+). Couvre heartbeat/tool-use, observabilite et couche raisonnement week-level avant Phase B.
+**Total restant : ~9-12 jours** (incluant Phase A+). Couvre proactive coach loop, observabilite, tool-use heartbeat et couche raisonnement week-level avant Phase B.
 
 ### Deploiement prod — 4 mai 2026
 
-`main` est deploye sur Fly.io au commit `406bb23`.
+`main` est deploye sur Fly.io au commit `60e4db7`.
 
 Livres ensemble :
 - Chantier 2 truth source runtime core ;
 - Chantier 3A conversation tool loop partiel ;
 - retry JSON court apres tool-use DeepSeek avant repair lourd ;
-- idempotence Telegram/API via `client_message_key` pour eviter double traitement apres timeout ou reponse perdue.
+- idempotence Telegram/API via `client_message_key` pour eviter double traitement apres timeout ou reponse perdue ;
+- heartbeat read-only fake-action guard via LLM judge `ALLOW/BLOCK`, sans regex fake-action.
 
 Verification avant deploy :
-- `./scripts/test-backend -q` : 626 passed, 11 skipped, 6 subtests passed ;
+- `./scripts/test-backend -q` : 627 passed, 11 skipped, 6 subtests passed ;
 - `.venv/bin/python -m compileall backend/src/fitmas` : OK ;
-- smoke reel DeepSeek `golden_case_autonomy` + `today_unavailability` : exit 0, tools bien appeles.
+- smoke reel DeepSeek `golden_case_autonomy` + `today_unavailability` : exit 0, tools bien appeles ;
+- health prod `https://the deployed app/health` : `{"status":"ok"}`.
 
 Dette observee dans le smoke reel : `weekly_review` pouvait encore dire "regarde ton app demain matin, j'ai ajuste le planning" alors qu'aucune mutation n'etait appliquee. Traitement 3A-bis : LLM judge `ALLOW/BLOCK` systematique sur chaque sortie heartbeat read-only.
 
@@ -291,28 +296,149 @@ Ce guard lit uniquement la sortie LLM heartbeat, jamais le texte utilisateur.
 Il reste donc conforme a la doctrine : determinisme sur artefact machine, pas
 sur comprehension user.
 
-### Chantier 4 — Observabilite briefing
+### Vision heartbeat — proactive coach loop
 
-Endpoint debug `POST /api/v0/debug/heartbeat/morning?dump=true` qui retourne :
+Le mot `heartbeat` est historique. La cible produit n'est pas un message fixe
+tous les matins a la meme heure. C'est une **initiative coach bornee** :
 
-- bundle complet (`YesterdayTruth`, `TodayTruth`, `WeekDigest`, `recent_activities`, `recent_proactive_context`)
-- prompt systeme rendu
-- prompt user rendu
-- response LLM brut
-- message final rendu
+```text
+scheduler / evenement
+  -> le coach se reveille
+  -> lit la verite recente avec tools
+  -> decide send/no_send
+  -> compose un message utile ou se tait
+  -> guard anti-harcelement + judge read-only
+```
+
+Sources de reveil :
+- routine planifiee : briefing matin, revue semaine, pre-session ;
+- evenement : nouvelle activite Strava, seance tres sous/sur-attendue,
+  seance cle manquee, silence prolonge ;
+- opportunite : fenetre utile pour recadrer, proteger la recup, demander une
+  clarification courte.
+
+Regles produit :
+- `NO_SEND` est un resultat normal, pas un echec ;
+- pas de harcelement : cooldown, cap journalier, nouveaute reelle, pas deux
+  recadrages sur le meme sujet ;
+- le coach ne doit pas claim une action planning sans event ;
+- tant que le heartbeat est read-only, il propose ou demande confirmation.
+
+### Chantier 4 — Observabilite proactive coach loop ✅ implemente localement 4 mai 2026
+
+Endpoint debug `POST /api/v0/debug/heartbeat/{kind}?dump=true` qui retourne :
+
+- contexte lu par le heartbeat (`heartbeat_bundle`, signals, sessions,
+  activites, time_context selon le kind) ;
+- prompt systeme rendu ;
+- prompt user rendu ;
+- response LLM brute ;
+- decision `send/no_send` et raison ;
+- sortie du judge read-only `ALLOW/BLOCK` ;
+- message final envoye ou raison de silence.
+
+Kinds supportes : `morning`, `pre_session`, `signal_check`, `weekly_review`.
+Le meme `dump=true` existe aussi sur `POST /ops/heartbeat/{kind}`.
+
+Implementation :
+- `llm_gateway.generate_heartbeat_text_with_debug()` expose `raw_text`,
+  `text`, `reason`, `allow_no_send` sans changer le helper historique ;
+- `heartbeat.capture_debug_trace(kind)` trace gate, contexte, prompt, LLM,
+  judge et decision finale via `ContextVar` local au tour ;
+- les endpoints ajoutent le bloc `debug` seulement si `dump=true`.
 
 Permet diagnostic d'incident en 5 minutes au lieu de 2h d'audit. Active uniquement quand `FITMAS_ENABLE_DEBUG_ENDPOINTS` est set.
 
-Tests : un debug endpoint ne devrait pas etre actif en prod par defaut (deja la regle). Verifier que le dump n'expose pas de PII / API keys.
+Tests :
+- `tests/test_heartbeat_debug_endpoint.py` verrouille prompt + raw LLM +
+  judge + decision finale ;
+- test no-op : sans seance du jour, le dump expose `no_today_session`.
+- verification 4 mai : `./scripts/test-backend -q` -> 630 passed,
+  11 skipped, 6 subtests ; dump reel DeepSeek OK (`prompt`, `raw_text`,
+  `judge`, `decision` presents).
+
+Dogfood parallele 4 mai :
+- P1 ouvert : certaines replies post-mutation peuvent encore contredire les
+  events reels (`week_scope_constraint`, sous-performance severe). Prochain
+  correctif recommande : post-event reply verifier / repair sur
+  `events_committed + session_changes + final_reply`.
+- P1 heartbeat read-only : fuite "on replace les deux seances..." observee
+  dans un weekly review. Mitigation immediate : prompt du judge durci avec
+  `events_committed: []`, exemples BLOCK, et smoke direct DeepSeek confirme
+  `BLOCK` sur la phrase fautive.
+
+### P1 prioritaire — Post-event reply verifier
+
+Bloquant avant 3B-A. Tant que ce trou existe, plus on libere le coach, plus il
+peut produire des phrases fluides mais fausses apres une vraie mutation.
+
+Bug observe :
+
+```text
+events reels = mercredi et jeudi remplaces par Journee flexible
+reply finale = "J'ai decale le fractionne a jeudi"
+```
+
+L'etat DB est correct, mais la voix ment sur l'etat. C'est plus dangereux qu'un
+simple mauvais ton : le user croit qu'une action differente a ete commit.
+
+Contrat attendu :
+
+```text
+events_committed + events_blocked + session_changes + final_reply
+  -> verifier LLM
+  -> ALLOW si la phrase colle aux events
+  -> REPAIR si elle invente / inverse / ajoute une mutation
+  -> fallback outage court si repair impossible
+```
+
+Exemple :
+
+```json
+{
+  "events_committed": [
+    {"command": "replace_session", "before": "Fractionne", "after": "Journee flexible"},
+    {"command": "replace_session", "before": "Renfo", "after": "Journee flexible"}
+  ],
+  "final_reply": "J'ai decale le fractionne a jeudi."
+}
+```
+
+Verdict attendu :
+
+```json
+{
+  "verdict": "repair",
+  "reason": "La reply claim un deplacement a jeudi, non present dans les events.",
+  "repaired_reply": "J'ai libere mercredi et jeudi en journees flexibles. On garde de la marge cette semaine au lieu de forcer le fractionne."
+}
+```
+
+Frontiere doctrine : ce verifier ne lit jamais le texte user libre. Il juge
+uniquement des artefacts machine produits apres mutation : events DB, diff de
+sessions, phrase sortante. Il est donc conforme a LLM-first.
+
+Tests a ajouter :
+- reply qui mentionne un jour/session absent des events -> repair ;
+- reply qui colle exactement aux events -> allow ;
+- LLM verifier invalide/outage -> fallback court sans claim d'action inventee ;
+- smoke dogfood `week_scope_constraint` : la phrase finale ne peut plus dire
+  "decale a jeudi" si l'event reel est `replace_session -> Journee flexible`.
 
 ### Ordre propose
 
-1. ~~**Maintenant** : Chantier 0~~ ✅ shippe 2 mai 2026
-2. ~~**Cette semaine** : Chantier 1~~ ✅ shippe 3 mai 2026 — voix coach unifiee tous pipelines (+ 1bis claim_guard repair + 1ter capture indirecte + cleanup DB prod)
-3. **Dogfood 24-48h** : valider voix unifiee + DB propre sur Telegram avant gros chantier. Surveiller logs `coach_voice.receipt_style pipeline=*` et `claim_repair_*`.
-4. **Decision a prendre** : Chantier 2 avant ou apres Chantier 3 ? Reco = **avant** (truth source d'abord, tool-use loop construit dessus, et c'est aussi prerequis Phase A+). Mais 4-5j sans feature visible.
-5. **En parallele** : Chantier 4 (1j) pose pour le futur, peut s'attaquer en marge de 2 ou 3
-6. **Apres Chantier 3** : Phase A+ Weekly Coherence Review (3-4j) — l'apport produit le plus visible, transforme le coach reactif local en coach strategique week-level
+1. ~~**Chantier 0-3A-bis**~~ ✅ shippe/deploye 2-4 mai 2026.
+2. ~~**Chantier 4**~~ ✅ observabilite proactive coach loop.
+3. **Maintenant : P1 post-event reply verifier** — fermer les replies finales
+   qui contredisent les events reels.
+4. **Ensuite : Chantier 3B-A** — heartbeat tool-use read-only. Le coach peut
+   verifier plan, activites, constraints, load avant de parler.
+5. **Puis : Chantier 3B-B** — PlanPatch propose + confirmation Telegram,
+   toujours sans commit autonome.
+6. **Apres preuves dogfood : Chantier 3B-C** — action-tools natifs bornes.
+7. **Apres 3B** : Phase A+ Weekly Coherence Review (3-4j) — l'apport produit
+   le plus visible, transforme le coach reactif local en coach strategique
+   week-level.
 
 ### Phase A — etat apres chantiers 0+1+2
 

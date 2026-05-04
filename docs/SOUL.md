@@ -171,13 +171,30 @@ Règle :
 - `aujourd'hui`, `demain`, `hier`, `ce soir`, `demain matin` doivent toujours être interprétés depuis ce contexte exact
 - si l'utilisateur demande directement la date, l'heure ou le jour, le coach doit répondre clairement et sans halluciner
 
-## Heartbeat
+## Proactive Coach Loop
 
-### 3 sources de réveil
+`Heartbeat` est le nom historique du module. La vision produit est plus large :
+le coach peut se reveiller dans la journee, regarder ce qui vient de se passer,
+et choisir librement d'envoyer un message ou de se taire.
+
+Ce n'est pas un briefing automatique tous les matins a heure fixe. Le briefing
+matin est seulement une occasion parmi d'autres.
+
+Boucle cible :
+
+```text
+occasion de reveil
+  -> lecture de la verite recente
+  -> decision send/no_send
+  -> message utile, court, contextuel
+  -> anti-harcelement + audit
+```
+
+### Sources de réveil
 
 1. **Routine planifiée** — briefing matin, rappel pré-séance, revue dimanche soir, nouvelle semaine lundi matin
-2. **Événement** — nouvelle activité Strava, message user
-3. **Exception** — séance clé manquée, silence prolongé
+2. **Événement** — nouvelle activité Strava, séance très sous/sur-attendue, message user
+3. **Exception** — séance clé manquée, silence prolongé, incohérence semaine
 
 ### Garde-fous déterministes (implémentés)
 
@@ -187,8 +204,11 @@ Règle :
 - **Fenêtre active** : heures locales user uniquement
 - **Catch-up matin** : si le scheduler rate la fenêtre jitterée du briefing et qu'aucun proactif n'a déjà été envoyé, il peut rattraper jusqu'à 10h locale
 - **No-op valide** : ne rien envoyer est un résultat fréquent et acceptable
+- **Nouveauté réelle** : ne pas envoyer deux recadrages sur le même sujet sans information nouvelle
+- **Read-only honnête** : sans event de mutation, le coach propose ou demande confirmation ; il ne dit pas qu'il a déjà changé le plan
 
 Le LLM ne bypass pas ces règles. Les garde-fous sont évalués avant tout appel LLM.
+Pour les sorties heartbeat read-only, un LLM judge `ALLOW/BLOCK` bloque les fake-action claims sans event réel.
 
 ### Triggers implémentés
 
@@ -202,22 +222,26 @@ Le LLM ne bypass pas ces règles. Les garde-fous sont évalués avant tout appel
 
 Règle :
 - les signaux restent disponibles dans le contexte coach
-- ils nourrissent surtout le briefing matin et le rappel pré-séance
+- ils nourrissent la proactive coach loop, pas seulement le briefing matin
+- le scheduler déclenche des occasions de réflexion ; il ne force pas toujours un message
 - il n'y a plus de cron autonome à 14h
 
 ### Debug live
 
-- `POST /api/v0/debug/heartbeat/morning`
-- `POST /api/v0/debug/heartbeat/pre_session`
+- `POST /api/v0/debug/heartbeat/{kind}?dump=true&send=false`
+- `POST /ops/heartbeat/{kind}?dump=true&send=false`
 
 But:
 - tester le rendu réel
+- comprendre pourquoi le coach envoie ou se tait
+- inspecter contexte, prompts, sortie LLM brute, judge `ALLOW/BLOCK`, décision finale
 - confirmer l'envoi Telegram
 - débugger sans lancer de process SSH lourd sur Fly
 
 Règle:
 - désactivé par défaut sur Fly / prod
 - activable explicitement via `FITMAS_ENABLE_DEBUG_ENDPOINTS`
+- kinds supportés : `morning`, `pre_session`, `signal_check`, `weekly_review`
 
 ### Ce qui n'est pas encore implémenté
 
@@ -248,12 +272,14 @@ Un message seulement si au moins une condition est vraie :
 - risque d'adhésion à traiter
 - check-in contextuel à forte valeur
 - retour après événement important
+- séance très au-dessous / au-dessus de l'attendu qui mérite un recadrage ou une protection de charge
 
 ### Quand ne pas envoyer
 
 - le plan n'a pas changé
 - aucune action n'est attendue
 - le système ne ferait que "prendre des nouvelles" sans contexte solide
+- le message serait une répétition d'un recadrage déjà envoyé sans fait nouveau
 
 ### 4 types de messages
 

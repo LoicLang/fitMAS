@@ -16,7 +16,11 @@ This module handles gating, data loading, LLM calls, and fallback generation.
 from __future__ import annotations
 
 import logging
-from datetime import timedelta, timezone as dt_timezone
+from contextlib import contextmanager
+from contextvars import ContextVar
+from dataclasses import asdict, dataclass, field, is_dataclass
+from datetime import date, datetime, timedelta, timezone as dt_timezone
+from typing import Any, Iterator
 
 from sqlalchemy.orm import Session
 
@@ -48,7 +52,7 @@ from fitmas.skills.heartbeat.roles import (
     select_calibration_need,
 )
 from fitmas.knowledge import load_sport_knowledge
-from fitmas.llm_gateway import generate_heartbeat_text, request_text
+from fitmas.llm_gateway import generate_heartbeat_text, generate_heartbeat_text_with_debug, request_text
 from fitmas.llm_prompt_builder import detect_open_question
 from fitmas.recent_reality import build_recent_reality_window
 from fitmas.signals import collect_signals, format_signals_for_prompt
@@ -62,10 +66,39 @@ MAX_PROACTIVE_MESSAGES_PER_DAY = heartbeat_evaluation.MAX_PROACTIVE_MESSAGES_PER
 MODULE_GUARD_WINDOW = heartbeat_evaluation.MODULE_GUARD_WINDOW
 _LAST_PROACTIVE_GUARD_AT = heartbeat_evaluation.LAST_PROACTIVE_GUARD_AT
 
+
+@dataclass
+class HeartbeatDebugTrace:
+    kind: str
+    pipeline: str | None = None
+    gate: dict[str, Any] | None = None
+    context: dict[str, Any] = field(default_factory=dict)
+    prompt: dict[str, Any] = field(default_factory=dict)
+    llm: dict[str, Any] = field(default_factory=dict)
+    judge: dict[str, Any] = field(default_factory=dict)
+    decision: dict[str, Any] = field(default_factory=dict)
+    final: dict[str, Any] = field(default_factory=lambda: {"message": None})
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "kind": self.kind,
+            "pipeline": self.pipeline,
+            "gate": self.gate,
+            "context": _debug_jsonable(self.context),
+            "prompt": self.prompt,
+            "llm": self.llm,
+            "judge": self.judge,
+            "decision": self.decision,
+            "final": self.final,
+        }
+
+
+_DEBUG_TRACE: ContextVar[HeartbeatDebugTrace | None] = ContextVar("heartbeat_debug_trace", default=None)
+
 _READONLY_CLAIM_JUDGE_SYSTEM = (
     "Tu es un juge de securite FitMAS. Tu lis uniquement un message heartbeat "
     "deja genere par l'assistant. Ce heartbeat est read-only : aucun changement "
-    "de planning n'a ete commit sur ce tour.\n\n"
+    "de planning n'a ete commit sur ce tour, aucun event de mutation n'existe.\n\n"
     "Reponds exactement ALLOW ou BLOCK.\n"
     "BLOCK si le message affirme ou implique fortement qu'une action planning "
     "a deja ete faite par FitMAS: j'ai ajuste le planning, j'ai bascule, "
@@ -75,6 +108,9 @@ _READONLY_CLAIM_JUDGE_SYSTEM = (
     "decide sans confirmation ni event: on place X lundi, on pose la semaine, "
     "on garde/remplace/decale X, on allege Y, on recentre sur Z. Meme au futur, "
     "si la phrase sonne comme une decision appliquee ou un plan fixe, BLOCK.\n"
+    "Exemples BLOCK: 'Pour la semaine prochaine, on replace les deux seances "
+    "manquees sur lundi et mercredi', 'on garde mercredi libre mais on le "
+    "remplace par du running', 'demain on bascule tout en course'.\n"
     "ALLOW si c'est une proposition, une question, une intention future, une "
     "orientation de coaching, une observation, ou une action faite par le user. "
     "Les marqueurs de proposition explicites sont par exemple: je propose, "
@@ -86,6 +122,62 @@ def _reserve_module_guard(user_id: int, *, now=None) -> None:
     heartbeat_evaluation.reserve_module_guard(user_id, now=now)
 
 
+@contextmanager
+def capture_debug_trace(kind: str) -> Iterator[HeartbeatDebugTrace]:
+    trace = HeartbeatDebugTrace(kind=kind)
+    token = _DEBUG_TRACE.set(trace)
+    try:
+        yield trace
+    finally:
+        _DEBUG_TRACE.reset(token)
+
+
+def _trace() -> HeartbeatDebugTrace | None:
+    return _DEBUG_TRACE.get()
+
+
+def _debug_jsonable(value: Any) -> Any:
+    if is_dataclass(value):
+        return _debug_jsonable(asdict(value))
+    if isinstance(value, (datetime, date)):
+        return value.isoformat()
+    if isinstance(value, dict):
+        return {str(key): _debug_jsonable(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_debug_jsonable(item) for item in value]
+    if isinstance(value, (str, int, float, bool)) or value is None:
+        return value
+    return str(value)
+
+
+def _trace_gate(gate: Any) -> None:
+    trace = _trace()
+    if trace is None:
+        return
+    trace.gate = {
+        "allowed": bool(getattr(gate, "allowed", False)),
+        "reason": getattr(gate, "reason", None),
+    }
+
+
+def _trace_context(name: str, value: Any) -> None:
+    trace = _trace()
+    if trace is not None:
+        trace.context[name] = value
+
+
+def _trace_decision(action: str, reason: str) -> None:
+    trace = _trace()
+    if trace is not None:
+        trace.decision = {"action": action, "reason": reason}
+
+
+def _trace_final(message: str | None) -> None:
+    trace = _trace()
+    if trace is not None:
+        trace.final = {"message": message}
+
+
 def _llm_generate(
     system: str,
     prompt: str,
@@ -93,7 +185,29 @@ def _llm_generate(
     allow_no_send: bool = True,
     pipeline: str = "heartbeat",
 ) -> str | None:
-    text = generate_heartbeat_text(system, prompt, allow_no_send=allow_no_send)
+    trace = _trace()
+    if trace is not None:
+        trace.pipeline = pipeline
+        trace.prompt = {"system": system, "user": prompt}
+        generation = generate_heartbeat_text_with_debug(system, prompt, allow_no_send=allow_no_send)
+        if isinstance(generation, dict):
+            text = generation.get("text")
+            trace.llm = {
+                "raw_text": generation.get("raw_text"),
+                "text": text,
+                "reason": generation.get("reason"),
+                "allow_no_send": generation.get("allow_no_send", allow_no_send),
+            }
+        else:
+            text = generation.text
+            trace.llm = {
+                "raw_text": generation.raw_text,
+                "text": text,
+                "reason": generation.reason,
+                "allow_no_send": generation.allow_no_send,
+            }
+    else:
+        text = generate_heartbeat_text(system, prompt, allow_no_send=allow_no_send)
     # Chantier 1 - Etape D : log-only receipt-style detection sur les outputs
     # heartbeat (briefing / reminder / review / signal). Permet de mesurer le
     # taux de violation par pipeline avant de promouvoir en hard guard.
@@ -116,6 +230,8 @@ def _llm_generate(
 def _heartbeat_readonly_judge_blocks(text: str, *, pipeline: str) -> bool:
     prompt = (
         f"Pipeline: {pipeline}\n\n"
+        "events_committed: []\n"
+        "capability: read_only\n\n"
         "Message heartbeat a juger:\n"
         f"{text.strip()}\n\n"
         "Decision:"
@@ -124,17 +240,29 @@ def _heartbeat_readonly_judge_blocks(text: str, *, pipeline: str) -> bool:
         decision = request_text(system=_READONLY_CLAIM_JUDGE_SYSTEM, prompt=prompt, max_tokens=8)
     except Exception:
         logger.exception("heartbeat.readonly_claim_judge_error pipeline=%s", pipeline)
+        trace = _trace()
+        if trace is not None:
+            trace.judge = {"decision": None, "blocked": True, "reason": "judge_error"}
         return True
     normalized = coach_voice.normalize_for_voice_guard(decision or "")
     if normalized.startswith("allow"):
+        trace = _trace()
+        if trace is not None:
+            trace.judge = {"decision": decision, "blocked": False, "reason": "allow"}
         return False
     if normalized.startswith("block"):
+        trace = _trace()
+        if trace is not None:
+            trace.judge = {"decision": decision, "blocked": True, "reason": "block"}
         return True
     logger.warning(
         "heartbeat.readonly_claim_judge_invalid pipeline=%s decision=%r",
         pipeline,
         decision,
     )
+    trace = _trace()
+    if trace is not None:
+        trace.judge = {"decision": decision, "blocked": True, "reason": "invalid_judge_response"}
     return True
 
 
@@ -149,14 +277,20 @@ def morning_briefing() -> CoachDraft | None:
         user = repo.get_user(db)
 
         gate = heartbeat_evaluation.evaluate_proactive_gate(db, user)
+        _trace_gate(gate)
         if not gate.allowed:
             logger.info("Morning briefing skipped — %s", str(gate.reason or "blocked").replace("_", " "))
+            _trace_decision("no_send", str(gate.reason or "gate_blocked"))
+            _trace_final(None)
             return None
 
         time_context = build_time_context(user.timezone)
+        _trace_context("time_context", time_context)
         local_now = get_local_now(user.timezone)
         today_session = repo.get_today_scheduled_session(db, user.id, timezone_name=user.timezone)
         if not today_session:
+            _trace_decision("no_send", "no_today_session")
+            _trace_final(None)
             return None
         day = None
         calibration_need = select_calibration_need(
@@ -238,6 +372,7 @@ def morning_briefing() -> CoachDraft | None:
             week_activities=recent_activities,
             capability=BRIEFING_ROLE.capability,
         )
+        _trace_context("heartbeat_bundle", bundle)
 
         # Build prompt via BriefingRole
         system, prompt = build_briefing_prompt(
@@ -260,10 +395,14 @@ def morning_briefing() -> CoachDraft | None:
             memory_updates = []
             if effective_calibration_need is not None and looks_like_clarification_message(llm_msg):
                 memory_updates.append(effective_calibration_need.as_memory_update())
+            _trace_decision("send", "llm_message")
+            _trace_final(llm_msg)
             return CoachDraft(text=llm_msg, proactive=True, memory_updates=memory_updates)
 
         # Fallback
         if clarification is not None:
+            _trace_decision("send", "fallback_after_llm_no_message")
+            _trace_final(clarification.question)
             return CoachDraft(text=clarification.question, proactive=True)
         label = today_session.label or DAY_LABELS[time_context["day_key"]]
         msg = (
@@ -276,6 +415,8 @@ def morning_briefing() -> CoachDraft | None:
         fact_lines = get_active_fact_lines(db, user)
         if fact_lines:
             msg += "\nA noter: " + "; ".join(line.lstrip("- ") for line in fact_lines[:2]) + "."
+        _trace_decision("send", "fallback_after_llm_no_message")
+        _trace_final(msg)
         return CoachDraft(text=msg, proactive=True)
     finally:
         db.close()
@@ -296,18 +437,25 @@ def pre_session_reminder() -> CoachDraft | None:
             require_recent_exchange_gap=True,
             recent_exchange_hours=RECENT_EXCHANGE_HOURS,
         )
+        _trace_gate(gate)
         if not gate.allowed:
             logger.info("Pre-session reminder skipped — %s", str(gate.reason or "blocked").replace("_", " "))
+            _trace_decision("no_send", str(gate.reason or "gate_blocked"))
+            _trace_final(None)
             return None
 
         time_context = build_time_context(user.timezone)
+        _trace_context("time_context", time_context)
         today_key = time_context["day_key"]
         tomorrow_date = get_local_now(user.timezone).date() + timedelta(days=1)
         tomorrow_sessions = [
             session for session in repo.get_scheduled_sessions_for_date(db, user.id, target_date=tomorrow_date)
             if session.sport_type != "rest"
         ]
+        _trace_context("tomorrow_sessions", tomorrow_sessions)
         if not tomorrow_sessions:
+            _trace_decision("no_send", "no_tomorrow_session")
+            _trace_final(None)
             return None
 
         key_words = ("cle", "fort", "qualite", "bloc", "longue", "long")
@@ -320,6 +468,8 @@ def pre_session_reminder() -> CoachDraft | None:
         )
         if key_session is None:
             logger.info("Tomorrow (%s) is not a key session — skipping reminder", NEXT_DAY[today_key])
+            _trace_decision("no_send", "no_key_session")
+            _trace_final(None)
             return None
 
         calibration_need = select_calibration_need(
@@ -346,6 +496,8 @@ def pre_session_reminder() -> CoachDraft | None:
             memory_updates = []
             if calibration_need is not None and looks_like_clarification_message(llm_msg):
                 memory_updates.append(calibration_need.as_memory_update())
+            _trace_decision("send", "llm_message")
+            _trace_final(llm_msg)
             return CoachDraft(text=llm_msg, proactive=True, memory_updates=memory_updates)
 
         label = key_session.label or DAY_LABELS[NEXT_DAY[today_key]]
@@ -353,6 +505,8 @@ def pre_session_reminder() -> CoachDraft | None:
         fact_lines = get_active_fact_lines(db, user)
         if fact_lines:
             msg += "\nA noter: " + "; ".join(line.lstrip("- ") for line in fact_lines[:2]) + "."
+        _trace_decision("send", "fallback_after_llm_no_message")
+        _trace_final(msg)
         return CoachDraft(text=msg, proactive=True)
     finally:
         db.close()
@@ -368,9 +522,12 @@ def weekly_review() -> CoachDraft | None:
     try:
         user = repo.get_user(db)
         local_today = get_local_now(user.timezone).date()
+        _trace_context("local_today", local_today)
         start_date = local_today - timedelta(days=6)
         scheduled_sessions = repo.get_scheduled_sessions(db, user.id, limit=120)
         activities = repo.get_activities(db, user.id, limit=500)
+        _trace_context("scheduled_sessions", scheduled_sessions)
+        _trace_context("activities", activities[:20])
         planning_decision = repo.get_latest_planning_decision_record(db, user.id)
         coach_bundle = build_coach_state_bundle(
             db,
@@ -455,9 +612,13 @@ def weekly_review() -> CoachDraft | None:
 
         llm_msg = _llm_generate(system, prompt, allow_no_send=False, pipeline="heartbeat_review")
         if llm_msg:
+            _trace_decision("send", "llm_message")
+            _trace_final(llm_msg)
             return CoachDraft(text=llm_msg, proactive=True)
 
         msg = "Fin de semaine. Le plan a tenu ses reperes. On prend de la marge pour la suite."
+        _trace_decision("send", "fallback_after_llm_no_message")
+        _trace_final(msg)
         return CoachDraft(text=msg, proactive=True)
     finally:
         db.close()
@@ -478,8 +639,11 @@ def signal_check() -> CoachDraft | None:
             require_recent_exchange_gap=True,
             recent_exchange_hours=RECENT_EXCHANGE_HOURS,
         )
+        _trace_gate(gate)
         if not gate.allowed:
             logger.info("Signal check skipped — %s", str(gate.reason or "blocked").replace("_", " "))
+            _trace_decision("no_send", str(gate.reason or "gate_blocked"))
+            _trace_final(None)
             return None
 
         # Adaptive plan triggers
@@ -487,25 +651,36 @@ def signal_check() -> CoachDraft | None:
             from fitmas.adaptation import check_and_adapt_tsb, check_and_adapt_missed
             tsb_result = check_and_adapt_tsb(db, user)
             if tsb_result and tsb_result.decisions and tsb_result.message:
+                _trace_decision("send", "tsb_adaptation")
+                _trace_final(tsb_result.message)
                 return CoachDraft(text=tsb_result.message, proactive=True)
             missed_result = check_and_adapt_missed(db, user)
             if missed_result and missed_result.decisions and missed_result.message:
+                _trace_decision("send", "missed_session_adaptation")
+                _trace_final(missed_result.message)
                 return CoachDraft(text=missed_result.message, proactive=True)
         except Exception:
             logger.exception("Adaptation trigger check failed (non-blocking)")
 
         signals = collect_signals(db, user)
+        _trace_context("signals", signals)
         if not signals:
+            _trace_decision("no_send", "no_signals")
+            _trace_final(None)
             return None
 
         actionable = [s for s in signals if s["severity"] in ("warning", "action")]
         if not actionable:
             big_session = next((s for s in signals if s["kind"] == "big_session_done"), None)
             if not big_session:
+                _trace_decision("no_send", "no_actionable_signal")
+                _trace_final(None)
                 return None
             actionable = [big_session]
+        _trace_context("actionable_signals", actionable)
 
         time_context = build_time_context(user.timezone)
+        _trace_context("time_context", time_context)
 
         # Build prompt via SignalRole
         system, prompt = build_signal_prompt(
@@ -517,6 +692,8 @@ def signal_check() -> CoachDraft | None:
 
         llm_msg = _llm_generate(system, prompt, pipeline="heartbeat_signal")
         if llm_msg:
+            _trace_decision("send", "llm_message")
+            _trace_final(llm_msg)
             return CoachDraft(text=llm_msg, proactive=True)
 
         # Fallback
@@ -536,6 +713,8 @@ def signal_check() -> CoachDraft | None:
         if fact_lines:
             msg += "\nA noter: " + "; ".join(line.lstrip("- ") for line in fact_lines[:2]) + "."
 
+        _trace_decision("send", "fallback_after_llm_no_message")
+        _trace_final(msg)
         return CoachDraft(text=msg, proactive=True)
     finally:
         db.close()

@@ -175,17 +175,17 @@ Checks attendus :
 - les continuations courtes (`Oui`, `Running`, `Mercredi`) appellent bien le LLM et peuvent produire mutation/event reel
 - les tool traces peuvent montrer un fallback JSON apres tool-use ; c'est connu, mais ne doit pas devenir une action silencieuse fausse
 
-Debug briefing matin prod :
+Debug proactive coach loop :
 
 ```bash
-fly logs -a fitmas --no-tail | rg "morning_briefing|Morning briefing|sendMessage|Cooldown|Daily proactive"
-fly ssh console -a fitmas -C "/bin/sh -lc 'python - <<\"PY\"
-from fitmas.heartbeat import morning_briefing
-draft = morning_briefing()
-print(bool(draft))
-print(draft.text[:500] if draft else \"no draft\")
-PY'"
+curl -X POST "http://127.0.0.1:8033/api/v0/debug/heartbeat/morning?dump=true&send=false" | jq
+curl -X POST "http://127.0.0.1:8033/ops/heartbeat/signal_check?dump=true&send=false" | jq
 ```
+
+Le dump contient : gate, contexte lu, prompt systeme/user, sortie LLM brute,
+decision `send/no_send`, judge `ALLOW/BLOCK`, message final ou raison de
+silence. En prod, activer explicitement `FITMAS_ENABLE_DEBUG_ENDPOINTS=true`
+avant d'appeler ces endpoints.
 
 Depuis le 28 avril, le scheduler a un catch-up jusqu'a 10h locale si le creneau jitter du briefing matin a ete rate et qu'aucun proactif n'a deja ete envoye.
 
@@ -319,7 +319,8 @@ Règle :
 
 Endpoints debug disponibles seulement si autorisés :
 - `GET /api/v0/signals`
-- `POST /api/v0/debug/heartbeat/{kind}`
+- `POST /api/v0/debug/heartbeat/{kind}?dump=true`
+- `POST /ops/heartbeat/{kind}?dump=true`
 - `POST /api/v0/reset`
 
 Comportement voulu :

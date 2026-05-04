@@ -37,6 +37,14 @@ class StructuredJSONResult:
     provider_fallback_used: bool = False
 
 
+@dataclass(frozen=True, slots=True)
+class HeartbeatTextGeneration:
+    raw_text: str | None
+    text: str | None
+    reason: str
+    allow_no_send: bool
+
+
 # ---------------------------------------------------------------------------
 # Client
 # ---------------------------------------------------------------------------
@@ -863,8 +871,13 @@ NO_SEND_INSTRUCTION = (
 )
 
 
-def generate_heartbeat_text(system: str, prompt: str, *, allow_no_send: bool = True) -> str | None:
-    """Generate text for heartbeat messages. Returns None on failure or NO_SEND."""
+def generate_heartbeat_text_with_debug(
+    system: str,
+    prompt: str,
+    *,
+    allow_no_send: bool = True,
+) -> HeartbeatTextGeneration:
+    """Generate heartbeat text and expose raw/normalized decisions for debug dumps."""
     final_system = system
     if allow_no_send:
         final_system += NO_SEND_INSTRUCTION
@@ -876,27 +889,67 @@ def generate_heartbeat_text(system: str, prompt: str, *, allow_no_send: bool = T
         max_tokens=256,
     )
     if response is None:
-        return None
+        return HeartbeatTextGeneration(
+            raw_text=None,
+            text=None,
+            reason="llm_unavailable",
+            allow_no_send=allow_no_send,
+        )
 
     text = message_text(response)
     if not text:
-        return None
+        return HeartbeatTextGeneration(
+            raw_text=None,
+            text=None,
+            reason="empty_response",
+            allow_no_send=allow_no_send,
+        )
 
     # Check for NO_SEND token (exact match or wrapped in markup)
+    raw_text = text
     cleaned = text.replace("*", "").replace("`", "").replace("#", "").strip()
     if cleaned.upper() == NO_SEND_TOKEN:
         logger.info("LLM opted out with NO_SEND")
-        return None
+        return HeartbeatTextGeneration(
+            raw_text=raw_text,
+            text=None,
+            reason="no_send_token",
+            allow_no_send=allow_no_send,
+        )
 
     # NO_SEND + short ack (<100 chars) -> also suppress
     if NO_SEND_TOKEN in text.upper() and len(text) < 100:
         logger.info("LLM opted out with NO_SEND + short ack")
-        return None
+        return HeartbeatTextGeneration(
+            raw_text=raw_text,
+            text=None,
+            reason="no_send_short_ack",
+            allow_no_send=allow_no_send,
+        )
 
     # NO_SEND + real content -> strip token, deliver content
     if NO_SEND_TOKEN in text.upper():
         text = text.replace(NO_SEND_TOKEN, "").replace("no_send", "").strip()
         if not text:
-            return None
+            return HeartbeatTextGeneration(
+                raw_text=raw_text,
+                text=None,
+                reason="no_send_after_strip",
+                allow_no_send=allow_no_send,
+            )
 
-    return text
+    return HeartbeatTextGeneration(
+        raw_text=raw_text,
+        text=text,
+        reason="generated",
+        allow_no_send=allow_no_send,
+    )
+
+
+def generate_heartbeat_text(system: str, prompt: str, *, allow_no_send: bool = True) -> str | None:
+    """Generate text for heartbeat messages. Returns None on failure or NO_SEND."""
+    return generate_heartbeat_text_with_debug(
+        system,
+        prompt,
+        allow_no_send=allow_no_send,
+    ).text

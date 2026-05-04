@@ -101,3 +101,43 @@ la prose finale libre. Ne pas le faire avant.
 - [x] tests unitaires verrouillent les patterns visibles ;
 - [x] smoke reel `heartbeat_non_completion` applique bien `skipped` via
   `execution_actions`.
+
+## P1 prioritaire — Post-event reply verifier
+
+Apres Chantier 4, le dogfood a isole une classe plus dangereuse que la voix
+backend-like : **la reply post-mutation peut contredire les events reels**.
+
+Exemple :
+
+```text
+events reels = deux sessions remplacees par Journee flexible
+reply finale = "J'ai decale le fractionne a jeudi"
+```
+
+Objectif : avant tout envoi user apres mutation, verifier que la phrase finale
+ne claim que ce qui existe dans `events_committed`, `events_blocked` et le diff
+de sessions. Si elle ajoute, inverse ou transforme une action, la faire reparer
+par LLM ; si le repair echoue, utiliser un fallback court sans claim inventee.
+
+Pipeline cible :
+
+```text
+PlanPatch valide / commit
+  -> events_committed + session_changes
+  -> final reply composer LLM
+  -> post-event reply verifier
+     -> ALLOW | REPAIR | outage fallback
+  -> send
+```
+
+Ce verifier ne lit pas le texte utilisateur libre. Il juge seulement des
+artefacts machine post-mutation + la phrase sortante, donc il respecte la
+doctrine LLM-first.
+
+Acceptance :
+- une reply qui mentionne un jour/session/action absent des events est reparee ;
+- une reply fidele aux events passe sans modification ;
+- un verifier invalide/outage tombe sur un fallback court, auditable, sans faux
+  claim d'action ;
+- smoke `week_scope_constraint` ne peut plus dire "decale a jeudi" si l'event
+  reel est un remplacement par `Journee flexible`.

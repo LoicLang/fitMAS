@@ -20,6 +20,8 @@ Objectifs :
 - mesurer l'impact reel avant d'augmenter la liberte du modele
 - permettre la composition de quelques tools atomiques quand le modele en a besoin
 - laisser le LLM choisir les tools utiles ; le code fixe seulement les capacites autorisees
+- soutenir la proactive coach loop : le heartbeat doit pouvoir relire plan,
+  activites, constraints et charge avant de decider `send/no_send`
 
 ## Ce qu'on fait
 
@@ -147,6 +149,24 @@ Cible Phase A :
 - l'orchestrateur fournit au LLM une whitelist de tools read-only / validation-only
 - le LLM demande les tools pertinents
 - `execute_tool_calls()` accepte ou bloque chaque demande selon budget
+
+### Pipeline `heartbeat` / proactive coach loop
+
+Direction immediate :
+- Chantier 4 observe la boucle complete : contexte, prompt, response brute,
+  decision `send/no_send`, judge `ALLOW/BLOCK`, message final — shippe
+  via `dump=true` sur `/api/v0/debug/heartbeat/{kind}` et `/ops/heartbeat/{kind}` ;
+- Chantier 3B-A donne au heartbeat les read-tools utiles, sans write autonome :
+  `get_plan_window`, `get_recent_activities`, `get_activity_highlights`,
+  `get_recent_reality_window`, `get_load_context`, `get_user_constraints`,
+  `get_relevant_facts` ;
+- Chantier 3B-B autorise une proposition `PlanPatch` + confirmation Telegram,
+  toujours revalidee backend avant commit ;
+- Chantier 3B-C seulement introduit des action-tools natifs bornes.
+
+Regle : le heartbeat est un coach proactif, pas un cron de texte. Les tools
+servent a decider s'il y a quelque chose d'utile a dire. `NO_SEND` reste un
+resultat sain.
 
 Categories historiques a ne pas reproduire comme classifieur user-text :
 | Intent | Tools offerts |
