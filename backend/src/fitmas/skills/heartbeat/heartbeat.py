@@ -48,7 +48,7 @@ from fitmas.skills.heartbeat.roles import (
     select_calibration_need,
 )
 from fitmas.knowledge import load_sport_knowledge
-from fitmas.llm_gateway import generate_heartbeat_text
+from fitmas.llm_gateway import generate_heartbeat_text, request_text
 from fitmas.llm_prompt_builder import detect_open_question
 from fitmas.recent_reality import build_recent_reality_window
 from fitmas.signals import collect_signals, format_signals_for_prompt
@@ -61,6 +61,25 @@ RECENT_EXCHANGE_HOURS = heartbeat_evaluation.RECENT_EXCHANGE_HOURS
 MAX_PROACTIVE_MESSAGES_PER_DAY = heartbeat_evaluation.MAX_PROACTIVE_MESSAGES_PER_DAY
 MODULE_GUARD_WINDOW = heartbeat_evaluation.MODULE_GUARD_WINDOW
 _LAST_PROACTIVE_GUARD_AT = heartbeat_evaluation.LAST_PROACTIVE_GUARD_AT
+
+_READONLY_CLAIM_JUDGE_SYSTEM = (
+    "Tu es un juge de securite FitMAS. Tu lis uniquement un message heartbeat "
+    "deja genere par l'assistant. Ce heartbeat est read-only : aucun changement "
+    "de planning n'a ete commit sur ce tour.\n\n"
+    "Reponds exactement ALLOW ou BLOCK.\n"
+    "BLOCK si le message affirme ou implique fortement qu'une action planning "
+    "a deja ete faite par FitMAS: j'ai ajuste le planning, j'ai bascule, "
+    "j'ai remplace, c'est pose/cale/verrouille, regarde ton app parce que "
+    "le planning a change.\n"
+    "BLOCK aussi si le heartbeat read-only annonce un planning futur comme deja "
+    "decide sans confirmation ni event: on place X lundi, on pose la semaine, "
+    "on garde/remplace/decale X, on allege Y, on recentre sur Z. Meme au futur, "
+    "si la phrase sonne comme une decision appliquee ou un plan fixe, BLOCK.\n"
+    "ALLOW si c'est une proposition, une question, une intention future, une "
+    "orientation de coaching, une observation, ou une action faite par le user. "
+    "Les marqueurs de proposition explicites sont par exemple: je propose, "
+    "on peut, si tu veux, si tu confirmes, tu veux qu'on, il faudra."
+)
 
 
 def _reserve_module_guard(user_id: int, *, now=None) -> None:
@@ -84,7 +103,7 @@ def _llm_generate(
             pipeline,
             text[:160],
         )
-    if text and pipeline.startswith("heartbeat") and coach_voice.message_claims_readonly_commit(text):
+    if text and pipeline.startswith("heartbeat") and _heartbeat_readonly_judge_blocks(text, pipeline=pipeline):
         logger.warning(
             "coach_voice.readonly_commit_claim pipeline=%s message=%r",
             pipeline,
@@ -92,6 +111,31 @@ def _llm_generate(
         )
         return None
     return text
+
+
+def _heartbeat_readonly_judge_blocks(text: str, *, pipeline: str) -> bool:
+    prompt = (
+        f"Pipeline: {pipeline}\n\n"
+        "Message heartbeat a juger:\n"
+        f"{text.strip()}\n\n"
+        "Decision:"
+    )
+    try:
+        decision = request_text(system=_READONLY_CLAIM_JUDGE_SYSTEM, prompt=prompt, max_tokens=8)
+    except Exception:
+        logger.exception("heartbeat.readonly_claim_judge_error pipeline=%s", pipeline)
+        return True
+    normalized = coach_voice.normalize_for_voice_guard(decision or "")
+    if normalized.startswith("allow"):
+        return False
+    if normalized.startswith("block"):
+        return True
+    logger.warning(
+        "heartbeat.readonly_claim_judge_invalid pipeline=%s decision=%r",
+        pipeline,
+        decision,
+    )
+    return True
 
 
 # ---------------------------------------------------------------------------

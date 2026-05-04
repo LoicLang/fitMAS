@@ -105,22 +105,6 @@ RECEIPT_PATTERNS: tuple[re.Pattern[str], ...] = (
 )
 
 
-READONLY_COMMIT_CLAIM_PATTERNS: tuple[re.Pattern[str], ...] = (
-    re.compile(r"\bon verrouille\b"),
-    re.compile(r"\bon met\b"),
-    re.compile(r"\bon cale\b"),
-    re.compile(r"\bje pose\b"),
-    re.compile(r"\bje mets\b"),
-    re.compile(r"\bje cale\b"),
-    re.compile(r"\bje deplace\b"),
-    re.compile(r"\bje remplace\b"),
-    re.compile(r"\bj ai (deja )?(tout )?(ajuste|bascule|remplace|deplace|cale|pose|mis|change|reorganise)\b"),
-    re.compile(r"\bc est cale\b"),
-    re.compile(r"\bc est pose\b"),
-    re.compile(r"\bon continue d empiler\b"),
-)
-
-
 def normalize_for_voice_guard(value: str) -> str:
     """Normalise un texte pour les guards voix : ASCII, lowercase, apostrophes uniformes."""
     normalized = unicodedata.normalize("NFKD", value)
@@ -140,20 +124,6 @@ def message_looks_receipt_style(message: str) -> bool:
         return False
     normalized = normalize_for_voice_guard(message)
     return any(pattern.search(normalized) for pattern in RECEIPT_PATTERNS)
-
-
-def message_claims_readonly_commit(message: str) -> bool:
-    """Detecte une sortie read-only qui parle comme si elle commitait.
-
-    Ce guard lit uniquement une sortie LLM user-facing, jamais le texte user.
-    Il est utilise pour les pipelines heartbeat read-only : sans event de
-    mutation, ces messages doivent proposer ou demander confirmation, pas dire
-    "on verrouille" / "c'est pose".
-    """
-    if not message:
-        return False
-    normalized = normalize_for_voice_guard(message)
-    return any(pattern.search(normalized) for pattern in READONLY_COMMIT_CLAIM_PATTERNS)
 
 
 def message_violates_coach_voice(message: str) -> bool:

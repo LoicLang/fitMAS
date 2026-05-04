@@ -44,7 +44,7 @@ Chantiers en cours (suite incident hallucination factuelle briefing 2 mai) :
 - ✅ **Chantier 2** — Truth source unifié runtime — `ScheduledSession` seul runtime pour mutations/signals/activity matching — shippé + déployé 4 mai 2026
 - ✅ **Chantier 3A** — Conversation tool loop partiel — multi-round read/validation tools + `validate_plan_patch`, `PlanPatch` conservé — shippé + déployé 4 mai 2026
 - ✅ **Correctif Telegram** — idempotence `client_message_key` + retry réponse perdue après commit — shippé + déployé 4 mai 2026
-- ✅ **Heartbeat fake-action guard** — read-only ne peut plus claim une action sans event réel (`j'ai ajusté`, `j'ai basculé`, `regarde ton app`, etc.) — 4 mai 2026
+- ✅ **Heartbeat fake-action guard** — LLM judge systématique `ALLOW/BLOCK` sur chaque sortie heartbeat read-only, sans regex fake-action — 4 mai 2026
 - **Chantier 3B** — Tool-use loop heartbeat + action-tools natifs bornés — `docs/LLM-FIRST-CONVERSATION.md`
 - **Chantier 4** — Observabilité briefing (1j) — endpoint debug dump bundle + prompt + response
 - **Phase A+** — Weekly Coherence Review (3-4j, après Chantier 3B ou si jugé non bloquant) — couche raisonnement week-level, transforme coach réactif local en coach stratégique — `docs/BUILD-ORDER.md` section dédiée

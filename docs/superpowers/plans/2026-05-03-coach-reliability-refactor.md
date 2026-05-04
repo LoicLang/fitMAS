@@ -120,9 +120,9 @@ Expected: all tests pass.
 - [x] **Step 1: Write failing tests**
 
 Add tests that:
-- `coach_voice.message_claims_readonly_commit("On verrouille ca...")` is true;
-- `coach_voice.message_claims_readonly_commit("Je te proposerais de verrouiller...")` is false;
-- heartbeat `_llm_generate(... pipeline="heartbeat_briefing")` returns `None` for read-only commit claims.
+- heartbeat `_llm_generate(... pipeline="heartbeat_briefing")` calls a LLM judge on heartbeat output;
+- heartbeat returns `None` when the judge returns `BLOCK`;
+- heartbeat returns the original text when the judge returns `ALLOW`.
 
 - [x] **Step 2: Run tests red**
 
@@ -132,8 +132,9 @@ Expected: missing helper / guard failure.
 
 - [x] **Step 3: Implement guard**
 
-Add `READONLY_COMMIT_CLAIM_PATTERNS` and `message_claims_readonly_commit`.
-In `_llm_generate`, if pipeline starts with `heartbeat` and the message claims read-only commit, log and return `None`.
+Add a heartbeat read-only LLM judge. In `_llm_generate`, if pipeline starts
+with `heartbeat`, ask the judge `ALLOW/BLOCK` on the generated heartbeat text.
+Return `None` on `BLOCK`, outage, or invalid judge output.
 
 - [x] **Step 4: Run tests green**
 

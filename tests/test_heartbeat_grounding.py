@@ -557,15 +557,74 @@ class HeartbeatGroundingTest(unittest.TestCase):
 
     def test_llm_generate_blocks_readonly_commit_claims(self) -> None:
         original_generate = heartbeat.generate_heartbeat_text
+        original_request_text = getattr(heartbeat, "request_text", None)
         try:
             heartbeat.generate_heartbeat_text = (
                 lambda *args, **kwargs: "Regarde ton app demain matin, j'ai ajuste le planning."
             )
+            heartbeat.request_text = lambda **kwargs: "BLOCK"
             text = heartbeat._llm_generate("system", "prompt", pipeline="heartbeat_briefing")
         finally:
             heartbeat.generate_heartbeat_text = original_generate
+            if original_request_text is not None:
+                heartbeat.request_text = original_request_text
 
         self.assertIsNone(text)
+
+    def test_llm_generate_allows_ambiguous_readonly_claim_when_judge_allows(self) -> None:
+        original_generate = heartbeat.generate_heartbeat_text
+        original_request_text = getattr(heartbeat, "request_text", None)
+        try:
+            heartbeat.generate_heartbeat_text = (
+                lambda *args, **kwargs: "J'ai ajuste mon angle : je te propose de garder le footing easy."
+            )
+            heartbeat.request_text = lambda **kwargs: "ALLOW"
+            text = heartbeat._llm_generate("system", "prompt", pipeline="heartbeat_review")
+        finally:
+            heartbeat.generate_heartbeat_text = original_generate
+            if original_request_text is not None:
+                heartbeat.request_text = original_request_text
+
+        self.assertEqual(text, "J'ai ajuste mon angle : je te propose de garder le footing easy.")
+
+    def test_llm_generate_judges_future_agency_claims(self) -> None:
+        original_generate = heartbeat.generate_heartbeat_text
+        original_request_text = getattr(heartbeat, "request_text", None)
+        try:
+            heartbeat.generate_heartbeat_text = (
+                lambda *args, **kwargs: "La semaine prochaine, on recentre sur l'eau et on allege le renfo."
+            )
+            heartbeat.request_text = lambda **kwargs: "BLOCK"
+            text = heartbeat._llm_generate("system", "prompt", pipeline="heartbeat_review")
+        finally:
+            heartbeat.generate_heartbeat_text = original_generate
+            if original_request_text is not None:
+                heartbeat.request_text = original_request_text
+
+        self.assertIsNone(text)
+
+    def test_llm_generate_judges_every_heartbeat_message(self) -> None:
+        original_generate = heartbeat.generate_heartbeat_text
+        original_request_text = getattr(heartbeat, "request_text", None)
+        try:
+            heartbeat.generate_heartbeat_text = (
+                lambda *args, **kwargs: "Footing easy ce matin, rien a forcer."
+            )
+            calls: list[dict] = []
+
+            def fake_judge(**kwargs):
+                calls.append(kwargs)
+                return "ALLOW"
+
+            heartbeat.request_text = fake_judge
+            text = heartbeat._llm_generate("system", "prompt", pipeline="heartbeat_briefing")
+        finally:
+            heartbeat.generate_heartbeat_text = original_generate
+            if original_request_text is not None:
+                heartbeat.request_text = original_request_text
+
+        self.assertEqual(text, "Footing easy ce matin, rien a forcer.")
+        self.assertEqual(len(calls), 1)
 
     def test_morning_briefing_includes_recent_proactive_messages_for_novelty(self) -> None:
         _, _ = self._create_plan_with_today_session()

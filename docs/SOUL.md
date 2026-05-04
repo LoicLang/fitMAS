@@ -115,11 +115,11 @@ Cloture acceptee quand :
 - [x] `llm_prompt_builder.py` n'a plus de bloc voix inline ; il importe depuis `coach_voice.py`
 - [x] `roles.py` (heartbeat) importe les memes blocs ; les builders ont les regles voix + few-shots
 - [x] Detecteur receipt-style log-only branche sur conversation + heartbeat (4 sub-pipelines : briefing, reminder, review, signal)
-- [x] Guard heartbeat read-only bloque les fake-action claims sans event reel :
-  "on verrouille", "je pose", "j'ai ajuste", "j'ai bascule",
-  "j'ai tout remplace", "on continue d'empiler".
+- [x] Guard heartbeat read-only : LLM judge systematique `ALLOW/BLOCK` sur
+  chaque sortie heartbeat, sans regex fake-action, bloque les fake-action
+  claims sans event reel.
 - [x] Tests verrouillent : un changement de regle voix se propage automatiquement a tous les pipelines (`tests/test_coach_voice_cross_pipeline.py`)
-- [x] Aucune regression sur la suite : 569 tests passent (full suite minus integration_real)
+- [x] Aucune regression sur la suite : 627 tests passent, 11 skips, 6 subtests
 
 ### Effet attendu
 

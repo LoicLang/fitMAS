@@ -59,7 +59,7 @@ L'audit declenche par cet incident a confirme 3 failles structurelles connexes :
 | 1quater | ✅ Coach reliability slice 0 — final reply composer + guards backend/heartbeat + execution receipt hardening — shippe 3 mai 2026 | 1j | `docs/COACH-RELIABILITY-REFACTOR.md` |
 | 2 | ✅ Truth source runtime core — `ScheduledSession` seul pour mutations/signals/activity matching — shippe 3 mai 2026 | 1j | `docs/COACH-COHERENCE-REFACTOR.md` section "Plan 2 mai 2026" |
 | 3A | ✅ Conversation tool loop partiel — multi-round read/validation + `validate_plan_patch`, `PlanPatch` conserve — shippe 3 mai, deploye 4 mai 2026 | 1.5j | section ci-dessous |
-| 3A-bis | ✅ Heartbeat read-only fake-action guard — claims "j'ai ajuste / j'ai bascule / regarde ton app" bloques sans event reel — 4 mai 2026 | 0.5j | section ci-dessous |
+| 3A-bis | ✅ Heartbeat read-only fake-action guard — LLM judge systematique `ALLOW/BLOCK` sur chaque sortie heartbeat, sans regex fake-action — 4 mai 2026 | 0.5j | section ci-dessous |
 | 3B | Tool-use loop heartbeat + action-tools natifs bornes | 4-5j | `docs/LLM-FIRST-CONVERSATION.md` section "Phase 5 - Tool-use loop unifie" |
 | 4 | Observabilite briefing (endpoint debug dump bundle + prompt + response) | 1j | section ci-dessous |
 | **A+** | **Phase A+ Weekly Coherence Review** (apres 3B ou si 3B non bloquant, avant Phase B) | 3-4j | section "Phase A+" ci-dessous |
@@ -81,7 +81,7 @@ Verification avant deploy :
 - `.venv/bin/python -m compileall backend/src/fitmas` : OK ;
 - smoke reel DeepSeek `golden_case_autonomy` + `today_unavailability` : exit 0, tools bien appeles.
 
-Dette observee dans le smoke reel : `weekly_review` pouvait encore dire "regarde ton app demain matin, j'ai ajuste le planning" alors qu'aucune mutation n'etait appliquee. Traitement 3A-bis : hard guard heartbeat read-only sur ces fake-action claims.
+Dette observee dans le smoke reel : `weekly_review` pouvait encore dire "regarde ton app demain matin, j'ai ajuste le planning" alors qu'aucune mutation n'etait appliquee. Traitement 3A-bis : LLM judge `ALLOW/BLOCK` systematique sur chaque sortie heartbeat read-only.
 
 ### Chantier 0 — Fix TTL `_recent_proactive_context` ✅ shippe 2 mai 2026
 
@@ -272,15 +272,15 @@ Il ne doit pas claim :
 - "regarde ton app" quand cette phrase implique un changement deja fait.
 
 Fix livre :
-- extension de `coach_voice.message_claims_readonly_commit()` aux formes
-  `j'ai ajuste`, `j'ai bascule`, `j'ai tout remplace`, `on continue d'empiler` ;
-- `_llm_generate(... pipeline="heartbeat_*")` bloque ces sorties en retournant
-  `None`, donc le heartbeat ne part pas plutot qu'envoyer un faux commit ;
+- `_llm_generate(... pipeline="heartbeat_*")` appelle un LLM judge `ALLOW/BLOCK`
+  sur chaque sortie heartbeat read-only, sans regex fake-action ;
+- si le judge dit `BLOCK`, echoue ou repond autre chose, le heartbeat retourne
+  `None`, donc il ne part pas plutot qu'envoyer un faux commit ;
 - suggestions explicites toujours autorisees : `je te propose de basculer...`,
-  `si tu veux...`, `il faudra ajuster...`.
+  `si tu veux...`, `il faudra ajuster...`, `sinon on continue d'empiler...`.
 
 Verification locale :
-- `./scripts/test-backend -q` : 626 passed, 11 skipped, 6 subtests passed ;
+- `./scripts/test-backend -q` : 627 passed, 11 skipped, 6 subtests passed ;
 - `.venv/bin/python -m compileall backend/src/fitmas` : OK ;
 - smoke reel DeepSeek `heartbeat_non_completion` : exit 0, renfo J-1 marque
   `skipped` via `execution_actions` ;
