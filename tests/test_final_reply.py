@@ -3,10 +3,12 @@ from __future__ import annotations
 from fitmas.final_reply import (
     BlockedEvent,
     FinalReplyContext,
+    build_post_event_reply_verifier_prompt,
     build_final_reply_prompt,
     compose_final_reply,
     is_valid_final_reply,
     outage_fallback_reply,
+    verify_post_event_reply,
 )
 
 
@@ -90,3 +92,97 @@ def test_outage_fallback_is_short_and_non_technical() -> None:
     assert "mutation" not in fallback.lower()
     assert "block_reason" not in fallback.lower()
     assert "n'ai applique aucun changement" not in fallback
+
+
+def _committed_context() -> FinalReplyContext:
+    return FinalReplyContext(
+        committed_events=(
+            "Mercredi remplace par Journee flexible.",
+            "Jeudi remplace par Journee flexible.",
+        ),
+        allowed_to_claim_mutation=True,
+        pipeline="conversation",
+        pipeline_capability="can_confirm",
+    )
+
+
+def test_post_event_verifier_prompt_contains_only_machine_truth_and_reply() -> None:
+    ctx = _committed_context()
+
+    system, prompt = build_post_event_reply_verifier_prompt(
+        ctx,
+        "J'ai decale le fractionne a jeudi.",
+    )
+
+    assert "post-mutation" in system
+    assert "Mercredi remplace par Journee flexible" in prompt
+    assert "Jeudi remplace par Journee flexible" in prompt
+    assert "J'ai decale le fractionne a jeudi" in prompt
+    assert "Message user" not in prompt
+
+
+def test_post_event_verifier_allows_faithful_reply() -> None:
+    ctx = _committed_context()
+
+    def fake_request_text(**kwargs):
+        assert "Mercredi remplace par Journee flexible" in kwargs["prompt"]
+        return '{"verdict":"allow","reason":"la reply suit les events"}'
+
+    reply = verify_post_event_reply(
+        "Mercredi et jeudi passent en journees flexibles.",
+        ctx,
+        request_text_fn=fake_request_text,
+    )
+
+    assert reply == "Mercredi et jeudi passent en journees flexibles."
+
+
+def test_post_event_verifier_repairs_contradictory_reply() -> None:
+    ctx = _committed_context()
+
+    def fake_request_text(**kwargs):
+        assert "J'ai decale le fractionne a jeudi" in kwargs["prompt"]
+        return (
+            '{"verdict":"repair","reason":"la reply invente un deplacement",'
+            '"repaired_reply":"J ai libere mercredi et jeudi en journees flexibles."}'
+        )
+
+    reply = verify_post_event_reply(
+        "J'ai decale le fractionne a jeudi.",
+        ctx,
+        request_text_fn=fake_request_text,
+    )
+
+    assert reply == "J ai libere mercredi et jeudi en journees flexibles."
+
+
+def test_post_event_verifier_falls_back_when_judge_is_invalid() -> None:
+    ctx = _committed_context()
+
+    def fake_request_text(**kwargs):
+        return "ALLOW"
+
+    assert (
+        verify_post_event_reply(
+            "J'ai decale le fractionne a jeudi.",
+            ctx,
+            request_text_fn=fake_request_text,
+        )
+        is None
+    )
+
+
+def test_post_event_verifier_rejects_invalid_repair() -> None:
+    ctx = _committed_context()
+
+    def fake_request_text(**kwargs):
+        return '{"verdict":"repair","repaired_reply":"Tu confirmes ?"}'
+
+    assert (
+        verify_post_event_reply(
+            "J'ai decale le fractionne a jeudi.",
+            ctx,
+            request_text_fn=fake_request_text,
+        )
+        is None
+    )

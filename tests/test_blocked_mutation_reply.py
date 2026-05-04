@@ -179,13 +179,114 @@ class BlockedMutationReplyTest(unittest.TestCase):
         with patch(
             "fitmas.conversation_pipeline.final_reply.compose_final_reply",
             return_value="C'est cale : le footing passe au 24 mars, sans toucher au reste.",
-        ) as compose:
+        ) as compose, patch(
+            "fitmas.conversation_pipeline.final_reply.verify_post_event_reply",
+            return_value="C'est cale : le footing passe au 24 mars, sans toucher au reste.",
+        ) as verify:
             reply = _applied_plan_patch_reply(result, fallback="Patch applique.")
 
         self.assertEqual(reply, "C'est cale : le footing passe au 24 mars, sans toucher au reste.")
         context = compose.call_args.args[0]
         self.assertTrue(context.allowed_to_claim_mutation)
         self.assertIn("Footing deplace", context.committed_events[0])
+        self.assertTrue(verify.called)
+
+    def test_plan_patch_applied_repairs_composer_contradiction(self) -> None:
+        from fitmas.conversation_pipeline import _applied_plan_patch_reply
+
+        result = PlanPatchServiceResult(
+            validation=PlanPatchValidation(status="valid", operation_results=()),
+            mutation_result=PlanMutationServiceResult(
+                plan_id=1,
+                applied_count=2,
+                attempted_count=2,
+                event_count=2,
+                applied_events=(
+                    PlanAppliedMutationEvent(
+                        command_type="replace_session",
+                        user_visible_summary="Mercredi remplace par Journee flexible.",
+                        event_id=7,
+                        target_session_id=41,
+                        before_snapshot={
+                            "session_title": "Fractionne",
+                            "scheduled_date": "2099-03-23",
+                            "sport_type": "running",
+                            "duration_min": 36,
+                        },
+                        after_snapshot={
+                            "session_title": "Journee flexible",
+                            "scheduled_date": "2099-03-23",
+                            "sport_type": "rest",
+                            "duration_min": 0,
+                        },
+                    ),
+                    PlanAppliedMutationEvent(
+                        command_type="replace_session",
+                        user_visible_summary="Jeudi remplace par Journee flexible.",
+                        event_id=8,
+                        target_session_id=42,
+                    ),
+                ),
+            ),
+        )
+
+        with patch(
+            "fitmas.conversation_pipeline.final_reply.compose_final_reply",
+            return_value="J'ai decale le fractionne a jeudi.",
+        ), patch(
+            "fitmas.conversation_pipeline.final_reply.verify_post_event_reply",
+            return_value="J'ai libere mercredi et jeudi en journees flexibles.",
+        ) as verify:
+            reply = _applied_plan_patch_reply(result, fallback="Patch applique.")
+
+        self.assertEqual(reply, "J'ai libere mercredi et jeudi en journees flexibles.")
+        verifier_context = verify.call_args.args[1]
+        self.assertEqual(
+            verifier_context.committed_events,
+            (
+                "Mercredi remplace par Journee flexible.",
+                "Jeudi remplace par Journee flexible.",
+            ),
+        )
+        self.assertTrue(
+            any(
+                "before=Fractionne | 2099-03-23 | running | 36 min" in fact
+                and "after=Journee flexible | 2099-03-23 | rest | 0 min" in fact
+                for fact in verifier_context.extra_facts
+            )
+        )
+
+    def test_plan_patch_applied_falls_back_to_event_summary_when_verifier_fails(self) -> None:
+        from fitmas.conversation_pipeline import _applied_plan_patch_reply
+
+        result = PlanPatchServiceResult(
+            validation=PlanPatchValidation(status="valid", operation_results=()),
+            mutation_result=PlanMutationServiceResult(
+                plan_id=1,
+                applied_count=1,
+                attempted_count=1,
+                event_count=1,
+                applied_events=(
+                    PlanAppliedMutationEvent(
+                        command_type="replace_session",
+                        user_visible_summary="Mercredi remplace par Journee flexible.",
+                        event_id=7,
+                        target_session_id=41,
+                    ),
+                ),
+            ),
+        )
+
+        with patch(
+            "fitmas.conversation_pipeline.final_reply.compose_final_reply",
+            return_value="J'ai decale le fractionne a jeudi.",
+        ), patch(
+            "fitmas.conversation_pipeline.final_reply.verify_post_event_reply",
+            return_value=None,
+        ):
+            reply = _applied_plan_patch_reply(result, fallback="Patch applique.")
+
+        self.assertEqual(reply, "Mercredi remplace par Journee flexible.")
 
     def test_execution_applied_patch_block_prefers_final_reply_composer(self) -> None:
         result = PlanPatchServiceResult(

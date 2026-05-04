@@ -102,7 +102,7 @@ la prose finale libre. Ne pas le faire avant.
 - [x] smoke reel `heartbeat_non_completion` applique bien `skipped` via
   `execution_actions`.
 
-## P1 prioritaire — Post-event reply verifier
+## P1 prioritaire — Post-event reply verifier ✅ implemente localement 4 mai 2026
 
 Apres Chantier 4, le dogfood a isole une classe plus dangereuse que la voix
 backend-like : **la reply post-mutation peut contredire les events reels**.
@@ -114,7 +114,7 @@ events reels = deux sessions remplacees par Journee flexible
 reply finale = "J'ai decale le fractionne a jeudi"
 ```
 
-Objectif : avant tout envoi user apres mutation, verifier que la phrase finale
+Objectif livre : avant tout envoi user apres mutation, verifier que la phrase finale
 ne claim que ce qui existe dans `events_committed`, `events_blocked` et le diff
 de sessions. Si elle ajoute, inverse ou transforme une action, la faire reparer
 par LLM ; si le repair echoue, utiliser un fallback court sans claim inventee.
@@ -135,9 +135,13 @@ artefacts machine post-mutation + la phrase sortante, donc il respecte la
 doctrine LLM-first.
 
 Acceptance :
-- une reply qui mentionne un jour/session/action absent des events est reparee ;
-- une reply fidele aux events passe sans modification ;
-- un verifier invalide/outage tombe sur un fallback court, auditable, sans faux
+- [x] une reply qui mentionne un jour/session/action absent des events est reparee ;
+- [x] une reply fidele aux events passe sans modification ;
+- [x] un verifier invalide/outage tombe sur un fallback court, auditable, sans faux
   claim d'action ;
-- smoke `week_scope_constraint` ne peut plus dire "decale a jeudi" si l'event
-  reel est un remplacement par `Journee flexible`.
+- [x] le contexte verifier recoit un diff compact `before_snapshot` /
+  `after_snapshot` quand disponible, pour distinguer `replace_session` de
+  `move_session`.
+- [ ] smoke `week_scope_constraint` reel a relancer apres commit/deploy : la
+  phrase finale ne doit plus dire "decale a jeudi" si l'event reel est un
+  remplacement par `Journee flexible`.

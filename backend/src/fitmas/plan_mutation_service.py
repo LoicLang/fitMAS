@@ -40,6 +40,8 @@ class PlanAppliedMutationEvent:
     user_visible_summary: str
     event_id: int | None = None
     target_session_id: int | None = None
+    before_snapshot: dict[str, Any] | None = None
+    after_snapshot: dict[str, Any] | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -105,6 +107,11 @@ def apply_decisions_for_user(
                 applied_events.extend(create_result.applied_events)
                 blocked_events.extend(create_result.blocked_events)
             continue
+        before_snapshot = (
+            _session_snapshot(_scheduled_session_by_id(scheduled_sessions, decision.target_session_id))
+            if decision.target_session_id is not None
+            else {}
+        )
         pre_result, post_result = mutations.apply(
             db,
             plan_id,
@@ -133,6 +140,7 @@ def apply_decisions_for_user(
                 if decision.target_session_id is not None
                 else None
             )
+            after_snapshot = _session_snapshot(updated_session)
             user_visible_summary = _build_user_visible_summary(decision, updated_session)
             event = repo.add_plan_mutation_event(
                 db,
@@ -141,8 +149,8 @@ def apply_decisions_for_user(
                 trigger_type=trigger_type,
                 command_type=decision.mutation_type,
                 target_session_ids=_decision_session_ids(decision),
-                before_snapshot={},
-                after_snapshot=_session_snapshot(updated_session),
+                before_snapshot=before_snapshot,
+                after_snapshot=after_snapshot,
                 reason={"rationale": decision.rationale} if decision.rationale else {},
                 impact=_jsonable_dict(post_result),
                 user_visible_summary=user_visible_summary,
@@ -156,6 +164,8 @@ def apply_decisions_for_user(
                     target_session_id=decision.target_session_id,
                     user_visible_summary=user_visible_summary,
                     event_id=_event_id(event),
+                    before_snapshot=before_snapshot,
+                    after_snapshot=after_snapshot,
                 )
             )
 
@@ -389,6 +399,7 @@ def _apply_create_session_operation(
         source_plan_created_at=getattr(plan, "created_at", None),
     )
     summary = _build_create_session_summary(operation, session, coach_message=coach_message)
+    after_snapshot = _session_snapshot(session)
     event = repo.add_plan_mutation_event(
         db,
         user_id=user.id,
@@ -397,7 +408,7 @@ def _apply_create_session_operation(
         command_type="create_session",
         target_session_ids=[int(session.id)],
         before_snapshot={},
-        after_snapshot=_session_snapshot(session),
+        after_snapshot=after_snapshot,
         reason={"rationale": operation.rationale} if operation.rationale else {},
         impact={},
         user_visible_summary=summary,
@@ -409,6 +420,8 @@ def _apply_create_session_operation(
         target_session_id=int(session.id),
         user_visible_summary=summary,
         event_id=_event_id(event),
+        before_snapshot={},
+        after_snapshot=after_snapshot,
     )
 
 
@@ -596,6 +609,15 @@ def _decision_session_ids(decision: MutationDecision) -> list[int]:
     if decision.second_session_id is not None:
         ids.append(int(decision.second_session_id))
     return ids
+
+
+def _scheduled_session_by_id(scheduled_sessions: Sequence[Any], session_id: int | None) -> Any | None:
+    if session_id is None:
+        return None
+    for session in scheduled_sessions:
+        if getattr(session, "id", None) == session_id:
+            return session
+    return None
 
 
 def _session_snapshot(session: s.ScheduledSession | None) -> dict[str, Any]:

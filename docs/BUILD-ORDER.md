@@ -61,13 +61,13 @@ L'audit declenche par cet incident a confirme 3 failles structurelles connexes :
 | 3A | ✅ Conversation tool loop partiel — multi-round read/validation + `validate_plan_patch`, `PlanPatch` conserve — shippe 3 mai, deploye 4 mai 2026 | 1.5j | section ci-dessous |
 | 3A-bis | ✅ Heartbeat read-only fake-action guard — LLM judge systematique `ALLOW/BLOCK` sur chaque sortie heartbeat, sans regex fake-action — 4 mai 2026 | 0.5j | section ci-dessous |
 | 4 | ✅ Observabilite proactive coach loop — dump contexte, prompt, decision `send/no_send`, judge, message final — implemente localement 4 mai 2026 | 0.5j | section ci-dessous |
-| **P1** | **Post-event reply verifier — bloquant avant 3B-A** : verifier/reparer toute phrase finale post-mutation contre `events_committed + session_changes` | **0.5-1j** | section ci-dessous |
+| P1 | ✅ Post-event reply verifier — verifier/reparer toute phrase finale post-mutation contre `events_committed + session_changes` — implemente localement 4 mai 2026 | 0.5j | section ci-dessous |
 | 3B-A | Tool-use loop proactive heartbeat read-only — le coach relit la verite recente avant de parler | 2-3j | `docs/LLM-FIRST-CONVERSATION.md` section "Phase 5 - Tool-use loop unifie" |
 | 3B-B | Proactive PlanPatch propose + confirmation, pas de commit autonome | 2j | `docs/LLM-FIRST-CONVERSATION.md` |
 | 3B-C | Action-tools natifs bornes, apres preuves 3B-A/B | 2-3j | `docs/RUNTIME-TOOLS.md` |
 | **A+** | **Phase A+ Weekly Coherence Review** (apres 3B ou si 3B non bloquant, avant Phase B) | 3-4j | section "Phase A+" ci-dessous |
 
-**Total restant : ~9-12 jours** (incluant Phase A+). Couvre proactive coach loop, observabilite, tool-use heartbeat et couche raisonnement week-level avant Phase B.
+**Total restant : ~8-11 jours** (incluant Phase A+). Couvre proactive coach loop, tool-use heartbeat et couche raisonnement week-level avant Phase B.
 
 ### Deploiement prod — 4 mai 2026
 
@@ -358,19 +358,19 @@ Tests :
   `judge`, `decision` presents).
 
 Dogfood parallele 4 mai :
-- P1 ouvert : certaines replies post-mutation peuvent encore contredire les
-  events reels (`week_scope_constraint`, sous-performance severe). Prochain
-  correctif recommande : post-event reply verifier / repair sur
-  `events_committed + session_changes + final_reply`.
+- P1 post-event : certaines replies post-mutation pouvaient encore contredire
+  les events reels (`week_scope_constraint`, sous-performance severe).
+  Correctif local : verifier / repair sur `events_committed +
+  events_blocked + session_changes + final_reply`.
 - P1 heartbeat read-only : fuite "on replace les deux seances..." observee
   dans un weekly review. Mitigation immediate : prompt du judge durci avec
   `events_committed: []`, exemples BLOCK, et smoke direct DeepSeek confirme
   `BLOCK` sur la phrase fautive.
 
-### P1 prioritaire — Post-event reply verifier
+### P1 — Post-event reply verifier ✅ implemente localement 4 mai 2026
 
-Bloquant avant 3B-A. Tant que ce trou existe, plus on libere le coach, plus il
-peut produire des phrases fluides mais fausses apres une vraie mutation.
+Bloquant avant 3B-A. Ferme localement : plus on libere le coach, plus il faut
+verifier que sa phrase finale colle aux mutations effectivement appliquees.
 
 Bug observe :
 
@@ -382,7 +382,7 @@ reply finale = "J'ai decale le fractionne a jeudi"
 L'etat DB est correct, mais la voix ment sur l'etat. C'est plus dangereux qu'un
 simple mauvais ton : le user croit qu'une action differente a ete commit.
 
-Contrat attendu :
+Contrat implemente :
 
 ```text
 events_committed + events_blocked + session_changes + final_reply
@@ -418,20 +418,30 @@ Frontiere doctrine : ce verifier ne lit jamais le texte user libre. Il juge
 uniquement des artefacts machine produits apres mutation : events DB, diff de
 sessions, phrase sortante. Il est donc conforme a LLM-first.
 
-Tests a ajouter :
-- reply qui mentionne un jour/session absent des events -> repair ;
-- reply qui colle exactement aux events -> allow ;
-- LLM verifier invalide/outage -> fallback court sans claim d'action inventee ;
-- smoke dogfood `week_scope_constraint` : la phrase finale ne peut plus dire
-  "decale a jeudi" si l'event reel est `replace_session -> Journee flexible`.
+Implementation :
+- `final_reply.verify_post_event_reply()` demande un verdict JSON
+  `allow|repair` a partir des artefacts post-mutation ;
+- `_applied_plan_patch_reply()` passe la sortie du final composer dans ce
+  verifier avant envoi ;
+- si le verifier est invalide ou outage, fallback sur les summaries d'events
+  commités, pas sur la phrase inventee ;
+- `PlanAppliedMutationEvent` transporte maintenant `before_snapshot` /
+  `after_snapshot` quand disponible ; le verifier recoit un diff compact en
+  `extra_facts`.
+
+Tests ajoutes :
+- reply qui mentionne un jour/session/action absent des events -> repair ;
+- reply qui colle aux events -> allow ;
+- LLM verifier invalide/outage -> fallback summary commit sans claim inventee ;
+- contexte verifier enrichi avec `before -> after` pour distinguer
+  `replace_session` de `move_session`.
 
 ### Ordre propose
 
 1. ~~**Chantier 0-3A-bis**~~ ✅ shippe/deploye 2-4 mai 2026.
 2. ~~**Chantier 4**~~ ✅ observabilite proactive coach loop.
-3. **Maintenant : P1 post-event reply verifier** — fermer les replies finales
-   qui contredisent les events reels.
-4. **Ensuite : Chantier 3B-A** — heartbeat tool-use read-only. Le coach peut
+3. ~~**P1 post-event reply verifier**~~ ✅ implemente localement.
+4. **Maintenant : Chantier 3B-A** — heartbeat tool-use read-only. Le coach peut
    verifier plan, activites, constraints, load avant de parler.
 5. **Puis : Chantier 3B-B** — PlanPatch propose + confirmation Telegram,
    toujours sans commit autonome.

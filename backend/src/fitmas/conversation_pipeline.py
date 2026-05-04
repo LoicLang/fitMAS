@@ -925,21 +925,62 @@ def _applied_patch_summary(service_result: PlanPatchServiceResult | None, *, fal
 
 def _applied_plan_patch_reply(service_result: PlanPatchServiceResult | None, *, fallback: str) -> str:
     committed_events: list[str] = []
+    blocked_events: list[final_reply.BlockedEvent] = []
+    extra_facts: list[str] = []
     if service_result is not None and service_result.mutation_result is not None:
         for event in service_result.mutation_result.applied_events:
             summary = str(event.user_visible_summary or "").strip()
             if summary and summary not in committed_events:
                 committed_events.append(summary)
+            extra_facts.append(_applied_event_fact(event))
+        for event in service_result.mutation_result.blocked_events:
+            warning = event.warnings[0] if event.warnings else None
+            blocked_events.append(
+                final_reply.BlockedEvent(
+                    command=str(event.command_type or "plan_patch"),
+                    reason=event.block_reason,
+                    warning=warning,
+                )
+            )
     context = final_reply.FinalReplyContext(
         committed_events=tuple(committed_events),
+        blocked_events=tuple(blocked_events),
         allowed_to_claim_mutation=bool(committed_events),
         pipeline="conversation",
         pipeline_capability="can_confirm",
+        extra_facts=tuple(extra_facts),
     )
     composed = final_reply.compose_final_reply(context)
     if composed:
-        return composed
+        verified = final_reply.verify_post_event_reply(composed, context)
+        if verified:
+            return verified
     return " ".join(committed_events) if committed_events else fallback
+
+
+def _applied_event_fact(event: Any) -> str:
+    target = event.target_session_id if event.target_session_id is not None else "unknown"
+    before = _compact_session_snapshot(getattr(event, "before_snapshot", None) or {})
+    after = _compact_session_snapshot(getattr(event, "after_snapshot", None) or {})
+    if before or after:
+        return f"session change: command={event.command_type} target_session_id={target} before={before or 'unknown'} after={after or 'unknown'}"
+    return f"commit command={event.command_type} target_session_id={target}"
+
+
+def _compact_session_snapshot(snapshot: dict[str, Any]) -> str:
+    if not snapshot:
+        return ""
+    title = str(snapshot.get("session_title") or snapshot.get("title") or "").strip()
+    scheduled_date = str(snapshot.get("scheduled_date") or snapshot.get("day") or "").strip()
+    sport = str(snapshot.get("sport_type") or "").strip()
+    duration = snapshot.get("duration_min")
+    bits = [bit for bit in (title, scheduled_date, sport) if bit]
+    if duration is not None:
+        try:
+            bits.append(f"{int(duration)} min")
+        except (TypeError, ValueError):
+            bits.append(f"{duration} min")
+    return " | ".join(bits)
 
 
 def _final_reply_context_for_plan_patch_block(

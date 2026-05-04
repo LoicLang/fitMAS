@@ -7,8 +7,9 @@ the user-facing sentence when a normal path would otherwise use a canned reply.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+import json
 import os
-from typing import Callable
+from typing import Any, Callable
 
 from fitmas import coach_voice
 from fitmas.claim_guard import looks_like_action_claim
@@ -141,6 +142,113 @@ def compose_final_reply(
     if not is_valid_final_reply(reply, context):
         return None
     return str(reply).strip()
+
+
+def build_post_event_reply_verifier_prompt(
+    context: FinalReplyContext,
+    outgoing_reply: str,
+) -> tuple[str, str]:
+    """Build a verifier prompt from post-mutation machine facts and reply only."""
+    system = (
+        f"{coach_voice.COACH_VOICE_RULES}\n\n"
+        "Tu es le verificateur post-mutation FitMAS.\n"
+        "Tu ne lis pas le message utilisateur et tu ne deduis aucune intention.\n"
+        "Tu compares uniquement les events machine deja commits/bloques avec la reponse sortante.\n"
+        "Retourne uniquement un JSON strict: "
+        '{"verdict":"allow|repair","reason":"court","repaired_reply":"texte si repair"}'
+    )
+    lines = [
+        f"Pipeline: {context.pipeline}",
+        f"Capacite pipeline: {context.pipeline_capability}",
+    ]
+    if context.committed_events:
+        lines.append("Events commits:")
+        lines.extend(f"- {event}" for event in context.committed_events)
+    else:
+        lines.append("Events commits: aucun")
+    if context.blocked_events:
+        lines.append("Events bloques:")
+        for event in context.blocked_events:
+            bits = [event.command]
+            if event.reason:
+                bits.append(f"reason={event.reason}")
+            if event.suggested_fix:
+                bits.append(f"suggested_fix={event.suggested_fix}")
+            if event.warning:
+                bits.append(f"warning={event.warning}")
+            lines.append("- " + " | ".join(bits))
+    if context.execution_actions_applied:
+        lines.append("Execution appliquee:")
+        lines.extend(f"- {item}" for item in context.execution_actions_applied)
+    if context.memory_actions_applied:
+        lines.append("Memoire appliquee:")
+        lines.extend(f"- {item}" for item in context.memory_actions_applied)
+    if context.extra_facts:
+        lines.append("Faits machine utiles:")
+        lines.extend(f"- {item}" for item in context.extra_facts)
+    lines.extend(
+        [
+            "Reponse sortante a verifier:",
+            outgoing_reply,
+            "",
+            "ALLOW seulement si chaque action, date, session, sport et duree mentionnes par la reponse est supporte par les events.",
+            "REPAIR si la reponse ajoute un deplacement, swap, creation, suppression, remplacement, date ou cible absent des events.",
+            "REPAIR si la reponse transforme un remplacement/liberation en deplacement, ou inverse un commit et un blocage.",
+            "REPAIR si elle demande confirmation pour une action deja committee.",
+            "En repair, garde 1-2 phrases courtes, sans nom technique, sans inventer de nouvelle action.",
+        ]
+    )
+    return system, "\n".join(lines)
+
+
+def verify_post_event_reply(
+    reply: str | None,
+    context: FinalReplyContext,
+    *,
+    request_text_fn: RequestTextFn = request_text,
+) -> str | None:
+    """Verify or repair a post-event reply against committed machine facts."""
+    if not is_valid_final_reply(reply, context):
+        return None
+    text = str(reply).strip()
+    if not context.committed_events:
+        return text
+
+    system, prompt = build_post_event_reply_verifier_prompt(context, text)
+    raw = request_text_fn(system=system, prompt=prompt, max_tokens=350)
+    verdict = _parse_post_event_verdict(raw)
+    if verdict is None:
+        return None
+    if verdict.get("verdict") == "allow":
+        return text
+    if verdict.get("verdict") == "repair":
+        repaired = str(verdict.get("repaired_reply") or "").strip()
+        if is_valid_final_reply(repaired, context):
+            return repaired
+    return None
+
+
+def _parse_post_event_verdict(raw: str | None) -> dict[str, Any] | None:
+    if not raw:
+        return None
+    text = str(raw).strip()
+    if text.startswith("```"):
+        text = text.strip("`").strip()
+        if text.lower().startswith("json"):
+            text = text[4:].strip()
+    try:
+        payload = json.loads(text)
+    except json.JSONDecodeError:
+        return None
+    if not isinstance(payload, dict):
+        return None
+    verdict = str(payload.get("verdict") or "").strip().lower()
+    if verdict not in {"allow", "repair"}:
+        return None
+    payload["verdict"] = verdict
+    if verdict == "repair" and not str(payload.get("repaired_reply") or "").strip():
+        return None
+    return payload
 
 
 def outage_fallback_reply(context: FinalReplyContext) -> str:
