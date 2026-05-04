@@ -65,6 +65,7 @@ L'audit declenche par cet incident a confirme 3 failles structurelles connexes :
 | P1-bis | ✅ PlanPatch confirmation parity — changement de sport sur seance cle repasse par confirmation, comme `MutationDecision` — implemente localement 4 mai 2026 | 0.5h | section ci-dessous |
 | 3B-A | ✅ Tool-use loop proactive heartbeat read-only — le coach relit la verite recente avant de parler — implemente localement 4 mai 2026 | 0.5j | `docs/LLM-FIRST-CONVERSATION.md` section "Phase 5 - Tool-use loop unifie" |
 | P1-ter | ✅ Execution receipt repair hardening — plus d'outage generique si le LLM reconnait "pas fait hier" sans `execution_actions` et qu'une cible follow-up est structuree — implemente localement 4 mai 2026 | 0.5j | section ci-dessous |
+| P1-quater | Dogfood API fallout — execution action verifier + post-event date facts + target ambiguity + durable availability memory | 0.5-1j | section ci-dessous |
 | 3B-B | Proactive PlanPatch propose + confirmation, pas de commit autonome | 2j | `docs/LLM-FIRST-CONVERSATION.md` |
 | 3B-C | Action-tools natifs bornes, apres preuves 3B-A/B | 2-3j | `docs/RUNTIME-TOOLS.md` |
 | **A+** | **Phase A+ Weekly Coherence Review** (apres 3B ou si 3B non bloquant, avant Phase B) | 3-4j | section "Phase A+" ci-dessous |
@@ -530,6 +531,33 @@ Verification :
 Ce P1 est distinct de 3B-A : il touche la conversation reactive, pas le
 heartbeat read-tools. Il ferme la base execution avant 3B-B.
 
+### P1-quater ouvert — Dogfood API fallout
+
+Tests reels API/DeepSeek du 4 mai (agent de test read-only) apres 3B-A/P1-ter.
+`heartbeat_non_completion` est maintenant corrige cote agent principal, mais
+quatre risques restent a fermer avant 3B-B :
+
+1. **Execution completion incoherente** : sur "J'ai couru aujourd'hui 30 min",
+   l'assistant peut dire qu'il croit l'execution alors que la session du jour
+   finit `skipped`. Cible : verifier/reparer les `execution_actions` contre la
+   reply/rationale et les events appliques, meme principe que le post-event
+   verifier planning.
+2. **Reply post-mutation date/day fausse** : un `replace_session` correct peut
+   etre raconte avec un mauvais jour visible ("lundi" vs mardi 5 mai). Cible :
+   enrichir les facts du post-event verifier avec date ISO + day label + before
+   / after, et bloquer les contradictions calendaires.
+3. **Cible planning ambigue trop vite mutee** : "Deplace la course a vendredi"
+   avec plusieurs courses futures peut etre resolu en swap sans clarification.
+   Cible : forcer clarification/confirmation quand la reference LLM reste
+   underspecifiee et que plusieurs candidats DB matchent.
+4. **Contrainte piscine pas toujours durable** : "ma piscine est fermee deux
+   semaines" peut muter une nage sans `memory_actions`. Cible : renforcer le
+   repair/eval `record_availability`, toujours sans parser le texte user.
+
+Frontiere : ne pas corriger par regex sur texte utilisateur. Les fixes doivent
+passer par artefacts LLM, results tools, validation DB, verifiers LLM ou
+prompts/evals.
+
 ### Ordre propose
 
 1. ~~**Chantier 0-3A-bis**~~ ✅ shippe/deploye 2-4 mai 2026.
@@ -538,10 +566,12 @@ heartbeat read-tools. Il ferme la base execution avant 3B-B.
 4. ~~**Chantier 3B-A**~~ ✅ heartbeat tool-use read-only.
 5. ~~**P1-ter execution receipt repair hardening**~~ ✅ smoke
    `heartbeat_non_completion` ferme.
-6. **Maintenant : Chantier 3B-B** — PlanPatch propose + confirmation Telegram,
+6. **Maintenant : P1-quater dogfood API fallout** — fermer les incoherences
+   observees par tests reels avant plus d'autonomie.
+7. **Ensuite : Chantier 3B-B** — PlanPatch propose + confirmation Telegram,
    toujours sans commit autonome.
-7. **Apres preuves dogfood : Chantier 3B-C** — action-tools natifs bornes.
-8. **Apres 3B** : Phase A+ Weekly Coherence Review (3-4j) — l'apport produit
+8. **Apres preuves dogfood : Chantier 3B-C** — action-tools natifs bornes.
+9. **Apres 3B** : Phase A+ Weekly Coherence Review (3-4j) — l'apport produit
    le plus visible, transforme le coach reactif local en coach strategique
    week-level.
 
