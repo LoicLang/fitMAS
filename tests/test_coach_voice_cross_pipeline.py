@@ -153,6 +153,10 @@ class HeartbeatReadOnlyCommitClaimGuardTest(unittest.TestCase):
             "C'est cale pour vendredi.",
             "C'est pose.",
             "Je deplace la seance a mercredi.",
+            "Regarde ton app demain matin, j'ai ajuste le planning.",
+            "J'ai bascule les deux natations sur ton objectif 10km.",
+            "J'ai deja tout remplace pendant que la piscine etait fermee.",
+            "On continue d'empiler du volume course.",
         ]
         for msg in cases:
             self.assertTrue(
@@ -165,6 +169,9 @@ class HeartbeatReadOnlyCommitClaimGuardTest(unittest.TestCase):
             "Je te proposerais de verrouiller mardi en Z2 si tu confirmes.",
             "Je peux poser mardi en Z2 si tu veux.",
             "On peut caler vendredi, mais je veux ton feu vert.",
+            "Il faudra ajuster la semaine demain matin.",
+            "Je te propose de basculer les nages en course si tu confirmes.",
+            "Si tu veux, on continue sur du volume course.",
         ]
         for msg in ok:
             self.assertFalse(

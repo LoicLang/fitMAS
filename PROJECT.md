@@ -2,7 +2,7 @@
 
 Coach IA multisport proactif qui ajuste ton entraînement selon ta vraie vie.
 
-## Statut — 2 mai 2026
+## Statut — 4 mai 2026
 
 **Déployé et fonctionnel sur https://the deployed app/**
 
@@ -18,8 +18,11 @@ Ce qui tourne en prod :
 - Heartbeat proactif avec cooldowns + catch-up matin borné (briefing matin, rappel pré-séance, revue dimanche, nouveau plan lundi)
 - Mémoire V2 base : `profile / working / patterns`
 - Runtime tools multi-tool borné : read-only / candidate / validation-only, aucun write DB libre
+- Conversation tool loop 3A : multi-round read/validation tools, `validate_plan_patch`, replay DeepSeek tool-use, retry JSON court avant repair lourd
 - Runtime conversationnel désormais branché sur les prompt layers live
 - `CoachDecision` + `PlanPatch` branchés sur la conversation : validation serveur, confirmation pending, commit via `PlanMutationService`
+- `ScheduledSession` est la vérité runtime pour mutations/signals/activity matching ; `WeeklyPlan`/`DayPlan` restent template/compat
+- Idempotence Telegram/API sur `client_message_key` : un timeout ou retry Telegram ne relance plus une mutation déjà traitée
 - Doctrine conversation renforcee : zero determinisme sur texte utilisateur libre ; le LLM est le seul detecteur d'intention
 - Phase 1 voix conversation shippée 30 avril : règles "Voix coach" + few-shots BONS/MAUVAIS sur `fitmas_message`, détecteur receipt-style log-only
 - Phase 2 `pending_resolution` typed + `memory_actions` + `execution_actions` shippée 1 mai : confirmations résolues structurellement, plus de re-décision sauvage
@@ -38,15 +41,18 @@ Chantiers en cours (suite incident hallucination factuelle briefing 2 mai) :
 - ✅ **Chantier 1bis** — claim_guard via LLM repair (plus de canned "Je n'ai applique aucun changement...") — shippé 3 mai 2026
 - ✅ **Chantier 1ter** — Capture indirecte de constraints dans le prompt conversation (piscine vidange, voyage, douleur ongoing) — shippé 3 mai 2026
 - ✅ **Cleanup DB prod** — 395 rows obsolètes purgées, mémoire repart propre — 3 mai 2026
-- **Chantier 2** — Truth source unifié runtime (4-5j) — clôture définitive Phase 3 cohérence + tuer dual-write — `docs/COACH-COHERENCE-REFACTOR.md`
-- **Chantier 3** — Tool-use loop unifié conversation + heartbeat (6-7j) — vraie boucle agentique multi-rounds, prose terminale — `docs/LLM-FIRST-CONVERSATION.md`
+- ✅ **Chantier 2** — Truth source unifié runtime — `ScheduledSession` seul runtime pour mutations/signals/activity matching — shippé + déployé 4 mai 2026
+- ✅ **Chantier 3A** — Conversation tool loop partiel — multi-round read/validation tools + `validate_plan_patch`, `PlanPatch` conservé — shippé + déployé 4 mai 2026
+- ✅ **Correctif Telegram** — idempotence `client_message_key` + retry réponse perdue après commit — shippé + déployé 4 mai 2026
+- ✅ **Heartbeat fake-action guard** — read-only ne peut plus claim une action sans event réel (`j'ai ajusté`, `j'ai basculé`, `regarde ton app`, etc.) — 4 mai 2026
+- **Chantier 3B** — Tool-use loop heartbeat + action-tools natifs bornés — `docs/LLM-FIRST-CONVERSATION.md`
 - **Chantier 4** — Observabilité briefing (1j) — endpoint debug dump bundle + prompt + response
-- **Phase A+** — Weekly Coherence Review (3-4j, après Chantier 3) — couche raisonnement week-level, transforme coach réactif local en coach stratégique — `docs/BUILD-ORDER.md` section dédiée
+- **Phase A+** — Weekly Coherence Review (3-4j, après Chantier 3B ou si jugé non bloquant) — couche raisonnement week-level, transforme coach réactif local en coach stratégique — `docs/BUILD-ORDER.md` section dédiée
 
 Cap produit actuel :
 - Telegram = coach conversationnel
 - App = cockpit performance
-- priorité immédiate : dogfood Telegram + briefings réels pour valider voix unifiée, puis Chantiers 2+3 pour clôturer Phase A LLM-first et préparer Phase A+
+- priorité immédiate : terminer Chantier 3B heartbeat/tool-use puis préparer Phase A+
 - Phase B long terme : progression/prescription structurée, pas ouverte tant que Phase A + Chantiers 2+3 + Phase A+ ne sont pas clos
 
 ## Stack

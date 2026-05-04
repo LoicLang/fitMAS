@@ -559,7 +559,7 @@ class HeartbeatGroundingTest(unittest.TestCase):
         original_generate = heartbeat.generate_heartbeat_text
         try:
             heartbeat.generate_heartbeat_text = (
-                lambda *args, **kwargs: "On verrouille ca : mardi 30min Z2, jeudi renfo."
+                lambda *args, **kwargs: "Regarde ton app demain matin, j'ai ajuste le planning."
             )
             text = heartbeat._llm_generate("system", "prompt", pipeline="heartbeat_briefing")
         finally:

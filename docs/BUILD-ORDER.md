@@ -58,11 +58,30 @@ L'audit declenche par cet incident a confirme 3 failles structurelles connexes :
 | - | ✅ Cleanup DB prod : 395 rows obsoletes purgees, memoire propre — 3 mai 2026 | 1h | section ci-dessous |
 | 1quater | ✅ Coach reliability slice 0 — final reply composer + guards backend/heartbeat + execution receipt hardening — shippe 3 mai 2026 | 1j | `docs/COACH-RELIABILITY-REFACTOR.md` |
 | 2 | ✅ Truth source runtime core — `ScheduledSession` seul pour mutations/signals/activity matching — shippe 3 mai 2026 | 1j | `docs/COACH-COHERENCE-REFACTOR.md` section "Plan 2 mai 2026" |
-| 3 | Tool-use loop unifie conversation + heartbeat (3A conversation partiel shippe 3 mai : multi-round read/validation + `validate_plan_patch`; heartbeat/action-tools natifs restent ouverts) | 6-7j | `docs/LLM-FIRST-CONVERSATION.md` section "Phase 5 - Tool-use loop unifie" |
+| 3A | ✅ Conversation tool loop partiel — multi-round read/validation + `validate_plan_patch`, `PlanPatch` conserve — shippe 3 mai, deploye 4 mai 2026 | 1.5j | section ci-dessous |
+| 3A-bis | ✅ Heartbeat read-only fake-action guard — claims "j'ai ajuste / j'ai bascule / regarde ton app" bloques sans event reel — 4 mai 2026 | 0.5j | section ci-dessous |
+| 3B | Tool-use loop heartbeat + action-tools natifs bornes | 4-5j | `docs/LLM-FIRST-CONVERSATION.md` section "Phase 5 - Tool-use loop unifie" |
 | 4 | Observabilite briefing (endpoint debug dump bundle + prompt + response) | 1j | section ci-dessous |
-| **A+** | **Phase A+ Weekly Coherence Review** (apres Chantier 3, avant Phase B) | 3-4j | section "Phase A+" ci-dessous |
+| **A+** | **Phase A+ Weekly Coherence Review** (apres 3B ou si 3B non bloquant, avant Phase B) | 3-4j | section "Phase A+" ci-dessous |
 
-**Total restant : ~12-14 jours** (incluant Phase A+). Couvre tool-use loop + observabilite + couche raisonnement week-level avant Phase B.
+**Total restant : ~8-10 jours** (incluant Phase A+). Couvre heartbeat/tool-use, observabilite et couche raisonnement week-level avant Phase B.
+
+### Deploiement prod — 4 mai 2026
+
+`main` est deploye sur Fly.io au commit `406bb23`.
+
+Livres ensemble :
+- Chantier 2 truth source runtime core ;
+- Chantier 3A conversation tool loop partiel ;
+- retry JSON court apres tool-use DeepSeek avant repair lourd ;
+- idempotence Telegram/API via `client_message_key` pour eviter double traitement apres timeout ou reponse perdue.
+
+Verification avant deploy :
+- `./scripts/test-backend -q` : 626 passed, 11 skipped, 6 subtests passed ;
+- `.venv/bin/python -m compileall backend/src/fitmas` : OK ;
+- smoke reel DeepSeek `golden_case_autonomy` + `today_unavailability` : exit 0, tools bien appeles.
+
+Dette observee dans le smoke reel : `weekly_review` pouvait encore dire "regarde ton app demain matin, j'ai ajuste le planning" alors qu'aucune mutation n'etait appliquee. Traitement 3A-bis : hard guard heartbeat read-only sur ces fake-action claims.
 
 ### Chantier 0 — Fix TTL `_recent_proactive_context` ✅ shippe 2 mai 2026
 
@@ -204,7 +223,7 @@ Verification locale :
 - `./scripts/smoke-real-conversations --scenario heartbeat_non_completion` : passe, renfo J-1 marque skipped
 - `./scripts/smoke-real-conversations --scenario compound_non_completion_swap` : passe, clarification quand aucune seance vendredi n'existe
 
-### Chantier 3A — Conversation tool loop partiel ✅ shippe 3 mai 2026
+### Chantier 3A — Conversation tool loop partiel ✅ shippe 3 mai / deploye 4 mai 2026
 
 Objectif : donner au coach plus d'agence de lecture/validation sans ouvrir les
 write tools natifs.
@@ -232,6 +251,45 @@ Verification locale :
 - `tests/test_llm_gateway_json.py` : preservation blocs `thinking` ;
 - `tests/test_final_reply.py` + `tests/test_blocked_mutation_reply.py` : replies
   post-resultat.
+
+### Chantier 3A-bis — Heartbeat read-only fake-action guard ✅ shippe 4 mai 2026
+
+Objectif : fermer la classe vue dans le smoke reel du 4 mai :
+
+> "Regarde ton app demain matin, j'ai ajuste le planning..."
+
+Sans event de mutation, le heartbeat doit pouvoir :
+- constater ;
+- proposer ;
+- demander confirmation ;
+- dire qu'il faudra ajuster dans le chat.
+
+Il ne doit pas claim :
+- "j'ai ajuste" ;
+- "j'ai bascule" ;
+- "j'ai tout remplace" ;
+- "c'est pose / cale / verrouille" ;
+- "regarde ton app" quand cette phrase implique un changement deja fait.
+
+Fix livre :
+- extension de `coach_voice.message_claims_readonly_commit()` aux formes
+  `j'ai ajuste`, `j'ai bascule`, `j'ai tout remplace`, `on continue d'empiler` ;
+- `_llm_generate(... pipeline="heartbeat_*")` bloque ces sorties en retournant
+  `None`, donc le heartbeat ne part pas plutot qu'envoyer un faux commit ;
+- suggestions explicites toujours autorisees : `je te propose de basculer...`,
+  `si tu veux...`, `il faudra ajuster...`.
+
+Verification locale :
+- `./scripts/test-backend -q` : 626 passed, 11 skipped, 6 subtests passed ;
+- `.venv/bin/python -m compileall backend/src/fitmas` : OK ;
+- smoke reel DeepSeek `heartbeat_non_completion` : exit 0, renfo J-1 marque
+  `skipped` via `execution_actions` ;
+- smoke reel DeepSeek `golden_case_autonomy` : exit 0, `weekly_review` ne claim
+  plus "j'ai ajuste" sans event et propose explicitement de regarder ensemble.
+
+Ce guard lit uniquement la sortie LLM heartbeat, jamais le texte utilisateur.
+Il reste donc conforme a la doctrine : determinisme sur artefact machine, pas
+sur comprehension user.
 
 ### Chantier 4 — Observabilite briefing
 

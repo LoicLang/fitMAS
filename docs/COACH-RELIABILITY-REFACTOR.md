@@ -93,6 +93,9 @@ la prose finale libre. Ne pas le faire avant.
 - [x] aucune confirmation normale ne dit "Reponds oui ou non" ;
 - [x] aucun heartbeat read-only ne peut envoyer "on verrouille", "je pose",
   "je mets", "c'est cale", "c'est pose", "je deplace" sans event ;
+- [x] extension 4 mai : aucun heartbeat read-only ne peut envoyer
+  "j'ai ajuste", "j'ai bascule", "j'ai tout remplace",
+  "on continue d'empiler" ou "regarde ton app... j'ai ajuste" sans event ;
 - [x] les fallbacks restants sont clairement outage/systeme et courts ;
 - [x] tests unitaires verrouillent les patterns visibles ;
 - [x] smoke reel `heartbeat_non_completion` applique bien `skipped` via

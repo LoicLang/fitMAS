@@ -114,8 +114,10 @@ READONLY_COMMIT_CLAIM_PATTERNS: tuple[re.Pattern[str], ...] = (
     re.compile(r"\bje cale\b"),
     re.compile(r"\bje deplace\b"),
     re.compile(r"\bje remplace\b"),
+    re.compile(r"\bj ai (deja )?(tout )?(ajuste|bascule|remplace|deplace|cale|pose|mis|change|reorganise)\b"),
     re.compile(r"\bc est cale\b"),
     re.compile(r"\bc est pose\b"),
+    re.compile(r"\bon continue d empiler\b"),
 )
 
 
