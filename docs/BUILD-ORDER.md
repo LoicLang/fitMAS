@@ -65,7 +65,7 @@ L'audit declenche par cet incident a confirme 3 failles structurelles connexes :
 | P1-bis | ✅ PlanPatch confirmation parity — changement de sport sur seance cle repasse par confirmation, comme `MutationDecision` — implemente localement 4 mai 2026 | 0.5h | section ci-dessous |
 | 3B-A | ✅ Tool-use loop proactive heartbeat read-only — le coach relit la verite recente avant de parler — implemente localement 4 mai 2026 | 0.5j | `docs/LLM-FIRST-CONVERSATION.md` section "Phase 5 - Tool-use loop unifie" |
 | P1-ter | ✅ Execution receipt repair hardening — plus d'outage generique si le LLM reconnait "pas fait hier" sans `execution_actions` et qu'une cible follow-up est structuree — implemente localement 4 mai 2026 | 0.5j | section ci-dessous |
-| P1-quater | Dogfood API fallout — execution action verifier + post-event date facts + target ambiguity + durable availability memory | 0.5-1j | section ci-dessous |
+| P1-quater | ✅ Dogfood API fallout — execution action verifier + post-event date facts + target ambiguity + durable availability memory — implemente localement 4 mai 2026 | 0.5-1j | section ci-dessous |
 | 3B-B | Proactive PlanPatch propose + confirmation, pas de commit autonome | 2j | `docs/LLM-FIRST-CONVERSATION.md` |
 | 3B-C | Action-tools natifs bornes, apres preuves 3B-A/B | 2-3j | `docs/RUNTIME-TOOLS.md` |
 | **A+** | **Phase A+ Weekly Coherence Review** (apres 3B ou si 3B non bloquant, avant Phase B) | 3-4j | section "Phase A+" ci-dessous |
@@ -512,9 +512,15 @@ Fix livre :
 - si le payload LLM invalide dit lui-meme que la seance d'hier est manquee et
   qu'une cible follow-up structuree existe, `llm.py` reconstruit un
   `CoachDecision(no_change)` avec `execution_actions=[record_execution_update]` ;
+- extension P1-quater : si une CoachDecision **valide** parle d'une execution
+  d'hier mais oublie `execution_actions`, `llm.py` relance un repair LLM; sans
+  session id certain, le repair peut utiliser `target_ref="seance d'hier"` et
+  le writer resout ensuite contre la DB ;
 - ce repair ne lit jamais le texte utilisateur libre : il se base uniquement sur
   l'artefact LLM invalide + la cible DB deja identifiee par le contexte systeme ;
-- si aucune cible structuree n'existe, on ne synthetise pas d'action.
+- si aucun session id certain n'existe, le repair peut seulement emettre une
+  reference naturelle bornee (`target_ref="seance d'hier"`), que le writer doit
+  resoudre contre la DB ; sans resolution unique, pas d'action synthetisee.
 
 Frontiere doctrine :
 - ne pas parser le texte user ;
@@ -531,32 +537,40 @@ Verification :
 Ce P1 est distinct de 3B-A : il touche la conversation reactive, pas le
 heartbeat read-tools. Il ferme la base execution avant 3B-B.
 
-### P1-quater ouvert — Dogfood API fallout
+### P1-quater — Dogfood API fallout ✅ implemente localement 4 mai 2026
 
 Tests reels API/DeepSeek du 4 mai (agent de test read-only) apres 3B-A/P1-ter.
-`heartbeat_non_completion` est maintenant corrige cote agent principal, mais
-quatre risques restent a fermer avant 3B-B :
+`heartbeat_non_completion` etait deja corrige cote agent principal, mais quatre
+risques restaient a fermer avant 3B-B.
 
-1. **Execution completion incoherente** : sur "J'ai couru aujourd'hui 30 min",
-   l'assistant peut dire qu'il croit l'execution alors que la session du jour
-   finit `skipped`. Cible : verifier/reparer les `execution_actions` contre la
-   reply/rationale et les events appliques, meme principe que le post-event
-   verifier planning.
-2. **Reply post-mutation date/day fausse** : un `replace_session` correct peut
-   etre raconte avec un mauvais jour visible ("lundi" vs mardi 5 mai). Cible :
-   enrichir les facts du post-event verifier avec date ISO + day label + before
-   / after, et bloquer les contradictions calendaires.
-3. **Cible planning ambigue trop vite mutee** : "Deplace la course a vendredi"
-   avec plusieurs courses futures peut etre resolu en swap sans clarification.
-   Cible : forcer clarification/confirmation quand la reference LLM reste
-   underspecifiee et que plusieurs candidats DB matchent.
-4. **Contrainte piscine pas toujours durable** : "ma piscine est fermee deux
-   semaines" peut muter une nage sans `memory_actions`. Cible : renforcer le
-   repair/eval `record_availability`, toujours sans parser le texte user.
+Fix livre :
+- **Execution completion incoherente** : `llm.py` verifie/repare les
+  `execution_actions` quand la reply/rationale contredit le statut structure
+  (`completed` vs `not_completed`), via LLM repair sur CoachDecision.
+- **Reply post-mutation date/day fausse** : les facts du post-event verifier
+  incluent maintenant `YYYY-MM-DD (jour)` dans les snapshots before/after.
+- **Cible planning ambigue trop vite mutee** : `validate_plan_patch` force
+  `requires_confirmation` si une operation `move_session`/`swap_sessions`
+  cible une seance d'un sport qui a plusieurs candidats actifs et que la source
+  n'est pas disambiguisee (`from_day` absent).
+- **Contrainte piscine pas toujours durable** : sur intent LLM
+  `availability_constraint`, `llm.py` peut reparer une CoachDecision sans
+  `record_availability` en ajoutant une `memory_actions.record_availability`.
 
 Frontiere : ne pas corriger par regex sur texte utilisateur. Les fixes doivent
 passer par artefacts LLM, results tools, validation DB, verifiers LLM ou
 prompts/evals.
+
+Verification locale :
+- tests rouges/passes : `test_decide_repairs_valid_yesterday_execution_reply_without_followup_id`,
+  `test_decide_repairs_execution_action_status_contradicting_reply`,
+  `test_decide_repairs_missing_availability_memory_for_availability_intent`,
+  `test_plan_patch_validation_requires_confirmation_for_ambiguous_same_sport_move_target`,
+  `test_plan_patch_applied_verifier_context_includes_calendar_day_label`.
+- suite proche : `tests/test_llm_tools.py tests/test_plan_patch.py
+  tests/test_blocked_mutation_reply.py tests/test_core_flows.py` -> 142 passed.
+- smoke reel DeepSeek `heartbeat_non_completion` : exit 0, renfo J-1 marque
+  `skipped`.
 
 ### Ordre propose
 
@@ -566,9 +580,8 @@ prompts/evals.
 4. ~~**Chantier 3B-A**~~ ✅ heartbeat tool-use read-only.
 5. ~~**P1-ter execution receipt repair hardening**~~ ✅ smoke
    `heartbeat_non_completion` ferme.
-6. **Maintenant : P1-quater dogfood API fallout** — fermer les incoherences
-   observees par tests reels avant plus d'autonomie.
-7. **Ensuite : Chantier 3B-B** — PlanPatch propose + confirmation Telegram,
+6. ~~**P1-quater dogfood API fallout**~~ ✅ incoherences test reel fermees.
+7. **Maintenant : Chantier 3B-B** — PlanPatch propose + confirmation Telegram,
    toujours sans commit autonome.
 8. **Apres preuves dogfood : Chantier 3B-C** — action-tools natifs bornes.
 9. **Apres 3B** : Phase A+ Weekly Coherence Review (3-4j) — l'apport produit

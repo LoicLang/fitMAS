@@ -477,6 +477,24 @@ def decide(
             return None
 
         if isinstance(parsed_decision, CoachDecision):
+            parsed_decision = _maybe_repair_missing_execution_action_from_followup(
+                decision=parsed_decision,
+                system=system_prompt,
+                prompt=prompt,
+                coach_context=coach_context,
+            )
+            parsed_decision = _maybe_repair_execution_action_consistency(
+                decision=parsed_decision,
+                system=system_prompt,
+                prompt=prompt,
+                coach_context=coach_context,
+            )
+            parsed_decision = _maybe_repair_missing_availability_memory_action(
+                decision=parsed_decision,
+                system=system_prompt,
+                prompt=prompt,
+                coach_context=coach_context,
+            )
             logger.info(
                 "LLM coach decision: %s — %s",
                 parsed_decision.response_type,
@@ -944,6 +962,140 @@ def _repair_execution_receipt_without_action_decision(
             followup_session_id,
         )
     return decision
+
+
+def _maybe_repair_missing_execution_action_from_followup(
+    *,
+    decision: CoachDecision,
+    system: str,
+    prompt: str,
+    coach_context: dict | None,
+) -> CoachDecision:
+    followup_session_id = _optional_int((coach_context or {}).get("unresolved_execution_followup_session_id"))
+    if decision.execution_actions:
+        return decision
+    normalized_decision_text = _normalize_for_guard(" ".join([decision.fitmas_message, decision.rationale]))
+    mentions_recent_execution = (
+        followup_session_id is not None
+        or "hier" in normalized_decision_text
+        or "yesterday" in normalized_decision_text
+    )
+    if not mentions_recent_execution:
+        return decision
+    payload = decision.model_dump(mode="json")
+    followup_text = str((coach_context or {}).get("unresolved_execution_followup") or "").strip()
+    if followup_session_id is not None:
+        target_instruction = (
+            "Tu ne dois pas inventer de nouvelle seance: la seule cible autorisee est "
+            f"target_session_id={followup_session_id}."
+        )
+    else:
+        target_instruction = (
+            "Si tu ajoutes une action sans id certain, utilise un target_ref naturel "
+            "comme `seance d'hier`; le backend resoudra contre la DB."
+        )
+    repair_prompt = (
+        "Verifie si cette CoachDecision a oublie `execution_actions` pour le suivi execution cible.\n"
+        f"{target_instruction}\n"
+        "Si le user repond que cette seance cible a ete faite, ajoute `record_execution_update` completed.\n"
+        "Si le user repond que cette seance cible n'a pas ete faite, ajoute `record_execution_update` not_completed.\n"
+        "Si le user ne repond pas au suivi execution, retourne exactement le meme JSON.\n"
+        "Ne change pas les mutations planning ni les memory_actions deja valides.\n"
+        "Retourne uniquement un JSON FitMAS CoachDecision valide.\n\n"
+        f"SUIVI_EXECUTION_STRUCTURE:\n{followup_text or '(non fourni)'}\n\n"
+        f"DECISION_A_VERIFIER:\n{json.dumps(payload, ensure_ascii=False)}\n\n"
+        "CONTEXTE_ORIGINAL:\n"
+        f"{prompt}\n"
+    )
+    repaired = _request_structured_json(
+        system=system,
+        messages=[{"role": "user", "content": repair_prompt}],
+        max_tokens=1024,
+    )
+    parsed = parse_coach_decision_payload(repaired)
+    if parsed is None:
+        logger.warning("llm.followup_execution_repair_invalid")
+        return decision
+    return parsed
+
+
+def _maybe_repair_execution_action_consistency(
+    *,
+    decision: CoachDecision,
+    system: str,
+    prompt: str,
+    coach_context: dict | None,
+) -> CoachDecision:
+    if not bool((coach_context or {}).get("verify_execution_actions")):
+        return decision
+    if not decision.execution_actions:
+        return decision
+    payload = decision.model_dump(mode="json")
+    repair_prompt = (
+        "Verifie la coherence entre `fitmas_message` / `rationale` et `execution_actions`.\n"
+        "Tu ne dois pas inventer de nouvelle seance ni changer une mutation planning.\n"
+        "Si la phrase dit que la seance est faite mais que l'action dit not_completed, corrige l'action en completed.\n"
+        "Si la phrase dit que la seance n'est pas faite mais que l'action dit completed, corrige l'action en not_completed.\n"
+        "Si tout est coherent, retourne exactement le meme JSON.\n"
+        "Retourne uniquement un JSON FitMAS CoachDecision valide.\n\n"
+        f"DECISION_A_VERIFIER:\n{json.dumps(payload, ensure_ascii=False)}\n\n"
+        "CONTEXTE_ORIGINAL:\n"
+        f"{prompt}\n"
+    )
+    repaired = _request_structured_json(
+        system=system,
+        messages=[{"role": "user", "content": repair_prompt}],
+        max_tokens=1024,
+    )
+    parsed = parse_coach_decision_payload(repaired)
+    if parsed is None:
+        logger.warning("llm.execution_action_verifier_invalid")
+        return decision
+    return parsed
+
+
+def _maybe_repair_missing_availability_memory_action(
+    *,
+    decision: CoachDecision,
+    system: str,
+    prompt: str,
+    coach_context: dict | None,
+) -> CoachDecision:
+    if not bool((coach_context or {}).get("repair_memory_actions")):
+        return decision
+    if any(getattr(action, "type", "") == "record_availability" for action in decision.memory_actions):
+        return decision
+    intents = {
+        str((coach_context or {}).get("turn_primary_intent") or "").strip(),
+        *[str(item).strip() for item in ((coach_context or {}).get("turn_secondary_intents") or ())],
+    }
+    if "availability_constraint" not in intents:
+        return decision
+    payload = decision.model_dump(mode="json")
+    repair_prompt = (
+        "Verifie si cette CoachDecision oublie une `memory_actions.record_availability`.\n"
+        "Tu es autorise a relire le contexte original comme LLM; le backend ne parse pas ce texte.\n"
+        "Si le user exprime une contrainte durable ou datee de disponibilite, ajoute une action `record_availability`.\n"
+        "Si aucune contrainte de disponibilite n'est presente, retourne exactement le meme JSON.\n"
+        "Ne change pas les mutations planning, pending_resolution ni execution_actions.\n"
+        "Retourne uniquement un JSON FitMAS CoachDecision valide.\n\n"
+        "FORME record_availability:\n"
+        '{"type":"record_availability","window_text":"...","availability":"unavailable|limited|available|unknown",'
+        '"starts_on":null,"ends_on":null,"confidence":0.75,"evidence":"..."}\n\n'
+        f"DECISION_A_VERIFIER:\n{json.dumps(payload, ensure_ascii=False)}\n\n"
+        "CONTEXTE_ORIGINAL:\n"
+        f"{prompt}\n"
+    )
+    repaired = _request_structured_json(
+        system=system,
+        messages=[{"role": "user", "content": repair_prompt}],
+        max_tokens=1024,
+    )
+    parsed = parse_coach_decision_payload(repaired)
+    if parsed is None:
+        logger.warning("llm.availability_memory_repair_invalid")
+        return decision
+    return parsed
 
 
 def _normalize_bool(raw: Any) -> bool | None:

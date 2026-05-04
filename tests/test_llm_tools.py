@@ -1309,6 +1309,221 @@ class LLMToolsTest(unittest.TestCase):
         self.assertIs(decision.execution_actions[0].completed, False)
         self.assertGreaterEqual(len(prompts), 2)
 
+    def test_decide_repairs_execution_action_status_contradicting_reply(self) -> None:
+        original_client = llm._client
+        original_request_structured_json = llm._request_structured_json
+        prompts: list[str] = []
+
+        def fake_request_structured_json(*, system, messages, model="claude-haiku-4-5-20251001", max_tokens=1024):
+            prompts.append(str(messages[0]["content"]))
+            if len(prompts) == 1:
+                return {
+                    "response_type": "no_change",
+                    "rationale": "Course faite aujourd'hui, 30 min.",
+                    "fitmas_message": "Vu pour ta course de 30 minutes aujourd'hui, je te la compte.",
+                    "execution_actions": [
+                        {
+                            "type": "record_execution_update",
+                            "target_ref": "seance d'aujourd'hui",
+                            "target_session_id": 123,
+                            "status": "not_completed",
+                            "completed": False,
+                            "confidence": 0.86,
+                        }
+                    ],
+                }
+            return {
+                "response_type": "no_change",
+                "rationale": "Course faite aujourd'hui, 30 min.",
+                "fitmas_message": "Vu pour ta course de 30 minutes aujourd'hui, je te la compte.",
+                "execution_actions": [
+                    {
+                        "type": "record_execution_update",
+                        "target_ref": "seance d'aujourd'hui",
+                        "target_session_id": 123,
+                        "status": "completed",
+                        "completed": True,
+                        "duration_min": 30,
+                        "confidence": 0.86,
+                    }
+                ],
+            }
+
+        llm._client = lambda: object()
+        llm._request_structured_json = fake_request_structured_json
+        try:
+            decision = llm.decide(
+                "J'ai couru aujourd'hui 30 min",
+                "Repere",
+                coach_context={"verify_execution_actions": True},
+            )
+        finally:
+            llm._client = original_client
+            llm._request_structured_json = original_request_structured_json
+
+        self.assertIsInstance(decision, llm.CoachDecision)
+        self.assertEqual(len(decision.execution_actions), 1)
+        self.assertEqual(decision.execution_actions[0].status, "completed")
+        self.assertIs(decision.execution_actions[0].completed, True)
+        self.assertIn("execution_actions", prompts[1])
+
+    def test_decide_repairs_valid_followup_reply_missing_execution_action(self) -> None:
+        original_client = llm._client
+        original_request_structured_json = llm._request_structured_json
+        prompts: list[str] = []
+
+        def fake_request_structured_json(*, system, messages, model="claude-haiku-4-5-20251001", max_tokens=1024):
+            prompts.append(str(messages[0]["content"]))
+            if len(prompts) == 1:
+                return {
+                    "response_type": "reply",
+                    "rationale": "User explique l'absence d'execution hier (renfo id=123).",
+                    "fitmas_message": "Compris. Aujourd'hui on garde le footing facile.",
+                    "memory_actions": [
+                        {
+                            "type": "record_availability",
+                            "window_text": "imprevu travail hier",
+                            "availability": "limited",
+                            "confidence": 0.8,
+                        }
+                    ],
+                }
+            return {
+                "response_type": "reply",
+                "rationale": "Execution manquee hier sur le renfo id=123.",
+                "fitmas_message": "Compris. Aujourd'hui on garde le footing facile.",
+                "memory_actions": [
+                    {
+                        "type": "record_availability",
+                        "window_text": "imprevu travail hier",
+                        "availability": "limited",
+                        "confidence": 0.8,
+                    }
+                ],
+                "execution_actions": [
+                    {
+                        "type": "record_execution_update",
+                        "target_ref": "seance d'hier",
+                        "target_session_id": 123,
+                        "status": "not_completed",
+                        "completed": False,
+                        "confidence": 0.9,
+                    }
+                ],
+            }
+
+        llm._client = lambda: object()
+        llm._request_structured_json = fake_request_structured_json
+        try:
+            decision = llm.decide(
+                "J'ai pas eu le temps hier malheureusement",
+                "Repere",
+                coach_context={
+                    "unresolved_execution_followup": "Suivi execution non resolu",
+                    "unresolved_execution_followup_session_id": 123,
+                },
+            )
+        finally:
+            llm._client = original_client
+            llm._request_structured_json = original_request_structured_json
+
+        self.assertIsInstance(decision, llm.CoachDecision)
+        self.assertEqual(len(decision.execution_actions), 1)
+        self.assertEqual(decision.execution_actions[0].target_session_id, 123)
+        self.assertEqual(decision.execution_actions[0].status, "not_completed")
+        self.assertIn("Suivi execution non resolu", prompts[1])
+
+    def test_decide_repairs_valid_yesterday_execution_reply_without_followup_id(self) -> None:
+        original_client = llm._client
+        original_request_structured_json = llm._request_structured_json
+        prompts: list[str] = []
+
+        def fake_request_structured_json(*, system, messages, model="claude-haiku-4-5-20251001", max_tokens=1024):
+            prompts.append(str(messages[0]["content"]))
+            if len(prompts) == 1:
+                return {
+                    "response_type": "reply",
+                    "rationale": "User explique pourquoi le renfo d'hier a saute.",
+                    "fitmas_message": "D'accord. Le footing ce matin, tu le sens ?",
+                    "memory_actions": [],
+                }
+            return {
+                "response_type": "reply",
+                "rationale": "Renfo d'hier saute, execution manquee.",
+                "fitmas_message": "D'accord. Le footing ce matin, tu le sens ?",
+                "execution_actions": [
+                    {
+                        "type": "record_execution_update",
+                        "target_ref": "seance d'hier",
+                        "status": "not_completed",
+                        "completed": False,
+                        "confidence": 0.86,
+                    }
+                ],
+            }
+
+        llm._client = lambda: object()
+        llm._request_structured_json = fake_request_structured_json
+        try:
+            decision = llm.decide("J'ai pas eu le temps hier", "Repere")
+        finally:
+            llm._client = original_client
+            llm._request_structured_json = original_request_structured_json
+
+        self.assertIsInstance(decision, llm.CoachDecision)
+        self.assertEqual(len(decision.execution_actions), 1)
+        self.assertEqual(decision.execution_actions[0].target_ref, "seance d'hier")
+        self.assertEqual(decision.execution_actions[0].status, "not_completed")
+
+    def test_decide_repairs_missing_availability_memory_for_availability_intent(self) -> None:
+        original_client = llm._client
+        original_request_structured_json = llm._request_structured_json
+        prompts: list[str] = []
+
+        def fake_request_structured_json(*, system, messages, model="claude-haiku-4-5-20251001", max_tokens=1024):
+            prompts.append(str(messages[0]["content"]))
+            if len(prompts) == 1:
+                return {
+                    "response_type": "no_change",
+                    "rationale": "Piscine fermee deux semaines; aucune seance nage a modifier maintenant.",
+                    "fitmas_message": "Piscine fermee deux semaines, c'est note. Je le garde pour les prochains plans.",
+                    "memory_actions": [],
+                }
+            return {
+                "response_type": "no_change",
+                "rationale": "Piscine fermee deux semaines; contrainte disponible a memoriser.",
+                "fitmas_message": "Piscine fermee deux semaines, c'est note. Je le garde pour les prochains plans.",
+                "memory_actions": [
+                    {
+                        "type": "record_availability",
+                        "window_text": "piscine fermee deux semaines",
+                        "availability": "unavailable",
+                        "confidence": 0.86,
+                        "evidence": "piscine fermee deux semaines",
+                    }
+                ],
+            }
+
+        llm._client = lambda: object()
+        llm._request_structured_json = fake_request_structured_json
+        try:
+            decision = llm.decide(
+                "Ma piscine est fermee deux semaines",
+                "Repere",
+                coach_context={
+                    "repair_memory_actions": True,
+                    "turn_primary_intent": "availability_constraint",
+                },
+            )
+        finally:
+            llm._client = original_client
+            llm._request_structured_json = original_request_structured_json
+
+        self.assertIsInstance(decision, llm.CoachDecision)
+        self.assertEqual(len(decision.memory_actions), 1)
+        self.assertEqual(decision.memory_actions[0].type, "record_availability")
+        self.assertIn("record_availability", prompts[1])
+
     def test_decide_rejects_truncated_confirmation_message_and_repairs(self) -> None:
         original_client = llm._client
         original_request_structured_json = llm._request_structured_json

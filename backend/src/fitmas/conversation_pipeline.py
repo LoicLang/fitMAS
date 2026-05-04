@@ -300,6 +300,8 @@ def run_conversation_turn(
             "unresolved_execution_followup": unresolved_execution_followup_text,
             "unresolved_execution_followup_session_id": unresolved_execution_followup_session_id,
             "unresolved_execution_followup_target_date": unresolved_execution_followup_target_date,
+            "verify_execution_actions": True,
+            "repair_memory_actions": True,
         },
         remembered_facts=state.active_facts,
         time_context=conversation_context.time_context,
@@ -980,13 +982,27 @@ def _compact_session_snapshot(snapshot: dict[str, Any]) -> str:
     scheduled_date = str(snapshot.get("scheduled_date") or snapshot.get("day") or "").strip()
     sport = str(snapshot.get("sport_type") or "").strip()
     duration = snapshot.get("duration_min")
-    bits = [bit for bit in (title, scheduled_date, sport) if bit]
+    bits = [bit for bit in (title, _date_with_day_label(scheduled_date), sport) if bit]
     if duration is not None:
         try:
             bits.append(f"{int(duration)} min")
         except (TypeError, ValueError):
             bits.append(f"{duration} min")
     return " | ".join(bits)
+
+
+def _date_with_day_label(raw: str) -> str:
+    value = str(raw or "").strip()
+    if len(value) < 10:
+        return value
+    try:
+        from datetime import date
+
+        parsed = date.fromisoformat(value[:10])
+    except ValueError:
+        return value
+    days = ("lundi", "mardi", "mercredi", "jeudi", "vendredi", "samedi", "dimanche")
+    return f"{parsed.isoformat()} ({days[parsed.weekday()]})"
 
 
 def _final_reply_context_for_plan_patch_block(

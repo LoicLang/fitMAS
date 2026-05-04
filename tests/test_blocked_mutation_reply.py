@@ -250,11 +250,58 @@ class BlockedMutationReplyTest(unittest.TestCase):
         )
         self.assertTrue(
             any(
-                "before=Fractionne | 2099-03-23 | running | 36 min" in fact
-                and "after=Journee flexible | 2099-03-23 | rest | 0 min" in fact
+                "before=Fractionne | 2099-03-23 (lundi)" in fact
+                and "after=Journee flexible | 2099-03-23 (lundi)" in fact
                 for fact in verifier_context.extra_facts
             )
         )
+
+    def test_plan_patch_applied_verifier_context_includes_calendar_day_label(self) -> None:
+        from fitmas.conversation_pipeline import _applied_plan_patch_reply
+
+        result = PlanPatchServiceResult(
+            validation=PlanPatchValidation(status="valid", operation_results=()),
+            mutation_result=PlanMutationServiceResult(
+                plan_id=1,
+                applied_count=1,
+                attempted_count=1,
+                event_count=1,
+                applied_events=(
+                    PlanAppliedMutationEvent(
+                        command_type="replace_session",
+                        user_visible_summary="Mardi remplace par Footing easy.",
+                        event_id=7,
+                        target_session_id=41,
+                        before_snapshot={
+                            "session_title": "Natation",
+                            "scheduled_date": "2026-05-05",
+                            "sport_type": "swimming",
+                            "duration_min": 40,
+                        },
+                        after_snapshot={
+                            "session_title": "Footing easy",
+                            "scheduled_date": "2026-05-05",
+                            "sport_type": "running",
+                            "duration_min": 35,
+                        },
+                    ),
+                ),
+            ),
+        )
+
+        with patch(
+            "fitmas.conversation_pipeline.final_reply.compose_final_reply",
+            return_value="J'ai remplace lundi matin par un footing.",
+        ), patch(
+            "fitmas.conversation_pipeline.final_reply.verify_post_event_reply",
+            return_value="Mardi 5 mai passe en footing easy.",
+        ) as verify:
+            reply = _applied_plan_patch_reply(result, fallback="Patch applique.")
+
+        self.assertEqual(reply, "Mardi 5 mai passe en footing easy.")
+        context = verify.call_args.args[1]
+        joined = "\n".join(context.extra_facts)
+        self.assertIn("2026-05-05 (mardi)", joined)
 
     def test_plan_patch_applied_falls_back_to_event_summary_when_verifier_fails(self) -> None:
         from fitmas.conversation_pipeline import _applied_plan_patch_reply

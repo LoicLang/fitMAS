@@ -104,10 +104,15 @@ def validate_plan_patch(
         )
         warning_codes = tuple(warning.code for warning in pre_result.warnings)
         warning_messages = tuple(warning.message for warning in pre_result.warnings)
+        status = _status_from_pre_result(allowed=pre_result.allowed, warning_codes=warning_codes)
+        if status == "valid" and _is_ambiguous_existing_session_reference(operation, scheduled_sessions=scheduled_sessions):
+            warning_codes = (*warning_codes, "ambiguous_target_reference")
+            warning_messages = (*warning_messages, "Plusieurs seances du meme sport peuvent correspondre a cette reference.")
+            status = "requires_confirmation"
         operation_results.append(
             PlanPatchOperationValidation(
                 operation_type=operation.operation_type,
-                status=_status_from_pre_result(allowed=pre_result.allowed, warning_codes=warning_codes),
+                status=status,
                 target_session_id=operation.target_session_id,
                 block_reason=pre_result.block_reason,
                 warning_codes=warning_codes,
@@ -224,6 +229,30 @@ def _validate_existing_session_targets(
     return None
 
 
+def _is_ambiguous_existing_session_reference(
+    operation: PlanPatchOperation,
+    *,
+    scheduled_sessions: Sequence[Any],
+) -> bool:
+    if operation.operation_type not in {"move_session", "swap_sessions"}:
+        return False
+    if str(operation.from_day or "").strip():
+        return False
+    target = _find_scheduled_session(scheduled_sessions, operation.target_session_id)
+    if target is None:
+        return False
+    target_sport = str(_value(target, "sport_type") or "").strip().lower()
+    if not target_sport or target_sport in {"rest", "off"}:
+        return False
+    candidates = [
+        session
+        for session in scheduled_sessions
+        if str(_value(session, "sport_type") or "").strip().lower() == target_sport
+        and str(_value(session, "completion_status") or "").strip().lower() not in {"done", "skipped", "canceled"}
+    ]
+    return len(candidates) > 1
+
+
 def _operation_to_mutation_decision(operation: PlanPatchOperation, *, fitmas_message: str) -> MutationDecision:
     from fitmas.llm import MutationDecision
 
@@ -322,6 +351,8 @@ def _suggested_fix_for_operation(
         return "Choisir un jour sans autre seance intense."
     if "replace_key_session_changes_sport" in codes:
         return "Demander confirmation avant de changer le sport d'une seance cle."
+    if "ambiguous_target_reference" in codes:
+        return "Demander confirmation: plusieurs seances du meme sport peuvent correspondre."
     if "move_to_past" in codes:
         return "Choisir une date future."
     return None

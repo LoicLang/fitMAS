@@ -185,6 +185,50 @@ def test_plan_patch_validation_blocks_impossible_operations() -> None:
     assert validation.summary == "Patch bloque: move_session same_sport_proximity."
 
 
+def test_plan_patch_validation_requires_confirmation_for_ambiguous_same_sport_move_target() -> None:
+    patch = PlanPatch(
+        operations=[
+            PlanPatchOperation(
+                operation_type="move_session",
+                target_session_id=10,
+                target_date="2099-04-18",
+                rationale="Deplacer la course a vendredi.",
+            )
+        ],
+        coach_message="Je deplace la course a vendredi.",
+    )
+    sessions = [
+        SimpleNamespace(
+            id=10,
+            scheduled_date=date(2099, 4, 14),
+            sport_type="running",
+            session_type="easy",
+            completion_status="planned",
+        ),
+        SimpleNamespace(
+            id=11,
+            scheduled_date=date(2099, 4, 16),
+            sport_type="running",
+            session_type="tempo",
+            completion_status="planned",
+        ),
+    ]
+
+    validation = validate_plan_patch(
+        object(),
+        plan_id=0,
+        patch=patch,
+        scheduled_sessions=sessions,
+        timezone_name="Europe/Paris",
+    )
+
+    assert validation.status == "requires_confirmation"
+    result = validation.operation_results[0]
+    assert result.status == "requires_confirmation"
+    assert result.warning_codes == ("ambiguous_target_reference",)
+    assert "confirmation" in str(result.suggested_fix).lower()
+
+
 def test_plan_patch_validation_blocks_missing_target_session_before_commit() -> None:
     patch = PlanPatch(
         operations=[

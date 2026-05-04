@@ -117,12 +117,41 @@ Fix livre :
 - `llm.py` ajoute un repair semantique local apres echec du JSON repair :
   uniquement si l'artefact LLM invalide reconnait lui-meme l'execution manquee
   et qu'une cible follow-up structuree existe ;
+- extension P1-quater : le meme principe couvre maintenant une CoachDecision
+  valide mais incomplete. Si elle parle d'une execution d'hier sans
+  `execution_actions`, un repair LLM peut ajouter un `target_ref` naturel
+  (`seance d'hier`) que le writer resout ensuite contre la DB ;
 - le repair produit `CoachDecision(no_change)` +
   `execution_actions=[record_execution_update(status=not_completed)]`.
 
 Frontiere : aucun parsing du texte utilisateur libre. Le code repare un artefact
-LLM fautif contre une cible DB deja identifiee ; sans cible structuree, il ne
+LLM fautif contre une cible DB deja identifiee ou une reference naturelle bornee
+que le writer doit resoudre contre la DB ; sans resolution unique, il ne
 synthetise pas d'action.
+
+## P1-quater — Dogfood API fallout ✅ implemente localement 4 mai 2026
+
+Apres les tests API reels, quatre incoherences restaient trop fragiles avant
+3B-B :
+
+- `execution_actions` pouvait contredire la reply/rationale visible ;
+- la reply post-mutation pouvait citer le mauvais jour malgre un event correct ;
+- une cible planning vague pouvait etre mutee trop vite si plusieurs seances du
+  meme sport existaient ;
+- une contrainte de disponibilite pouvait etre comprise puis non memorisee.
+
+Fix livre :
+- verification/reparation LLM de `execution_actions` sur CoachDecision, sans
+  parser le texte user ;
+- enrichissement des facts post-event avec `YYYY-MM-DD (jour)` pour que le
+  verifier puisse bloquer les contradictions calendaires ;
+- `validate_plan_patch` passe en `requires_confirmation` sur target ambigu non
+  disambiguise ;
+- repair LLM de `record_availability` quand l'intent LLM est
+  `availability_constraint` et que la CoachDecision a oublie la memoire.
+
+Frontiere : tout part d'artefacts LLM, de validation DB ou de facts
+post-mutation. Aucun regex/keyword sur texte utilisateur libre.
 
 ## P1 prioritaire — Post-event reply verifier ✅ implemente localement 4 mai 2026
 
