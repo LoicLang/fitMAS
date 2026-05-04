@@ -652,6 +652,43 @@ class FitMASCoreFlowsTest(unittest.TestCase):
         self.assertIn("Je ne touche pas", second["assistant_message"]["text"])
         self.assertIsNone(pending)
 
+    def test_message_client_key_returns_existing_turn_without_reprocessing(self) -> None:
+        repo.add_conversation_turn(
+            self.db,
+            user_id=self.user.id,
+            user_message="Remplace les natations",
+            assistant_message="C'est deja traite.",
+            response_mode="plan_patch_applied",
+            extraction_confidence=0.85,
+            day_updated=None,
+            mutation_type="",
+            mutation_applied=True,
+            pending_confirmation=False,
+            pending_confirmation_id=None,
+            decision_json="{}",
+            context={"client_message_key": "telegram:42:1003", "source": "telegram"},
+            memory_writes=[],
+        )
+        original_decide = api_messages.decide
+        try:
+            def fail_decide(*args, **kwargs):
+                raise AssertionError("Duplicate client key should not re-enter LLM decision")
+
+            api_messages.decide = fail_decide
+            result = self.client.post(
+                "/api/v0/messages",
+                json={
+                    "text": "Remplace les natations",
+                    "client_message_key": "telegram:42:1003",
+                    "source": "telegram",
+                },
+            ).json()
+        finally:
+            api_messages.decide = original_decide
+
+        self.assertEqual(result["assistant_message"]["text"], "C'est deja traite.")
+        self.assertEqual(result["user_message"]["text"], "Remplace les natations")
+
     def test_pending_reject_resolution_closes_pending_without_mutation(self) -> None:
         _, session = self._create_plan_for_today()
         session.priority = "Seance cle"

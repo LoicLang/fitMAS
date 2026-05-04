@@ -5,6 +5,8 @@ from pydantic import BaseModel
 
 class IncomingMessage(BaseModel):
     text: str
+    client_message_key: str | None = None
+    source: str | None = None
 
 
 class OnboardPayload(BaseModel):

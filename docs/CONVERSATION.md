@@ -93,6 +93,23 @@ Le `CoachDecision` cible porte :
 Le LLM propose ces actions.
 Le backend les valide et les applique via services officiels.
 
+### Idempotence livraison Telegram
+
+Chaque message Telegram transmis a `/api/v0/messages` porte une cle
+`client_message_key` stable :
+
+- message seul : `telegram:{chat_id}:{message_id}`
+- batch debounce : `telegram:{chat_id}:{first_message_id}-{last_message_id}`
+
+Le backend stocke cette cle dans `ConversationTurnRecord.context_json`. Si la
+meme cle revient, le pipeline renvoie la reponse du tour deja traite sans
+repasser par le LLM et sans relancer de mutation.
+
+Cette idempotence sert a traiter les timeouts ambigus : si Telegram perd la
+reponse API alors que le serveur a deja commit, le bot retente une fois avec la
+meme cle et recupere le tour existant. C'est une garantie sur artefact machine,
+pas un parsing du texte utilisateur.
+
 ### Etat actuel
 
 Phase 0 du chantier LLM-first a retire les plus gros chemins user-text du

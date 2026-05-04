@@ -41,7 +41,7 @@ from fitmas.conversation_contract import (
     ConversationTurnState,
     ConversationUserNotFoundError,
 )
-from fitmas.models import Extraction, Message, MessageReply, MessageRole
+from fitmas.models import DayId, Extraction, Message, MessageReply, MessageRole
 from fitmas.mutation_permissions import (
     assess_mutation_impact,
     build_confirmation_prompt,
@@ -73,9 +73,17 @@ def run_conversation_turn(
     if user is None:
         raise ConversationUserNotFoundError("No onboarded user yet")
 
+    duplicate_reply = _reply_for_duplicate_client_message(db=db, user_id=user.id, payload=payload)
+    if duplicate_reply is not None:
+        return duplicate_reply
+
     state = _load_turn_state(db=db, user=user, user_text=payload.text)
     turn_memory_writes: list[dict] = []
     turn_context: dict[str, object] = {}
+    if payload.client_message_key:
+        turn_context["client_message_key"] = payload.client_message_key
+    if payload.source:
+        turn_context["source"] = payload.source
     pending_confirmation = repo.get_active_pending_mutation_confirmation(db, user.id)
     pending_confirmation_context = _pending_confirmation_context_for_prompt(pending_confirmation)
 
@@ -578,6 +586,37 @@ def run_conversation_turn(
         turn_context=turn_context,
         memory_writes=turn_memory_writes,
     )
+
+
+def _reply_for_duplicate_client_message(
+    *,
+    db: Session,
+    user_id: int,
+    payload: ConversationTurnInput,
+) -> MessageReply | None:
+    key = str(payload.client_message_key or "").strip()
+    if not key:
+        return None
+    row = repo.get_conversation_turn_by_client_message_key(db, user_id, key)
+    if row is None:
+        return None
+    logger.info("conversation_pipeline.idempotent_replay user=%s key=%s turn=%s", user_id, key, row.id)
+    day_updated = _day_id_from_row(row.day_updated)
+    return MessageReply(
+        user_message=Message(role=MessageRole.USER, text=row.user_message),
+        extraction=Extraction(confidence=float(row.extraction_confidence or 0.0)),
+        assistant_message=Message(role=MessageRole.AGENT, text=row.assistant_message),
+        day_updated=day_updated,
+    )
+
+
+def _day_id_from_row(raw: str | None) -> DayId | None:
+    if not raw:
+        return None
+    try:
+        return DayId(str(raw))
+    except ValueError:
+        return None
 
 
 def _load_turn_state(*, db: Session, user, user_text: str) -> ConversationTurnState:

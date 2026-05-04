@@ -337,6 +337,21 @@ def get_recent_conversation_turns(
     return repo_conversation.get_recent_conversation_turns(db, user_id, limit=limit)
 
 
+def get_conversation_turn_by_client_message_key(
+    db: Session,
+    user_id: int,
+    client_message_key: str,
+    *,
+    limit: int = 50,
+) -> s.ConversationTurnRecord | None:
+    return repo_conversation.get_conversation_turn_by_client_message_key(
+        db,
+        user_id,
+        client_message_key,
+        limit=limit,
+    )
+
+
 def get_active_pending_mutation_confirmation(
     db: Session, user_id: int
 ) -> s.PendingMutationConfirmation | None:

@@ -32,6 +32,32 @@ def get_recent_conversation_turns(
     )
 
 
+def get_conversation_turn_by_client_message_key(
+    db: Session,
+    user_id: int,
+    client_message_key: str,
+    *,
+    limit: int = 50,
+) -> s.ConversationTurnRecord | None:
+    """Return a recent turn for an external delivery idempotency key.
+
+    The key lives in context_json to avoid a schema migration for the Telegram
+    delivery repair. This is exact-key idempotency, not user-text parsing.
+    """
+    key = str(client_message_key or "").strip()
+    if not key:
+        return None
+    rows = get_recent_conversation_turns(db, user_id, limit=limit)
+    for row in rows:
+        try:
+            context = json.loads(row.context_json or "{}")
+        except Exception:
+            continue
+        if isinstance(context, dict) and str(context.get("client_message_key") or "").strip() == key:
+            return row
+    return None
+
+
 def get_active_pending_mutation_confirmation(
     db: Session, user_id: int
 ) -> s.PendingMutationConfirmation | None:

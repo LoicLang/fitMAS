@@ -187,7 +187,11 @@ def post_message(payload: IncomingMessage, db: Session = Depends(get_db)) -> Mes
 
     try:
         return run_conversation_turn(
-            ConversationTurnInput(text=payload.text),
+            ConversationTurnInput(
+                text=payload.text,
+                client_message_key=payload.client_message_key,
+                source=payload.source,
+            ),
             db=db,
             dependencies=ConversationPipelineDependencies(
                 decide=decide,

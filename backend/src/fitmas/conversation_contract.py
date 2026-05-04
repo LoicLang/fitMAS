@@ -10,6 +10,8 @@ from fitmas.models import DayId, Extraction
 @dataclass(slots=True)
 class ConversationTurnInput:
     text: str
+    client_message_key: str | None = None
+    source: str | None = None
 
 
 @dataclass(slots=True)

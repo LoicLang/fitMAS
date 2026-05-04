@@ -10,7 +10,7 @@ from telegram.ext import Application, CommandHandler, ContextTypes, MessageHandl
 from fitmas.telegram_api import api_get, api_post
 from fitmas.telegram_debounce import (
     build_batched_text,
-    consume_messages,
+    consume_messages_with_ids,
     enqueue_message,
     has_pending_messages,
     is_in_flight,
@@ -86,11 +86,12 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     user_text = update.message.text
     if not user_text or update.effective_chat is None:
         return
-    if context.job_queue is None:
-        await _forward_message_immediately(update, user_text)
-        return
     chat_id = int(update.effective_chat.id)
-    enqueue_message(chat_id, user_text)
+    message_id = getattr(update.message, "message_id", None)
+    if context.job_queue is None:
+        await _forward_message_immediately(update, user_text, chat_id=chat_id, message_id=message_id)
+        return
+    enqueue_message(chat_id, user_text, message_id=message_id)
     _schedule_debounced_flush(context, chat_id)
 
 
@@ -105,7 +106,7 @@ async def _flush_debounced_messages(context: ContextTypes.DEFAULT_TYPE) -> None:
             _schedule_debounced_flush(context, chat_id)
         return
 
-    batched_messages = consume_messages(chat_id)
+    batched_messages, message_ids = consume_messages_with_ids(chat_id)
     if not batched_messages:
         return
 
@@ -115,7 +116,9 @@ async def _flush_debounced_messages(context: ContextTypes.DEFAULT_TYPE) -> None:
 
     mark_in_flight(chat_id, True)
     try:
-        result = await api_post("/api/v0/messages", {"text": user_text})
+        result = await _post_message_with_idempotent_retry(
+            _message_payload(user_text, chat_id=chat_id, message_ids=message_ids)
+        )
         reply = result.get("assistant_message", {}).get("text", "...")
         await context.bot.send_message(chat_id=chat_id, text=reply)
     except httpx.HTTPStatusError as exc:
@@ -159,9 +162,17 @@ def _debounce_job_name(chat_id: int) -> str:
     return f"telegram_debounce:{chat_id}"
 
 
-async def _forward_message_immediately(update: Update, user_text: str) -> None:
+async def _forward_message_immediately(
+    update: Update,
+    user_text: str,
+    *,
+    chat_id: int,
+    message_id: int | None,
+) -> None:
     try:
-        result = await api_post("/api/v0/messages", {"text": user_text})
+        result = await _post_message_with_idempotent_retry(
+            _message_payload(user_text, chat_id=chat_id, message_ids=[message_id])
+        )
         reply = result.get("assistant_message", {}).get("text", "...")
         await update.message.reply_text(reply)
     except httpx.HTTPStatusError as exc:
@@ -173,6 +184,47 @@ async def _forward_message_immediately(update: Update, user_text: str) -> None:
     except Exception:
         logger.exception("Error forwarding message")
         await update.message.reply_text("Probleme de connexion avec FitMAS. Reessaie dans un instant.")
+
+
+async def _post_message_with_idempotent_retry(payload: dict[str, object]) -> dict:
+    try:
+        return await api_post("/api/v0/messages", payload)
+    except httpx.HTTPStatusError as exc:
+        if not _should_retry_message_post(payload, exc):
+            raise
+        logger.warning("Retrying message post after server error with client key")
+        return await api_post("/api/v0/messages", payload)
+    except httpx.RequestError:
+        if not payload.get("client_message_key"):
+            raise
+        logger.warning("Retrying message post after lost response with client key")
+        return await api_post("/api/v0/messages", payload)
+
+
+def _should_retry_message_post(payload: dict[str, object], exc: httpx.HTTPStatusError) -> bool:
+    return bool(payload.get("client_message_key")) and exc.response.status_code >= 500
+
+
+def _message_payload(
+    text: str,
+    *,
+    chat_id: int,
+    message_ids: list[int | None],
+) -> dict[str, object]:
+    payload: dict[str, object] = {"text": text}
+    key = _client_message_key(chat_id=chat_id, message_ids=message_ids)
+    if key:
+        payload["client_message_key"] = key
+        payload["source"] = "telegram"
+    return payload
+
+
+def _client_message_key(*, chat_id: int, message_ids: list[int | None]) -> str | None:
+    ids = [int(message_id) for message_id in message_ids if message_id is not None]
+    if not ids:
+        return None
+    suffix = str(ids[0]) if len(ids) == 1 else f"{ids[0]}-{ids[-1]}"
+    return f"telegram:{chat_id}:{suffix}"
 
 
 async def cmd_newweek(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:

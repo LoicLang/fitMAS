@@ -4,6 +4,8 @@ import unittest
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
+import httpx
+
 import fitmas.telegram_commands as telegram_commands
 from fitmas.telegram_debounce import reset_state
 
@@ -44,11 +46,11 @@ class TelegramCommandsTest(unittest.IsolatedAsyncioTestCase):
 
     async def test_handle_message_batches_quick_messages_into_single_api_call(self) -> None:
         update = SimpleNamespace(
-            message=SimpleNamespace(text="Premier message", reply_text=AsyncMock()),
+            message=SimpleNamespace(text="Premier message", message_id=1001, reply_text=AsyncMock()),
             effective_chat=SimpleNamespace(id=42),
         )
         second_update = SimpleNamespace(
-            message=SimpleNamespace(text="Second message", reply_text=AsyncMock()),
+            message=SimpleNamespace(text="Second message", message_id=1002, reply_text=AsyncMock()),
             effective_chat=SimpleNamespace(id=42),
         )
         job_queue = _FakeJobQueue()
@@ -75,13 +77,17 @@ class TelegramCommandsTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(job_queue.last_when, telegram_commands._DEBOUNCE_SECONDS)
         api_post_mock.assert_awaited_once_with(
             "/api/v0/messages",
-            {"text": "Premier message\nSecond message"},
+            {
+                "text": "Premier message\nSecond message",
+                "client_message_key": "telegram:42:1001-1002",
+                "source": "telegram",
+            },
         )
         bot.send_message.assert_awaited_once_with(chat_id=42, text="Réponse groupée")
 
     async def test_handle_message_falls_back_to_immediate_forward_without_job_queue(self) -> None:
         update = SimpleNamespace(
-            message=SimpleNamespace(text="Message seul", reply_text=AsyncMock()),
+            message=SimpleNamespace(text="Message seul", message_id=1003, reply_text=AsyncMock()),
             effective_chat=SimpleNamespace(id=42),
         )
         context = SimpleNamespace(job_queue=None)
@@ -94,5 +100,41 @@ class TelegramCommandsTest(unittest.IsolatedAsyncioTestCase):
         finally:
             telegram_commands.api_post = original_api_post
 
-        api_post_mock.assert_awaited_once_with("/api/v0/messages", {"text": "Message seul"})
+        api_post_mock.assert_awaited_once_with(
+            "/api/v0/messages",
+            {
+                "text": "Message seul",
+                "client_message_key": "telegram:42:1003",
+                "source": "telegram",
+            },
+        )
         update.message.reply_text.assert_awaited_once_with("Réponse immédiate")
+
+    async def test_handle_message_retries_same_client_key_after_lost_api_response(self) -> None:
+        update = SimpleNamespace(
+            message=SimpleNamespace(text="Remplace les natations", message_id=1004, reply_text=AsyncMock()),
+            effective_chat=SimpleNamespace(id=42),
+        )
+        context = SimpleNamespace(job_queue=None)
+        payload = {
+            "text": "Remplace les natations",
+            "client_message_key": "telegram:42:1004",
+            "source": "telegram",
+        }
+
+        original_api_post = telegram_commands.api_post
+        api_post_mock = AsyncMock(
+            side_effect=[
+                httpx.ReadTimeout("lost response after commit"),
+                {"assistant_message": {"text": "Réponse récupérée"}},
+            ]
+        )
+        telegram_commands.api_post = api_post_mock
+        try:
+            await telegram_commands.handle_message(update, context)
+        finally:
+            telegram_commands.api_post = original_api_post
+
+        self.assertEqual(api_post_mock.await_count, 2)
+        api_post_mock.assert_any_await("/api/v0/messages", payload)
+        update.message.reply_text.assert_awaited_once_with("Réponse récupérée")
