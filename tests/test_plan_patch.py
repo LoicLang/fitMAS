@@ -99,6 +99,48 @@ def test_plan_patch_validation_requires_confirmation_for_training_warnings() -> 
     assert validation.operation_results[0].warning_codes == ("hard_session_limit",)
 
 
+def test_plan_patch_validation_requires_confirmation_when_replacing_key_session_sport() -> None:
+    patch = PlanPatch(
+        operations=[
+            PlanPatchOperation(
+                operation_type="replace_session",
+                target_session_id=22,
+                new_sport_type="swimming",
+                new_session_type="easy",
+                new_title="Natation souple",
+                new_duration_min=35,
+                new_intensity="easy",
+                rationale="Remplacer la seance cle par moins d'impact.",
+            )
+        ],
+        coach_message="Je remplace par natation souple.",
+    )
+    sessions = [
+        SimpleNamespace(
+            id=22,
+            sport_type="running",
+            session_title="Tempo 10k",
+            priority="Seance cle",
+            intensity="hard",
+            completion_status="planned",
+        ),
+    ]
+
+    validation = validate_plan_patch(
+        object(),
+        plan_id=0,
+        patch=patch,
+        scheduled_sessions=sessions,
+        timezone_name="Europe/Paris",
+    )
+
+    assert validation.status == "requires_confirmation"
+    result = validation.operation_results[0]
+    assert result.status == "requires_confirmation"
+    assert result.warning_codes == ("replace_key_session_changes_sport",)
+    assert "confirmation" in str(result.suggested_fix).lower()
+
+
 def test_plan_patch_validation_blocks_impossible_operations() -> None:
     patch = PlanPatch(
         operations=[

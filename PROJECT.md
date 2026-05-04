@@ -47,6 +47,7 @@ Chantiers en cours (suite incident hallucination factuelle briefing 2 mai) :
 - ✅ **Heartbeat fake-action guard** — LLM judge systématique `ALLOW/BLOCK` sur chaque sortie heartbeat read-only, sans regex fake-action — 4 mai 2026
 - ✅ **Chantier 4** — Observabilité proactive coach loop — `dump=true` expose contexte, prompt, decision `send/no_send`, judge, message final — 4 mai 2026
 - ✅ **P1 post-event reply verifier** — verifier/réparer une réponse finale post-mutation contre les events réellement commités avant envoi — implémenté localement 4 mai 2026
+- ✅ **P1 PlanPatch confirmation parity** — un `replace_session` qui change le sport d’une séance clé repasse par confirmation, comme la route `MutationDecision` — implémenté localement 4 mai 2026
 - **Chantier 3B** — Tool-use loop proactive heartbeat + action-tools natifs bornés — `docs/LLM-FIRST-CONVERSATION.md`
 - **Phase A+** — Weekly Coherence Review (3-4j, après Chantier 3B ou si jugé non bloquant) — couche raisonnement week-level, transforme coach réactif local en coach stratégique — `docs/BUILD-ORDER.md` section dédiée
 

@@ -320,6 +320,8 @@ def _suggested_fix_for_operation(
         return "Transformer la seance en easy ou deplacer une autre seance intense."
     if "hard_session_collision" in codes:
         return "Choisir un jour sans autre seance intense."
+    if "replace_key_session_changes_sport" in codes:
+        return "Demander confirmation avant de changer le sport d'une seance cle."
     if "move_to_past" in codes:
         return "Choisir une date future."
     return None

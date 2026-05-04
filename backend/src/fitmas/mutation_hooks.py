@@ -75,6 +75,7 @@ def run_pre_mutation_hooks(
     _check_same_sport_proximity(result, decision, scheduled_sessions=scheduled_sessions, timezone_name=timezone_name)
     _check_protected_recovery_target(result, decision, scheduled_sessions=scheduled_sessions, timezone_name=timezone_name)
     _check_occupied_training_target(result, decision, scheduled_sessions=scheduled_sessions, timezone_name=timezone_name)
+    _check_key_session_replace_confirmation(result, decision, scheduled_sessions=scheduled_sessions)
     _check_load_coherence(result, decision, scheduled_sessions=scheduled_sessions)
 
     if result.warnings:
@@ -189,6 +190,28 @@ def _check_load_coherence(
             code="hard_session_limit",
             message=f"Deja {week_hard_count} seances intenses cette semaine (max {limit}).",
         ))
+
+
+def _check_key_session_replace_confirmation(
+    result: PreMutationResult,
+    decision: MutationDecision,
+    *,
+    scheduled_sessions: Sequence[Any],
+) -> None:
+    """Warn before changing the sport of a key session."""
+    if decision.mutation_type != "replace_session":
+        return
+    target = _find_session(scheduled_sessions, decision.target_session_id)
+    if target is None or not _is_key_session(target):
+        return
+    current_sport = str(_value(target, "sport_type") or "").strip().lower()
+    next_sport = str(decision.new_sport_type or "").strip().lower()
+    if not next_sport or next_sport == current_sport:
+        return
+    result.warnings.append(MutationWarning(
+        code="replace_key_session_changes_sport",
+        message="Ce remplacement change le sport d'une seance cle.",
+    ))
 
 
 def _check_same_sport_proximity(

@@ -62,6 +62,7 @@ L'audit declenche par cet incident a confirme 3 failles structurelles connexes :
 | 3A-bis | ✅ Heartbeat read-only fake-action guard — LLM judge systematique `ALLOW/BLOCK` sur chaque sortie heartbeat, sans regex fake-action — 4 mai 2026 | 0.5j | section ci-dessous |
 | 4 | ✅ Observabilite proactive coach loop — dump contexte, prompt, decision `send/no_send`, judge, message final — implemente localement 4 mai 2026 | 0.5j | section ci-dessous |
 | P1 | ✅ Post-event reply verifier — verifier/reparer toute phrase finale post-mutation contre `events_committed + session_changes` — implemente localement 4 mai 2026 | 0.5j | section ci-dessous |
+| P1-bis | ✅ PlanPatch confirmation parity — changement de sport sur seance cle repasse par confirmation, comme `MutationDecision` — implemente localement 4 mai 2026 | 0.5h | section ci-dessous |
 | 3B-A | Tool-use loop proactive heartbeat read-only — le coach relit la verite recente avant de parler | 2-3j | `docs/LLM-FIRST-CONVERSATION.md` section "Phase 5 - Tool-use loop unifie" |
 | 3B-B | Proactive PlanPatch propose + confirmation, pas de commit autonome | 2j | `docs/LLM-FIRST-CONVERSATION.md` |
 | 3B-C | Action-tools natifs bornes, apres preuves 3B-A/B | 2-3j | `docs/RUNTIME-TOOLS.md` |
@@ -366,6 +367,9 @@ Dogfood parallele 4 mai :
   dans un weekly review. Mitigation immediate : prompt du judge durci avec
   `events_committed: []`, exemples BLOCK, et smoke direct DeepSeek confirme
   `BLOCK` sur la phrase fautive.
+- P1-bis PlanPatch : les smokes reels ont montre qu'un remplacement de seance
+  cle via `PlanPatch` pouvait s'appliquer sans confirmation. Correctif local :
+  pre-hook `replace_key_session_changes_sport` partage par `validate_plan_patch`.
 
 ### P1 — Post-event reply verifier ✅ implemente localement 4 mai 2026
 
@@ -436,11 +440,27 @@ Tests ajoutes :
 - contexte verifier enrichi avec `before -> after` pour distinguer
   `replace_session` de `move_session`.
 
+### P1-bis — PlanPatch confirmation parity ✅ implemente localement 4 mai 2026
+
+Bug observe par smoke reel DeepSeek : `Tu peux remplacer ma seance cle par une
+natation ?` pouvait produire un `PlanPatch.replace_session` applique directement.
+La route legacy `MutationDecision` passait bien par `assess_mutation_impact`,
+mais `PlanPatch` s'appuyait sur les pre-hooks et ne signalait pas encore ce cas.
+
+Fix :
+- pre-hook `replace_key_session_changes_sport` quand `replace_session` change
+  le sport d'une seance cle ;
+- `validate_plan_patch` transforme ce warning en `requires_confirmation` ;
+- suggested fix explicite : demander confirmation avant de changer le sport
+  d'une seance cle.
+
+Test : `test_plan_patch_validation_requires_confirmation_when_replacing_key_session_sport`.
+
 ### Ordre propose
 
 1. ~~**Chantier 0-3A-bis**~~ ✅ shippe/deploye 2-4 mai 2026.
 2. ~~**Chantier 4**~~ ✅ observabilite proactive coach loop.
-3. ~~**P1 post-event reply verifier**~~ ✅ implemente localement.
+3. ~~**P1 post-event reply verifier + P1-bis PlanPatch confirmation parity**~~ ✅ implemente localement.
 4. **Maintenant : Chantier 3B-A** — heartbeat tool-use read-only. Le coach peut
    verifier plan, activites, constraints, load avant de parler.
 5. **Puis : Chantier 3B-B** — PlanPatch propose + confirmation Telegram,
