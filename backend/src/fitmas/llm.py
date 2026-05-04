@@ -457,11 +457,22 @@ def decide(
 
         parsed_decision = _parse_llm_decision_payload(data)
         if parsed_decision is None:
-            data = _repair_invalid_decision_payload(data=_last_invalid_decision_payload, system=system_prompt, prompt=prompt)
+            initial_invalid_payload = _last_invalid_decision_payload
+            data = _repair_invalid_decision_payload(data=initial_invalid_payload, system=system_prompt, prompt=prompt)
             parsed_decision = _parse_llm_decision_payload(data)
+            if parsed_decision is None:
+                parsed_decision = _repair_execution_receipt_without_action_decision(
+                    data=_last_invalid_decision_payload or data or initial_invalid_payload,
+                    coach_context=coach_context,
+                )
         if parsed_decision is None:
             data = _request_claude_decision_fallback(system=system_prompt, prompt=prompt)
             parsed_decision = _parse_llm_decision_payload(data)
+            if parsed_decision is None:
+                parsed_decision = _repair_execution_receipt_without_action_decision(
+                    data=_last_invalid_decision_payload or data,
+                    coach_context=coach_context,
+                )
         if parsed_decision is None:
             return None
 
@@ -734,6 +745,15 @@ def _optional_str(value: Any) -> str | None:
     return text or None
 
 
+def _optional_int(value: Any) -> int | None:
+    if value in (None, ""):
+        return None
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
 def _normalize_memory_actions(raw: Any) -> tuple[dict[str, Any], ...]:
     if not isinstance(raw, (list, tuple)):
         return ()
@@ -872,6 +892,58 @@ def _message_claims_execution_receipt_without_action(message: str, *, rationale:
         "execution manquee",
     )
     return any(marker in normalized for marker in receipt_markers)
+
+
+def _repair_execution_receipt_without_action_decision(
+    *,
+    data: dict[str, Any] | None,
+    coach_context: dict | None,
+) -> CoachDecision | None:
+    """Repair a semantic miss after the LLM already understood the execution receipt.
+
+    This does not parse the user's free text. It only reacts to an invalid LLM
+    artifact that already says the previous session was missed, and it requires
+    the conversation pipeline to provide the structured follow-up session id.
+    """
+    if not isinstance(data, dict):
+        return None
+    fitmas_message = str(data.get("fitmas_message") or "").strip()
+    rationale = str(data.get("rationale") or "").strip()
+    if not fitmas_message or not rationale:
+        return None
+    if not _message_claims_execution_receipt_without_action(fitmas_message, rationale=rationale):
+        return None
+    followup_session_id = _optional_int((coach_context or {}).get("unresolved_execution_followup_session_id"))
+    if followup_session_id is None:
+        return None
+    evidence_parts = [part for part in (rationale, fitmas_message) if part]
+    evidence = " | ".join(evidence_parts)
+    if len(evidence) > 240:
+        evidence = evidence[:237].rstrip() + "..."
+    repaired_payload = {
+        "response_type": "no_change",
+        "rationale": rationale,
+        "fitmas_message": fitmas_message,
+        "execution_actions": [
+            {
+                "type": "record_execution_update",
+                "target_ref": "seance d'hier",
+                "target_session_id": followup_session_id,
+                "status": "not_completed",
+                "completed": False,
+                "confidence": 0.85,
+                "evidence": evidence,
+            }
+        ],
+        "pending_resolution": data.get("pending_resolution"),
+    }
+    decision = parse_coach_decision_payload(repaired_payload)
+    if decision is not None:
+        logger.info(
+            "llm.coach_decision_semantic_repair reason=execution_receipt_without_action target_session_id=%s",
+            followup_session_id,
+        )
+    return decision
 
 
 def _normalize_bool(raw: Any) -> bool | None:

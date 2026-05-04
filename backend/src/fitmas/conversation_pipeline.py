@@ -175,10 +175,14 @@ def run_conversation_turn(
         )
     )
     unresolved_execution_followup_text: str | None = None
+    unresolved_execution_followup_session_id: int | None = None
+    unresolved_execution_followup_target_date: str | None = None
     if clarification is not None:
         yesterday = conversation_context.temporal_resolution.local_date.fromordinal(
             conversation_context.temporal_resolution.local_date.toordinal() - 1
         )
+        unresolved_execution_followup_session_id = clarification.session_id
+        unresolved_execution_followup_target_date = yesterday.isoformat()
         unresolved_execution_followup_text = render_unresolved_execution_followup(
             clarification,
             target_date_iso=yesterday.isoformat(),
@@ -294,6 +298,8 @@ def run_conversation_turn(
                 turn_plan=turn_plan,
             ),
             "unresolved_execution_followup": unresolved_execution_followup_text,
+            "unresolved_execution_followup_session_id": unresolved_execution_followup_session_id,
+            "unresolved_execution_followup_target_date": unresolved_execution_followup_target_date,
         },
         remembered_facts=state.active_facts,
         time_context=conversation_context.time_context,

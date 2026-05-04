@@ -1271,6 +1271,44 @@ class LLMToolsTest(unittest.TestCase):
         self.assertEqual(len(decision.execution_actions), 1)
         self.assertIn("execution_actions", prompts[1])
 
+    def test_decide_repairs_execution_receipt_after_failed_json_repair_when_followup_target_is_structured(self) -> None:
+        original_client = llm._client
+        original_request_structured_json = llm._request_structured_json
+        prompts: list[str] = []
+
+        def fake_request_structured_json(*, system, messages, model="claude-haiku-4-5-20251001", max_tokens=1024):
+            prompts.append(str(messages[0]["content"]))
+            return {
+                "response_type": "no_change",
+                "rationale": "Utilisateur signale un imprevu hier, seance non faite.",
+                "fitmas_message": "Vu pour hier. On repart proprement ce matin.",
+            }
+
+        llm._client = lambda: object()
+        llm._request_structured_json = fake_request_structured_json
+        with patch.dict("os.environ", {}, clear=True):
+            try:
+                decision = llm.decide(
+                    "J'ai pas eu le temps hier malheureusement",
+                    "Repere",
+                    coach_context={
+                        "unresolved_execution_followup": "Suivi execution non resolu",
+                        "unresolved_execution_followup_session_id": 123,
+                        "unresolved_execution_followup_target_date": "2026-05-03",
+                    },
+                )
+            finally:
+                llm._client = original_client
+                llm._request_structured_json = original_request_structured_json
+
+        self.assertIsInstance(decision, llm.CoachDecision)
+        self.assertEqual(decision.response_type, "no_change")
+        self.assertEqual(len(decision.execution_actions), 1)
+        self.assertEqual(decision.execution_actions[0].target_session_id, 123)
+        self.assertEqual(decision.execution_actions[0].status, "not_completed")
+        self.assertIs(decision.execution_actions[0].completed, False)
+        self.assertGreaterEqual(len(prompts), 2)
+
     def test_decide_rejects_truncated_confirmation_message_and_repairs(self) -> None:
         original_client = llm._client
         original_request_structured_json = llm._request_structured_json

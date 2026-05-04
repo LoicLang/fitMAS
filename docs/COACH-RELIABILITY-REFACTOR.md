@@ -102,6 +102,28 @@ la prose finale libre. Ne pas le faire avant.
 - [x] smoke reel `heartbeat_non_completion` applique bien `skipped` via
   `execution_actions`.
 
+## P1-ter — Execution receipt repair ✅ implemente localement 4 mai 2026
+
+Apres 3B-A, un smoke reel a isole un cas residuel : le LLM pouvait reconnaitre
+"pas fait hier" dans `fitmas_message` / `rationale` mais oublier
+`execution_actions`. La sortie etait justement invalidee par
+`execution_receipt_without_action`, puis pouvait finir en outage si le repair
+JSON renvoyait encore le meme oubli.
+
+Fix livre :
+- `conversation_pipeline.py` transmet la cible follow-up sous forme structuree
+  (`unresolved_execution_followup_session_id`) au lieu de seulement injecter un
+  bloc texte dans le prompt ;
+- `llm.py` ajoute un repair semantique local apres echec du JSON repair :
+  uniquement si l'artefact LLM invalide reconnait lui-meme l'execution manquee
+  et qu'une cible follow-up structuree existe ;
+- le repair produit `CoachDecision(no_change)` +
+  `execution_actions=[record_execution_update(status=not_completed)]`.
+
+Frontiere : aucun parsing du texte utilisateur libre. Le code repare un artefact
+LLM fautif contre une cible DB deja identifiee ; sans cible structuree, il ne
+synthetise pas d'action.
+
 ## P1 prioritaire — Post-event reply verifier ✅ implemente localement 4 mai 2026
 
 Apres Chantier 4, le dogfood a isole une classe plus dangereuse que la voix

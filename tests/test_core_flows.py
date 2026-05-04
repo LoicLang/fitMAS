@@ -973,15 +973,16 @@ class FitMASCoreFlowsTest(unittest.TestCase):
         "Tu l'as faite ou pas ?" reply (which looped on missed sessions).
         It is surfaced as soft prompt context — the LLM arbitrates whether
         to ask, integrate or move on."""
-        self._seed_uncertain_yesterday_key_session()
+        _, yesterday_session = self._seed_uncertain_yesterday_key_session()
         captured: dict[str, object] = {}
         original_decide = api_messages.decide
         original_extract_facts = api_messages.extract_facts
         try:
             def fake_decide(*args, **kwargs):
-                captured["unresolved_followup"] = (
-                    kwargs.get("coach_context", {}).get("unresolved_execution_followup")
-                )
+                coach_context = kwargs.get("coach_context", {})
+                captured["unresolved_followup"] = coach_context.get("unresolved_execution_followup")
+                captured["unresolved_followup_session_id"] = coach_context.get("unresolved_execution_followup_session_id")
+                captured["unresolved_followup_target_date"] = coach_context.get("unresolved_execution_followup_target_date")
                 return MutationDecision(
                     mutation_type="no_change",
                     rationale="J'ai vu hier flou, je decide moi-meme.",
@@ -999,6 +1000,8 @@ class FitMASCoreFlowsTest(unittest.TestCase):
         followup = captured.get("unresolved_followup") or ""
         self.assertIn("Suivi execution non resolu", followup)
         self.assertIn("Tu l'as faite ou pas", followup)
+        self.assertEqual(captured.get("unresolved_followup_session_id"), yesterday_session.id)
+        self.assertTrue(str(captured.get("unresolved_followup_target_date") or "").strip())
 
     def test_targeted_clarification_does_not_trigger_fatigue_adaptation_without_llm(self) -> None:
         """Phase 0: fatigue text is not auto-adapted when the LLM decision is unavailable."""

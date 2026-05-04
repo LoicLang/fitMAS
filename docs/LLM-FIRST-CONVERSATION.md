@@ -363,6 +363,13 @@ Taches :
   que le user mentionne sante/dispo/execution. Cette revue est diagnostic, pas un
   nouveau parser runtime.
 
+Etat 4 mai 2026 : `heartbeat_non_completion` est verrouille par un repair
+semantique qui ne lit pas le texte utilisateur. Si le LLM reconnait dans son
+artefact invalide que la seance d'hier est manquee mais oublie
+`execution_actions`, et si le contexte systeme contient une cible follow-up
+structuree, le backend reconstruit un `record_execution_update` borne. Sans
+cible structuree, pas d'action synthetisee.
+
 ### Phase 5 - Tool-use loop unifie (Chantier 3 du plan 2 mai 2026)
 
 Objectif : passer le runtime conversation **et** le runtime heartbeat d'un modele "structured output JSON terminal" vers un **vrai tool-use loop multi-rounds** ou les actions deviennent des tools natifs et la reponse finale au user est de la prose libre.
