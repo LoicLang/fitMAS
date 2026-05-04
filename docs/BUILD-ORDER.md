@@ -60,12 +60,12 @@ L'audit declenche par cet incident a confirme 3 failles structurelles connexes :
 | 2 | ✅ Truth source runtime core — `ScheduledSession` seul pour mutations/signals/activity matching — shippe 3 mai 2026 | 1j | `docs/COACH-COHERENCE-REFACTOR.md` section "Plan 2 mai 2026" |
 | 3A | ✅ Conversation tool loop partiel — multi-round read/validation + `validate_plan_patch`, `PlanPatch` conserve — shippe 3 mai, deploye 4 mai 2026 | 1.5j | section ci-dessous |
 | 3A-bis | ✅ Heartbeat read-only fake-action guard — LLM judge systematique `ALLOW/BLOCK` sur chaque sortie heartbeat, sans regex fake-action — 4 mai 2026 | 0.5j | section ci-dessous |
-| 4 | ✅ Observabilite proactive coach loop — dump contexte, prompt, decision `send/no_send`, judge, message final — implemente localement 4 mai 2026 | 0.5j | section ci-dessous |
-| P1 | ✅ Post-event reply verifier — verifier/reparer toute phrase finale post-mutation contre `events_committed + session_changes` — implemente localement 4 mai 2026 | 0.5j | section ci-dessous |
-| P1-bis | ✅ PlanPatch confirmation parity — changement de sport sur seance cle repasse par confirmation, comme `MutationDecision` — implemente localement 4 mai 2026 | 0.5h | section ci-dessous |
-| 3B-A | ✅ Tool-use loop proactive heartbeat read-only — le coach relit la verite recente avant de parler — implemente localement 4 mai 2026 | 0.5j | `docs/LLM-FIRST-CONVERSATION.md` section "Phase 5 - Tool-use loop unifie" |
-| P1-ter | ✅ Execution receipt repair hardening — plus d'outage generique si le LLM reconnait "pas fait hier" sans `execution_actions` et qu'une cible follow-up est structuree — implemente localement 4 mai 2026 | 0.5j | section ci-dessous |
-| P1-quater | ✅ Dogfood API fallout — execution action verifier + post-event date facts + target ambiguity + durable availability memory — implemente localement 4 mai 2026 | 0.5-1j | section ci-dessous |
+| 4 | ✅ Observabilite proactive coach loop — dump contexte, prompt, decision `send/no_send`, judge, message final — deploye 4 mai 2026 | 0.5j | section ci-dessous |
+| P1 | ✅ Post-event reply verifier — verifier/reparer toute phrase finale post-mutation contre `events_committed + session_changes` — deploye 4 mai 2026 | 0.5j | section ci-dessous |
+| P1-bis | ✅ PlanPatch confirmation parity — changement de sport sur seance cle repasse par confirmation, comme `MutationDecision` — deploye 4 mai 2026 | 0.5h | section ci-dessous |
+| 3B-A | ✅ Tool-use loop proactive heartbeat read-only — le coach relit la verite recente avant de parler — deploye 4 mai 2026 | 0.5j | `docs/LLM-FIRST-CONVERSATION.md` section "Phase 5 - Tool-use loop unifie" |
+| P1-ter | ✅ Execution receipt repair hardening — plus d'outage generique si le LLM reconnait "pas fait hier" sans `execution_actions` et qu'une cible follow-up est structuree — deploye 4 mai 2026 | 0.5j | section ci-dessous |
+| P1-quater | ✅ Dogfood API fallout — execution action verifier + post-event date facts + target ambiguity + durable availability memory — deploye 4 mai 2026 | 0.5-1j | section ci-dessous |
 | 3B-B | Proactive PlanPatch propose + confirmation, pas de commit autonome | 2j | `docs/LLM-FIRST-CONVERSATION.md` |
 | 3B-C | Action-tools natifs bornes, apres preuves 3B-A/B | 2-3j | `docs/RUNTIME-TOOLS.md` |
 | **A+** | **Phase A+ Weekly Coherence Review** (apres 3B ou si 3B non bloquant, avant Phase B) | 3-4j | section "Phase A+" ci-dessous |
@@ -74,20 +74,21 @@ L'audit declenche par cet incident a confirme 3 failles structurelles connexes :
 
 ### Deploiement prod — 4 mai 2026
 
-`main` est deploye sur Fly.io au commit `60e4db7`.
+`main` est deploye sur Fly.io avec le bloc Phase A/P1-quater du 4 mai 2026.
 
 Livres ensemble :
 - Chantier 2 truth source runtime core ;
 - Chantier 3A conversation tool loop partiel ;
 - retry JSON court apres tool-use DeepSeek avant repair lourd ;
 - idempotence Telegram/API via `client_message_key` pour eviter double traitement apres timeout ou reponse perdue ;
-- heartbeat read-only fake-action guard via LLM judge `ALLOW/BLOCK`, sans regex fake-action.
+- heartbeat read-only fake-action guard via LLM judge `ALLOW/BLOCK`, sans regex fake-action ;
+- P1-quater dogfood API fallout : coherence `execution_actions`, facts date/day post-event, confirmation cible planning ambigue, memoire disponibilite.
 
 Verification avant deploy :
-- `./scripts/test-backend -q` : 627 passed, 11 skipped, 6 subtests passed ;
+- `./scripts/test-backend -q` : 648 passed, 11 skipped, 6 subtests passed ;
 - `.venv/bin/python -m compileall backend/src/fitmas` : OK ;
-- smoke reel DeepSeek `golden_case_autonomy` + `today_unavailability` : exit 0, tools bien appeles ;
-- health prod `https://the deployed app/health` : `{"status":"ok"}`.
+- `git diff --check` : OK ;
+- smoke reel DeepSeek `heartbeat_non_completion` : exit 0, renfo J-1 marque `skipped`.
 
 Dette observee dans le smoke reel : `weekly_review` pouvait encore dire "regarde ton app demain matin, j'ai ajuste le planning" alors qu'aucune mutation n'etait appliquee. Traitement 3A-bis : LLM judge `ALLOW/BLOCK` systematique sur chaque sortie heartbeat read-only.
 
@@ -537,7 +538,7 @@ Verification :
 Ce P1 est distinct de 3B-A : il touche la conversation reactive, pas le
 heartbeat read-tools. Il ferme la base execution avant 3B-B.
 
-### P1-quater — Dogfood API fallout ✅ implemente localement 4 mai 2026
+### P1-quater — Dogfood API fallout ✅ deploye 4 mai 2026
 
 Tests reels API/DeepSeek du 4 mai (agent de test read-only) apres 3B-A/P1-ter.
 `heartbeat_non_completion` etait deja corrige cote agent principal, mais quatre

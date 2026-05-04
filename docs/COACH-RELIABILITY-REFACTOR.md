@@ -129,7 +129,7 @@ LLM fautif contre une cible DB deja identifiee ou une reference naturelle bornee
 que le writer doit resoudre contre la DB ; sans resolution unique, il ne
 synthetise pas d'action.
 
-## P1-quater — Dogfood API fallout ✅ implemente localement 4 mai 2026
+## P1-quater — Dogfood API fallout ✅ deploye 4 mai 2026
 
 Apres les tests API reels, quatre incoherences restaient trop fragiles avant
 3B-B :
