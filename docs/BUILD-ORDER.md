@@ -72,6 +72,9 @@ L'audit declenche par cet incident a confirme 3 failles structurelles connexes :
 | 3B-C | ✅ Action-tools natifs bornes, **apres A+ core gate** — `draft_move_session`, `draft_swap_sessions`, `draft_replace_session`, `draft_lighten_day`, `draft_create_session`, candidates PlanPatch sans write — implemente localement 5 mai 2026 | 2-3j | `docs/RUNTIME-TOOLS.md` |
 | A+4 | ✅ Tool `validate_week_coherence` validation-only conversation/planning/heartbeat + capture pending heartbeat reviewee — implemente localement 5 mai 2026 | 0.5-1j | `docs/SPORT-QUALITY-REVIEW.md` |
 | A+5 | ✅ Review semaine generee avant commit — guard avant `replace_plan` / `ScheduledSession`, fallback conservative si policy review non `valid`, fallback persistable sauf `blocked` — implemente localement 5 mai 2026 | 1j | `docs/SPORT-QUALITY-REVIEW.md` |
+| P1-quinquies | ✅ Lane terminale `close_turn` — clotures sociales sans tools, sans marker question ouverte, composer final via `final_reply.py` — implemente localement 5 mai 2026 | 0.5j | `docs/superpowers/plans/2026-05-05-terminal-close-lane.md` |
+| P1-sexies | ✅ Composer final `no_change` — `CoachDecision(no_change)` + compat legacy passent par `final_reply.py`, avec faits memoire/execution appliques — implemente localement 5 mai 2026 | 0.5j | `docs/superpowers/plans/2026-05-05-no-change-final-composer.md` |
+| P1-septies | ✅ Composer final `plan_lookup` — lecture factuelle via `final_reply.py` avec guard anti-drift chiffres/jours/zones/statuts — implemente localement 5 mai 2026 | 0.5j | `docs/superpowers/plans/2026-05-05-plan-lookup-final-composer.md` |
 
 **Total restant avant B0 : 0 jour**. Phase A+ est fermee localement. Prochaine lane : dogfood court puis B0 si stable.
 

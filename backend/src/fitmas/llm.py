@@ -185,6 +185,9 @@ _DAYS_FR_TO_EN = {
 }
 
 _TURN_INTENT_TO_PROMPT_INTENT = {
+    "close_turn": IntentCategory.CLOSE_TURN,
+    "trivial_ack": IntentCategory.CLOSE_TURN,
+    "casual_chat": IntentCategory.CLOSE_TURN,
     "availability_constraint": IntentCategory.PLAN_NEGOTIATION,
     "plan_mutation": IntentCategory.PLAN_NEGOTIATION,
     "plan_lookup": IntentCategory.PLAN_LOOKUP,
@@ -211,6 +214,7 @@ _CONVERSATION_TOOL_BUDGET = (
     "validate_plan_patch",
     "validate_week_coherence",
 )
+_TERMINAL_NO_TOOL_INTENTS = {"close_turn", "trivial_ack", "casual_chat"}
 _ALLOWED_MUTATION_TYPES = {
     "move_session",
     "lighten_day",
@@ -282,6 +286,11 @@ def _normalize_day(raw: str | None) -> str | None:
 def _prompt_intent_from_turn_context(coach_context: dict | None) -> IntentCategory | None:
     primary_intent = str((coach_context or {}).get("turn_primary_intent") or "")
     return _TURN_INTENT_TO_PROMPT_INTENT.get(primary_intent)
+
+
+def _is_terminal_no_tool_intent(coach_context: dict | None) -> bool:
+    primary_intent = str((coach_context or {}).get("turn_primary_intent") or "")
+    return primary_intent in _TERMINAL_NO_TOOL_INTENTS
 
 
 def _client():
@@ -418,7 +427,7 @@ def decide(
         routing_reason=None,
         intent=effective_intent,
     )
-    tool_names = _tool_budget_for_context(tool_context)
+    tool_names = () if _is_terminal_no_tool_intent(coach_context) else _tool_budget_for_context(tool_context)
     selected_facts = (coach_context or {}).get("selected_facts") or select_prompt_facts(remembered_facts or [])
     unresolved_execution_followup = (coach_context or {}).get("unresolved_execution_followup")
     prompt_bundle = build_layered_conversation_prompt(

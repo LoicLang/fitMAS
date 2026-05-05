@@ -260,7 +260,9 @@ def _latest_agent_message(history: list[dict[str, Any]] | None) -> str | None:
     return None
 
 
-def _open_question_block(history: list[dict[str, Any]] | None) -> str:
+def _open_question_block(history: list[dict[str, Any]] | None, *, enabled: bool = True) -> str:
+    if not enabled:
+        return ""
     coach_text = _latest_agent_message(history)
     question = detect_open_question(coach_text)
     if not question:
@@ -354,7 +356,10 @@ def build_conversation_prompt_bundle(
     if signal_summary and prompt_policy.include_signals:
         signal_block = f"\n{signal_summary}\n"
 
-    open_question_block = _open_question_block(conversation_history)
+    open_question_block = _open_question_block(
+        conversation_history,
+        enabled=prompt_policy.include_open_question_marker,
+    )
 
     followup_block = ""
     if unresolved_execution_followup:
@@ -411,7 +416,7 @@ def build_layered_conversation_prompt(
     then wraps the result in the same ConversationPromptBundle for compatibility.
     """
     layered = assemble_layered_prompt(
-        coach_context=coach_context,
+        coach_context=coach_context if prompt_policy.include_coach_context else None,
         profile_summary=profile_summary,
         time_block=time_block,
         plan_summary=None,
@@ -459,7 +464,10 @@ def build_layered_conversation_prompt(
     ]
     if prompt_policy.include_timeline and timeline_summary:
         prompt_parts.append(f"Calendrier daté utile:\n{timeline_summary}")
-    open_question_block = _open_question_block(conversation_history)
+    open_question_block = _open_question_block(
+        conversation_history,
+        enabled=prompt_policy.include_open_question_marker,
+    )
     if open_question_block:
         prompt_parts.append(open_question_block.strip())
     if unresolved_execution_followup:

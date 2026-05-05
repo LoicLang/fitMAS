@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import sys
 from contextlib import contextmanager
@@ -248,7 +249,7 @@ def _print_turn(label: str, response: dict, before: dict, after: dict) -> None:
     print("")
 
 
-def _post_message(client: TestClient, db: SessionLocal, user: s.User, text: str) -> None:
+def _post_message(client: TestClient, db: SessionLocal, user: s.User, text: str) -> dict:
     before = _snapshot(db, user.id)
     response = client.post("/api/v0/messages", json={"text": text})
     response.raise_for_status()
@@ -256,6 +257,7 @@ def _post_message(client: TestClient, db: SessionLocal, user: s.User, text: str)
     db.expire_all()
     after = _snapshot(db, user.id)
     _print_turn(text, payload, before, after)
+    return payload
 
 
 @contextmanager
@@ -309,6 +311,36 @@ def _setup_base(db: SessionLocal, *, vague_week: bool = False, strong_next_day_h
 
 def scenario_empty_ack(db: SessionLocal, client: TestClient, user: s.User) -> None:
     _post_message(client, db, user, "ok merci")
+
+
+def scenario_close_turn_open_question(db: SessionLocal, client: TestClient, user: s.User) -> None:
+    persist_draft(
+        user.id,
+        CoachDraft(text="Tu dis Okay chef - t'attends quoi de moi ? Un point sur la semaine ?"),
+        db=db,
+    )
+    payload = _post_message(client, db, user, "Okay chef")
+    turn = (
+        db.query(s.ConversationTurnRecord)
+        .filter(s.ConversationTurnRecord.user_id == user.id)
+        .order_by(s.ConversationTurnRecord.id.desc())
+        .first()
+    )
+    if turn is None:
+        raise AssertionError("Expected a persisted close-turn conversation record")
+    context = json.loads(turn.context_json or "{}")
+    reply_text = str((payload.get("assistant_message") or {}).get("text") or "")
+    normalized_reply = reply_text.lower()
+    if turn.response_mode != "close_turn_composed":
+        raise AssertionError(f"Expected close_turn_composed, got {turn.response_mode}")
+    if "?" in reply_text or "attends quoi" in normalized_reply:
+        raise AssertionError(f"Expected terminal close without relance, got: {reply_text}")
+    if context.get("terminal_close") is not True:
+        raise AssertionError(f"Expected terminal_close context, got: {context}")
+    if context.get("tools_offered") != 0:
+        raise AssertionError(f"Expected zero tools offered, got: {context}")
+    if context.get("open_question_marker") != "suppressed":
+        raise AssertionError(f"Expected suppressed open-question marker, got: {context}")
 
 
 def scenario_greeting(db: SessionLocal, client: TestClient, user: s.User) -> None:
@@ -709,6 +741,11 @@ def scenario_heartbeat_non_completion(db: SessionLocal, client: TestClient, user
 
 SCENARIOS: list[Scenario] = [
     Scenario("empty_ack", "Petit ack sans info utile", scenario_empty_ack),
+    Scenario(
+        "close_turn_open_question",
+        "Cloture sociale apres question ouverte: pas de relance, pas de tools",
+        scenario_close_turn_open_question,
+    ),
     Scenario("greeting", "Petit message social", scenario_greeting),
     Scenario("info_query", "Question factuelle sur l'historique", scenario_info_query),
     Scenario("execution_update", "Declaration d'activite puis correction temporelle", scenario_execution_update),

@@ -72,6 +72,25 @@ Un seul agent decisionnaire par tour.
 Les loops de tools read-only sont autorisees : ce n'est pas un deuxieme cerveau,
 c'est le meme LLM qui lit la verite systeme avant de decider.
 
+Exception d'orchestration terminale (5 mai 2026) : si le turn planner LLM sort
+`primary_intent=close_turn`, le backend peut fermer le tour sans appeler le gros
+`decide()` quand aucun pending, calibration ouverte ou signal secondaire n'est
+actif. Cette branche ne comprend pas le texte user elle-meme : elle applique une
+policy sur un artefact LLM et l'etat machine, puis confie la phrase finale a
+`final_reply.py`.
+
+Extension prose finale (5 mai 2026) : apres une decision `no_change`, le backend
+peut confier la phrase visible a `final_reply.py` avec le brouillon LLM initial
+et les faits machine deja appliques (`memory_actions`, `execution_actions`).
+Le composer ne redecide pas : il reformule le resultat valide.
+
+Extension `plan_lookup` (5 mai 2026) : les tours lus comme questions factuelles
+par le turn planner LLM utilisent un composer final dedie. La sortie composee
+est comparee au brouillon LLM initial sur des tokens factuels sensibles
+(chiffres, jours, dates relatives, zones, statuts). Si elle derive, elle est
+rejetee. Cette verification ne lit pas le texte utilisateur libre ; elle juge
+une transformation post-LLM.
+
 ## Contrat CoachDecision cible
 
 Le LLM peut proposer plusieurs actions dans une seule sortie structuree.
@@ -125,6 +144,8 @@ Regles :
 Autorise :
 
 - parser la sortie LLM structuree
+- appliquer une policy d'orchestration sur un intent LLM structure (`close_turn`)
+  et sur l'etat machine (pending/calibration/signaux secondaires)
 - valider les types et les champs requis
 - verifier qu'un `target_ref` LLM correspond a une seule seance
 - refuser si la cible est ambigue
@@ -134,6 +155,10 @@ Autorise :
 - logguer un audit event
 - reparer du JSON invalide de forme avant validation schema
 - comparer une reply LLM avec des events post-LLM pour detecter une promesse non committee
+- reformuler une reply finale via `final_reply.py` depuis un brouillon LLM et des
+  faits machine deja valides/appliques
+- comparer un brouillon LLM factuel et sa reply composee pour refuser une derive
+  de chiffre, jour, date relative, zone ou statut
 
 Interdit :
 

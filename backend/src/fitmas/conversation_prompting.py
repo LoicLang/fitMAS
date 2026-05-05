@@ -17,10 +17,24 @@ class ConversationPromptPolicy:
     include_signals: bool = True
     include_facts: bool = True
     include_coach_context: bool = True
+    include_open_question_marker: bool = True
 
 
 # Maps intent categories to prompt policies for context compaction.
 _INTENT_POLICIES: dict[IntentCategory, ConversationPromptPolicy] = {
+    IntentCategory.CLOSE_TURN: ConversationPromptPolicy(
+        name="casual_close",
+        history_limit=3,
+        include_plan_summary=False,
+        include_timeline=False,
+        include_execution=False,
+        include_temporal=True,
+        include_claim=False,
+        include_signals=False,
+        include_facts=False,
+        include_coach_context=False,
+        include_open_question_marker=False,
+    ),
     IntentCategory.CASUAL_CHAT: ConversationPromptPolicy(
         name="casual_compact",
         history_limit=6,

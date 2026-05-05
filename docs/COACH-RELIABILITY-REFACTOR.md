@@ -203,3 +203,38 @@ Acceptance :
 - [ ] smoke `week_scope_constraint` reel a relancer apres commit/deploy : la
   phrase finale ne doit plus dire "decale a jeudi" si l'event reel est un
   remplacement par `Journee flexible`.
+
+## P1-sexies — No-change final composer ✅ implemente localement 5 mai 2026
+
+Le premier slice du virage "composer final en derniere couche" couvre les tours
+sans mutation planning :
+
+- `CoachDecision(response_type="no_change")`
+- compat legacy `MutationDecision(mutation_type="no_change")`
+
+Le backend applique d'abord les actions structurees deja autorisees
+(`memory_actions`, `execution_actions`), puis construit un `FinalReplyContext`
+avec :
+
+- brouillon LLM initial ;
+- absence de commit planning ;
+- actions memoire/execution effectivement appliquees.
+
+Si le composer echoue ou est desactive, le pipeline garde le brouillon LLM
+initial. Aucune template backend ne parle a sa place.
+
+## P1-septies — Plan-lookup final composer ✅ implemente localement 5 mai 2026
+
+Le deuxieme slice du virage "composer final en derniere couche" couvre les tours
+de lecture factuelle (`turn_plan.primary_intent=plan_lookup`) quand la decision
+finale reste sans mutation planning.
+
+Diff avec `no_change` generique :
+
+- capability dediee `plan_lookup` dans `FinalReplyContext` ;
+- prompt de composition oriente preservation des faits ;
+- validation post-composer qui refuse une derive de tokens factuels sensibles
+  entre brouillon LLM initial et reply finale.
+
+Tokens surveilles : chiffres, jours, dates relatives, zones type `Z2`, statuts
+plan/execution. Le guard ne lit jamais le texte utilisateur libre.

@@ -48,6 +48,19 @@ class ConversationPromptingTest(unittest.TestCase):
         self.assertFalse(policy.include_timeline)
         self.assertFalse(policy.include_signals)
 
+    def test_close_turn_uses_terminal_policy(self) -> None:
+        policy = select_conversation_prompt_policy(intent=IntentCategory.CLOSE_TURN)
+
+        self.assertEqual(policy.name, "casual_close")
+        self.assertEqual(policy.history_limit, 3)
+        self.assertFalse(policy.include_timeline)
+        self.assertFalse(policy.include_execution)
+        self.assertFalse(policy.include_claim)
+        self.assertFalse(policy.include_signals)
+        self.assertFalse(policy.include_facts)
+        self.assertFalse(policy.include_coach_context)
+        self.assertFalse(policy.include_open_question_marker)
+
     def test_intent_takes_precedence_over_routing_reason(self) -> None:
         policy = select_conversation_prompt_policy(
             routing_reason="fact_recall",

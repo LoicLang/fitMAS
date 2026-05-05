@@ -254,6 +254,33 @@ def run_conversation_turn(
         },
     }
 
+    if _should_use_terminal_close_path(
+        turn_plan=turn_plan,
+        pending_confirmation=pending_confirmation,
+        open_calibration_need=open_calibration_need,
+    ):
+        reply_text = final_reply.compose_close_turn_reply(
+            user_text=payload.text,
+            previous_agent_text=state.previous_agent_text,
+        ) or final_reply.close_turn_outage_fallback_reply()
+        turn_context.update(
+            {
+                "terminal_close": True,
+                "tools_offered": 0,
+                "open_question_marker": "suppressed",
+            }
+        )
+        return _reply_and_record_turn(
+            db=db,
+            user_id=user.id,
+            user_text=payload.text,
+            reply_text=reply_text,
+            extraction=Extraction(confidence=float(getattr(turn_plan, "confidence", 0.95) or 0.95)),
+            response_mode="close_turn_composed",
+            turn_context=turn_context,
+            memory_writes=turn_memory_writes,
+        )
+
     # Chantier 1 (autonomy refactor): decide() runs on every conversational
     # turn that is not a calibration-only ack. The deterministic groundings
     # (availability, adaptation, execution contestation, low-signal) are
@@ -461,6 +488,18 @@ def run_conversation_turn(
             decision = None
         else:
             reply_text = decision.confirmation_reason or decision.fitmas_message
+            response_mode = decision.response_type
+            if decision.response_type == "no_change":
+                reply_text, composed_mode = _compose_no_change_reply_for_turn(
+                    db=db,
+                    user=user,
+                    user_text=payload.text,
+                    original_reply=reply_text,
+                    turn_context=turn_context,
+                    action_result=turn_context.get("coach_decision_action_result") or {},
+                )
+                if composed_mode:
+                    response_mode = composed_mode
             legacy_no_change = MutationDecision(
                 mutation_type="no_change",
                 rationale=decision.rationale,
@@ -469,7 +508,7 @@ def run_conversation_turn(
             outcome = ConversationTurnOutcome(
                 extraction=Extraction(confidence=0.85),
                 reply_text=reply_text,
-                response_mode=decision.response_type,
+                response_mode=response_mode,
                 decision=legacy_no_change,
                 mutation_applied=False,
             )
@@ -515,14 +554,24 @@ def run_conversation_turn(
             )
             logger.info("Pending confirmation (%s): %s", decision.mutation_type, reply_text[:120])
         elif decision.mutation_type == "no_change":
+            reply_text, composed_mode = _compose_no_change_reply_for_turn(
+                db=db,
+                user=user,
+                user_text=payload.text,
+                original_reply=decision.fitmas_message,
+                turn_context=turn_context,
+            )
+            response_mode = composed_mode or "reply"
+            if composed_mode:
+                decision = decision.model_copy(update={"fitmas_message": reply_text})
             outcome = ConversationTurnOutcome(
                 extraction=Extraction(confidence=extraction_confidence),
-                reply_text=decision.fitmas_message,
-                response_mode="reply",
+                reply_text=reply_text,
+                response_mode=response_mode,
                 decision=decision,
                 mutation_applied=False,
             )
-            logger.info("LLM reply (%s): %s", decision.mutation_type, decision.fitmas_message[:120])
+            logger.info("LLM reply (%s): %s", decision.mutation_type, reply_text[:120])
         else:
             patch = plan_patch_from_mutation_decisions(
                 [decision],
@@ -1164,6 +1213,85 @@ def _final_reply_context_for_execution_applied_patch_block(
     )
 
 
+def _memory_action_phrases_for_final_reply(action_result: dict) -> tuple[str, ...]:
+    if int(action_result.get("memory_applied") or 0) <= 0:
+        return ()
+    return ("Memoire utilisateur mise a jour.",)
+
+
+def _execution_action_phrases_for_final_reply(
+    db: Session,
+    *,
+    user,
+    action_result: dict,
+) -> tuple[str, ...]:
+    phrases: list[str] = []
+    for raw_session_id in tuple(action_result.get("execution_updated_session_ids") or ()):
+        try:
+            session_id = int(raw_session_id)
+        except (TypeError, ValueError):
+            continue
+        session = repo.get_scheduled_session(db, user.id, session_id)
+        if session is None:
+            continue
+        title = str(session.session_title or "La seance").strip()
+        status = str(session.completion_status or "").strip()
+        if status == "done":
+            phrases.append(f"{title} notee comme faite.")
+        elif status == "skipped":
+            phrases.append(f"{title} notee comme non faite.")
+        else:
+            phrases.append(f"{title} mise a jour.")
+    if not phrases and int(action_result.get("execution_applied") or 0) > 0:
+        phrases.append("Execution notee.")
+    return tuple(phrases)
+
+
+def _compose_no_change_reply_for_turn(
+    *,
+    db: Session,
+    user,
+    user_text: str,
+    original_reply: str,
+    turn_context: dict[str, object],
+    action_result: dict | None = None,
+) -> tuple[str, str | None]:
+    action_result = action_result or {}
+    memory_actions_applied = _memory_action_phrases_for_final_reply(action_result)
+    execution_actions_applied = _execution_action_phrases_for_final_reply(
+        db,
+        user=user,
+        action_result=action_result,
+    )
+    capability = "plan_lookup" if _turn_context_primary_intent(turn_context) == "plan_lookup" else "no_change"
+    if capability == "plan_lookup":
+        composed_reply = final_reply.compose_plan_lookup_reply(
+            user_text=user_text,
+            original_llm_reply=original_reply,
+            memory_actions_applied=memory_actions_applied,
+            execution_actions_applied=execution_actions_applied,
+        )
+    else:
+        composed_reply = final_reply.compose_no_change_reply(
+            user_text=user_text,
+            original_llm_reply=original_reply,
+            memory_actions_applied=memory_actions_applied,
+            execution_actions_applied=execution_actions_applied,
+        )
+    if not composed_reply:
+        return original_reply, None
+    turn_context["final_reply_composed"] = True
+    turn_context["final_reply_capability"] = capability
+    return composed_reply, f"{capability}_composed"
+
+
+def _turn_context_primary_intent(turn_context: dict[str, object]) -> str:
+    turn_plan = turn_context.get("turn_plan")
+    if not isinstance(turn_plan, dict):
+        return ""
+    return str(turn_plan.get("primary_intent") or "")
+
+
 def _plan_patch_needs_confirmation(service_result: PlanPatchServiceResult | None) -> bool:
     if service_result is None:
         return False
@@ -1484,6 +1612,27 @@ def _turn_plan_payload(turn_plan) -> dict | None:
         }
     payload["has_plan_mutation"] = bool(getattr(turn_plan, "has_plan_mutation", False))
     return payload
+
+
+def _should_use_terminal_close_path(
+    *,
+    turn_plan,
+    pending_confirmation,
+    open_calibration_need,
+) -> bool:
+    if turn_plan is None:
+        return False
+    if str(getattr(turn_plan, "primary_intent", "") or "") != "close_turn":
+        return False
+    if bool(getattr(turn_plan, "has_plan_mutation", False)):
+        return False
+    if tuple(getattr(turn_plan, "secondary_intents", ()) or ()):
+        return False
+    if pending_confirmation is not None and str(getattr(pending_confirmation, "status", "") or "") == "pending":
+        return False
+    if open_calibration_need is not None:
+        return False
+    return True
 
 
 def _should_route_availability_context_to_llm(

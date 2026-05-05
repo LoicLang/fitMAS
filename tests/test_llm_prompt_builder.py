@@ -369,6 +369,55 @@ class OpenQuestionMarkerInjectionTest(unittest.TestCase):
         bundle = self._build(history=history, layered=False)
         self.assertNotIn("Question ouverte du tour precedent", bundle.prompt)
 
+    def test_terminal_close_policy_suppresses_open_question_marker(self) -> None:
+        history = [
+            {"role": "agent", "text": "Tu veux un point semaine ou on garde le plan ?"},
+            {"role": "user", "text": "Okay chef"},
+        ]
+        policy = ConversationPromptPolicy(
+            name="casual_close",
+            history_limit=3,
+            include_timeline=False,
+            include_execution=False,
+            include_claim=False,
+            include_signals=False,
+            include_facts=False,
+            include_coach_context=False,
+            include_open_question_marker=False,
+        )
+        classic = build_conversation_prompt_bundle(
+            user_text="Okay chef",
+            prompt_policy=policy,
+            time_block="Nous sommes mardi.",
+            plan_summary="",
+            timeline_summary="- id=1 | date=2026-05-06 | Footing",
+            execution_summary="Execution: planned_pending.",
+            temporal_summary="Repere temporel: demain = 2026-05-06.",
+            activity_claim_summary=None,
+            signal_summary="Signal: aucun.",
+            conversation_history=history,
+            coach_context={"coach_name": "FitMAS"},
+            selected_facts=["[preference] matin"],
+        )
+        layered = build_layered_conversation_prompt(
+            user_text="Okay chef",
+            prompt_policy=policy,
+            time_block="Nous sommes mardi.",
+            timeline_summary="- id=1 | date=2026-05-06 | Footing",
+            execution_summary="Execution: planned_pending.",
+            temporal_summary="Repere temporel: demain = 2026-05-06.",
+            activity_claim_summary=None,
+            signal_summary="Signal: aucun.",
+            conversation_history=history,
+            coach_context={"coach_name": "FitMAS"},
+            selected_facts=["[preference] matin"],
+        )
+
+        self.assertNotIn("Question ouverte du tour precedent", classic.prompt)
+        self.assertNotIn("Question ouverte du tour precedent", layered.prompt)
+        self.assertNotIn("Calendrier date reel", classic.prompt)
+        self.assertNotIn("Calendrier daté utile", layered.prompt)
+
 
 class UnresolvedExecutionFollowupInjectionTest(unittest.TestCase):
     """Chantier 3bis: when the pipeline detects an unresolved execution

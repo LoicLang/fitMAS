@@ -5,8 +5,14 @@ from fitmas.final_reply import (
     FinalReplyContext,
     build_post_event_reply_verifier_prompt,
     build_final_reply_prompt,
+    close_turn_outage_fallback_reply,
     compose_final_reply,
+    compose_close_turn_reply,
+    compose_no_change_reply,
+    compose_plan_lookup_reply,
+    is_valid_close_turn_reply,
     is_valid_final_reply,
+    is_valid_plan_lookup_reply,
     outage_fallback_reply,
     verify_post_event_reply,
 )
@@ -111,6 +117,106 @@ def test_outage_fallback_is_short_and_non_technical() -> None:
     assert "mutation" not in fallback.lower()
     assert "block_reason" not in fallback.lower()
     assert "n'ai applique aucun changement" not in fallback
+
+
+def test_close_turn_composer_uses_terminal_context() -> None:
+    def fake_request_text(**kwargs):
+        assert "terminal_close" in kwargs["prompt"]
+        assert "Ne relance pas le user" in kwargs["prompt"]
+        assert "Dernier message coach: Tu veux un point semaine ?" in kwargs["prompt"]
+        return "Carre, on garde ca."
+
+    reply = compose_close_turn_reply(
+        user_text="Okay chef",
+        previous_agent_text="Tu veux un point semaine ?",
+        request_text_fn=fake_request_text,
+    )
+
+    assert reply == "Carre, on garde ca."
+
+
+def test_close_turn_validation_rejects_questions_and_action_claims() -> None:
+    assert is_valid_close_turn_reply("Tu veux que je te fasse un point demain ?") is False
+    assert is_valid_close_turn_reply("Je deplace ca a demain.") is False
+    assert is_valid_close_turn_reply("Mutation enregistree.") is False
+    assert is_valid_close_turn_reply("Carre, on garde ca.") is True
+
+
+def test_close_turn_outage_fallback_is_terminal() -> None:
+    fallback = close_turn_outage_fallback_reply()
+
+    assert is_valid_close_turn_reply(fallback)
+    assert "?" not in fallback
+
+
+def test_no_change_composer_uses_original_reply_as_draft() -> None:
+    def fake_request_text(**kwargs):
+        assert "no_change" in kwargs["prompt"]
+        assert "Brouillon LLM initial: Je te fais le point sans toucher au plan." in kwargs["prompt"]
+        assert "Aucun changement planning n'a ete commit" in kwargs["prompt"]
+        return "Tu gardes le footing facile ce soir, sans chercher a en rajouter."
+
+    reply = compose_no_change_reply(
+        user_text="Je fais quoi ce soir ?",
+        original_llm_reply="Je te fais le point sans toucher au plan.",
+        request_text_fn=fake_request_text,
+    )
+
+    assert reply == "Tu gardes le footing facile ce soir, sans chercher a en rajouter."
+
+
+def test_no_change_composer_can_include_applied_non_plan_actions() -> None:
+    def fake_request_text(**kwargs):
+        assert "Renfo 34min notee comme non faite." in kwargs["prompt"]
+        assert "Memoire utilisateur mise a jour." in kwargs["prompt"]
+        return "Renfo note non fait. Ce soir tu gardes simple."
+
+    reply = compose_no_change_reply(
+        user_text="J'ai pas eu le temps hier",
+        original_llm_reply="Note pour hier. On garde ce matin simple.",
+        execution_actions_applied=("Renfo 34min notee comme non faite.",),
+        memory_actions_applied=("Memoire utilisateur mise a jour.",),
+        request_text_fn=fake_request_text,
+    )
+
+    assert reply == "Renfo note non fait. Ce soir tu gardes simple."
+
+
+def test_plan_lookup_composer_uses_fact_preservation_context() -> None:
+    def fake_request_text(**kwargs):
+        assert "plan_lookup" in kwargs["prompt"]
+        assert "ne change aucun fait date" in kwargs["prompt"].lower()
+        assert "Brouillon LLM initial: Demain: footing 36 min Z2." in kwargs["prompt"]
+        return "Demain, footing de 36 min en Z2."
+
+    reply = compose_plan_lookup_reply(
+        user_text="J'ai quoi demain ?",
+        original_llm_reply="Demain: footing 36 min Z2.",
+        request_text_fn=fake_request_text,
+    )
+
+    assert reply == "Demain, footing de 36 min en Z2."
+
+
+def test_plan_lookup_validation_rejects_fact_drift() -> None:
+    assert is_valid_plan_lookup_reply(
+        "Demain, footing de 40 min en Z2.",
+        original_llm_reply="Demain: footing 36 min Z2.",
+    ) is False
+    assert is_valid_plan_lookup_reply(
+        "Demain, footing de 36 min en Z2.",
+        original_llm_reply="Demain: footing 36 min Z2.",
+    ) is True
+
+
+def test_plan_lookup_composer_drops_fact_drift_output() -> None:
+    reply = compose_plan_lookup_reply(
+        user_text="J'ai quoi demain ?",
+        original_llm_reply="Demain: footing 36 min Z2.",
+        request_text_fn=lambda **kwargs: "Demain, footing de 40 min en Z2.",
+    )
+
+    assert reply is None
 
 
 def _committed_context() -> FinalReplyContext:

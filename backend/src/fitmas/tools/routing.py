@@ -5,6 +5,7 @@ from enum import Enum
 
 class IntentCategory(str, Enum):
     CASUAL_CHAT = "casual_chat"
+    CLOSE_TURN = "close_turn"
     EXECUTION_REPORT = "execution_report"
     PLAN_NEGOTIATION = "plan_negotiation"
     PLAN_LOOKUP = "plan_lookup"

@@ -12,6 +12,7 @@ logger = logging.getLogger(__name__)
 
 
 _PRIMARY_INTENTS = {
+    "close_turn",
     "trivial_ack",
     "casual_chat",
     "plan_lookup",
@@ -104,6 +105,10 @@ def _build_prompt(
         "health_signal": "douleur, fatigue, maladie, gene physique",
         "calibration_answer": "reponse courte a une question de calibration ouverte",
         "needs_clarification": "message ambigu dont la cible est risquee",
+        "close_turn": (
+            "accuse reception ou cloture sociale sans nouvelle contrainte, sans choix "
+            "de creneau, sans question plan, sans acceptation explicite d'un pending"
+        ),
     }
     return "\n".join(
         [
@@ -134,10 +139,14 @@ Regles:
 - Ne force pas une seule intention si le message est compose.
 - Un wording comme "vendredi a la place ?" peut etre une mutation meme sans mot-cle swap/decale.
 - Si la cible concrete manque, primary_intent=needs_clarification.
+- "Okay chef", "nickel merci", "parfait on garde ca", "carre" sans autre signal -> primary_intent=close_turn.
+- "Ok decale a vendredi" -> plan_mutation, pas close_turn.
+- "Ok mais j'ai mal au genou" -> health_signal, pas close_turn.
+- Si une confirmation pending existe dans le contexte aval, elle sera resolue par le coach decisionnaire; ne force pas close_turn sur une acceptation transactionnelle claire.
 
 Reponds uniquement avec un JSON valide:
 {
-  "primary_intent": "plan_mutation|plan_lookup|execution_report|availability_constraint|health_signal|calibration_answer|preference_signal|casual_chat|trivial_ack|needs_clarification",
+  "primary_intent": "close_turn|plan_mutation|plan_lookup|execution_report|availability_constraint|health_signal|calibration_answer|preference_signal|casual_chat|trivial_ack|needs_clarification",
   "secondary_intents": ["non_completion_claim|activity_claim|availability_constraint|health_signal|plan_mutation|preference_signal|calibration_answer"],
   "user_goal": "phrase courte",
   "mutation_signal": true,

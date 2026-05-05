@@ -156,6 +156,21 @@ runtime conversation :
   et le wrapper `tool_routing.py` sont supprimes. `tools/routing.py` ne contient
   plus de classifieur ni de budget de tools depuis le texte user; il garde
   seulement l'enum `IntentCategory` pour les policies de prompt.
+- Lane terminale `close_turn` (5 mai 2026) : quand le turn planner LLM classe
+  un message comme cloture sociale non transactionnelle, le backend verifie
+  l'absence de pending/calibration/signaux secondaires, n'offre aucun tool,
+  supprime le marker de question ouverte et compose la phrase finale via
+  `final_reply.py`. Ce n'est pas un parser d'ack : la decision de cloture vient
+  d'un artefact LLM + etat machine.
+- Composer final `no_change` (5 mai 2026) : les tours `CoachDecision(no_change)`
+  et legacy `MutationDecision(no_change)` passent par `final_reply.py` avant
+  l'envoi. Le backend transmet seulement des faits machine : brouillon LLM,
+  absence de commit planning, actions memoire/execution deja appliquees.
+- Composer final `plan_lookup` (5 mai 2026) : quand le turn planner LLM a classe
+  le tour en lecture factuelle, le composer final utilise une capability
+  dediee. Sa sortie est rejetee si elle change les tokens factuels sensibles du
+  brouillon LLM initial (chiffres, jours, dates relatives, zones, statuts).
+  Le guard compare des artefacts LLM, pas le texte user libre.
 
 Dettes restantes :
 
@@ -181,6 +196,8 @@ La reply utilisateur doit etre derivee d'un resultat valide ou reparee par le LL
 | `availability_constraint` | Indispo ponctuelle, voyage, creneau impossible | Le LLM emet `memory_actions` / `plan_action`; le backend resout la fenetre contre le planning reel puis valide avant write |
 | `health_signal` | Douleur, gene, fatigue locale | Le LLM emet une action sante structuree; le backend valide et enregistre via writer borne |
 | `execution_update` | Activite faite, pas faite, correction | Le LLM emet `execution_actions`; le backend resout la cible et applique seulement si unique |
+| `close_turn` | "Okay chef", "nickel merci", "parfait on garde ca" sans autre signal | Le backend ferme le tour sans tools ni mutation, sauf pending/calibration/signal actif |
+| `plan_lookup` | "J'ai quoi demain ?", "redonne le plan", "plus longue sortie recente" | Le LLM lit les tools/contexte puis la reply finale passe par un composer factuel avec guard anti-drift |
 
 ### Implementation dans api_messages.py
 

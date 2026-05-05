@@ -56,6 +56,9 @@ Chantiers en cours (suite incident hallucination factuelle briefing 2 mai) :
 - ✅ **Chantier 3B-C** — Action-tools natifs bornés : `draft_move_session`, `draft_swap_sessions`, `draft_replace_session`, `draft_lighten_day`, `draft_create_session`, tous candidates PlanPatch sans write, seulement derrière la gate A+ core — implémenté localement 5 mai 2026 — `docs/RUNTIME-TOOLS.md`
 - ✅ **A+4** — tool `validate_week_coherence` validation-only conversation/planning/heartbeat + pending heartbeat seulement après review sportive confirmable — implémenté localement 5 mai 2026 — `docs/SPORT-QUALITY-REVIEW.md`
 - ✅ **A+5** — semaine générée/régénérée relue avant `replace_plan` / création des `ScheduledSession`, fallback conservative si policy review non `valid`, fallback persistable sauf `blocked` — implémenté localement 5 mai 2026 — `docs/SPORT-QUALITY-REVIEW.md`
+- ✅ **P1-quinquies** — lane terminale conversation `close_turn` : clôtures sociales sans tools, sans relance de question ouverte, réponse finale via `final_reply.py` — implémenté localement 5 mai 2026
+- ✅ **P1-sexies** — composer final `no_change` : tours sans mutation planning reformulés via `final_reply.py`, avec faits mémoire/exécution appliqués — implémenté localement 5 mai 2026
+- ✅ **P1-septies** — composer final `plan_lookup` : lectures factuelles reformulées via `final_reply.py` avec guard anti-drift chiffres/jours/zones/statuts — implémenté localement 5 mai 2026
 
 Cap produit actuel :
 - Telegram = coach conversationnel

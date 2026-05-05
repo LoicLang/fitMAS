@@ -9,6 +9,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 import json
 import os
+import re
 from typing import Any, Callable
 
 from fitmas import coach_voice
@@ -161,6 +162,177 @@ def compose_final_reply(
     if not is_valid_final_reply(reply, context):
         return None
     return str(reply).strip()
+
+
+def compose_close_turn_reply(
+    *,
+    user_text: str,
+    previous_agent_text: str | None = None,
+    request_text_fn: RequestTextFn = request_text,
+) -> str | None:
+    """Compose a terminal social close reply from a tiny no-action context."""
+    extra_facts = [
+        "Intent: terminal_close",
+        "Aucun changement planning n'a ete commit.",
+        "Ne relance pas le user.",
+    ]
+    if previous_agent_text:
+        extra_facts.append(f"Dernier message coach: {previous_agent_text}")
+    context = FinalReplyContext(
+        user_text=user_text,
+        allowed_to_claim_mutation=False,
+        pipeline="conversation",
+        pipeline_capability="terminal_close",
+        extra_facts=tuple(extra_facts),
+    )
+    reply = compose_final_reply(context, request_text_fn=request_text_fn)
+    if not is_valid_close_turn_reply(reply):
+        return None
+    return str(reply).strip()
+
+
+def compose_no_change_reply(
+    *,
+    user_text: str,
+    original_llm_reply: str,
+    memory_actions_applied: tuple[str, ...] = (),
+    execution_actions_applied: tuple[str, ...] = (),
+    request_text_fn: RequestTextFn = request_text,
+) -> str | None:
+    """Compose the final visible reply for a validated no-plan-change turn."""
+    context = FinalReplyContext(
+        user_text=user_text,
+        original_llm_reply=original_llm_reply,
+        memory_actions_applied=memory_actions_applied,
+        execution_actions_applied=execution_actions_applied,
+        allowed_to_claim_mutation=False,
+        pipeline="conversation",
+        pipeline_capability="no_change",
+        extra_facts=(
+            "Response type: no_change",
+            "Aucun changement planning n'a ete commit.",
+            "Tu peux reformuler le brouillon, mais pas changer ses faits ni ajouter d'action.",
+        ),
+    )
+    return compose_final_reply(context, request_text_fn=request_text_fn)
+
+
+def compose_plan_lookup_reply(
+    *,
+    user_text: str,
+    original_llm_reply: str,
+    memory_actions_applied: tuple[str, ...] = (),
+    execution_actions_applied: tuple[str, ...] = (),
+    request_text_fn: RequestTextFn = request_text,
+) -> str | None:
+    """Compose a factual read-only reply and reject obvious fact drift."""
+    context = FinalReplyContext(
+        user_text=user_text,
+        original_llm_reply=original_llm_reply,
+        memory_actions_applied=memory_actions_applied,
+        execution_actions_applied=execution_actions_applied,
+        allowed_to_claim_mutation=False,
+        pipeline="conversation",
+        pipeline_capability="plan_lookup",
+        extra_facts=(
+            "Response type: plan_lookup",
+            "Aucun changement planning n'a ete commit.",
+            "Question factuelle: ne change aucun fait date, jour, duree, distance, zone, intensite ou statut.",
+            "Si tu ne peux pas reformuler sans alterer les faits, garde le contenu du brouillon.",
+        ),
+    )
+    reply = compose_final_reply(context, request_text_fn=request_text_fn)
+    if not is_valid_plan_lookup_reply(reply, original_llm_reply=original_llm_reply):
+        return None
+    return str(reply).strip()
+
+
+def is_valid_plan_lookup_reply(reply: str | None, *, original_llm_reply: str) -> bool:
+    if not reply:
+        return False
+    context = FinalReplyContext(
+        original_llm_reply=original_llm_reply,
+        allowed_to_claim_mutation=False,
+        pipeline="conversation",
+        pipeline_capability="plan_lookup",
+    )
+    if not is_valid_final_reply(reply, context):
+        return False
+    return _preserves_plan_lookup_fact_tokens(
+        str(reply),
+        source_text=original_llm_reply,
+    )
+
+
+def is_valid_close_turn_reply(reply: str | None) -> bool:
+    if not reply:
+        return False
+    text = str(reply).strip()
+    if len(text) < 3 or len(text) > 140:
+        return False
+    if "?" in text:
+        return False
+    if _sentence_count(text) > 1:
+        return False
+    context = FinalReplyContext(
+        allowed_to_claim_mutation=False,
+        pipeline="conversation",
+        pipeline_capability="terminal_close",
+    )
+    return is_valid_final_reply(text, context)
+
+
+def close_turn_outage_fallback_reply() -> str:
+    return "Carre, on garde ca."
+
+
+def _sentence_count(text: str) -> int:
+    endings = sum(1 for char in text if char in ".!?")
+    return max(1, endings)
+
+
+_NUMBER_RE = re.compile(r"\b\d+(?:[,.]\d+)?\b")
+_ZONE_RE = re.compile(r"\bz\s*[1-7]\b", re.IGNORECASE)
+_FACT_WORDS = {
+    "lundi",
+    "mardi",
+    "mercredi",
+    "jeudi",
+    "vendredi",
+    "samedi",
+    "dimanche",
+    "aujourd hui",
+    "demain",
+    "hier",
+    "planned",
+    "adapted",
+    "done",
+    "skipped",
+    "fait",
+    "faite",
+    "non fait",
+    "non faite",
+    "prevu",
+    "prevue",
+    "planifie",
+    "planifiee",
+}
+
+
+def _preserves_plan_lookup_fact_tokens(reply: str, *, source_text: str) -> bool:
+    source_tokens = _plan_lookup_fact_tokens(source_text)
+    reply_tokens = _plan_lookup_fact_tokens(reply)
+    return source_tokens <= reply_tokens and reply_tokens <= source_tokens
+
+
+def _plan_lookup_fact_tokens(text: str) -> set[str]:
+    normalized = coach_voice.normalize_for_voice_guard(text)
+    tokens = {match.group(0).replace(",", ".").replace(" ", "") for match in _NUMBER_RE.finditer(normalized)}
+    tokens.update(match.group(0).replace(" ", "").lower() for match in _ZONE_RE.finditer(normalized))
+    for word in _FACT_WORDS:
+        if word in normalized:
+            tokens.add(word)
+    return tokens
 
 
 def build_post_event_reply_verifier_prompt(
