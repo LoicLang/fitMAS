@@ -44,8 +44,42 @@ class PlannerV2Test(unittest.TestCase):
         self.assertTrue(all(day["intensity"] == "easy" for day in active_days))
         self.assertTrue(all(day["load_score"] <= 1 for day in active_days))
 
+    def test_injury_protection_keeps_minimum_effective_support_when_available(self) -> None:
+        decision = _decision(
+            planning_mode="injury_protection",
+            key_session_count=0,
+            long_session=False,
+            weekly_target_tss=120.0,
+            strength_session_count=0,
+        )
 
-def _decision(*, planning_mode: str, key_session_count: int, long_session: bool, weekly_target_tss: float) -> PlanningDecision:
+        week = build_week_plan(
+            sports=["running", "cycling", "swimming", "strength"],
+            weekly_structure_notes="Semaine de protection active.",
+            constraints=["Mollet sensible si intensite trop proche."],
+            coach_name="FitMAS",
+            planning_decision=decision,
+        )
+
+        active_days = [day for day in week["days"] if day["sport_type"] != "rest"]
+        active_sports = {day["sport_type"] for day in active_days}
+        self.assertGreaterEqual(len(active_days), 3)
+        self.assertIn("running", active_sports)
+        self.assertIn("cycling", active_sports)
+        self.assertIn("swimming", active_sports)
+        self.assertNotIn("strength", active_sports)
+        self.assertTrue(all(day["intensity"] == "easy" for day in active_days))
+        self.assertTrue(all(day["load_score"] <= 1 for day in active_days))
+
+
+def _decision(
+    *,
+    planning_mode: str,
+    key_session_count: int,
+    long_session: bool,
+    weekly_target_tss: float,
+    strength_session_count: int = 1,
+) -> PlanningDecision:
     return PlanningDecision(
         user_id=1,
         week_start=date(2026, 3, 23),
@@ -56,7 +90,7 @@ def _decision(*, planning_mode: str, key_session_count: int, long_session: bool,
         weekly_target_tss=weekly_target_tss,
         intensity_distribution="balanced",
         key_session_count=key_session_count,
-        strength_session_count=1,
+        strength_session_count=strength_session_count,
         long_session=long_session,
         rationale=("test rationale",),
         adaptations=("test adaptation",),

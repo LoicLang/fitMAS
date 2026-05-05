@@ -131,8 +131,8 @@ class ModifyPendingResolution(BaseModel):
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
 
     type: Literal["modify_pending"]
-    reason: str
     requested_changes: str
+    reason: str | None = None
 
 
 class IgnorePendingResolution(BaseModel):
@@ -589,6 +589,10 @@ def _validate_decision_payload(data: dict[str, Any] | None) -> dict[str, Any] | 
         _remember_invalid_decision(data)
         logger.warning("llm.decision_invalid reason=coach_voice_violation mutation_type=%s", mutation_type)
         return None
+    if _message_has_user_facing_internal_jargon(fitmas_message):
+        _remember_invalid_decision(data)
+        logger.warning("llm.decision_invalid reason=user_facing_internal_jargon mutation_type=%s", mutation_type)
+        return None
     if _message_looks_receipt_style(fitmas_message):
         logger.warning("llm.coach_voice_receipt_style mutation_type=%s message=%r", mutation_type, fitmas_message[:120])
     if _looks_truncated_fitmas_message(fitmas_message):
@@ -755,6 +759,9 @@ def _valid_coach_message(message: str, *, response_type: str) -> bool:
         return False
     if _message_violates_coach_voice(message):
         logger.warning("llm.coach_decision_invalid reason=coach_voice_violation response_type=%s", response_type)
+        return False
+    if _message_has_user_facing_internal_jargon(message):
+        logger.warning("llm.coach_decision_invalid reason=user_facing_internal_jargon response_type=%s", response_type)
         return False
     if _message_looks_receipt_style(message):
         logger.warning("llm.coach_voice_receipt_style response_type=%s message=%r", response_type, message[:120])
@@ -1206,6 +1213,7 @@ def _looks_truncated_fitmas_message(message: str) -> bool:
 # inside this file; new code should import from `fitmas.coach_voice` directly.
 _message_violates_coach_voice = coach_voice.message_violates_coach_voice
 _message_looks_receipt_style = coach_voice.message_looks_receipt_style
+_message_has_user_facing_internal_jargon = coach_voice.message_has_user_facing_internal_jargon
 _normalize_for_guard = coach_voice.normalize_for_voice_guard
 
 
@@ -1234,6 +1242,7 @@ def _repair_invalid_decision_payload(*, data: dict[str, Any] | None, system: str
         "- execution_actions autorise record_execution_update: target_ref, target_session_id?, status=completed|not_completed|partially_completed|unknown, completed?, sport_type?, duration_min?, confidence, evidence?\n"
         "- memory_actions autorise record_health_signal, record_availability, record_preference\n"
         "- pending_resolution autorise accept_pending, reject_pending, modify_pending, ignore, needs_clarification\n"
+        "- pending_resolution.modify_pending exige requested_changes; reason est optionnel\n"
         "- requires_confirmation exige confirmation_reason et sert aux mutations planning risquees, pas aux updates execution simples\n"
         "- move_session/lighten_day/update_session/replace_session exigent target_session_id\n"
         "- swap_sessions exige target_session_id et second_session_id\n"

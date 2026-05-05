@@ -58,6 +58,19 @@ _COMMITTED_CONFIRMATION_FRAGMENTS = (
     "ca te va",
     "ça te va",
 )
+_UNCOMMITTED_ACTION_CLAIM_FRAGMENTS = (
+    "echange fait",
+    "swap fait",
+    "deplacement fait",
+    "remplacement fait",
+    "changement fait",
+    "c est deplace",
+    "c'est deplace",
+    "c est cale",
+    "c'est cale",
+    "c est ajoute",
+    "c'est ajoute",
+)
 
 
 def build_final_reply_prompt(context: FinalReplyContext) -> tuple[str, str]:
@@ -66,7 +79,8 @@ def build_final_reply_prompt(context: FinalReplyContext) -> tuple[str, str]:
         f"{coach_voice.COACH_VOICE_RULES}\n\n"
         "Tu composes la reponse finale visible au user a partir de faits backend.\n"
         "Le backend a deja valide, bloque, commit ou cree une confirmation.\n"
-        "Tu ne dois jamais inventer un commit. Tu ne dois jamais exposer les noms techniques.\n"
+        "Tu ne dois jamais inventer un commit. Tu ne dois jamais exposer les noms techniques "
+        "(reviewer, patch, runtime, fallback, commit, JSON, tool, offplan).\n"
         "Reponds uniquement avec le texte final, sans JSON ni markdown."
     )
     lines = [
@@ -121,12 +135,17 @@ def is_valid_final_reply(reply: str | None, context: FinalReplyContext) -> bool:
         return False
     if coach_voice.message_violates_coach_voice(text):
         return False
+    if coach_voice.message_has_user_facing_internal_jargon(text):
+        return False
     if coach_voice.message_looks_receipt_style(text):
         return False
     if context.committed_events and any(fragment in normalized for fragment in _COMMITTED_CONFIRMATION_FRAGMENTS):
         return False
-    if not context.allowed_to_claim_mutation and looks_like_action_claim(text):
-        return False
+    if not context.allowed_to_claim_mutation:
+        if looks_like_action_claim(text):
+            return False
+        if any(fragment in normalized for fragment in _UNCOMMITTED_ACTION_CLAIM_FRAGMENTS):
+            return False
     return True
 
 

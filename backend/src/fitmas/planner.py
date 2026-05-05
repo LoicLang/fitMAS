@@ -181,9 +181,14 @@ def _build_sessions(
 
     if mode == "injury_protection":
         sessions.append(_session_from_type(primary_sport, _recovery_type(primary_sport), preferred_day=key_day, mode=mode))
-        if strength_budget > 0:
+        low_impact_supports = [sport for sport in support_sports if sport != "strength"]
+        for sport in low_impact_supports[:2]:
+            sessions.append(_session_from_type(sport, _support_type(sport, mode), preferred_day=None, mode=mode))
+        if strength_budget > 0 and len(sessions) < 3:
             sessions.append(_session_from_type("strength", "mobility", preferred_day=None, mode=mode))
-        return sessions
+        elif "strength" in normalized_sports and not low_impact_supports and len(sessions) < 3:
+            sessions.append(_session_from_type("strength", "mobility", preferred_day=None, mode=mode))
+        return sessions[:3]
 
     key_types = _key_types_for_mode(primary_sport, mode)
     quality_budget = min(key_budget, len(key_types))

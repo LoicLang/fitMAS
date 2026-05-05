@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import re
 from typing import Any
 
 from sqlalchemy.orm import Session
@@ -355,25 +356,36 @@ def run_conversation_turn(
                     mutation_applied=False,
                 )
             else:
-                pending_row = repo.create_pending_mutation_confirmation(
-                    db,
-                    user_id=user.id,
-                    impact_level="high",
-                    reason=decision.confirmation_reason or "llm_requires_confirmation",
-                    mutation_type="plan_patch",
-                    summary=_plan_patch_confirmation_summary(service_result),
-                    source_text=payload.text,
-                    decision_json=serialize_plan_patch_confirmation(decision.plan_patch),
-                    expires_at=default_confirmation_expiry(),
-                )
                 reply_text = _build_plan_patch_confirmation_prompt(service_result)
-                outcome = ConversationTurnOutcome(
-                    extraction=Extraction(confidence=0.85),
-                    reply_text=reply_text,
-                    response_mode="plan_patch_confirmation",
-                    pending_confirmation=True,
-                    pending_confirmation_id=pending_row.id,
-                )
+                if _plan_patch_confirmation_reply_requests_clarification(reply_text):
+                    outcome = ConversationTurnOutcome(
+                        extraction=Extraction(confidence=0.85),
+                        reply_text=reply_text,
+                        response_mode="plan_patch_clarification",
+                        mutation_applied=False,
+                    )
+                else:
+                    pending_row = repo.create_pending_mutation_confirmation(
+                        db,
+                        user_id=user.id,
+                        impact_level="high",
+                        reason=_plan_patch_pending_reason(
+                            service_result,
+                            fallback_reason=decision.confirmation_reason or "llm_requires_confirmation",
+                        ),
+                        mutation_type="plan_patch",
+                        summary=_plan_patch_confirmation_summary(service_result),
+                        source_text=payload.text,
+                        decision_json=serialize_plan_patch_confirmation(decision.plan_patch),
+                        expires_at=default_confirmation_expiry(),
+                    )
+                    outcome = ConversationTurnOutcome(
+                        extraction=Extraction(confidence=0.85),
+                        reply_text=reply_text,
+                        response_mode="plan_patch_confirmation",
+                        pending_confirmation=True,
+                        pending_confirmation_id=pending_row.id,
+                    )
             decision = None
         elif decision.response_type == "plan_patch" and decision.plan_patch is not None:
             service_result = apply_patch_for_user(
@@ -397,25 +409,36 @@ def run_conversation_turn(
                     mutation_applied=True,
                 )
             elif _plan_patch_needs_confirmation(service_result):
-                pending_row = repo.create_pending_mutation_confirmation(
-                    db,
-                    user_id=user.id,
-                    impact_level="high",
-                    reason="plan_patch_requires_confirmation",
-                    mutation_type="plan_patch",
-                    summary=_plan_patch_confirmation_summary(service_result),
-                    source_text=payload.text,
-                    decision_json=serialize_plan_patch_confirmation(decision.plan_patch),
-                    expires_at=default_confirmation_expiry(),
-                )
                 reply_text = _build_plan_patch_confirmation_prompt(service_result)
-                outcome = ConversationTurnOutcome(
-                    extraction=Extraction(confidence=0.85),
-                    reply_text=reply_text,
-                    response_mode="plan_patch_confirmation",
-                    pending_confirmation=True,
-                    pending_confirmation_id=pending_row.id,
-                )
+                if _plan_patch_confirmation_reply_requests_clarification(reply_text):
+                    outcome = ConversationTurnOutcome(
+                        extraction=Extraction(confidence=0.85),
+                        reply_text=reply_text,
+                        response_mode="plan_patch_clarification",
+                        mutation_applied=False,
+                    )
+                else:
+                    pending_row = repo.create_pending_mutation_confirmation(
+                        db,
+                        user_id=user.id,
+                        impact_level="high",
+                        reason=_plan_patch_pending_reason(
+                            service_result,
+                            fallback_reason="plan_patch_requires_confirmation",
+                        ),
+                        mutation_type="plan_patch",
+                        summary=_plan_patch_confirmation_summary(service_result),
+                        source_text=payload.text,
+                        decision_json=serialize_plan_patch_confirmation(decision.plan_patch),
+                        expires_at=default_confirmation_expiry(),
+                    )
+                    outcome = ConversationTurnOutcome(
+                        extraction=Extraction(confidence=0.85),
+                        reply_text=reply_text,
+                        response_mode="plan_patch_confirmation",
+                        pending_confirmation=True,
+                        pending_confirmation_id=pending_row.id,
+                    )
             else:
                 action_result = turn_context.get("coach_decision_action_result") or {}
                 if int(action_result.get("execution_applied") or 0) > 0:
@@ -694,12 +717,14 @@ def _active_memory_payloads(db: Session, user_id: int) -> tuple[list[object], li
 def _pending_confirmation_context_for_prompt(pending_confirmation) -> str | None:
     if pending_confirmation is None:
         return None
+    reason = _safe_user_visible_pending_text(str(pending_confirmation.reason or "").strip())
+    summary = _safe_user_visible_pending_text(str(pending_confirmation.summary or "").strip())
     return (
         "Confirmation planning en attente (artefact machine, pas une decision deja appliquee):\n"
         f"- id: {pending_confirmation.id}\n"
         f"- type: {pending_confirmation.mutation_type}\n"
-        f"- raison: {pending_confirmation.reason}\n"
-        f"- resume: {pending_confirmation.summary}\n"
+        f"- raison: {reason}\n"
+        f"- resume: {summary}\n"
         "- lis le nouveau message dans ce contexte et decide toi-meme.\n"
         "- si le user accepte clairement, retourne `pending_resolution.type=accept_pending`.\n"
         "- si le user refuse, retourne `pending_resolution.type=reject_pending`.\n"
@@ -1150,18 +1175,69 @@ def _plan_patch_needs_confirmation(service_result: PlanPatchServiceResult | None
 
 def _plan_patch_confirmation_summary(service_result: PlanPatchServiceResult | None) -> str:
     if service_result is None:
-        return "patch planning a confirmer"
+        return "Changement a confirmer avant de bouger la semaine."
     if service_result.week_policy_status == "requires_confirmation" and service_result.week_review is not None:
         summary = str(service_result.week_review.summary or "").strip()
         if summary:
-            return summary
+            return _safe_user_visible_pending_text(summary)
     first = service_result.validation.operation_results[0] if service_result.validation.operation_results else None
     if first is not None:
         if first.warning_messages:
-            return first.warning_messages[0]
+            return _safe_user_visible_pending_text(first.warning_messages[0])
         if first.block_reason:
-            return first.block_reason
-    return "ce changement modifie sensiblement la semaine"
+            return _safe_user_visible_pending_text(first.block_reason)
+    return "Ce changement modifie sensiblement la semaine."
+
+
+def _plan_patch_pending_reason(
+    service_result: PlanPatchServiceResult | None,
+    *,
+    fallback_reason: str | None,
+) -> str:
+    fallback = str(fallback_reason or "").strip()
+    if fallback and not coach_voice.message_has_user_facing_internal_jargon(fallback):
+        return fallback
+    return _plan_patch_confirmation_summary(service_result)
+
+
+def _safe_user_visible_pending_text(text: str | None) -> str:
+    value = str(text or "").strip()
+    if not value or coach_voice.message_has_user_facing_internal_jargon(value):
+        return "Changement a confirmer avant de bouger la semaine."
+    return value
+
+
+def _plan_patch_confirmation_reply_requests_clarification(reply_text: str | None) -> bool:
+    if not reply_text:
+        return False
+    normalized = coach_voice.normalize_for_voice_guard(str(reply_text))
+    clarification_markers = (
+        "tu parlais de",
+        "tu peux me preciser",
+        "tu peux me dire si",
+        "preciser laquelle",
+        "preciser lesquelles",
+        "tu pensais a quel",
+        "tu veux dire quel",
+        "tu visais",
+        "si tu visais",
+        "plusieurs seances",
+        "quel sport",
+        "quelle seance",
+        "quel jour",
+        "quel creneau",
+        "laquelle tu visais",
+        "lequel tu visais",
+        "laquelle tu veux",
+        "lequel tu veux",
+        "dit laquelle",
+        "dis moi laquelle",
+    )
+    if any(marker in normalized for marker in clarification_markers):
+        return True
+    if "?" not in str(reply_text):
+        return False
+    return bool(re.search(r"\b(quel|quelle|quels|quelles|lequel|laquelle|lesquelles)\b", normalized))
 
 
 def _week_review_suggested_fix(service_result: PlanPatchServiceResult) -> str | None:

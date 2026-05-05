@@ -152,7 +152,8 @@ FitMAS repond toujours a 4 questions :
 5. construit le squelette hebdo deterministe (`planner.py`)
 6. demande au LLM le detail borne des seances (`llm.py`)
 7. valide (`plan_validator.py`)
-8. persiste
+8. relit la qualite sportive de la semaine generee (`generated_week_coherence.py`)
+9. persiste
 
 ### Modules
 

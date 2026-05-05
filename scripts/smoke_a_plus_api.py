@@ -85,6 +85,121 @@ SCENARIOS: tuple[SmokeScenario, ...] = (
         expectation="coherent_commit_or_pending",
         description="Low-risk planning turn may commit or ask confirmation, but must stay artifact-coherent.",
     ),
+    SmokeScenario(
+        name="swap_key_and_recovery",
+        prompt="Echange le fractionne seuil id 1 avec la recuperation mobilite id 3.",
+        expectation="guarded_no_commit",
+        description="Swapping a key hard session into a dense window should be guarded.",
+    ),
+    SmokeScenario(
+        name="replace_key_running_strength",
+        prompt="Remplace le fractionne seuil id 1 par une seance renfo mobilite facile.",
+        expectation="guarded_no_commit",
+        description="Replacing the key running stimulus with easy strength should not commit silently.",
+    ),
+    SmokeScenario(
+        name="lighten_key_after_fatigue",
+        prompt="Je suis fatigue, allege le fractionne seuil id 1 sans casser la semaine.",
+        expectation="coherent_commit_or_pending",
+        description="Lightening a key hard day may commit or ask confirmation, but must stay artifact-coherent.",
+    ),
+    SmokeScenario(
+        name="create_easy_free_day",
+        prompt="Ajoute un footing facile de 30 minutes lundi prochain.",
+        expectation="coherent_commit_or_pending",
+        description="Creating an easy support session may commit or ask confirmation, never claim without artifacts.",
+    ),
+    SmokeScenario(
+        name="lookup_current_plan",
+        prompt="Redonne-moi le plan actuel, jour par jour.",
+        expectation="no_plan_write",
+        description="A lookup turn must not write planning artifacts.",
+    ),
+    SmokeScenario(
+        name="ambiguous_move",
+        prompt="Mets la course plus tard dans la semaine.",
+        expectation="no_plan_write",
+        description="An ambiguous planning request should clarify/read, not write a vague mutation.",
+    ),
+    SmokeScenario(
+        name="health_note_no_plan_write",
+        prompt="J'ai une petite douleur au genou gauche aujourd'hui, retiens-le pour les prochains ajustements.",
+        expectation="no_plan_write",
+        description="Health memory should not become a direct planning write by itself.",
+    ),
+    SmokeScenario(
+        name="swim_unavailable_two_weeks",
+        prompt="Je ne peux pas nager pendant deux semaines, adapte si besoin sans faire n'importe quoi.",
+        expectation="coherent_commit_or_pending",
+        description="A multi-day sport constraint may propose a guarded PlanPatch or ask follow-up.",
+    ),
+)
+
+
+@dataclass(frozen=True, slots=True)
+class GeneratedWeekWorkflow:
+    name: str
+    payload: dict[str, Any]
+    regenerations: int = 2
+
+
+GENERATED_WEEK_WORKFLOWS: tuple[GeneratedWeekWorkflow, ...] = (
+    GeneratedWeekWorkflow(
+        name="onboard_loaded_running",
+        payload={
+            "name": "Loic",
+            "primary_objective": "preparer un 10 km propre dans 8 semaines sans casser la recuperation",
+            "sports": ["course", "velo", "natation", "renforcement"],
+            "weekly_structure_notes": (
+                "Mardi possible court, mercredi qualite si frais, jeudi charge pro, "
+                "samedi long possible, dimanche famille."
+            ),
+            "constraints": [
+                "fatigue moyenne depuis deux jours",
+                "douleur mollet gauche legere si intensite trop proche",
+                "pas de natation jeudi",
+            ],
+            "preferences": ["courir le matin", "garder une vraie journee legere apres qualite"],
+            "goal_context": "Objectif principal course, sports secondaires utiles mais pas prioritaires.",
+            "current_state_notes": "Forme correcte, pas envie de charger trop vite.",
+            "coach_name": "Aster",
+            "coach_style": "direct",
+            "coach_relationship": "coach lucide et fiable",
+            "coach_do": "proteger les seances cles et expliquer les compromis",
+            "coach_dont": "empiler du dur pour remplir la semaine",
+            "coach_soul": "sobre et precis",
+            "timezone": "Europe/Paris",
+        },
+        regenerations=2,
+    ),
+    GeneratedWeekWorkflow(
+        name="onboard_triathlon_fragile",
+        payload={
+            "name": "Camille",
+            "primary_objective": "reprendre triathlon sprint avec priorite endurance facile",
+            "sports": ["natation", "velo", "course", "renforcement"],
+            "weekly_structure_notes": (
+                "Piscine lundi et vendredi seulement, velo possible mercredi, "
+                "course courte samedi, dimanche repos familial."
+            ),
+            "constraints": [
+                "retour apres rhume",
+                "pas deux seances dures consecutives",
+                "temps limite a 45 minutes en semaine",
+            ],
+            "preferences": ["seances simples", "technique natation avant volume"],
+            "goal_context": "Reprendre proprement avant de chercher la performance.",
+            "current_state_notes": "Cardio ok mais fatigue post-maladie a surveiller.",
+            "coach_name": "Aster",
+            "coach_style": "calme",
+            "coach_relationship": "coach protecteur mais clair",
+            "coach_do": "privilegier progressivite et recuperation",
+            "coach_dont": "prescrire du seuil si le contexte sante est fragile",
+            "coach_soul": "pose et net",
+            "timezone": "Europe/Paris",
+        },
+        regenerations=1,
+    ),
 )
 
 _PENDING_OR_BLOCKED_MODES = {
@@ -96,6 +211,11 @@ _PENDING_OR_BLOCKED_MODES = {
     "pending_accept_blocked",
 }
 _MUTATION_CLAIM_MARKERS = (
+    "echange fait",
+    "swap fait",
+    "deplacement fait",
+    "remplacement fait",
+    "changement fait",
     "c'est deplace",
     "c est deplace",
     "je l'ai deplace",
@@ -144,6 +264,8 @@ def evaluate_scenario_result(
             reasons.append("latest turn marked mutation_applied")
         if new_pending and not any(str(row.get("mutation_type") or "") == "plan_patch" for row in new_pending):
             reasons.append("created pending confirmation outside plan_patch")
+        if not event_delta and _looks_like_mutation_claim(assistant_message):
+            reasons.append("assistant claimed a mutation without committed event")
         if (
             not event_delta
             and not pending_delta
@@ -172,6 +294,55 @@ def evaluate_scenario_result(
 
     else:
         reasons.append(f"unknown expectation {scenario.expectation!r}")
+
+    return ScenarioCheckResult(ok=not reasons, reasons=reasons, warnings=warnings)
+
+
+def evaluate_generated_week_response(
+    name: str,
+    response: dict[str, Any],
+    snapshot: DbSnapshot,
+) -> ScenarioCheckResult:
+    week = response.get("week_plan") if isinstance(response.get("week_plan"), dict) else response
+    days = week.get("days") if isinstance(week, dict) else None
+    reasons: list[str] = []
+    warnings: list[str] = []
+
+    if not isinstance(days, list):
+        reasons.append("response has no week days")
+        days = []
+    elif len(days) != 7:
+        reasons.append(f"response has {len(days)} day(s), expected 7")
+
+    active_days = [day for day in days if isinstance(day, dict) and _is_active_training_day(day)]
+    if not active_days:
+        reasons.append("response has no active training day")
+    for day in active_days:
+        if not str(day.get("session_description") or "").strip():
+            reasons.append(f"active day {day.get('day') or '?'} has no session description")
+            break
+
+    if not snapshot.sessions:
+        reasons.append("created no scheduled sessions")
+    active_sessions = [row for row in snapshot.sessions if _is_active_training_day(row)]
+    if snapshot.sessions and not active_sessions:
+        reasons.append("created only rest scheduled sessions")
+
+    hard_sessions = [row for row in active_sessions if _is_hard_session(row)]
+    if len(hard_sessions) > 3:
+        reasons.append(f"created {len(hard_sessions)} hard scheduled sessions")
+    min_hard_gap = _min_session_gap_hours(hard_sessions)
+    if min_hard_gap is not None and min_hard_gap < 36:
+        reasons.append(f"hard scheduled sessions too close: {min_hard_gap:.1f}h")
+
+    if snapshot.events:
+        reasons.append(f"created {len(snapshot.events)} plan mutation event(s)")
+    if snapshot.pending:
+        reasons.append(f"created {len(snapshot.pending)} pending confirmation(s)")
+
+    summary = str(week.get("summary") or "") if isinstance(week, dict) else ""
+    if "fallback sportif" in summary.lower():
+        warnings.append(f"{name} used generated-week fallback")
 
     return ScenarioCheckResult(ok=not reasons, reasons=reasons, warnings=warnings)
 
@@ -231,6 +402,17 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
         choices=[scenario.name for scenario in SCENARIOS],
         help="Run only this scenario. Repeatable.",
     )
+    parser.add_argument(
+        "--generated-workflow",
+        action="append",
+        choices=[workflow.name for workflow in GENERATED_WEEK_WORKFLOWS],
+        help="Run this generated-week onboarding/regenerate workflow. Repeatable.",
+    )
+    parser.add_argument(
+        "--skip-generated-week",
+        action="store_true",
+        help="Skip generated-week onboarding/regenerate workflows.",
+    )
     parser.add_argument("--port", type=int, default=8073, help="First localhost port to try.")
     parser.add_argument(
         "--db-path",
@@ -260,6 +442,10 @@ def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv or sys.argv[1:])
     db_path = args.db_path.resolve()
     selected = _selected_scenarios(args.scenario)
+    selected_generated = _selected_generated_workflows(
+        args.generated_workflow,
+        include_default=not args.scenario and not args.skip_generated_week,
+    )
     port = _choose_port(args.port)
     base_url = f"http://127.0.0.1:{port}"
     log_path = ROOT / f".tmp-smoke-a-plus-api-{os.getpid()}.log"
@@ -269,7 +455,11 @@ def main(argv: list[str] | None = None) -> int:
     if not os.environ.get("ANTHROPIC_API_KEY") and os.environ.get("DEEPSEEK_API_KEY"):
         os.environ["ANTHROPIC_API_KEY"] = os.environ["DEEPSEEK_API_KEY"]
 
-    print(f"A+ API smoke: {len(selected)} scenario(s)")
+    print(
+        "A+ API smoke: "
+        f"{len(selected)} message scenario(s), "
+        f"{len(selected_generated)} generated-week workflow(s)"
+    )
     print(f"DB: {db_path}")
     print(f"API: {base_url}")
     print(f"log: {log_path}")
@@ -280,9 +470,11 @@ def main(argv: list[str] | None = None) -> int:
     try:
         _wait_for_health(base_url, timeout_seconds=args.startup_timeout)
         failures = 0
+        checks = 0
         for scenario in selected:
             _reset_and_seed_database(db_path)
             before = load_db_snapshot(db_path)
+            checks += 1
             print(f"SCENARIO {scenario.name}")
             print(f"prompt: {scenario.prompt}")
             try:
@@ -309,11 +501,21 @@ def main(argv: list[str] | None = None) -> int:
                 print(f"WARN: {warning}")
             print("")
 
+        for workflow in selected_generated:
+            failures, checks = _run_generated_week_workflow(
+                workflow,
+                base_url=base_url,
+                db_path=db_path,
+                timeout_seconds=args.timeout,
+                failures=failures,
+                checks=checks,
+            )
+
         if failures:
-            print(f"RESULT: FAIL ({failures}/{len(selected)} scenario(s))")
+            print(f"RESULT: FAIL ({failures}/{checks} check(s))")
             print(f"server log: {log_path}")
             return 1
-        print(f"RESULT: OK ({len(selected)} scenario(s))")
+        print(f"RESULT: OK ({checks} check(s))")
         return 0
     finally:
         _stop_server(server)
@@ -328,6 +530,82 @@ def _selected_scenarios(names: list[str] | None) -> tuple[SmokeScenario, ...]:
         return SCENARIOS
     by_name = {scenario.name: scenario for scenario in SCENARIOS}
     return tuple(by_name[name] for name in names)
+
+
+def _selected_generated_workflows(
+    names: list[str] | None,
+    *,
+    include_default: bool,
+) -> tuple[GeneratedWeekWorkflow, ...]:
+    if not names:
+        return GENERATED_WEEK_WORKFLOWS if include_default else ()
+    by_name = {workflow.name: workflow for workflow in GENERATED_WEEK_WORKFLOWS}
+    return tuple(by_name[name] for name in names)
+
+
+def _run_generated_week_workflow(
+    workflow: GeneratedWeekWorkflow,
+    *,
+    base_url: str,
+    db_path: Path,
+    timeout_seconds: float,
+    failures: int,
+    checks: int,
+) -> tuple[int, int]:
+    _reset_database_schema(db_path)
+    print(f"GENERATED_WEEK {workflow.name}")
+    try:
+        response = _post_json(
+            base_url,
+            "/api/v0/onboard",
+            workflow.payload,
+            timeout_seconds=timeout_seconds,
+        )
+    except Exception as exc:  # pragma: no cover - exercised by real smoke only
+        print(f"FAIL: onboard HTTP/LLM error: {exc}")
+        print("")
+        return failures + 1, checks + 1
+
+    checks += 1
+    snapshot = load_db_snapshot(db_path)
+    result = evaluate_generated_week_response(f"{workflow.name}:onboard", response, snapshot)
+    _print_generated_week_artifacts("onboard", response, snapshot)
+    failures = _print_check_result(result, failures)
+
+    for index in range(1, workflow.regenerations + 1):
+        try:
+            response = _post_json(
+                base_url,
+                "/api/v0/week/regenerate",
+                {},
+                timeout_seconds=timeout_seconds,
+            )
+        except Exception as exc:  # pragma: no cover - exercised by real smoke only
+            checks += 1
+            failures += 1
+            print(f"FAIL: regenerate#{index} HTTP/LLM error: {exc}")
+            print("")
+            continue
+        checks += 1
+        snapshot = load_db_snapshot(db_path)
+        result = evaluate_generated_week_response(f"{workflow.name}:regenerate#{index}", response, snapshot)
+        _print_generated_week_artifacts(f"regenerate#{index}", response, snapshot)
+        failures = _print_check_result(result, failures)
+    print("")
+    return failures, checks
+
+
+def _print_check_result(result: ScenarioCheckResult, failures: int) -> int:
+    if result.ok:
+        print("OK")
+    else:
+        failures += 1
+        print("FAIL")
+        for reason in result.reasons:
+            print(f"- {reason}")
+    for warning in result.warnings:
+        print(f"WARN: {warning}")
+    return failures
 
 
 def _choose_port(start_port: int) -> int:
@@ -387,9 +665,19 @@ def _wait_for_health(base_url: str, *, timeout_seconds: float) -> None:
 
 
 def _post_message(base_url: str, prompt: str, *, timeout_seconds: float) -> dict[str, Any]:
-    body = json.dumps({"text": prompt}).encode("utf-8")
+    return _post_json(base_url, "/api/v0/messages", {"text": prompt}, timeout_seconds=timeout_seconds)
+
+
+def _post_json(
+    base_url: str,
+    path: str,
+    payload: dict[str, Any],
+    *,
+    timeout_seconds: float,
+) -> dict[str, Any]:
+    body = json.dumps(payload).encode("utf-8")
     request = urllib.request.Request(
-        f"{base_url}/api/v0/messages",
+        f"{base_url}{path}",
         data=body,
         headers={"Content-Type": "application/json"},
         method="POST",
@@ -431,6 +719,24 @@ def _print_artifacts(before: DbSnapshot, after: DbSnapshot) -> None:
         print(f"  session#{change['id']}: {change['before']} -> {change['after']}")
 
 
+def _print_generated_week_artifacts(label: str, response: dict[str, Any], snapshot: DbSnapshot) -> None:
+    week = response.get("week_plan") if isinstance(response.get("week_plan"), dict) else response
+    days = week.get("days") if isinstance(week, dict) else []
+    active_days = [day for day in days if isinstance(day, dict) and _is_active_training_day(day)]
+    hard_sessions = [row for row in snapshot.sessions if _is_active_training_day(row) and _is_hard_session(row)]
+    print(
+        f"{label}: "
+        f"days={len(days) if isinstance(days, list) else '-'} "
+        f"active_days={len(active_days)} "
+        f"scheduled_sessions={len(snapshot.sessions)} "
+        f"hard_sessions={len(hard_sessions)} "
+        f"min_hard_gap={_format_gap(_min_session_gap_hours(hard_sessions))}"
+    )
+    summary = str(week.get("summary") or "") if isinstance(week, dict) else ""
+    if summary:
+        print(f"  summary: {summary[:180]}")
+
+
 def _session_changes(
     before_rows: tuple[dict[str, Any], ...],
     after_rows: tuple[dict[str, Any], ...],
@@ -456,6 +762,50 @@ def _session_summary(row: dict[str, Any]) -> str:
         f"{row.get('intensity') or '-'} | "
         f"{row.get('completion_status') or '-'}"
     )
+
+
+def _is_active_training_day(payload: dict[str, Any]) -> bool:
+    sport = str(payload.get("sport_type") or "").strip().lower()
+    return sport not in {"", "rest", "off"}
+
+
+def _is_hard_session(payload: dict[str, Any]) -> bool:
+    intensity = str(payload.get("intensity") or "").strip().lower()
+    session_type = str(payload.get("session_type") or "").strip().lower()
+    return intensity == "hard" or session_type in {"threshold", "intervals", "tempo", "long"}
+
+
+def _min_session_gap_hours(sessions: list[dict[str, Any]]) -> float | None:
+    dates = sorted(parsed for row in sessions if (parsed := _parse_datetime(row.get("scheduled_date"))) is not None)
+    if len(dates) < 2:
+        return None
+    gaps = [
+        (later - earlier).total_seconds() / 3600
+        for earlier, later in zip(dates, dates[1:])
+    ]
+    return min(gaps) if gaps else None
+
+
+def _parse_datetime(value: Any) -> datetime | None:
+    if not value:
+        return None
+    text = str(value).strip()
+    try:
+        return datetime.fromisoformat(text)
+    except ValueError:
+        pass
+    try:
+        return datetime.strptime(text, "%Y-%m-%d %H:%M:%S.%f")
+    except ValueError:
+        pass
+    try:
+        return datetime.strptime(text, "%Y-%m-%d %H:%M:%S")
+    except ValueError:
+        return None
+
+
+def _format_gap(value: float | None) -> str:
+    return "-" if value is None else f"{value:.1f}h"
 
 
 def load_db_snapshot(db_path: Path) -> DbSnapshot:
@@ -528,19 +878,12 @@ def _row_to_dict(row: sqlite3.Row) -> dict[str, Any]:
 
 
 def _reset_and_seed_database(db_path: Path) -> None:
-    os.environ["FITMAS_DB_PATH"] = str(db_path)
-    if str(BACKEND_SRC) not in sys.path:
-        sys.path.insert(0, str(BACKEND_SRC))
+    _reset_database_schema(db_path)
 
     from fitmas import repository as repo
     from fitmas import schema as s
-    from fitmas.db import Base, SessionLocal, engine, init_db
+    from fitmas.db import SessionLocal
     from fitmas.time_context import DAY_KEYS, day_label_fr, get_local_now
-
-    db_path.parent.mkdir(parents=True, exist_ok=True)
-    Base.metadata.drop_all(bind=engine)
-    Base.metadata.create_all(bind=engine)
-    init_db()
 
     with SessionLocal() as db:
         user = s.User(
@@ -687,6 +1030,19 @@ def _reset_and_seed_database(db_path: Path) -> None:
                 match_reason="a_plus_smoke",
                 tss=tss,
             )
+
+
+def _reset_database_schema(db_path: Path) -> None:
+    os.environ["FITMAS_DB_PATH"] = str(db_path)
+    if str(BACKEND_SRC) not in sys.path:
+        sys.path.insert(0, str(BACKEND_SRC))
+
+    from fitmas.db import Base, engine, init_db
+
+    db_path.parent.mkdir(parents=True, exist_ok=True)
+    Base.metadata.drop_all(bind=engine)
+    Base.metadata.create_all(bind=engine)
+    init_db()
 
 
 def _next_weekday_date(now: datetime, *, target_weekday: int) -> datetime:

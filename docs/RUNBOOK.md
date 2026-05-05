@@ -174,6 +174,8 @@ Usage :
 - utilise une DB SQLite temporaire dediee ;
 - seed une semaine runtime en `ScheduledSession` avec deux seances cles running, recuperation, velo et natation ;
 - joue des scenarios reels via `/api/v0/messages` avec le vrai provider LLM ;
+- joue aussi des workflows `/api/v0/onboard` + `/api/v0/week/regenerate` pour
+  verifier A+5 sur les semaines generees ;
 - verifie les artefacts DB : `plan_mutation_events`, `pending_mutation_confirmations`, `conversation_turns`, `scheduled_sessions`.
 
 Scenarios verrouilles :
@@ -183,11 +185,40 @@ Scenarios verrouilles :
 - `occupied_target` : target occupee ne doit pas commit ;
 - `memory_preference` : preference memoire ne doit pas creer de write planning ;
 - `move_easy_to_free` : un move easy peut commit ou demander confirmation, mais jamais claim sans event/pending.
+- `swap_key_and_recovery` / `replace_key_running_strength` : changements sur
+  seance cle doivent rester gates ;
+- `lighten_key_after_fatigue` : fatigue + allègement conserve memoire et
+  confirmation si le patch reste significatif ;
+- `create_easy_free_day` : creation easy datee ne doit jamais claim sans
+  artefact ;
+- `lookup_current_plan`, `ambiguous_move`, `health_note_no_plan_write` :
+  lecture / ambiguite / sante ne doivent pas creer de write planning ;
+- `swim_unavailable_two_weeks` : contrainte sport multi-jours reste coherent
+  commit-or-pending.
+
+Workflows A+5 :
+- `onboard_loaded_running` ;
+- `onboard_triathlon_fragile`.
+
+Checks A+5 a inspecter :
+- si la review sportive refuse la semaine candidate, la semaine persistable doit
+  etre une version allegee lisible, pas une reponse technique ;
+- les textes visibles (`summary`, `session_note`, reply finale) ne doivent pas
+  contenir `fallback`, `reviewer`, `patch`, `commit`, `offplan`, `runtime`,
+  `JSON` ou `tool` ;
+- les pending visibles (`reason`, `summary`) doivent rester lisibles et ne pas
+  exposer `plan_patch_requires_confirmation`, `reviewer`, `commiter` ;
+- une reply qui demande encore quelle seance/cible le user vise ne doit pas
+  creer de pending confirmation ;
+- `injury_protection` avec sports support disponibles doit garder du mouvement
+  easy/load <= 1, pas une semaine presque vide.
 
 Commandes utiles :
 
 ```bash
 ./scripts/smoke-a-plus-api --scenario move_hard_close --scenario replace_key_running_swim_easy
+./scripts/smoke-a-plus-api --skip-generated-week
+./scripts/smoke-a-plus-api --generated-workflow onboard_loaded_running
 ./scripts/smoke-a-plus-api --keep-db --port 8075
 ```
 

@@ -104,6 +104,28 @@ RECEIPT_PATTERNS: tuple[re.Pattern[str], ...] = (
     re.compile(r"\bton coach a (ajuste|modifie|deplace)\b"),
 )
 
+USER_FACING_INTERNAL_JARGON_FRAGMENTS: tuple[str, ...] = (
+    "voici la reponse pour l utilisateur",
+    "fallback sportif",
+    "review sportive",
+    "reviewer",
+    "planpatch",
+    "plan_patch",
+    " swap sessions ",
+    "llm",
+    " plan patch ",
+    " patch ",
+    " runtime ",
+    " tool ",
+    " json ",
+    " offplan ",
+    " user ",
+    " validateur ",
+    " commit ",
+    " commiter ",
+    " commite ",
+)
+
 
 def normalize_for_voice_guard(value: str) -> str:
     """Normalise un texte pour les guards voix : ASCII, lowercase, apostrophes uniformes."""
@@ -148,3 +170,17 @@ def message_violates_coach_voice(message: str) -> bool:
         or " le coach te " in padded
         or " le coach vous " in padded
     )
+
+
+def message_has_user_facing_internal_jargon(message: str) -> bool:
+    """Detecte les fuites de jargon interne dans un texte visible user.
+
+    Ce guard ne lit pas le message utilisateur et ne deduit aucune intention.
+    Il valide seulement un artefact LLM sortant contre les fuites observees en
+    dogfood: wrapper de reponse, fallback/reviewer/patch/commit/offplan.
+    """
+    if not message:
+        return False
+    normalized = normalize_for_voice_guard(message)
+    padded = f" {re.sub(r'[^a-z0-9]+', ' ', normalized)} "
+    return any(fragment in padded for fragment in USER_FACING_INTERNAL_JARGON_FRAGMENTS)

@@ -492,6 +492,50 @@ class BlockedMutationReplyTest(unittest.TestCase):
         self.assertTrue(_plan_patch_needs_confirmation(result))
         self.assertEqual(_plan_patch_confirmation_summary(result), "La fin de semaine devient trop dense.")
 
+    def test_plan_patch_pending_summary_and_reason_hide_internal_terms(self) -> None:
+        from fitmas.conversation_pipeline import _plan_patch_confirmation_summary, _plan_patch_pending_reason
+
+        result = PlanPatchServiceResult(
+            validation=PlanPatchValidation(status="valid", operation_results=()),
+            week_policy_status="requires_confirmation",
+            week_review=WeekCoherenceReview(
+                status="requires_confirmation",
+                sport_quality="fragile",
+                confidence=0.8,
+                summary="Reviewer sportif signale une fragilite sur ce patch avant de commiter. Demande si le user confirme.",
+                findings=(),
+                suggested_adjustments=(),
+                recommended_policy="confirm_original",
+            ),
+        )
+
+        summary = _plan_patch_confirmation_summary(result)
+        reason = _plan_patch_pending_reason(result, fallback_reason="plan_patch_requires_confirmation")
+
+        for text in (summary, reason):
+            normalized = text.lower()
+            self.assertIn("confirm", normalized)
+            self.assertNotIn("reviewer", normalized)
+            self.assertNotIn("patch", normalized)
+            self.assertNotIn("commiter", normalized)
+            self.assertNotIn("user", normalized)
+
+    def test_confirmation_reply_clarification_detector_handles_preciser_which_sessions(self) -> None:
+        from fitmas.conversation_pipeline import _plan_patch_confirmation_reply_requests_clarification
+
+        replies = [
+            "Tu peux me preciser lesquelles exactement tu veux intervertir ?",
+            "Avant de confirmer : tu pensais a quel sport pour cette seance longue ?",
+            "Je te confirme une fois que tu m'as dit laquelle tu veux bouger en premier.",
+            "Tu peux me dire si tu visais la sortie longue de jeudi ou celle de samedi ?",
+            "Plusieurs seances en ligne pourraient coller a ta demande.",
+        ]
+
+        for reply in replies:
+            self.assertTrue(_plan_patch_confirmation_reply_requests_clarification(reply))
+
+        self.assertFalse(_plan_patch_confirmation_reply_requests_clarification("Tu confirmes ce changement ?"))
+
     def test_week_review_block_surfaces_sport_reason(self) -> None:
         result = PlanPatchServiceResult(
             validation=PlanPatchValidation(status="valid", operation_results=()),

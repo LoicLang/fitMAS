@@ -10,6 +10,7 @@ from fitmas.api_payloads import OnboardPayload, OnboardPreviewPayload
 from fitmas.api_support import apply_onboarding_to_user, build_onboarding_facts, normalized_onboarding_payload
 from fitmas.calibration_status import build_calibration_status, build_initial_calibration_status
 from fitmas.db import get_db
+from fitmas.generated_week_coherence import GeneratedWeekCoherenceBlocked, guard_generated_week_coherence
 from fitmas.llm import formulate_onboarding_recap, formulate_week_plan, preview_coach_voice
 from fitmas.memory_profile import replace_profile_memory
 from fitmas.models import OnboardPreview, OnboardResult, WeeklyPlan
@@ -103,7 +104,19 @@ def _generate_enriched_week_for_user(db: Session, user: s.User) -> dict:
     enriched["_mesocycle_week"] = mesocycle.week_in_cycle
     enriched["_mesocycle_number"] = mesocycle.cycle_number
     enriched["_total_weeks"] = mesocycle.total_weeks
-    return enriched
+    review = guard_generated_week_coherence(
+        enriched,
+        timezone_name=user.timezone,
+        activities=repo.get_activities(db, user.id, limit=120),
+        active_facts=_active_facts_for_generated_week_review(db, user.id),
+    )
+    if review.used_fallback:
+        logger.warning(
+            "generated_week.week_coherence_fallback user=%s summary=%s",
+            user.id,
+            review.review.summary,
+        )
+    return review.week
 
 
 @router.post("/api/v0/onboard/preview", response_model=OnboardPreview)
@@ -145,7 +158,10 @@ def onboard(payload: OnboardPayload, db: Session = Depends(get_db)) -> OnboardRe
         preferences=normalized_payload["preferences"],
     )
     replace_profile_memory(db, user.id, build_onboarding_facts(normalized_payload))
-    enriched_week = _generate_enriched_week_for_user(db, user)
+    try:
+        enriched_week = _generate_enriched_week_for_user(db, user)
+    except GeneratedWeekCoherenceBlocked as exc:
+        raise HTTPException(status_code=409, detail="Generated week blocked by sport quality review") from exc
     planning_bundle = refresh_planning_state(db, user=user)
     calibration_status = build_calibration_status(
         profile=planning_bundle.profile,
@@ -205,7 +221,10 @@ def regenerate_week(db: Session = Depends(get_db)) -> WeeklyPlan:
     if user is None:
         raise HTTPException(status_code=404, detail="No onboarded user yet")
 
-    enriched_week = _generate_enriched_week_for_user(db, user)
+    try:
+        enriched_week = _generate_enriched_week_for_user(db, user)
+    except GeneratedWeekCoherenceBlocked as exc:
+        raise HTTPException(status_code=409, detail="Generated week blocked by sport quality review") from exc
     plan = repo.replace_plan(
         db,
         user.id,
@@ -220,3 +239,26 @@ def regenerate_week(db: Session = Depends(get_db)) -> WeeklyPlan:
 
     logger.info("Week regenerated for user %s (mesocycle %s/%s)", user.id, enriched_week.get("_mesocycle_week", 1), enriched_week.get("_mesocycle_number", 1))
     return repo.to_pydantic_plan(plan)
+
+
+def _active_facts_for_generated_week_review(db: Session, user_id: int) -> tuple[dict, ...]:
+    try:
+        rows = repo.get_active_memory_items(
+            db,
+            user_id,
+            profile_limit=24,
+            working_limit=24,
+            include_patterns=True,
+            pattern_limit=6,
+            total_limit=36,
+        )
+    except Exception:
+        logger.warning("generated_week.active_facts_unavailable user=%s", user_id, exc_info=True)
+        return ()
+    payloads: list[dict] = []
+    for row in rows:
+        try:
+            payloads.append(repo.to_pydantic_fact(row).model_dump())
+        except Exception:
+            continue
+    return tuple(payloads)

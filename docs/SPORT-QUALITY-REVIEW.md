@@ -1066,14 +1066,33 @@ Tests :
 
 ### Slice A+5 - Review semaine generee
 
-- brancher apres `build_week_plan` / `validate_week_plan` ;
-- avant creation des `ScheduledSession`.
+✅ Implemente localement 5 mai 2026.
+
+- branche apres `build_week_plan` / `formulate_week_plan` ;
+- avant `replace_plan` et donc avant creation/sync des `ScheduledSession` ;
+- transforme la semaine candidate en `PlanPatch` synthetique `create_session`
+  read-only ;
+- appelle `WeekCoherenceReviewer` sur cette semaine candidate ;
+- si policy review non `valid` : genere une version allegee prudente et la
+  reviewe ;
+- si cette version allegee est encore `blocked` : stoppe avec erreur 409, aucun
+  `replace_plan`.
+- une version allegee `warning` / `requires_confirmation` reste
+  persistable en onboarding : il vaut mieux livrer une semaine allegee relue que
+  bloquer un nouveau user sur un compromis non critique.
+- cette version ne doit jamais exposer de jargon interne user-facing
+  (`fallback`, `review`, `patch`, `commit`, etc.) dans `summary` /
+  `session_note`.
+- en mode `injury_protection`, le planner garde un minimum efficace si des
+  sports support faciles sont disponibles : recuperation primaire + supports
+  low-impact disponibles, puis mobilite/renfo seulement si budgetee ou seul
+  support explicite, toujours easy/load <= 1.
 
 Tests :
 
-- generated week reviewed ;
-- blocked review trigger fallback/regeneration ;
-- valid review commit sessions.
+- ✅ generated week reviewed ;
+- ✅ blocked / requires_confirmation review trigger fallback/regeneration ;
+- ✅ valid review commit sessions.
 
 ### Slice B0 - SessionPrescriptionEngine
 

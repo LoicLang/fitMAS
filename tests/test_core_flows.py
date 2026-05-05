@@ -995,6 +995,56 @@ class FitMASCoreFlowsTest(unittest.TestCase):
         self.assertTrue(turns[0].pending_confirmation)
         self.assertIn("confirm", result["assistant_message"]["text"].lower())
 
+    def test_plan_patch_confirmation_reply_that_clarifies_does_not_create_pending(self) -> None:
+        _, session = self._create_plan_for_today()
+        original_date = session.scheduled_date.date()
+        target_date = (original_date + timedelta(days=2)).isoformat()
+        original_decide = api_messages.decide
+        original_extract_facts = api_messages.extract_facts
+        original_week_review = plan_mutation_service.review_week_coherence_with_llm
+        original_compose = conversation_pipeline.final_reply.compose_final_reply
+        try:
+            api_messages.decide = lambda *args, **kwargs: CoachDecision(
+                response_type="plan_patch",
+                rationale="Le LLM a choisi une cible mais sa reponse demande encore clarification.",
+                fitmas_message="Je regarde quelle seance tu veux dire.",
+                plan_patch=PlanPatch(
+                    coach_message="Je peux deplacer la seance.",
+                    operations=[
+                        PlanPatchOperation(
+                            operation_type="move_session",
+                            target_session_id=session.id,
+                            target_date=target_date,
+                            rationale="Demande a confirmer.",
+                        )
+                    ],
+                ),
+            )
+            api_messages.extract_facts = lambda *args, **kwargs: []
+            plan_mutation_service.review_week_coherence_with_llm = _confirm_week_review
+            conversation_pipeline.final_reply.compose_final_reply = (
+                lambda *_args, **_kwargs: "Tu parlais de la seance de mercredi ou de celle de samedi ?"
+            )
+
+            result = self.client.post("/api/v0/messages", json={"text": "Mets la course plus tard"}).json()
+        finally:
+            api_messages.decide = original_decide
+            api_messages.extract_facts = original_extract_facts
+            plan_mutation_service.review_week_coherence_with_llm = original_week_review
+            conversation_pipeline.final_reply.compose_final_reply = original_compose
+
+        self.db.expire_all()
+        refreshed = repo.get_scheduled_session(self.db, self.user.id, session.id)
+        pending = repo.get_active_pending_mutation_confirmation(self.db, self.user.id)
+        turns = repo.get_recent_conversation_turns(self.db, self.user.id, limit=1)
+
+        self.assertIsNotNone(refreshed)
+        self.assertEqual(refreshed.scheduled_date.date(), original_date)
+        self.assertIsNone(pending)
+        self.assertEqual(turns[0].response_mode, "plan_patch_clarification")
+        self.assertFalse(turns[0].pending_confirmation)
+        self.assertIn("tu parlais", result["assistant_message"]["text"].lower())
+
     def test_conversation_turn_serializes_datetime_memory_writes(self) -> None:
         row = repo.add_conversation_turn(
             self.db,

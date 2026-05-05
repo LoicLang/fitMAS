@@ -55,12 +55,12 @@ Chantiers en cours (suite incident hallucination factuelle briefing 2 mai) :
 - ✅ **Phase A+ core** — Sport Quality / Week Coherence gate avant nouveaux action-tools : simulation, reviewer LLM/fallback typé, gate runtime dans `apply_patch_for_user`, smoke API réel `scripts/smoke-a-plus-api` — implémenté localement 5 mai 2026 — `docs/SPORT-QUALITY-REVIEW.md`
 - ✅ **Chantier 3B-C** — Action-tools natifs bornés : `draft_move_session`, `draft_swap_sessions`, `draft_replace_session`, `draft_lighten_day`, `draft_create_session`, tous candidates PlanPatch sans write, seulement derrière la gate A+ core — implémenté localement 5 mai 2026 — `docs/RUNTIME-TOOLS.md`
 - ✅ **A+4** — tool `validate_week_coherence` validation-only conversation/planning/heartbeat + pending heartbeat seulement après review sportive confirmable — implémenté localement 5 mai 2026 — `docs/SPORT-QUALITY-REVIEW.md`
-- **A+5** — semaine générée relue avant commit — `docs/SPORT-QUALITY-REVIEW.md`
+- ✅ **A+5** — semaine générée/régénérée relue avant `replace_plan` / création des `ScheduledSession`, fallback conservative si policy review non `valid`, fallback persistable sauf `blocked` — implémenté localement 5 mai 2026 — `docs/SPORT-QUALITY-REVIEW.md`
 
 Cap produit actuel :
 - Telegram = coach conversationnel
 - App = cockpit performance
-- priorité immédiate : A+5 (semaine générée relue avant commit) + rejouer `./scripts/smoke-a-plus-api` avant dogfood
+- priorité immédiate : dogfood court Phase A+ + rejouer `./scripts/smoke-a-plus-api` avant prochaine deploy
 - Phase B long terme : progression/prescription structurée, pas ouverte tant que Phase A + Chantiers 2+3 + Phase A+ ne sont pas clos
 
 ## Stack

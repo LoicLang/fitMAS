@@ -51,7 +51,26 @@ def test_validation_rejects_action_claim_when_no_commit_allowed() -> None:
     ctx = _blocked_context()
 
     assert is_valid_final_reply("Je deplace la seance a jeudi.", ctx) is False
+    assert is_valid_final_reply("Echange fait. Tu confirmes pour garder ca ?", ctx) is False
     assert is_valid_final_reply("Je peux l'echanger avec vendredi si tu veux.", ctx) is True
+
+
+def test_validation_rejects_user_facing_internal_jargon() -> None:
+    ctx = _blocked_context()
+
+    invalid = [
+        "Hello. Voici la reponse pour l'utilisateur.",
+        "Fallback sportif: semaine allegee apres review sportive.",
+        "Le reviewer demande confirmation sur ce patch.",
+        "Deux sorties offplan cette semaine.",
+        "Je commit le changement.",
+    ]
+
+    for reply in invalid:
+        assert is_valid_final_reply(reply, ctx) is False
+
+    assert is_valid_final_reply("Deux sorties hors planning cette semaine.", ctx) is True
+    assert is_valid_final_reply("Je te propose de confirmer ce changement.", ctx) is True
 
 
 def test_compose_final_reply_uses_request_text_and_validates_output() -> None:

@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 import tempfile
 import unittest
+from types import SimpleNamespace
 from unittest.mock import patch
 
 os.environ.setdefault("FITMAS_DB_PATH", tempfile.mktemp(prefix="fitmas-onboarding-tests-", suffix=".db"))
@@ -56,6 +57,11 @@ class OnboardingPlannerFlowTest(unittest.TestCase):
                 "summary": "summary",
                 "days": planner_output["days"],
             }),
+            patch.object(
+                api_onboarding,
+                "guard_generated_week_coherence",
+                side_effect=lambda enriched_week, **_kwargs: SimpleNamespace(week=enriched_week, used_fallback=False),
+            ) as guard_week,
         ):
             onboard = self.client.post("/api/v0/onboard", json=payload)
             self.assertEqual(onboard.status_code, 200)
@@ -91,6 +97,7 @@ class OnboardingPlannerFlowTest(unittest.TestCase):
             self.assertEqual(third_regenerate.json()["mesocycle_week"], 4)
             self.assertTrue(third_regenerate.json()["is_deload"])
             self.assertIn("Recuperation", third_regenerate.json()["week_label"])
+            self.assertEqual(guard_week.call_count, 4)
 
 
 if __name__ == "__main__":

@@ -71,9 +71,9 @@ L'audit declenche par cet incident a confirme 3 failles structurelles connexes :
 | A+1-A+3 | ✅ **Phase A+ core gate** — simulation, contexte deterministe, LLM reviewer/fallback type, gate runtime dans `apply_patch_for_user`, smoke API reel `scripts/smoke-a-plus-api` — implemente localement 5 mai 2026 | 3-4j | `docs/SPORT-QUALITY-REVIEW.md` + section "Phase A+" ci-dessous |
 | 3B-C | ✅ Action-tools natifs bornes, **apres A+ core gate** — `draft_move_session`, `draft_swap_sessions`, `draft_replace_session`, `draft_lighten_day`, `draft_create_session`, candidates PlanPatch sans write — implemente localement 5 mai 2026 | 2-3j | `docs/RUNTIME-TOOLS.md` |
 | A+4 | ✅ Tool `validate_week_coherence` validation-only conversation/planning/heartbeat + capture pending heartbeat reviewee — implemente localement 5 mai 2026 | 0.5-1j | `docs/SPORT-QUALITY-REVIEW.md` |
-| A+5 | Review semaine generee avant commit | 1j | `docs/SPORT-QUALITY-REVIEW.md` |
+| A+5 | ✅ Review semaine generee avant commit — guard avant `replace_plan` / `ScheduledSession`, fallback conservative si policy review non `valid`, fallback persistable sauf `blocked` — implemente localement 5 mai 2026 | 1j | `docs/SPORT-QUALITY-REVIEW.md` |
 
-**Total restant avant B0 : ~1 jour**. Reste A+5 : review semaine generee avant Phase B.
+**Total restant avant B0 : 0 jour**. Phase A+ est fermee localement. Prochaine lane : dogfood court puis B0 si stable.
 
 ### Deploiement prod — 4 mai 2026
 
@@ -642,8 +642,11 @@ Verification locale :
 12. ~~**A+4**~~ ✅ tool `validate_week_coherence` validation-only,
    conversation/planning/heartbeat, pending heartbeat possible seulement apres
    review sportive confirmable.
-13. **Maintenant : A+5** — semaine generee relue avant commit.
-14. **Apres seulement : B0/B1/B2** — prescription structuree, session quality,
+13. ~~**A+5**~~ ✅ semaine generee relue avant commit, fallback conservative si
+   policy review non `valid`.
+14. **Maintenant : dogfood court Phase A+** — verifier conversation, heartbeat,
+   onboarding/regenerate et app sur donnees reelles.
+15. **Apres seulement : B0/B1/B2** — prescription structuree, session quality,
    performance signals et calibration.
 
 ### Phase A — etat apres chantiers 0+1+2

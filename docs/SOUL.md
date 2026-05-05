@@ -121,6 +121,33 @@ Cloture acceptee quand :
 - [x] Tests verrouillent : un changement de regle voix se propage automatiquement a tous les pipelines (`tests/test_coach_voice_cross_pipeline.py`)
 - [x] Aucune regression sur la suite : 627 tests passent, 11 skips, 6 subtests
 
+### Guard user-facing anti-jargon interne
+
+Depuis le durcissement du 5 mai 2026, `coach_voice.py` expose aussi
+`message_has_user_facing_internal_jargon()`.
+
+Frontiere :
+
+- autorise : validation d un artefact LLM sortant ;
+- interdit : comprendre ou router le message utilisateur ;
+- objectif : bloquer les fuites observees en dogfood (`fallback sportif`,
+  `reviewer`, `patch`, `runtime`, `commit`, `JSON`, `tool`, `offplan`,
+  wrapper type `Voici la reponse pour l'utilisateur`).
+
+Ces mots peuvent exister dans les prompts, logs et docs. Ils ne doivent pas
+sortir dans un message visible user. Le coach dit `hors planning`, `semaine
+allegee`, `confirmation`, `changement`, pas les noms internes du systeme.
+
+Le meme principe s applique aux artefacts susceptibles d etre relus par un
+user ou reinjectes dans un prompt (`pending.reason`, `pending.summary`) :
+raison lisible ou resume prudent, jamais `plan_patch_requires_confirmation`,
+`reviewer sportif`, `commiter`, etc.
+
+Autre garde-fou post-LLM : si une reponse de confirmation demande en fait une
+clarification de cible ("tu parlais de...", "quelle seance..."), le runtime ne
+cree pas de pending. Il renvoie la clarification telle quelle. C est une policy
+sur l artefact LLM sortant, pas un parsing du message user.
+
 ### Effet attendu
 
 - voix coach uniforme sur tous les messages user-facing (conversation, briefing, reminder, weekly review)
