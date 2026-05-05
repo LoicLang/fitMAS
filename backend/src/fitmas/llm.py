@@ -932,8 +932,6 @@ def _repair_execution_receipt_without_action_decision(
     if not _message_claims_execution_receipt_without_action(fitmas_message, rationale=rationale):
         return None
     followup_session_id = _optional_int((coach_context or {}).get("unresolved_execution_followup_session_id"))
-    if followup_session_id is None:
-        return None
     evidence_parts = [part for part in (rationale, fitmas_message) if part]
     evidence = " | ".join(evidence_parts)
     if len(evidence) > 240:
@@ -955,6 +953,10 @@ def _repair_execution_receipt_without_action_decision(
         ],
         "pending_resolution": data.get("pending_resolution"),
     }
+    if followup_session_id is None:
+        action = repaired_payload["execution_actions"][0]
+        action.pop("target_session_id", None)
+        action["confidence"] = 0.8
     decision = parse_coach_decision_payload(repaired_payload)
     if decision is not None:
         logger.info(
@@ -979,6 +981,7 @@ def _maybe_repair_missing_execution_action_from_followup(
         followup_session_id is not None
         or "hier" in normalized_decision_text
         or "yesterday" in normalized_decision_text
+        or _looks_like_execution_update_artifact(normalized_decision_text)
     )
     if not mentions_recent_execution:
         return decision
@@ -1017,6 +1020,39 @@ def _maybe_repair_missing_execution_action_from_followup(
         logger.warning("llm.followup_execution_repair_invalid")
         return decision
     return parsed
+
+
+def _looks_like_execution_update_artifact(normalized_text: str) -> bool:
+    if not normalized_text:
+        return False
+    non_completion_terms = (
+        "pas fait",
+        "n a pas fait",
+        "non realise",
+        "non realisee",
+        "manque",
+        "manquee",
+        "rate",
+        "ratee",
+        "saute",
+        "skipped",
+        "not completed",
+    )
+    execution_subjects = (
+        "seance",
+        "session",
+        "renfo",
+        "footing",
+        "course",
+        "running",
+        "natation",
+        "swim",
+        "velo",
+        "cycling",
+    )
+    return any(term in normalized_text for term in non_completion_terms) and any(
+        subject in normalized_text for subject in execution_subjects
+    )
 
 
 def _maybe_repair_execution_action_consistency(

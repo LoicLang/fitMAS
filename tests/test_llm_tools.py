@@ -1475,6 +1475,87 @@ class LLMToolsTest(unittest.TestCase):
         self.assertEqual(decision.execution_actions[0].target_ref, "seance d'hier")
         self.assertEqual(decision.execution_actions[0].status, "not_completed")
 
+    def test_decide_repairs_invalid_execution_receipt_without_followup_id(self) -> None:
+        original_client = llm._client
+        original_request_structured_json = llm._request_structured_json
+        prompts: list[str] = []
+
+        invalid_payload = {
+            "response_type": "no_change",
+            "rationale": "User explique un imprevu hier, le renfo n'a pas ete fait.",
+            "fitmas_message": "Vu pour hier. On garde le footing facile ce matin.",
+            "memory_actions": [
+                {
+                    "type": "record_availability",
+                    "window_text": "imprevu travail hier",
+                    "availability": "limited",
+                    "confidence": 0.75,
+                }
+            ],
+        }
+
+        def fake_request_structured_json(*, system, messages, model="claude-haiku-4-5-20251001", max_tokens=1024):
+            prompts.append(str(messages[0]["content"]))
+            return dict(invalid_payload)
+
+        llm._client = lambda: object()
+        llm._request_structured_json = fake_request_structured_json
+        try:
+            decision = llm.decide("J'ai pas eu le temps hier", "Repere")
+        finally:
+            llm._client = original_client
+            llm._request_structured_json = original_request_structured_json
+
+        self.assertIsInstance(decision, llm.CoachDecision)
+        self.assertEqual(len(decision.execution_actions), 1)
+        self.assertEqual(decision.execution_actions[0].target_ref, "seance d'hier")
+        self.assertEqual(decision.execution_actions[0].status, "not_completed")
+        self.assertIs(decision.execution_actions[0].completed, False)
+        self.assertGreaterEqual(len(prompts), 2)
+
+    def test_decide_repairs_valid_non_completion_artifact_without_hier_word(self) -> None:
+        original_client = llm._client
+        original_request_structured_json = llm._request_structured_json
+        prompts: list[str] = []
+
+        def fake_request_structured_json(*, system, messages, model="claude-haiku-4-5-20251001", max_tokens=1024):
+            prompts.append(str(messages[0]["content"]))
+            if len(prompts) == 1:
+                return {
+                    "response_type": "reply",
+                    "rationale": "User confirme qu'il n'a pas fait le renfo de mercredi (id=123).",
+                    "fitmas_message": "Pas grave, on garde le footing facile ce matin.",
+                    "memory_actions": [],
+                }
+            return {
+                "response_type": "reply",
+                "rationale": "Renfo de mercredi id=123 non realise.",
+                "fitmas_message": "Pas grave, on garde le footing facile ce matin.",
+                "execution_actions": [
+                    {
+                        "type": "record_execution_update",
+                        "target_ref": "renfo de mercredi",
+                        "target_session_id": 123,
+                        "status": "not_completed",
+                        "completed": False,
+                        "confidence": 0.88,
+                    }
+                ],
+            }
+
+        llm._client = lambda: object()
+        llm._request_structured_json = fake_request_structured_json
+        try:
+            decision = llm.decide("J'ai pas eu le temps", "Repere")
+        finally:
+            llm._client = original_client
+            llm._request_structured_json = original_request_structured_json
+
+        self.assertIsInstance(decision, llm.CoachDecision)
+        self.assertEqual(len(decision.execution_actions), 1)
+        self.assertEqual(decision.execution_actions[0].target_session_id, 123)
+        self.assertEqual(decision.execution_actions[0].status, "not_completed")
+
     def test_decide_repairs_missing_availability_memory_for_availability_intent(self) -> None:
         original_client = llm._client
         original_request_structured_json = llm._request_structured_json

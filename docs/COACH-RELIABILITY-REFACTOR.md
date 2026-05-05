@@ -121,6 +121,13 @@ Fix livre :
   valide mais incomplete. Si elle parle d'une execution d'hier sans
   `execution_actions`, un repair LLM peut ajouter un `target_ref` naturel
   (`seance d'hier`) que le writer resout ensuite contre la DB ;
+- extension 5 mai : si l'artefact LLM parle clairement d'une seance non faite
+  sans utiliser le mot "hier" (`renfo de mercredi id=... non realise`), le meme
+  repair LLM est tente avant de rendre la reponse ;
+- extension 5 mai bis : si l'artefact LLM invalide reconnait "pas fait hier"
+  mais qu'aucun `unresolved_execution_followup_session_id` n'est disponible, le
+  repair semantique produit un `target_ref="seance d'hier"` au lieu de tomber en
+  outage ; le writer garde la responsabilite de resoudre une cible DB unique ;
 - le repair produit `CoachDecision(no_change)` +
   `execution_actions=[record_execution_update(status=not_completed)]`.
 

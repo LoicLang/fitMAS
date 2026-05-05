@@ -34,7 +34,7 @@ from fitmas.activity_helpers import (
 from fitmas.calibration_needs import CalibrationNeedType, looks_like_clarification_message
 from fitmas.coach_reading_digest import CoachReadingDigest, build_coach_reading_facts
 from fitmas.coach_state_bundle import build_coach_state_bundle
-from fitmas.coach_messages import CoachDraft
+from fitmas.coach_messages import CoachDraft, DraftPendingConfirmation
 from fitmas.db import SessionLocal
 from fitmas.execution_clarification import build_execution_clarification
 from fitmas.skills.heartbeat import evaluation as heartbeat_evaluation
@@ -54,6 +54,8 @@ from fitmas.skills.heartbeat.roles import (
 from fitmas.knowledge import load_sport_knowledge
 from fitmas.llm_gateway import generate_heartbeat_text, generate_heartbeat_text_with_debug, request_text
 from fitmas.llm_prompt_builder import detect_open_question
+from fitmas.mutation_permissions import default_confirmation_expiry, serialize_plan_patch_confirmation
+from fitmas.plan_patch import PlanPatch, PlanPatchValidation, plan_patch_from_mutation_decisions, validate_plan_patch
 from fitmas.recent_reality import build_recent_reality_window
 from fitmas.signals import collect_signals, format_signals_for_prompt
 from fitmas.skills.heartbeat.tool_loop import (
@@ -101,6 +103,10 @@ class HeartbeatDebugTrace:
 
 
 _DEBUG_TRACE: ContextVar[HeartbeatDebugTrace | None] = ContextVar("heartbeat_debug_trace", default=None)
+_PENDING_CONFIRMATION: ContextVar[DraftPendingConfirmation | None] = ContextVar(
+    "heartbeat_pending_confirmation",
+    default=None,
+)
 
 _READONLY_CLAIM_JUDGE_SYSTEM = (
     "Tu es un juge de securite FitMAS. Tu lis uniquement un message heartbeat "
@@ -140,6 +146,12 @@ def capture_debug_trace(kind: str) -> Iterator[HeartbeatDebugTrace]:
 
 def _trace() -> HeartbeatDebugTrace | None:
     return _DEBUG_TRACE.get()
+
+
+def _take_pending_confirmation() -> DraftPendingConfirmation | None:
+    pending = _PENDING_CONFIRMATION.get()
+    _PENDING_CONFIRMATION.set(None)
+    return pending
 
 
 def _debug_jsonable(value: Any) -> Any:
@@ -212,6 +224,7 @@ def _llm_generate(
     pipeline: str = "heartbeat",
     tool_context: ToolContext | None = None,
 ) -> str | None:
+    _PENDING_CONFIRMATION.set(None)
     trace = _trace()
     use_tools = heartbeat_read_tools_enabled(tool_context)
     if trace is not None:
@@ -229,6 +242,12 @@ def _llm_generate(
         )
         if isinstance(generation, dict):
             text = generation.get("text")
+            pending_confirmation = _pending_confirmation_from_tool_generation(
+                generation,
+                text=str(text or ""),
+                pipeline=pipeline,
+            )
+            _PENDING_CONFIRMATION.set(pending_confirmation)
             trace.llm = {
                 "raw_text": generation.get("raw_text"),
                 "text": text,
@@ -237,6 +256,12 @@ def _llm_generate(
             }
             if generation.get("tools") is not None:
                 trace.tools = generation.get("tools") or {}
+            if pending_confirmation is not None:
+                trace.final["pending_confirmation"] = {
+                    "mutation_type": pending_confirmation.mutation_type,
+                    "summary": pending_confirmation.summary,
+                    "reason": pending_confirmation.reason,
+                }
         else:
             text = generation.text
             trace.llm = {
@@ -254,6 +279,13 @@ def _llm_generate(
                 tool_context=tool_context,
             )
             text = str(generation.get("text") or "").strip() or None
+            _PENDING_CONFIRMATION.set(
+                _pending_confirmation_from_tool_generation(
+                    generation,
+                    text=str(text or ""),
+                    pipeline=pipeline,
+                )
+            )
         else:
             text = generate_heartbeat_text(system, prompt, allow_no_send=allow_no_send)
     # Chantier 1 - Etape D : log-only receipt-style detection sur les outputs
@@ -271,8 +303,47 @@ def _llm_generate(
             pipeline,
             text[:160],
         )
+        _PENDING_CONFIRMATION.set(None)
         return None
     return text
+
+
+def _pending_confirmation_from_tool_generation(
+    generation: dict[str, Any],
+    *,
+    text: str,
+    pipeline: str,
+) -> DraftPendingConfirmation | None:
+    normalized_text = coach_voice.normalize_for_voice_guard(text)
+    if "confirm" not in normalized_text:
+        return None
+    candidate = generation.get("candidate_plan_patch")
+    if not isinstance(candidate, dict):
+        return None
+    raw_patch = candidate.get("patch")
+    if not isinstance(raw_patch, dict):
+        return None
+    validation = candidate.get("validation")
+    if not isinstance(validation, dict):
+        return None
+    status = str(validation.get("status") or "").strip()
+    if status not in {"valid", "warning", "requires_confirmation"}:
+        return None
+    try:
+        patch = PlanPatch.model_validate(raw_patch)
+    except Exception:
+        logger.warning("heartbeat.pending_plan_patch_invalid pipeline=%s", pipeline, exc_info=True)
+        return None
+    summary = str(candidate.get("summary") or validation.get("summary") or "ajustement proactif a confirmer").strip()
+    return DraftPendingConfirmation(
+        impact_level="high",
+        reason=f"{pipeline}_validated_plan_patch",
+        mutation_type="plan_patch",
+        summary=summary,
+        source_text=text,
+        decision_json=serialize_plan_patch_confirmation(patch),
+        expires_at=default_confirmation_expiry(),
+    )
 
 
 def _heartbeat_readonly_judge_blocks(text: str, *, pipeline: str) -> bool:
@@ -457,7 +528,12 @@ def morning_briefing() -> CoachDraft | None:
                 memory_updates.append(effective_calibration_need.as_memory_update())
             _trace_decision("send", "llm_message")
             _trace_final(llm_msg)
-            return CoachDraft(text=llm_msg, proactive=True, memory_updates=memory_updates)
+            return CoachDraft(
+                text=llm_msg,
+                proactive=True,
+                memory_updates=memory_updates,
+                pending_confirmation=_take_pending_confirmation(),
+            )
 
         # Fallback
         if clarification is not None:
@@ -567,7 +643,12 @@ def pre_session_reminder() -> CoachDraft | None:
                 memory_updates.append(calibration_need.as_memory_update())
             _trace_decision("send", "llm_message")
             _trace_final(llm_msg)
-            return CoachDraft(text=llm_msg, proactive=True, memory_updates=memory_updates)
+            return CoachDraft(
+                text=llm_msg,
+                proactive=True,
+                memory_updates=memory_updates,
+                pending_confirmation=_take_pending_confirmation(),
+            )
 
         label = key_session.label or DAY_LABELS[NEXT_DAY[today_key]]
         msg = f"Demain c'est {key_session.session_title}. Tu te sens comment pour {label.lower()} ?"
@@ -695,7 +776,7 @@ def weekly_review() -> CoachDraft | None:
         if llm_msg:
             _trace_decision("send", "llm_message")
             _trace_final(llm_msg)
-            return CoachDraft(text=llm_msg, proactive=True)
+            return CoachDraft(text=llm_msg, proactive=True, pending_confirmation=_take_pending_confirmation())
 
         msg = "Fin de semaine. Le plan a tenu ses reperes. On prend de la marge pour la suite."
         _trace_decision("send", "fallback_after_llm_no_message")
@@ -732,14 +813,28 @@ def signal_check() -> CoachDraft | None:
             from fitmas.adaptation import check_and_adapt_tsb, check_and_adapt_missed
             tsb_result = check_and_adapt_tsb(db, user)
             if tsb_result and tsb_result.decisions and tsb_result.message:
-                _trace_decision("send", "tsb_adaptation")
-                _trace_final(tsb_result.message)
-                return CoachDraft(text=tsb_result.message, proactive=True)
+                draft = _adaptation_plan_patch_confirmation_draft(
+                    db,
+                    user=user,
+                    result=tsb_result,
+                    reason="heartbeat_tsb_adaptation",
+                )
+                if draft is not None:
+                    _trace_decision("send", "tsb_adaptation_confirmation")
+                    _trace_final(draft.text)
+                    return draft
             missed_result = check_and_adapt_missed(db, user)
             if missed_result and missed_result.decisions and missed_result.message:
-                _trace_decision("send", "missed_session_adaptation")
-                _trace_final(missed_result.message)
-                return CoachDraft(text=missed_result.message, proactive=True)
+                draft = _adaptation_plan_patch_confirmation_draft(
+                    db,
+                    user=user,
+                    result=missed_result,
+                    reason="heartbeat_missed_session_adaptation",
+                )
+                if draft is not None:
+                    _trace_decision("send", "missed_session_adaptation_confirmation")
+                    _trace_final(draft.text)
+                    return draft
         except Exception:
             logger.exception("Adaptation trigger check failed (non-blocking)")
 
@@ -784,7 +879,7 @@ def signal_check() -> CoachDraft | None:
         if llm_msg:
             _trace_decision("send", "llm_message")
             _trace_final(llm_msg)
-            return CoachDraft(text=llm_msg, proactive=True)
+            return CoachDraft(text=llm_msg, proactive=True, pending_confirmation=_take_pending_confirmation())
 
         # Fallback
         first = actionable[0]
@@ -808,6 +903,78 @@ def signal_check() -> CoachDraft | None:
         return CoachDraft(text=msg, proactive=True)
     finally:
         db.close()
+
+
+def _adaptation_plan_patch_confirmation_draft(
+    db: Session,
+    *,
+    user: s.User,
+    result: Any,
+    reason: str,
+) -> CoachDraft | None:
+    message = str(getattr(result, "message", "") or "").strip()
+    patch = plan_patch_from_mutation_decisions(
+        getattr(result, "decisions", ()) or (),
+        coach_message=message or "Je te propose un ajustement de planning.",
+        confirmation_reason=reason,
+    )
+    if not patch.operations:
+        return None
+    validation = validate_plan_patch(
+        db,
+        plan_id=0,
+        patch=patch,
+        scheduled_sessions=repo.get_scheduled_sessions(db, user.id, limit=120),
+        timezone_name=user.timezone,
+    )
+    if validation.status == "blocked":
+        logger.info(
+            "heartbeat.plan_patch_candidate_blocked user=%s reason=%s summary=%s",
+            user.id,
+            reason,
+            validation.summary,
+        )
+        return None
+    summary = _heartbeat_plan_patch_confirmation_summary(validation)
+    text = _heartbeat_confirmation_message(message, summary)
+    return CoachDraft(
+        text=text,
+        proactive=True,
+        pending_confirmation=DraftPendingConfirmation(
+            impact_level="high",
+            reason=reason,
+            mutation_type="plan_patch",
+            summary=summary,
+            source_text=text,
+            decision_json=serialize_plan_patch_confirmation(patch),
+            expires_at=default_confirmation_expiry(),
+        ),
+    )
+
+
+def _heartbeat_plan_patch_confirmation_summary(validation: PlanPatchValidation) -> str:
+    first = validation.operation_results[0] if validation.operation_results else None
+    if first is not None:
+        if first.warning_messages:
+            return first.warning_messages[0]
+        if first.suggested_fix:
+            return first.suggested_fix
+        if first.block_reason:
+            return first.block_reason
+    return validation.summary or "ajustement proactif a confirmer"
+
+
+def _heartbeat_confirmation_message(message: str, summary: str) -> str:
+    base = str(message or "").strip()
+    normalized = coach_voice.normalize_for_voice_guard(base)
+    if not base:
+        return f"Je peux te proposer cet ajustement: {summary}. Tu confirmes ?"
+    if "confirm" in normalized:
+        return base
+    proposal_markers = ("propose", "peux", "peut", "si tu veux", "si tu confirmes")
+    if any(marker in normalized for marker in proposal_markers):
+        return f"{base.rstrip(' .?!')} — tu confirmes ?"
+    return f"Je peux te proposer cet ajustement: {summary}. Tu confirmes ?"
 
 
 # ---------------------------------------------------------------------------

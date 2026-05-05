@@ -13,6 +13,7 @@ import fitmas.heartbeat as heartbeat
 import fitmas.adaptation as adaptation
 from fitmas import repository as repo, schema as s
 from fitmas.adaptation import AdaptationResult
+from fitmas.coach_messages import persist_draft
 from fitmas.db import Base, SessionLocal, engine, init_db
 from fitmas.llm import MutationDecision
 from fitmas.time_context import DAY_KEYS, day_label_fr, get_local_now
@@ -914,6 +915,55 @@ class HeartbeatGroundingTest(unittest.TestCase):
         self.assertIsNotNone(draft)
         self.assertIn("proposerais", draft.text.lower())
         self.assertEqual(events, [])
+
+    def test_signal_check_adaptation_candidate_creates_pending_only_after_persist(self) -> None:
+        _, session = self._create_plan_with_today_session()
+        original_tsb = adaptation.check_and_adapt_tsb
+        original_missed = adaptation.check_and_adapt_missed
+        original_collect = heartbeat.collect_signals
+        original_gate = heartbeat.heartbeat_evaluation.evaluate_proactive_gate
+        try:
+            heartbeat.heartbeat_evaluation.evaluate_proactive_gate = lambda *args, **kwargs: SimpleNamespace(
+                allowed=True,
+                reason=None,
+            )
+            adaptation.check_and_adapt_tsb = lambda *args, **kwargs: AdaptationResult(
+                trigger_type="tsb_alert",
+                decisions=[
+                    MutationDecision(
+                        mutation_type="lighten_day",
+                        target_session_id=session.id,
+                        rationale="Charge trop haute sur les derniers jours.",
+                        fitmas_message="Je te propose d'alleger le footing du jour.",
+                    )
+                ],
+                message="Je te propose d'alleger le footing du jour.",
+                applied=False,
+            )
+            adaptation.check_and_adapt_missed = lambda *args, **kwargs: None
+            heartbeat.collect_signals = lambda *args, **kwargs: []
+
+            draft = heartbeat.signal_check()
+        finally:
+            adaptation.check_and_adapt_tsb = original_tsb
+            adaptation.check_and_adapt_missed = original_missed
+            heartbeat.collect_signals = original_collect
+            heartbeat.heartbeat_evaluation.evaluate_proactive_gate = original_gate
+
+        self.assertIsNotNone(draft)
+        self.assertIn("confirm", draft.text.lower())
+        self.assertIsNotNone(draft.pending_confirmation)
+        self.assertEqual(self.db.query(s.PendingMutationConfirmation).count(), 0)
+        self.assertEqual(self.db.query(s.PlanMutationEventRecord).count(), 0)
+
+        persist_draft(self.user.id, draft, db=self.db)
+
+        pending = self.db.query(s.PendingMutationConfirmation).one()
+        self.assertEqual(pending.status, "pending")
+        self.assertEqual(pending.mutation_type, "plan_patch")
+        self.assertIn('"kind": "plan_patch"', pending.decision_json)
+        self.assertIn("lighten_day", pending.decision_json)
+        self.assertEqual(self.db.query(s.PlanMutationEventRecord).count(), 0)
 
     def test_morning_briefing_prefers_scheduled_session_over_legacy_day_plan(self) -> None:
         _, today_session = self._create_plan_with_today_session()

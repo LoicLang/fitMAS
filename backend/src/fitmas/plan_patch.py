@@ -71,6 +71,43 @@ def adapt_plan_patch_to_mutation_decisions(patch: PlanPatch) -> list[MutationDec
     ]
 
 
+def plan_patch_from_mutation_decisions(
+    decisions: Sequence[Any],
+    *,
+    coach_message: str,
+    confirmation_reason: str | None = None,
+) -> PlanPatch:
+    """Convert legacy adaptation suggestions to the PlanPatch confirmation shape."""
+    operations: list[PlanPatchOperation] = []
+    for decision in decisions:
+        mutation_type = str(_value(decision, "mutation_type") or "").strip()
+        if not mutation_type or mutation_type == "no_change":
+            continue
+        operations.append(
+            PlanPatchOperation(
+                operation_type=mutation_type,
+                target_session_id=_optional_int(_value(decision, "target_session_id")),
+                second_session_id=_optional_int(_value(decision, "second_session_id")),
+                target_date=_optional_str(_value(decision, "target_date")),
+                from_day=_optional_str(_value(decision, "from_day")),
+                to_day=_optional_str(_value(decision, "to_day")),
+                new_title=_optional_str(_value(decision, "new_title")),
+                new_goal=_optional_str(_value(decision, "new_goal")),
+                new_sport_type=_optional_str(_value(decision, "new_sport_type")),
+                new_session_type=_optional_str(_value(decision, "new_session_type")),
+                new_duration_min=_optional_int(_value(decision, "new_duration_min")),
+                new_intensity=_optional_str(_value(decision, "new_intensity")),
+                new_description=_optional_str(_value(decision, "new_description")),
+                rationale=str(_value(decision, "rationale") or "Adaptation proactive a confirmer."),
+            )
+        )
+    return PlanPatch(
+        coach_message=coach_message,
+        confirmation_reason=confirmation_reason,
+        operations=operations,
+    )
+
+
 def validate_plan_patch(
     db: Session,
     *,
@@ -317,6 +354,20 @@ def _value(obj: Any, key: str) -> Any:
     if isinstance(obj, dict):
         return obj.get(key)
     return getattr(obj, key, None)
+
+
+def _optional_int(value: Any) -> int | None:
+    if value is None:
+        return None
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _optional_str(value: Any) -> str | None:
+    raw = str(value or "").strip()
+    return raw or None
 
 
 def _suggested_fix_for_operation(

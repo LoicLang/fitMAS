@@ -9,9 +9,9 @@ counters in the briefing prompt. Splits the truth into three atomic blocks:
                    weekly counts onto a specific day (incident 2026-04-29)
 
 Also defines `HeartbeatCapabilityBudget`: the prefiguration of the upcoming
-TurnScope primitive. Today the heartbeat is `read_only=True` by call-site
-(no plan_patch, no candidate emission). The type lives here so the
-conversation TurnScope can adopt the same shape without renaming concepts.
+TurnScope primitive. Most heartbeat roles are read-only. Since 3B-B, the
+signal-check path may emit a PlanPatch candidate for pending confirmation,
+but it still never commits a planning mutation autonomously.
 """
 from __future__ import annotations
 
@@ -49,9 +49,9 @@ TodayStatus = Literal["rest", "no_plan", "planned"]
 class HeartbeatCapabilityBudget:
     """Capability budget for a heartbeat role.
 
-    Heartbeat is `read_only=True` by call-site: it never emits a PlanPatch
-    or candidate replan. The LLM may suggest action in natural language but
-    the runtime cannot commit anything proactively.
+    Heartbeat is read-only by default. Action-capable proactive turns may
+    carry a PlanPatch candidate into a pending confirmation, but the runtime
+    cannot commit anything proactively.
 
     Prefigures the conversation TurnScope. Same primitive will gate the
     coach turn capabilities once the router lands.

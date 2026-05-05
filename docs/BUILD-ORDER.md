@@ -66,11 +66,11 @@ L'audit declenche par cet incident a confirme 3 failles structurelles connexes :
 | 3B-A | ✅ Tool-use loop proactive heartbeat read-only — le coach relit la verite recente avant de parler — deploye 4 mai 2026 | 0.5j | `docs/LLM-FIRST-CONVERSATION.md` section "Phase 5 - Tool-use loop unifie" |
 | P1-ter | ✅ Execution receipt repair hardening — plus d'outage generique si le LLM reconnait "pas fait hier" sans `execution_actions` et qu'une cible follow-up est structuree — deploye 4 mai 2026 | 0.5j | section ci-dessous |
 | P1-quater | ✅ Dogfood API fallout — execution action verifier + post-event date facts + target ambiguity + durable availability memory — deploye 4 mai 2026 | 0.5-1j | section ci-dessous |
-| 3B-B | Proactive PlanPatch propose + confirmation, pas de commit autonome | 2j | `docs/LLM-FIRST-CONVERSATION.md` |
+| 3B-B | ✅ Proactive PlanPatch propose + confirmation Telegram pending, pas de commit autonome — implemente localement 5 mai 2026 | 1j | section ci-dessous |
 | 3B-C | Action-tools natifs bornes, apres preuves 3B-A/B | 2-3j | `docs/RUNTIME-TOOLS.md` |
 | **A+** | **Phase A+ Weekly Coherence Review** (apres 3B ou si 3B non bloquant, avant Phase B) | 3-4j | section "Phase A+" ci-dessous |
 
-**Total restant : ~7-10 jours** (incluant Phase A+). Couvre propositions proactives avec confirmation, action-tools bornes et couche raisonnement week-level avant Phase B.
+**Total restant : ~5-8 jours** (incluant Phase A+). Couvre action-tools bornes et couche raisonnement week-level avant Phase B.
 
 ### Deploiement prod — 4 mai 2026
 
@@ -493,6 +493,39 @@ Tests :
 - debug endpoint expose la surface tools ;
 - tests heartbeat existants conserves.
 
+### Chantier 3B-B — Heartbeat PlanPatch + confirmation ✅ implemente localement 5 mai 2026
+
+Objectif : le heartbeat peut proposer un vrai ajustement planning sans jamais
+committer tout seul.
+
+Implementation :
+- pipeline `heartbeat` expose maintenant `suggest_replan_candidates` et
+  `validate_plan_patch` en plus des read-tools ;
+- si le LLM heartbeat appelle `validate_plan_patch` et obtient
+  `valid|warning|requires_confirmation`, le draft transporte une
+  `DraftPendingConfirmation(plan_patch)` ;
+- `persist_draft()` cree la `PendingMutationConfirmation` seulement apres
+  livraison/persistance du message proactif, ce qui evite les ghost pending si
+  Telegram echoue ;
+- `signal_check()` convertit les anciennes candidates `MutationDecision`
+  proactives (`tsb_alert`, missed cascade) en `PlanPatch`, valide, puis demande
+  confirmation au lieu d'envoyer une simple suggestion non actionnable ;
+- aucune ligne ne cree de `plan_mutation_event` avant acceptation explicite du
+  pending par conversation.
+
+Frontiere :
+- pas de write tool natif ;
+- pas de commit autonome heartbeat ;
+- acceptation toujours traitee par le pipeline conversation existant
+  `pending_resolution -> apply_patch_for_user`, avec revalidation avant commit.
+
+Verification locale :
+- `tests/test_heartbeat_tool_loop.py` : capture d'un `validate_plan_patch`
+  heartbeat en pending candidate ;
+- `tests/test_heartbeat_grounding.py` : `signal_check` cree une pending apres
+  `persist_draft`, sans event mutation ;
+- suite proche heartbeat/tools/core/plan patch : 123 passed.
+
 ### P1-ter — Execution receipt repair hardening ✅ implemente localement 4 mai 2026
 
 Smoke reel du 4 mai apres 3B-A :
@@ -517,8 +550,15 @@ Fix livre :
   d'hier mais oublie `execution_actions`, `llm.py` relance un repair LLM; sans
   session id certain, le repair peut utiliser `target_ref="seance d'hier"` et
   le writer resout ensuite contre la DB ;
+- extension 5 mai : le meme repair se declenche aussi si l'artefact LLM dit
+  explicitement qu'une seance/renfo/footing/etc. n'a pas ete fait, meme sans
+  employer le mot "hier" (`renfo de mercredi id=... non realise`) ;
+- extension 5 mai bis : le repair semantique couvre aussi le payload **invalide**
+  qui reconnait "pas fait hier" sans `unresolved_execution_followup_session_id` :
+  il emet seulement `target_ref="seance d'hier"` et laisse le writer resoudre
+  une cible DB unique ;
 - ce repair ne lit jamais le texte utilisateur libre : il se base uniquement sur
-  l'artefact LLM invalide + la cible DB deja identifiee par le contexte systeme ;
+  l'artefact LLM invalide/valide + la cible DB deja identifiee par le contexte systeme ;
 - si aucun session id certain n'existe, le repair peut seulement emettre une
   reference naturelle bornee (`target_ref="seance d'hier"`), que le writer doit
   resoudre contre la DB ; sans resolution unique, pas d'action synthetisee.
@@ -531,6 +571,7 @@ Frontiere doctrine :
 
 Verification :
 - test rouge/passe sur repair apres echec du JSON repair ;
+- test rouge/passe sur artefact LLM non-completion sans mot "hier" ;
 - test pipeline sur propagation de la cible follow-up structuree ;
 - smoke reel DeepSeek `heartbeat_non_completion` : exit 0, renfo J-1 marque
   `skipped`, reply conversationnelle.
@@ -582,10 +623,11 @@ Verification locale :
 5. ~~**P1-ter execution receipt repair hardening**~~ ✅ smoke
    `heartbeat_non_completion` ferme.
 6. ~~**P1-quater dogfood API fallout**~~ ✅ incoherences test reel fermees.
-7. **Maintenant : Chantier 3B-B** — PlanPatch propose + confirmation Telegram,
-   toujours sans commit autonome.
-8. **Apres preuves dogfood : Chantier 3B-C** — action-tools natifs bornes.
-9. **Apres 3B** : Phase A+ Weekly Coherence Review (3-4j) — l'apport produit
+7. ~~**Chantier 3B-B**~~ ✅ PlanPatch propose + confirmation Telegram, sans
+   commit autonome.
+8. **Maintenant : discuter/evaluer 3B-B, puis Chantier 3B-C** — action-tools
+   natifs bornes.
+9. **Apres 3B-C** : Phase A+ Weekly Coherence Review (3-4j) — l'apport produit
    le plus visible, transforme le coach reactif local en coach strategique
    week-level.
 

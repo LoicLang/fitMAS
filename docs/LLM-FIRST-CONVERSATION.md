@@ -400,9 +400,10 @@ Conversation a maintenant une premiere boucle outillee 3A :
 
 Ce n'est pas encore la Phase 5 complete :
 
-- heartbeat utilise maintenant une boucle read-tools read-only 3B-A
-  (`get_plan_window`, activites, realite recente, charge, contraintes,
-  memoire), mais pas encore de tools d'action ;
+- heartbeat utilise maintenant une boucle 3B-B avec read-tools +
+  `suggest_replan_candidates` + `validate_plan_patch`. Il peut creer une
+  pending confirmation `PlanPatch` apres delivery, mais ne commit toujours pas
+  de mutation autonome ;
 - les actions planning ne sont pas encore des tools natifs ;
 - la decision interne reste un `CoachDecision` JSON pendant la migration ;
 - la prose libre finale est livree sur les chemins planning post-resultat, pas encore comme unique terminaison universelle.

@@ -12,7 +12,7 @@ from fitmas.tools.registry import list_tools_for_pipeline
 from fitmas.tools.runtime import ToolExecution, execute_tool_calls
 
 
-HEARTBEAT_READ_TOOL_NAMES: tuple[str, ...] = (
+HEARTBEAT_TOOL_NAMES: tuple[str, ...] = (
     "get_plan_window",
     "get_recent_activities",
     "get_activity_highlights",
@@ -20,7 +20,10 @@ HEARTBEAT_READ_TOOL_NAMES: tuple[str, ...] = (
     "get_load_context",
     "get_user_constraints",
     "get_relevant_facts",
+    "suggest_replan_candidates",
+    "validate_plan_patch",
 )
+HEARTBEAT_READ_TOOL_NAMES = HEARTBEAT_TOOL_NAMES
 MAX_HEARTBEAT_TOOL_ROUNDS = 2
 MAX_HEARTBEAT_TOOL_CALLS = 4
 
@@ -48,7 +51,7 @@ def generate_heartbeat_text_with_tools_debug(
             "allow_no_send": generation.allow_no_send,
             "tools": {},
         }
-    tools = list_tools_for_pipeline(tool_context.pipeline, tool_names=HEARTBEAT_READ_TOOL_NAMES)
+    tools = list_tools_for_pipeline(tool_context.pipeline, tool_names=HEARTBEAT_TOOL_NAMES)
     tool_names = [str(tool.get("name") or "") for tool in tools]
     if not tools:
         generation = generate_heartbeat_text_with_debug(system, prompt, allow_no_send=allow_no_send)
@@ -62,10 +65,13 @@ def generate_heartbeat_text_with_tools_debug(
 
     final_system = (
         f"{system}\n\n"
-        "Tu as acces a des read-tools heartbeat. Ils lisent seulement le plan, "
-        "les activites, les contraintes, la memoire et la charge; ils n'ecrivent rien. "
-        "Utilise-les avant une affirmation factuelle fragile. Si tu proposes un changement, "
-        "formule-le comme une proposition ou une demande de confirmation: ce heartbeat est read-only."
+        "Tu as acces a des tools heartbeat bornes. Les read-tools lisent le plan, "
+        "les activites, les contraintes, la memoire et la charge. "
+        "`suggest_replan_candidates` et `validate_plan_patch` peuvent aider a proposer un ajustement, "
+        "mais aucun tool heartbeat ne commit en base. "
+        "Utilise les tools avant une affirmation factuelle fragile. "
+        "Si tu proposes un changement de planning, appelle `validate_plan_patch` avant ta reponse finale "
+        "et formule uniquement une demande de confirmation."
     )
     if allow_no_send:
         final_system += gw.NO_SEND_INSTRUCTION
@@ -92,6 +98,7 @@ def generate_heartbeat_text_with_tools_debug(
     tool_calls_used = 0
     requested: list[str] = []
     results_debug: list[dict[str, Any]] = []
+    candidate_plan_patch: dict[str, Any] | None = None
     while True:
         stop_reason = str(getattr(response, "stop_reason", "") or "")
         if stop_reason != "tool_use":
@@ -100,6 +107,8 @@ def generate_heartbeat_text_with_tools_debug(
                 allow_no_send=allow_no_send,
             )
             normalized["tools"] = {"offered": tool_names, "requested": requested, "results": results_debug}
+            if candidate_plan_patch is not None:
+                normalized["candidate_plan_patch"] = candidate_plan_patch
             return normalized
 
         tool_blocks = _tool_use_blocks(response)
@@ -125,6 +134,7 @@ def generate_heartbeat_text_with_tools_debug(
             max_tools=remaining_budget,
             llm_round_trips=tool_rounds + 1,
         )
+        candidate_plan_patch = _candidate_plan_patch_from_tools(tool_calls, executions) or candidate_plan_patch
         tool_calls_used += min(len(tool_calls), remaining_budget)
         results_debug.extend(_tool_results_debug(executions))
         messages.append({"role": "assistant", "content": gw.serialize_content_blocks(getattr(response, "content", []))})
@@ -191,11 +201,15 @@ def _tool_followup_content(
         )
     if allow_more_tools:
         text = (
-            "Tu peux appeler un autre read-tool si une information manque. "
+            "Tu peux appeler un autre tool si une information manque. "
+            "Si tu proposes un changement, valide-le d'abord avec validate_plan_patch. "
             "Sinon reponds en prose coach courte, ou NO_SEND si rien d'utile."
         )
     else:
-        text = "Budget tools termine. Reponds maintenant en prose coach courte, ou NO_SEND si rien d'utile."
+        text = (
+            "Budget tools termine. Reponds maintenant en prose coach courte, "
+            "demande confirmation si un PlanPatch vient d'etre valide, ou NO_SEND si rien d'utile."
+        )
     content.append({"type": "text", "text": text})
     return content
 
@@ -211,6 +225,30 @@ def _tool_results_debug(executions: list[ToolExecution]) -> list[dict[str, Any]]
         }
         for execution in executions
     ]
+
+
+def _candidate_plan_patch_from_tools(
+    tool_calls: list[ToolCall],
+    executions: list[ToolExecution],
+) -> dict[str, Any] | None:
+    for call, execution in zip(tool_calls, executions):
+        if call.tool_name != "validate_plan_patch":
+            continue
+        raw_patch = call.arguments.get("patch")
+        if not isinstance(raw_patch, dict):
+            continue
+        result = execution.result
+        if result.status != "ok" or not isinstance(result.payload, dict):
+            continue
+        validation_status = str(result.payload.get("status") or "").strip()
+        if validation_status not in {"valid", "warning", "requires_confirmation"}:
+            continue
+        return {
+            "patch": raw_patch,
+            "validation": result.payload,
+            "summary": result.summary,
+        }
+    return None
 
 
 def _normalize_heartbeat_generation(raw_text: str | None, *, allow_no_send: bool) -> dict[str, Any]:

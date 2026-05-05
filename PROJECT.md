@@ -49,15 +49,16 @@ Chantiers en cours (suite incident hallucination factuelle briefing 2 mai) :
 - ✅ **P1 post-event reply verifier** — verifier/réparer une réponse finale post-mutation contre les events réellement commités avant envoi — implémenté localement 4 mai 2026
 - ✅ **P1 PlanPatch confirmation parity** — un `replace_session` qui change le sport d’une séance clé repasse par confirmation, comme la route `MutationDecision` — implémenté localement 4 mai 2026
 - ✅ **Chantier 3B-A** — Heartbeat read-tools read-only : plan, activités, réalité récente, charge, contraintes et mémoire avant `send/no_send` — implémenté localement 4 mai 2026
-- ✅ **P1 execution receipt repair** — si le LLM reconnait “pas fait hier” sans `execution_actions`, repair sémantique sur artefact LLM + cible follow-up structurée, pas d’outage générique — implémenté localement 4 mai 2026
+- ✅ **Chantier 3B-B** — Heartbeat peut proposer un `PlanPatch` proactif avec confirmation Telegram pending, sans commit autonome — implémenté localement 5 mai 2026
+- ✅ **P1 execution receipt repair** — si le LLM reconnait “pas fait hier” sans `execution_actions`, repair sémantique sur artefact LLM ; cible follow-up structurée si dispo, sinon `target_ref` borné résolu par le writer — implémenté localement 4-5 mai 2026
 - ✅ **P1-quater** — dogfood API fallout : verifier `execution_actions`, date/day dans facts post-event, confirmation cible planning ambiguë, repair mémoire disponibilité — déployé 4 mai 2026
-- **Chantier 3B** — Tool-use loop proactive heartbeat + action-tools natifs bornés — `docs/LLM-FIRST-CONVERSATION.md`
+- **Chantier 3B-C** — Action-tools natifs bornés, après preuves 3B-A/B — `docs/RUNTIME-TOOLS.md`
 - **Phase A+** — Weekly Coherence Review (3-4j, après Chantier 3B ou si jugé non bloquant) — couche raisonnement week-level, transforme coach réactif local en coach stratégique — `docs/BUILD-ORDER.md` section dédiée
 
 Cap produit actuel :
 - Telegram = coach conversationnel
 - App = cockpit performance
-- priorité immédiate : proposer des `PlanPatch` proactifs avec confirmation Telegram sans commit autonome
+- priorité immédiate : discuter/évaluer 3B-B, puis ouvrir les action-tools natifs bornés 3B-C
 - Phase B long terme : progression/prescription structurée, pas ouverte tant que Phase A + Chantiers 2+3 + Phase A+ ne sont pas clos
 
 ## Stack

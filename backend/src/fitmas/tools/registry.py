@@ -157,7 +157,7 @@ def build_tool_registry() -> dict[str, ToolSpec]:
                 },
                 "required": [],
             },
-            allowed_pipelines=("conversation", "planning"),
+            allowed_pipelines=("conversation", "planning", "heartbeat"),
             handler=_suggest_replan_candidates,
         ),
         ToolSpec(
@@ -176,7 +176,7 @@ def build_tool_registry() -> dict[str, ToolSpec]:
                 },
                 "required": ["patch"],
             },
-            allowed_pipelines=("conversation", "planning"),
+            allowed_pipelines=("conversation", "planning", "heartbeat"),
             handler=_validate_plan_patch_tool,
         ),
         ToolSpec(

@@ -101,8 +101,9 @@ Registry V1 :
 - `get_load_context`
 - `get_user_constraints`
 - `get_relevant_facts`
-- `propose_replan` (a reclasser en `suggest_replan_candidates`)
-- `validate_plan_patch` (validation-only, ajoute en Chantier 3A)
+- `suggest_replan_candidates`
+- `propose_replan` (legacy compat, non route par defaut)
+- `validate_plan_patch` (validation-only, ajoute conversation 3A puis heartbeat 3B-B)
 
 Tous ces tools lisent des objets deja charges par l'orchestrateur.
 Le registre actuel reste volontairement tres compact.
@@ -157,21 +158,25 @@ Direction immediate :
   decision `send/no_send`, judge `ALLOW/BLOCK`, message final — shippe
   via `dump=true` sur `/api/v0/debug/heartbeat/{kind}` et `/ops/heartbeat/{kind}` ;
 - Chantier 3B-A donne au heartbeat les read-tools utiles, sans write autonome
-  (implemente localement 4 mai 2026) :
+  (deployee 4 mai 2026) :
   `get_plan_window`, `get_recent_activities`, `get_activity_highlights`,
   `get_recent_reality_window`, `get_load_context`, `get_user_constraints`,
   `get_relevant_facts` ;
 - Chantier 3B-B autorise une proposition `PlanPatch` + confirmation Telegram,
-  toujours revalidee backend avant commit ;
+  toujours revalidee backend avant commit (implemente localement 5 mai 2026) ;
 - Chantier 3B-C seulement introduit des action-tools natifs bornes.
 
 Regle : le heartbeat est un coach proactif, pas un cron de texte. Les tools
 servent a decider s'il y a quelque chose d'utile a dire. `NO_SEND` reste un
 resultat sain.
 
-Etat 3B-A :
-- pipeline `heartbeat` autorise seulement des tools read-only ;
-- pas de candidate tool, pas de validation tool, pas de write tool ;
+Etat 3B-B :
+- pipeline `heartbeat` autorise les read-tools, `suggest_replan_candidates`
+  et `validate_plan_patch` ;
+- `validate_plan_patch` reste validation-only : il ne commit rien ;
+- un `PlanPatch` valide/remontant confirmation devient une pending Telegram
+  seulement apres delivery/persist du draft ;
+- pas de write tool natif, pas de commit autonome ;
 - boucle dediee `skills/heartbeat/tool_loop.py`, max 2 rounds / 4 tool calls ;
 - debug dump expose `tools.offered`, `tools.requested`, `tools.results`.
 

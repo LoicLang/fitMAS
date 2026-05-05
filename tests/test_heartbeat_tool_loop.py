@@ -80,6 +80,147 @@ class HeartbeatToolLoopTest(unittest.TestCase):
         self.assertEqual(trace.tools["requested"], ["get_plan_window"])
         self.assertEqual(trace.tools["results"][0]["status"], "ok")
 
+    def test_llm_generate_captures_validated_plan_patch_as_pending_candidate(self) -> None:
+        responses = [
+            SimpleNamespace(
+                stop_reason="tool_use",
+                content=[
+                    SimpleNamespace(
+                        type="tool_use",
+                        id="toolu_1",
+                        name="validate_plan_patch",
+                        input={
+                            "patch": {
+                                "coach_message": "Je te propose d'alleger demain.",
+                                "operations": [
+                                    {
+                                        "operation_type": "lighten_day",
+                                        "target_session_id": 10,
+                                        "rationale": "Charge haute.",
+                                    }
+                                ],
+                            }
+                        },
+                    )
+                ],
+            ),
+            SimpleNamespace(
+                stop_reason="end_turn",
+                content=[SimpleNamespace(type="text", text="Je te propose d'alleger demain — tu confirmes ?")],
+            ),
+        ]
+
+        def fake_request_message(**_kwargs):
+            return responses.pop(0)
+
+        context = ToolContext(
+            pipeline="heartbeat",
+            user_id=1,
+            timezone_name="Europe/Paris",
+            now=datetime.fromisoformat("2026-05-04T07:30:00+02:00"),
+            scheduled_sessions=[
+                {
+                    "id": 10,
+                    "scheduled_date": "2026-05-05T07:00:00+02:00",
+                    "sport_type": "running",
+                    "session_title": "Footing facile",
+                    "duration_min": 35,
+                    "completion_status": "planned",
+                }
+            ],
+        )
+
+        original_request_message = tool_loop.gw.request_message
+        original_request_text = heartbeat.request_text
+        try:
+            tool_loop.gw.request_message = fake_request_message
+            heartbeat.request_text = lambda **_kwargs: "ALLOW"
+            text = heartbeat._llm_generate(
+                "system",
+                "prompt",
+                pipeline="heartbeat_signal",
+                tool_context=context,
+            )
+            pending = heartbeat._take_pending_confirmation()
+        finally:
+            tool_loop.gw.request_message = original_request_message
+            heartbeat.request_text = original_request_text
+
+        self.assertEqual(text, "Je te propose d'alleger demain — tu confirmes ?")
+        self.assertIsNotNone(pending)
+        self.assertEqual(pending.mutation_type, "plan_patch")
+        self.assertIn('"kind": "plan_patch"', pending.decision_json)
+        self.assertIn("lighten_day", pending.decision_json)
+
+    def test_llm_generate_does_not_create_pending_when_final_reply_does_not_confirm(self) -> None:
+        responses = [
+            SimpleNamespace(
+                stop_reason="tool_use",
+                content=[
+                    SimpleNamespace(
+                        type="tool_use",
+                        id="toolu_1",
+                        name="validate_plan_patch",
+                        input={
+                            "patch": {
+                                "coach_message": "Je teste un ajustement.",
+                                "operations": [
+                                    {
+                                        "operation_type": "lighten_day",
+                                        "target_session_id": 10,
+                                        "rationale": "Charge haute.",
+                                    }
+                                ],
+                            }
+                        },
+                    )
+                ],
+            ),
+            SimpleNamespace(
+                stop_reason="end_turn",
+                content=[SimpleNamespace(type="text", text="Je garde juste un oeil sur demain.")],
+            ),
+        ]
+
+        def fake_request_message(**_kwargs):
+            return responses.pop(0)
+
+        context = ToolContext(
+            pipeline="heartbeat",
+            user_id=1,
+            timezone_name="Europe/Paris",
+            now=datetime.fromisoformat("2026-05-04T07:30:00+02:00"),
+            scheduled_sessions=[
+                {
+                    "id": 10,
+                    "scheduled_date": "2026-05-05T07:00:00+02:00",
+                    "sport_type": "running",
+                    "session_title": "Footing facile",
+                    "duration_min": 35,
+                    "completion_status": "planned",
+                }
+            ],
+        )
+
+        original_request_message = tool_loop.gw.request_message
+        original_request_text = heartbeat.request_text
+        try:
+            tool_loop.gw.request_message = fake_request_message
+            heartbeat.request_text = lambda **_kwargs: "ALLOW"
+            text = heartbeat._llm_generate(
+                "system",
+                "prompt",
+                pipeline="heartbeat_signal",
+                tool_context=context,
+            )
+            pending = heartbeat._take_pending_confirmation()
+        finally:
+            tool_loop.gw.request_message = original_request_message
+            heartbeat.request_text = original_request_text
+
+        self.assertEqual(text, "Je garde juste un oeil sur demain.")
+        self.assertIsNone(pending)
+
 
 if __name__ == "__main__":
     unittest.main()

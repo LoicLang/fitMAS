@@ -158,10 +158,9 @@ def select_calibration_need(
 class HeartbeatRole:
     """Declares the capabilities and constraints of a heartbeat role.
 
-    `capability` prefigures the conversation TurnScope: read-only by default,
-    no plan_patch, no candidate. Heartbeat call-sites enforce this by virtue
-    of never invoking the mutation pipeline; the explicit field makes the
-    contract greppable and ready to plug into TurnScope.
+    `capability` prefigures the conversation TurnScope: read-only by default.
+    Since 3B-B, the signal role may emit a PlanPatch candidate as a pending
+    confirmation; call-sites still never commit a mutation autonomously.
     """
     name: str
     can_read: tuple[str, ...]    # what data sources this role can access
@@ -197,9 +196,9 @@ REVIEW_ROLE = HeartbeatRole(
 SIGNAL_ROLE = HeartbeatRole(
     name="signal",
     can_read=("signals", "facts", "adaptation"),
-    can_write=("message", "trigger_adaptation"),
+    can_write=("message", "pending_confirmation"),
     max_output_sentences=3,
-    capability=HeartbeatCapabilityBudget(read_only=True),
+    capability=HeartbeatCapabilityBudget(read_only=False, can_emit_plan_patch=True, can_emit_candidate=True),
 )
 
 
