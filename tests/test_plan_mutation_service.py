@@ -4,6 +4,8 @@ from datetime import date
 from pathlib import Path
 from types import SimpleNamespace
 
+import pytest
+
 from fitmas.llm import MutationDecision
 from fitmas.plan_patch import PlanPatch, PlanPatchOperation
 from fitmas.plan_mutation_service import (
@@ -16,6 +18,17 @@ from fitmas.plan_mutation_service import (
     move_session_for_user,
     skip_session_for_user,
 )
+from fitmas.week_coherence import WeekCoherenceFinding, WeekCoherenceReview
+
+
+@pytest.fixture(autouse=True)
+def _default_week_review(monkeypatch) -> None:
+    monkeypatch.setattr(
+        "fitmas.plan_mutation_service.review_week_coherence_with_llm",
+        lambda *args, **kwargs: _week_review("valid", "commit_original"),
+    )
+    monkeypatch.setattr("fitmas.plan_mutation_service.repo.get_activities", lambda *args, **kwargs: [])
+    monkeypatch.setattr("fitmas.plan_mutation_service.repo.get_active_memory_items", lambda *args, **kwargs: [])
 
 
 def test_apply_decisions_for_user_returns_none_when_empty() -> None:
@@ -58,6 +71,205 @@ def test_apply_patch_for_user_commits_only_valid_patch(monkeypatch) -> None:
     assert result.validation.status == "valid"
     assert result.mutation_result is not None
     assert result.mutation_result.applied_count == 1
+
+
+def test_apply_patch_for_user_week_review_requires_confirmation_prevents_commit(monkeypatch) -> None:
+    user = SimpleNamespace(id=7, timezone="Europe/Paris")
+    patch = PlanPatch(
+        operations=[
+            PlanPatchOperation(
+                operation_type="move_session",
+                target_session_id=22,
+                target_date="2099-04-30",
+                rationale="Indispo.",
+            )
+        ],
+        coach_message="Je deplace.",
+    )
+
+    monkeypatch.setattr("fitmas.plan_mutation_service.repo.get_active_plan_optional", lambda db, user_id: SimpleNamespace(id=42))
+    monkeypatch.setattr(
+        "fitmas.plan_mutation_service.repo.get_scheduled_sessions",
+        lambda *args, **kwargs: [SimpleNamespace(id=22, scheduled_date=date(2099, 4, 29), intensity="easy", completion_status="planned")],
+    )
+    monkeypatch.setattr(
+        "fitmas.plan_mutation_service.review_week_coherence_with_llm",
+        lambda *args, **kwargs: _week_review("requires_confirmation", "confirm_original"),
+    )
+
+    def _apply(*args, **kwargs):
+        raise AssertionError("week review requires_confirmation must not commit")
+
+    monkeypatch.setattr("fitmas.plan_mutation_service.mutations.apply", _apply)
+
+    result = apply_patch_for_user(object(), user=user, patch=patch)
+
+    assert result.validation.status == "valid"
+    assert result.week_review is not None
+    assert result.week_review.status == "requires_confirmation"
+    assert result.week_policy_status == "requires_confirmation"
+    assert result.mutation_result is None
+
+
+def test_apply_patch_for_user_week_review_blocked_prevents_commit(monkeypatch) -> None:
+    user = SimpleNamespace(id=7, timezone="Europe/Paris")
+    patch = PlanPatch(
+        operations=[
+            PlanPatchOperation(
+                operation_type="move_session",
+                target_session_id=22,
+                target_date="2099-04-30",
+                rationale="Indispo.",
+            )
+        ],
+        coach_message="Je deplace.",
+    )
+
+    monkeypatch.setattr("fitmas.plan_mutation_service.repo.get_active_plan_optional", lambda db, user_id: SimpleNamespace(id=42))
+    monkeypatch.setattr(
+        "fitmas.plan_mutation_service.repo.get_scheduled_sessions",
+        lambda *args, **kwargs: [SimpleNamespace(id=22, scheduled_date=date(2099, 4, 29), intensity="easy", completion_status="planned")],
+    )
+    monkeypatch.setattr(
+        "fitmas.plan_mutation_service.review_week_coherence_with_llm",
+        lambda *args, **kwargs: _week_review("blocked", "block_original"),
+    )
+
+    def _apply(*args, **kwargs):
+        raise AssertionError("week review blocked must not commit")
+
+    monkeypatch.setattr("fitmas.plan_mutation_service.mutations.apply", _apply)
+
+    result = apply_patch_for_user(object(), user=user, patch=patch)
+
+    assert result.validation.status == "valid"
+    assert result.week_review is not None
+    assert result.week_review.status == "blocked"
+    assert result.week_policy_status == "blocked"
+    assert result.mutation_result is None
+
+
+def test_apply_patch_for_user_confirmed_week_review_can_commit(monkeypatch) -> None:
+    user = SimpleNamespace(id=7, timezone="Europe/Paris")
+    patch = PlanPatch(
+        operations=[
+            PlanPatchOperation(
+                operation_type="move_session",
+                target_session_id=22,
+                target_date="2099-04-30",
+                rationale="Indispo.",
+            )
+        ],
+        coach_message="Je deplace.",
+    )
+    calls: list[str] = []
+
+    monkeypatch.setattr("fitmas.plan_mutation_service.repo.get_active_plan_optional", lambda db, user_id: SimpleNamespace(id=42))
+    monkeypatch.setattr(
+        "fitmas.plan_mutation_service.repo.get_scheduled_sessions",
+        lambda *args, **kwargs: [SimpleNamespace(id=22, scheduled_date=date(2099, 4, 29), intensity="easy", completion_status="planned")],
+    )
+    monkeypatch.setattr("fitmas.plan_mutation_service.repo.get_scheduled_session", lambda *args, **kwargs: None)
+    monkeypatch.setattr("fitmas.plan_mutation_service.repo.add_plan_mutation_event", lambda *args, **kwargs: None)
+    monkeypatch.setattr(
+        "fitmas.plan_mutation_service.review_week_coherence_with_llm",
+        lambda *args, **kwargs: _week_review("requires_confirmation", "confirm_original"),
+    )
+
+    def _apply(db, plan_id, decision, **kwargs):
+        calls.append(decision.mutation_type)
+        return SimpleNamespace(allowed=True, warnings=[]), SimpleNamespace()
+
+    monkeypatch.setattr("fitmas.plan_mutation_service.mutations.apply", _apply)
+
+    result = apply_patch_for_user(object(), user=user, patch=patch, allow_requires_confirmation=True)
+
+    assert result.week_policy_status == "valid"
+    assert result.mutation_result is not None
+    assert result.mutation_result.applied_count == 1
+    assert calls == ["move_session"]
+
+
+def test_apply_patch_for_user_passes_loaded_context_to_week_review(monkeypatch) -> None:
+    user = SimpleNamespace(id=7, timezone="Europe/Paris")
+    patch = PlanPatch(
+        operations=[
+            PlanPatchOperation(
+                operation_type="move_session",
+                target_session_id=22,
+                target_date="2099-04-30",
+                rationale="Indispo.",
+            )
+        ],
+        coach_message="Je deplace.",
+    )
+    bundle = SimpleNamespace(
+        planning_contract={"goal": "10k"},
+        week_mission={"mission": "preserve_key_session"},
+        session_policies=({"session_id": 22, "role": "key"},),
+        recent_reality=None,
+    )
+    active_facts = ({"category": "availability", "key": "pool_closed", "value": "true"},)
+    activities = (SimpleNamespace(id=1),)
+    captured = []
+
+    monkeypatch.setattr("fitmas.plan_mutation_service.repo.get_active_plan_optional", lambda db, user_id: SimpleNamespace(id=42))
+    monkeypatch.setattr(
+        "fitmas.plan_mutation_service.repo.get_scheduled_sessions",
+        lambda *args, **kwargs: [SimpleNamespace(id=22, scheduled_date=date(2099, 4, 29), intensity="easy", completion_status="planned")],
+    )
+
+    def _review(context, **kwargs):
+        captured.append(context)
+        return _week_review("requires_confirmation", "confirm_original")
+
+    monkeypatch.setattr("fitmas.plan_mutation_service.review_week_coherence_with_llm", _review)
+
+    result = apply_patch_for_user(
+        object(),
+        user=user,
+        patch=patch,
+        coach_state_bundle=bundle,
+        activities=activities,
+        active_facts=active_facts,
+    )
+
+    assert result.week_policy_status == "requires_confirmation"
+    assert captured[0].planning_contract == {"goal": "10k"}
+    assert captured[0].week_mission == {"mission": "preserve_key_session"}
+    assert captured[0].session_policies == ({"session_id": 22, "role": "key"},)
+    assert captured[0].recent_reality == {"activity_count": 1}
+    assert captured[0].active_constraints == active_facts
+
+
+def test_apply_patch_for_user_runtime_block_skips_week_review(monkeypatch) -> None:
+    user = SimpleNamespace(id=7, timezone="Europe/Paris")
+    patch = PlanPatch(
+        operations=[
+            PlanPatchOperation(
+                operation_type="move_session",
+                target_session_id=999,
+                target_date="2099-04-30",
+                rationale="Indispo.",
+            )
+        ],
+        coach_message="Je deplace.",
+    )
+
+    monkeypatch.setattr("fitmas.plan_mutation_service.repo.get_active_plan_optional", lambda db, user_id: SimpleNamespace(id=42))
+    monkeypatch.setattr("fitmas.plan_mutation_service.repo.get_scheduled_sessions", lambda *args, **kwargs: [])
+
+    def _review(*args, **kwargs):
+        raise AssertionError("week review must not run after runtime hard block")
+
+    monkeypatch.setattr("fitmas.plan_mutation_service.review_week_coherence_with_llm", _review)
+
+    result = apply_patch_for_user(object(), user=user, patch=patch)
+
+    assert result.validation.status == "blocked"
+    assert result.week_review is None
+    assert result.week_policy_status == "blocked"
+    assert result.mutation_result is None
 
 
 def test_apply_patch_for_user_does_not_commit_patch_requiring_confirmation(monkeypatch) -> None:
@@ -965,3 +1177,21 @@ def test_only_plan_mutation_service_imports_low_level_mutation_executor() -> Non
             offenders.append(str(path.relative_to(root)))
 
     assert offenders == []
+
+
+def _week_review(status: str, recommended_policy: str) -> WeekCoherenceReview:
+    return WeekCoherenceReview(
+        status=status,
+        sport_quality="fragile" if status != "valid" else "good",
+        confidence=0.86,
+        summary="review semaine",
+        findings=(
+            WeekCoherenceFinding(
+                code="mission_preserved" if status == "valid" else "mission_diluted",
+                severity="info" if status == "valid" else "requires_confirmation",
+                detail="Review test.",
+            ),
+        ),
+        suggested_adjustments=(),
+        recommended_policy=recommended_policy,
+    )

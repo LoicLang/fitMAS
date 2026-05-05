@@ -52,7 +52,7 @@ from fitmas.mutation_permissions import (
     serialize_mutation_decision,
 )
 from fitmas.plan_mutation_service import PlanPatchServiceResult, apply_decisions_for_user, apply_patch_for_user
-from fitmas.plan_patch import validate_plan_patch
+from fitmas.plan_patch import plan_patch_from_mutation_decisions, validate_plan_patch
 from fitmas.profile_summary import build_profile_summary
 from fitmas.signals import collect_signals
 from fitmas.tools.contract import ToolContext
@@ -383,6 +383,9 @@ def run_conversation_turn(
                 source="conversation",
                 trigger_type="coach_decision_plan_patch",
                 explained_to_user=True,
+                coach_state_bundle=coach_bundle,
+                activities=state.activities,
+                active_facts=state.active_facts,
             )
             applied = _patch_was_applied(service_result)
             if applied:
@@ -498,13 +501,20 @@ def run_conversation_turn(
             )
             logger.info("LLM reply (%s): %s", decision.mutation_type, decision.fitmas_message[:120])
         else:
-            service_result = apply_decisions_for_user(
+            patch = plan_patch_from_mutation_decisions(
+                [decision],
+                coach_message=decision.fitmas_message,
+            )
+            service_result = apply_patch_for_user(
                 db,
                 user=user,
-                decisions=[decision],
+                patch=patch,
                 source="conversation",
                 trigger_type="life_change_adaptation" if adaptation is not None else "message",
                 explained_to_user=True,
+                coach_state_bundle=coach_bundle,
+                activities=state.activities,
+                active_facts=state.active_facts,
             )
             if adaptation is not None:
                 repo.add_adaptation_event(
@@ -512,23 +522,46 @@ def run_conversation_turn(
                     user.id,
                     build_adaptation_log_entry(decision=adaptation, scheduled_sessions=state.scheduled_sessions),
                 )
-            applied = _mutation_was_applied(service_result)
-            reply_text = (
-                _applied_event_summary(service_result, decision)
-                if applied
-                else _blocked_mutation_reply(decision, service_result)
-            )
-            if not applied:
-                _log_mutation_blocked(service_result, user_id=user.id)
-            outcome = ConversationTurnOutcome(
-                extraction=Extraction(confidence=extraction_confidence),
-                reply_text=reply_text,
-                day_updated=api_messages._resolve_day_updated(decision) if applied else None,
-                response_mode="mutation_applied" if applied else "mutation_blocked",
-                decision=decision,
-                mutation_applied=applied,
-            )
-            logger.info("LLM reply (%s): %s", decision.mutation_type, reply_text[:120])
+            applied = _patch_was_applied(service_result)
+            if applied:
+                reply_text = _applied_plan_patch_reply(service_result, fallback=decision.fitmas_message)
+            elif _plan_patch_needs_confirmation(service_result):
+                pending_row = repo.create_pending_mutation_confirmation(
+                    db,
+                    user_id=user.id,
+                    impact_level="high",
+                    reason="week_coherence_requires_confirmation",
+                    mutation_type="plan_patch",
+                    summary=_plan_patch_confirmation_summary(service_result),
+                    source_text=payload.text,
+                    decision_json=serialize_plan_patch_confirmation(patch),
+                    expires_at=default_confirmation_expiry(),
+                )
+                reply_text = _build_plan_patch_confirmation_prompt(service_result)
+                outcome = ConversationTurnOutcome(
+                    extraction=Extraction(confidence=extraction_confidence),
+                    reply_text=reply_text,
+                    response_mode="plan_patch_confirmation",
+                    decision=decision,
+                    mutation_applied=False,
+                    pending_confirmation=True,
+                    pending_confirmation_id=pending_row.id,
+                )
+                logger.info("LLM reply (%s): %s", decision.mutation_type, reply_text[:120])
+                decision = None
+            else:
+                reply_text = _blocked_plan_patch_reply(service_result)
+                _log_plan_patch_blocked(service_result, user_id=user.id)
+            if outcome is None:
+                outcome = ConversationTurnOutcome(
+                    extraction=Extraction(confidence=extraction_confidence),
+                    reply_text=reply_text,
+                    day_updated=api_messages._resolve_day_updated(decision) if applied else None,
+                    response_mode="mutation_applied" if applied else "mutation_blocked",
+                    decision=decision,
+                    mutation_applied=applied,
+                )
+                logger.info("LLM reply (%s): %s", decision.mutation_type, reply_text[:120])
     elif outcome is None:
         # Chantier 1 (autonomy refactor): the only remaining path here is
         # "decide() returned None and there is no deterministic adaptation
@@ -1010,6 +1043,19 @@ def _final_reply_context_for_plan_patch_block(
 ) -> final_reply.FinalReplyContext:
     blocked_events: list[final_reply.BlockedEvent] = []
     if service_result is not None:
+        if service_result.week_policy_status == "blocked" and service_result.week_review is not None:
+            finding = next(
+                (item for item in service_result.week_review.findings if item.severity == "blocked"),
+                None,
+            )
+            blocked_events.append(
+                final_reply.BlockedEvent(
+                    command="plan_patch",
+                    reason=finding.code if finding is not None else "week_coherence_blocked",
+                    warning=finding.detail if finding is not None else service_result.week_review.summary,
+                    suggested_fix=_week_review_suggested_fix(service_result),
+                )
+            )
         for result in service_result.validation.operation_results:
             if result.status == "valid":
                 continue
@@ -1096,12 +1142,19 @@ def _final_reply_context_for_execution_applied_patch_block(
 def _plan_patch_needs_confirmation(service_result: PlanPatchServiceResult | None) -> bool:
     if service_result is None:
         return False
-    return service_result.validation.status in {"warning", "requires_confirmation"}
+    return (
+        service_result.week_policy_status == "requires_confirmation"
+        or service_result.validation.status in {"warning", "requires_confirmation"}
+    )
 
 
 def _plan_patch_confirmation_summary(service_result: PlanPatchServiceResult | None) -> str:
     if service_result is None:
         return "patch planning a confirmer"
+    if service_result.week_policy_status == "requires_confirmation" and service_result.week_review is not None:
+        summary = str(service_result.week_review.summary or "").strip()
+        if summary:
+            return summary
     first = service_result.validation.operation_results[0] if service_result.validation.operation_results else None
     if first is not None:
         if first.warning_messages:
@@ -1109,6 +1162,17 @@ def _plan_patch_confirmation_summary(service_result: PlanPatchServiceResult | No
         if first.block_reason:
             return first.block_reason
     return "ce changement modifie sensiblement la semaine"
+
+
+def _week_review_suggested_fix(service_result: PlanPatchServiceResult) -> str | None:
+    review = service_result.week_review
+    if review is None:
+        return None
+    for adjustment in review.suggested_adjustments:
+        reason = str(adjustment.get("reason") or "").strip()
+        if reason:
+            return reason
+    return None
 
 
 def _build_plan_patch_confirmation_prompt(service_result: PlanPatchServiceResult | None) -> str:

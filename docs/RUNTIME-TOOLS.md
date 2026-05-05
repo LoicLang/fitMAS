@@ -104,6 +104,7 @@ Registry V1 :
 - `suggest_replan_candidates`
 - `propose_replan` (legacy compat, non route par defaut)
 - `validate_plan_patch` (validation-only, ajoute conversation 3A puis heartbeat 3B-B)
+- `validate_week_coherence` (Phase A+ cible, validation-only sport quality, pas encore implemente)
 
 Tous ces tools lisent des objets deja charges par l'orchestrateur.
 Le registre actuel reste volontairement tres compact.
@@ -112,7 +113,50 @@ Direction V2 :
 - conserver les tools atomiques utiles
 - enrichir leurs descriptions et leurs payloads
 - garder `validate_plan_patch` comme tool validation-only : il aide le LLM a tester un `PlanPatch`, mais le backend revalide toujours au commit
+- ajouter `validate_week_coherence` comme tool validation-only : il aide le LLM a tester la qualite sportive d'un `PlanPatch`, mais le backend re-run toujours la review avant commit
 - ajouter `get_coach_state` seulement comme macro-tool read-only optionnel, pas comme remplacement des tools atomiques
+
+### `validate_week_coherence` (Phase A+ cible)
+
+Doc canonique : `docs/SPORT-QUALITY-REVIEW.md`.
+
+Role :
+- tester si un `PlanPatch` garde une bonne logique sportive sur la semaine ;
+- distinct de `validate_plan_patch`, qui repond seulement a la legalite runtime ;
+- retourner `WeekCoherenceReview` + facts deterministes ;
+- permettre au coach LLM de savoir si un patch doit etre commit, confirme, bloque ou repare.
+
+Contraintes :
+- validation-only, aucun write ;
+- allowed pipelines cibles : `conversation`, `planning`, `heartbeat` ;
+- input : `PlanPatch` complet ;
+- output type : `status`, `sport_quality`, `confidence`, `summary`, `findings`, `recommended_policy`, optional `revised_patch` ;
+- ne remplace pas les tools atomiques de lecture ;
+- ne remplace pas la gate backend.
+
+Doctrine d'autorite :
+
+```text
+Reviewer = autorite sportive.
+Runtime = autorite systeme.
+PlanMutationService = effet DB.
+Coach = relation + explication.
+```
+
+Le reviewer peut augmenter la prudence (`valid` -> `requires_confirmation` ou
+`blocked`). Il ne peut jamais supprimer un hard block deterministe.
+
+V1 :
+- `commit_original` -> commit si `validate_plan_patch` est valid ;
+- `confirm_original` -> pending confirmation ;
+- `block_original` -> no commit ;
+- `retry_with_revised_patch` / `confirm_revised` -> traiter comme block + proposer direction.
+
+V2 :
+- autoriser un seul repair pass structure avec `revised_patch` ;
+- re-run `validate_plan_patch(revised_patch)` ;
+- re-run `validate_week_coherence(revised_patch)` ;
+- jamais de boucle libre coach/reviewer.
 
 ### `tool_runtime.py`
 
@@ -164,7 +208,9 @@ Direction immediate :
   `get_relevant_facts` ;
 - Chantier 3B-B autorise une proposition `PlanPatch` + confirmation Telegram,
   toujours revalidee backend avant commit (implemente localement 5 mai 2026) ;
-- Chantier 3B-C seulement introduit des action-tools natifs bornes.
+- Chantier 3B-C introduit des action-tools natifs bornes seulement apres la
+  gate A+ core (`validate_plan_patch -> WeekCoherenceReviewer -> policy ->
+  writer`).
 
 Regle : le heartbeat est un coach proactif, pas un cron de texte. Les tools
 servent a decider s'il y a quelque chose d'utile a dire. `NO_SEND` reste un
@@ -179,6 +225,46 @@ Etat 3B-B :
 - pas de write tool natif, pas de commit autonome ;
 - boucle dediee `skills/heartbeat/tool_loop.py`, max 2 rounds / 4 tool calls ;
 - debug dump expose `tools.offered`, `tools.requested`, `tools.results`.
+
+Cible Phase A+ heartbeat :
+- tout `PlanPatch` proactif passe aussi par `validate_week_coherence` ;
+- si review `blocked` ou trop fragile : `NO_SEND` ou message sans pending ;
+- si review `requires_confirmation` / `valid` : pending confirmation possible ;
+- le backend re-run la gate avant commit quand le user accepte.
+
+### Position de 3B-C dans la roadmap
+
+Recadrage 5 mai 2026 :
+
+```text
+3B-B dogfood court
+  -> A+1/A+2/A+3 gate sportive core
+  -> 3B-C action-tools natifs bornes
+  -> A+4/A+5 validate_week_coherence tool + review semaine generee
+```
+
+Raison :
+
+```text
+Ne pas donner plus d'autonomie d'action au coach avant que la review sportive
+soit une gate runtime obligatoire.
+```
+
+Une fois 3B-C ouvert, tout action-tool planning doit produire un artefact borne
+qui repasse par :
+
+```text
+validate_plan_patch
+  -> WeekCoherenceReviewer
+  -> aggregate backend policy
+  -> PlanMutationService
+```
+
+Interdit :
+- action-tool qui write en DB directement ;
+- action-tool qui skip la review sportive ;
+- action-tool qui transforme une suggestion reviewer vague en mutation libre ;
+- commit autonome heartbeat.
 
 Categories historiques a ne pas reproduire comme classifieur user-text :
 | Intent | Tools offerts |

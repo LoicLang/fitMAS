@@ -160,6 +160,37 @@ ANTHROPIC_API_KEY="${ANTHROPIC_API_KEY:-$DEEPSEEK_API_KEY}" \
 ./scripts/smoke-real-conversations --scenario golden_case_autonomy --scenario today_unavailability
 ```
 
+Smoke API Phase A+ / WeekCoherence :
+
+```bash
+set -a; source .env; set +a
+FITMAS_USE_DEEPSEEK_OPENAI_STRUCTURED=1 \
+ANTHROPIC_API_KEY="${ANTHROPIC_API_KEY:-$DEEPSEEK_API_KEY}" \
+./scripts/smoke-a-plus-api
+```
+
+Usage :
+- lance un vrai serveur HTTP local `fitmas.main:app` sur un port libre a partir de `8073` ;
+- utilise une DB SQLite temporaire dediee ;
+- seed une semaine runtime en `ScheduledSession` avec deux seances cles running, recuperation, velo et natation ;
+- joue des scenarios reels via `/api/v0/messages` avec le vrai provider LLM ;
+- verifie les artefacts DB : `plan_mutation_events`, `pending_mutation_confirmations`, `conversation_turns`, `scheduled_sessions`.
+
+Scenarios verrouilles :
+- `move_hard_close` : deplacer une seance dure/key vers une fenetre dangereuse ne doit pas commit ;
+- `replace_key_running_swim_easy` : remplacer une seance cle running par natation easy ne doit pas commit ;
+- `add_hard_dense` : ajouter du dur dans une semaine deja dense ne doit pas commit silencieusement ;
+- `occupied_target` : target occupee ne doit pas commit ;
+- `memory_preference` : preference memoire ne doit pas creer de write planning ;
+- `move_easy_to_free` : un move easy peut commit ou demander confirmation, mais jamais claim sans event/pending.
+
+Commandes utiles :
+
+```bash
+./scripts/smoke-a-plus-api --scenario move_hard_close --scenario replace_key_running_swim_easy
+./scripts/smoke-a-plus-api --keep-db --port 8075
+```
+
 Smoke Phase A avant dogfood reel :
 
 ```bash

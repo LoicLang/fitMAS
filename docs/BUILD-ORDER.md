@@ -67,10 +67,12 @@ L'audit declenche par cet incident a confirme 3 failles structurelles connexes :
 | P1-ter | ✅ Execution receipt repair hardening — plus d'outage generique si le LLM reconnait "pas fait hier" sans `execution_actions` et qu'une cible follow-up est structuree — deploye 4 mai 2026 | 0.5j | section ci-dessous |
 | P1-quater | ✅ Dogfood API fallout — execution action verifier + post-event date facts + target ambiguity + durable availability memory — deploye 4 mai 2026 | 0.5-1j | section ci-dessous |
 | 3B-B | ✅ Proactive PlanPatch propose + confirmation Telegram pending, pas de commit autonome — implemente localement 5 mai 2026 | 1j | section ci-dessous |
-| 3B-C | Action-tools natifs bornes, apres preuves 3B-A/B | 2-3j | `docs/RUNTIME-TOOLS.md` |
-| **A+** | **Phase A+ Weekly Coherence Review** (apres 3B ou si 3B non bloquant, avant Phase B) | 3-4j | section "Phase A+" ci-dessous |
+| A+0 | ✅ Documentation Sport Quality / Week Coherence — doctrine reviewer sportif, policy runtime, progression par stimulus | 0.5j | `docs/SPORT-QUALITY-REVIEW.md` |
+| A+1-A+3 | ✅ **Phase A+ core gate** — simulation, contexte deterministe, LLM reviewer/fallback type, gate runtime dans `apply_patch_for_user`, smoke API reel `scripts/smoke-a-plus-api` — implemente localement 5 mai 2026 | 3-4j | `docs/SPORT-QUALITY-REVIEW.md` + section "Phase A+" ci-dessous |
+| 3B-C | Action-tools natifs bornes, **apres A+ core gate** | 2-3j | `docs/RUNTIME-TOOLS.md` |
+| A+4-A+5 | Tool `validate_week_coherence` + heartbeat review + review semaine generee | 1.5-2j | `docs/SPORT-QUALITY-REVIEW.md` |
 
-**Total restant : ~5-8 jours** (incluant Phase A+). Couvre action-tools bornes et couche raisonnement week-level avant Phase B.
+**Total restant avant B0 : ~6.5-9 jours**. Couvre gate sportive core, action-tools bornes derriere gate, tool `validate_week_coherence`, heartbeat et review semaine generee avant Phase B.
 
 ### Deploiement prod — 4 mai 2026
 
@@ -625,11 +627,20 @@ Verification locale :
 6. ~~**P1-quater dogfood API fallout**~~ ✅ incoherences test reel fermees.
 7. ~~**Chantier 3B-B**~~ ✅ PlanPatch propose + confirmation Telegram, sans
    commit autonome.
-8. **Maintenant : discuter/evaluer 3B-B, puis Chantier 3B-C** — action-tools
-   natifs bornes.
-9. **Apres 3B-C** : Phase A+ Weekly Coherence Review (3-4j) — l'apport produit
-   le plus visible, transforme le coach reactif local en coach strategique
-   week-level.
+8. **Maintenant : dogfood court 3B-B** — verifier pending heartbeat PlanPatch,
+   sans commit autonome.
+9. ~~**Phase A+ core gate (A+1-A+3)**~~ ✅ implemente localement 5 mai 2026 —
+   simulation, reviewer LLM/fallback type, gate runtime. Objectif : aucun
+   `PlanPatch` significatif ne commit sans review sportive.
+10. ~~**Smoke API reel A+**~~ ✅ `./scripts/smoke-a-plus-api` — serveur HTTP
+   local + vrai provider + DB temporaire ; verrouille les regressions
+   `move_hard_close` et `replace_key_running_swim_easy`.
+11. **Maintenant : Chantier 3B-C** — action-tools natifs bornes, mais uniquement
+   derriere `validate_plan_patch -> WeekCoherenceReviewer -> policy -> writer`.
+12. **Puis : A+4-A+5** — tool `validate_week_coherence`, heartbeat review,
+   semaine generee relue avant commit.
+13. **Apres seulement : B0/B1/B2** — prescription structuree, session quality,
+   performance signals et calibration.
 
 ### Phase A — etat apres chantiers 0+1+2
 
@@ -640,11 +651,13 @@ Apres ces 3 chantiers, Phase A est *vraiment* fermee :
 - verite runtime unique ✅ (chantier 2 ferme la dette truth source)
 - aucune classe de bug "hallucination factuelle" residuelle
 
-A ce moment-la, on peut soit attaquer Chantier 3 (tool-use loop unifie comme refactor archi cible) puis Phase A+, soit ouvrir Phase A+ direct si la dette tool-use loop n'est pas bloquante. Phase B reste differee.
+A ce moment-la, la priorite change : ouvrir A+ core avant 3B-C. La raison est simple : ne pas donner plus d'autonomie d'action au coach avant que la gate sportive soit en place. Phase B reste differee.
 
-### Phase A+ — Weekly Coherence Review
+### Phase A+ — Sport Quality / Week Coherence Review
 
-Concept inspire d'un brainstorm strategique du 2 mai 2026 (apport externe). Pas dans le scope Phase A initial, pas Phase B non plus — c'est une couche intermediaire.
+Doc canonique : `docs/SPORT-QUALITY-REVIEW.md`.
+
+Concept inspire d'un brainstorm strategique du 2 mai 2026, puis recadre le 5 mai 2026 : pas un second coach, pas Phase B prescription complete, mais une **couche de review sportive** entre `PlanPatch` et commit.
 
 **Probleme adressé** : aujourd'hui le coach est bon en *reaction locale* (constraint -> mutation locale -> validate -> commit). Il ne raisonne pas au niveau *semaine entiere*. Il sait swap mardi/jeudi, il ne sait pas dire "ce swap surcharge ta fin de semaine, je propose plutot X".
 
@@ -657,15 +670,36 @@ Concept inspire d'un brainstorm strategique du 2 mai 2026 (apport externe). Pas 
 
 C'est de la **qualite de decision week-level**, distinct de la fiabilite (Phase A) et de la prescription intra-seance (Phase B).
 
-**Triggers Phase A+** (la review week-level ne se declenche pas a chaque petit move) :
-- contrainte user touche une seance cle
-- contrainte couvre plusieurs jours
-- contrainte impacte une seance dure
-- user rapporte fatigue / douleur / maladie
-- user a manque plusieurs seances
-- user demande swap entre seances distantes
-- patch local genere des warnings (`validate_plan_patch` -> warning)
-- mission de la semaine est compromise
+Doctrine :
+
+```text
+Le coach propose.
+Le reviewer sportif challenge.
+La policy backend tranche.
+Le writer applique.
+Le coach explique.
+```
+
+Frontiere d'autorite :
+
+```text
+Reviewer = autorite sportive.
+Runtime = autorite systeme.
+PlanMutationService = effet DB.
+Coach = relation + explication.
+```
+
+Le reviewer n'est pas juste un critique. Il rend un verdict et une policy recommandee (`commit_original`, `confirm_original`, `block_original`, puis V2 `retry_with_revised_patch` / `confirm_revised`). Mais il ne parle pas au user, ne write pas, ne commit rien et ne supprime jamais un hard block deterministe.
+
+**Triggers Phase A+** : appel quasi systematique sur tout `PlanPatch` sportivement significatif :
+- `move_session`, `swap_sessions`, `replace_session`, `lighten_day`, `create_session`
+- patch multi-operations ou heartbeat proactif
+- changement sport / duree / intensite
+- seance key / support / recovery touchee
+- fatigue / douleur / maladie / contrainte active
+- validation runtime `warning` ou `requires_confirmation`
+
+Skip acceptable seulement pour execution pure (`done` / `skipped`), lookup, memoire, clarification, ou accept/reject pending deja reviewe si patch inchange et review version actuelle.
 
 **Capacites cibles a livrer** :
 
@@ -676,16 +710,42 @@ C'est de la **qualite de decision week-level**, distinct de la fiabilite (Phase 
 | `get_planning_contract()` | lire week_mission, key_sessions, protected_sessions, change_budget |
 | `validate_week_coherence(patch)` | "si on applique ce patch, la semaine fait-elle encore sens ?" — distinct de `validate_plan_patch` (legalite) ; couvre `too_many_hard_sessions`, `recovery_gap_too_short`, `key_session_lost`, `weekly_load_too_high`, `mission_not_preserved`, etc. |
 
-**Skill enrichie** :
-- `replan_after_constraint` recoit le branchement Phase A+ : si scope multi-session OU key session impactee OU multi-day, le LLM passe par `validate_week_coherence` avant de finaliser le `PlanPatch`
+**Contrats / modules cibles** :
+- `backend/src/fitmas/week_coherence.py` : `simulate_plan_patch`, `build_week_coherence_context`, `evaluate_week_invariants`, `review_week_coherence_with_llm`, `aggregate_week_coherence_policy`
+- `WeekCoherenceReview` : status, sport_quality, confidence, findings, `recommended_policy`, optional `revised_patch`
+- `PlanPatchServiceResult` porte la week gate pour pending/replies
+- pending confirmation stocke patch hash + review status + recommended policy + review version
 
-**Effort total : 3-4 jours**.
+**Skill enrichie** :
+- `replan_after_constraint` recoit le branchement Phase A+ : pour tout patch significatif, le LLM peut appeler `validate_week_coherence` avant sa decision finale
+- le backend re-run toujours `validate_plan_patch` + `WeekCoherenceReviewer` avant commit
+
+**Effort A+ core : 3-4 jours**. **Effort A+ hardening : 1.5-2 jours**.
 
 **Dependances** :
-- Chantier 3 (tool-use loop unifie) facilite l'ajout de tools mutants/lecture (mais Phase A+ peut se livrer sur le shape actuel si Chantier 3 est differe)
+- Chantier 3A/3B-A/3B-B donnent assez de boucle tool-use pour livrer A+ core maintenant
+- Chantier 3B-C doit attendre A+ core : plus d'action-tools sans reviewer sportif augmente trop le risque de patchs techniquement valides mais mauvais
 - Chantier 2 (truth source unifie) est **prerequis** pour `get_planning_contract` et `validate_week_coherence` — sans ScheduledSession seul truth, le scoring week donne des resultats incoherents
 
 **Differentiateur produit** : Phase A+ est ce qui transforme FitMAS d'un "outil qui swap" en "coach qui sauve la semaine". C'est probablement le wedge produit le plus important a moyen terme. Pas urgent, mais dimensionnant.
+
+Ordre detaille :
+1. 3B-B dogfood court : confirmer que les pending heartbeat PlanPatch sont propres
+2. A+0 docs + contrats (`SPORT-QUALITY-REVIEW.md`) — fait localement
+3. A+1 simulation / context / checks deterministes — implemente localement
+4. A+2 LLM `WeekCoherenceReviewer` / fallback type — implemente localement
+5. A+3 gate runtime dans `apply_patch_for_user` — implemente localement
+6. 3B-C action-tools natifs bornes, maintenant proteges par la gate
+7. A+4 tool validation-only `validate_week_coherence`
+8. A+5 review semaine generee
+9. B0 `SessionPrescriptionEngine`
+10. B1 `SessionQualityReviewer`
+11. B2 `PerformanceSignalService` + `CalibrationProposal`
+
+Decoupage mental :
+- **MVP** : A+1 -> A+3. Le coach ne commit plus de patch significatif sans reviewer.
+- **Hardening** : 3B-C -> A+5. Plus d'autonomie, mais toujours sous gate.
+- **Scale sportif** : B0 -> B2. Prescription, seance, progression, calibration.
 
 ## Historique — 30 avril 2026
 

@@ -17,6 +17,7 @@ from fitmas.plan_mutation_service import (
     PlanPatchServiceResult,
 )
 from fitmas.plan_patch import PlanPatchOperationValidation, PlanPatchValidation
+from fitmas.week_coherence import WeekCoherenceFinding, WeekCoherenceReview
 
 
 def _service_result_with(event: PlanBlockedMutationEvent) -> PlanMutationServiceResult:
@@ -417,6 +418,52 @@ class BlockedMutationReplyTest(unittest.TestCase):
 
         self.assertNotIn("Reponds oui ou non", prompt)
         self.assertIn("confirm", prompt.lower())
+
+    def test_week_review_requires_confirmation_counts_as_pending(self) -> None:
+        from fitmas.conversation_pipeline import _plan_patch_confirmation_summary, _plan_patch_needs_confirmation
+
+        result = PlanPatchServiceResult(
+            validation=PlanPatchValidation(status="valid", operation_results=()),
+            week_policy_status="requires_confirmation",
+            week_review=WeekCoherenceReview(
+                status="requires_confirmation",
+                sport_quality="fragile",
+                confidence=0.8,
+                summary="La fin de semaine devient trop dense.",
+                findings=(),
+                suggested_adjustments=(),
+                recommended_policy="confirm_original",
+            ),
+        )
+
+        self.assertTrue(_plan_patch_needs_confirmation(result))
+        self.assertEqual(_plan_patch_confirmation_summary(result), "La fin de semaine devient trop dense.")
+
+    def test_week_review_block_surfaces_sport_reason(self) -> None:
+        result = PlanPatchServiceResult(
+            validation=PlanPatchValidation(status="valid", operation_results=()),
+            week_policy_status="blocked",
+            week_review=WeekCoherenceReview(
+                status="blocked",
+                sport_quality="poor",
+                confidence=0.82,
+                summary="La seance cle est perdue.",
+                findings=(
+                    WeekCoherenceFinding(
+                        code="key_session_lost",
+                        severity="blocked",
+                        detail="La seance cle disparait de la semaine.",
+                    ),
+                ),
+                suggested_adjustments=(),
+                recommended_policy="block_original",
+            ),
+        )
+
+        with patch("fitmas.conversation_pipeline.final_reply.compose_final_reply", return_value=None):
+            reply = _blocked_plan_patch_reply(result)
+
+        self.assertIn("seance cle disparait", reply.lower())
 
     def test_legacy_confirmation_prompt_drops_yes_no_protocol(self) -> None:
         prompt = build_confirmation_prompt(

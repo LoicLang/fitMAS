@@ -52,13 +52,14 @@ Chantiers en cours (suite incident hallucination factuelle briefing 2 mai) :
 - ✅ **Chantier 3B-B** — Heartbeat peut proposer un `PlanPatch` proactif avec confirmation Telegram pending, sans commit autonome — implémenté localement 5 mai 2026
 - ✅ **P1 execution receipt repair** — si le LLM reconnait “pas fait hier” sans `execution_actions`, repair sémantique sur artefact LLM ; cible follow-up structurée si dispo, sinon `target_ref` borné résolu par le writer — implémenté localement 4-5 mai 2026
 - ✅ **P1-quater** — dogfood API fallout : verifier `execution_actions`, date/day dans facts post-event, confirmation cible planning ambiguë, repair mémoire disponibilité — déployé 4 mai 2026
-- **Chantier 3B-C** — Action-tools natifs bornés, après preuves 3B-A/B — `docs/RUNTIME-TOOLS.md`
-- **Phase A+** — Weekly Coherence Review (3-4j, après Chantier 3B ou si jugé non bloquant) — couche raisonnement week-level, transforme coach réactif local en coach stratégique — `docs/BUILD-ORDER.md` section dédiée
+- ✅ **Phase A+ core** — Sport Quality / Week Coherence gate avant nouveaux action-tools : simulation, reviewer LLM/fallback typé, gate runtime dans `apply_patch_for_user`, smoke API réel `scripts/smoke-a-plus-api` — implémenté localement 5 mai 2026 — `docs/SPORT-QUALITY-REVIEW.md`
+- **Chantier 3B-C** — Action-tools natifs bornés, seulement derrière la gate A+ core — `docs/RUNTIME-TOOLS.md`
+- **Phase A+ hardening** — tool `validate_week_coherence`, heartbeat review, semaine générée relue avant commit — `docs/SPORT-QUALITY-REVIEW.md`
 
 Cap produit actuel :
 - Telegram = coach conversationnel
 - App = cockpit performance
-- priorité immédiate : discuter/évaluer 3B-B, puis ouvrir les action-tools natifs bornés 3B-C
+- priorité immédiate : ouvrir 3B-C seulement derrière la gate A+ core + rejouer `./scripts/smoke-a-plus-api` avant dogfood
 - Phase B long terme : progression/prescription structurée, pas ouverte tant que Phase A + Chantiers 2+3 + Phase A+ ne sont pas clos
 
 ## Stack
@@ -78,13 +79,14 @@ Cap produit actuel :
 2. `PROJECT.md` — ce fichier
 3. `docs/README.md` — carte des docs
 4. `docs/BUILD-ORDER.md` — source de verite sur l'etat reel et la suite
-5. `docs/LLM-FIRST-CONVERSATION.md` — doctrine zero determinisme sur texte user + plan de migration
-6. `docs/ARCHITECTURE.md` — stack, principes de harness, modele de donnees, flux
-7. `docs/PRODUCT.md` — vision, scope, parcours utilisateur
-8. `docs/COACH-COHERENCE-REFACTOR.md` — gouvernance state/mutations
-9. `docs/PLANNING.md` — contrat + moteur planning
-10. `docs/CONVERSATION.md` — grounding + indications utilisateur
-11. `docs/SOUL.md` — voix, heartbeat, messagerie
+5. `docs/SPORT-QUALITY-REVIEW.md` — Phase A+ reviewer sportif, coherence semaine, progression par stimulus
+6. `docs/LLM-FIRST-CONVERSATION.md` — doctrine zero determinisme sur texte user + plan de migration
+7. `docs/ARCHITECTURE.md` — stack, principes de harness, modele de donnees, flux
+8. `docs/PRODUCT.md` — vision, scope, parcours utilisateur
+9. `docs/COACH-COHERENCE-REFACTOR.md` — gouvernance state/mutations
+10. `docs/PLANNING.md` — contrat + moteur planning
+11. `docs/CONVERSATION.md` — grounding + indications utilisateur
+12. `docs/SOUL.md` — voix, heartbeat, messagerie
 
 ## Structure du repo
 

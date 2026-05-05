@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from dataclasses import asdict, dataclass, is_dataclass
 from datetime import date
 from typing import Any, Sequence
@@ -15,6 +16,13 @@ from fitmas.plan_patch import (
     PlanPatchValidation,
     adapt_plan_patch_to_mutation_decisions,
     validate_plan_patch,
+)
+from fitmas.week_coherence import (
+    WeekCoherenceContext,
+    WeekCoherenceReview,
+    aggregate_week_coherence_policy,
+    build_week_coherence_context,
+    review_week_coherence_with_llm,
 )
 
 
@@ -32,6 +40,8 @@ class PlanMutationServiceResult:
 class PlanPatchServiceResult:
     validation: PlanPatchValidation
     mutation_result: PlanMutationServiceResult | None = None
+    week_review: WeekCoherenceReview | None = None
+    week_policy_status: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -261,6 +271,9 @@ def apply_patch_for_user(
     explained_to_user: bool = False,
     conversation_turn_id: int | None = None,
     allow_requires_confirmation: bool = False,
+    coach_state_bundle: Any | None = None,
+    activities: Sequence[Any] | None = None,
+    active_facts: Sequence[Any] | None = None,
 ) -> PlanPatchServiceResult:
     plan = repo.get_active_plan_optional(db, user.id)
     plan_id = int(getattr(plan, "id", 0) or 0)
@@ -274,8 +287,38 @@ def apply_patch_for_user(
         scheduled_sessions=scheduled_sessions,
         timezone_name=getattr(user, "timezone", None),
     )
+    if validation.status == "blocked":
+        return PlanPatchServiceResult(validation=validation, week_policy_status="blocked")
+
+    week_context = build_week_coherence_context(
+        patch=patch,
+        validation=validation,
+        scheduled_sessions=scheduled_sessions,
+        coach_state_bundle=coach_state_bundle,
+        activities=activities if activities is not None else _recent_activities_for_week_review(db, user.id),
+        active_facts=active_facts if active_facts is not None else _active_facts_for_week_review(db, user.id),
+        timezone_name=getattr(user, "timezone", None),
+    )
+    week_review = _review_patch_week_coherence(week_context)
+    week_policy_status = aggregate_week_coherence_policy(
+        patch_validation=validation,
+        week_review=week_review,
+        deterministic_checks=week_context.deterministic_checks,
+        allow_requires_confirmation=allow_requires_confirmation,
+    )
+    if week_policy_status != "valid":
+        return PlanPatchServiceResult(
+            validation=validation,
+            week_review=week_review,
+            week_policy_status=week_policy_status,
+        )
+
     if not _validation_allows_patch_commit(validation, allow_requires_confirmation=allow_requires_confirmation):
-        return PlanPatchServiceResult(validation=validation)
+        return PlanPatchServiceResult(
+            validation=validation,
+            week_review=week_review,
+            week_policy_status="requires_confirmation",
+        )
 
     legacy_operations = [
         operation for operation in patch.operations if operation.operation_type != "create_session"
@@ -331,7 +374,70 @@ def apply_patch_for_user(
         applied_events=tuple(applied_events),
         blocked_events=tuple(blocked_events),
     )
-    return PlanPatchServiceResult(validation=validation, mutation_result=mutation_result)
+    return PlanPatchServiceResult(
+        validation=validation,
+        mutation_result=mutation_result,
+        week_review=week_review,
+        week_policy_status=week_policy_status,
+    )
+
+
+def _review_patch_week_coherence(context: WeekCoherenceContext) -> WeekCoherenceReview:
+    return review_week_coherence_with_llm(context, request_json_fn=_request_week_coherence_json)
+
+
+def _request_week_coherence_json(**kwargs) -> dict[str, Any] | None:
+    from fitmas import llm_gateway as gw
+
+    context = kwargs.get("context") or {}
+    context_json = json.dumps(context, ensure_ascii=False, default=str)
+    return gw.request_json(
+        system=(
+            "Tu es WeekCoherenceReviewer, reviewer sportif subordonne FitMAS. "
+            "Tu ne parles pas au user, tu ne commit rien, tu respectes les hard blocks. "
+            "Retourne uniquement le JSON demande."
+        ),
+        prompt=(
+            "Juge si ce PlanPatch garde une bonne logique sportive. "
+            "Champs obligatoires: status, sport_quality, confidence, summary, "
+            "findings, suggested_adjustments, recommended_policy.\n\n"
+            "Valeurs autorisees:\n"
+            "- status: valid | warning | requires_confirmation | blocked\n"
+            "- sport_quality: good | acceptable | fragile | poor\n"
+            "- recommended_policy: commit_original | confirm_original | block_original | retry_with_revised_patch | confirm_revised\n\n"
+            f"Contexte JSON:\n{context_json}"
+        ),
+        max_tokens=900,
+    )
+
+
+def _recent_activities_for_week_review(db: Session, user_id: int) -> tuple[Any, ...]:
+    try:
+        return tuple(repo.get_activities(db, user_id, limit=120))
+    except Exception:
+        return ()
+
+
+def _active_facts_for_week_review(db: Session, user_id: int) -> tuple[dict[str, Any], ...]:
+    try:
+        rows = repo.get_active_memory_items(
+            db,
+            user_id,
+            profile_limit=24,
+            working_limit=24,
+            include_patterns=True,
+            pattern_limit=6,
+            total_limit=36,
+        )
+    except Exception:
+        return ()
+    payloads: list[dict[str, Any]] = []
+    for row in rows:
+        try:
+            payloads.append(repo.to_pydantic_fact(row).model_dump())
+        except Exception:
+            continue
+    return tuple(payloads)
 
 
 def _normalize_targetless_replace_to_create(patch: PlanPatch) -> PlanPatch:

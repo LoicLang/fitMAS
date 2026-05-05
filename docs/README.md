@@ -17,6 +17,7 @@ read_when:
 | `SYSTEM-MAP.md` | Carte du systeme : flux, frontieres LLM/tools/skills, points d'extension |
 | `PRODUCT.md` | Vision, wedge multisport, scope, parcours utilisateur |
 | `COACH-COHERENCE-REFACTOR.md` | Gouvernance etat : verite runtime unique, writer unique, bundle partage, gates |
+| `SPORT-QUALITY-REVIEW.md` | Doctrine Phase A+ : reviewer sportif non-writer, coherence semaine, policy runtime, prescription/progression future |
 | `PLANNING.md` | Contrat produit + moteur V2 de la planification adaptative |
 | `CONVERSATION.md` | Grounding conversationnel, doctrine LLM-first, dette active des anciens extracteurs |
 | `MEMORY-V2.md` | Architecture memoire : profile vs working vs patterns, regles et migration |
@@ -48,15 +49,16 @@ Pour un nouvel agent :
 3. `COACH-AUTONOMY-REFACTOR.md` — historique de refactor autonomie
 4. `SYSTEM-MAP.md` — carte d'ensemble
 5. `RUNTIME-TOOLS.md` — tools multi-tool bornes et workflow `replan_after_constraint`
-6. `CONVERSATION.md` — grounding + indications
-7. `RUNBOOK.md` — ops, smokes, debug prod
-8. `ARCHITECTURE.md` — stack, principes, modules
-9. `PRODUCT.md` — vision et scope
-10. `COACH-COHERENCE-REFACTOR.md` — gouvernance state/mutations
-11. `PLANNING.md` — contrat + moteur planning
-12. `MEMORY-V2.md` — memoire utilisateur
-13. `APP-UX.md` — contrat UX app
-14. `SOUL.md` — voix coach
+6. `SPORT-QUALITY-REVIEW.md` — Phase A+ reviewer sportif, week coherence, progression par stimulus
+7. `CONVERSATION.md` — grounding + indications
+8. `RUNBOOK.md` — ops, smokes, debug prod
+9. `ARCHITECTURE.md` — stack, principes, modules
+10. `PRODUCT.md` — vision et scope
+11. `COACH-COHERENCE-REFACTOR.md` — gouvernance state/mutations
+12. `PLANNING.md` — contrat + moteur planning
+13. `MEMORY-V2.md` — memoire utilisateur
+14. `APP-UX.md` — contrat UX app
+15. `SOUL.md` — voix coach
 
 ## Raccourcis
 
@@ -68,6 +70,8 @@ Pour un nouvel agent :
 | Quel contrat produit ? | `PRODUCT.md` |
 | Quelle fondation technique ? | `ARCHITECTURE.md` |
 | Comment retablir une verite unique coach/app/planning ? | `COACH-COHERENCE-REFACTOR.md` |
+| Comment eviter les plans valides mais mauvais sportivement ? | `SPORT-QUALITY-REVIEW.md` |
+| Qui tranche entre coach, reviewer sportif, runtime et writer ? | `SPORT-QUALITY-REVIEW.md` |
 | Comment evoluer le planner ? | `PLANNING.md` |
 | Pourquoi le coach se trompe sur le reel, le temps ou l'intention ? | `CONVERSATION.md` |
 | Comment evoluer la memoire sans fourre-tout ? | `MEMORY-V2.md` |

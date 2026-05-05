@@ -14,15 +14,53 @@ import fitmas.api_messages as api_messages
 import fitmas.calibration_needs as calibration_needs
 import fitmas.conversation_pipeline as conversation_pipeline
 import fitmas.llm as llm
+import fitmas.plan_mutation_service as plan_mutation_service
 from fitmas.adaptation import AdaptationResult
 from fitmas.api import app
 from fitmas.db import Base, SessionLocal, engine, init_db
 from fitmas.llm import CoachDecision, MutationDecision
-from fitmas.plan_patch import PlanPatch, PlanPatchOperation
+from fitmas.plan_patch import PlanPatch, PlanPatchOperation, PlanPatchOperationValidation, PlanPatchValidation
 from fitmas.plan_actions import move_session
 from fitmas.training_load import compute_ctl_atl_tsb, estimate_tss
 from fitmas import repository as repo, schema as s
 from fitmas.time_context import DAY_KEYS, day_label_fr, get_local_now
+from fitmas.week_coherence import WeekCoherenceFinding, WeekCoherenceReview
+
+
+def _valid_week_review(*args, **kwargs) -> WeekCoherenceReview:
+    return WeekCoherenceReview(
+        status="valid",
+        sport_quality="good",
+        confidence=0.86,
+        summary="review semaine valide",
+        findings=(
+            WeekCoherenceFinding(
+                code="mission_preserved",
+                severity="info",
+                detail="Review test.",
+            ),
+        ),
+        suggested_adjustments=(),
+        recommended_policy="commit_original",
+    )
+
+
+def _confirm_week_review(*args, **kwargs) -> WeekCoherenceReview:
+    return WeekCoherenceReview(
+        status="requires_confirmation",
+        sport_quality="fragile",
+        confidence=0.86,
+        summary="La semaine devient fragile.",
+        findings=(
+            WeekCoherenceFinding(
+                code="mission_diluted",
+                severity="requires_confirmation",
+                detail="Le patch degrade la coherence semaine.",
+            ),
+        ),
+        suggested_adjustments=(),
+        recommended_policy="confirm_original",
+    )
 
 
 class FitMASCoreFlowsTest(unittest.TestCase):
@@ -50,9 +88,12 @@ class FitMASCoreFlowsTest(unittest.TestCase):
         self.db.refresh(self.user)
         self._original_plan_conversation_turn = api_messages.plan_conversation_turn
         api_messages.plan_conversation_turn = lambda *args, **kwargs: None
+        self._original_week_review = plan_mutation_service.review_week_coherence_with_llm
+        plan_mutation_service.review_week_coherence_with_llm = _valid_week_review
 
     def tearDown(self) -> None:
         api_messages.plan_conversation_turn = self._original_plan_conversation_turn
+        plan_mutation_service.review_week_coherence_with_llm = self._original_week_review
         self.db.close()
 
     def _create_plan_for_today(self) -> tuple[s.WeeklyPlan, s.ScheduledSession]:
@@ -446,6 +487,62 @@ class FitMASCoreFlowsTest(unittest.TestCase):
         self.assertIn("confirmes", second["assistant_message"]["text"].lower())
         self.assertIsNotNone(pending)
 
+    def test_legacy_mutation_decision_runs_week_gate_before_commit(self) -> None:
+        now = get_local_now(self.user.timezone)
+        scheduled_at = (now + timedelta(days=1)).replace(hour=7, minute=0, second=0, microsecond=0)
+        target_date = (now + timedelta(days=3)).date().isoformat()
+        session = s.ScheduledSession(
+            user_id=self.user.id,
+            day=DAY_KEYS[scheduled_at.weekday()],
+            label=day_label_fr(DAY_KEYS[scheduled_at.weekday()], capitalize=True),
+            scheduled_date=scheduled_at,
+            sport_type="cycling",
+            session_type="easy",
+            session_title="Velo souple",
+            session_goal="Support",
+            duration_min=45,
+            intensity="easy",
+            load_score=1,
+            priority="Normal",
+            flexibility="stable",
+            completion_status="planned",
+        )
+        self.db.add(session)
+        self.db.commit()
+        self.db.refresh(session)
+
+        original_decide = api_messages.decide
+        original_extract_facts = api_messages.extract_facts
+        original_week_review = plan_mutation_service.review_week_coherence_with_llm
+        try:
+            api_messages.decide = lambda *args, **kwargs: MutationDecision(
+                mutation_type="move_session",
+                target_session_id=session.id,
+                target_date=target_date,
+                rationale="Deplacement low-risk demande par le user.",
+                fitmas_message="Je deplace le velo souple.",
+            )
+            api_messages.extract_facts = lambda *args, **kwargs: []
+            plan_mutation_service.review_week_coherence_with_llm = _confirm_week_review
+            result = self.client.post("/api/v0/messages", json={"text": "Deplace le velo souple a dimanche"}).json()
+        finally:
+            api_messages.decide = original_decide
+            api_messages.extract_facts = original_extract_facts
+            plan_mutation_service.review_week_coherence_with_llm = original_week_review
+
+        self.db.expire_all()
+        refreshed_session = repo.get_scheduled_session(self.db, self.user.id, session.id)
+        pending = repo.get_active_pending_mutation_confirmation(self.db, self.user.id)
+        events = self.db.query(s.PlanMutationEventRecord).filter(s.PlanMutationEventRecord.user_id == self.user.id).all()
+
+        self.assertIsNotNone(refreshed_session)
+        self.assertEqual(refreshed_session.scheduled_date.date(), scheduled_at.date())
+        self.assertEqual(events, [])
+        self.assertIsNotNone(pending)
+        self.assertEqual(pending.mutation_type, "plan_patch")
+        self.assertIn("fragile", pending.summary.lower())
+        self.assertIn("confirm", result["assistant_message"]["text"].lower())
+
     def test_plan_patch_pending_yes_does_not_auto_apply_without_llm_resolution(self) -> None:
         _, session = self._create_plan_for_today()
         now = get_local_now(self.user.timezone)
@@ -785,7 +882,7 @@ class FitMASCoreFlowsTest(unittest.TestCase):
         _, session = self._create_plan_for_today()
         original_decide = api_messages.decide
         original_extract_facts = api_messages.extract_facts
-        original_apply = conversation_pipeline.apply_decisions_for_user
+        original_apply = conversation_pipeline.apply_patch_for_user
         try:
             api_messages.decide = lambda *args, **kwargs: MutationDecision(
                 mutation_type="move_session",
@@ -795,16 +892,25 @@ class FitMASCoreFlowsTest(unittest.TestCase):
                 fitmas_message="OK. Je deplace la seance demain.",
             )
             api_messages.extract_facts = lambda *args, **kwargs: []
-            conversation_pipeline.apply_decisions_for_user = lambda *args, **kwargs: SimpleNamespace(
-                applied_count=0,
-                event_count=0,
-                applied_events=(),
+            conversation_pipeline.apply_patch_for_user = lambda *args, **kwargs: plan_mutation_service.PlanPatchServiceResult(
+                validation=PlanPatchValidation(
+                    status="blocked",
+                    operation_results=(
+                        PlanPatchOperationValidation(
+                            operation_type="move_session",
+                            status="blocked",
+                            target_session_id=session.id,
+                            block_reason="protected_recovery_target",
+                        ),
+                    ),
+                ),
+                week_policy_status="blocked",
             )
             result = self.client.post("/api/v0/messages", json={"text": "Mets ca demain"}).json()
         finally:
             api_messages.decide = original_decide
             api_messages.extract_facts = original_extract_facts
-            conversation_pipeline.apply_decisions_for_user = original_apply
+            conversation_pipeline.apply_patch_for_user = original_apply
 
         turns = repo.get_recent_conversation_turns(self.db, self.user.id, limit=1)
 
