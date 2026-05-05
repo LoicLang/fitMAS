@@ -5,6 +5,7 @@ from typing import Any, Sequence
 
 from fitmas.execution_context import build_today_execution_context
 from fitmas.fact_memory import fact_is_current, select_relevant_facts
+from fitmas import plan_patch_tools
 from fitmas.planning_window_resolution import format_planning_window_summary, resolve_planning_window_inputs
 from fitmas.replan_proposal import build_replan_proposal
 from fitmas.time_context import get_local_now, get_timezone
@@ -147,6 +148,7 @@ def build_tool_registry() -> dict[str, ToolSpec]:
         ToolSpec(
             name="suggest_replan_candidates",
             description="Suggere des candidates de replan pour une contrainte temporelle ou sportive active, sans ecrire en base. Ce tool n'est pas une autorite de decision: le coach doit transformer la candidate utile en PlanPatch puis laisser le backend valider/commit.",
+            kind="candidate",
             input_schema={
                 "type": "object",
                 "properties": {
@@ -161,11 +163,136 @@ def build_tool_registry() -> dict[str, ToolSpec]:
             handler=_suggest_replan_candidates,
         ),
         ToolSpec(
+            name="draft_move_session",
+            description=(
+                "Construit un PlanPatch candidat pour deplacer une seance existante vers une date cible, "
+                "puis le valide sans ecrire en base. Retourne patch + validation. Le coach doit copier le patch "
+                "dans CoachDecision; le backend revalide et applique via PlanMutationService."
+            ),
+            kind="candidate",
+            input_schema={
+                "type": "object",
+                "properties": {
+                    "target_session_id": {"type": "integer", "description": "ID ScheduledSession a deplacer."},
+                    "target_date": {"type": "string", "description": "Date cible ISO YYYY-MM-DD."},
+                    "from_day": {"type": "string", "description": "Jour source si connu."},
+                    "to_day": {"type": "string", "description": "Jour cible si connu."},
+                    "rationale": {"type": "string", "description": "Raison courte du changement."},
+                    "coach_message": {"type": "string", "description": "Message coach associe au patch candidat."},
+                    "confirmation_reason": {"type": "string", "description": "Raison de confirmation si le coach veut la demander."},
+                },
+                "required": ["target_session_id", "target_date", "rationale", "coach_message"],
+            },
+            allowed_pipelines=("conversation", "planning"),
+            handler=plan_patch_tools.draft_move_session,
+        ),
+        ToolSpec(
+            name="draft_swap_sessions",
+            description=(
+                "Construit un PlanPatch candidat pour echanger deux seances existantes, puis le valide sans ecrire en base. "
+                "A utiliser quand deux vraies seances existent deja et que le user veut inverser leurs jours."
+            ),
+            kind="candidate",
+            input_schema={
+                "type": "object",
+                "properties": {
+                    "target_session_id": {"type": "integer", "description": "Premier ID ScheduledSession."},
+                    "second_session_id": {"type": "integer", "description": "Second ID ScheduledSession."},
+                    "rationale": {"type": "string", "description": "Raison courte de l'echange."},
+                    "coach_message": {"type": "string", "description": "Message coach associe au patch candidat."},
+                    "confirmation_reason": {"type": "string", "description": "Raison de confirmation si besoin."},
+                },
+                "required": ["target_session_id", "second_session_id", "rationale", "coach_message"],
+            },
+            allowed_pipelines=("conversation", "planning"),
+            handler=plan_patch_tools.draft_swap_sessions,
+        ),
+        ToolSpec(
+            name="draft_replace_session",
+            description=(
+                "Construit un PlanPatch candidat pour remplacer le contenu d'une seance existante, puis le valide "
+                "sans ecrire en base. Retourne patch + validation; aucun commit n'est effectue."
+            ),
+            kind="candidate",
+            input_schema={
+                "type": "object",
+                "properties": {
+                    "target_session_id": {"type": "integer", "description": "ID ScheduledSession a remplacer."},
+                    "new_title": {"type": "string", "description": "Nouveau titre."},
+                    "new_goal": {"type": "string", "description": "Nouvel objectif."},
+                    "new_sport_type": {"type": "string", "description": "Nouveau sport, ex running/swimming/cycling."},
+                    "new_session_type": {"type": "string", "description": "Nouveau type de seance."},
+                    "new_duration_min": {"type": "integer", "description": "Nouvelle duree en minutes."},
+                    "new_intensity": {"type": "string", "description": "Nouvelle intensite: easy/moderate/hard."},
+                    "new_description": {"type": "string", "description": "Description courte."},
+                    "rationale": {"type": "string", "description": "Raison courte du remplacement."},
+                    "coach_message": {"type": "string", "description": "Message coach associe au patch candidat."},
+                    "confirmation_reason": {"type": "string", "description": "Raison de confirmation si besoin."},
+                },
+                "required": ["target_session_id", "new_sport_type", "new_title", "new_duration_min", "rationale", "coach_message"],
+            },
+            allowed_pipelines=("conversation", "planning"),
+            handler=plan_patch_tools.draft_replace_session,
+        ),
+        ToolSpec(
+            name="draft_lighten_day",
+            description=(
+                "Construit un PlanPatch candidat pour alleger une seance existante, puis le valide sans ecrire en base. "
+                "A utiliser pour fatigue/douleur/recuperation quand la seance reste au planning mais devient plus facile."
+            ),
+            kind="candidate",
+            input_schema={
+                "type": "object",
+                "properties": {
+                    "target_session_id": {"type": "integer", "description": "ID ScheduledSession a alleger."},
+                    "new_title": {"type": "string", "description": "Titre ajuste optionnel."},
+                    "new_goal": {"type": "string", "description": "Objectif ajuste optionnel."},
+                    "new_duration_min": {"type": "integer", "description": "Duree cible optionnelle."},
+                    "new_intensity": {"type": "string", "description": "Intensite cible, defaut easy."},
+                    "new_description": {"type": "string", "description": "Description courte optionnelle."},
+                    "rationale": {"type": "string", "description": "Raison courte de l'allegement."},
+                    "coach_message": {"type": "string", "description": "Message coach associe au patch candidat."},
+                    "confirmation_reason": {"type": "string", "description": "Raison de confirmation si besoin."},
+                },
+                "required": ["target_session_id", "rationale", "coach_message"],
+            },
+            allowed_pipelines=("conversation", "planning"),
+            handler=plan_patch_tools.draft_lighten_day,
+        ),
+        ToolSpec(
+            name="draft_create_session",
+            description=(
+                "Construit un PlanPatch candidat pour creer une nouvelle seance datee, puis le valide sans ecrire en base. "
+                "Retourne patch + validation; le backend revalide avant tout commit."
+            ),
+            kind="candidate",
+            input_schema={
+                "type": "object",
+                "properties": {
+                    "target_date": {"type": "string", "description": "Date cible ISO YYYY-MM-DD."},
+                    "new_title": {"type": "string", "description": "Titre de la nouvelle seance."},
+                    "new_goal": {"type": "string", "description": "Objectif de la nouvelle seance."},
+                    "new_sport_type": {"type": "string", "description": "Sport, ex running/swimming/cycling."},
+                    "new_session_type": {"type": "string", "description": "Type de seance."},
+                    "new_duration_min": {"type": "integer", "description": "Duree en minutes."},
+                    "new_intensity": {"type": "string", "description": "Intensite: easy/moderate/hard."},
+                    "new_description": {"type": "string", "description": "Description courte."},
+                    "rationale": {"type": "string", "description": "Raison courte de creation."},
+                    "coach_message": {"type": "string", "description": "Message coach associe au patch candidat."},
+                    "confirmation_reason": {"type": "string", "description": "Raison de confirmation si besoin."},
+                },
+                "required": ["target_date", "new_sport_type", "new_title", "new_duration_min", "rationale", "coach_message"],
+            },
+            allowed_pipelines=("conversation", "planning"),
+            handler=plan_patch_tools.draft_create_session,
+        ),
+        ToolSpec(
             name="validate_plan_patch",
             description=(
                 "Valide un PlanPatch sans l'appliquer. Retourne valid/warning/"
                 "requires_confirmation/blocked, les raisons typees et les suggested_fix."
             ),
+            kind="validation",
             input_schema={
                 "type": "object",
                 "properties": {
@@ -180,8 +307,30 @@ def build_tool_registry() -> dict[str, ToolSpec]:
             handler=_validate_plan_patch_tool,
         ),
         ToolSpec(
+            name="validate_week_coherence",
+            description=(
+                "Review sportive validation-only d'un PlanPatch: simule la semaine before/after, "
+                "retourne validation runtime, checks deterministes et verdict WeekCoherenceReviewer. "
+                "Aucun commit; le backend re-run toujours cette gate avant write."
+            ),
+            kind="validation",
+            input_schema={
+                "type": "object",
+                "properties": {
+                    "patch": {
+                        "type": "object",
+                        "description": "PlanPatch complet: coach_message + operations[].",
+                    }
+                },
+                "required": ["patch"],
+            },
+            allowed_pipelines=("conversation", "planning", "heartbeat"),
+            handler=_validate_week_coherence_tool,
+        ),
+        ToolSpec(
             name="propose_replan",
             description="Compat legacy: utilise suggest_replan_candidates. Retourne une candidate de replan read-only, pas une decision finale.",
+            kind="candidate",
             input_schema={
                 "type": "object",
                 "properties": {
@@ -211,6 +360,7 @@ def list_tools_for_pipeline(pipeline: str, *, tool_names: Sequence[str] | None =
                 {
                     "name": spec.name,
                     "description": spec.description,
+                    "kind": spec.kind,
                     "input_schema": dict(spec.input_schema),
                 }
             )
@@ -219,6 +369,7 @@ def list_tools_for_pipeline(pipeline: str, *, tool_names: Sequence[str] | None =
         {
             "name": spec.name,
             "description": spec.description,
+            "kind": spec.kind,
             "input_schema": dict(spec.input_schema),
         }
         for spec in registry.values()
@@ -388,15 +539,8 @@ def _propose_replan(context: ToolContext, arguments: dict[str, Any]) -> ToolResu
 def _validate_plan_patch_tool(context: ToolContext, arguments: dict[str, Any]) -> ToolResult:
     from fitmas.plan_patch import PlanPatch, validate_plan_patch
 
-    raw_patch = arguments.get("patch")
-    if not isinstance(raw_patch, dict):
-        raw_patch = {
-            "coach_message": str(arguments.get("coach_message") or "Patch a valider."),
-            "operations": arguments.get("operations") or [],
-            "confirmation_reason": arguments.get("confirmation_reason"),
-        }
     try:
-        patch = PlanPatch.model_validate(raw_patch)
+        patch = PlanPatch.model_validate(_raw_patch_payload(arguments))
     except Exception as exc:
         return ToolResult(
             tool_name="validate_plan_patch",
@@ -411,7 +555,83 @@ def _validate_plan_patch_tool(context: ToolContext, arguments: dict[str, Any]) -
         scheduled_sessions=context.scheduled_sessions,
         timezone_name=context.timezone_name,
     )
+    payload = _plan_patch_validation_payload(validation)
+    return ToolResult(
+        tool_name="validate_plan_patch",
+        status="ok",
+        payload=payload,
+        summary=validation.summary,
+    )
+
+
+def _validate_week_coherence_tool(context: ToolContext, arguments: dict[str, Any]) -> ToolResult:
+    from fitmas.plan_patch import PlanPatch, validate_plan_patch
+    from fitmas.week_coherence import aggregate_week_coherence_policy, build_week_coherence_context
+
+    try:
+        patch = PlanPatch.model_validate(_raw_patch_payload(arguments))
+    except Exception as exc:
+        return ToolResult(
+            tool_name="validate_week_coherence",
+            status="error",
+            error=f"invalid_plan_patch: {exc}",
+            summary="Patch invalide: schema PlanPatch non respecte.",
+        )
+    validation = validate_plan_patch(
+        context.db,
+        plan_id=0,
+        patch=patch,
+        scheduled_sessions=context.scheduled_sessions,
+        timezone_name=context.timezone_name,
+    )
+    week_context = build_week_coherence_context(
+        patch=patch,
+        validation=validation,
+        scheduled_sessions=context.scheduled_sessions,
+        activities=context.activities,
+        active_facts=context.active_facts,
+        timezone_name=context.timezone_name,
+    )
+    request_json_fn = None if validation.status == "blocked" else _request_week_coherence_json
+    review = review_week_coherence_with_llm(
+        week_context,
+        request_json_fn=request_json_fn,
+    )
+    policy_status = aggregate_week_coherence_policy(
+        patch_validation=validation,
+        week_review=review,
+        deterministic_checks=week_context.deterministic_checks,
+        allow_requires_confirmation=False,
+    )
     payload = {
+        "validation": _plan_patch_validation_payload(validation),
+        "deterministic_checks": _deterministic_week_checks_payload(week_context.deterministic_checks),
+        "review": _week_coherence_review_payload(review),
+        "policy_status": policy_status,
+        "commit_performed": False,
+        "writer": "none",
+    }
+    return ToolResult(
+        tool_name="validate_week_coherence",
+        status="ok",
+        payload=payload,
+        summary=review.summary,
+    )
+
+
+def _raw_patch_payload(arguments: dict[str, Any]) -> dict[str, Any]:
+    raw_patch = arguments.get("patch")
+    if isinstance(raw_patch, dict):
+        return raw_patch
+    return {
+        "coach_message": str(arguments.get("coach_message") or "Patch a valider."),
+        "operations": arguments.get("operations") or [],
+        "confirmation_reason": arguments.get("confirmation_reason"),
+    }
+
+
+def _plan_patch_validation_payload(validation: Any) -> dict[str, Any]:
+    return {
         "status": validation.status,
         "summary": validation.summary,
         "operation_results": [
@@ -427,12 +647,58 @@ def _validate_plan_patch_tool(context: ToolContext, arguments: dict[str, Any]) -
             for result in validation.operation_results
         ],
     }
-    return ToolResult(
-        tool_name="validate_plan_patch",
-        status="ok",
-        payload=payload,
-        summary=validation.summary,
-    )
+
+
+def _deterministic_week_checks_payload(checks: Any) -> dict[str, Any]:
+    return {
+        "hard_sessions_before": checks.hard_sessions_before,
+        "hard_sessions_after": checks.hard_sessions_after,
+        "min_hard_gap_hours_after": checks.min_hard_gap_hours_after,
+        "recovery_sessions_before": checks.recovery_sessions_before,
+        "recovery_sessions_after": checks.recovery_sessions_after,
+        "key_session_ids_touched": list(checks.key_session_ids_touched),
+        "completed_session_ids_touched": list(checks.completed_session_ids_touched),
+        "weekly_duration_delta_min": checks.weekly_duration_delta_min,
+        "estimated_tss_delta": checks.estimated_tss_delta,
+        "change_budget_remaining_before": checks.change_budget_remaining_before,
+        "change_budget_remaining_after": checks.change_budget_remaining_after,
+        "flags": list(checks.flags),
+    }
+
+
+def _week_coherence_review_payload(review: WeekCoherenceReview) -> dict[str, Any]:
+    payload = {
+        "status": review.status,
+        "sport_quality": review.sport_quality,
+        "confidence": review.confidence,
+        "summary": review.summary,
+        "findings": [
+            {
+                "code": finding.code,
+                "severity": finding.severity,
+                "detail": finding.detail,
+                "target_session_ids": list(finding.target_session_ids),
+            }
+            for finding in review.findings
+        ],
+        "suggested_adjustments": [dict(item) for item in review.suggested_adjustments],
+        "recommended_policy": review.recommended_policy,
+    }
+    if review.revised_patch is not None:
+        payload["revised_patch"] = review.revised_patch.model_dump(exclude_none=True)
+    return payload
+
+
+def _request_week_coherence_json(**kwargs) -> dict[str, Any] | None:
+    from fitmas.plan_mutation_service import _request_week_coherence_json as request_json
+
+    return request_json(**kwargs)
+
+
+def review_week_coherence_with_llm(context: Any, *, request_json_fn: Any = None) -> Any:
+    from fitmas.week_coherence import review_week_coherence_with_llm as review
+
+    return review(context, request_json_fn=request_json_fn)
 
 
 def _build_replan_candidate_result(

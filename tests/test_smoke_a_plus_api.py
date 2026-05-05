@@ -109,6 +109,30 @@ def test_coherent_commit_or_pending_fails_on_claim_without_event_or_pending():
     assert "assistant claimed a mutation without event or pending confirmation" in result.reasons
 
 
+def test_coherent_commit_or_pending_fails_on_backend_claim_guard_phrasing():
+    smoke = _load_smoke_module()
+    scenario = smoke.SmokeScenario(
+        name="move_easy_to_free",
+        prompt="deplace la seance facile",
+        expectation="coherent_commit_or_pending",
+    )
+    before = smoke.DbSnapshot(events=(), pending=(), sessions=(), latest_turn=None)
+    after = smoke.DbSnapshot(
+        events=(),
+        pending=(),
+        sessions=(),
+        latest_turn={
+            "response_mode": "reply",
+            "assistant_message": "J'ai inverse la sortie longue et le fractionne.",
+        },
+    )
+
+    result = smoke.evaluate_scenario_result(scenario, before, after)
+
+    assert not result.ok
+    assert "assistant claimed a mutation without event or pending confirmation" in result.reasons
+
+
 def test_reply_placeholders_are_reported_as_warnings_not_artifact_failures():
     smoke = _load_smoke_module()
     scenario = smoke.SmokeScenario(

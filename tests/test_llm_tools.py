@@ -20,7 +20,13 @@ CANONICAL_CONVERSATION_TOOLS = [
     "get_relevant_facts",
     "get_user_constraints",
     "suggest_replan_candidates",
+    "draft_move_session",
+    "draft_swap_sessions",
+    "draft_replace_session",
+    "draft_lighten_day",
+    "draft_create_session",
     "validate_plan_patch",
+    "validate_week_coherence",
 ]
 
 

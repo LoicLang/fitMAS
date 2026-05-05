@@ -38,6 +38,12 @@ _ACTION_VERBS = (
     "retire",
     "annule",
     "ajoute",
+    "cale",
+    "glisse",
+    "inverse",
+    "mis",
+    "pose",
+    "permute",
     "swap",
     "swappe",
 )
@@ -52,7 +58,7 @@ def _strip_accents(text: str) -> str:
 _NEGATION_RE = re.compile(r"\bn[e']\s*$", re.IGNORECASE)
 _PRONOUN_PATTERNS = tuple(
     re.compile(
-        rf"\b(?:je\s+|j['’]\s*)(?:te\s+|vous\s+|le\s+|la\s+|les\s+|me\s+)?{verb}\w*\b",
+        rf"\b(?:je\s+|j['’]\s*)(?:te\s+|vous\s+|le\s+|la\s+|les\s+|me\s+|l['’]\s*)?(?:(?:ai|avais|viens\s+de)\s+)?{verb}\w*\b",
         re.IGNORECASE,
     )
     for verb in _ACTION_VERBS

@@ -39,6 +39,7 @@ ToolHandler = Callable[[ToolContext, dict[str, Any]], ToolResult]
 class ToolSpec:
     name: str
     description: str
+    kind: str = "read"
     input_schema: Mapping[str, Any] = field(default_factory=dict)
     allowed_pipelines: tuple[str, ...] = ("conversation",)
     handler: ToolHandler | None = None
@@ -48,6 +49,7 @@ def serialize_tool_spec(spec: ToolSpec) -> dict[str, Any]:
     return {
         "name": spec.name,
         "description": spec.description,
+        "kind": spec.kind,
         "input_schema": dict(spec.input_schema),
         "allowed_pipelines": list(spec.allowed_pipelines),
     }

@@ -344,7 +344,7 @@ def run_conversation_turn(
                 scheduled_sessions=state.scheduled_sessions,
                 timezone_name=user.timezone,
             )
-            service_result = PlanPatchServiceResult(validation=validation)
+            service_result = PlanPatchServiceResult(validation=validation, patch=decision.plan_patch)
             if validation.status == "blocked":
                 reply_text = _blocked_plan_patch_reply(service_result)
                 _log_plan_patch_blocked(service_result, user_id=user.id)
@@ -1182,11 +1182,42 @@ def _build_plan_patch_confirmation_prompt(service_result: PlanPatchServiceResult
         allowed_to_claim_mutation=False,
         pipeline="conversation",
         pipeline_capability="can_confirm",
+        extra_facts=_plan_patch_confirmation_facts(service_result),
     )
     composed = final_reply.compose_final_reply(context)
     if composed:
         return composed
     return final_reply.outage_fallback_reply(context)
+
+
+def _plan_patch_confirmation_facts(service_result: PlanPatchServiceResult | None) -> tuple[str, ...]:
+    patch = service_result.patch if service_result is not None else None
+    if patch is None:
+        return ()
+    facts: list[str] = []
+    coach_message = str(patch.coach_message or "").strip()
+    if coach_message:
+        facts.append(f"Patch coach_message: {coach_message}")
+    for index, operation in enumerate(patch.operations, start=1):
+        bits = [f"operation#{index}", str(operation.operation_type)]
+        if operation.target_session_id is not None:
+            bits.append(f"target_session_id={operation.target_session_id}")
+        if operation.second_session_id is not None:
+            bits.append(f"second_session_id={operation.second_session_id}")
+        if operation.target_date:
+            bits.append(f"target_date={operation.target_date}")
+        if operation.new_sport_type:
+            bits.append(f"new_sport_type={operation.new_sport_type}")
+        if operation.new_session_type:
+            bits.append(f"new_session_type={operation.new_session_type}")
+        if operation.new_title:
+            bits.append(f"new_title={operation.new_title}")
+        if operation.new_duration_min is not None:
+            bits.append(f"new_duration_min={operation.new_duration_min}")
+        if operation.new_intensity:
+            bits.append(f"new_intensity={operation.new_intensity}")
+        facts.append(" | ".join(bits))
+    return tuple(facts)
 
 
 def _log_plan_patch_blocked(service_result: PlanPatchServiceResult | None, *, user_id: int | None) -> None:

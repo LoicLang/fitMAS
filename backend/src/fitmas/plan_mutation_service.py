@@ -39,6 +39,7 @@ class PlanMutationServiceResult:
 @dataclass(frozen=True, slots=True)
 class PlanPatchServiceResult:
     validation: PlanPatchValidation
+    patch: PlanPatch | None = None
     mutation_result: PlanMutationServiceResult | None = None
     week_review: WeekCoherenceReview | None = None
     week_policy_status: str | None = None
@@ -288,7 +289,7 @@ def apply_patch_for_user(
         timezone_name=getattr(user, "timezone", None),
     )
     if validation.status == "blocked":
-        return PlanPatchServiceResult(validation=validation, week_policy_status="blocked")
+        return PlanPatchServiceResult(validation=validation, patch=patch, week_policy_status="blocked")
 
     week_context = build_week_coherence_context(
         patch=patch,
@@ -309,6 +310,7 @@ def apply_patch_for_user(
     if week_policy_status != "valid":
         return PlanPatchServiceResult(
             validation=validation,
+            patch=patch,
             week_review=week_review,
             week_policy_status=week_policy_status,
         )
@@ -316,6 +318,7 @@ def apply_patch_for_user(
     if not _validation_allows_patch_commit(validation, allow_requires_confirmation=allow_requires_confirmation):
         return PlanPatchServiceResult(
             validation=validation,
+            patch=patch,
             week_review=week_review,
             week_policy_status="requires_confirmation",
         )
@@ -376,6 +379,7 @@ def apply_patch_for_user(
     )
     return PlanPatchServiceResult(
         validation=validation,
+        patch=patch,
         mutation_result=mutation_result,
         week_review=week_review,
         week_policy_status=week_policy_status,

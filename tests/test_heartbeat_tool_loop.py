@@ -3,10 +3,12 @@ from __future__ import annotations
 import unittest
 from datetime import datetime
 from types import SimpleNamespace
+from unittest.mock import patch
 
 import fitmas.heartbeat as heartbeat
 from fitmas.skills.heartbeat import tool_loop
 from fitmas.tool_contract import ToolContext
+from fitmas.week_coherence import WeekCoherenceFinding, WeekCoherenceReview
 
 
 class HeartbeatToolLoopTest(unittest.TestCase):
@@ -150,6 +152,92 @@ class HeartbeatToolLoopTest(unittest.TestCase):
         self.assertIsNotNone(pending)
         self.assertEqual(pending.mutation_type, "plan_patch")
         self.assertIn('"kind": "plan_patch"', pending.decision_json)
+        self.assertIn("lighten_day", pending.decision_json)
+
+    def test_llm_generate_captures_week_reviewed_plan_patch_as_pending_candidate(self) -> None:
+        patch_payload = {
+            "coach_message": "Je te propose d'alleger demain.",
+            "operations": [
+                {
+                    "operation_type": "lighten_day",
+                    "target_session_id": 10,
+                    "rationale": "Charge haute.",
+                }
+            ],
+        }
+        responses = [
+            SimpleNamespace(
+                stop_reason="tool_use",
+                content=[
+                    SimpleNamespace(
+                        type="tool_use",
+                        id="toolu_1",
+                        name="validate_week_coherence",
+                        input={"patch": patch_payload},
+                    )
+                ],
+            ),
+            SimpleNamespace(
+                stop_reason="end_turn",
+                content=[SimpleNamespace(type="text", text="Je te propose d'alleger demain — tu confirmes ?")],
+            ),
+        ]
+
+        def fake_request_message(**_kwargs):
+            return responses.pop(0)
+
+        context = ToolContext(
+            pipeline="heartbeat",
+            user_id=1,
+            timezone_name="Europe/Paris",
+            now=datetime.fromisoformat("2026-05-04T07:30:00+02:00"),
+            scheduled_sessions=[
+                {
+                    "id": 10,
+                    "scheduled_date": "2026-05-05T07:00:00+02:00",
+                    "sport_type": "running",
+                    "session_title": "Footing facile",
+                    "duration_min": 35,
+                    "completion_status": "planned",
+                }
+            ],
+        )
+        review = WeekCoherenceReview(
+            status="requires_confirmation",
+            sport_quality="fragile",
+            confidence=0.8,
+            summary="Allegement acceptable mais a confirmer.",
+            findings=(
+                WeekCoherenceFinding(
+                    code="health_constraint_requires_review",
+                    severity="requires_confirmation",
+                    detail="Charge haute.",
+                ),
+            ),
+            suggested_adjustments=(),
+            recommended_policy="confirm_original",
+        )
+
+        original_request_message = tool_loop.gw.request_message
+        original_request_text = heartbeat.request_text
+        try:
+            tool_loop.gw.request_message = fake_request_message
+            heartbeat.request_text = lambda **_kwargs: "ALLOW"
+            with patch("fitmas.tools.registry.review_week_coherence_with_llm", return_value=review, create=True):
+                text = heartbeat._llm_generate(
+                    "system",
+                    "prompt",
+                    pipeline="heartbeat_signal",
+                    tool_context=context,
+                )
+                pending = heartbeat._take_pending_confirmation()
+        finally:
+            tool_loop.gw.request_message = original_request_message
+            heartbeat.request_text = original_request_text
+
+        self.assertEqual(text, "Je te propose d'alleger demain — tu confirmes ?")
+        self.assertIsNotNone(pending)
+        self.assertEqual(pending.mutation_type, "plan_patch")
         self.assertIn("lighten_day", pending.decision_json)
 
     def test_llm_generate_does_not_create_pending_when_final_reply_does_not_confirm(self) -> None:

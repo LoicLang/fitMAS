@@ -193,8 +193,20 @@ def _new_rows(
 
 
 def _looks_like_mutation_claim(message: str) -> bool:
+    if _looks_like_backend_action_claim(message):
+        return True
     normalized = _normalize(message)
     return any(marker in normalized for marker in _MUTATION_CLAIM_MARKERS)
+
+
+def _looks_like_backend_action_claim(message: str) -> bool:
+    try:
+        if str(BACKEND_SRC) not in sys.path:
+            sys.path.insert(0, str(BACKEND_SRC))
+        from fitmas.claim_guard import looks_like_action_claim
+    except Exception:
+        return False
+    return looks_like_action_claim(message)
 
 
 def _contains_bracket_placeholder(message: str) -> bool:

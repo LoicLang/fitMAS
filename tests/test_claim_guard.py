@@ -40,6 +40,15 @@ class TestLooksLikeActionClaim:
     def test_je_swappe_is_a_claim(self):
         assert looks_like_action_claim("Je swappe lundi et mercredi.") is True
 
+    def test_j_ai_inverse_is_a_claim(self):
+        assert looks_like_action_claim("J’ai inversé la sortie longue et le fractionné.") is True
+
+    def test_j_ai_cale_is_a_claim(self):
+        assert looks_like_action_claim("J'ai calé la récup lundi.") is True
+
+    def test_je_pose_is_a_claim(self):
+        assert looks_like_action_claim("Je pose un footing mercredi.") is True
+
     def test_negation_ne_is_not_a_claim(self):
         assert looks_like_action_claim(
             "Je ne deplace pas la seance sans ton accord."

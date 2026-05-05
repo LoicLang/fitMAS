@@ -69,10 +69,11 @@ L'audit declenche par cet incident a confirme 3 failles structurelles connexes :
 | 3B-B | ✅ Proactive PlanPatch propose + confirmation Telegram pending, pas de commit autonome — implemente localement 5 mai 2026 | 1j | section ci-dessous |
 | A+0 | ✅ Documentation Sport Quality / Week Coherence — doctrine reviewer sportif, policy runtime, progression par stimulus | 0.5j | `docs/SPORT-QUALITY-REVIEW.md` |
 | A+1-A+3 | ✅ **Phase A+ core gate** — simulation, contexte deterministe, LLM reviewer/fallback type, gate runtime dans `apply_patch_for_user`, smoke API reel `scripts/smoke-a-plus-api` — implemente localement 5 mai 2026 | 3-4j | `docs/SPORT-QUALITY-REVIEW.md` + section "Phase A+" ci-dessous |
-| 3B-C | Action-tools natifs bornes, **apres A+ core gate** | 2-3j | `docs/RUNTIME-TOOLS.md` |
-| A+4-A+5 | Tool `validate_week_coherence` + heartbeat review + review semaine generee | 1.5-2j | `docs/SPORT-QUALITY-REVIEW.md` |
+| 3B-C | ✅ Action-tools natifs bornes, **apres A+ core gate** — `draft_move_session`, `draft_swap_sessions`, `draft_replace_session`, `draft_lighten_day`, `draft_create_session`, candidates PlanPatch sans write — implemente localement 5 mai 2026 | 2-3j | `docs/RUNTIME-TOOLS.md` |
+| A+4 | ✅ Tool `validate_week_coherence` validation-only conversation/planning/heartbeat + capture pending heartbeat reviewee — implemente localement 5 mai 2026 | 0.5-1j | `docs/SPORT-QUALITY-REVIEW.md` |
+| A+5 | Review semaine generee avant commit | 1j | `docs/SPORT-QUALITY-REVIEW.md` |
 
-**Total restant avant B0 : ~6.5-9 jours**. Couvre gate sportive core, action-tools bornes derriere gate, tool `validate_week_coherence`, heartbeat et review semaine generee avant Phase B.
+**Total restant avant B0 : ~1 jour**. Reste A+5 : review semaine generee avant Phase B.
 
 ### Deploiement prod — 4 mai 2026
 
@@ -635,11 +636,14 @@ Verification locale :
 10. ~~**Smoke API reel A+**~~ ✅ `./scripts/smoke-a-plus-api` — serveur HTTP
    local + vrai provider + DB temporaire ; verrouille les regressions
    `move_hard_close` et `replace_key_running_swim_easy`.
-11. **Maintenant : Chantier 3B-C** — action-tools natifs bornes, mais uniquement
-   derriere `validate_plan_patch -> WeekCoherenceReviewer -> policy -> writer`.
-12. **Puis : A+4-A+5** — tool `validate_week_coherence`, heartbeat review,
-   semaine generee relue avant commit.
-13. **Apres seulement : B0/B1/B2** — prescription structuree, session quality,
+11. ~~**Chantier 3B-C**~~ ✅ action-tools natifs bornes, conversation/planning
+   only, candidates PlanPatch sans write. Commit toujours derriere
+   `validate_plan_patch -> WeekCoherenceReviewer -> policy -> writer`.
+12. ~~**A+4**~~ ✅ tool `validate_week_coherence` validation-only,
+   conversation/planning/heartbeat, pending heartbeat possible seulement apres
+   review sportive confirmable.
+13. **Maintenant : A+5** — semaine generee relue avant commit.
+14. **Apres seulement : B0/B1/B2** — prescription structuree, session quality,
    performance signals et calibration.
 
 ### Phase A — etat apres chantiers 0+1+2

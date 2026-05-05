@@ -53,13 +53,14 @@ Chantiers en cours (suite incident hallucination factuelle briefing 2 mai) :
 - ✅ **P1 execution receipt repair** — si le LLM reconnait “pas fait hier” sans `execution_actions`, repair sémantique sur artefact LLM ; cible follow-up structurée si dispo, sinon `target_ref` borné résolu par le writer — implémenté localement 4-5 mai 2026
 - ✅ **P1-quater** — dogfood API fallout : verifier `execution_actions`, date/day dans facts post-event, confirmation cible planning ambiguë, repair mémoire disponibilité — déployé 4 mai 2026
 - ✅ **Phase A+ core** — Sport Quality / Week Coherence gate avant nouveaux action-tools : simulation, reviewer LLM/fallback typé, gate runtime dans `apply_patch_for_user`, smoke API réel `scripts/smoke-a-plus-api` — implémenté localement 5 mai 2026 — `docs/SPORT-QUALITY-REVIEW.md`
-- **Chantier 3B-C** — Action-tools natifs bornés, seulement derrière la gate A+ core — `docs/RUNTIME-TOOLS.md`
-- **Phase A+ hardening** — tool `validate_week_coherence`, heartbeat review, semaine générée relue avant commit — `docs/SPORT-QUALITY-REVIEW.md`
+- ✅ **Chantier 3B-C** — Action-tools natifs bornés : `draft_move_session`, `draft_swap_sessions`, `draft_replace_session`, `draft_lighten_day`, `draft_create_session`, tous candidates PlanPatch sans write, seulement derrière la gate A+ core — implémenté localement 5 mai 2026 — `docs/RUNTIME-TOOLS.md`
+- ✅ **A+4** — tool `validate_week_coherence` validation-only conversation/planning/heartbeat + pending heartbeat seulement après review sportive confirmable — implémenté localement 5 mai 2026 — `docs/SPORT-QUALITY-REVIEW.md`
+- **A+5** — semaine générée relue avant commit — `docs/SPORT-QUALITY-REVIEW.md`
 
 Cap produit actuel :
 - Telegram = coach conversationnel
 - App = cockpit performance
-- priorité immédiate : ouvrir 3B-C seulement derrière la gate A+ core + rejouer `./scripts/smoke-a-plus-api` avant dogfood
+- priorité immédiate : A+5 (semaine générée relue avant commit) + rejouer `./scripts/smoke-a-plus-api` avant dogfood
 - Phase B long terme : progression/prescription structurée, pas ouverte tant que Phase A + Chantiers 2+3 + Phase A+ ne sont pas clos
 
 ## Stack

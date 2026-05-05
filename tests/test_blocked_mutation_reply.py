@@ -16,7 +16,7 @@ from fitmas.plan_mutation_service import (
     PlanMutationServiceResult,
     PlanPatchServiceResult,
 )
-from fitmas.plan_patch import PlanPatchOperationValidation, PlanPatchValidation
+from fitmas.plan_patch import PlanPatch, PlanPatchOperation, PlanPatchOperationValidation, PlanPatchValidation
 from fitmas.week_coherence import WeekCoherenceFinding, WeekCoherenceReview
 
 
@@ -418,6 +418,59 @@ class BlockedMutationReplyTest(unittest.TestCase):
 
         self.assertNotIn("Reponds oui ou non", prompt)
         self.assertIn("confirm", prompt.lower())
+
+    def test_plan_patch_confirmation_prompt_passes_patch_details_to_composer(self) -> None:
+        from fitmas.conversation_pipeline import _build_plan_patch_confirmation_prompt
+
+        result = PlanPatchServiceResult(
+            patch=PlanPatch(
+                coach_message="La recuperation mobilite passe au lundi 11.",
+                operations=[
+                    PlanPatchOperation(
+                        operation_type="move_session",
+                        target_session_id=3,
+                        target_date="2026-05-11",
+                        rationale="Recup mobilite decalee au lundi.",
+                    )
+                ],
+            ),
+            validation=PlanPatchValidation(
+                status="valid",
+                operation_results=(
+                    PlanPatchOperationValidation(
+                        operation_type="move_session",
+                        status="valid",
+                        target_session_id=3,
+                    ),
+                ),
+            ),
+            week_policy_status="requires_confirmation",
+            week_review=WeekCoherenceReview(
+                status="requires_confirmation",
+                sport_quality="fragile",
+                confidence=0.8,
+                summary="Patch possible mais fragile sportivement; confirmation requise.",
+                findings=(),
+                suggested_adjustments=(),
+                recommended_policy="confirm_original",
+            ),
+        )
+
+        captured_contexts = []
+
+        def fake_compose(context):
+            captured_contexts.append(context)
+            return "Je peux la passer au lundi 11, mais je veux ton feu vert avant de bouger cette recuperation."
+
+        with patch("fitmas.conversation_pipeline.final_reply.compose_final_reply", side_effect=fake_compose):
+            reply = _build_plan_patch_confirmation_prompt(result)
+
+        self.assertIn("lundi 11", reply)
+        self.assertTrue(captured_contexts)
+        facts = "\n".join(captured_contexts[0].extra_facts)
+        self.assertIn("move_session", facts)
+        self.assertIn("target_session_id=3", facts)
+        self.assertIn("target_date=2026-05-11", facts)
 
     def test_week_review_requires_confirmation_counts_as_pending(self) -> None:
         from fitmas.conversation_pipeline import _plan_patch_confirmation_summary, _plan_patch_needs_confirmation

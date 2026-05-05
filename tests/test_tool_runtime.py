@@ -2,10 +2,12 @@ from __future__ import annotations
 
 import unittest
 from datetime import datetime
+from unittest.mock import patch
 
 from fitmas.tool_contract import ToolCall, ToolContext
 from fitmas.tool_registry import build_tool_registry, list_tools_for_pipeline
 from fitmas.tool_runtime import execute_tool_call, execute_tool_calls
+from fitmas.week_coherence import WeekCoherenceFinding, WeekCoherenceReview
 
 
 class ToolRuntimeTest(unittest.TestCase):
@@ -67,7 +69,9 @@ class ToolRuntimeTest(unittest.TestCase):
         )
 
     def test_registry_exposes_conversation_tools(self) -> None:
-        names = {tool["name"] for tool in list_tools_for_pipeline("conversation")}
+        tools = list_tools_for_pipeline("conversation")
+        names = {tool["name"] for tool in tools}
+        by_name = {tool["name"]: tool for tool in tools}
 
         self.assertIn("get_today_context", names)
         self.assertIn("suggest_replan_candidates", names)
@@ -78,6 +82,15 @@ class ToolRuntimeTest(unittest.TestCase):
         self.assertIn("get_recent_reality_window", names)
         self.assertIn("get_load_context", names)
         self.assertIn("validate_plan_patch", names)
+        self.assertIn("draft_move_session", names)
+        self.assertIn("draft_swap_sessions", names)
+        self.assertIn("draft_replace_session", names)
+        self.assertIn("draft_lighten_day", names)
+        self.assertIn("draft_create_session", names)
+        self.assertIn("validate_week_coherence", names)
+        self.assertEqual(by_name["draft_move_session"]["kind"], "candidate")
+        self.assertEqual(by_name["validate_plan_patch"]["kind"], "validation")
+        self.assertEqual(by_name["validate_week_coherence"]["kind"], "validation")
 
     def test_registry_exposes_heartbeat_candidate_validation_tools_without_legacy_write(self) -> None:
         names = {tool["name"] for tool in list_tools_for_pipeline("heartbeat")}
@@ -91,8 +104,14 @@ class ToolRuntimeTest(unittest.TestCase):
         self.assertIn("get_relevant_facts", names)
         self.assertIn("suggest_replan_candidates", names)
         self.assertIn("validate_plan_patch", names)
+        self.assertIn("validate_week_coherence", names)
         self.assertNotIn("resolve_planning_window", names)
         self.assertNotIn("propose_replan", names)
+        self.assertNotIn("draft_move_session", names)
+        self.assertNotIn("draft_swap_sessions", names)
+        self.assertNotIn("draft_replace_session", names)
+        self.assertNotIn("draft_lighten_day", names)
+        self.assertNotIn("draft_create_session", names)
 
     def test_execute_tool_call_returns_today_context(self) -> None:
         result, trace = execute_tool_call(
@@ -425,6 +444,80 @@ class ToolRuntimeTest(unittest.TestCase):
         self.assertEqual(result.payload["operation_results"][0]["status"], "valid")
         self.assertEqual(result.summary, "Patch valide.")
 
+    def test_validate_week_coherence_tool_returns_review_payload_without_write(self) -> None:
+        registry = build_tool_registry()
+        context = ToolContext(
+            pipeline="conversation",
+            user_id=1,
+            timezone_name="Europe/Paris",
+            scheduled_sessions=[
+                {
+                    "id": 91,
+                    "scheduled_date": "2099-03-23T07:00:00+01:00",
+                    "sport_type": "running",
+                    "session_type": "easy",
+                    "session_title": "Footing",
+                    "duration_min": 45,
+                    "intensity": "easy",
+                    "priority": "Normal",
+                    "completion_status": "planned",
+                },
+                {
+                    "id": 92,
+                    "scheduled_date": "2099-03-24T07:00:00+01:00",
+                    "sport_type": "rest",
+                    "session_type": "rest",
+                    "session_title": "Repos flexible",
+                    "duration_min": 0,
+                    "intensity": "easy",
+                    "priority": "Recovery",
+                    "flexibility": "flexible",
+                    "completion_status": "planned",
+                },
+            ],
+            active_facts=(
+                {"category": "goal", "key": "main", "value": "10 km", "active": True},
+            ),
+        )
+        patch_payload = {
+            "coach_message": "Je peux bouger le footing a mardi.",
+            "operations": [
+                {
+                    "operation_type": "move_session",
+                    "target_session_id": 91,
+                    "target_date": "2099-03-24",
+                    "rationale": "Jour cible libre.",
+                }
+            ],
+        }
+        review = WeekCoherenceReview(
+            status="valid",
+            sport_quality="good",
+            confidence=0.9,
+            summary="Semaine coherente apres deplacement.",
+            findings=(
+                WeekCoherenceFinding(
+                    code="mission_preserved",
+                    severity="info",
+                    detail="Le stimulus reste coherent.",
+                    target_session_ids=(91,),
+                ),
+            ),
+            suggested_adjustments=(),
+            recommended_policy="commit_original",
+        )
+
+        with patch("fitmas.tools.registry.review_week_coherence_with_llm", return_value=review, create=True):
+            result = registry["validate_week_coherence"].handler(context, {"patch": patch_payload})
+
+        self.assertEqual(result.status, "ok")
+        self.assertEqual(result.payload["validation"]["status"], "valid")
+        self.assertEqual(result.payload["review"]["status"], "valid")
+        self.assertEqual(result.payload["review"]["recommended_policy"], "commit_original")
+        self.assertEqual(result.payload["deterministic_checks"]["weekly_duration_delta_min"], 0)
+        self.assertFalse(result.payload["commit_performed"])
+        self.assertEqual(result.payload["writer"], "none")
+
     def test_validate_plan_patch_tool_blocks_occupied_target_with_suggested_fix(self) -> None:
         registry = build_tool_registry()
         context = ToolContext(
@@ -479,6 +572,188 @@ class ToolRuntimeTest(unittest.TestCase):
         operation = result.payload["operation_results"][0]
         self.assertEqual(operation["block_reason"], "occupied_training_target")
         self.assertIn("swap_sessions", operation["suggested_fix"])
+
+    def test_draft_move_session_returns_candidate_patch_and_validation_without_write(self) -> None:
+        registry = build_tool_registry()
+        context = ToolContext(
+            pipeline="conversation",
+            user_id=1,
+            timezone_name="Europe/Paris",
+            scheduled_sessions=[
+                {
+                    "id": 61,
+                    "scheduled_date": "2099-03-23T07:00:00+01:00",
+                    "sport_type": "running",
+                    "session_type": "easy",
+                    "session_title": "Footing",
+                    "duration_min": 45,
+                    "intensity": "easy",
+                    "priority": "Normal",
+                    "completion_status": "planned",
+                },
+                {
+                    "id": 62,
+                    "scheduled_date": "2099-03-24T07:00:00+01:00",
+                    "sport_type": "rest",
+                    "session_type": "rest",
+                    "session_title": "Repos flexible",
+                    "duration_min": 0,
+                    "intensity": "easy",
+                    "priority": "Recovery",
+                    "flexibility": "flexible",
+                    "completion_status": "planned",
+                },
+            ],
+        )
+
+        result = registry["draft_move_session"].handler(
+            context,
+            {
+                "target_session_id": 61,
+                "target_date": "2099-03-24",
+                "rationale": "Indisponibilite mardi.",
+                "coach_message": "Je peux bouger le footing a mercredi.",
+            },
+        )
+
+        self.assertEqual(result.status, "ok")
+        self.assertFalse(result.payload["commit_performed"])
+        self.assertEqual(result.payload["validation"]["status"], "valid")
+        patch = result.payload["patch"]
+        self.assertEqual(patch["operations"][0]["operation_type"], "move_session")
+        self.assertEqual(patch["operations"][0]["target_session_id"], 61)
+        self.assertEqual(patch["operations"][0]["target_date"], "2099-03-24")
+        self.assertEqual(result.payload["next_step"], "return_plan_patch")
+
+    def test_draft_swap_sessions_returns_candidate_patch(self) -> None:
+        registry = build_tool_registry()
+        context = ToolContext(
+            pipeline="conversation",
+            user_id=1,
+            timezone_name="Europe/Paris",
+            scheduled_sessions=[
+                {
+                    "id": 63,
+                    "scheduled_date": "2099-03-23T07:00:00+01:00",
+                    "sport_type": "running",
+                    "session_type": "easy",
+                    "session_title": "Footing",
+                    "duration_min": 45,
+                    "intensity": "easy",
+                    "priority": "Normal",
+                    "completion_status": "planned",
+                },
+                {
+                    "id": 64,
+                    "scheduled_date": "2099-03-24T07:00:00+01:00",
+                    "sport_type": "cycling",
+                    "session_type": "easy",
+                    "session_title": "Velo easy",
+                    "duration_min": 50,
+                    "intensity": "easy",
+                    "priority": "Normal",
+                    "completion_status": "planned",
+                },
+            ],
+        )
+
+        result = registry["draft_swap_sessions"].handler(
+            context,
+            {
+                "target_session_id": 63,
+                "second_session_id": 64,
+                "rationale": "Echange demande par l'utilisateur.",
+                "coach_message": "J'echange les deux seances.",
+            },
+        )
+
+        self.assertEqual(result.status, "ok")
+        self.assertEqual(result.payload["validation"]["status"], "valid")
+        operation = result.payload["patch"]["operations"][0]
+        self.assertEqual(operation["operation_type"], "swap_sessions")
+        self.assertEqual(operation["target_session_id"], 63)
+        self.assertEqual(operation["second_session_id"], 64)
+
+    def test_draft_replace_session_surfaces_confirmation_when_key_sport_changes(self) -> None:
+        registry = build_tool_registry()
+        context = ToolContext(
+            pipeline="conversation",
+            user_id=1,
+            timezone_name="Europe/Paris",
+            scheduled_sessions=[
+                {
+                    "id": 71,
+                    "scheduled_date": "2099-03-23T07:00:00+01:00",
+                    "sport_type": "running",
+                    "session_type": "threshold",
+                    "session_title": "Fractionne seuil",
+                    "duration_min": 60,
+                    "intensity": "hard",
+                    "priority": "Seance cle",
+                    "completion_status": "planned",
+                }
+            ],
+        )
+
+        result = registry["draft_replace_session"].handler(
+            context,
+            {
+                "target_session_id": 71,
+                "new_sport_type": "swimming",
+                "new_session_type": "easy",
+                "new_title": "Natation easy",
+                "new_duration_min": 40,
+                "new_intensity": "easy",
+                "rationale": "Baisser l'impact.",
+                "coach_message": "Je peux remplacer par une natation easy.",
+            },
+        )
+
+        self.assertEqual(result.status, "ok")
+        self.assertEqual(result.payload["validation"]["status"], "requires_confirmation")
+        operation = result.payload["validation"]["operation_results"][0]
+        self.assertIn("replace_key_session_changes_sport", operation["warning_codes"])
+        self.assertEqual(result.payload["next_step"], "return_requires_confirmation")
+
+    def test_draft_create_session_blocks_occupied_training_target(self) -> None:
+        registry = build_tool_registry()
+        context = ToolContext(
+            pipeline="conversation",
+            user_id=1,
+            timezone_name="Europe/Paris",
+            scheduled_sessions=[
+                {
+                    "id": 81,
+                    "scheduled_date": "2099-03-24T07:00:00+01:00",
+                    "sport_type": "cycling",
+                    "session_type": "endurance",
+                    "session_title": "Velo endurance",
+                    "duration_min": 75,
+                    "intensity": "moderate",
+                    "priority": "Normal",
+                    "completion_status": "planned",
+                }
+            ],
+        )
+
+        result = registry["draft_create_session"].handler(
+            context,
+            {
+                "target_date": "2099-03-24",
+                "new_sport_type": "running",
+                "new_session_type": "hard",
+                "new_title": "Seance dure",
+                "new_duration_min": 45,
+                "new_intensity": "hard",
+                "rationale": "Ajouter du stimulus.",
+                "coach_message": "Je peux ajouter une seance dure.",
+            },
+        )
+
+        self.assertEqual(result.status, "ok")
+        self.assertEqual(result.payload["validation"]["status"], "blocked")
+        self.assertFalse(result.payload["commit_performed"])
+        self.assertEqual(result.payload["next_step"], "do_not_commit")
 
 
 if __name__ == "__main__":

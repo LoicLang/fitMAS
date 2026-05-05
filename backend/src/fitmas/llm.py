@@ -192,7 +192,7 @@ _TURN_INTENT_TO_PROMPT_INTENT = {
     "health_signal": IntentCategory.PLAN_NEGOTIATION,
     "preference_signal": IntentCategory.PLAN_NEGOTIATION,
 }
-_CONVERSATION_READ_TOOL_BUDGET = (
+_CONVERSATION_TOOL_BUDGET = (
     "get_today_context",
     "get_plan_window",
     "resolve_planning_window",
@@ -203,7 +203,13 @@ _CONVERSATION_READ_TOOL_BUDGET = (
     "get_relevant_facts",
     "get_user_constraints",
     "suggest_replan_candidates",
+    "draft_move_session",
+    "draft_swap_sessions",
+    "draft_replace_session",
+    "draft_lighten_day",
+    "draft_create_session",
     "validate_plan_patch",
+    "validate_week_coherence",
 )
 _ALLOWED_MUTATION_TYPES = {
     "move_session",
@@ -1288,7 +1294,7 @@ def _tool_budget_for_context(tool_context: ToolContext | None) -> tuple[str, ...
     if tool_context is None:
         return ()
     if tool_context.pipeline == "conversation":
-        return _CONVERSATION_READ_TOOL_BUDGET
+        return _CONVERSATION_TOOL_BUDGET
     return ()
 
 
@@ -1582,6 +1588,9 @@ def _tool_followup_content(tool_use_blocks: list[Any], tool_executions: list[Too
             "type": "text",
             "text": (
                 "Tu peux appeler d'autres tools si une information manque. "
+                "Si un tool draft_* retourne payload.patch, ne dis jamais que c'est applique; "
+                "copie ce patch dans un CoachDecision response_type=plan_patch ou requires_confirmation. "
+                "Si tu as valide un patch significatif, utilise aussi validate_week_coherence quand disponible. "
                 "Si tu as assez d'information, retourne maintenant uniquement un JSON FitMAS CoachDecision valide; "
                 "pas de prose hors JSON."
             ),

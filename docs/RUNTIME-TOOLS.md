@@ -89,6 +89,11 @@ Evolution V2 :
 - ajouter une policy par intent : max tools, max round-trips, categories autorisees
 - garder les writes interdits dans le runtime LLM conversationnel
 
+Etat 3B-C :
+- `ToolSpec.kind` est expose dans le registry (`read`, `candidate`, `validation`) ;
+- les action-tools planning natifs sont des `candidate`, jamais des `write` ;
+- aucun tool LLM-facing ne commit en DB.
+
 ### `tool_registry.py`
 
 Registry V1 :
@@ -102,9 +107,14 @@ Registry V1 :
 - `get_user_constraints`
 - `get_relevant_facts`
 - `suggest_replan_candidates`
+- `draft_move_session` (3B-C, candidate PlanPatch, conversation/planning only)
+- `draft_swap_sessions` (3B-C, candidate PlanPatch, conversation/planning only)
+- `draft_replace_session` (3B-C, candidate PlanPatch, conversation/planning only)
+- `draft_lighten_day` (3B-C, candidate PlanPatch, conversation/planning only)
+- `draft_create_session` (3B-C, candidate PlanPatch, conversation/planning only)
 - `propose_replan` (legacy compat, non route par defaut)
 - `validate_plan_patch` (validation-only, ajoute conversation 3A puis heartbeat 3B-B)
-- `validate_week_coherence` (Phase A+ cible, validation-only sport quality, pas encore implemente)
+- `validate_week_coherence` (A+4, validation-only sport quality)
 
 Tous ces tools lisent des objets deja charges par l'orchestrateur.
 Le registre actuel reste volontairement tres compact.
@@ -113,10 +123,10 @@ Direction V2 :
 - conserver les tools atomiques utiles
 - enrichir leurs descriptions et leurs payloads
 - garder `validate_plan_patch` comme tool validation-only : il aide le LLM a tester un `PlanPatch`, mais le backend revalide toujours au commit
-- ajouter `validate_week_coherence` comme tool validation-only : il aide le LLM a tester la qualite sportive d'un `PlanPatch`, mais le backend re-run toujours la review avant commit
+- garder `validate_week_coherence` comme tool validation-only : il aide le LLM a tester la qualite sportive d'un `PlanPatch`, mais le backend re-run toujours la review avant commit
 - ajouter `get_coach_state` seulement comme macro-tool read-only optionnel, pas comme remplacement des tools atomiques
 
-### `validate_week_coherence` (Phase A+ cible)
+### `validate_week_coherence` (A+4)
 
 Doc canonique : `docs/SPORT-QUALITY-REVIEW.md`.
 
@@ -151,6 +161,16 @@ V1 :
 - `confirm_original` -> pending confirmation ;
 - `block_original` -> no commit ;
 - `retry_with_revised_patch` / `confirm_revised` -> traiter comme block + proposer direction.
+
+Etat A+4 :
+- expose dans `conversation`, `planning`, `heartbeat` ;
+- retourne `payload.validation`, `payload.deterministic_checks`,
+  `payload.review`, `payload.policy_status`, `commit_performed=false`,
+  `writer=none` ;
+- le handler revalide d'abord le `PlanPatch`, simule la semaine, appelle le
+  reviewer sportif sauf hard block runtime, puis retourne un verdict ;
+- le heartbeat peut capturer un patch reviewe comme pending confirmation ;
+- le commit final repasse toujours par `PlanMutationService`.
 
 V2 :
 - autoriser un seul repair pass structure avec `revised_patch` ;
@@ -232,6 +252,13 @@ Cible Phase A+ heartbeat :
 - si review `requires_confirmation` / `valid` : pending confirmation possible ;
 - le backend re-run la gate avant commit quand le user accepte.
 
+Etat A+4 :
+- `validate_week_coherence` est expose au heartbeat ;
+- le system prompt heartbeat demande `validate_plan_patch` puis
+  `validate_week_coherence` avant une proposition planning ;
+- une sortie tool `validate_week_coherence` confirmable peut alimenter une
+  pending `plan_patch`.
+
 ### Position de 3B-C dans la roadmap
 
 Recadrage 5 mai 2026 :
@@ -240,7 +267,8 @@ Recadrage 5 mai 2026 :
 3B-B dogfood court
   -> A+1/A+2/A+3 gate sportive core
   -> 3B-C action-tools natifs bornes
-  -> A+4/A+5 validate_week_coherence tool + review semaine generee
+  -> A+4 validate_week_coherence tool
+  -> A+5 review semaine generee
 ```
 
 Raison :
@@ -259,6 +287,33 @@ validate_plan_patch
   -> aggregate backend policy
   -> PlanMutationService
 ```
+
+### Action-tools 3B-C
+
+Les tools 3B-C donnent au coach une meilleure ergonomie d'action, pas une
+nouvelle autorite d'ecriture.
+
+Tools :
+- `draft_move_session`
+- `draft_swap_sessions`
+- `draft_replace_session`
+- `draft_lighten_day`
+- `draft_create_session`
+
+Contrat :
+- input : arguments metier bornes (`target_session_id`, `target_date`, champs
+  de remplacement, rationale, `coach_message`) ;
+- output : `payload.patch`, `payload.validation`, `payload.next_step`,
+  `commit_performed=false`, `writer=none` ;
+- validation : appelle `validate_plan_patch` dans le handler ;
+- commit : jamais dans le tool ; le coach doit retourner un `CoachDecision`
+  `plan_patch` ou `requires_confirmation`, puis `PlanMutationService` revalide
+  et passe la gate A+.
+
+Pipelines :
+- autorise : `conversation`, `planning` ;
+- interdit : `heartbeat` pour le MVP 3B-C, afin de garder la proactive loop sans
+  action native tant que `validate_week_coherence` tool n'est pas expose.
 
 Interdit :
 - action-tool qui write en DB directement ;

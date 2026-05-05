@@ -1047,16 +1047,22 @@ Tests :
 
 ### Slice A+4 - Tool validate_week_coherence
 
-- ajouter au registry ;
+✅ Implemente localement 5 mai 2026.
+
+- ajoute au registry ;
 - allowed `conversation`, `planning`, `heartbeat` ;
+- retourne validation runtime, deterministic checks, review sportive et
+  `policy_status` ;
+- aucun write (`commit_performed=false`, `writer=none`) ;
+- heartbeat peut capturer un patch reviewe comme pending confirmation ;
 - backend re-run toujours avant commit.
 
 Tests :
 
-- tool returns review payload ;
-- tool never writes ;
-- tool budget respecte ;
-- backend re-run gate meme si tool deja appele.
+- ✅ tool returns review payload ;
+- ✅ tool never writes ;
+- ✅ tool budget respecte ;
+- ✅ backend re-run gate meme si tool deja appele.
 
 ### Slice A+5 - Review semaine generee
 

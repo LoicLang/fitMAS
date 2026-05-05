@@ -22,6 +22,7 @@ HEARTBEAT_TOOL_NAMES: tuple[str, ...] = (
     "get_relevant_facts",
     "suggest_replan_candidates",
     "validate_plan_patch",
+    "validate_week_coherence",
 )
 HEARTBEAT_READ_TOOL_NAMES = HEARTBEAT_TOOL_NAMES
 MAX_HEARTBEAT_TOOL_ROUNDS = 2
@@ -67,10 +68,10 @@ def generate_heartbeat_text_with_tools_debug(
         f"{system}\n\n"
         "Tu as acces a des tools heartbeat bornes. Les read-tools lisent le plan, "
         "les activites, les contraintes, la memoire et la charge. "
-        "`suggest_replan_candidates` et `validate_plan_patch` peuvent aider a proposer un ajustement, "
+        "`suggest_replan_candidates`, `validate_plan_patch` et `validate_week_coherence` peuvent aider a proposer un ajustement, "
         "mais aucun tool heartbeat ne commit en base. "
         "Utilise les tools avant une affirmation factuelle fragile. "
-        "Si tu proposes un changement de planning, appelle `validate_plan_patch` avant ta reponse finale "
+        "Si tu proposes un changement de planning, appelle `validate_plan_patch` puis `validate_week_coherence` avant ta reponse finale "
         "et formule uniquement une demande de confirmation."
     )
     if allow_no_send:
@@ -202,7 +203,7 @@ def _tool_followup_content(
     if allow_more_tools:
         text = (
             "Tu peux appeler un autre tool si une information manque. "
-            "Si tu proposes un changement, valide-le d'abord avec validate_plan_patch. "
+            "Si tu proposes un changement, valide-le d'abord avec validate_plan_patch puis validate_week_coherence. "
             "Sinon reponds en prose coach courte, ou NO_SEND si rien d'utile."
         )
     else:
@@ -232,7 +233,7 @@ def _candidate_plan_patch_from_tools(
     executions: list[ToolExecution],
 ) -> dict[str, Any] | None:
     for call, execution in zip(tool_calls, executions):
-        if call.tool_name != "validate_plan_patch":
+        if call.tool_name not in {"validate_plan_patch", "validate_week_coherence"}:
             continue
         raw_patch = call.arguments.get("patch")
         if not isinstance(raw_patch, dict):
@@ -240,15 +241,32 @@ def _candidate_plan_patch_from_tools(
         result = execution.result
         if result.status != "ok" or not isinstance(result.payload, dict):
             continue
-        validation_status = str(result.payload.get("status") or "").strip()
+        validation = _candidate_validation_payload(call.tool_name, result.payload)
+        validation_status = str(validation.get("status") or "").strip()
         if validation_status not in {"valid", "warning", "requires_confirmation"}:
             continue
-        return {
+        candidate = {
             "patch": raw_patch,
-            "validation": result.payload,
+            "validation": validation,
             "summary": result.summary,
         }
+        if call.tool_name == "validate_week_coherence":
+            review = result.payload.get("review")
+            if not isinstance(review, dict):
+                continue
+            review_status = str(review.get("status") or "").strip()
+            if review_status not in {"valid", "warning", "requires_confirmation"}:
+                continue
+            candidate["week_review"] = review
+        return candidate
     return None
+
+
+def _candidate_validation_payload(tool_name: str, payload: dict[str, Any]) -> dict[str, Any]:
+    if tool_name == "validate_week_coherence":
+        validation = payload.get("validation")
+        return validation if isinstance(validation, dict) else {}
+    return payload
 
 
 def _normalize_heartbeat_generation(raw_text: str | None, *, allow_no_send: bool) -> dict[str, Any]:
