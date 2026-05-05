@@ -238,17 +238,22 @@ def compose_plan_lookup_reply(
             "Response type: plan_lookup",
             "Aucun changement planning n'a ete commit.",
             "Question factuelle: ne change aucun fait date, jour, duree, distance, zone, intensite ou statut.",
+            "Ne pose pas de question au user: reponds au lookup et ferme le tour.",
             "Si tu ne peux pas reformuler sans alterer les faits, garde le contenu du brouillon.",
         ),
     )
     reply = compose_final_reply(context, request_text_fn=request_text_fn)
-    if not is_valid_plan_lookup_reply(reply, original_llm_reply=original_llm_reply):
-        return None
-    return str(reply).strip()
+    if is_valid_plan_lookup_reply(reply, original_llm_reply=original_llm_reply):
+        return str(reply).strip()
+    if is_valid_plan_lookup_reply(original_llm_reply, original_llm_reply=original_llm_reply):
+        return str(original_llm_reply).strip()
+    return None
 
 
 def is_valid_plan_lookup_reply(reply: str | None, *, original_llm_reply: str) -> bool:
     if not reply:
+        return False
+    if "?" in str(reply):
         return False
     context = FinalReplyContext(
         original_llm_reply=original_llm_reply,

@@ -20,6 +20,7 @@ from fitmas.adaptation import AdaptationResult
 from fitmas.api import app
 from fitmas.db import Base, SessionLocal, engine, init_db
 from fitmas.llm import CoachDecision, MutationDecision
+from fitmas.mutation_permissions import default_confirmation_expiry, serialize_plan_patch_confirmation
 from fitmas.plan_patch import PlanPatch, PlanPatchOperation, PlanPatchOperationValidation, PlanPatchValidation
 from fitmas.plan_actions import move_session
 from fitmas.training_load import compute_ctl_atl_tsb, estimate_tss
@@ -704,6 +705,57 @@ class FitMASCoreFlowsTest(unittest.TestCase):
         self.assertIsNone(active_pending)
         self.assertEqual(all_pending[0].status, "accepted")
         self.assertEqual(events[0].command_type, "replace_session")
+
+    def test_pending_accepts_matching_legacy_mutation_decision(self) -> None:
+        _, session = self._create_plan_for_today()
+        target_date = (get_local_now(self.user.timezone) + timedelta(days=5)).date().isoformat()
+        patch = PlanPatch(
+            coach_message="Je deplace cette seance a dimanche.",
+            operations=[
+                PlanPatchOperation(
+                    operation_type="move_session",
+                    target_session_id=session.id,
+                    target_date=target_date,
+                    rationale="Confirmation utilisateur.",
+                )
+            ],
+        )
+        pending = repo.create_pending_mutation_confirmation(
+            self.db,
+            user_id=self.user.id,
+            impact_level="high",
+            reason="move_session_far_shift",
+            mutation_type="plan_patch",
+            summary="deplacer cette seance a dimanche",
+            source_text="test",
+            decision_json=serialize_plan_patch_confirmation(patch),
+            expires_at=default_confirmation_expiry(),
+        )
+        original_decide = api_messages.decide
+        original_extract_facts = api_messages.extract_facts
+        try:
+            api_messages.decide = lambda *args, **kwargs: MutationDecision(
+                mutation_type="move_session",
+                target_session_id=session.id,
+                target_date=target_date,
+                rationale="Acceptation pending comprise, mais sortie legacy.",
+                fitmas_message="Je deplace cette seance a dimanche.",
+            )
+            api_messages.extract_facts = lambda *args, **kwargs: []
+            result = self.client.post("/api/v0/messages", json={"text": "oui je confirme"}).json()
+        finally:
+            api_messages.decide = original_decide
+            api_messages.extract_facts = original_extract_facts
+
+        self.db.expire_all()
+        refreshed_session = repo.get_scheduled_session(self.db, self.user.id, session.id)
+        refreshed_pending = self.db.get(s.PendingMutationConfirmation, pending.id)
+        turn = repo.get_recent_conversation_turns(self.db, self.user.id, limit=1)[0]
+
+        self.assertEqual(result["assistant_message"]["text"], "Je deplace cette seance a dimanche.")
+        self.assertEqual(turn.response_mode, "pending_accepted")
+        self.assertEqual(refreshed_session.scheduled_date.date().isoformat(), target_date)
+        self.assertEqual(refreshed_pending.status, "accepted")
 
     def test_high_impact_confirmation_no_keeps_plan_unchanged(self) -> None:
         _, session = self._create_plan_for_today()

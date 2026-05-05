@@ -170,7 +170,16 @@ runtime conversation :
   le tour en lecture factuelle, le composer final utilise une capability
   dediee. Sa sortie est rejetee si elle change les tokens factuels sensibles du
   brouillon LLM initial (chiffres, jours, dates relatives, zones, statuts).
-  Le guard compare des artefacts LLM, pas le texte user libre.
+  Si la reformulation derive ou echoue, le backend garde le brouillon initial
+  valide comme sortie terminale `plan_lookup`, plutot que de retomber sur la
+  voie legacy `reply`. Une reformulation qui rouvre le tour avec une question
+  est rejetee. Le guard compare des artefacts LLM, pas le texte user libre.
+- Compat pending PlanPatch (5 mai 2026) : si une confirmation `plan_patch`
+  existe et que le LLM ressort exactement la meme operation sous forme legacy
+  `MutationDecision` au lieu de `pending_resolution.accept_pending`, le backend
+  applique la pending existante. La comparaison se fait uniquement entre
+  artefacts machine (operation, IDs, dates, champs de mutation), jamais via
+  parsing de "oui". Les anciennes pending legacy ne beneficient pas de ce pont.
 
 Dettes restantes :
 

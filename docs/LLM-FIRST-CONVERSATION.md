@@ -88,8 +88,17 @@ Extension `plan_lookup` (5 mai 2026) : les tours lus comme questions factuelles
 par le turn planner LLM utilisent un composer final dedie. La sortie composee
 est comparee au brouillon LLM initial sur des tokens factuels sensibles
 (chiffres, jours, dates relatives, zones, statuts). Si elle derive, elle est
+rejetee, et le brouillon initial valide est garde comme sortie terminale
+`plan_lookup`. Une reformulation qui ajoute une question de relance est aussi
 rejetee. Cette verification ne lit pas le texte utilisateur libre ; elle juge
 une transformation post-LLM.
+
+Compat confirmations pending (5 mai 2026) : si le LLM comprend une acceptation
+mais sort encore une `MutationDecision` legacy identique a la pending `plan_patch`
+active au lieu d'un `pending_resolution.accept_pending`, le backend accepte la
+pending. La gate compare seulement les artefacts machine deja structures
+(operation, IDs, dates, champs mutation), jamais le texte utilisateur libre. Les
+anciennes pending legacy restent sur le contrat strict `pending_resolution`.
 
 ## Contrat CoachDecision cible
 

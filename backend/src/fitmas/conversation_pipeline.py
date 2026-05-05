@@ -515,6 +515,17 @@ def run_conversation_turn(
             decision = None
 
     if outcome is None and decision:
+        legacy_pending_outcome = _apply_matching_legacy_pending_acceptance(
+            db=db,
+            user=user,
+            decision=decision,
+            pending_confirmation=pending_confirmation,
+        )
+        if legacy_pending_outcome is not None:
+            outcome = legacy_pending_outcome
+            decision = None
+
+    if outcome is None and decision:
         extraction_confidence = adaptation.event.confidence if adaptation else 0.85
         target_session = (
             repo.get_scheduled_session(db, user.id, decision.target_session_id)
@@ -1019,6 +1030,85 @@ def _accept_pending_confirmation(
             response_mode="pending_accept_error",
             mutation_applied=False,
         )
+
+
+def _apply_matching_legacy_pending_acceptance(
+    *,
+    db: Session,
+    user,
+    decision: MutationDecision,
+    pending_confirmation,
+) -> ConversationTurnOutcome | None:
+    if pending_confirmation is None:
+        return None
+    if not _legacy_decision_matches_pending_confirmation(decision, pending_confirmation):
+        return None
+    return _accept_pending_confirmation(
+        db=db,
+        user=user,
+        decision=decision,
+        pending_confirmation=pending_confirmation,
+    )
+
+
+def _legacy_decision_matches_pending_confirmation(decision: MutationDecision, pending_confirmation) -> bool:
+    mutation_type = _normalized_pending_value(getattr(decision, "mutation_type", None))
+    if not mutation_type or mutation_type == "no_change":
+        return False
+    if str(getattr(pending_confirmation, "mutation_type", "") or "") != "plan_patch":
+        return False
+    try:
+        patch = deserialize_plan_patch_confirmation(pending_confirmation.decision_json)
+        operations = tuple(patch.operations or ())
+        if len(operations) != 1:
+            return False
+        return _mutation_decision_matches_patch_operation(decision, operations[0])
+    except Exception:
+        logger.exception(
+            "pending_legacy_match_decode_failed pending=%s",
+            getattr(pending_confirmation, "id", None),
+        )
+        return False
+
+
+def _mutation_decision_matches_patch_operation(decision: MutationDecision, operation: Any) -> bool:
+    if _normalized_pending_value(getattr(decision, "mutation_type", None)) != _normalized_pending_value(
+        getattr(operation, "operation_type", None)
+    ):
+        return False
+    for field in _PENDING_MUTATION_MATCH_FIELDS:
+        if _normalized_pending_value(getattr(decision, field, None)) != _normalized_pending_value(
+            getattr(operation, field, None)
+        ):
+            return False
+    return True
+
+
+_PENDING_MUTATION_MATCH_FIELDS = (
+    "target_session_id",
+    "second_session_id",
+    "target_date",
+    "from_day",
+    "to_day",
+    "new_title",
+    "new_goal",
+    "new_sport_type",
+    "new_session_type",
+    "new_duration_min",
+    "new_intensity",
+    "new_description",
+)
+
+
+def _normalized_pending_value(value: object) -> object:
+    if value is None:
+        return None
+    if isinstance(value, str):
+        stripped = value.strip()
+        if not stripped:
+            return None
+        return stripped.lower()
+    return value
 
 
 def _patch_was_applied(service_result: PlanPatchServiceResult | None) -> bool:
