@@ -113,8 +113,10 @@ Toute validation training doit sortir un statut gradue :
 - `requires_confirmation` : possible mais engage un trade-off lourd ; confirmation ciblee
 - `blocked` : dangereux, incoherent, ou impossible techniquement
 
-Une recuperation protegee ne doit plus etre traitee comme un mur systematique.
-Souvent, le bon comportement est `requires_confirmation` ou une alternative structurée :
+Une recuperation planifiee ne doit plus etre traitee comme un mur systematique.
+Depuis le 6 mai 2026, elle n'est plus un hard-block writer : le reviewer semaine
+juge si le patch garde assez de recuperation. Souvent, le bon comportement est
+`valid`, `warning`, `requires_confirmation` ou une alternative structurée :
 
 - "on echange avec vendredi et je deplace la recup samedi"
 - "je peux le faire, mais tu perds la recuperation post-charge"
@@ -384,7 +386,7 @@ Cas a couvrir :
 - "piscine fermee 2 semaines" memorise une contrainte et ne relance pas "tu l'as faite ou pas ?"
 - "Oui" puis "Running" puis "Mercredi" reste un seul fil de continuation
 - aucune phrase "je libere / je mets / je deplace" sans event mutation ou confirmation pending
-- swap avec recuperation protegee propose un chemin (`swap` ou deplacement recup), pas une boucle defensive
+- swap avec recuperation planifiee propose un chemin (`swap` ou deplacement recup), pas une boucle defensive
 - reponses aux questions simples (`tu vois ma seance ?`, `c'est quoi demain ?`, `pourquoi repos ?`) lisent les bonnes sources et restent courtes
 
 Gate :
@@ -681,7 +683,7 @@ Gate :
 But :
 
 - formaliser les workflows repetes sans rendre le runtime libre
-- donner au coach une routine actionnable pour les cas dogfood : piscine fermee, voyage, indispo, swap, recuperation protegee
+- donner au coach une routine actionnable pour les cas dogfood : piscine fermee, voyage, indispo, swap, recuperation planifiee
 
 La skill n'est pas un write DB.
 C'est un protocole de raisonnement outille :
@@ -816,7 +818,7 @@ Sources de validation a composer :
 Regle de classification :
 
 - danger sante/blessure ou cible inexistante -> `blocked`
-- recuperation protegee modifiee mais preservable ailleurs -> `requires_confirmation`
+- recuperation planifiee modifiee -> review semaine (`valid`, `warning` ou `requires_confirmation` selon coherence)
 - proximite meme sport / load dense mais acceptable -> `warning` ou `requires_confirmation` selon gravite
 - patch propre -> `valid`
 
@@ -827,7 +829,7 @@ Slice livre :
 - `allowed=False` des pre-hooks -> `blocked`
 - warnings pre-hooks -> `requires_confirmation`
 - aucun commit quand le statut global n'est pas `valid`
-- slice 28 avril : sortie enrichie avec `summary` de batch et `suggested_fix` par operation pour `protected_recovery_target`, `same_sport_proximity`, `occupied_training_target`, cible de session absente/obsolete, hard-session warnings et create-session invalide ; les patchs modifiant une seance existante sont bloques proprement quand aucun plan actif ne permet le chemin legacy
+- slice 28 avril : sortie enrichie avec `summary` de batch et `suggested_fix` par operation pour `same_sport_proximity`, `occupied_training_target`, cible de session absente/obsolete, hard-session warnings et create-session invalide ; depuis le 6 mai, `protected_recovery_target` est deprecie et la recuperation passe par review semaine
 - slice DeepSeek/JSON 28 avril : les continuations courtes passent par JSON mode OpenAI-compatible par defaut ; le parser repare uniquement les erreurs de forme avant validation schema (`_type=...`, `_type: ...`, `plan_patch={...}`, `rationale` placee au mauvais niveau, `replace_session` sans cible mais avec champs complets de creation), sans classifier `oui` ni creer d'action deterministe. Le prompt precise aussi que `Running` seul est une preference sport et ne doit pas creer une seance lundi par defaut.
 
 Fichiers probables :
@@ -840,8 +842,8 @@ Fichiers probables :
 
 Gate :
 
-- swap avec recuperation protegee n'est pas bloque si la recup reste dans la semaine
-- replace d'une recuperation protegee sans preservation sort `requires_confirmation` ou `blocked` selon contexte
+- swap avec recuperation planifiee n'est pas bloque si la review semaine reste coherente
+- replace/deplacement d'une recuperation planifiee sort `valid`, `warning` ou `requires_confirmation` selon la review, pas un block writer local
 - piscine fermee multi-jours produit un patch qui couvre toutes les nages impactees ou indique explicitement les restes
 - le LLM peut recevoir des `suggested_fixes` exploitables
 
@@ -969,7 +971,7 @@ Le refactor est fini quand le golden case (7 tours ci-dessus) produit toutes les
 - Le coach garde le fil sur les continuations courtes (`oui`, `running`, `mercredi`) au lieu de les traiter comme des tours isoles
 - Le coach peut produire un `PlanPatch` multi-operation valide, partiel explicitement scoped, ou une alternative expliquee
 - Les validations training sortent `valid / warning / requires_confirmation / blocked`, pas seulement "allowed / blocked"
-- Une recuperation protegee peut etre deplacee ou preservee via patch quand c'est coherent ; elle n'est bloquee dur que si la recuperation disparait ou si le risque est trop fort
+- Une recuperation planifiee peut etre deplacee, preservee ou consommee via patch quand la review semaine juge la coherence acceptable
 - **Toute affirmation d'action ("je libere", "je deplace", "je mets") est garantie d'être suivie d'une mutation réelle auditée dans `plan_mutation_events`** ; sinon la phrase est bloquée
 - La weekly review utilise les mêmes données que la conversation (cohérence)
 - Une contrainte temporelle ("piscine fermée 2 semaines") est mémorisée et respectée 7 jours plus tard

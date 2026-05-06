@@ -377,8 +377,8 @@ Une passe dediee a la fiabilite conversation a ete close :
 - **LLM force arbitrage sur mutation** (faille B, af54eda) : les early-exits deterministes (availability week_scope / no_candidate, adaptation candidate, health auto-apply, execution clarification, execution contestation) sont gatees sur `plan_mutation_request`. Un message compose `mutation + claim` ne peut plus etre silencieusement swallowe par un extracteur deterministe.
 - **LLM failure modes types** (faille D, e81c3da) : `_classify_llm_exception` produit des labels stables pour triage operationnel.
 - **JSON parsing robuste** (eea74e7) : tous les chemins LLM passent par `llm_gateway._robust_json_loads` — les queues tronquees et le prose residuel ne droppent plus de payloads.
-- **Protected recovery guards** (b39c712, 216bf11, 605eb5f) : extension `protected_recovery_target` aux mutations `replace / update / lighten / move` + autorisation `swap` impliquant une recuperation (c'est un satellite).
-- **Block_reason typed propage a l'utilisateur** (199a40e) : le pre-hook ne produit plus une reply generique, mais une raison lisible (`protected_recovery_target`, `same_sport_proximity`, `occupied_training_target`).
+- **Recovery via review** (6 mai 2026) : les anciens guards `protected_recovery_target` sont deprecies en runtime. Un repos/recuperation fait partie du plan et peut bouger si la review semaine garde la coherence.
+- **Block_reason typed propage a l'utilisateur** (199a40e) : le pre-hook ne produit plus une reply generique, mais une raison lisible (`same_sport_proximity`, `occupied_training_target`).
 - **Briefing grounding** (910f47a) : compteurs execution 7 jours injectes dans le briefing matin — ferme un trou de confabulation de decompte hebdo.
 - **Streak signal propre** (a59a6da) : activites < 15 min filtrees avant computation streak.
 
@@ -401,7 +401,7 @@ Verdict franc :
 - phase 2 = fermee cote routing (PlanMutationService est le gateway unique)
 - phase 3 = partiellement fermee (lectures user-facing migrees, mais signals.py lit encore WeeklyPlan)
 - phase 4 = partiellement fermee (adaptation produit des propositions, mais certains chemins auto-appliquent encore)
-- phase 5 = fermee sur 2 guards (same_sport_proximity, protected_recovery_target)
+- phase 5 = fermee sur les guards writer restants ; la recuperation est maintenant arbitree par review semaine
 
 #### Realite dual-write non resolue
 
@@ -642,7 +642,7 @@ Statut courant :
 - `PlanMutationService` passe maintenant la timeline runtime a l'executeur de mutation pour alimenter les hooks de coherence
 - premier guard pose : un `move_session` avec date explicite qui cree un quasi-doublon meme sport / meme type a moins de 48h est bloque avec `same_sport_proximity`
 - ce guard couvre les decisions conversationnelles et les actions app avec `target_date`; les moves app sans date restent un auto-placement a traiter separement si besoin
-- deuxieme guard pose : un `move_session` vers une recuperation stable/protegee est bloque avec `protected_recovery_target`, tandis qu'un repos `flexible` reste utilisable
+- ancien deuxieme guard : `protected_recovery_target` est deprecie depuis le 6 mai 2026 ; un repos stable n'est plus un mur runtime, il est gere comme contrainte sportive de semaine
 - troisieme guard pose : un `move_session` vers une journee qui contient deja une vraie seance training est bloque avec `occupied_training_target`; il faut un `swap_sessions` ou une clarification
 - la similarite initiale vit dans `session_similarity.py` pour pouvoir etre enrichie sans grossir `mutation_hooks.py`
 

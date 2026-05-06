@@ -75,8 +75,40 @@ L'audit declenche par cet incident a confirme 3 failles structurelles connexes :
 | P1-quinquies | ✅ Lane terminale `close_turn` — clotures sociales sans tools, sans marker question ouverte, composer final via `final_reply.py` — implemente localement 5 mai 2026 | 0.5j | `docs/superpowers/plans/2026-05-05-terminal-close-lane.md` |
 | P1-sexies | ✅ Composer final `no_change` — `CoachDecision(no_change)` + compat legacy passent par `final_reply.py`, avec faits memoire/execution appliques — implemente localement 5 mai 2026 | 0.5j | `docs/superpowers/plans/2026-05-05-no-change-final-composer.md` |
 | P1-septies | ✅ Composer final `plan_lookup` — lecture factuelle via `final_reply.py` avec guard anti-drift chiffres/jours/zones/statuts — implemente localement 5 mai 2026 | 0.5j | `docs/superpowers/plans/2026-05-05-plan-lookup-final-composer.md` |
+| P1-octies | 🔥 Prompt/context optimization pass — reduire et specialiser le contexte donne a chaque couche LLM (`turn_planner`, `decide`, composers, verifiers, heartbeat) pour eviter que des contraintes de prompt ou faits inutiles poussent le coach a halluciner, relancer ou parler backend — a entamer apres stabilisation dogfood de la lane terminale | 1-2j | section "Chantier P1-octies" ci-dessous |
 
-**Total restant avant B0 : 0 jour**. Phase A+ est fermee localement. Prochaine lane : dogfood court puis B0 si stable.
+**Total restant avant B0 : 1-2 jours**. Phase A+ est fermee localement, mais le dogfood du 6 mai a montre que la qualite de sortie depend encore trop du volume et de la forme de contexte donne aux couches LLM. Prochaine lane : P1-octies, puis dogfood court et B0 si stable.
+
+### Chantier P1-octies — Prompt/context optimization pass 🔥
+
+Objectif : reprendre systematiquement les prompts et contextes de chaque couche
+LLM pour donner **juste assez de verite** sans tuer la voix ni pousser le modele
+a completer les trous.
+
+Cause dogfood : la lane `close_turn` et les composers finaux ont montre le bon
+pattern architectural (decision machine -> composer -> verifier), mais aussi une
+fragilite : quand un composer recoit peu de faits et une consigne trop vague
+("sois contextualise"), il peut inventer un detail plausible ou rouvrir le tour.
+Ce n'est pas un probleme a regler par des parsers deterministes sur la sortie ;
+c'est un probleme de contrat entre couches LLM.
+
+Scope recommande :
+- inventorier les entrees exactes de `turn_planner`, `decide`, composers,
+  verifiers, heartbeat et tool loop ;
+- separer les faits necessaires, les consignes de voix, les contraintes de
+  validation et les exemples ;
+- reduire les contextes des lanes terminales/no-op ;
+- rendre explicite la mission de chaque couche : detecter, decider, composer,
+  verifier, jamais tout faire a la fois ;
+- ajouter des golden prompts/tests pour les tours courts dogfood : ack,
+  lookup plan, confirmation pending, slot court, signal sante.
+
+Critere de sortie :
+- chaque couche LLM a un contrat court et documente ;
+- les facts injectes sont justifies par la mission de la couche ;
+- les outputs visibles passent par composer/verifier quand il y a risque de
+  drift, sans parser deterministe de texte utilisateur libre ;
+- smoke reel Telegram sur les scenarios dogfood courts reste naturel et factuel.
 
 ### Deploiement prod — 4 mai 2026
 
@@ -1137,7 +1169,7 @@ Ce qui est vrai dans le code aujourd'hui :
   - `CoachStateBundle` = lecture partagée pour app, conversation, heartbeat ✓
   - `PlanMutationService` = gateway unique des mutations visibles ✓
   - `plan_mutation_events` = audit forward-only ✓
-  - guards writer : `same_sport_proximity` et `protected_recovery_target` ✓
+  - guards writer : `same_sport_proximity` + `occupied_training_target` ; repos/recuperation arbitres par review semaine ✓
   - `plan_actions.py` / `mutations.py` mutent uniquement `ScheduledSession` ✓
   - `signals.py` et `activities.py` lisent `ScheduledSession`, plus `WeeklyPlan/DayPlan` ✓
   - `adaptation.py` produit des propositions, mais certains chemins (fatigue low-impact) auto-appliquent encore via orchestrateur
@@ -1163,7 +1195,7 @@ Ce qui est vrai dans le code aujourd'hui :
 - `/api/v0/week` clarifié comme compat template
 - adaptation background suggestion-only
 - guard `same_sport_proximity` sur moves datés
-- guard `protected_recovery_target` sur repos/récupération stable
+- ancien guard `protected_recovery_target` deprecie : repos/récupération = contrainte de plan, plus verrou runtime
 - `SYSTEM-MAP.md` comme carte d'architecture pour les agents
 - `skills/heartbeat/context.py` : `HeartbeatContextBundle` injecte `YesterdayTruth` / `TodayTruth` / `WeekDigest` dans le briefing matin ; pas de lens LLM dans heartbeat
 - `coach_reading_digest` : contexte pré-digéré (facts déterministes + lens Haiku JSON) injecté dans `decide()` sur intents lookup/report/availability, avec voice rules anti-bullshit (12b4bf8)

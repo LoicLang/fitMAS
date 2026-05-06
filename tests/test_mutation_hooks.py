@@ -78,7 +78,7 @@ def test_move_session_allows_different_sport_proximity() -> None:
     assert result.block_reason is None
 
 
-def test_move_session_blocks_protected_recovery_target() -> None:
+def test_move_session_allows_stable_recovery_target() -> None:
     decision = MutationDecision(
         mutation_type="move_session",
         target_session_id=10,
@@ -113,8 +113,8 @@ def test_move_session_blocks_protected_recovery_target() -> None:
         timezone_name="Europe/Paris",
     )
 
-    assert result.allowed is False
-    assert result.block_reason == "protected_recovery_target"
+    assert result.allowed is True
+    assert result.block_reason is None
 
 
 def test_move_session_allows_flexible_recovery_target() -> None:
@@ -242,9 +242,11 @@ def test_swap_sessions_allows_flexible_recovery_target() -> None:
     assert result.block_reason is None
 
 
-def test_replace_session_blocks_protected_recovery() -> None:
-    """Replacing a stable recovery session with a training is forbidden —
-    the protected recovery cannot be erased in place."""
+def test_replace_session_allows_stable_recovery() -> None:
+    """A stable recovery is part of the plan, not a writer-level lock.
+
+    Week coherence review owns the sporting trade-off.
+    """
     decision = MutationDecision(
         mutation_type="replace_session",
         target_session_id=11,
@@ -271,8 +273,8 @@ def test_replace_session_blocks_protected_recovery() -> None:
         timezone_name="Europe/Paris",
     )
 
-    assert result.allowed is False
-    assert result.block_reason == "protected_recovery_target"
+    assert result.allowed is True
+    assert result.block_reason is None
 
 
 def test_replace_session_allows_flexible_recovery() -> None:
@@ -308,9 +310,8 @@ def test_replace_session_allows_flexible_recovery() -> None:
     assert result.block_reason is None
 
 
-def test_update_session_blocks_protected_recovery() -> None:
-    """Updating a protected recovery into something else is forbidden —
-    e.g. converting a stable rest day into a training."""
+def test_update_session_allows_stable_recovery() -> None:
+    """Stable recovery is not a hard runtime lock."""
     decision = MutationDecision(
         mutation_type="update_session",
         target_session_id=11,
@@ -337,13 +338,12 @@ def test_update_session_blocks_protected_recovery() -> None:
         timezone_name="Europe/Paris",
     )
 
-    assert result.allowed is False
-    assert result.block_reason == "protected_recovery_target"
+    assert result.allowed is True
+    assert result.block_reason is None
 
 
-def test_lighten_day_blocks_protected_recovery() -> None:
-    """Trying to lighten a protected recovery day is forbidden — there's
-    nothing to lighten and mutating it would erode the recovery slot."""
+def test_lighten_day_allows_stable_recovery() -> None:
+    """Recovery coherence belongs to review, not pre-hook hard-blocking."""
     decision = MutationDecision(
         mutation_type="lighten_day",
         target_session_id=11,
@@ -370,8 +370,8 @@ def test_lighten_day_blocks_protected_recovery() -> None:
         timezone_name="Europe/Paris",
     )
 
-    assert result.allowed is False
-    assert result.block_reason == "protected_recovery_target"
+    assert result.allowed is True
+    assert result.block_reason is None
 
 
 def test_move_session_blocks_occupied_training_target() -> None:

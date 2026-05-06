@@ -960,7 +960,7 @@ class FitMASCoreFlowsTest(unittest.TestCase):
             api_messages.decide = fail_decide
             api_messages.extract_facts = fail_extract_facts
             conversation_pipeline.final_reply.compose_close_turn_reply = (
-                lambda **kwargs: "Carre, on garde ca."
+                lambda **kwargs: "Parfait. Tu laisses le plan faire son boulot."
             )
 
             result = self.client.post("/api/v0/messages", json={"text": "Okay chef"}).json()
@@ -976,13 +976,14 @@ class FitMASCoreFlowsTest(unittest.TestCase):
         turns = repo.get_recent_conversation_turns(self.db, self.user.id, limit=1)
         context = json.loads(turns[0].context_json)
 
-        self.assertEqual(result["assistant_message"]["text"], "Carre, on garde ca.")
+        self.assertEqual(result["assistant_message"]["text"], "Parfait. Tu laisses le plan faire son boulot.")
         self.assertEqual(turns[0].response_mode, "close_turn_composed")
         self.assertFalse(turns[0].mutation_applied)
         self.assertFalse(turns[0].pending_confirmation)
         self.assertTrue(context["terminal_close"])
         self.assertEqual(context["tools_offered"], 0)
         self.assertEqual(context["open_question_marker"], "suppressed")
+        self.assertEqual(context["close_turn_reply_source"], "composer")
 
     def test_coach_decision_no_change_uses_final_composer(self) -> None:
         self._create_plan_for_today()

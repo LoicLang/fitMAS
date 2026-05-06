@@ -304,13 +304,13 @@ def test_plan_patch_validation_blocks_completed_session_target() -> None:
     )
 
 
-def test_plan_patch_validation_surfaces_protected_recovery_fix() -> None:
+def test_plan_patch_validation_allows_move_to_stable_recovery() -> None:
     patch = PlanPatch(
         operations=[
             PlanPatchOperation(
                 operation_type="move_session",
                 target_session_id=10,
-                target_date="2026-04-15",
+                target_date="2099-04-15",
                 rationale="Deplacer le tempo sur le jour de repos.",
             )
         ],
@@ -319,14 +319,14 @@ def test_plan_patch_validation_surfaces_protected_recovery_fix() -> None:
     sessions = [
         SimpleNamespace(
             id=10,
-            scheduled_date=date(2026, 4, 13),
+            scheduled_date=date(2099, 4, 13),
             sport_type="running",
             session_type="tempo",
             completion_status="planned",
         ),
         SimpleNamespace(
             id=11,
-            scheduled_date=date(2026, 4, 15),
+            scheduled_date=date(2099, 4, 15),
             sport_type="rest",
             session_type="rest",
             session_title="Repos protecteur",
@@ -343,9 +343,9 @@ def test_plan_patch_validation_surfaces_protected_recovery_fix() -> None:
         timezone_name="Europe/Paris",
     )
 
-    assert validation.status == "blocked"
-    assert validation.operation_results[0].block_reason == "protected_recovery_target"
-    assert validation.operation_results[0].suggested_fix == "Utiliser swap_sessions pour conserver la recuperation dans la semaine."
+    assert validation.status == "valid"
+    assert validation.operation_results[0].block_reason is None
+    assert validation.operation_results[0].suggested_fix is None
 
 
 def test_plan_patch_validation_accepts_low_risk_create_session() -> None:

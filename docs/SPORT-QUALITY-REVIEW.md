@@ -77,6 +77,11 @@ Une semaine peut respecter les regles deterministes et rester mauvaise :
 
 Donc le deterministe doit produire les faits. Le LLM reviewer juge le compromis.
 
+Depuis le 6 mai 2026, les repos/recuperations planifies suivent cette doctrine :
+ils ne sont plus des verrous writer locaux. Les hooks signalent les impossibilites
+techniques ; la review semaine juge si une recuperation deplacee, consommee ou
+mal replacee reste sportivement acceptable.
+
 ## Interdits
 
 Ne pas creer un second coach.

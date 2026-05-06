@@ -73,7 +73,6 @@ def run_pre_mutation_hooks(
     _check_completed_target(result, decision, scheduled_sessions=scheduled_sessions)
     _check_fragile_day(result, decision, scheduled_sessions=scheduled_sessions, timezone_name=timezone_name)
     _check_same_sport_proximity(result, decision, scheduled_sessions=scheduled_sessions, timezone_name=timezone_name)
-    _check_protected_recovery_target(result, decision, scheduled_sessions=scheduled_sessions, timezone_name=timezone_name)
     _check_occupied_training_target(result, decision, scheduled_sessions=scheduled_sessions, timezone_name=timezone_name)
     _check_key_session_replace_confirmation(result, decision, scheduled_sessions=scheduled_sessions)
     _check_load_coherence(result, decision, scheduled_sessions=scheduled_sessions)
@@ -244,89 +243,6 @@ def _check_same_sport_proximity(
         ),
         severity="warning",
     ))
-
-
-def _is_protected_recovery_session(session: Any) -> bool:
-    """True if the session is a recovery slot that should not be displaced.
-
-    Recovery-like + not explicitly flexible = protected.
-    A session whose title mentions "protect" is protected regardless of
-    the flexibility value.
-    """
-    if str(_value(session, "completion_status") or "").strip().lower() in {"done", "skipped"}:
-        return False
-    sport = str(_value(session, "sport_type") or "").strip().lower()
-    session_type = str(_value(session, "session_type") or "").strip().lower()
-    flexibility = str(_value(session, "flexibility") or "").strip().lower()
-    title = str(_value(session, "session_title") or "").strip().lower()
-    recovery_like = sport in {"rest", "off"} or session_type in {"rest", "recovery", "mobility"}
-    if not recovery_like:
-        return False
-    protected = flexibility != "flexible" or any(token in title for token in ("protect", "protec", "repos protect"))
-    return protected
-
-
-def _check_protected_recovery_target(
-    result: PreMutationResult,
-    decision: MutationDecision,
-    *,
-    scheduled_sessions: Sequence[Any],
-    timezone_name: str | None,
-) -> None:
-    """Block mutations that would erase a protected recovery in place.
-
-    Sport coherence: a recovery is a satellite of the hard session it
-    protects — its value is the rest it provides relative to stress, not
-    the specific date. So:
-
-    - move_session onto a protected recovery is blocked (target date
-      would overwrite the recovery → it disappears).
-    - swap_sessions involving a protected recovery is ALLOWED: the swap
-      moves the recovery to a new date, it stays in the week. The LLM
-      is expected to reason about whether the new placement still makes
-      sense physiologically (see system prompt guidance).
-    - replace_session / update_session / lighten_day targeting a
-      protected recovery is blocked: these mutations erase the recovery
-      in place.
-
-    Flexible rest slots always pass through — the user owns those."""
-    if decision.mutation_type == "move_session":
-        target_date = _resolve_decision_target_date(decision, timezone_name=timezone_name)
-        if target_date is None:
-            return
-        for session in scheduled_sessions:
-            if _value(session, "id") == decision.target_session_id:
-                continue
-            if _session_date(session, timezone_name) != target_date:
-                continue
-            if _is_protected_recovery_session(session):
-                result.allowed = False
-                result.block_reason = "protected_recovery_target"
-                result.warnings.append(MutationWarning(
-                    code="protected_recovery_target",
-                    message=f"Le {target_date.isoformat()} est une recuperation protegee.",
-                    severity="warning",
-                ))
-                return
-        return
-
-    if decision.mutation_type in {"replace_session", "update_session", "lighten_day"}:
-        if decision.target_session_id is None:
-            return
-        target = _find_session(scheduled_sessions, decision.target_session_id)
-        if target is None:
-            return
-        if _is_protected_recovery_session(target):
-            session_date = _session_date(target, timezone_name)
-            date_label = session_date.isoformat() if session_date is not None else "cette seance"
-            result.allowed = False
-            result.block_reason = "protected_recovery_target"
-            result.warnings.append(MutationWarning(
-                code="protected_recovery_target",
-                message=f"{date_label} est une recuperation protegee, on ne la modifie pas en place.",
-                severity="warning",
-            ))
-            return
 
 
 def _check_occupied_training_target(

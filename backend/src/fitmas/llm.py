@@ -1837,15 +1837,12 @@ def make_timeline_summary(sessions: list) -> str:
 def _timeline_slot_kind(session: object) -> str:
     sport = str(getattr(session, "sport_type", "") or "").strip().lower()
     session_type = str(getattr(session, "session_type", "") or "").strip().lower()
-    flexibility = str(getattr(session, "flexibility", "") or "").strip().lower()
     status = str(getattr(session, "completion_status", "") or "").strip().lower()
     if status in {"done", "skipped", "canceled"}:
-        return "protected_recovery" if sport in {"rest", "off"} or session_type in {"rest", "recovery", "mobility"} else "training"
+        return "closed"
     recovery_like = sport in {"rest", "off", ""} or session_type in {"rest", "recovery", "mobility"}
-    if recovery_like and flexibility == "flexible":
-        return "free_flexible"
     if recovery_like:
-        return "protected_recovery"
+        return "free_flexible"
     return "training"
 
 

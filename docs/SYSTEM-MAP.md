@@ -221,7 +221,7 @@ Regle conversation :
 
 ### Feedback bloquant mutations
 
-Quand un pre-hook bloque une mutation, `PlanMutationService` expose un `PlanBlockedMutationEvent` avec un `block_reason` typed (`protected_recovery_target`, `same_sport_proximity`, `occupied_training_target`).
+Quand un pre-hook bloque une mutation, `PlanMutationService` expose un `PlanBlockedMutationEvent` avec un `block_reason` typed (`same_sport_proximity`, `occupied_training_target`). Les repos/recuperations ne sont plus des hard-blocks runtime ; la review semaine juge leur deplacement ou consommation.
 
 Regle :
 - le blocage est une verite machine post-validation

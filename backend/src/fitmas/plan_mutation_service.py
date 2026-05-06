@@ -60,8 +60,8 @@ class PlanBlockedMutationEvent:
     """Surface pre-hook rejection details to the caller.
 
     Carries the mutation_type, the typed `block_reason` from the hook
-    (e.g. `protected_recovery_target`, `same_sport_proximity`,
-    `occupied_training_target`), and the warning messages so the caller
+    (e.g. `same_sport_proximity`, `occupied_training_target`),
+    and the warning messages so the caller
     can craft a reason-specific reply instead of a generic fallback.
     """
     command_type: str

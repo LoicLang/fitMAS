@@ -25,8 +25,8 @@ def _blocked_context() -> FinalReplyContext:
         blocked_events=(
             BlockedEvent(
                 command="move_session",
-                reason="protected_recovery_target",
-                suggested_fix="swap_sessions vers vendredi",
+                reason="same_sport_proximity",
+                suggested_fix="choisir une date a plus de 48h",
             ),
         ),
         allowed_to_claim_mutation=False,
@@ -38,8 +38,8 @@ def _blocked_context() -> FinalReplyContext:
 def test_prompt_contains_backend_truth_without_authorizing_action_claims() -> None:
     system, prompt = build_final_reply_prompt(_blocked_context())
 
-    assert "protected_recovery_target" in prompt
-    assert "swap_sessions vers vendredi" in prompt
+    assert "same_sport_proximity" in prompt
+    assert "choisir une date a plus de 48h" in prompt
     assert "Aucun changement planning n'a ete commit" in prompt
     assert "ne claim pas une action appliquee" in prompt
     assert "Voix coach" in system
@@ -83,12 +83,12 @@ def test_compose_final_reply_uses_request_text_and_validates_output() -> None:
     ctx = _blocked_context()
 
     def fake_request_text(**kwargs):
-        assert "protected_recovery_target" in kwargs["prompt"]
-        return "Je ne l'ecrase pas : ce creneau protege ta recup. Je peux plutot echanger avec vendredi."
+        assert "same_sport_proximity" in kwargs["prompt"]
+        return "Je garde plus de 48h entre deux seances du meme sport."
 
     reply = compose_final_reply(ctx, request_text_fn=fake_request_text)
 
-    assert reply == "Je ne l'ecrase pas : ce creneau protege ta recup. Je peux plutot echanger avec vendredi."
+    assert reply == "Je garde plus de 48h entre deux seances du meme sport."
 
 
 def test_compose_final_reply_drops_invalid_output() -> None:
@@ -120,11 +120,18 @@ def test_outage_fallback_is_short_and_non_technical() -> None:
 
 
 def test_close_turn_composer_uses_terminal_context() -> None:
+    verifier_calls = 0
+
     def fake_request_text(**kwargs):
+        nonlocal verifier_calls
+        if "Reponse sortante a verifier:" in kwargs["prompt"]:
+            verifier_calls += 1
+            assert "Dernier message coach visible: Tu veux un point semaine ?" in kwargs["prompt"]
+            return '{"verdict":"allow","reason":"fermeture courte"}'
         assert "terminal_close" in kwargs["prompt"]
         assert "Ne relance pas le user" in kwargs["prompt"]
         assert "Dernier message coach: Tu veux un point semaine ?" in kwargs["prompt"]
-        return "Carre, on garde ca."
+        return "Carre, on s'arrete la."
 
     reply = compose_close_turn_reply(
         user_text="Okay chef",
@@ -132,20 +139,149 @@ def test_close_turn_composer_uses_terminal_context() -> None:
         request_text_fn=fake_request_text,
     )
 
-    assert reply == "Carre, on garde ca."
+    assert reply == "Carre, on s'arrete la."
+    assert verifier_calls == 1
+
+
+def test_close_turn_composer_retries_before_outage_fallback_phrase() -> None:
+    compose_calls = 0
+    verifier_calls = 0
+
+    def fake_request_text(**kwargs):
+        nonlocal compose_calls, verifier_calls
+        if "Reponse sortante a verifier:" in kwargs["prompt"]:
+            verifier_calls += 1
+            return '{"verdict":"allow","reason":"fermeture courte"}'
+        compose_calls += 1
+        if compose_calls == 1:
+            return "Carre, on garde ca."
+        assert "Premiere proposition rejetee" in kwargs["prompt"]
+        return "Parfait. Tu deroules les 36 minutes tranquille."
+
+    reply = compose_close_turn_reply(
+        user_text="Parfait on fait ça",
+        previous_agent_text="Aujourd'hui retour en piste : 36 min footing, allure parole.",
+        request_text_fn=fake_request_text,
+    )
+
+    assert reply == "Parfait. Tu deroules les 36 minutes tranquille."
+    assert compose_calls == 2
+    assert verifier_calls == 1
+
+
+def test_close_turn_verifier_repairs_meta_intent_explanations() -> None:
+    compose_calls = 0
+    verifier_calls = 0
+
+    def fake_request_text(**kwargs):
+        nonlocal compose_calls, verifier_calls
+        if "Reponse sortante a verifier:" in kwargs["prompt"]:
+            verifier_calls += 1
+            assert 'je prends ca comme' in kwargs["prompt"]
+            return (
+                '{"verdict":"repair","reason":"meta",'
+                '"repaired_reply":"Parfait. Rien a ajouter pour ce tour."}'
+            )
+        compose_calls += 1
+        return '"Okay chef" - je prends ca comme un "on est cale, pas de question".'
+
+    reply = compose_close_turn_reply(
+        user_text="Okay chef",
+        previous_agent_text="Tu veux un point semaine ?",
+        request_text_fn=fake_request_text,
+    )
+
+    assert reply == "Parfait. Rien a ajouter pour ce tour."
+    assert compose_calls == 1
+    assert verifier_calls == 1
+
+
+def test_close_turn_verifier_repairs_followup_invitations() -> None:
+    compose_calls = 0
+    verifier_calls = 0
+
+    def fake_request_text(**kwargs):
+        nonlocal compose_calls, verifier_calls
+        if "Reponse sortante a verifier:" in kwargs["prompt"]:
+            verifier_calls += 1
+            assert "tu me tiens au jus" in kwargs["prompt"]
+            return (
+                '{"verdict":"repair","reason":"rouvre le fil",'
+                '"repaired_reply":"Parfait. Rien a ajouter pour ce tour."}'
+            )
+        compose_calls += 1
+        return "Pas de souci, tu me tiens au jus si tu veux qu'on touche a quelque chose."
+
+    reply = compose_close_turn_reply(
+        user_text="Okay chef",
+        previous_agent_text="Tu veux un point semaine ?",
+        request_text_fn=fake_request_text,
+    )
+
+    assert reply == "Parfait. Rien a ajouter pour ce tour."
+    assert compose_calls == 1
+    assert verifier_calls == 1
+
+
+def test_close_turn_verifier_repairs_unsupported_plan_facts() -> None:
+    compose_calls = 0
+    verifier_calls = 0
+
+    def fake_request_text(**kwargs):
+        nonlocal compose_calls, verifier_calls
+        if "Reponse sortante a verifier:" in kwargs["prompt"]:
+            verifier_calls += 1
+            assert "On reprend mardi avec la poutre" in kwargs["prompt"]
+            return (
+                '{"verdict":"repair","reason":"fait planning absent du contexte",'
+                '"repaired_reply":"Parfait. Rien a ajouter pour ce tour."}'
+            )
+        compose_calls += 1
+        return "Pas de point necessaire. On reprend mardi avec la poutre."
+
+    reply = compose_close_turn_reply(
+        user_text="Okay chef",
+        previous_agent_text="Tu veux un point semaine ?",
+        request_text_fn=fake_request_text,
+    )
+
+    assert reply == "Parfait. Rien a ajouter pour ce tour."
+    assert compose_calls == 1
+    assert verifier_calls == 1
+
+
+def test_close_turn_verifier_allows_supported_plan_facts() -> None:
+    verifier_calls = 0
+
+    def fake_request_text(**kwargs):
+        nonlocal verifier_calls
+        if "Reponse sortante a verifier:" in kwargs["prompt"]:
+            verifier_calls += 1
+            assert "36 min footing" in kwargs["prompt"]
+            return '{"verdict":"allow","reason":"faits repris du dernier coach"}'
+        return "Parfait. Tu deroules les 36 minutes tranquille."
+
+    reply = compose_close_turn_reply(
+        user_text="Parfait on fait ca",
+        previous_agent_text="Aujourd'hui retour en piste : 36 min footing, allure parole.",
+        request_text_fn=fake_request_text,
+    )
+
+    assert reply == "Parfait. Tu deroules les 36 minutes tranquille."
+    assert verifier_calls == 1
 
 
 def test_close_turn_validation_rejects_questions_and_action_claims() -> None:
     assert is_valid_close_turn_reply("Tu veux que je te fasse un point demain ?") is False
     assert is_valid_close_turn_reply("Je deplace ca a demain.") is False
     assert is_valid_close_turn_reply("Mutation enregistree.") is False
-    assert is_valid_close_turn_reply("Carre, on garde ca.") is True
+    assert is_valid_close_turn_reply("Carre, on garde ca.") is False
 
 
 def test_close_turn_outage_fallback_is_terminal() -> None:
     fallback = close_turn_outage_fallback_reply()
 
-    assert is_valid_close_turn_reply(fallback)
+    assert is_valid_close_turn_reply(fallback, allow_outage_fallback=True)
     assert "?" not in fallback
 
 

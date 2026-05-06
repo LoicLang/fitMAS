@@ -82,6 +82,7 @@ def _review_generated_week(
         patch=patch,
         scheduled_sessions=(),
         timezone_name=timezone_name,
+        now=now,
     )
     context = build_week_coherence_context(
         patch=patch,

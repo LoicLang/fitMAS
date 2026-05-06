@@ -161,7 +161,14 @@ runtime conversation :
   l'absence de pending/calibration/signaux secondaires, n'offre aucun tool,
   supprime le marker de question ouverte et compose la phrase finale via
   `final_reply.py`. Ce n'est pas un parser d'ack : la decision de cloture vient
-  d'un artefact LLM + etat machine.
+  d'un artefact LLM + etat machine. Le fallback technique `Carre, on garde ca.`
+  est reserve aux outages : si le composer produit cette phrase generique, elle
+  est rejetee et le composer retente une fermeture courte avant tout fallback.
+  La sortie candidate passe ensuite par un verifier LLM `allow|repair` qui juge
+  semantiquement si elle ferme vraiment le tour : pas de relance, pas de meta
+  ("je prends ca comme..."), pas de nouveau fait planning absent du dernier
+  message coach/user. Le backend applique seulement le verdict structure du
+  verifier ; il ne parse pas le texte user.
 - Composer final `no_change` (5 mai 2026) : les tours `CoachDecision(no_change)`
   et legacy `MutationDecision(no_change)` passent par `final_reply.py` avant
   l'envoi. Le backend transmet seulement des faits machine : brouillon LLM,
@@ -192,9 +199,13 @@ Dettes restantes :
 ### Feedback block_reason typed
 
 Quand `PlanMutationService` rejette une mutation via un pre-hook, l'event bloque est surface avec `block_reason` typed :
-- `protected_recovery_target` — move vers recup protegee
 - `same_sport_proximity` — quasi-doublon meme sport < 48h
 - `occupied_training_target` — jour cible a deja une vraie seance
+
+Depuis le 6 mai 2026, un repos/recuperation stable n'est plus un `block_reason`
+runtime : c'est une contrainte sportive du plan. Si une mutation le deplace ou
+le consomme, le reviewer semaine juge la coherence globale au lieu d'un hard
+block local.
 
 La reply utilisateur doit etre derivee d'un resultat valide ou reparee par le LLM sous contrainte. Les anciennes replies canned par `_BLOCK_REASON_REPLIES` restent de la dette a retirer pour eviter qu'un helper parle a la place du coach. Chaque blocage alimente aussi `logger.info("mutation_blocked ...")` pour audit.
 

@@ -51,13 +51,10 @@ class ConversationPromptBuilderTest(unittest.TestCase):
         self.assertIn("Je veux le renfo aujourd'hui et la piscine demain", bundle.system[0]["text"])
         self.assertIn("On peut echanger mercredi et jeudi ?", bundle.system[0]["text"])
         self.assertIn("swap_sessions", bundle.system[0]["text"])
-        # Sport coherence rules: swap involving a recovery is allowed
-        # (the recovery migrates), destructive mutations on protected
-        # recovery stay forbidden, and the LLM must flag when moving a
-        # hard session should drag its recovery along.
-        self.assertIn("recuperation (flexible ou protegee) est autorise", bundle.system[0]["text"])
-        self.assertIn("satellite de la seance dure", bundle.system[0]["text"])
-        self.assertIn("`replace_session` / `update_session` / `lighten_day` sur un `slot=protected_recovery`", bundle.system[0]["text"])
+        # Sport coherence rules: recovery belongs to the weekly plan/review,
+        # not to a writer-level protected slot.
+        self.assertIn("recuperation est une contrainte sportive a reviewer", bundle.system[0]["text"])
+        self.assertNotIn("slot=protected_recovery", bundle.system[0]["text"])
         self.assertIn("ne cree pas un pending confirmation sur ton interpretation", bundle.system[0]["text"])
         self.assertIn("Source de vérité planning conversationnelle", bundle.prompt)
         self.assertIn("Tempo", bundle.prompt)
@@ -172,6 +169,17 @@ class ConversationPromptBuilderTest(unittest.TestCase):
                     completion_status="planned",
                     flexibility="flexible",
                 ),
+                SimpleNamespace(
+                    id=27,
+                    scheduled_date="2026-04-18",
+                    day="saturday",
+                    sport_type="rest",
+                    session_type="rest",
+                    session_title="Repos stable",
+                    session_goal="Assimiler",
+                    completion_status="planned",
+                    flexibility="stable",
+                ),
             ]
         )
 
@@ -179,6 +187,7 @@ class ConversationPromptBuilderTest(unittest.TestCase):
         self.assertIn("swappable=true", summary)
         self.assertIn("movable_target=false", summary)
         self.assertIn("id=26 | date=2026-04-17 | day=friday | slot=free_flexible", summary)
+        self.assertIn("id=27 | date=2026-04-18 | day=saturday | slot=free_flexible", summary)
         self.assertIn("movable_target=true", summary)
         self.assertIn("can_swap_with_training=true", summary)
 
@@ -200,7 +209,9 @@ class ConversationPromptBuilderTest(unittest.TestCase):
 
         system_text = "\n".join(part["text"] for part in bundle.system)
         self.assertIn("free_flexible", system_text)
-        self.assertIn("la recuperation migre", system_text)
+        self.assertIn("recuperation est une contrainte sportive a reviewer", system_text)
+        self.assertIn("conserver la recuperation dans la semaine", system_text)
+        self.assertNotIn("slot=protected_recovery", system_text)
 
     def test_system_prompt_explains_completion_status_semantics(self) -> None:
         bundle = build_conversation_prompt_bundle(
@@ -270,8 +281,8 @@ class CoachPostureTest(unittest.TestCase):
         self.assertIn("utilise les tools activite disponibles", system_text)
         self.assertIn("option la plus conservative", system_text)
         self.assertIn("running easy/steady le mercredi", system_text)
-        self.assertIn("Repos\" n'est pas automatiquement protege", system_text)
-        self.assertIn("slot=protected_recovery", system_text)
+        self.assertIn("repos fait partie du plan", system_text)
+        self.assertNotIn("slot=protected_recovery", system_text)
         self.assertIn("je suis claque, je bascule la seance d'aujourd'hui a demain", system_text)
         self.assertIn("move_session si demain est slot=free_flexible", system_text)
         self.assertIn("apres \"oui\" puis \"Running\" seul, sans jour connu", system_text)

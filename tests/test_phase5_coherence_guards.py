@@ -120,7 +120,7 @@ def test_same_sport_proximity_guard_blocks_apply_and_event() -> None:
         db.close()
 
 
-def test_protected_recovery_target_blocks_apply_and_event() -> None:
+def test_move_to_stable_recovery_applies_and_moves_recovery() -> None:
     db = SessionLocal()
     try:
         user = s.User(name="Loic", timezone="Europe/Paris")
@@ -212,10 +212,13 @@ def test_protected_recovery_target_blocks_apply_and_event() -> None:
         db.refresh(target)
         events = db.query(s.PlanMutationEventRecord).all()
 
+        db.refresh(recovery)
+
         assert result is not None
-        assert result.applied_count == 0
-        assert result.event_count == 0
-        assert target.scheduled_date.date().isoformat() == "2026-04-13"
-        assert events == []
+        assert result.applied_count == 1
+        assert result.event_count == 1
+        assert target.scheduled_date.date().isoformat() == "2026-04-15"
+        assert recovery.scheduled_date.date().isoformat() == "2026-04-13"
+        assert events[0].command_type == "move_session"
     finally:
         db.close()

@@ -171,24 +171,63 @@ def compose_close_turn_reply(
     request_text_fn: RequestTextFn = request_text,
 ) -> str | None:
     """Compose a terminal social close reply from a tiny no-action context."""
+    context = _close_turn_context(
+        user_text=user_text,
+        previous_agent_text=previous_agent_text,
+    )
+    reply = compose_final_reply(context, request_text_fn=request_text_fn)
+    verified_reply = verify_close_turn_reply(
+        reply,
+        user_text=user_text,
+        previous_agent_text=previous_agent_text,
+        request_text_fn=request_text_fn,
+    )
+    if verified_reply:
+        return verified_reply
+
+    retry_context = _close_turn_context(
+        user_text=user_text,
+        previous_agent_text=previous_agent_text,
+        retry_after_fallback_like=True,
+    )
+    retry_reply = compose_final_reply(retry_context, request_text_fn=request_text_fn)
+    return verify_close_turn_reply(
+        retry_reply,
+        user_text=user_text,
+        previous_agent_text=previous_agent_text,
+        request_text_fn=request_text_fn,
+    )
+
+
+def _close_turn_context(
+    *,
+    user_text: str,
+    previous_agent_text: str | None = None,
+    retry_after_fallback_like: bool = False,
+) -> FinalReplyContext:
     extra_facts = [
         "Intent: terminal_close",
         "Aucun changement planning n'a ete commit.",
         "Ne relance pas le user.",
+        "Le user ferme socialement le dernier message: termine le tour, ne fais pas un mini-coaching.",
+        "Ne commente pas l'intention du user et ne cite pas son message.",
+        "N'ajoute pas d'invitation de suivi du type 'tu me dis si besoin'.",
+        "Ne mentionne aucun jour, duree, zone, sport ou prochaine seance absent du dernier message coach.",
+        "La phrase fallback technique 'Carre, on garde ca.' est reservee aux outages; ne l'utilise pas en sortie composee.",
+        "Exemple si le dernier coach posait une question ouverte et le user ferme: Carre, on s'arrete la.",
+        "Exemple si le dernier coach proposait 36 min footing et le user valide: Parfait. Tu deroules ca tranquille.",
     ]
     if previous_agent_text:
         extra_facts.append(f"Dernier message coach: {previous_agent_text}")
-    context = FinalReplyContext(
+    if retry_after_fallback_like:
+        extra_facts.append("Premiere proposition rejetee par le verifier ou reservee aux outages. Recompose une fermeture courte, sans nouveau fait.")
+    return FinalReplyContext(
         user_text=user_text,
         allowed_to_claim_mutation=False,
         pipeline="conversation",
         pipeline_capability="terminal_close",
         extra_facts=tuple(extra_facts),
     )
-    reply = compose_final_reply(context, request_text_fn=request_text_fn)
-    if not is_valid_close_turn_reply(reply):
-        return None
-    return str(reply).strip()
 
 
 def compose_no_change_reply(
@@ -269,7 +308,7 @@ def is_valid_plan_lookup_reply(reply: str | None, *, original_llm_reply: str) ->
     )
 
 
-def is_valid_close_turn_reply(reply: str | None) -> bool:
+def is_valid_close_turn_reply(reply: str | None, *, allow_outage_fallback: bool = False) -> bool:
     if not reply:
         return False
     text = str(reply).strip()
@@ -277,7 +316,9 @@ def is_valid_close_turn_reply(reply: str | None) -> bool:
         return False
     if "?" in text:
         return False
-    if _sentence_count(text) > 1:
+    if _sentence_count(text) > 2:
+        return False
+    if not allow_outage_fallback and _looks_like_close_turn_outage_fallback(text):
         return False
     context = FinalReplyContext(
         allowed_to_claim_mutation=False,
@@ -289,6 +330,12 @@ def is_valid_close_turn_reply(reply: str | None) -> bool:
 
 def close_turn_outage_fallback_reply() -> str:
     return "Carre, on garde ca."
+
+
+def _looks_like_close_turn_outage_fallback(text: str) -> bool:
+    normalized = coach_voice.normalize_for_voice_guard(text)
+    canonical = re.sub(r"[^a-z0-9]+", " ", normalized).strip()
+    return canonical == "carre on garde ca"
 
 
 def _sentence_count(text: str) -> int:
@@ -338,6 +385,71 @@ def _plan_lookup_fact_tokens(text: str) -> set[str]:
         if word in normalized:
             tokens.add(word)
     return tokens
+
+
+def build_close_turn_reply_verifier_prompt(
+    *,
+    user_text: str,
+    previous_agent_text: str | None,
+    outgoing_reply: str,
+) -> tuple[str, str]:
+    """Build a semantic verifier prompt for terminal social closes."""
+    system = (
+        f"{coach_voice.COACH_VOICE_RULES}\n\n"
+        "Tu es le verificateur terminal_close FitMAS.\n"
+        "Le turn planner LLM a deja decide que le tour est une cloture sociale.\n"
+        "Tu ne choisis pas d'action et tu ne modifies aucun planning.\n"
+        "Tu verifies seulement si la phrase finale ferme naturellement le tour.\n"
+        "Retourne uniquement un JSON strict: "
+        '{"verdict":"allow|repair","reason":"court","repaired_reply":"texte si repair"}'
+    )
+    lines = [
+        "Intent deja decide: terminal_close",
+        f"Dernier message coach visible: {previous_agent_text or '(absent)'}",
+        f"Message user: {user_text or '(absent)'}",
+        "Reponse sortante a verifier:",
+        outgoing_reply,
+        "",
+        "ALLOW seulement si la reponse:",
+        "- ferme le tour en 1-2 phrases courtes;",
+        "- ne pose aucune question et ne relance pas le user;",
+        "- n'explique pas le routage social et ne cite pas le message user;",
+        "- n'ajoute aucun jour, duree, zone, sport, seance ou action absent du dernier message coach/user;",
+        "- ne claim aucun changement planning, aucune confirmation et aucun commit;",
+        "- n'utilise pas la phrase fallback technique 'Carre, on garde ca.'.",
+        "REPAIR si une regle est violee.",
+        "En repair, ecris une fermeture naturelle courte. Si les faits sont insuffisants, reste generique.",
+    ]
+    return system, "\n".join(lines)
+
+
+def verify_close_turn_reply(
+    reply: str | None,
+    *,
+    user_text: str,
+    previous_agent_text: str | None,
+    request_text_fn: RequestTextFn = request_text,
+) -> str | None:
+    """Verify or repair a terminal close reply through a semantic LLM judge."""
+    if not is_valid_close_turn_reply(reply, allow_outage_fallback=False):
+        return None
+    text = str(reply).strip()
+    system, prompt = build_close_turn_reply_verifier_prompt(
+        user_text=user_text,
+        previous_agent_text=previous_agent_text,
+        outgoing_reply=text,
+    )
+    raw = request_text_fn(system=system, prompt=prompt, max_tokens=350)
+    verdict = _parse_post_event_verdict(raw)
+    if verdict is None:
+        return None
+    if verdict.get("verdict") == "allow":
+        return text
+    if verdict.get("verdict") == "repair":
+        repaired = str(verdict.get("repaired_reply") or "").strip()
+        if is_valid_close_turn_reply(repaired, allow_outage_fallback=False):
+            return repaired
+    return None
 
 
 def build_post_event_reply_verifier_prompt(
@@ -466,11 +578,6 @@ def outage_fallback_reply(context: FinalReplyContext) -> str:
 
 def _blocked_event_fallback(event: BlockedEvent) -> str:
     reason = str(event.reason or "").strip()
-    if reason == "protected_recovery_target":
-        return (
-            "Je garde ce creneau en recuperation protegee. "
-            "Si tu veux garder la seance, le bon move est un swap."
-        )
     if reason == "same_sport_proximity":
         return (
             "Je ne rapproche pas deux seances du meme sport a moins de 48h. "

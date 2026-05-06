@@ -77,7 +77,14 @@ Exception d'orchestration terminale (5 mai 2026) : si le turn planner LLM sort
 `decide()` quand aucun pending, calibration ouverte ou signal secondaire n'est
 actif. Cette branche ne comprend pas le texte user elle-meme : elle applique une
 policy sur un artefact LLM et l'etat machine, puis confie la phrase finale a
-`final_reply.py`.
+`final_reply.py`. Depuis le 6 mai 2026, la phrase fallback technique
+`Carre, on garde ca.` est invalide comme sortie composee : si le composer la
+propose, il retente une phrase contextualisee avant de laisser le backend
+utiliser le fallback outage. La sortie candidate passe par un verifier LLM
+`allow|repair` : il juge si la phrase ferme vraiment le tour, sans relance,
+sans meta-routage visible et sans nouveau fait planning absent du dernier
+message coach/user. Le backend applique le verdict structure ; il ne comprend
+pas lui-meme le texte libre.
 
 Extension prose finale (5 mai 2026) : apres une decision `no_change`, le backend
 peut confier la phrase visible a `final_reply.py` avec le brouillon LLM initial

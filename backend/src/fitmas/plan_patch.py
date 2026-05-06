@@ -115,6 +115,7 @@ def validate_plan_patch(
     patch: PlanPatch,
     scheduled_sessions: Sequence[Any] = (),
     timezone_name: str | None = None,
+    now: datetime | None = None,
 ) -> PlanPatchValidation:
     operation_results: list[PlanPatchOperationValidation] = []
     for operation in patch.operations:
@@ -124,6 +125,7 @@ def validate_plan_patch(
                     operation,
                     scheduled_sessions=scheduled_sessions,
                     timezone_name=timezone_name,
+                    now=now,
                 )
             )
             continue
@@ -175,6 +177,7 @@ def _validate_create_session_operation(
     *,
     scheduled_sessions: Sequence[Any],
     timezone_name: str | None,
+    now: datetime | None,
 ) -> PlanPatchOperationValidation:
     target_date = _parse_iso_date(operation.target_date)
     if target_date is None:
@@ -184,7 +187,7 @@ def _validate_create_session_operation(
             block_reason="missing_target_date",
             suggested_fix="Renseigner target_date au format YYYY-MM-DD.",
         )
-    local_today = get_local_now(timezone_name).date()
+    local_today = get_local_now(timezone_name, now=now).date()
     if target_date < local_today:
         return PlanPatchOperationValidation(
             operation_type=operation.operation_type,
@@ -378,8 +381,6 @@ def _suggested_fix_for_operation(
     scheduled_sessions: Sequence[Any],
 ) -> str | None:
     codes = set(warning_codes)
-    if block_reason == "protected_recovery_target":
-        return "Utiliser swap_sessions pour conserver la recuperation dans la semaine."
     if block_reason == "same_sport_proximity":
         target = _find_scheduled_session(scheduled_sessions, operation.target_session_id)
         sport_type = str(_value(target, "sport_type") or "meme sport").strip().lower()

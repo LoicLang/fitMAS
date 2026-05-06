@@ -259,15 +259,18 @@ def run_conversation_turn(
         pending_confirmation=pending_confirmation,
         open_calibration_need=open_calibration_need,
     ):
-        reply_text = final_reply.compose_close_turn_reply(
+        composed_close_reply = final_reply.compose_close_turn_reply(
             user_text=payload.text,
             previous_agent_text=state.previous_agent_text,
-        ) or final_reply.close_turn_outage_fallback_reply()
+        )
+        close_reply_source = "composer" if composed_close_reply else "outage_fallback"
+        reply_text = composed_close_reply or final_reply.close_turn_outage_fallback_reply()
         turn_context.update(
             {
                 "terminal_close": True,
                 "tools_offered": 0,
                 "open_question_marker": "suppressed",
+                "close_turn_reply_source": close_reply_source,
             }
         )
         return _reply_and_record_turn(

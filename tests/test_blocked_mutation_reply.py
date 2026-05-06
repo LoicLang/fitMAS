@@ -36,7 +36,7 @@ class BlockedMutationReplyTest(unittest.TestCase):
     explain WHY so they can adjust their ask, and the next LLM turn has
     a concrete constraint to reason about rather than a vague failure."""
 
-    def test_protected_recovery_target_gets_specific_reply(self) -> None:
+    def test_legacy_protected_recovery_reason_does_not_surface_protected_language(self) -> None:
         decision = SimpleNamespace(mutation_type="move_session", target_session_id=10)
         result = _service_result_with(
             PlanBlockedMutationEvent(
@@ -48,8 +48,8 @@ class BlockedMutationReplyTest(unittest.TestCase):
 
         reply = _blocked_mutation_reply(decision, result)
 
-        self.assertIn("recuperation protegee", reply.lower())
-        self.assertNotIn("creneau cible n'est pas assez sur", reply)
+        self.assertNotIn("recuperation protegee", reply.lower())
+        self.assertNotIn("protected_recovery_target", reply)
 
     def test_same_sport_proximity_gets_specific_reply(self) -> None:
         decision = SimpleNamespace(mutation_type="move_session", target_session_id=10)
