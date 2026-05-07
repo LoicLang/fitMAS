@@ -19,6 +19,48 @@ WeekCoherenceRecommendedPolicy = Literal[
     "confirm_revised",
 ]
 WeekCoherencePolicyStatus = Literal["valid", "requires_confirmation", "blocked"]
+CoherenceFindingSeverity = Literal["info", "warning", "risk", "blocker"]
+
+
+@dataclass(frozen=True, slots=True)
+class WeekFacts:
+    total_sessions_before: int
+    total_sessions_after: int
+    total_duration_min_before: int
+    total_duration_min_after: int
+    hard_sessions_before: int
+    hard_sessions_after: int
+    min_hard_gap_hours_after: int | None
+    recovery_sessions_before: int
+    recovery_sessions_after: int
+    recovery_after_hard_before: int
+    recovery_after_hard_after: int
+    weekly_duration_delta_min: int
+    estimated_tss_delta: float | None
+    key_session_ids_touched: tuple[int, ...]
+    completed_session_ids_touched: tuple[int, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class CoherenceFinding:
+    code: str
+    severity: CoherenceFindingSeverity
+    message: str
+    evidence: dict[str, Any]
+    affected_session_ids: tuple[int, ...] = ()
+    suggested_operations: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True, slots=True)
+class WeekCoherenceScore:
+    total: float
+    recovery: float
+    goal_alignment: float
+    progression: float
+    adherence: float
+    readiness_fit: float
+    constraint_fit: float
+    risk: float
 
 
 @dataclass(frozen=True, slots=True)
@@ -84,6 +126,9 @@ class WeekCoherenceContext:
     session_policies: tuple[dict[str, Any], ...]
     recent_reality: dict[str, Any] | None
     active_constraints: tuple[dict[str, Any], ...]
+    facts: WeekFacts | None = None
+    score: WeekCoherenceScore | None = None
+    coherence_findings: tuple[CoherenceFinding, ...] = ()
 
 
 def simulate_plan_patch(
@@ -168,7 +213,7 @@ def build_week_coherence_context(
         active_constraints=tuple(_as_dict(item) or {} for item in active_facts),
     )
     checks = evaluate_week_invariants(initial)
-    return WeekCoherenceContext(
+    checked = WeekCoherenceContext(
         patch=patch,
         validation=validation,
         before_week=before,
@@ -181,6 +226,153 @@ def build_week_coherence_context(
         recent_reality=initial.recent_reality,
         active_constraints=initial.active_constraints,
     )
+    facts = extract_week_facts(checked)
+    score = score_week_coherence(facts=facts, context=checked)
+    findings = generate_coherence_findings(facts=facts, score=score, context=checked)
+    return WeekCoherenceContext(
+        patch=patch,
+        validation=validation,
+        before_week=before,
+        after_week=after,
+        diff=diff,
+        deterministic_checks=checks,
+        planning_contract=checked.planning_contract,
+        week_mission=checked.week_mission,
+        session_policies=checked.session_policies,
+        recent_reality=checked.recent_reality,
+        active_constraints=checked.active_constraints,
+        facts=facts,
+        score=score,
+        coherence_findings=findings,
+    )
+
+
+def extract_week_facts(context: WeekCoherenceContext) -> WeekFacts:
+    before_sessions = context.before_week.sessions
+    after_sessions = context.after_week.sessions
+    checks = context.deterministic_checks
+    total_duration_before = sum(_int(session.get("duration_min"), default=0) for session in before_sessions)
+    total_duration_after = sum(_int(session.get("duration_min"), default=0) for session in after_sessions)
+    return WeekFacts(
+        total_sessions_before=len(before_sessions),
+        total_sessions_after=len(after_sessions),
+        total_duration_min_before=total_duration_before,
+        total_duration_min_after=total_duration_after,
+        hard_sessions_before=checks.hard_sessions_before,
+        hard_sessions_after=checks.hard_sessions_after,
+        min_hard_gap_hours_after=checks.min_hard_gap_hours_after,
+        recovery_sessions_before=checks.recovery_sessions_before,
+        recovery_sessions_after=checks.recovery_sessions_after,
+        recovery_after_hard_before=_recovery_after_hard_count(before_sessions),
+        recovery_after_hard_after=_recovery_after_hard_count(after_sessions),
+        weekly_duration_delta_min=checks.weekly_duration_delta_min,
+        estimated_tss_delta=checks.estimated_tss_delta,
+        key_session_ids_touched=checks.key_session_ids_touched,
+        completed_session_ids_touched=checks.completed_session_ids_touched,
+    )
+
+
+def score_week_coherence(*, facts: WeekFacts, context: WeekCoherenceContext) -> WeekCoherenceScore:
+    del context
+    recovery_penalty = 0.0
+    if facts.recovery_sessions_after < facts.recovery_sessions_before:
+        recovery_penalty += 18.0
+    if facts.recovery_after_hard_after < facts.recovery_after_hard_before:
+        recovery_penalty += 14.0 * (facts.recovery_after_hard_before - facts.recovery_after_hard_after)
+    if facts.min_hard_gap_hours_after is not None and facts.min_hard_gap_hours_after < 36:
+        recovery_penalty += 22.0
+
+    load_penalty = 0.0
+    if abs(facts.weekly_duration_delta_min) >= 45:
+        load_penalty += 10.0
+    if facts.estimated_tss_delta is not None and abs(facts.estimated_tss_delta) >= 35:
+        load_penalty += 12.0
+
+    recovery = _bounded_score(100.0 - recovery_penalty)
+    progression = _bounded_score(88.0 - load_penalty)
+    risk = _bounded_score(100.0 - recovery_penalty - (load_penalty * 0.5))
+    goal_alignment = 86.0
+    adherence = 84.0
+    readiness_fit = 84.0
+    constraint_fit = 88.0
+    total = round(
+        recovery * 0.25
+        + progression * 0.20
+        + goal_alignment * 0.20
+        + adherence * 0.15
+        + readiness_fit * 0.10
+        + constraint_fit * 0.10,
+        1,
+    )
+    return WeekCoherenceScore(
+        total=total,
+        recovery=round(recovery, 1),
+        goal_alignment=goal_alignment,
+        progression=round(progression, 1),
+        adherence=adherence,
+        readiness_fit=readiness_fit,
+        constraint_fit=constraint_fit,
+        risk=round(risk, 1),
+    )
+
+
+def generate_coherence_findings(
+    *,
+    facts: WeekFacts,
+    score: WeekCoherenceScore,
+    context: WeekCoherenceContext,
+) -> tuple[CoherenceFinding, ...]:
+    del score
+    findings: list[CoherenceFinding] = []
+    if facts.recovery_after_hard_after < facts.recovery_after_hard_before:
+        findings.append(
+            CoherenceFinding(
+                code="RECOVERY_AFTER_HARD_LOST",
+                severity="warning",
+                message="Le changement reduit la recuperation placee apres une seance exigeante.",
+                evidence={
+                    "before": facts.recovery_after_hard_before,
+                    "after": facts.recovery_after_hard_after,
+                },
+                affected_session_ids=_changed_session_ids(context),
+                suggested_operations=("reduce_intensity", "replace_session_type", "mark_optional"),
+            )
+        )
+    if facts.min_hard_gap_hours_after is not None and facts.min_hard_gap_hours_after < 36:
+        findings.append(
+            CoherenceFinding(
+                code="HARD_SESSIONS_TOO_CLOSE",
+                severity="risk",
+                message="Deux seances exigeantes se retrouvent trop proches.",
+                evidence={"min_gap_hours_after": facts.min_hard_gap_hours_after},
+                affected_session_ids=(),
+                suggested_operations=("move_session", "reduce_intensity", "replace_session_type"),
+            )
+        )
+    if facts.recovery_sessions_after < facts.recovery_sessions_before:
+        findings.append(
+            CoherenceFinding(
+                code="RECOVERY_SESSION_LOST",
+                severity="risk",
+                message="Le changement retire une recuperation de la semaine.",
+                evidence={
+                    "before": facts.recovery_sessions_before,
+                    "after": facts.recovery_sessions_after,
+                },
+                affected_session_ids=_changed_session_ids(context),
+                suggested_operations=("add_recovery_session", "replace_session_type", "mark_optional"),
+            )
+        )
+    if not findings:
+        findings.append(
+            CoherenceFinding(
+                code="NO_STRUCTURAL_WEEK_RISK_DETECTED",
+                severity="info",
+                message="Aucun risque structurel majeur detecte par les facts de semaine.",
+                evidence={},
+            )
+        )
+    return tuple(findings)
 
 
 def evaluate_week_invariants(context: WeekCoherenceContext) -> DeterministicWeekChecks:
@@ -224,8 +416,6 @@ def evaluate_week_invariants(context: WeekCoherenceContext) -> DeterministicWeek
         flags.append("completed_session_touched")
     if recovery_after < recovery_before:
         flags.append("recovery_session_lost")
-    if not recovery_after_hard_preserved:
-        flags.append("recovery_after_hard_lost")
     if hard_after > 3:
         flags.append("too_many_hard_sessions")
     if min_hard_gap is not None and min_hard_gap < 36:
@@ -489,6 +679,9 @@ def _context_payload(context: WeekCoherenceContext) -> dict[str, Any]:
         "after_week": _jsonable(context.after_week),
         "diff": _jsonable(context.diff),
         "deterministic_checks": _jsonable(context.deterministic_checks),
+        "facts": _jsonable(context.facts),
+        "score": _jsonable(context.score),
+        "coherence_findings": _jsonable(context.coherence_findings),
         "planning_contract": context.planning_contract,
         "week_mission": context.week_mission,
         "session_policies": list(context.session_policies),
@@ -564,6 +757,14 @@ def _sort_sessions(sessions: Sequence[dict[str, Any]]) -> list[dict[str, Any]]:
     return sorted(
         (deepcopy(session) for session in sessions),
         key=lambda item: (_parse_date(item.get("scheduled_date")) or date.max, int(item.get("id") or 0)),
+    )
+
+
+def _changed_session_ids(context: WeekCoherenceContext) -> tuple[int, ...]:
+    return tuple(
+        int(item["id"])
+        for item in context.diff.changed_sessions
+        if item.get("id") is not None
     )
 
 
@@ -730,3 +931,7 @@ def _int(value: Any, *, default: int) -> int:
         return int(value)
     except (TypeError, ValueError):
         return default
+
+
+def _bounded_score(value: float) -> float:
+    return max(0.0, min(100.0, value))

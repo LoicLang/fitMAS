@@ -10,6 +10,7 @@ from fitmas.week_coherence import (
     WeekCoherenceFinding,
     WeekCoherenceReview,
     aggregate_week_coherence_policy,
+    build_week_coherence_context,
     evaluate_week_invariants,
     review_week_coherence_with_llm,
     simulate_plan_patch,
@@ -145,7 +146,7 @@ def test_evaluate_week_invariants_detects_key_touch_recovery_delta_and_hard_gap(
     assert "hard_sessions_too_close" in checks.flags
 
 
-def test_evaluate_week_invariants_detects_recovery_after_hard_lost_even_if_recovery_count_is_preserved() -> None:
+def test_week_coherence_exposes_recovery_after_hard_loss_as_finding_not_policy_flag() -> None:
     sessions = [
         _session(1, datetime(2026, 5, 4, 8, 0), "running", "tempo", "hard", 50, "Seance cle"),
         _session(2, datetime(2026, 5, 5, 8, 0), "rest", "recovery", "easy", 0, "Recovery"),
@@ -162,26 +163,51 @@ def test_evaluate_week_invariants_detects_recovery_after_hard_lost_even_if_recov
         ],
         coach_message="Je deplace la recuperation.",
     )
-    before, after, diff = simulate_plan_patch(sessions, patch, timezone_name="Europe/Paris")
-    context = WeekCoherenceContext(
+    context = build_week_coherence_context(
         patch=patch,
         validation=PlanPatchValidation(status="valid", operation_results=()),
-        before_week=before,
-        after_week=after,
-        diff=diff,
-        deterministic_checks=_empty_checks(),
-        planning_contract=None,
-        week_mission=None,
-        session_policies=(),
-        recent_reality=None,
-        active_constraints=(),
+        scheduled_sessions=sessions,
+        timezone_name="Europe/Paris",
     )
 
-    checks = evaluate_week_invariants(context)
+    assert context.deterministic_checks.recovery_sessions_before == context.deterministic_checks.recovery_sessions_after
+    assert context.deterministic_checks.recovery_after_hard_preserved is False
+    assert "recovery_after_hard_lost" not in context.deterministic_checks.flags
+    assert context.facts is not None
+    assert context.facts.recovery_after_hard_before == 1
+    assert context.facts.recovery_after_hard_after == 0
+    assert context.score is not None
+    assert context.score.recovery < 100
+    assert any(finding.code == "RECOVERY_AFTER_HARD_LOST" for finding in context.coherence_findings)
 
-    assert checks.recovery_sessions_before == checks.recovery_sessions_after
-    assert checks.recovery_after_hard_preserved is False
-    assert "recovery_after_hard_lost" in checks.flags
+
+def test_fallback_review_does_not_require_confirmation_for_recovery_after_hard_loss_alone() -> None:
+    sessions = [
+        _session(1, datetime(2026, 5, 4, 8, 0), "running", "tempo", "hard", 50, "Seance cle"),
+        _session(2, datetime(2026, 5, 5, 8, 0), "rest", "recovery", "easy", 0, "Recovery"),
+    ]
+    patch = PlanPatch(
+        operations=[
+            PlanPatchOperation(
+                operation_type="move_session",
+                target_session_id=2,
+                target_date="2026-05-08",
+                rationale="Deplacer le repos plus tard.",
+            )
+        ],
+        coach_message="Je deplace la recuperation.",
+    )
+    context = build_week_coherence_context(
+        patch=patch,
+        validation=PlanPatchValidation(status="valid", operation_results=()),
+        scheduled_sessions=sessions,
+        timezone_name="Europe/Paris",
+    )
+
+    review = review_week_coherence_with_llm(context, request_json_fn=None)
+
+    assert review.status == "valid"
+    assert review.recommended_policy == "commit_original"
 
 
 def test_aggregate_week_coherence_policy_preserves_hard_block_and_reviewer_friction() -> None:

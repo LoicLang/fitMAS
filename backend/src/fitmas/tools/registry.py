@@ -606,6 +606,9 @@ def _validate_week_coherence_tool(context: ToolContext, arguments: dict[str, Any
     payload = {
         "validation": _plan_patch_validation_payload(validation),
         "deterministic_checks": _deterministic_week_checks_payload(week_context.deterministic_checks),
+        "facts": _week_facts_payload(week_context.facts),
+        "score": _week_score_payload(week_context.score),
+        "coherence_findings": _coherence_findings_payload(week_context.coherence_findings),
         "review": _week_coherence_review_payload(review),
         "policy_status": policy_status,
         "commit_performed": False,
@@ -656,6 +659,7 @@ def _deterministic_week_checks_payload(checks: Any) -> dict[str, Any]:
         "min_hard_gap_hours_after": checks.min_hard_gap_hours_after,
         "recovery_sessions_before": checks.recovery_sessions_before,
         "recovery_sessions_after": checks.recovery_sessions_after,
+        "recovery_after_hard_preserved": checks.recovery_after_hard_preserved,
         "key_session_ids_touched": list(checks.key_session_ids_touched),
         "completed_session_ids_touched": list(checks.completed_session_ids_touched),
         "weekly_duration_delta_min": checks.weekly_duration_delta_min,
@@ -664,6 +668,57 @@ def _deterministic_week_checks_payload(checks: Any) -> dict[str, Any]:
         "change_budget_remaining_after": checks.change_budget_remaining_after,
         "flags": list(checks.flags),
     }
+
+
+def _week_facts_payload(facts: Any | None) -> dict[str, Any]:
+    if facts is None:
+        return {}
+    return {
+        "total_sessions_before": facts.total_sessions_before,
+        "total_sessions_after": facts.total_sessions_after,
+        "total_duration_min_before": facts.total_duration_min_before,
+        "total_duration_min_after": facts.total_duration_min_after,
+        "hard_sessions_before": facts.hard_sessions_before,
+        "hard_sessions_after": facts.hard_sessions_after,
+        "min_hard_gap_hours_after": facts.min_hard_gap_hours_after,
+        "recovery_sessions_before": facts.recovery_sessions_before,
+        "recovery_sessions_after": facts.recovery_sessions_after,
+        "recovery_after_hard_before": facts.recovery_after_hard_before,
+        "recovery_after_hard_after": facts.recovery_after_hard_after,
+        "weekly_duration_delta_min": facts.weekly_duration_delta_min,
+        "estimated_tss_delta": facts.estimated_tss_delta,
+        "key_session_ids_touched": list(facts.key_session_ids_touched),
+        "completed_session_ids_touched": list(facts.completed_session_ids_touched),
+    }
+
+
+def _week_score_payload(score: Any | None) -> dict[str, Any]:
+    if score is None:
+        return {}
+    return {
+        "total": score.total,
+        "recovery": score.recovery,
+        "goal_alignment": score.goal_alignment,
+        "progression": score.progression,
+        "adherence": score.adherence,
+        "readiness_fit": score.readiness_fit,
+        "constraint_fit": score.constraint_fit,
+        "risk": score.risk,
+    }
+
+
+def _coherence_findings_payload(findings: Any) -> list[dict[str, Any]]:
+    return [
+        {
+            "code": finding.code,
+            "severity": finding.severity,
+            "message": finding.message,
+            "evidence": dict(finding.evidence),
+            "affected_session_ids": list(finding.affected_session_ids),
+            "suggested_operations": list(finding.suggested_operations),
+        }
+        for finding in findings
+    ]
 
 
 def _week_coherence_review_payload(review: WeekCoherenceReview) -> dict[str, Any]:

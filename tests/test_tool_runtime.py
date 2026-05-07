@@ -515,6 +515,9 @@ class ToolRuntimeTest(unittest.TestCase):
         self.assertEqual(result.payload["review"]["status"], "valid")
         self.assertEqual(result.payload["review"]["recommended_policy"], "commit_original")
         self.assertEqual(result.payload["deterministic_checks"]["weekly_duration_delta_min"], 0)
+        self.assertEqual(result.payload["facts"]["total_sessions_after"], 2)
+        self.assertIn("total", result.payload["score"])
+        self.assertEqual(result.payload["coherence_findings"][0]["code"], "NO_STRUCTURAL_WEEK_RISK_DETECTED")
         self.assertFalse(result.payload["commit_performed"])
         self.assertEqual(result.payload["writer"], "none")
 
