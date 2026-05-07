@@ -75,9 +75,40 @@ L'audit declenche par cet incident a confirme 3 failles structurelles connexes :
 | P1-quinquies | ✅ Lane terminale `close_turn` — clotures sociales sans tools, sans marker question ouverte, composer final via `final_reply.py` — implemente localement 5 mai 2026 | 0.5j | `docs/superpowers/plans/2026-05-05-terminal-close-lane.md` |
 | P1-sexies | ✅ Composer final `no_change` — `CoachDecision(no_change)` + compat legacy passent par `final_reply.py`, avec faits memoire/execution appliques — implemente localement 5 mai 2026 | 0.5j | `docs/superpowers/plans/2026-05-05-no-change-final-composer.md` |
 | P1-septies | ✅ Composer final `plan_lookup` — lecture factuelle via `final_reply.py` avec guard anti-drift chiffres/jours/zones/statuts — implemente localement 5 mai 2026 | 0.5j | `docs/superpowers/plans/2026-05-05-plan-lookup-final-composer.md` |
-| P1-octies | 🔥 Prompt/context optimization pass — reduire et specialiser le contexte donne a chaque couche LLM (`turn_planner`, `decide`, composers, verifiers, heartbeat) pour eviter que des contraintes de prompt ou faits inutiles poussent le coach a halluciner, relancer ou parler backend — a entamer apres stabilisation dogfood de la lane terminale | 1-2j | section "Chantier P1-octies" ci-dessous |
+| P1-nonies | ✅ Grounded final speech + heartbeat future truth — temporal refs typees, grounding packet partage, verifier semantique LLM pour lookup planning/confirmation, idempotency key durable, `PlanWindowTruth` heartbeat — implemente localement 7 mai 2026 | 0.5-1j | `docs/superpowers/plans/2026-05-07-grounded-final-speech-and-heartbeat.md` |
+| P1-octies | 🔥 Prompt/context optimization pass + `decide() returned None` reduction — reduire et specialiser le contexte donne a chaque couche LLM (`turn_planner`, `decide`, composers, verifiers, heartbeat), auditer les prompts qui diluent la decision, et mesurer/reduire les retours `None` du decisionnaire — prochain chantier dogfood | 1-2j | section "Chantier P1-octies" ci-dessous |
 
-**Total restant avant B0 : 1-2 jours**. Phase A+ est fermee localement, mais le dogfood du 6 mai a montre que la qualite de sortie depend encore trop du volume et de la forme de contexte donne aux couches LLM. Prochaine lane : P1-octies, puis dogfood court et B0 si stable.
+**Total restant avant B0 : 1-2 jours**. Phase A+ est fermee localement, et P1-nonies a retire les contradictions factuelles visibles les plus dangereuses. La prochaine lane reste P1-octies : audit prompt/contexte et baisse des `decide() returned None`, puis dogfood court et B0 si stable.
+
+### Chantier P1-nonies — Grounded final speech + heartbeat future truth ✅
+
+Objectif livre le 7 mai 2026 : ne plus laisser une phrase finale visible
+contredire une verite planning deja connue du backend.
+
+Fix livres :
+- `conversation_turn_planner.py` peut maintenant retourner des
+  `temporal_references` typees, `requires_truth_read` et `truth_scope`, que le
+  backend resout ensuite sans parser le texte utilisateur libre ;
+- nouveau `grounding_contract.py` : `ReplyGroundingPacket`, temporal refs
+  resolues et `PlanWindowFact` partages entre conversation, final reply et
+  heartbeat ;
+- `plan_lookup` planning passe par un verifier semantique LLM contre le
+  grounding DB, plus par un tracking deterministe de tokens/chiffres du
+  brouillon LLM ;
+- les confirmations `PlanPatch` recoivent local date + plan window, puis sont
+  verifiees contre ces facts avant sortie ;
+- acceptance de pending `PlanPatch` utilise la reply post-event verifier, pas le
+  vieux `patch.coach_message` ;
+- les closes sociaux recoivent un grounding et traitent le dernier message coach
+  comme contexte social, pas comme source de verite planning ;
+- idempotence Telegram durable : `conversation_turns.client_message_key` et
+  `source` sont des colonnes, plus seulement un champ fragile de `context_json` ;
+- heartbeat matin recoit `PlanWindowTruth` 7 jours et le vrai `_llm_generate`
+  peut verifier la phrase proactive contre ce plan futur.
+
+Frontiere doctrine : aucune regex/keyword sur texte utilisateur libre. La
+comprehension reste LLM ; le code resout et verifie uniquement des artefacts
+LLM/DB structures.
 
 ### Chantier P1-octies — Prompt/context optimization pass 🔥
 
@@ -98,6 +129,10 @@ Scope recommande :
 - separer les faits necessaires, les consignes de voix, les contraintes de
   validation et les exemples ;
 - reduire les contextes des lanes terminales/no-op ;
+- instrumenter les cas `decide() returned None` par intent, provider, taille de
+  prompt, tool-use et raison de repair/fallback ;
+- reduire les `None` en simplifiant le contrat de sortie, pas en ajoutant des
+  parsers de texte utilisateur libre ;
 - rendre explicite la mission de chaque couche : detecter, decider, composer,
   verifier, jamais tout faire a la fois ;
 - ajouter des golden prompts/tests pour les tours courts dogfood : ack,

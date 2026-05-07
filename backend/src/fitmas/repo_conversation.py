@@ -39,14 +39,21 @@ def get_conversation_turn_by_client_message_key(
     *,
     limit: int = 50,
 ) -> s.ConversationTurnRecord | None:
-    """Return a recent turn for an external delivery idempotency key.
-
-    The key lives in context_json to avoid a schema migration for the Telegram
-    delivery repair. This is exact-key idempotency, not user-text parsing.
-    """
+    """Return a recent turn for an external delivery idempotency key."""
     key = str(client_message_key or "").strip()
     if not key:
         return None
+    row = (
+        db.query(s.ConversationTurnRecord)
+        .filter(
+            s.ConversationTurnRecord.user_id == user_id,
+            s.ConversationTurnRecord.client_message_key == key,
+        )
+        .order_by(s.ConversationTurnRecord.id.desc())
+        .first()
+    )
+    if row is not None:
+        return row
     rows = get_recent_conversation_turns(db, user_id, limit=limit)
     for row in rows:
         try:
@@ -115,6 +122,8 @@ def add_conversation_turn(
     decision_json: str,
     context: dict[str, object] | None,
     memory_writes: list[dict[str, object]] | None,
+    client_message_key: str | None = None,
+    source: str | None = None,
 ) -> s.ConversationTurnRecord:
     row = s.ConversationTurnRecord(
         user_id=user_id,
@@ -127,6 +136,8 @@ def add_conversation_turn(
         mutation_applied=mutation_applied,
         pending_confirmation=pending_confirmation,
         pending_confirmation_id=pending_confirmation_id,
+        client_message_key=str(client_message_key or "").strip() or None,
+        source=str(source or "").strip() or None,
         decision_json=decision_json,
         context_json=_json_dumps(context or {}),
         memory_writes_json=_json_dumps(memory_writes or []),

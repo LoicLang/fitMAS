@@ -84,3 +84,23 @@ def test_plan_conversation_turn_accepts_availability_constraint(monkeypatch) -> 
     assert turn_plan is not None
     assert turn_plan.primary_intent == "availability_constraint"
     assert turn_plan.has_plan_mutation is False
+
+
+def test_turn_plan_can_carry_grounding_requirements() -> None:
+    plan = planner.ConversationTurnPlan(
+        primary_intent="plan_mutation",
+        user_goal="deplacer la seance de demain a vendredi",
+        mutation_signal=True,
+        temporal_references=(
+            {"kind": "relative_day", "value": "tomorrow", "role": "source"},
+            {"kind": "weekday", "value": "friday", "role": "target"},
+        ),
+        requires_truth_read=True,
+        truth_scope="plan_window",
+        confidence=0.91,
+    )
+
+    assert plan.temporal_references[0]["kind"] == "relative_day"
+    assert plan.temporal_references[1]["value"] == "friday"
+    assert plan.requires_truth_read is True
+    assert plan.truth_scope == "plan_window"

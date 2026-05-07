@@ -93,6 +93,10 @@ def _ensure_sqlite_columns() -> None:
         "coach_messages": [
             ("proactive", "ALTER TABLE coach_messages ADD COLUMN proactive BOOLEAN DEFAULT 0"),
         ],
+        "conversation_turns": [
+            ("client_message_key", "ALTER TABLE conversation_turns ADD COLUMN client_message_key VARCHAR(128)"),
+            ("source", "ALTER TABLE conversation_turns ADD COLUMN source VARCHAR(32)"),
+        ],
     }
 
     with engine.begin() as connection:

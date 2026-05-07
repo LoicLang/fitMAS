@@ -677,6 +677,8 @@ def add_conversation_turn(
     decision_json: str,
     context: dict[str, object] | None,
     memory_writes: list[dict[str, object]] | None,
+    client_message_key: str | None = None,
+    source: str | None = None,
 ) -> s.ConversationTurnRecord:
     return repo_conversation.add_conversation_turn(
         db,
@@ -693,6 +695,8 @@ def add_conversation_turn(
         decision_json=decision_json,
         context=context,
         memory_writes=memory_writes,
+        client_message_key=client_message_key,
+        source=source,
     )
 
 

@@ -377,6 +377,8 @@ class ConversationTurnRecord(Base):
     mutation_applied: Mapped[bool] = mapped_column(Boolean, default=False)
     pending_confirmation: Mapped[bool] = mapped_column(Boolean, default=False)
     pending_confirmation_id: Mapped[int | None] = mapped_column(nullable=True, default=None)
+    client_message_key: Mapped[str | None] = mapped_column(String(128), nullable=True, default=None)
+    source: Mapped[str | None] = mapped_column(String(32), nullable=True, default=None)
     decision_json: Mapped[str] = mapped_column(Text, default="{}")
     context_json: Mapped[str] = mapped_column(Text, default="{}")
     memory_writes_json: Mapped[str] = mapped_column(Text, default="[]")

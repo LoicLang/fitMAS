@@ -24,7 +24,7 @@ from typing import Any, Iterator
 
 from sqlalchemy.orm import Session
 
-from fitmas import coach_voice, repository as repo, schema as s
+from fitmas import coach_voice, final_reply, repository as repo, schema as s
 from fitmas.activity_helpers import (
     activities_last_days as _activities_last_days,
     activities_on_local_date as _activities_on_local_date,
@@ -37,6 +37,7 @@ from fitmas.coach_state_bundle import build_coach_state_bundle
 from fitmas.coach_messages import CoachDraft, DraftPendingConfirmation
 from fitmas.db import SessionLocal
 from fitmas.execution_clarification import build_execution_clarification
+from fitmas.grounding_contract import ReplyGroundingPacket, plan_window_facts_from_sessions
 from fitmas.skills.heartbeat import evaluation as heartbeat_evaluation
 from fitmas.skills.heartbeat.context import build_heartbeat_context_bundle
 from fitmas.skills.heartbeat.roles import (
@@ -223,6 +224,7 @@ def _llm_generate(
     allow_no_send: bool = True,
     pipeline: str = "heartbeat",
     tool_context: ToolContext | None = None,
+    factual_grounding: ReplyGroundingPacket | None = None,
 ) -> str | None:
     _PENDING_CONFIRMATION.set(None)
     trace = _trace()
@@ -305,6 +307,21 @@ def _llm_generate(
         )
         _PENDING_CONFIRMATION.set(None)
         return None
+    if text and factual_grounding is not None:
+        verified = final_reply.verify_factual_reply(
+            text,
+            grounding=factual_grounding,
+            pipeline_capability=pipeline,
+            request_text_fn=request_text,
+        )
+        if verified is None:
+            logger.warning("heartbeat.factual_verifier_blocked pipeline=%s message=%r", pipeline, text[:160])
+            trace = _trace()
+            if trace is not None:
+                trace.judge = {"blocked": True, "reason": "factual_verifier_blocked"}
+            _PENDING_CONFIRMATION.set(None)
+            return None
+        text = verified
     return text
 
 
@@ -438,6 +455,13 @@ def morning_briefing() -> CoachDraft | None:
             end_date=local_now.date(),
             limit=42,
         )
+        future_sessions = repo.get_scheduled_sessions_between_dates(
+            db,
+            user.id,
+            start_date=local_now.date(),
+            end_date=local_now.date() + timedelta(days=6),
+            limit=21,
+        )
         tool_scheduled_sessions = repo.get_scheduled_sessions(db, user.id, limit=120)
         recent_activities = repo.get_activities(db, user.id, limit=120)
         recent_claims = _claimed_activities_last_days(db, user, days=14)
@@ -490,6 +514,7 @@ def morning_briefing() -> CoachDraft | None:
                 claims=list(recent_claims),
             ),
             week_activities=recent_activities,
+            future_scheduled_sessions=future_sessions,
             capability=BRIEFING_ROLE.capability,
         )
         _trace_context("heartbeat_bundle", bundle)
@@ -520,6 +545,11 @@ def morning_briefing() -> CoachDraft | None:
                 now=local_now,
                 scheduled_sessions=tool_scheduled_sessions,
                 activities=recent_activities,
+            ),
+            factual_grounding=ReplyGroundingPacket(
+                local_date=local_now.date(),
+                timezone_name=getattr(user, "timezone", None),
+                plan_window=plan_window_facts_from_sessions(future_sessions),
             ),
         )
         if llm_msg:

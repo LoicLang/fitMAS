@@ -20,6 +20,7 @@ from datetime import date, datetime, timedelta
 from typing import Any, Literal, Sequence
 
 from fitmas.activity_claims import ActivityClaim
+from fitmas.grounding_contract import PlanWindowFact, plan_window_facts_from_sessions
 from fitmas.recent_reality import RecentRealityWindow
 
 REST_SPORTS = {"rest", "off"}
@@ -127,9 +128,17 @@ class WeekDigest:
 
 
 @dataclass(frozen=True, slots=True)
+class PlanWindowTruth:
+    today: date
+    window_days: int
+    sessions: tuple[PlanWindowFact, ...]
+
+
+@dataclass(frozen=True, slots=True)
 class HeartbeatContextBundle:
     yesterday: YesterdayTruth
     today: TodayTruth
+    plan_window: PlanWindowTruth
     week: WeekDigest
     capability: HeartbeatCapabilityBudget
 
@@ -147,6 +156,7 @@ def build_heartbeat_context_bundle(
     yesterday_claims: Sequence[ActivityClaim],
     week_recent_reality: RecentRealityWindow,
     week_activities: Sequence[Any],
+    future_scheduled_sessions: Sequence[Any] = (),
     capability: HeartbeatCapabilityBudget = HeartbeatCapabilityBudget(),
 ) -> HeartbeatContextBundle:
     yesterday_date = today - timedelta(days=1)
@@ -160,6 +170,10 @@ def build_heartbeat_context_bundle(
         today=_build_today_truth(
             today=today,
             planned_session=today_planned_session,
+        ),
+        plan_window=_build_plan_window_truth(
+            today=today,
+            scheduled_sessions=future_scheduled_sessions,
         ),
         week=_build_week_digest(
             today=today,
@@ -258,6 +272,23 @@ def _build_today_truth(*, today: date, planned_session: Any | None) -> TodayTrut
     )
 
 
+def _build_plan_window_truth(
+    *,
+    today: date,
+    scheduled_sessions: Sequence[Any],
+    window_days: int = 7,
+) -> PlanWindowTruth:
+    return PlanWindowTruth(
+        today=today,
+        window_days=window_days,
+        sessions=plan_window_facts_from_sessions(
+            scheduled_sessions,
+            start_date=today,
+            end_date=today + timedelta(days=window_days - 1),
+        ),
+    )
+
+
 def _build_week_digest(
     *,
     today: date,
@@ -324,6 +355,7 @@ def render_heartbeat_context_bundle(bundle: HeartbeatContextBundle) -> str:
     parts: list[str] = []
     parts.append(_render_yesterday_truth(bundle.yesterday))
     parts.append(_render_today_truth(bundle.today))
+    parts.append(_render_plan_window_truth(bundle.plan_window))
     parts.append(_render_week_digest(bundle.week))
     return "\n\n".join(parts)
 
@@ -375,6 +407,20 @@ def _render_today_truth(truth: TodayTruth) -> str:
     return "\n".join(lines)
 
 
+def _render_plan_window_truth(truth: PlanWindowTruth) -> str:
+    lines = [
+        f"[PlanWindowTruth — {truth.window_days}j a partir d'aujourd'hui, source planning future autoritaire]",
+        f"start: {truth.today.isoformat()} ({DAY_NAMES_FR.get(truth.today.weekday(), truth.today.isoformat())})",
+    ]
+    if truth.sessions:
+        lines.append("sessions:")
+        for fact in truth.sessions:
+            lines.append("  - " + _format_plan_window_fact_inline(fact))
+    else:
+        lines.append("sessions: aucune")
+    return "\n".join(lines)
+
+
 def _render_week_digest(digest: WeekDigest) -> str:
     lines = [
         f"[WeekDigest — {digest.window_days}j roulants, agregat hebdo, "
@@ -407,6 +453,20 @@ def _format_planned_session_inline(session: PlannedSessionFact) -> str:
 def _format_activity_inline(activity: ActivityFact) -> str:
     link = "linked-to-plan" if activity.linked_to_plan else "offplan"
     return f"{activity.sport or 'sport'} {activity.duration_min}min ({link})"
+
+
+def _format_plan_window_fact_inline(fact: PlanWindowFact) -> str:
+    pieces = [
+        f"{fact.scheduled_date.isoformat()} ({fact.day_label})",
+        fact.sport or "sport",
+    ]
+    if fact.title:
+        pieces.append(f'"{fact.title}"')
+    if fact.duration_min is not None:
+        pieces.append(f"{fact.duration_min}min")
+    pieces.append(f"[{fact.completion_status}]")
+    pieces.append(f"slot={fact.slot_kind}")
+    return " ".join(pieces)
 
 
 # ---------------------------------------------------------------------------

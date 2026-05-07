@@ -41,6 +41,9 @@ class ConversationTurnPlan(BaseModel):
     user_goal: str = ""
     mutation_signal: bool = False
     execution_claim: dict[str, Any] | None = None
+    temporal_references: tuple[dict[str, Any], ...] = ()
+    requires_truth_read: bool = False
+    truth_scope: str | None = None
     needs_clarification: bool = False
     clarification_question: str | None = None
     confidence: float = Field(default=0.0, ge=0.0, le=1.0)
@@ -110,12 +113,19 @@ def _build_prompt(
             "de creneau, sans question plan, sans acceptation explicite d'un pending"
         ),
     }
+    temporal_contract = {
+        "kind": "relative_day|weekday|date",
+        "value": "today|tomorrow|yesterday|monday..sunday|YYYY-MM-DD",
+        "role": "source|target|context",
+    }
     return "\n".join(
         [
             "Determine l'intention principale du tour FitMAS.",
             "Le message peut etre compose: garde une intention principale et des intentions secondaires.",
             "capabilities:",
             json.dumps(capabilities, ensure_ascii=False, sort_keys=True),
+            "Temporal refs: si le user pointe un jour/date, extrais un artefact type, pas une phrase.",
+            json.dumps(temporal_contract, ensure_ascii=False, sort_keys=True),
             "",
             "Contexte borne:",
             f"- temporel: {temporal_summary or 'aucun'}",
@@ -138,6 +148,7 @@ Regles:
 - Si le message combine "je n'ai pas fait / impossible / oublie" avec une cible de reprogrammation, l'intention principale est plan_mutation et non_completion_claim est secondaire.
 - Ne force pas une seule intention si le message est compose.
 - Un wording comme "vendredi a la place ?" peut etre une mutation meme sans mot-cle swap/decale.
+- Si le user conteste ou verifie une annonce planning du coach ("t'es sur ?", "redonne le plan actuel"), primary_intent=plan_lookup, requires_truth_read=true, truth_scope=plan_window.
 - Si la cible concrete manque, primary_intent=needs_clarification.
 - "Okay chef", "nickel merci", "parfait on garde ca", "carre" sans autre signal -> primary_intent=close_turn.
 - "Ok decale a vendredi" -> plan_mutation, pas close_turn.
@@ -151,6 +162,9 @@ Reponds uniquement avec un JSON valide:
   "user_goal": "phrase courte",
   "mutation_signal": true,
   "execution_claim": {"status": "done|not_done|unknown", "sport_type": "swimming|running|cycling|strength|climbing|unknown", "date": "YYYY-MM-DD|null"},
+  "temporal_references": [{"kind":"relative_day|weekday|date","value":"today|tomorrow|yesterday|monday|tuesday|wednesday|thursday|friday|saturday|sunday|YYYY-MM-DD","role":"source|target|context"}],
+  "requires_truth_read": false,
+  "truth_scope": "plan_window|execution|memory|null",
   "needs_clarification": false,
   "clarification_question": null,
   "confidence": 0.0

@@ -7,6 +7,12 @@ from typing import Any
 from sqlalchemy.orm import Session
 
 from fitmas import final_reply, repository as repo
+from fitmas.grounding_contract import (
+    ReplyGroundingPacket,
+    plan_window_facts_from_sessions,
+    render_grounding_packet_for_prompt,
+    resolve_temporal_intents,
+)
 from fitmas.adaptation_log import build_adaptation_log_entry
 from fitmas.calibration_llm import extract_calibration_resolution
 from fitmas import coach_voice
@@ -80,11 +86,11 @@ def run_conversation_turn(
 
     state = _load_turn_state(db=db, user=user, user_text=payload.text)
     turn_memory_writes: list[dict] = []
-    turn_context: dict[str, object] = {}
+    external_turn_context: dict[str, object] = {}
     if payload.client_message_key:
-        turn_context["client_message_key"] = payload.client_message_key
+        external_turn_context["client_message_key"] = payload.client_message_key
     if payload.source:
-        turn_context["source"] = payload.source
+        external_turn_context["source"] = payload.source
     pending_confirmation = repo.get_active_pending_mutation_confirmation(db, user.id)
     pending_confirmation_context = _pending_confirmation_context_for_prompt(pending_confirmation)
 
@@ -228,7 +234,15 @@ def run_conversation_turn(
         grounding_prompt_context,
     )
 
+    grounding_packet = _build_reply_grounding_packet(
+        user=user,
+        local_date=conversation_context.temporal_resolution.local_date,
+        scheduled_sessions=state.scheduled_sessions,
+        turn_plan=turn_plan,
+    )
+
     turn_context = {
+        **external_turn_context,
         "profile_summary": build_profile_summary(state.active_memory_rows),
         "timeline_summary": api_messages.make_timeline_summary(state.timeline),
         "execution_summary": execution_summary_for_prompt(conversation_context),
@@ -241,6 +255,9 @@ def run_conversation_turn(
             for fact in (list(conversation_context.selected_facts) or [])[:6]
         ],
         "turn_plan": _turn_plan_payload(turn_plan),
+        "grounding": {
+            "lines": list(render_grounding_packet_for_prompt(grounding_packet)),
+        },
         "planning_contract": coach_bundle.planning_contract.as_dict(),
         "availability_state": coach_bundle.availability_state.as_dict(),
         "week_mission": coach_bundle.week_mission.as_dict(),
@@ -262,6 +279,7 @@ def run_conversation_turn(
         composed_close_reply = final_reply.compose_close_turn_reply(
             user_text=payload.text,
             previous_agent_text=state.previous_agent_text,
+            grounding=grounding_packet,
         )
         close_reply_source = "composer" if composed_close_reply else "outage_fallback"
         reply_text = composed_close_reply or final_reply.close_turn_outage_fallback_reply()
@@ -386,7 +404,7 @@ def run_conversation_turn(
                     mutation_applied=False,
                 )
             else:
-                reply_text = _build_plan_patch_confirmation_prompt(service_result)
+                reply_text = _build_plan_patch_confirmation_prompt(service_result, grounding=grounding_packet)
                 if _plan_patch_confirmation_reply_requests_clarification(reply_text):
                     outcome = ConversationTurnOutcome(
                         extraction=Extraction(confidence=0.85),
@@ -439,7 +457,7 @@ def run_conversation_turn(
                     mutation_applied=True,
                 )
             elif _plan_patch_needs_confirmation(service_result):
-                reply_text = _build_plan_patch_confirmation_prompt(service_result)
+                reply_text = _build_plan_patch_confirmation_prompt(service_result, grounding=grounding_packet)
                 if _plan_patch_confirmation_reply_requests_clarification(reply_text):
                     outcome = ConversationTurnOutcome(
                         extraction=Extraction(confidence=0.85),
@@ -499,6 +517,7 @@ def run_conversation_turn(
                     user_text=payload.text,
                     original_reply=reply_text,
                     turn_context=turn_context,
+                    grounding=grounding_packet,
                     action_result=turn_context.get("coach_decision_action_result") or {},
                 )
                 if composed_mode:
@@ -574,6 +593,7 @@ def run_conversation_turn(
                 user_text=payload.text,
                 original_reply=decision.fitmas_message,
                 turn_context=turn_context,
+                grounding=grounding_packet,
             )
             response_mode = composed_mode or "reply"
             if composed_mode:
@@ -623,7 +643,7 @@ def run_conversation_turn(
                     decision_json=serialize_plan_patch_confirmation(patch),
                     expires_at=default_confirmation_expiry(),
                 )
-                reply_text = _build_plan_patch_confirmation_prompt(service_result)
+                reply_text = _build_plan_patch_confirmation_prompt(service_result, grounding=grounding_packet)
                 outcome = ConversationTurnOutcome(
                     extraction=Extraction(confidence=extraction_confidence),
                     reply_text=reply_text,
@@ -988,7 +1008,7 @@ def _accept_pending_confirmation(
                 repo.resolve_pending_mutation_confirmation(db, pending_confirmation.id, status="accepted")
                 return ConversationTurnOutcome(
                     extraction=Extraction(confidence=0.85),
-                    reply_text=_applied_patch_summary(service_result, fallback=patch.coach_message),
+                    reply_text=_applied_plan_patch_reply(service_result, fallback=patch.coach_message),
                     response_mode="pending_accepted",
                     mutation_applied=True,
                 )
@@ -1347,6 +1367,7 @@ def _compose_no_change_reply_for_turn(
     user_text: str,
     original_reply: str,
     turn_context: dict[str, object],
+    grounding: ReplyGroundingPacket | None = None,
     action_result: dict | None = None,
 ) -> tuple[str, str | None]:
     action_result = action_result or {}
@@ -1356,13 +1377,20 @@ def _compose_no_change_reply_for_turn(
         user=user,
         action_result=action_result,
     )
-    capability = "plan_lookup" if _turn_context_primary_intent(turn_context) == "plan_lookup" else "no_change"
+    capability = (
+        "plan_lookup"
+        if _turn_context_primary_intent(turn_context) == "plan_lookup"
+        or _turn_context_requires_truth_read(turn_context)
+        else "no_change"
+    )
     if capability == "plan_lookup":
+        lookup_grounding = grounding if _turn_context_should_ground_plan_lookup(turn_context) else None
         composed_reply = final_reply.compose_plan_lookup_reply(
             user_text=user_text,
             original_llm_reply=original_reply,
             memory_actions_applied=memory_actions_applied,
             execution_actions_applied=execution_actions_applied,
+            grounding=lookup_grounding,
         )
     else:
         composed_reply = final_reply.compose_no_change_reply(
@@ -1383,6 +1411,23 @@ def _turn_context_primary_intent(turn_context: dict[str, object]) -> str:
     if not isinstance(turn_plan, dict):
         return ""
     return str(turn_plan.get("primary_intent") or "")
+
+
+def _turn_context_requires_truth_read(turn_context: dict[str, object]) -> bool:
+    turn_plan = turn_context.get("turn_plan")
+    if not isinstance(turn_plan, dict):
+        return False
+    return bool(turn_plan.get("requires_truth_read")) or str(turn_plan.get("truth_scope") or "") == "plan_window"
+
+
+def _turn_context_should_ground_plan_lookup(turn_context: dict[str, object]) -> bool:
+    turn_plan = turn_context.get("turn_plan")
+    if not isinstance(turn_plan, dict):
+        return False
+    if str(turn_plan.get("truth_scope") or "") == "plan_window":
+        return True
+    refs = turn_plan.get("temporal_references")
+    return isinstance(refs, list) and bool(refs)
 
 
 def _plan_patch_needs_confirmation(service_result: PlanPatchServiceResult | None) -> bool:
@@ -1472,26 +1517,46 @@ def _week_review_suggested_fix(service_result: PlanPatchServiceResult) -> str | 
     return None
 
 
-def _build_plan_patch_confirmation_prompt(service_result: PlanPatchServiceResult | None) -> str:
+def _build_plan_patch_confirmation_prompt(
+    service_result: PlanPatchServiceResult | None,
+    *,
+    grounding: ReplyGroundingPacket | None = None,
+) -> str:
     summary = _plan_patch_confirmation_summary(service_result)
     context = final_reply.FinalReplyContext(
         pending_summary=summary,
         allowed_to_claim_mutation=False,
         pipeline="conversation",
         pipeline_capability="can_confirm",
-        extra_facts=_plan_patch_confirmation_facts(service_result),
+        extra_facts=_plan_patch_confirmation_facts(service_result, grounding=grounding),
     )
     composed = final_reply.compose_final_reply(context)
     if composed:
+        if _plan_patch_confirmation_reply_requests_clarification(composed):
+            return composed
+        if grounding is not None:
+            verified = final_reply.verify_factual_reply(
+                composed,
+                grounding=grounding,
+                pipeline_capability="plan_patch_confirmation",
+            )
+            if verified:
+                return verified
+            return final_reply.outage_fallback_reply(context)
         return composed
     return final_reply.outage_fallback_reply(context)
 
 
-def _plan_patch_confirmation_facts(service_result: PlanPatchServiceResult | None) -> tuple[str, ...]:
+def _plan_patch_confirmation_facts(
+    service_result: PlanPatchServiceResult | None,
+    *,
+    grounding: ReplyGroundingPacket | None = None,
+) -> tuple[str, ...]:
     patch = service_result.patch if service_result is not None else None
     if patch is None:
-        return ()
+        return render_grounding_packet_for_prompt(grounding)
     facts: list[str] = []
+    facts.extend(render_grounding_packet_for_prompt(grounding))
     coach_message = str(patch.coach_message or "").strip()
     if coach_message:
         facts.append(f"Patch coach_message: {coach_message}")
@@ -1638,6 +1703,8 @@ def _reply_and_record_turn(
         decision_json=serialize_mutation_decision(decision) if decision is not None else "{}",
         context=turn_context,
         memory_writes=memory_writes,
+        client_message_key=str((turn_context or {}).get("client_message_key") or "").strip() or None,
+        source=str((turn_context or {}).get("source") or "").strip() or None,
     )
     return MessageReply(
         user_message=Message(role=MessageRole.USER, text=user_text),
@@ -1691,6 +1758,25 @@ def _fact_identity(fact: object) -> str:
     if isinstance(fact, dict):
         return f"{fact.get('category')}:{fact.get('key')}"
     return str(fact)
+
+
+def _build_reply_grounding_packet(
+    *,
+    user,
+    local_date,
+    scheduled_sessions,
+    turn_plan,
+) -> ReplyGroundingPacket:
+    temporal_refs = resolve_temporal_intents(
+        tuple(getattr(turn_plan, "temporal_references", ()) or ()),
+        local_date=local_date,
+    )
+    return ReplyGroundingPacket(
+        local_date=local_date,
+        timezone_name=getattr(user, "timezone", None),
+        temporal_references=temporal_refs,
+        plan_window=plan_window_facts_from_sessions(scheduled_sessions),
+    )
 
 
 def _turn_plan_payload(turn_plan) -> dict | None:

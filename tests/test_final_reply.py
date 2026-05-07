@@ -334,25 +334,25 @@ def test_plan_lookup_composer_uses_fact_preservation_context() -> None:
     assert reply == "Demain, footing de 36 min en Z2."
 
 
-def test_plan_lookup_validation_rejects_fact_drift() -> None:
+def test_plan_lookup_validation_is_shape_only_without_grounding() -> None:
     assert is_valid_plan_lookup_reply(
         "Demain, footing de 40 min en Z2.",
         original_llm_reply="Demain: footing 36 min Z2.",
-    ) is False
+    ) is True
     assert is_valid_plan_lookup_reply(
         "Demain, footing de 36 min en Z2.",
         original_llm_reply="Demain: footing 36 min Z2.",
     ) is True
 
 
-def test_plan_lookup_composer_keeps_original_when_rewrite_drifts() -> None:
+def test_plan_lookup_composer_requires_grounding_for_fact_repair() -> None:
     reply = compose_plan_lookup_reply(
         user_text="J'ai quoi demain ?",
         original_llm_reply="Demain: footing 36 min Z2.",
         request_text_fn=lambda **kwargs: "Demain, footing de 40 min en Z2.",
     )
 
-    assert reply == "Demain: footing 36 min Z2."
+    assert reply == "Demain, footing de 40 min en Z2."
 
 
 def test_plan_lookup_composer_keeps_original_when_rewrite_reopens_turn() -> None:

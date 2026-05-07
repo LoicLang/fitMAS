@@ -14,6 +14,7 @@ from typing import Any, Callable
 
 from fitmas import coach_voice
 from fitmas.claim_guard import looks_like_action_claim
+from fitmas.grounding_contract import ReplyGroundingPacket, render_grounding_packet_for_prompt
 from fitmas.llm_gateway import request_text
 
 
@@ -154,8 +155,9 @@ def compose_final_reply(
     context: FinalReplyContext,
     *,
     request_text_fn: RequestTextFn = request_text,
+    force: bool = False,
 ) -> str | None:
-    if request_text_fn is request_text and os.getenv("FITMAS_ENABLE_FINAL_REPLY_COMPOSER") == "0":
+    if not force and request_text_fn is request_text and os.getenv("FITMAS_ENABLE_FINAL_REPLY_COMPOSER") == "0":
         return None
     system, prompt = build_final_reply_prompt(context)
     reply = request_text_fn(system=system, prompt=prompt, max_tokens=300)
@@ -168,6 +170,7 @@ def compose_close_turn_reply(
     *,
     user_text: str,
     previous_agent_text: str | None = None,
+    grounding: ReplyGroundingPacket | None = None,
     request_text_fn: RequestTextFn = request_text,
 ) -> str | None:
     """Compose a terminal social close reply from a tiny no-action context."""
@@ -175,11 +178,12 @@ def compose_close_turn_reply(
         user_text=user_text,
         previous_agent_text=previous_agent_text,
     )
-    reply = compose_final_reply(context, request_text_fn=request_text_fn)
+    reply = compose_final_reply(context, request_text_fn=request_text_fn, force=True)
     verified_reply = verify_close_turn_reply(
         reply,
         user_text=user_text,
         previous_agent_text=previous_agent_text,
+        grounding=grounding,
         request_text_fn=request_text_fn,
     )
     if verified_reply:
@@ -190,11 +194,12 @@ def compose_close_turn_reply(
         previous_agent_text=previous_agent_text,
         retry_after_fallback_like=True,
     )
-    retry_reply = compose_final_reply(retry_context, request_text_fn=request_text_fn)
+    retry_reply = compose_final_reply(retry_context, request_text_fn=request_text_fn, force=True)
     return verify_close_turn_reply(
         retry_reply,
         user_text=user_text,
         previous_agent_text=previous_agent_text,
+        grounding=grounding,
         request_text_fn=request_text_fn,
     )
 
@@ -212,7 +217,8 @@ def _close_turn_context(
         "Le user ferme socialement le dernier message: termine le tour, ne fais pas un mini-coaching.",
         "Ne commente pas l'intention du user et ne cite pas son message.",
         "N'ajoute pas d'invitation de suivi du type 'tu me dis si besoin'.",
-        "Ne mentionne aucun jour, duree, zone, sport ou prochaine seance absent du dernier message coach.",
+        "Le dernier message coach est un contexte social, pas une source de verite planning.",
+        "Ne mentionne aucun jour, duree, zone, sport ou prochaine seance sans grounding explicite.",
         "La phrase fallback technique 'Carre, on garde ca.' est reservee aux outages; ne l'utilise pas en sortie composee.",
         "Exemple si le dernier coach posait une question ouverte et le user ferme: Carre, on s'arrete la.",
         "Exemple si le dernier coach proposait 36 min footing et le user valide: Parfait. Tu deroules ca tranquille.",
@@ -262,9 +268,23 @@ def compose_plan_lookup_reply(
     original_llm_reply: str,
     memory_actions_applied: tuple[str, ...] = (),
     execution_actions_applied: tuple[str, ...] = (),
+    grounding: ReplyGroundingPacket | None = None,
     request_text_fn: RequestTextFn = request_text,
+    verifier_text_fn: RequestTextFn = request_text,
 ) -> str | None:
-    """Compose a factual read-only reply and reject obvious fact drift."""
+    """Compose a factual read-only reply and semantically verify against truth."""
+    extra_facts = (
+        "Response type: plan_lookup",
+        "Aucun changement planning n'a ete commit.",
+        "Question factuelle: ne change aucun fait date, jour, duree, distance, zone, intensite ou statut.",
+        "Ne pose pas de question au user: reponds au lookup et ferme le tour.",
+        "Si tu ne peux pas reformuler sans alterer les faits, garde le contenu du brouillon.",
+    )
+    if grounding is not None:
+        extra_facts = extra_facts + (
+            "Grounding autoritaire disponible ci-dessous; les faits planning doivent venir de lui.",
+            *render_grounding_packet_for_prompt(grounding),
+        )
     context = FinalReplyContext(
         user_text=user_text,
         original_llm_reply=original_llm_reply,
@@ -273,15 +293,27 @@ def compose_plan_lookup_reply(
         allowed_to_claim_mutation=False,
         pipeline="conversation",
         pipeline_capability="plan_lookup",
-        extra_facts=(
-            "Response type: plan_lookup",
-            "Aucun changement planning n'a ete commit.",
-            "Question factuelle: ne change aucun fait date, jour, duree, distance, zone, intensite ou statut.",
-            "Ne pose pas de question au user: reponds au lookup et ferme le tour.",
-            "Si tu ne peux pas reformuler sans alterer les faits, garde le contenu du brouillon.",
-        ),
+        extra_facts=extra_facts,
     )
     reply = compose_final_reply(context, request_text_fn=request_text_fn)
+    if grounding is not None:
+        verified = verify_factual_reply(
+            reply,
+            grounding=grounding,
+            pipeline_capability="plan_lookup",
+            request_text_fn=verifier_text_fn,
+        )
+        if verified:
+            return verified
+        verified_original = verify_factual_reply(
+            original_llm_reply,
+            grounding=grounding,
+            pipeline_capability="plan_lookup",
+            request_text_fn=verifier_text_fn,
+        )
+        if verified_original:
+            return verified_original
+        return None
     if is_valid_plan_lookup_reply(reply, original_llm_reply=original_llm_reply):
         return str(reply).strip()
     if is_valid_plan_lookup_reply(original_llm_reply, original_llm_reply=original_llm_reply):
@@ -302,10 +334,80 @@ def is_valid_plan_lookup_reply(reply: str | None, *, original_llm_reply: str) ->
     )
     if not is_valid_final_reply(reply, context):
         return False
-    return _preserves_plan_lookup_fact_tokens(
-        str(reply),
-        source_text=original_llm_reply,
+    return True
+
+
+def build_factual_reply_verifier_prompt(
+    *,
+    outgoing_reply: str,
+    grounding: ReplyGroundingPacket,
+    pipeline_capability: str,
+) -> tuple[str, str]:
+    """Build a semantic verifier prompt from DB grounding and the reply only."""
+    system = (
+        f"{coach_voice.COACH_VOICE_RULES}\n\n"
+        "Tu es le verificateur factualite FitMAS.\n"
+        "Tu ne lis pas le message utilisateur et tu ne deduis aucune intention.\n"
+        "Tu compares uniquement le grounding backend autoritaire avec la reponse sortante.\n"
+        "Retourne uniquement un JSON strict: "
+        '{"verdict":"allow|repair","reason":"court","repaired_reply":"texte si repair"}'
     )
+    lines = [
+        f"Capacite pipeline: {pipeline_capability}",
+        "Grounding autoritaire:",
+        *render_grounding_packet_for_prompt(grounding),
+        "",
+        "Reponse sortante a verifier:",
+        outgoing_reply,
+        "",
+        "ALLOW seulement si chaque jour, date, statut, sport, duree, zone, seance ou trou planning mentionne est supporte par le grounding.",
+        "REPAIR si la reponse contredit le grounding, ajoute un jour/date absent, ou dit qu'un creneau est vide alors qu'une session existe.",
+        "REPAIR si elle transforme une question de verification planning en relance au user au lieu de donner la verite disponible.",
+        "En repair, garde 1-2 phrases courtes, sans nom technique, sans inventer de nouvelle action.",
+    ]
+    if pipeline_capability == "plan_lookup":
+        lines.append("Pour plan_lookup: ne pose pas de question au user; donne la reponse factuelle et ferme.")
+    return system, "\n".join(lines)
+
+
+def verify_factual_reply(
+    reply: str | None,
+    *,
+    grounding: ReplyGroundingPacket,
+    pipeline_capability: str,
+    request_text_fn: RequestTextFn = request_text,
+) -> str | None:
+    """Verify or repair a reply against authoritative grounding facts."""
+    if not reply:
+        return None
+    text = str(reply).strip()
+    if pipeline_capability == "plan_lookup" and "?" in text:
+        return None
+    context = FinalReplyContext(
+        allowed_to_claim_mutation=False,
+        pipeline="conversation" if pipeline_capability == "plan_lookup" else pipeline_capability,
+        pipeline_capability=pipeline_capability,
+    )
+    if not is_valid_final_reply(text, context):
+        return None
+
+    system, prompt = build_factual_reply_verifier_prompt(
+        outgoing_reply=text,
+        grounding=grounding,
+        pipeline_capability=pipeline_capability,
+    )
+    raw = request_text_fn(system=system, prompt=prompt, max_tokens=450)
+    verdict = _parse_post_event_verdict(raw)
+    if verdict is None:
+        return None
+    if verdict.get("verdict") == "allow":
+        return text
+    repaired = str(verdict.get("repaired_reply") or "").strip()
+    if pipeline_capability == "plan_lookup" and "?" in repaired:
+        return None
+    if repaired and is_valid_final_reply(repaired, context):
+        return repaired
+    return None
 
 
 def is_valid_close_turn_reply(reply: str | None, *, allow_outage_fallback: bool = False) -> bool:
@@ -343,55 +445,12 @@ def _sentence_count(text: str) -> int:
     return max(1, endings)
 
 
-_NUMBER_RE = re.compile(r"\b\d+(?:[,.]\d+)?\b")
-_ZONE_RE = re.compile(r"\bz\s*[1-7]\b", re.IGNORECASE)
-_FACT_WORDS = {
-    "lundi",
-    "mardi",
-    "mercredi",
-    "jeudi",
-    "vendredi",
-    "samedi",
-    "dimanche",
-    "aujourd hui",
-    "demain",
-    "hier",
-    "planned",
-    "adapted",
-    "done",
-    "skipped",
-    "fait",
-    "faite",
-    "non fait",
-    "non faite",
-    "prevu",
-    "prevue",
-    "planifie",
-    "planifiee",
-}
-
-
-def _preserves_plan_lookup_fact_tokens(reply: str, *, source_text: str) -> bool:
-    source_tokens = _plan_lookup_fact_tokens(source_text)
-    reply_tokens = _plan_lookup_fact_tokens(reply)
-    return source_tokens <= reply_tokens and reply_tokens <= source_tokens
-
-
-def _plan_lookup_fact_tokens(text: str) -> set[str]:
-    normalized = coach_voice.normalize_for_voice_guard(text)
-    tokens = {match.group(0).replace(",", ".").replace(" ", "") for match in _NUMBER_RE.finditer(normalized)}
-    tokens.update(match.group(0).replace(" ", "").lower() for match in _ZONE_RE.finditer(normalized))
-    for word in _FACT_WORDS:
-        if word in normalized:
-            tokens.add(word)
-    return tokens
-
-
 def build_close_turn_reply_verifier_prompt(
     *,
     user_text: str,
     previous_agent_text: str | None,
     outgoing_reply: str,
+    grounding: ReplyGroundingPacket | None = None,
 ) -> tuple[str, str]:
     """Build a semantic verifier prompt for terminal social closes."""
     system = (
@@ -406,7 +465,12 @@ def build_close_turn_reply_verifier_prompt(
     lines = [
         "Intent deja decide: terminal_close",
         f"Dernier message coach visible: {previous_agent_text or '(absent)'}",
+        f"Dernier message coach visible (contexte social, pas source de verite planning): {previous_agent_text or '(absent)'}",
         f"Message user: {user_text or '(absent)'}",
+    ]
+    if grounding is not None:
+        lines.extend(["Grounding autoritaire:", *render_grounding_packet_for_prompt(grounding)])
+    lines.extend([
         "Reponse sortante a verifier:",
         outgoing_reply,
         "",
@@ -414,12 +478,12 @@ def build_close_turn_reply_verifier_prompt(
         "- ferme le tour en 1-2 phrases courtes;",
         "- ne pose aucune question et ne relance pas le user;",
         "- n'explique pas le routage social et ne cite pas le message user;",
-        "- n'ajoute aucun jour, duree, zone, sport, seance ou action absent du dernier message coach/user;",
+        "- n'ajoute aucun jour, duree, zone, sport, seance ou action absent du grounding ou du dernier message user;",
         "- ne claim aucun changement planning, aucune confirmation et aucun commit;",
         "- n'utilise pas la phrase fallback technique 'Carre, on garde ca.'.",
         "REPAIR si une regle est violee.",
         "En repair, ecris une fermeture naturelle courte. Si les faits sont insuffisants, reste generique.",
-    ]
+    ])
     return system, "\n".join(lines)
 
 
@@ -428,6 +492,7 @@ def verify_close_turn_reply(
     *,
     user_text: str,
     previous_agent_text: str | None,
+    grounding: ReplyGroundingPacket | None = None,
     request_text_fn: RequestTextFn = request_text,
 ) -> str | None:
     """Verify or repair a terminal close reply through a semantic LLM judge."""
@@ -438,6 +503,7 @@ def verify_close_turn_reply(
         user_text=user_text,
         previous_agent_text=previous_agent_text,
         outgoing_reply=text,
+        grounding=grounding,
     )
     raw = request_text_fn(system=system, prompt=prompt, max_tokens=350)
     verdict = _parse_post_event_verdict(raw)
