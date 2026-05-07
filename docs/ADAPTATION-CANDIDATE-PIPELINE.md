@@ -46,6 +46,22 @@ User message
 -> User reply
 ```
 
+## Etat — 7 mai 2026
+
+Implémente localement :
+
+- `week_coherence`: `WeekFacts`, `CoherenceFinding`, `WeekCoherenceScore` ;
+- `plan_patch_candidates`: `PlanPatchCandidate` + validation de contrat patch-set ;
+- `plan_patch_candidate_generator`: generator LLM borné, mocké en tests ;
+- `plan_patch_candidate_evaluator`: contrat -> flatten -> validation runtime -> facts/score/findings -> `policy_hint`.
+
+Pas encore branché :
+
+- decision policy finale ;
+- pending_choice ;
+- final composer adaptation ;
+- conversation pipeline.
+
 ## Frontieres
 
 - Le LLM ne parle pas au user dans la phase candidate.
