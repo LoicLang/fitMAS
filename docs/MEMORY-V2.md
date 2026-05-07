@@ -9,6 +9,21 @@ read_when:
 
 # FitMAS Memory V2
 
+## Statut Roadmap — 7 mai 2026
+
+Gros chantier memoire : **pas maintenant**.
+
+Position actuelle : garder cette grille en tete pendant les chantiers
+sport/prompt, tagger progressivement les facts quand c'est peu couteux, mais ne
+pas migrer la memoire tant que le comportement sportif cible n'est pas stabilise.
+
+```text
+DurableProfile     = objectifs, sports, preferences stables, contraintes recurrentes
+WorkingMemory      = fatigue recente, douleur, indisponibilite temporaire, voyage
+ExecutionReality   = fait, pas fait, partiel, offplan, claim utilisateur
+ConversationFrame  = question ouverte, pending confirmation, hypothese en cours
+```
+
 ## But
 
 Faire de la memoire FitMAS un systeme :

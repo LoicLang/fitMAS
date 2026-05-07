@@ -28,6 +28,30 @@ Si un autre doc diverge :
 
 **Un premier coach que Loïc reconnaît, comprend, et a envie de rouvrir demain.**
 
+## Roadmap Active — 7 mai 2026
+
+Ordre courant :
+
+```text
+1. Excellence sportive
+2. Observabilite decide() None
+3. Prompt/contexte
+4. Cadrage memoire leger
+5. Refactor global
+6. UX/UI
+```
+
+Regle d'arbitrage : sport d'abord. Le prochain gros gain produit reste une
+semaine sportivement credible, adaptable et relue. Le chantier prompt/contexte
+vient ensuite pour fiabiliser les couches LLM. La memoire reste en cadrage
+conceptuel seulement : pas de refactor structurel tant que le comportement
+sportif cible n'est pas stabilise.
+
+Docs a ouvrir selon le chantier :
+- excellence sportive : `docs/SPORT-QUALITY-REVIEW.md`
+- prompt/contexte + `decide() None` : `docs/PROMPT-CONTEXT-REFACTOR.md`
+- memoire : `docs/MEMORY-V2.md`
+
 ## Checkpoint courant — 4 mai 2026
 
 ### Incident dogfood briefing matin du 2 mai
@@ -76,7 +100,7 @@ L'audit declenche par cet incident a confirme 3 failles structurelles connexes :
 | P1-sexies | ✅ Composer final `no_change` — `CoachDecision(no_change)` + compat legacy passent par `final_reply.py`, avec faits memoire/execution appliques — implemente localement 5 mai 2026 | 0.5j | `docs/superpowers/plans/2026-05-05-no-change-final-composer.md` |
 | P1-septies | ✅ Composer final `plan_lookup` — lecture factuelle via `final_reply.py` avec guard anti-drift chiffres/jours/zones/statuts — implemente localement 5 mai 2026 | 0.5j | `docs/superpowers/plans/2026-05-05-plan-lookup-final-composer.md` |
 | P1-nonies | ✅ Grounded final speech + heartbeat future truth — temporal refs typees, grounding packet partage, verifier semantique LLM pour lookup planning/confirmation, idempotency key durable, `PlanWindowTruth` heartbeat — implemente localement 7 mai 2026 | 0.5-1j | `docs/superpowers/plans/2026-05-07-grounded-final-speech-and-heartbeat.md` |
-| P1-octies | 🔥 Prompt/context optimization pass + `decide() returned None` reduction — reduire et specialiser le contexte donne a chaque couche LLM (`turn_planner`, `decide`, composers, verifiers, heartbeat), auditer les prompts qui diluent la decision, et mesurer/reduire les retours `None` du decisionnaire — prochain chantier dogfood | 1-2j | section "Chantier P1-octies" ci-dessous |
+| P1-octies | 🔥 Prompt/context optimization pass + `decide() returned None` reduction — reduire et specialiser le contexte donne a chaque couche LLM (`turn_planner`, `decide`, composers, verifiers, heartbeat), auditer les prompts qui diluent la decision, et mesurer/reduire les retours `None` du decisionnaire — prochain chantier dogfood | 1-2j | `docs/PROMPT-CONTEXT-REFACTOR.md` + section ci-dessous |
 
 **Total restant avant B0 : 1-2 jours**. Phase A+ est fermee localement, et P1-nonies a retire les contradictions factuelles visibles les plus dangereuses. La prochaine lane reste P1-octies : audit prompt/contexte et baisse des `decide() returned None`, puis dogfood court et B0 si stable.
 
@@ -112,38 +136,18 @@ LLM/DB structures.
 
 ### Chantier P1-octies — Prompt/context optimization pass 🔥
 
-Objectif : reprendre systematiquement les prompts et contextes de chaque couche
-LLM pour donner **juste assez de verite** sans tuer la voix ni pousser le modele
-a completer les trous.
+Prochain chantier dogfood apres la passe sportive.
 
-Cause dogfood : la lane `close_turn` et les composers finaux ont montre le bon
-pattern architectural (decision machine -> composer -> verifier), mais aussi une
-fragilite : quand un composer recoit peu de faits et une consigne trop vague
-("sois contextualise"), il peut inventer un detail plausible ou rouvrir le tour.
-Ce n'est pas un probleme a regler par des parsers deterministes sur la sortie ;
-c'est un probleme de contrat entre couches LLM.
+But : donner a chaque couche LLM juste le contexte et le contrat dont elle a
+besoin. Commencer par tracer les `decide() returned None`, puis introduire un
+`ConversationContextPack`, un `PromptContract` par intent et des snapshots de
+prompts.
 
-Scope recommande :
-- inventorier les entrees exactes de `turn_planner`, `decide`, composers,
-  verifiers, heartbeat et tool loop ;
-- separer les faits necessaires, les consignes de voix, les contraintes de
-  validation et les exemples ;
-- reduire les contextes des lanes terminales/no-op ;
-- instrumenter les cas `decide() returned None` par intent, provider, taille de
-  prompt, tool-use et raison de repair/fallback ;
-- reduire les `None` en simplifiant le contrat de sortie, pas en ajoutant des
-  parsers de texte utilisateur libre ;
-- rendre explicite la mission de chaque couche : detecter, decider, composer,
-  verifier, jamais tout faire a la fois ;
-- ajouter des golden prompts/tests pour les tours courts dogfood : ack,
-  lookup plan, confirmation pending, slot court, signal sante.
+Frontiere : pas de parser deterministe sur texte utilisateur libre, pas de gros
+refactor memoire, pas de nouvelles regles de prompt pour masquer une cause
+structurelle.
 
-Critere de sortie :
-- chaque couche LLM a un contrat court et documente ;
-- les facts injectes sont justifies par la mission de la couche ;
-- les outputs visibles passent par composer/verifier quand il y a risque de
-  drift, sans parser deterministe de texte utilisateur libre ;
-- smoke reel Telegram sur les scenarios dogfood courts reste naturel et factuel.
+Doc canonique : `docs/PROMPT-CONTEXT-REFACTOR.md`.
 
 ### Deploiement prod — 4 mai 2026
 
