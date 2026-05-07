@@ -59,13 +59,12 @@ Implémente localement :
 - `final_reply.compose_plan_adaptation_reply`: composer post-policy qui claim seulement des events commits,
   traite `pending` comme proposition et `block` comme blocage.
 - `conversation_pipeline`: branche candidate conservative pour `primary_intent=plan_mutation` pur,
-  sans pending actif, sans calibration ouverte, sans signal sante/execution.
+  sans pending actif ni calibration ouverte.
+- `conversation_pipeline`: extension post-`decide()` pour les tours mixtes sante/execution + adaptation :
+  `decide()` produit d'abord les `memory_actions` / `execution_actions`, puis la voie candidate simule
+  et decide l'adaptation a partir des artefacts structures.
 - `pending_choice`: persiste les options comme `plan_patch_choice`; le tour suivant le LLM resout
   via `pending_resolution.accept_pending.selected_candidate_id`, puis le runtime applique seulement ce candidat.
-
-Pas encore branché :
-
-- extension aux tours mixtes execution/sante + adaptation.
 
 ## Frontieres
 

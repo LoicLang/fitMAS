@@ -1602,6 +1602,146 @@ class FitMASCoreFlowsTest(unittest.TestCase):
         self.assertEqual(refreshed.duration_min, 50)
         self.assertIsNone(active_pending)
 
+    def test_mixed_health_and_plan_mutation_keeps_memory_then_uses_candidate_flow(self) -> None:
+        _, session = self._create_plan_with_tomorrow_session()
+        from fitmas.plan_patch_adaptation_policy import AdaptationPolicyDecision
+        from fitmas.plan_patch_candidate_evaluator import EvaluatedPlanPatchCandidate
+        from fitmas.plan_patch_candidates import PlanPatchCandidate, PlanPatchCandidateValidation
+        from fitmas.week_coherence import WeekCoherenceScore
+
+        candidate_patch = PlanPatch(
+            operations=[
+                PlanPatchOperation(
+                    operation_type="update_session",
+                    target_session_id=session.id,
+                    new_duration_min=30,
+                    new_intensity="easy",
+                    rationale="Adapter apres douleur genou.",
+                )
+            ],
+            coach_message="Candidate only.",
+        )
+        candidate = PlanPatchCandidate(
+            id="reduce_tomorrow",
+            patches=(candidate_patch,),
+            rationale="Alleger la seance de demain.",
+            expected_tradeoff="On garde le mouvement sans charger le genou.",
+            confidence=0.83,
+            assumptions=("Le signal genou concerne la seance de demain.",),
+            risk_notes=(),
+            created_from_plan_id="plan_current",
+            created_from_plan_version=1,
+        )
+        evaluated = EvaluatedPlanPatchCandidate(
+            candidate=candidate,
+            candidate_validation=PlanPatchCandidateValidation(
+                status="valid",
+                patch_count=1,
+                operation_count=1,
+                operation_results=(),
+                summary="valid",
+            ),
+            patch=candidate_patch,
+            patch_validation=PlanPatchValidation(status="valid", operation_results=(), summary="valid"),
+            week_context=None,
+            facts=None,
+            score=WeekCoherenceScore(
+                total=78,
+                recovery=82,
+                goal_alignment=75,
+                progression=74,
+                adherence=85,
+                readiness_fit=70,
+                constraint_fit=85,
+                risk=75,
+            ),
+            findings=(),
+            score_delta=-6,
+            policy_hint="ask_confirmation",
+            evaluation_summary="Candidate possible, confirmation recommandee.",
+        )
+        policy_decision = AdaptationPolicyDecision(
+            action="pending_confirmation",
+            selected_candidate_id="reduce_tomorrow",
+            candidate_options=(),
+            reason="Candidate possible, confirmation recommandee.",
+            user_facing_reason="Candidate possible, confirmation recommandee.",
+            requires_confirmation_reason="Candidate possible, confirmation recommandee.",
+            risk_level="medium",
+        )
+        compose_calls: list[dict] = []
+
+        original_plan_turn = api_messages.plan_conversation_turn
+        original_decide = api_messages.decide
+        original_extract_facts = api_messages.extract_facts
+        original_generate = conversation_pipeline.generate_plan_patch_candidates
+        original_evaluate = conversation_pipeline.evaluate_plan_patch_candidate
+        original_policy = conversation_pipeline.decide_adaptation_policy
+        original_adaptation_compose = conversation_pipeline.final_reply.compose_plan_adaptation_reply
+        original_no_change_compose = conversation_pipeline.final_reply.compose_no_change_reply
+        try:
+            api_messages.plan_conversation_turn = lambda *args, **kwargs: SimpleNamespace(
+                primary_intent="health_signal",
+                secondary_intents=("plan_mutation",),
+                mutation_signal=True,
+                has_plan_mutation=True,
+                confidence=0.93,
+            )
+            api_messages.decide = lambda *args, **kwargs: CoachDecision(
+                response_type="no_change",
+                rationale="signal sante + besoin adaptation",
+                fitmas_message="Je note le genou avant de toucher la seance.",
+                memory_actions=[
+                    llm.HealthSignalAction(
+                        type="record_health_signal",
+                        health_signal="douleur genou",
+                        body_area="genou",
+                        severity="unknown",
+                        status="new",
+                        confidence=0.92,
+                        evidence="genou douloureux",
+                    )
+                ],
+            )
+            api_messages.extract_facts = lambda *args, **kwargs: []
+            conversation_pipeline.generate_plan_patch_candidates = lambda *args, **kwargs: (candidate,)
+            conversation_pipeline.evaluate_plan_patch_candidate = lambda *args, **kwargs: evaluated
+            conversation_pipeline.decide_adaptation_policy = lambda *args, **kwargs: policy_decision
+
+            def fake_adaptation_compose(**kwargs):
+                compose_calls.append(kwargs)
+                return "Genou note. Je te propose d'alleger demain; tu confirmes ?"
+
+            conversation_pipeline.final_reply.compose_plan_adaptation_reply = fake_adaptation_compose
+            conversation_pipeline.final_reply.compose_no_change_reply = lambda *args, **kwargs: "Memoire seule."
+
+            result = self.client.post(
+                "/api/v0/messages",
+                json={"text": "ok mais genou douloureux, adapte demain"},
+            ).json()
+        finally:
+            api_messages.plan_conversation_turn = original_plan_turn
+            api_messages.decide = original_decide
+            api_messages.extract_facts = original_extract_facts
+            conversation_pipeline.generate_plan_patch_candidates = original_generate
+            conversation_pipeline.evaluate_plan_patch_candidate = original_evaluate
+            conversation_pipeline.decide_adaptation_policy = original_policy
+            conversation_pipeline.final_reply.compose_plan_adaptation_reply = original_adaptation_compose
+            conversation_pipeline.final_reply.compose_no_change_reply = original_no_change_compose
+
+        turns = repo.get_recent_conversation_turns(self.db, self.user.id, limit=1)
+        pending = repo.get_active_pending_mutation_confirmation(self.db, self.user.id)
+
+        self.assertEqual(
+            result["assistant_message"]["text"],
+            "Genou note. Je te propose d'alleger demain; tu confirmes ?",
+        )
+        self.assertEqual(turns[0].response_mode, "plan_adaptation_pending_confirmation")
+        self.assertIn('"category": "health"', turns[0].memory_writes_json)
+        self.assertIsNotNone(pending)
+        self.assertEqual(pending.mutation_type, "plan_patch")
+        self.assertIn("Memoire utilisateur mise a jour.", compose_calls[0]["extra_facts"])
+
     def test_blocked_mutation_does_not_reply_as_applied(self) -> None:
         _, session = self._create_plan_for_today()
         original_decide = api_messages.decide

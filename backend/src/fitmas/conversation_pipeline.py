@@ -400,13 +400,14 @@ def run_conversation_turn(
     outcome: ConversationTurnOutcome | None = None
     if _is_coach_decision(decision):
         turn_context["coach_decision"] = _coach_decision_payload(decision)
-        turn_context["coach_decision_action_result"] = _apply_coach_decision_actions(
+        action_result = _apply_coach_decision_actions(
             db=db,
             user=user,
             decision=decision,
             turn_memory_writes=turn_memory_writes,
             unresolved_execution_followup=unresolved_execution_followup_text,
         )
+        turn_context["coach_decision_action_result"] = action_result
         pending_outcome = _apply_pending_resolution(
             db=db,
             user=user,
@@ -416,9 +417,41 @@ def run_conversation_turn(
         if pending_outcome is not None:
             outcome = pending_outcome
             decision = None
-        elif decision.response_type == "mutation_decision" and decision.mutation_decision is not None:
+        if (
+            outcome is None
+            and decision is not None
+            and _should_try_mixed_plan_adaptation_after_decide(decision=decision, turn_plan=turn_plan)
+        ):
+            mixed_adaptation_outcome = _maybe_handle_plan_adaptation_candidates(
+                db=db,
+                user=user,
+                user_text=payload.text,
+                turn_plan=turn_plan,
+                pending_confirmation=pending_confirmation,
+                open_calibration_need=open_calibration_need,
+                scheduled_sessions=state.scheduled_sessions,
+                coach_bundle=coach_bundle,
+                grounding=grounding_packet,
+                turn_context=turn_context,
+                mode="post_decide_mixed",
+                action_result=action_result,
+            )
+            if mixed_adaptation_outcome is not None:
+                outcome = mixed_adaptation_outcome
+                decision = None
+        if (
+            outcome is None
+            and decision is not None
+            and decision.response_type == "mutation_decision"
+            and decision.mutation_decision is not None
+        ):
             decision = decision.mutation_decision
-        elif decision.response_type == "requires_confirmation" and decision.plan_patch is not None:
+        elif (
+            outcome is None
+            and decision is not None
+            and decision.response_type == "requires_confirmation"
+            and decision.plan_patch is not None
+        ):
             validation = validate_plan_patch(
                 db,
                 plan_id=0,
@@ -468,7 +501,12 @@ def run_conversation_turn(
                         pending_confirmation_id=pending_row.id,
                     )
             decision = None
-        elif decision.response_type == "plan_patch" and decision.plan_patch is not None:
+        elif (
+            outcome is None
+            and decision is not None
+            and decision.response_type == "plan_patch"
+            and decision.plan_patch is not None
+        ):
             service_result = apply_patch_for_user(
                 db,
                 user=user,
@@ -540,7 +578,7 @@ def run_conversation_turn(
                 )
             logger.info("LLM coach patch reply (%s): %s", outcome.response_mode, reply_text[:120])
             decision = None
-        else:
+        elif outcome is None and decision is not None:
             reply_text = decision.confirmation_reason or decision.fitmas_message
             response_mode = decision.response_type
             if decision.response_type == "no_change":
@@ -1942,12 +1980,15 @@ def _maybe_handle_plan_adaptation_candidates(
     coach_bundle,
     grounding: ReplyGroundingPacket | None,
     turn_context: dict[str, object],
+    mode: str = "pre_decide_pure",
+    action_result: dict | None = None,
 ) -> ConversationTurnOutcome | None:
     if not _should_use_plan_adaptation_candidate_flow(
         turn_plan=turn_plan,
         pending_confirmation=pending_confirmation,
         open_calibration_need=open_calibration_need,
         scheduled_sessions=scheduled_sessions,
+        mode=mode,
     ):
         return None
 
@@ -2002,6 +2043,7 @@ def _maybe_handle_plan_adaptation_candidates(
         coach_bundle=coach_bundle,
         scheduled_sessions=scheduled_sessions,
         grounding=grounding,
+        action_result=action_result,
     )
 
 
@@ -2011,6 +2053,7 @@ def _should_use_plan_adaptation_candidate_flow(
     pending_confirmation,
     open_calibration_need,
     scheduled_sessions: list[Any],
+    mode: str = "pre_decide_pure",
 ) -> bool:
     if turn_plan is None:
         return False
@@ -2022,11 +2065,29 @@ def _should_use_plan_adaptation_candidate_flow(
         return False
     primary_intent = str(getattr(turn_plan, "primary_intent", "") or "")
     secondary_intents = {str(item) for item in tuple(getattr(turn_plan, "secondary_intents", ()) or ())}
+    if mode == "post_decide_mixed":
+        mixed_intents = {"health_signal", "execution_report"}
+        if primary_intent in mixed_intents or secondary_intents.intersection(mixed_intents):
+            return bool(getattr(turn_plan, "has_plan_mutation", False))
+        return False
     if primary_intent != "plan_mutation":
         return False
     if secondary_intents.intersection({"health_signal", "execution_report"}):
         return False
     return bool(getattr(turn_plan, "has_plan_mutation", False))
+
+
+def _should_try_mixed_plan_adaptation_after_decide(*, decision: Any, turn_plan) -> bool:
+    if not _is_coach_decision(decision):
+        return False
+    if str(getattr(decision, "response_type", "") or "") not in {"no_change", "reply"}:
+        return False
+    if not bool(getattr(turn_plan, "has_plan_mutation", False)):
+        return False
+    primary_intent = str(getattr(turn_plan, "primary_intent", "") or "")
+    secondary_intents = {str(item) for item in tuple(getattr(turn_plan, "secondary_intents", ()) or ())}
+    mixed_intents = {"health_signal", "execution_report"}
+    return primary_intent in mixed_intents or bool(secondary_intents.intersection(mixed_intents))
 
 
 def _outcome_from_adaptation_policy(
@@ -2039,12 +2100,15 @@ def _outcome_from_adaptation_policy(
     coach_bundle,
     scheduled_sessions: list[Any],
     grounding: ReplyGroundingPacket | None,
+    action_result: dict | None = None,
 ) -> ConversationTurnOutcome | None:
+    extra_facts = _adaptation_action_extra_facts(db=db, user=user, action_result=action_result)
     if policy_decision.action == "block":
         reply_text = final_reply.compose_plan_adaptation_reply(
             policy_decision=policy_decision,
             user_text=user_text,
             candidate_summaries=_candidate_summaries_for_reply(evaluated),
+            extra_facts=extra_facts,
         ) or final_reply.outage_fallback_reply(
             final_reply.build_plan_adaptation_reply_context(
                 policy_decision=policy_decision,
@@ -2077,6 +2141,7 @@ def _outcome_from_adaptation_policy(
             policy_decision=policy_decision,
             user_text=user_text,
             candidate_summaries=_candidate_summaries_for_reply(evaluated),
+            extra_facts=extra_facts,
         ) or final_reply.outage_fallback_reply(
             final_reply.build_plan_adaptation_reply_context(
                 policy_decision=policy_decision,
@@ -2113,6 +2178,7 @@ def _outcome_from_adaptation_policy(
             policy_decision=policy_decision,
             user_text=user_text,
             candidate_summaries=_candidate_summaries_for_reply((selected,)),
+            extra_facts=extra_facts,
         ) or _build_plan_patch_confirmation_prompt(service_result, grounding=grounding)
         return ConversationTurnOutcome(
             extraction=Extraction(confidence=0.85),
@@ -2144,6 +2210,7 @@ def _outcome_from_adaptation_policy(
             user_text=user_text,
             committed_events=committed_events,
             candidate_summaries=_candidate_summaries_for_reply((selected,)),
+            extra_facts=extra_facts,
         ) or _applied_plan_patch_reply(service_result, fallback=selected.patch.coach_message)
         return ConversationTurnOutcome(
             extraction=Extraction(confidence=0.85),
@@ -2305,6 +2372,20 @@ def _committed_event_summaries(service_result: PlanPatchServiceResult | None) ->
         if summary and summary not in summaries:
             summaries.append(summary)
     return tuple(summaries)
+
+
+def _adaptation_action_extra_facts(
+    *,
+    db: Session,
+    user,
+    action_result: dict | None,
+) -> tuple[str, ...]:
+    if not action_result:
+        return ()
+    return (
+        *_memory_action_phrases_for_final_reply(action_result),
+        *_execution_action_phrases_for_final_reply(db, user=user, action_result=action_result),
+    )
 
 
 def _should_route_availability_context_to_llm(
