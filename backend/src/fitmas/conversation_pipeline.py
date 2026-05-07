@@ -54,12 +54,14 @@ from fitmas.mutation_permissions import (
     build_confirmation_prompt,
     default_confirmation_expiry,
     deserialize_mutation_decision,
+    deserialize_plan_patch_choice_confirmation,
     deserialize_plan_patch_confirmation,
+    serialize_plan_patch_choice_confirmation,
     serialize_plan_patch_confirmation,
     serialize_mutation_decision,
 )
 from fitmas.plan_mutation_service import PlanPatchServiceResult, apply_decisions_for_user, apply_patch_for_user
-from fitmas.plan_patch import plan_patch_from_mutation_decisions, validate_plan_patch
+from fitmas.plan_patch import PlanPatch, plan_patch_from_mutation_decisions, validate_plan_patch
 from fitmas.plan_patch_adaptation_policy import AdaptationPolicyDecision, decide_adaptation_policy
 from fitmas.plan_patch_candidate_evaluator import EvaluatedPlanPatchCandidate, evaluate_plan_patch_candidate
 from fitmas.plan_patch_candidate_generator import CandidateGenerationInput, generate_plan_patch_candidates
@@ -833,19 +835,30 @@ def _pending_confirmation_context_for_prompt(pending_confirmation) -> str | None
         return None
     reason = _safe_user_visible_pending_text(str(pending_confirmation.reason or "").strip())
     summary = _safe_user_visible_pending_text(str(pending_confirmation.summary or "").strip())
-    return (
-        "Confirmation planning en attente (artefact machine, pas une decision deja appliquee):\n"
-        f"- id: {pending_confirmation.id}\n"
-        f"- type: {pending_confirmation.mutation_type}\n"
-        f"- raison: {reason}\n"
-        f"- resume: {summary}\n"
-        "- lis le nouveau message dans ce contexte et decide toi-meme.\n"
-        "- si le user accepte clairement, retourne `pending_resolution.type=accept_pending`.\n"
-        "- si le user refuse, retourne `pending_resolution.type=reject_pending`.\n"
-        "- si le user modifie la demande, retourne `modify_pending` avec requested_changes; ne forge pas un nouveau patch libre.\n"
-        "- si le user parle d'autre chose, retourne `ignore` et reponds au nouveau message.\n"
-        f"- payload: {pending_confirmation.decision_json}\n"
-    )
+    mutation_type = str(pending_confirmation.mutation_type or "").strip()
+    choice_instructions: tuple[str, ...] = ()
+    if mutation_type == "plan_patch_choice":
+        choice_instructions = (
+            "- ce pending contient plusieurs options candidates structurees.",
+            "- si le user choisit une option, retourne `pending_resolution.type=accept_pending` "
+            "avec `selected_candidate_id` egal a l'id exact de l'option choisie.",
+            "- si le choix est ambigu, retourne `pending_resolution.type=needs_clarification`.",
+        )
+    lines = [
+        "Confirmation planning en attente (artefact machine, pas une decision deja appliquee):",
+        f"- id: {pending_confirmation.id}",
+        f"- type: {mutation_type}",
+        f"- raison: {reason}",
+        f"- resume: {summary}",
+        "- lis le nouveau message dans ce contexte et decide toi-meme.",
+        "- si le user accepte clairement, retourne `pending_resolution.type=accept_pending`.",
+        "- si le user refuse, retourne `pending_resolution.type=reject_pending`.",
+        "- si le user modifie la demande, retourne `modify_pending` avec requested_changes; ne forge pas un nouveau patch libre.",
+        "- si le user parle d'autre chose, retourne `ignore` et reponds au nouveau message.",
+        *choice_instructions,
+        f"- payload: {pending_confirmation.decision_json}",
+    ]
+    return "\n".join(lines) + "\n"
 
 
 def _applied_event_summary(service_result, decision) -> str | None:
@@ -1023,6 +1036,14 @@ def _accept_pending_confirmation(
     pending_confirmation,
 ) -> ConversationTurnOutcome:
     try:
+        if str(getattr(pending_confirmation, "mutation_type", "") or "") == "plan_patch_choice":
+            return _accept_pending_plan_patch_choice(
+                db=db,
+                user=user,
+                decision=decision,
+                pending_confirmation=pending_confirmation,
+            )
+
         if str(getattr(pending_confirmation, "mutation_type", "") or "") == "plan_patch":
             patch = deserialize_plan_patch_confirmation(pending_confirmation.decision_json)
             service_result = apply_patch_for_user(
@@ -1084,6 +1105,70 @@ def _accept_pending_confirmation(
             response_mode="pending_accept_error",
             mutation_applied=False,
         )
+
+
+def _accept_pending_plan_patch_choice(
+    *,
+    db: Session,
+    user,
+    decision: Any,
+    pending_confirmation,
+) -> ConversationTurnOutcome:
+    resolution = getattr(decision, "pending_resolution", None)
+    selected_candidate_id = str(getattr(resolution, "selected_candidate_id", "") or "").strip()
+    if not selected_candidate_id:
+        return ConversationTurnOutcome(
+            extraction=Extraction(confidence=0.85),
+            reply_text=str(
+                getattr(decision, "fitmas_message", "")
+                or "Je veux bien, mais choisis une des options proposees."
+            ),
+            response_mode="pending_choice_needs_selection",
+            mutation_applied=False,
+            pending_confirmation=True,
+            pending_confirmation_id=getattr(pending_confirmation, "id", None),
+        )
+
+    candidates = deserialize_plan_patch_choice_confirmation(pending_confirmation.decision_json)
+    selected = next((candidate for candidate in candidates if candidate.id == selected_candidate_id), None)
+    if selected is None:
+        return ConversationTurnOutcome(
+            extraction=Extraction(confidence=0.85),
+            reply_text=str(
+                getattr(decision, "fitmas_message", "")
+                or "Je ne retrouve pas cette option. Rechoisis parmi celles que je viens de proposer."
+            ),
+            response_mode="pending_choice_invalid_selection",
+            mutation_applied=False,
+            pending_confirmation=True,
+            pending_confirmation_id=getattr(pending_confirmation, "id", None),
+        )
+
+    patch = _patch_from_choice_candidate(selected)
+    service_result = apply_patch_for_user(
+        db,
+        user=user,
+        patch=patch,
+        source="conversation",
+        trigger_type="pending_choice_confirmation",
+        explained_to_user=True,
+        allow_requires_confirmation=True,
+    )
+    applied = _patch_was_applied(service_result)
+    if applied:
+        repo.resolve_pending_mutation_confirmation(db, pending_confirmation.id, status="accepted")
+        return ConversationTurnOutcome(
+            extraction=Extraction(confidence=0.85),
+            reply_text=_applied_plan_patch_reply(service_result, fallback=patch.coach_message),
+            response_mode="pending_choice_accepted",
+            mutation_applied=True,
+        )
+    return ConversationTurnOutcome(
+        extraction=Extraction(confidence=0.85),
+        reply_text=_blocked_plan_patch_reply(service_result),
+        response_mode="pending_choice_accept_blocked",
+        mutation_applied=False,
+    )
 
 
 def _apply_matching_legacy_pending_acceptance(
@@ -1974,6 +2059,20 @@ def _outcome_from_adaptation_policy(
         )
 
     if policy_decision.action == "pending_choice":
+        choice_candidates = _pending_choice_candidates(policy_decision, evaluated)
+        pending_row = repo.create_pending_mutation_confirmation(
+            db,
+            user_id=user.id,
+            impact_level="medium",
+            reason=policy_decision.requires_confirmation_reason or policy_decision.reason,
+            mutation_type="plan_patch_choice",
+            summary=_pending_choice_summary(choice_candidates),
+            source_text=user_text,
+            decision_json=serialize_plan_patch_choice_confirmation(
+                tuple(item.candidate for item in choice_candidates)
+            ),
+            expires_at=default_confirmation_expiry(),
+        )
         reply_text = final_reply.compose_plan_adaptation_reply(
             policy_decision=policy_decision,
             user_text=user_text,
@@ -1989,6 +2088,8 @@ def _outcome_from_adaptation_policy(
             reply_text=reply_text,
             response_mode="plan_adaptation_pending_choice",
             mutation_applied=False,
+            pending_confirmation=True,
+            pending_confirmation_id=pending_row.id,
         )
 
     selected = _selected_evaluated_candidate(policy_decision, evaluated)
@@ -2154,6 +2255,34 @@ def _selected_evaluated_candidate(
     if not selected_id:
         return None
     return next((item for item in evaluated if item.candidate.id == selected_id), None)
+
+
+def _pending_choice_candidates(
+    policy_decision: AdaptationPolicyDecision,
+    evaluated: tuple[EvaluatedPlanPatchCandidate, ...],
+) -> tuple[EvaluatedPlanPatchCandidate, ...]:
+    option_ids = set(policy_decision.candidate_options)
+    if not option_ids:
+        return evaluated
+    return tuple(item for item in evaluated if item.candidate.id in option_ids)
+
+
+def _pending_choice_summary(evaluated: tuple[EvaluatedPlanPatchCandidate, ...]) -> str:
+    if not evaluated:
+        return "Choix d'adaptation en attente."
+    option_bits = [f"{item.candidate.id}: {item.candidate.rationale}" for item in evaluated]
+    return "Options d'adaptation en attente: " + " | ".join(option_bits)
+
+
+def _patch_from_choice_candidate(candidate: PlanPatchCandidate) -> PlanPatch:
+    operations = []
+    for patch in candidate.patches:
+        operations.extend(patch.operations)
+    return PlanPatch(
+        operations=operations,
+        coach_message=candidate.rationale or candidate.patches[0].coach_message,
+        confirmation_reason=candidate.expected_tradeoff or None,
+    )
 
 
 def _candidate_summaries_for_reply(evaluated: tuple[EvaluatedPlanPatchCandidate, ...]) -> tuple[str, ...]:

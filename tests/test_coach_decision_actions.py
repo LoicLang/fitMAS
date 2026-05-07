@@ -122,6 +122,26 @@ class CoachDecisionActionsTest(unittest.TestCase):
         self.assertEqual(decision.pending_resolution.type, "modify_pending")
         self.assertEqual(decision.pending_resolution.requested_changes, "placer l'alternative vendredi")
 
+    def test_parse_coach_decision_accepts_selected_pending_choice_candidate(self) -> None:
+        decision = llm.parse_coach_decision_payload(
+            {
+                "response_type": "no_change",
+                "rationale": "le user choisit une option pending_choice",
+                "fitmas_message": "Je prends l'option vendredi.",
+                "pending_resolution": {
+                    "type": "accept_pending",
+                    "selected_candidate_id": "llm_candidate_2",
+                },
+            }
+        )
+
+        self.assertIsNotNone(decision)
+        assert decision is not None
+        self.assertIsNotNone(decision.pending_resolution)
+        assert decision.pending_resolution is not None
+        self.assertEqual(decision.pending_resolution.type, "accept_pending")
+        self.assertEqual(decision.pending_resolution.selected_candidate_id, "llm_candidate_2")
+
     def test_parse_coach_decision_rejects_missed_yesterday_reply_without_execution_action(self) -> None:
         decision = llm.parse_coach_decision_payload(
             {

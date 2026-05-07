@@ -150,10 +150,12 @@ Format cible:
   Type autorise: record_execution_update avec target_ref, target_session_id?, status=completed|not_completed|partially_completed|unknown, completed?, sport_type?, duration_min?, confidence, evidence?
 - pending_resolution: optionnel, uniquement si un pending existe ou si le tour y fait reference.
   Types autorises: accept_pending | reject_pending | modify_pending | ignore | needs_clarification.
+  Pour un pending type plan_patch_choice, accept_pending exige selected_candidate_id si le user choisit une option.
   modify_pending exige requested_changes, reason est optionnel, et ne peut modifier que le pending existant, jamais forger un patch neuf.
   Tu ne parses jamais "oui/non" hors contexte: tu lis le message entier et le pending injecte.
   Exemples:
   - pending actif + "oui" clair -> pending_resolution.type=accept_pending
+  - pending plan_patch_choice + "la deuxieme / vendredi" -> pending_resolution.type=accept_pending, selected_candidate_id=<id exact de l'option>
   - pending actif + "non" clair -> pending_resolution.type=reject_pending
   - pending actif + "oui mais finalement vendredi" -> pending_resolution.type=modify_pending, requested_changes="deplacer/adapter vers vendredi"
   - pending actif + "j'ai pas eu le temps hier" -> pending_resolution.type=ignore + execution_actions si pertinent

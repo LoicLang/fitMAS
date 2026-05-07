@@ -60,10 +60,11 @@ Implémente localement :
   traite `pending` comme proposition et `block` comme blocage.
 - `conversation_pipeline`: branche candidate conservative pour `primary_intent=plan_mutation` pur,
   sans pending actif, sans calibration ouverte, sans signal sante/execution.
+- `pending_choice`: persiste les options comme `plan_patch_choice`; le tour suivant le LLM resout
+  via `pending_resolution.accept_pending.selected_candidate_id`, puis le runtime applique seulement ce candidat.
 
 Pas encore branché :
 
-- resolution persistante de `pending_choice` ;
 - extension aux tours mixtes execution/sante + adaptation.
 
 ## Frontieres

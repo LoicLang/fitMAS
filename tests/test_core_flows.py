@@ -1339,6 +1339,269 @@ class FitMASCoreFlowsTest(unittest.TestCase):
         self.assertIsNotNone(pending)
         self.assertEqual(pending.mutation_type, "plan_patch")
 
+    def test_candidate_pending_choice_is_persisted_as_structured_options(self) -> None:
+        _, session = self._create_plan_with_tomorrow_session()
+        from fitmas.plan_patch_adaptation_policy import AdaptationPolicyDecision
+        from fitmas.plan_patch_candidate_evaluator import EvaluatedPlanPatchCandidate
+        from fitmas.plan_patch_candidates import PlanPatchCandidate, PlanPatchCandidateValidation
+        from fitmas.week_coherence import WeekCoherenceScore
+
+        first_candidate = PlanPatchCandidate(
+            id="move_friday",
+            patches=(
+                PlanPatch(
+                    operations=[
+                        PlanPatchOperation(
+                            operation_type="move_session",
+                            target_session_id=session.id,
+                            target_date="2099-05-09",
+                            rationale="Option vendredi.",
+                        )
+                    ],
+                    coach_message="Option vendredi.",
+                ),
+            ),
+            rationale="Deplacer la seance a vendredi.",
+            expected_tradeoff="Garde le volume, bouge le placement.",
+            confidence=0.8,
+            assumptions=(),
+            risk_notes=(),
+            created_from_plan_id="plan_current",
+            created_from_plan_version=1,
+        )
+        second_candidate = PlanPatchCandidate(
+            id="reduce_tomorrow",
+            patches=(
+                PlanPatch(
+                    operations=[
+                        PlanPatchOperation(
+                            operation_type="update_session",
+                            target_session_id=session.id,
+                            new_duration_min=30,
+                            new_intensity="easy",
+                            rationale="Option allegee.",
+                        )
+                    ],
+                    coach_message="Option allegee.",
+                ),
+            ),
+            rationale="Garder demain mais alleger.",
+            expected_tradeoff="Moins de charge, pas de deplacement.",
+            confidence=0.78,
+            assumptions=(),
+            risk_notes=(),
+            created_from_plan_id="plan_current",
+            created_from_plan_version=1,
+        )
+
+        def evaluated(candidate, total):
+            return EvaluatedPlanPatchCandidate(
+                candidate=candidate,
+                candidate_validation=PlanPatchCandidateValidation(
+                    status="valid",
+                    patch_count=1,
+                    operation_count=1,
+                    operation_results=(),
+                    summary="valid",
+                ),
+                patch=candidate.patches[0],
+                patch_validation=PlanPatchValidation(status="valid", operation_results=(), summary="valid"),
+                week_context=None,
+                facts=None,
+                score=WeekCoherenceScore(
+                    total=total,
+                    recovery=80,
+                    goal_alignment=85,
+                    progression=80,
+                    adherence=85,
+                    readiness_fit=80,
+                    constraint_fit=85,
+                    risk=75,
+                ),
+                findings=(),
+                score_delta=-3,
+                policy_hint="commit_safe",
+                evaluation_summary="Candidate possible.",
+            )
+
+        policy_decision = AdaptationPolicyDecision(
+            action="pending_choice",
+            selected_candidate_id=None,
+            candidate_options=("move_friday", "reduce_tomorrow"),
+            reason="Deux options proches.",
+            user_facing_reason="Deux options proches.",
+            requires_confirmation_reason="Deux options proches.",
+            risk_level="medium",
+        )
+
+        original_plan_turn = api_messages.plan_conversation_turn
+        original_decide = api_messages.decide
+        original_extract_facts = api_messages.extract_facts
+        original_generate = conversation_pipeline.generate_plan_patch_candidates
+        original_evaluate = conversation_pipeline.evaluate_plan_patch_candidate
+        original_policy = conversation_pipeline.decide_adaptation_policy
+        original_compose = conversation_pipeline.final_reply.compose_plan_adaptation_reply
+        try:
+            api_messages.plan_conversation_turn = lambda *args, **kwargs: SimpleNamespace(
+                primary_intent="plan_mutation",
+                secondary_intents=(),
+                mutation_signal=True,
+                has_plan_mutation=True,
+                confidence=0.93,
+            )
+            api_messages.decide = lambda *args, **kwargs: (_ for _ in ()).throw(
+                AssertionError("decide() should not run")
+            )
+            api_messages.extract_facts = lambda *args, **kwargs: []
+            conversation_pipeline.generate_plan_patch_candidates = lambda *args, **kwargs: (
+                first_candidate,
+                second_candidate,
+            )
+            conversation_pipeline.evaluate_plan_patch_candidate = (
+                lambda *args, candidate, **kwargs: evaluated(
+                    candidate,
+                    84 if candidate.id == "move_friday" else 82,
+                )
+            )
+            conversation_pipeline.decide_adaptation_policy = lambda *args, **kwargs: policy_decision
+            conversation_pipeline.final_reply.compose_plan_adaptation_reply = (
+                lambda **kwargs: "J'ai deux options propres : vendredi ou alleger demain. Tu choisis."
+            )
+
+            result = self.client.post(
+                "/api/v0/messages",
+                json={"text": "On evite deux jours d'affilee ?"},
+            ).json()
+        finally:
+            api_messages.plan_conversation_turn = original_plan_turn
+            api_messages.decide = original_decide
+            api_messages.extract_facts = original_extract_facts
+            conversation_pipeline.generate_plan_patch_candidates = original_generate
+            conversation_pipeline.evaluate_plan_patch_candidate = original_evaluate
+            conversation_pipeline.decide_adaptation_policy = original_policy
+            conversation_pipeline.final_reply.compose_plan_adaptation_reply = original_compose
+
+        pending = repo.get_active_pending_mutation_confirmation(self.db, self.user.id)
+        payload = json.loads(pending.decision_json) if pending is not None else {}
+
+        self.assertEqual(
+            result["assistant_message"]["text"],
+            "J'ai deux options propres : vendredi ou alleger demain. Tu choisis.",
+        )
+        self.assertIsNotNone(pending)
+        self.assertEqual(pending.mutation_type, "plan_patch_choice")
+        self.assertEqual(payload["kind"], "plan_patch_choice")
+        self.assertEqual([item["id"] for item in payload["candidates"]], ["move_friday", "reduce_tomorrow"])
+
+    def test_accept_pending_choice_applies_selected_candidate_patch(self) -> None:
+        _, session = self._create_plan_with_tomorrow_session()
+        from fitmas.mutation_permissions import serialize_plan_patch_choice_confirmation
+        from fitmas.plan_patch_candidates import PlanPatchCandidate
+
+        move_patch = PlanPatch(
+            operations=[
+                PlanPatchOperation(
+                    operation_type="move_session",
+                    target_session_id=session.id,
+                    target_date="2099-05-09",
+                    rationale="Option vendredi.",
+                )
+            ],
+            coach_message="Option vendredi.",
+        )
+        reduce_patch = PlanPatch(
+            operations=[
+                PlanPatchOperation(
+                    operation_type="update_session",
+                    target_session_id=session.id,
+                    new_duration_min=30,
+                    new_intensity="easy",
+                    rationale="Option allegee.",
+                )
+            ],
+            coach_message="Option allegee.",
+        )
+        choices = (
+            PlanPatchCandidate(
+                id="move_friday",
+                patches=(move_patch,),
+                rationale="Deplacer la seance a vendredi.",
+                expected_tradeoff="Garde le volume.",
+                confidence=0.8,
+                assumptions=(),
+                risk_notes=(),
+                created_from_plan_id="plan_current",
+                created_from_plan_version=1,
+            ),
+            PlanPatchCandidate(
+                id="reduce_tomorrow",
+                patches=(reduce_patch,),
+                rationale="Garder demain mais alleger.",
+                expected_tradeoff="Reduit la charge.",
+                confidence=0.78,
+                assumptions=(),
+                risk_notes=(),
+                created_from_plan_id="plan_current",
+                created_from_plan_version=1,
+            ),
+        )
+        repo.create_pending_mutation_confirmation(
+            self.db,
+            user_id=self.user.id,
+            impact_level="medium",
+            reason="Deux options proches.",
+            mutation_type="plan_patch_choice",
+            summary="move_friday | reduce_tomorrow",
+            source_text="On evite deux jours d'affilee ?",
+            decision_json=serialize_plan_patch_choice_confirmation(choices),
+            expires_at=datetime.now() + timedelta(minutes=10),
+        )
+
+        original_plan_turn = api_messages.plan_conversation_turn
+        original_decide = api_messages.decide
+        original_extract_facts = api_messages.extract_facts
+        original_compose = conversation_pipeline.final_reply.compose_final_reply
+        original_verify = conversation_pipeline.final_reply.verify_post_event_reply
+        try:
+            api_messages.plan_conversation_turn = lambda *args, **kwargs: SimpleNamespace(
+                primary_intent="trivial_ack",
+                secondary_intents=(),
+                mutation_signal=False,
+                has_plan_mutation=False,
+                confidence=0.93,
+            )
+            api_messages.decide = lambda *args, **kwargs: CoachDecision(
+                response_type="no_change",
+                rationale="le user choisit une option",
+                fitmas_message="Je prends l'option vendredi.",
+                pending_resolution=llm.AcceptPendingResolution(
+                    type="accept_pending",
+                    selected_candidate_id="move_friday",
+                ),
+            )
+            api_messages.extract_facts = lambda *args, **kwargs: []
+            conversation_pipeline.final_reply.compose_final_reply = lambda *args, **kwargs: "C'est cale vendredi."
+            conversation_pipeline.final_reply.verify_post_event_reply = (
+                lambda reply, context, **kwargs: reply
+            )
+
+            result = self.client.post("/api/v0/messages", json={"text": "vendredi"}).json()
+        finally:
+            api_messages.plan_conversation_turn = original_plan_turn
+            api_messages.decide = original_decide
+            api_messages.extract_facts = original_extract_facts
+            conversation_pipeline.final_reply.compose_final_reply = original_compose
+            conversation_pipeline.final_reply.verify_post_event_reply = original_verify
+
+        self.db.expire_all()
+        refreshed = repo.get_scheduled_session(self.db, self.user.id, session.id)
+        active_pending = repo.get_active_pending_mutation_confirmation(self.db, self.user.id)
+
+        self.assertEqual(result["assistant_message"]["text"], "C'est cale vendredi.")
+        self.assertEqual(refreshed.scheduled_date.date().isoformat(), "2099-05-09")
+        self.assertEqual(refreshed.duration_min, 50)
+        self.assertIsNone(active_pending)
+
     def test_blocked_mutation_does_not_reply_as_applied(self) -> None:
         _, session = self._create_plan_for_today()
         original_decide = api_messages.decide

@@ -118,6 +118,7 @@ class AcceptPendingResolution(BaseModel):
 
     type: Literal["accept_pending"]
     reason: str | None = None
+    selected_candidate_id: str | None = None
 
 
 class RejectPendingResolution(BaseModel):
@@ -1251,6 +1252,7 @@ def _repair_invalid_decision_payload(*, data: dict[str, Any] | None, system: str
         "- execution_actions autorise record_execution_update: target_ref, target_session_id?, status=completed|not_completed|partially_completed|unknown, completed?, sport_type?, duration_min?, confidence, evidence?\n"
         "- memory_actions autorise record_health_signal, record_availability, record_preference\n"
         "- pending_resolution autorise accept_pending, reject_pending, modify_pending, ignore, needs_clarification\n"
+        "- pending_resolution.accept_pending peut porter selected_candidate_id pour choisir une option plan_patch_choice\n"
         "- pending_resolution.modify_pending exige requested_changes; reason est optionnel\n"
         "- requires_confirmation exige confirmation_reason et sert aux mutations planning risquees, pas aux updates execution simples\n"
         "- move_session/lighten_day/update_session/replace_session exigent target_session_id\n"

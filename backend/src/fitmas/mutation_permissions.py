@@ -7,6 +7,7 @@ from datetime import UTC, date, datetime, timedelta
 
 from fitmas.llm import MutationDecision
 from fitmas.plan_patch import PlanPatch
+from fitmas.plan_patch_candidates import PlanPatchCandidate
 
 _YES_TEXTS = {
     "oui",
@@ -181,6 +182,73 @@ def deserialize_plan_patch_confirmation(raw_value: str) -> PlanPatch:
     if isinstance(payload, dict) and payload.get("kind") == "plan_patch":
         return PlanPatch(**payload.get("plan_patch", {}))
     return PlanPatch(**payload)
+
+
+def serialize_plan_patch_choice_confirmation(candidates: Sequence[PlanPatchCandidate]) -> str:
+    return json.dumps(
+        {
+            "kind": "plan_patch_choice",
+            "candidates": [_plan_patch_candidate_payload(candidate) for candidate in candidates],
+        },
+        ensure_ascii=True,
+        sort_keys=True,
+    )
+
+
+def deserialize_plan_patch_choice_confirmation(raw_value: str) -> tuple[PlanPatchCandidate, ...]:
+    payload = json.loads(raw_value)
+    if not isinstance(payload, dict) or payload.get("kind") != "plan_patch_choice":
+        return ()
+    raw_candidates = payload.get("candidates")
+    if not isinstance(raw_candidates, list):
+        return ()
+    candidates: list[PlanPatchCandidate] = []
+    for raw_candidate in raw_candidates:
+        if not isinstance(raw_candidate, dict):
+            continue
+        patches = raw_candidate.get("patches")
+        if not isinstance(patches, list):
+            continue
+        candidates.append(
+            PlanPatchCandidate(
+                id=str(raw_candidate.get("id") or "").strip(),
+                patches=tuple(
+                    PlanPatch(**patch)
+                    for patch in patches
+                    if isinstance(patch, dict)
+                ),
+                rationale=str(raw_candidate.get("rationale") or "").strip(),
+                expected_tradeoff=str(raw_candidate.get("expected_tradeoff") or "").strip(),
+                confidence=float(raw_candidate.get("confidence") or 0.0),
+                assumptions=tuple(
+                    str(item).strip()
+                    for item in raw_candidate.get("assumptions", ())
+                    if str(item).strip()
+                ),
+                risk_notes=tuple(
+                    str(item).strip()
+                    for item in raw_candidate.get("risk_notes", ())
+                    if str(item).strip()
+                ),
+                created_from_plan_id=str(raw_candidate.get("created_from_plan_id") or "").strip(),
+                created_from_plan_version=int(raw_candidate.get("created_from_plan_version") or 0),
+            )
+        )
+    return tuple(candidate for candidate in candidates if candidate.id and candidate.patches)
+
+
+def _plan_patch_candidate_payload(candidate: PlanPatchCandidate) -> dict:
+    return {
+        "id": candidate.id,
+        "patches": [patch.model_dump(mode="json") for patch in candidate.patches],
+        "rationale": candidate.rationale,
+        "expected_tradeoff": candidate.expected_tradeoff,
+        "confidence": candidate.confidence,
+        "assumptions": list(candidate.assumptions),
+        "risk_notes": list(candidate.risk_notes),
+        "created_from_plan_id": candidate.created_from_plan_id,
+        "created_from_plan_version": candidate.created_from_plan_version,
+    }
 
 
 def summarize_mutation(
