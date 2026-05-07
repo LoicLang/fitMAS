@@ -56,10 +56,11 @@ Implémente localement :
 - `plan_patch_candidate_evaluator`: contrat -> flatten -> validation runtime -> facts/score/findings -> `policy_hint`.
 - `plan_patch_adaptation_policy`: selection pure `commit` / `pending_confirmation` / `pending_choice` / `block`
   sur candidats deja evalues, sans write.
+- `final_reply.compose_plan_adaptation_reply`: composer post-policy qui claim seulement des events commits,
+  traite `pending` comme proposition et `block` comme blocage.
 
 Pas encore branché :
 
-- final composer adaptation ;
 - conversation pipeline.
 
 ## Frontieres
