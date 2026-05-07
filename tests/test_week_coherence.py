@@ -145,6 +145,45 @@ def test_evaluate_week_invariants_detects_key_touch_recovery_delta_and_hard_gap(
     assert "hard_sessions_too_close" in checks.flags
 
 
+def test_evaluate_week_invariants_detects_recovery_after_hard_lost_even_if_recovery_count_is_preserved() -> None:
+    sessions = [
+        _session(1, datetime(2026, 5, 4, 8, 0), "running", "tempo", "hard", 50, "Seance cle"),
+        _session(2, datetime(2026, 5, 5, 8, 0), "rest", "recovery", "easy", 0, "Recovery"),
+        _session(3, datetime(2026, 5, 7, 8, 0), "running", "easy", "easy", 40, "Support"),
+    ]
+    patch = PlanPatch(
+        operations=[
+            PlanPatchOperation(
+                operation_type="move_session",
+                target_session_id=2,
+                target_date="2026-05-08",
+                rationale="Deplacer le repos plus tard.",
+            )
+        ],
+        coach_message="Je deplace la recuperation.",
+    )
+    before, after, diff = simulate_plan_patch(sessions, patch, timezone_name="Europe/Paris")
+    context = WeekCoherenceContext(
+        patch=patch,
+        validation=PlanPatchValidation(status="valid", operation_results=()),
+        before_week=before,
+        after_week=after,
+        diff=diff,
+        deterministic_checks=_empty_checks(),
+        planning_contract=None,
+        week_mission=None,
+        session_policies=(),
+        recent_reality=None,
+        active_constraints=(),
+    )
+
+    checks = evaluate_week_invariants(context)
+
+    assert checks.recovery_sessions_before == checks.recovery_sessions_after
+    assert checks.recovery_after_hard_preserved is False
+    assert "recovery_after_hard_lost" in checks.flags
+
+
 def test_aggregate_week_coherence_policy_preserves_hard_block_and_reviewer_friction() -> None:
     valid = PlanPatchValidation(status="valid", operation_results=())
     blocked = PlanPatchValidation(status="blocked", operation_results=())
@@ -277,6 +316,7 @@ def _empty_checks() -> DeterministicWeekChecks:
         min_hard_gap_hours_after=None,
         recovery_sessions_before=0,
         recovery_sessions_after=0,
+        recovery_after_hard_preserved=True,
         key_session_ids_touched=(),
         completed_session_ids_touched=(),
         weekly_duration_delta_min=0,
@@ -309,6 +349,7 @@ def _basic_context(
         min_hard_gap_hours_after=None,
         recovery_sessions_before=1,
         recovery_sessions_after=1,
+        recovery_after_hard_preserved=True,
         key_session_ids_touched=(),
         completed_session_ids_touched=(),
         weekly_duration_delta_min=0,

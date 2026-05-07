@@ -41,6 +41,7 @@ class DeterministicWeekChecks:
     min_hard_gap_hours_after: int | None
     recovery_sessions_before: int
     recovery_sessions_after: int
+    recovery_after_hard_preserved: bool
     key_session_ids_touched: tuple[int, ...]
     completed_session_ids_touched: tuple[int, ...]
     weekly_duration_delta_min: int
@@ -205,6 +206,9 @@ def evaluate_week_invariants(context: WeekCoherenceContext) -> DeterministicWeek
     hard_after = sum(1 for session in after_sessions if _is_hard_session(session))
     recovery_before = sum(1 for session in before_sessions if _is_recovery_session(session))
     recovery_after = sum(1 for session in after_sessions if _is_recovery_session(session))
+    recovery_after_hard_before = _recovery_after_hard_count(before_sessions)
+    recovery_after_hard_after = _recovery_after_hard_count(after_sessions)
+    recovery_after_hard_preserved = recovery_after_hard_after >= recovery_after_hard_before
     duration_before = sum(_int(session.get("duration_min"), default=0) for session in before_sessions)
     duration_after = sum(_int(session.get("duration_min"), default=0) for session in after_sessions)
     tss_before = sum(estimate_scheduled_session_tss(session) for session in before_sessions)
@@ -220,6 +224,8 @@ def evaluate_week_invariants(context: WeekCoherenceContext) -> DeterministicWeek
         flags.append("completed_session_touched")
     if recovery_after < recovery_before:
         flags.append("recovery_session_lost")
+    if not recovery_after_hard_preserved:
+        flags.append("recovery_after_hard_lost")
     if hard_after > 3:
         flags.append("too_many_hard_sessions")
     if min_hard_gap is not None and min_hard_gap < 36:
@@ -235,6 +241,7 @@ def evaluate_week_invariants(context: WeekCoherenceContext) -> DeterministicWeek
         min_hard_gap_hours_after=min_hard_gap,
         recovery_sessions_before=recovery_before,
         recovery_sessions_after=recovery_after,
+        recovery_after_hard_preserved=recovery_after_hard_preserved,
         key_session_ids_touched=key_touched,
         completed_session_ids_touched=completed_touched,
         weekly_duration_delta_min=duration_after - duration_before,
@@ -446,6 +453,7 @@ def _finding_for_flag(flag: str, *, checks: DeterministicWeekChecks) -> WeekCohe
         "multi_session_patch": ("requires_confirmation", "Le patch touche plusieurs operations."),
         "key_session_touched": ("requires_confirmation", "Le patch touche une seance cle."),
         "recovery_session_lost": ("requires_confirmation", "Le patch retire une recuperation de la semaine."),
+        "recovery_after_hard_lost": ("requires_confirmation", "La recuperation placee apres une seance dure n'est plus preservee."),
         "hard_sessions_too_close": ("requires_confirmation", "Deux seances dures se retrouvent trop proches."),
         "too_many_hard_sessions": ("requires_confirmation", "La semaine contient trop de seances dures."),
         "weekly_duration_delta_high": ("requires_confirmation", "Le delta de duree hebdomadaire est eleve."),
@@ -590,6 +598,20 @@ def _min_hard_gap_hours(sessions: Sequence[dict[str, Any]]) -> int | None:
     return min(int((current - previous).days * 24) for previous, current in zip(hard_dates, hard_dates[1:]))
 
 
+def _recovery_after_hard_count(sessions: Sequence[dict[str, Any]]) -> int:
+    hard_dates = {
+        item
+        for item in (_parse_date(session.get("scheduled_date")) for session in sessions if _is_hard_session(session))
+        if item is not None
+    }
+    recovery_dates = {
+        item
+        for item in (_parse_date(session.get("scheduled_date")) for session in sessions if _is_recovery_session(session))
+        if item is not None
+    }
+    return sum(1 for hard_date in hard_dates if hard_date.fromordinal(hard_date.toordinal() + 1) in recovery_dates)
+
+
 def _is_hard_session(session: dict[str, Any]) -> bool:
     intensity = str(session.get("intensity") or "").strip().lower()
     return intensity in {"hard", "key", "threshold"} or _is_key_session(session)
@@ -624,6 +646,7 @@ def _empty_checks() -> DeterministicWeekChecks:
         min_hard_gap_hours_after=None,
         recovery_sessions_before=0,
         recovery_sessions_after=0,
+        recovery_after_hard_preserved=True,
         key_session_ids_touched=(),
         completed_session_ids_touched=(),
         weekly_duration_delta_min=0,
