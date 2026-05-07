@@ -1209,6 +1209,136 @@ class FitMASCoreFlowsTest(unittest.TestCase):
         self.assertEqual(compose_calls, [])
         self.assertNotEqual(turns[0].response_mode, "close_turn_composed")
 
+    def test_plan_mutation_can_use_candidate_pipeline_without_big_decide(self) -> None:
+        _, session = self._create_plan_with_tomorrow_session()
+        from fitmas.plan_patch_adaptation_policy import AdaptationPolicyDecision
+        from fitmas.plan_patch_candidate_evaluator import EvaluatedPlanPatchCandidate
+        from fitmas.plan_patch_candidates import PlanPatchCandidate, PlanPatchCandidateValidation
+        from fitmas.week_coherence import WeekCoherenceScore
+
+        candidate_patch = PlanPatch(
+            operations=[
+                PlanPatchOperation(
+                    operation_type="move_session",
+                    target_session_id=session.id,
+                    target_date="2099-05-09",
+                    rationale="Nouveau creneau propose.",
+                )
+            ],
+            coach_message="Candidate only.",
+        )
+        candidate = PlanPatchCandidate(
+            id="cand_move",
+            patches=(candidate_patch,),
+            rationale="Deplacer la seance.",
+            expected_tradeoff="Recuperation a confirmer.",
+            confidence=0.82,
+            assumptions=(),
+            risk_notes=(),
+            created_from_plan_id="plan_current",
+            created_from_plan_version=1,
+        )
+        evaluated = EvaluatedPlanPatchCandidate(
+            candidate=candidate,
+            candidate_validation=PlanPatchCandidateValidation(
+                status="valid",
+                patch_count=1,
+                operation_count=1,
+                operation_results=(),
+                summary="valid",
+            ),
+            patch=candidate_patch,
+            patch_validation=PlanPatchValidation(status="valid", operation_results=(), summary="valid"),
+            week_context=None,
+            facts=None,
+            score=WeekCoherenceScore(
+                total=82,
+                recovery=80,
+                goal_alignment=85,
+                progression=80,
+                adherence=85,
+                readiness_fit=80,
+                constraint_fit=85,
+                risk=75,
+            ),
+            findings=(),
+            score_delta=-4,
+            policy_hint="ask_confirmation",
+            evaluation_summary="Candidate possible, confirmation recommandee.",
+        )
+        policy_decision = AdaptationPolicyDecision(
+            action="pending_confirmation",
+            selected_candidate_id="cand_move",
+            candidate_options=(),
+            reason="Candidate possible, confirmation recommandee.",
+            user_facing_reason="Candidate possible, confirmation recommandee.",
+            requires_confirmation_reason="Candidate possible, confirmation recommandee.",
+            risk_level="medium",
+        )
+
+        original_plan_turn = api_messages.plan_conversation_turn
+        original_decide = api_messages.decide
+        original_extract_facts = api_messages.extract_facts
+        original_generate = getattr(conversation_pipeline, "generate_plan_patch_candidates", None)
+        original_evaluate = getattr(conversation_pipeline, "evaluate_plan_patch_candidate", None)
+        original_policy = getattr(conversation_pipeline, "decide_adaptation_policy", None)
+        original_compose = conversation_pipeline.final_reply.compose_plan_adaptation_reply
+        try:
+            api_messages.plan_conversation_turn = lambda *args, **kwargs: SimpleNamespace(
+                primary_intent="plan_mutation",
+                secondary_intents=(),
+                mutation_signal=True,
+                has_plan_mutation=True,
+                confidence=0.93,
+            )
+
+            def fail_decide(*args, **kwargs):
+                raise AssertionError("decide() should not run when candidate pipeline handles the turn")
+
+            api_messages.decide = fail_decide
+            api_messages.extract_facts = lambda *args, **kwargs: []
+            conversation_pipeline.generate_plan_patch_candidates = lambda *args, **kwargs: (candidate,)
+            conversation_pipeline.evaluate_plan_patch_candidate = lambda *args, **kwargs: evaluated
+            conversation_pipeline.decide_adaptation_policy = lambda *args, **kwargs: policy_decision
+            conversation_pipeline.final_reply.compose_plan_adaptation_reply = (
+                lambda **kwargs: "Je te propose de bouger la seance a vendredi; tu confirmes ?"
+            )
+
+            result = self.client.post(
+                "/api/v0/messages",
+                json={"text": "On deplace la seance de demain a vendredi ?"},
+            ).json()
+        finally:
+            api_messages.plan_conversation_turn = original_plan_turn
+            api_messages.decide = original_decide
+            api_messages.extract_facts = original_extract_facts
+            if original_generate is None:
+                delattr(conversation_pipeline, "generate_plan_patch_candidates")
+            else:
+                conversation_pipeline.generate_plan_patch_candidates = original_generate
+            if original_evaluate is None:
+                delattr(conversation_pipeline, "evaluate_plan_patch_candidate")
+            else:
+                conversation_pipeline.evaluate_plan_patch_candidate = original_evaluate
+            if original_policy is None:
+                delattr(conversation_pipeline, "decide_adaptation_policy")
+            else:
+                conversation_pipeline.decide_adaptation_policy = original_policy
+            conversation_pipeline.final_reply.compose_plan_adaptation_reply = original_compose
+
+        turns = repo.get_recent_conversation_turns(self.db, self.user.id, limit=1)
+        context = json.loads(turns[0].context_json)
+        pending = repo.get_active_pending_mutation_confirmation(self.db, self.user.id)
+
+        self.assertEqual(
+            result["assistant_message"]["text"],
+            "Je te propose de bouger la seance a vendredi; tu confirmes ?",
+        )
+        self.assertEqual(turns[0].response_mode, "plan_adaptation_pending_confirmation")
+        self.assertEqual(context["adaptation_candidate_flow"]["policy_action"], "pending_confirmation")
+        self.assertIsNotNone(pending)
+        self.assertEqual(pending.mutation_type, "plan_patch")
+
     def test_blocked_mutation_does_not_reply_as_applied(self) -> None:
         _, session = self._create_plan_for_today()
         original_decide = api_messages.decide

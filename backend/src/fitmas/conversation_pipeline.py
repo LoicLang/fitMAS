@@ -60,6 +60,10 @@ from fitmas.mutation_permissions import (
 )
 from fitmas.plan_mutation_service import PlanPatchServiceResult, apply_decisions_for_user, apply_patch_for_user
 from fitmas.plan_patch import plan_patch_from_mutation_decisions, validate_plan_patch
+from fitmas.plan_patch_adaptation_policy import AdaptationPolicyDecision, decide_adaptation_policy
+from fitmas.plan_patch_candidate_evaluator import EvaluatedPlanPatchCandidate, evaluate_plan_patch_candidate
+from fitmas.plan_patch_candidate_generator import CandidateGenerationInput, generate_plan_patch_candidates
+from fitmas.plan_patch_candidates import ALLOWED_CANDIDATE_OPERATION_TYPES, PlanPatchCandidate
 from fitmas.profile_summary import build_profile_summary
 from fitmas.signals import collect_signals
 from fitmas.tools.contract import ToolContext
@@ -298,6 +302,33 @@ def run_conversation_turn(
             reply_text=reply_text,
             extraction=Extraction(confidence=float(getattr(turn_plan, "confidence", 0.95) or 0.95)),
             response_mode="close_turn_composed",
+            turn_context=turn_context,
+            memory_writes=turn_memory_writes,
+        )
+
+    adaptation_candidate_outcome = _maybe_handle_plan_adaptation_candidates(
+        db=db,
+        user=user,
+        user_text=payload.text,
+        turn_plan=turn_plan,
+        pending_confirmation=pending_confirmation,
+        open_calibration_need=open_calibration_need,
+        scheduled_sessions=state.scheduled_sessions,
+        coach_bundle=coach_bundle,
+        grounding=grounding_packet,
+        turn_context=turn_context,
+    )
+    if adaptation_candidate_outcome is not None:
+        return _reply_and_record_turn(
+            db=db,
+            user_id=user.id,
+            user_text=payload.text,
+            reply_text=adaptation_candidate_outcome.reply_text,
+            extraction=adaptation_candidate_outcome.extraction,
+            response_mode=adaptation_candidate_outcome.response_mode,
+            mutation_applied=adaptation_candidate_outcome.mutation_applied,
+            pending_confirmation=adaptation_candidate_outcome.pending_confirmation,
+            pending_confirmation_id=adaptation_candidate_outcome.pending_confirmation_id,
             turn_context=turn_context,
             memory_writes=turn_memory_writes,
         )
@@ -1812,6 +1843,339 @@ def _should_use_terminal_close_path(
     if open_calibration_need is not None:
         return False
     return True
+
+
+def _maybe_handle_plan_adaptation_candidates(
+    *,
+    db: Session,
+    user,
+    user_text: str,
+    turn_plan,
+    pending_confirmation,
+    open_calibration_need,
+    scheduled_sessions: list[Any],
+    coach_bundle,
+    grounding: ReplyGroundingPacket | None,
+    turn_context: dict[str, object],
+) -> ConversationTurnOutcome | None:
+    if not _should_use_plan_adaptation_candidate_flow(
+        turn_plan=turn_plan,
+        pending_confirmation=pending_confirmation,
+        open_calibration_need=open_calibration_need,
+        scheduled_sessions=scheduled_sessions,
+    ):
+        return None
+
+    current_plan_id, current_plan_version = _current_plan_identity()
+    input_payload = CandidateGenerationInput(
+        user_message=user_text,
+        parsed_user_intent=_turn_plan_payload(turn_plan) or {},
+        current_plan_summary=_current_plan_summary_for_candidates(scheduled_sessions),
+        current_plan_id=current_plan_id,
+        current_plan_version=current_plan_version,
+        constraints=_candidate_constraints_payload(coach_bundle),
+        week_facts=None,
+        coherence_findings=(),
+        allowed_operations=tuple(sorted(ALLOWED_CANDIDATE_OPERATION_TYPES)),
+        forbidden_operations=(),
+        pending_context=None,
+    )
+    candidates = generate_plan_patch_candidates(input_payload, request_json_fn=gw.request_json)
+    if not candidates:
+        turn_context["adaptation_candidate_flow"] = {
+            "attempted": True,
+            "candidates_generated": 0,
+        }
+        return None
+
+    evaluated = tuple(
+        evaluate_plan_patch_candidate(
+            db,
+            candidate=candidate,
+            current_plan_id=current_plan_id,
+            current_plan_version=current_plan_version,
+            plan_id=0,
+            scheduled_sessions=scheduled_sessions,
+            current_score=None,
+            timezone_name=user.timezone,
+            coach_state_bundle=coach_bundle,
+        )
+        for candidate in candidates
+    )
+    policy_decision = decide_adaptation_policy(evaluated)
+    turn_context["adaptation_candidate_flow"] = _adaptation_candidate_trace(
+        candidates=candidates,
+        evaluated=evaluated,
+        policy_decision=policy_decision,
+    )
+    return _outcome_from_adaptation_policy(
+        db=db,
+        user=user,
+        user_text=user_text,
+        policy_decision=policy_decision,
+        evaluated=evaluated,
+        coach_bundle=coach_bundle,
+        scheduled_sessions=scheduled_sessions,
+        grounding=grounding,
+    )
+
+
+def _should_use_plan_adaptation_candidate_flow(
+    *,
+    turn_plan,
+    pending_confirmation,
+    open_calibration_need,
+    scheduled_sessions: list[Any],
+) -> bool:
+    if turn_plan is None:
+        return False
+    if pending_confirmation is not None and str(getattr(pending_confirmation, "status", "") or "") == "pending":
+        return False
+    if open_calibration_need is not None:
+        return False
+    if not scheduled_sessions:
+        return False
+    primary_intent = str(getattr(turn_plan, "primary_intent", "") or "")
+    secondary_intents = {str(item) for item in tuple(getattr(turn_plan, "secondary_intents", ()) or ())}
+    if primary_intent != "plan_mutation":
+        return False
+    if secondary_intents.intersection({"health_signal", "execution_report"}):
+        return False
+    return bool(getattr(turn_plan, "has_plan_mutation", False))
+
+
+def _outcome_from_adaptation_policy(
+    *,
+    db: Session,
+    user,
+    user_text: str,
+    policy_decision: AdaptationPolicyDecision,
+    evaluated: tuple[EvaluatedPlanPatchCandidate, ...],
+    coach_bundle,
+    scheduled_sessions: list[Any],
+    grounding: ReplyGroundingPacket | None,
+) -> ConversationTurnOutcome | None:
+    if policy_decision.action == "block":
+        reply_text = final_reply.compose_plan_adaptation_reply(
+            policy_decision=policy_decision,
+            user_text=user_text,
+            candidate_summaries=_candidate_summaries_for_reply(evaluated),
+        ) or final_reply.outage_fallback_reply(
+            final_reply.build_plan_adaptation_reply_context(
+                policy_decision=policy_decision,
+                user_text=user_text,
+            )
+        )
+        return ConversationTurnOutcome(
+            extraction=Extraction(confidence=0.85),
+            reply_text=reply_text,
+            response_mode="plan_adaptation_block",
+            mutation_applied=False,
+        )
+
+    if policy_decision.action == "pending_choice":
+        reply_text = final_reply.compose_plan_adaptation_reply(
+            policy_decision=policy_decision,
+            user_text=user_text,
+            candidate_summaries=_candidate_summaries_for_reply(evaluated),
+        ) or final_reply.outage_fallback_reply(
+            final_reply.build_plan_adaptation_reply_context(
+                policy_decision=policy_decision,
+                user_text=user_text,
+            )
+        )
+        return ConversationTurnOutcome(
+            extraction=Extraction(confidence=0.85),
+            reply_text=reply_text,
+            response_mode="plan_adaptation_pending_choice",
+            mutation_applied=False,
+        )
+
+    selected = _selected_evaluated_candidate(policy_decision, evaluated)
+    if selected is None or selected.patch is None or selected.patch_validation is None:
+        return None
+
+    if policy_decision.action == "pending_confirmation":
+        service_result = PlanPatchServiceResult(validation=selected.patch_validation, patch=selected.patch)
+        pending_row = repo.create_pending_mutation_confirmation(
+            db,
+            user_id=user.id,
+            impact_level="high",
+            reason=policy_decision.requires_confirmation_reason or policy_decision.reason,
+            mutation_type="plan_patch",
+            summary=_plan_patch_confirmation_summary(service_result),
+            source_text=user_text,
+            decision_json=serialize_plan_patch_confirmation(selected.patch),
+            expires_at=default_confirmation_expiry(),
+        )
+        reply_text = final_reply.compose_plan_adaptation_reply(
+            policy_decision=policy_decision,
+            user_text=user_text,
+            candidate_summaries=_candidate_summaries_for_reply((selected,)),
+        ) or _build_plan_patch_confirmation_prompt(service_result, grounding=grounding)
+        return ConversationTurnOutcome(
+            extraction=Extraction(confidence=0.85),
+            reply_text=reply_text,
+            response_mode="plan_adaptation_pending_confirmation",
+            mutation_applied=False,
+            pending_confirmation=True,
+            pending_confirmation_id=pending_row.id,
+        )
+
+    if policy_decision.action != "commit":
+        return None
+
+    service_result = apply_patch_for_user(
+        db,
+        user=user,
+        patch=selected.patch,
+        source="conversation",
+        trigger_type="plan_adaptation_candidate",
+        explained_to_user=True,
+        coach_state_bundle=coach_bundle,
+        activities=(),
+        active_facts=(),
+    )
+    if _patch_was_applied(service_result):
+        committed_events = _committed_event_summaries(service_result)
+        reply_text = final_reply.compose_plan_adaptation_reply(
+            policy_decision=policy_decision,
+            user_text=user_text,
+            committed_events=committed_events,
+            candidate_summaries=_candidate_summaries_for_reply((selected,)),
+        ) or _applied_plan_patch_reply(service_result, fallback=selected.patch.coach_message)
+        return ConversationTurnOutcome(
+            extraction=Extraction(confidence=0.85),
+            reply_text=reply_text,
+            response_mode="plan_adaptation_commit",
+            mutation_applied=True,
+        )
+    if _plan_patch_needs_confirmation(service_result):
+        pending_row = repo.create_pending_mutation_confirmation(
+            db,
+            user_id=user.id,
+            impact_level="high",
+            reason=_plan_patch_pending_reason(
+                service_result,
+                fallback_reason="plan_adaptation_runtime_confirmation",
+            ),
+            mutation_type="plan_patch",
+            summary=_plan_patch_confirmation_summary(service_result),
+            source_text=user_text,
+            decision_json=serialize_plan_patch_confirmation(selected.patch),
+            expires_at=default_confirmation_expiry(),
+        )
+        return ConversationTurnOutcome(
+            extraction=Extraction(confidence=0.85),
+            reply_text=_build_plan_patch_confirmation_prompt(service_result, grounding=grounding),
+            response_mode="plan_adaptation_runtime_confirmation",
+            mutation_applied=False,
+            pending_confirmation=True,
+            pending_confirmation_id=pending_row.id,
+        )
+    _log_plan_patch_blocked(service_result, user_id=user.id)
+    return ConversationTurnOutcome(
+        extraction=Extraction(confidence=0.85),
+        reply_text=_blocked_plan_patch_reply(service_result),
+        response_mode="plan_adaptation_runtime_block",
+        mutation_applied=False,
+    )
+
+
+def _current_plan_identity() -> tuple[str, int]:
+    # Phase A contract identity: the generator echoes these values back, then
+    # deterministic validation only checks the structured candidate artifact.
+    return "plan_current", 1
+
+
+def _current_plan_summary_for_candidates(scheduled_sessions: list[Any]) -> dict[str, Any]:
+    return {
+        "sessions": [
+            {
+                "id": getattr(session, "id", None),
+                "scheduled_date": str(getattr(session, "scheduled_date", "") or ""),
+                "day": getattr(session, "day", None),
+                "title": getattr(session, "session_title", None),
+                "sport_type": getattr(session, "sport_type", None),
+                "session_type": getattr(session, "session_type", None),
+                "duration_min": getattr(session, "duration_min", None),
+                "intensity": getattr(session, "intensity", None),
+                "priority": getattr(session, "priority", None),
+                "completion_status": getattr(session, "completion_status", None),
+            }
+            for session in scheduled_sessions[:14]
+        ]
+    }
+
+
+def _candidate_constraints_payload(coach_bundle) -> dict[str, Any]:
+    return {
+        "planning_contract": coach_bundle.planning_contract.as_dict(),
+        "availability_state": coach_bundle.availability_state.as_dict(),
+        "week_mission": coach_bundle.week_mission.as_dict(),
+        "recent_reality": coach_bundle.recent_reality.as_dict(),
+    }
+
+
+def _adaptation_candidate_trace(
+    *,
+    candidates: tuple[PlanPatchCandidate, ...],
+    evaluated: tuple[EvaluatedPlanPatchCandidate, ...],
+    policy_decision: AdaptationPolicyDecision,
+) -> dict[str, Any]:
+    return {
+        "attempted": True,
+        "candidates_generated": len(candidates),
+        "candidates_evaluated": len(evaluated),
+        "candidate_ids": [candidate.id for candidate in candidates],
+        "policy_action": policy_decision.action,
+        "selected_candidate_id": policy_decision.selected_candidate_id,
+        "candidate_options": list(policy_decision.candidate_options),
+        "risk_level": policy_decision.risk_level,
+        "evaluations": [
+            {
+                "candidate_id": item.candidate.id,
+                "candidate_validation": item.candidate_validation.status,
+                "patch_validation": item.patch_validation.status if item.patch_validation is not None else None,
+                "score_total": item.score.total if item.score is not None else None,
+                "score_delta": item.score_delta,
+                "policy_hint": item.policy_hint,
+            }
+            for item in evaluated
+        ],
+    }
+
+
+def _selected_evaluated_candidate(
+    policy_decision: AdaptationPolicyDecision,
+    evaluated: tuple[EvaluatedPlanPatchCandidate, ...],
+) -> EvaluatedPlanPatchCandidate | None:
+    selected_id = policy_decision.selected_candidate_id
+    if not selected_id:
+        return None
+    return next((item for item in evaluated if item.candidate.id == selected_id), None)
+
+
+def _candidate_summaries_for_reply(evaluated: tuple[EvaluatedPlanPatchCandidate, ...]) -> tuple[str, ...]:
+    summaries: list[str] = []
+    for item in evaluated:
+        score = f"score={item.score.total}" if item.score is not None else "score=unknown"
+        summaries.append(
+            f"{item.candidate.id}: {item.candidate.rationale} | "
+            f"tradeoff={item.candidate.expected_tradeoff} | {score}"
+        )
+    return tuple(summaries)
+
+
+def _committed_event_summaries(service_result: PlanPatchServiceResult | None) -> tuple[str, ...]:
+    if service_result is None or service_result.mutation_result is None:
+        return ()
+    summaries: list[str] = []
+    for event in service_result.mutation_result.applied_events:
+        summary = str(event.user_visible_summary or "").strip()
+        if summary and summary not in summaries:
+            summaries.append(summary)
+    return tuple(summaries)
 
 
 def _should_route_availability_context_to_llm(

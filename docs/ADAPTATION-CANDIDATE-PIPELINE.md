@@ -58,10 +58,13 @@ Implémente localement :
   sur candidats deja evalues, sans write.
 - `final_reply.compose_plan_adaptation_reply`: composer post-policy qui claim seulement des events commits,
   traite `pending` comme proposition et `block` comme blocage.
+- `conversation_pipeline`: branche candidate conservative pour `primary_intent=plan_mutation` pur,
+  sans pending actif, sans calibration ouverte, sans signal sante/execution.
 
 Pas encore branché :
 
-- conversation pipeline.
+- resolution persistante de `pending_choice` ;
+- extension aux tours mixtes execution/sante + adaptation.
 
 ## Frontieres
 
