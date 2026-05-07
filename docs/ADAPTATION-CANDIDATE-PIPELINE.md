@@ -54,11 +54,11 @@ Implémente localement :
 - `plan_patch_candidates`: `PlanPatchCandidate` + validation de contrat patch-set ;
 - `plan_patch_candidate_generator`: generator LLM borné, mocké en tests ;
 - `plan_patch_candidate_evaluator`: contrat -> flatten -> validation runtime -> facts/score/findings -> `policy_hint`.
+- `plan_patch_adaptation_policy`: selection pure `commit` / `pending_confirmation` / `pending_choice` / `block`
+  sur candidats deja evalues, sans write.
 
 Pas encore branché :
 
-- decision policy finale ;
-- pending_choice ;
 - final composer adaptation ;
 - conversation pipeline.
 
