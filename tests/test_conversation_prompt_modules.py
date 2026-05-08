@@ -3,6 +3,7 @@ from fitmas.conversation_prompt_modules import (
     build_action_contract_system_text,
     build_calendar_truth_system_text,
     build_coach_voice_examples_system_text,
+    build_conversation_system_text,
     build_identity_voice_system_text,
     build_output_schema_system_text,
     build_tool_workflow_system_text,
@@ -48,6 +49,32 @@ def test_coach_voice_examples_system_text_contains_good_and_bad_examples() -> No
     assert "Exemples A NE JAMAIS ECRIRE" in text
     assert "Actions possibles:" not in text
     assert "Tu reponds UNIQUEMENT" not in text
+
+
+def test_conversation_system_text_composes_modules_in_order() -> None:
+    text = build_conversation_system_text()
+
+    markers = [
+        "Tu es FitMAS, un coach multisport IA.",
+        "Workflow replan_after_constraint:",
+        "Analyse le message utilisateur",
+        "Actions possibles:",
+        "Exemples BONS",
+        "Tu reponds UNIQUEMENT avec un JSON CoachDecision valide.",
+    ]
+    positions = [text.index(marker) for marker in markers]
+
+    assert positions == sorted(positions)
+    assert text == "\n\n".join(
+        (
+            build_identity_voice_system_text(),
+            build_tool_workflow_system_text(),
+            build_calendar_truth_system_text(),
+            build_action_contract_system_text(),
+            build_coach_voice_examples_system_text(),
+            build_output_schema_system_text(),
+        )
+    )
 
 
 def test_action_contract_system_text_contains_actions_rules_and_examples() -> None:

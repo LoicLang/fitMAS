@@ -213,3 +213,16 @@ Compat temporaire acceptee:
 - create_session exige target_date, new_sport_type, new_title, new_duration_min
 
 Pas de markdown. Pas de texte autour du JSON."""
+
+
+def build_conversation_system_text() -> str:
+    return "\n\n".join(
+        (
+            build_identity_voice_system_text(),
+            build_tool_workflow_system_text(),
+            build_calendar_truth_system_text(),
+            build_action_contract_system_text(),
+            build_coach_voice_examples_system_text(),
+            build_output_schema_system_text(),
+        )
+    )

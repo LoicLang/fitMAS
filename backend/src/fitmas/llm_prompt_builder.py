@@ -6,31 +6,14 @@ from typing import Any
 
 from fitmas.context_pack import ConversationContextPack
 from fitmas.conversation_prompt_modules import (
-    build_action_contract_system_text,
-    build_calendar_truth_system_text,
-    build_coach_voice_examples_system_text,
-    build_identity_voice_system_text,
-    build_output_schema_system_text,
-    build_tool_workflow_system_text,
+    build_conversation_system_text,
 )
 from fitmas.conversation_prompting import ConversationPromptPolicy
 from fitmas.prompt_observability import PromptTrace, build_prompt_trace
 from fitmas.prompt_layers import assemble_layered_prompt
 from fitmas.time_context import render_time_context
 
-_CONVERSATION_SYSTEM_TEXT = f"""\
-{build_identity_voice_system_text()}
-
-{build_tool_workflow_system_text()}
-
-{build_calendar_truth_system_text()}
-
-{build_action_contract_system_text()}
-
-{build_coach_voice_examples_system_text()}
-
-{build_output_schema_system_text()}\
-"""
+_CONVERSATION_SYSTEM_TEXT = build_conversation_system_text()
 
 
 # Confirmation tags that we treat as "not really an open question" — these are
