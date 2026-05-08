@@ -80,7 +80,7 @@ def test_conversation_system_text_composes_modules_in_order() -> None:
 
 
 def test_conversation_system_text_can_include_turn_scope_contract() -> None:
-    contract = get_prompt_contract("conversation_plan_lookup")
+    contract = get_prompt_contract("conversation_plan_negotiation")
 
     text = build_conversation_system_text(contract)
 
@@ -95,9 +95,43 @@ def test_conversation_system_text_can_include_turn_scope_contract() -> None:
     positions = [text.index(marker) for marker in markers]
 
     assert positions == sorted(positions)
-    assert "- route: conversation_plan_lookup" in text
+    assert "- route: conversation_plan_negotiation" in text
     assert "- sortie decision: CoachDecision" in text
     assert "grounded_final_reply" not in text
+
+
+def test_read_only_conversation_system_text_excludes_mutation_modules() -> None:
+    contract = get_prompt_contract("conversation_plan_lookup")
+
+    text = build_conversation_system_text(contract)
+
+    assert "Contrat du tour:" in text
+    assert "Analyse le message utilisateur" in text
+    assert "Tu reponds UNIQUEMENT avec un JSON CoachDecision valide." in text
+    assert "Workflow replan_after_constraint:" not in text
+    assert "Actions possibles:" not in text
+    assert "draft_move_session" not in text
+    assert "suggest_replan_candidates" not in text
+
+
+def test_draft_action_conversation_system_text_keeps_mutation_modules() -> None:
+    contract = get_prompt_contract("conversation_plan_negotiation")
+
+    text = build_conversation_system_text(contract)
+
+    assert "Contrat du tour:" in text
+    assert "Workflow replan_after_constraint:" in text
+    assert "Actions possibles:" in text
+    assert "draft_move_session" in text
+    assert "suggest_replan_candidates" in text
+
+
+def test_legacy_conversation_system_text_keeps_full_module_set() -> None:
+    text = build_conversation_system_text()
+
+    assert "Contrat du tour:" not in text
+    assert "Workflow replan_after_constraint:" in text
+    assert "Actions possibles:" in text
 
 
 def test_turn_scope_contract_system_text_renders_safe_contract_subset() -> None:

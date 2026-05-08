@@ -244,11 +244,13 @@ def build_conversation_system_text(contract: PromptContract | None = None) -> st
     ]
     if contract is not None:
         modules.append(build_turn_scope_contract_system_text(contract))
+    if contract is None or contract.capability in {"draft_action", "write_after_validation"}:
+        modules.append(build_tool_workflow_system_text())
+    modules.append(build_calendar_truth_system_text())
+    if contract is None or contract.capability in {"draft_action", "write_after_validation"}:
+        modules.append(build_action_contract_system_text())
     modules.extend(
         [
-            build_tool_workflow_system_text(),
-            build_calendar_truth_system_text(),
-            build_action_contract_system_text(),
             build_coach_voice_examples_system_text(),
             build_output_schema_system_text(),
         ]

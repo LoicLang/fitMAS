@@ -139,6 +139,8 @@ class ConversationPromptBuilderTest(unittest.TestCase):
             self.assertIn("Contrat du tour:", system_text)
             self.assertIn("- route: conversation_plan_lookup", system_text)
             self.assertIn("- sortie decision: CoachDecision", system_text)
+            self.assertNotIn("Workflow replan_after_constraint:", system_text)
+            self.assertNotIn("Actions possibles:", system_text)
             self.assertNotIn("grounded_final_reply", system_text)
 
     def test_live_prompt_builders_ignore_legacy_plan_anchor_even_if_requested(self) -> None:
