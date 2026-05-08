@@ -3,13 +3,14 @@ from __future__ import annotations
 import unittest
 from types import SimpleNamespace
 
-from fitmas.conversation_prompting import ConversationPromptPolicy
+from fitmas.conversation_prompting import ConversationPromptPolicy, select_conversation_prompt_policy
 from fitmas.llm import make_timeline_summary
 from fitmas.llm_prompt_builder import (
     build_conversation_prompt_bundle,
     build_layered_conversation_prompt,
     detect_open_question,
 )
+from fitmas.tools.routing import IntentCategory
 
 
 class ConversationPromptBuilderTest(unittest.TestCase):
@@ -98,6 +99,47 @@ class ConversationPromptBuilderTest(unittest.TestCase):
         self.assertIn("Source de vérité planning conversationnelle", bundle.prompt)
         self.assertTrue(bundle.prompt.endswith("Nouveau message de l'utilisateur:\nJeudi c'est quoi deja ?"))
         self.assertEqual(bundle.history_messages_used, 2)
+
+    def test_prompt_builders_include_turn_scope_contract_for_real_policy(self) -> None:
+        policy = select_conversation_prompt_policy(intent=IntentCategory.PLAN_LOOKUP)
+
+        classic = build_conversation_prompt_bundle(
+            user_text="J'ai quoi demain ?",
+            prompt_policy=policy,
+            time_block="Nous sommes vendredi 2026-05-08.",
+            profile_summary="Objectif 10 km.",
+            plan_summary="Legacy plan",
+            timeline_summary="- id=12 | date=2026-05-09 | [running] Footing Z2",
+            execution_summary="Execution: repos tenu.",
+            temporal_summary="Repere temporel: demain = 2026-05-09.",
+            activity_claim_summary="Claim: aucun.",
+            signal_summary="Signal: aucun.",
+            conversation_history=[],
+            coach_context={"turn_primary_intent": "plan_lookup"},
+            selected_facts=[],
+        )
+        layered = build_layered_conversation_prompt(
+            user_text="J'ai quoi demain ?",
+            prompt_policy=policy,
+            time_block="Nous sommes vendredi 2026-05-08.",
+            profile_summary="Objectif 10 km.",
+            plan_summary="Legacy plan",
+            timeline_summary="- id=12 | date=2026-05-09 | [running] Footing Z2",
+            execution_summary="Execution: repos tenu.",
+            temporal_summary="Repere temporel: demain = 2026-05-09.",
+            activity_claim_summary="Claim: aucun.",
+            signal_summary="Signal: aucun.",
+            conversation_history=[],
+            coach_context={"turn_primary_intent": "plan_lookup"},
+            selected_facts=[],
+        )
+
+        for bundle in (classic, layered):
+            system_text = "\n".join(part["text"] for part in bundle.system)
+            self.assertIn("Contrat du tour:", system_text)
+            self.assertIn("- route: conversation_plan_lookup", system_text)
+            self.assertIn("- sortie decision: CoachDecision", system_text)
+            self.assertNotIn("grounded_final_reply", system_text)
 
     def test_live_prompt_builders_ignore_legacy_plan_anchor_even_if_requested(self) -> None:
         policy = ConversationPromptPolicy(name="forced_legacy", history_limit=2, include_plan_summary=True)

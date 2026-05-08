@@ -11,9 +11,16 @@ from fitmas.conversation_prompt_modules import (
 from fitmas.conversation_prompting import ConversationPromptPolicy
 from fitmas.prompt_observability import PromptTrace, build_prompt_trace
 from fitmas.prompt_layers import assemble_layered_prompt
+from fitmas.prompt_contracts import get_prompt_contract
 from fitmas.time_context import render_time_context
 
 _CONVERSATION_SYSTEM_TEXT = build_conversation_system_text()
+
+
+def _conversation_system_text_for_policy(prompt_policy: ConversationPromptPolicy) -> str:
+    if not prompt_policy.contract_name:
+        return _CONVERSATION_SYSTEM_TEXT
+    return build_conversation_system_text(get_prompt_contract(prompt_policy.contract_name))
 
 
 # Confirmation tags that we treat as "not really an open question" — these are
@@ -208,7 +215,7 @@ Nouveau message de l'utilisateur:
     system = [
         {
             "type": "text",
-            "text": _CONVERSATION_SYSTEM_TEXT,
+            "text": _conversation_system_text_for_policy(prompt_policy),
             "cache_control": {"type": "ephemeral", "ttl": "1h"},
         }
     ]
@@ -292,10 +299,10 @@ def build_layered_conversation_prompt(
             entry["cache_control"] = cache_control
         system_parts.append(entry)
 
-    # The mutation instruction block is always included in system
+    # The conversation instruction block is always included in system.
     system_parts.insert(0, {
         "type": "text",
-        "text": _CONVERSATION_SYSTEM_TEXT,
+        "text": _conversation_system_text_for_policy(prompt_policy),
         "cache_control": {"type": "ephemeral", "ttl": "1h"},
     })
 

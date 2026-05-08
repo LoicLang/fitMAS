@@ -238,14 +238,19 @@ Compat temporaire acceptee:
 Pas de markdown. Pas de texte autour du JSON."""
 
 
-def build_conversation_system_text() -> str:
-    return "\n\n".join(
-        (
-            build_identity_voice_system_text(),
+def build_conversation_system_text(contract: PromptContract | None = None) -> str:
+    modules = [
+        build_identity_voice_system_text(),
+    ]
+    if contract is not None:
+        modules.append(build_turn_scope_contract_system_text(contract))
+    modules.extend(
+        [
             build_tool_workflow_system_text(),
             build_calendar_truth_system_text(),
             build_action_contract_system_text(),
             build_coach_voice_examples_system_text(),
             build_output_schema_system_text(),
-        )
+        ]
     )
+    return "\n\n".join(modules)

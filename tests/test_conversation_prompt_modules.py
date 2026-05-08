@@ -79,6 +79,27 @@ def test_conversation_system_text_composes_modules_in_order() -> None:
     )
 
 
+def test_conversation_system_text_can_include_turn_scope_contract() -> None:
+    contract = get_prompt_contract("conversation_plan_lookup")
+
+    text = build_conversation_system_text(contract)
+
+    markers = [
+        "Tu es FitMAS, un coach multisport IA.",
+        "Contrat du tour:",
+        "Workflow replan_after_constraint:",
+        "Analyse le message utilisateur",
+        "Actions possibles:",
+        "Tu reponds UNIQUEMENT avec un JSON CoachDecision valide.",
+    ]
+    positions = [text.index(marker) for marker in markers]
+
+    assert positions == sorted(positions)
+    assert "- route: conversation_plan_lookup" in text
+    assert "- sortie decision: CoachDecision" in text
+    assert "grounded_final_reply" not in text
+
+
 def test_turn_scope_contract_system_text_renders_safe_contract_subset() -> None:
     contract = get_prompt_contract("conversation_plan_lookup")
 
