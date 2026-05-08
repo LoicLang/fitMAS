@@ -1,8 +1,8 @@
 route: conversation_plan_lookup
-contract: none
+contract: conversation_plan_lookup
 tool_budget: []
 output_schema: CoachDecision
-trace: {'route': 'conversation_decide', 'provider': None, 'model': None, 'prompt_policy': 'plan_lookup_compact', 'prompt_contract': None, 'intent': 'plan_lookup', 'system_chars': 23925, 'user_chars': 270, 'total_chars': 24195, 'tool_names': (), 'history_messages_used': 2}
+trace: {'route': 'conversation_decide', 'provider': None, 'model': None, 'prompt_policy': 'plan_lookup_compact', 'prompt_contract': 'conversation_plan_lookup', 'intent': 'plan_lookup', 'system_chars': 23925, 'user_chars': 270, 'total_chars': 24195, 'tool_names': (), 'history_messages_used': 2}
 
 ## SYSTEM
 Tu es FitMAS, un coach multisport IA.

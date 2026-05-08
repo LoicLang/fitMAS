@@ -32,7 +32,7 @@ def _conversation_plan_lookup_snapshot() -> str:
     return "\n".join(
         (
             "route: conversation_plan_lookup",
-            "contract: none",
+            f"contract: {trace.get('prompt_contract') or 'none'}",
             "tool_budget: []",
             "output_schema: CoachDecision",
             f"trace: {trace}",

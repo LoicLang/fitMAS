@@ -53,5 +53,6 @@ def test_layered_prompt_bundle_exposes_trace_metadata() -> None:
 
     assert bundle.trace is not None
     assert bundle.trace.prompt_policy == "plan_lookup_compact"
+    assert bundle.trace.prompt_contract == "conversation_plan_lookup"
     assert bundle.trace.intent == "plan_lookup"
     assert bundle.trace.total_chars > 0
