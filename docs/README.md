@@ -22,6 +22,7 @@ read_when:
 | `CONVERSATION.md` | Grounding conversationnel, doctrine LLM-first, dette active des anciens extracteurs |
 | `MEMORY-V2.md` | Architecture memoire : profile vs working vs patterns, regles et migration |
 | `RUNTIME-TOOLS.md` | Contrat des tools runtime multi-tool bornes, registre read-only/candidate/validation, limites et metriques |
+| `PROMPT-CONTEXT-REFACTOR.md` | Prochain chantier prompt/contexte : PromptContract, ContextPack, snapshots, composers terminaux |
 | `APP-UX.md` | Contrat UX de la webapp : calendrier, today, performance |
 | `SOUL.md` | Voix FitMAS, heartbeat, messagerie, ton |
 | `RUNBOOK.md` | Commandes, flux a tester, debug, deploiement, mapping du code |
@@ -76,6 +77,7 @@ Pour un nouvel agent :
 | Pourquoi le coach se trompe sur le reel, le temps ou l'intention ? | `CONVERSATION.md` |
 | Comment evoluer la memoire sans fourre-tout ? | `MEMORY-V2.md` |
 | Comment brancher des tools runtime ? | `RUNTIME-TOOLS.md` |
+| Comment reduire les prompts, specialiser le contexte LLM et baisser les `decide() None` ? | `PROMPT-CONTEXT-REFACTOR.md` |
 | Quelle est la prochaine tranche avant dogfood ? | `BUILD-ORDER.md` |
 | Comment l'app doit se comporter ? | `APP-UX.md` |
 | Pourquoi le coach hallucine, agrege au lieu de detailler, demande au lieu de decider ? | `COACH-AUTONOMY-REFACTOR.md` |
