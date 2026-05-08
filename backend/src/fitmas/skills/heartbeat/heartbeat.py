@@ -40,7 +40,11 @@ from fitmas.execution_clarification import build_execution_clarification
 from fitmas.grounding_contract import ReplyGroundingPacket, plan_window_facts_from_sessions
 from fitmas.skills.heartbeat import evaluation as heartbeat_evaluation
 from fitmas.skills.heartbeat.context import build_heartbeat_context_bundle
-from fitmas.skills.heartbeat.reply_context import build_briefing_reply_context, build_reminder_reply_context
+from fitmas.skills.heartbeat.reply_context import (
+    build_briefing_reply_context,
+    build_reminder_reply_context,
+    build_review_reply_context,
+)
 from fitmas.skills.heartbeat.roles import (
     BRIEFING_ROLE,
     DAY_LABELS,
@@ -812,6 +816,27 @@ def weekly_review() -> CoachDraft | None:
             logger.warning("Weekly review: failed to build deterministic reading facts", exc_info=True)
             digest = None
 
+        active_fact_lines = get_active_fact_lines(db, user)
+        facts_block = (
+            "\n\nFaits actifs a prendre en compte:\n" + "\n".join(active_fact_lines)
+            if active_fact_lines
+            else ""
+        )
+        weekly_highlights = _weekly_review_highlights(db, user, start_date=start_date)
+        reply_context = build_review_reply_context(
+            week_sessions=week_sessions,
+            time_context=time_context,
+            done_count=done_count,
+            planned_count=planned_count,
+            total_sessions=int(coach_bundle.week_summary.get("total_sessions") or len(week_sessions)),
+            actual_activity_count=actual_activity_count,
+            actual_duration_min=actual_duration_min,
+            claimed_activity_count=claimed_activity_count,
+            claimed_duration_min=claimed_duration_min,
+            active_fact_lines=active_fact_lines,
+            weekly_highlights=weekly_highlights,
+        )
+
         # Build prompt via ReviewRole
         system, prompt = build_review_prompt(
             user=user,
@@ -824,8 +849,8 @@ def weekly_review() -> CoachDraft | None:
             actual_duration_min=actual_duration_min,
             claimed_activity_count=claimed_activity_count,
             claimed_duration_min=claimed_duration_min,
-            facts_block=format_active_facts_for_prompt(db, user),
-            weekly_highlights=_weekly_review_highlights(db, user, start_date=start_date),
+            facts_block=facts_block,
+            weekly_highlights=weekly_highlights,
             digest=digest,
         )
 
@@ -841,6 +866,7 @@ def weekly_review() -> CoachDraft | None:
                 scheduled_sessions=scheduled_sessions,
                 activities=activities,
             ),
+            heartbeat_reply_context=reply_context,
         )
         if llm_msg:
             _trace_decision("send", "llm_message")

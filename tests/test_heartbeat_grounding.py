@@ -980,6 +980,98 @@ class HeartbeatGroundingTest(unittest.TestCase):
         self.assertIn("faits actifs a prendre en compte", captured["system"].lower())
         self.assertIn("etat de sante general degrade", captured["system"].lower())
 
+    def test_weekly_review_passes_structured_reply_context_to_composer(self) -> None:
+        now = get_local_now(self.user.timezone)
+        today_key = DAY_KEYS[now.weekday()]
+        repo.replace_plan(
+            self.db,
+            self.user.id,
+            intention="test",
+            summary="test",
+            timezone_name=self.user.timezone,
+            days=[
+                {
+                    "day": today_key,
+                    "label": day_label_fr(today_key, capitalize=True),
+                    "sport_type": "running",
+                    "session_type": "easy",
+                    "session_title": "Footing propre",
+                    "session_goal": "Bouger",
+                    "session_note": "",
+                    "session_description": "",
+                    "duration_min": 45,
+                    "intensity": "easy",
+                    "load_score": 1,
+                    "priority": "Normal",
+                    "nutrition_focus": "",
+                    "flexibility": "stable",
+                    "completion_status": "planned",
+                }
+            ],
+        )
+        repo.add_activity(
+            self.db,
+            user_id=self.user.id,
+            source="manual",
+            sport_type="running",
+            title="Footing fait",
+            duration_min=35,
+            distance_m=7000,
+            elevation_m=0,
+            perceived_load=3,
+            note="",
+            started_at=now,
+            matched_day=None,
+            match_reason="",
+            avg_hr=None,
+            avg_speed=None,
+            tss=20.0,
+        )
+        repo.upsert_facts(
+            self.db,
+            self.user.id,
+            [
+                {
+                    "category": "health",
+                    "key": "shin_tension",
+                    "value": "Tibias a surveiller apres les footings.",
+                    "confidence": 0.9,
+                    "confirmed": True,
+                    "source": "conversation",
+                    "affects": ["planning", "conversation", "heartbeat"],
+                }
+            ],
+        )
+
+        captured: dict[str, HeartbeatReplyContext | None] = {}
+        original_llm = heartbeat._llm_generate
+        try:
+            def fake_llm(
+                system: str,
+                prompt: str,
+                *,
+                allow_no_send: bool = True,
+                heartbeat_reply_context: HeartbeatReplyContext | None = None,
+                **_kwargs,
+            ):
+                captured["context"] = heartbeat_reply_context
+                return "ok"
+
+            heartbeat._llm_generate = fake_llm
+            draft = heartbeat.weekly_review()
+        finally:
+            heartbeat._llm_generate = original_llm
+
+        self.assertEqual(draft.text, "ok")
+        context = captured.get("context")
+        self.assertIsInstance(context, HeartbeatReplyContext)
+        self.assertEqual(context.role, "review")
+        self.assertEqual(context.capability, "read_only")
+        self.assertTrue(any("Footing propre" in item and "45min" in item for item in context.plan_window))
+        self.assertTrue(any("actual_activity_count=1" in item for item in context.week_digest))
+        self.assertTrue(any("Tibias a surveiller" in fact.value for fact in context.active_facts))
+        self.assertTrue(any("aucun changement planning" in item for item in context.forbidden_claims))
+
     def test_weekly_review_prompt_mentions_weekly_health_highlight_from_transcript(self) -> None:
         now = get_local_now(self.user.timezone)
         today_key = DAY_KEYS[now.weekday()]

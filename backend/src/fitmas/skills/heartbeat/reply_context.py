@@ -53,6 +53,46 @@ def build_reminder_reply_context(
     )
 
 
+def build_review_reply_context(
+    *,
+    week_sessions: list[Any] | tuple[Any, ...],
+    time_context: dict[str, str],
+    total_sessions: int,
+    done_count: int,
+    planned_count: int,
+    actual_activity_count: int,
+    actual_duration_min: int,
+    claimed_activity_count: int,
+    claimed_duration_min: int,
+    active_fact_lines: list[str] | tuple[str, ...],
+    weekly_highlights: str = "",
+) -> final_reply.HeartbeatReplyContext:
+    week_digest = [
+        (
+            f"total_sessions={total_sessions} done_count={done_count} "
+            f"planned_not_done={planned_count}"
+        ),
+        (
+            f"actual_activity_count={actual_activity_count} "
+            f"actual_duration_min={actual_duration_min} "
+            f"claimed_activity_count={claimed_activity_count} "
+            f"claimed_duration_min={claimed_duration_min}"
+        ),
+    ]
+    if weekly_highlights.strip():
+        week_digest.append(f"evenements_explicatifs={weekly_highlights.strip()}")
+    return final_reply.HeartbeatReplyContext(
+        role="review",
+        capability="read_only",
+        temporal=_temporal_lines(time_context),
+        week_digest=tuple(week_digest),
+        plan_window=tuple(_scheduled_session_line(session) for session in week_sessions),
+        active_facts=_active_reply_facts(active_fact_lines),
+        angle="bilan hebdo utile, factuel, sans recitation",
+        forbidden_claims=_READ_ONLY_FORBIDDEN_CLAIMS,
+    )
+
+
 def _capability_label(capability: Any) -> str:
     if getattr(capability, "read_only", False):
         return "read_only"
