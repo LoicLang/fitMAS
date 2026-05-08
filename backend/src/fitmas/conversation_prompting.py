@@ -148,6 +148,10 @@ _INTENT_POLICIES: dict[IntentCategory, ConversationPromptPolicy] = {
 }
 
 
+def list_conversation_prompt_policies() -> tuple[ConversationPromptPolicy, ...]:
+    return tuple(_INTENT_POLICIES.values())
+
+
 def select_conversation_prompt_policy(
     *,
     routing_reason: str | None = None,
