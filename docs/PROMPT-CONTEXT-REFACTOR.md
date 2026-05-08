@@ -489,8 +489,8 @@ But : rattacher heartbeat au meme modele de sortie que conversation.
 
 Livrables :
 
-- `HeartbeatReplyContext` ;
-- `compose_heartbeat_reply()` ;
+- `HeartbeatReplyContext` ; ✅ brique isolee ajoutee, pas encore branchee runtime
+- `compose_heartbeat_reply()` ; ✅ brique isolee ajoutee, pas encore branchee runtime
 - conversion des active facts en structures non recopiables telles quelles ;
 - fallback outage propre ;
 - debug dump : truth, draft, composer input, composer output, judges, final.

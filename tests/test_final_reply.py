@@ -3,9 +3,13 @@ from __future__ import annotations
 from fitmas.final_reply import (
     BlockedEvent,
     FinalReplyContext,
+    HeartbeatReplyContext,
+    HeartbeatReplyFact,
     build_post_event_reply_verifier_prompt,
+    build_heartbeat_reply_prompt,
     build_final_reply_prompt,
     close_turn_outage_fallback_reply,
+    compose_heartbeat_reply,
     compose_final_reply,
     compose_close_turn_reply,
     compose_no_change_reply,
@@ -457,3 +461,53 @@ def test_post_event_verifier_rejects_invalid_repair() -> None:
         )
         is None
     )
+
+
+def test_heartbeat_reply_prompt_hides_internal_fact_categories() -> None:
+    context = HeartbeatReplyContext(
+        role="briefing",
+        capability="read_only",
+        temporal=("vendredi 8 mai 2026, 07:30",),
+        today_truth=("Footing endurance, 40 min Z2, planned.",),
+        week_digest=("planned=2, confirmed=1",),
+        active_facts=(
+            HeartbeatReplyFact(
+                category="health",
+                value="Tension tibias tres legere, pas de douleur a la palpation.",
+            ),
+        ),
+        draft="Bonjour. Vendredi — Footing endurance — 40 min Z2.",
+        forbidden_claims=("aucun changement planning commit",),
+    )
+
+    system, prompt = build_heartbeat_reply_prompt(context)
+
+    assert "compose le message heartbeat final" in system
+    assert "Tension tibias tres legere" in prompt
+    assert "health" not in prompt
+    assert "[health]" not in prompt
+    assert "Bonjour. Vendredi" in prompt
+
+
+def test_compose_heartbeat_reply_uses_context_and_validates_output() -> None:
+    context = HeartbeatReplyContext(
+        role="briefing",
+        capability="read_only",
+        temporal=("vendredi 8 mai 2026, 07:30",),
+        today_truth=("Footing endurance, 40 min Z2, planned.",),
+        active_facts=(
+            HeartbeatReplyFact(category="health", value="Tension tibias tres legere."),
+        ),
+        draft="Bonjour. Vendredi — Footing endurance — 40 min Z2.",
+        forbidden_claims=("aucun changement planning commit",),
+    )
+
+    def fake_request_text(**kwargs):
+        assert "Footing endurance" in kwargs["prompt"]
+        assert "Tension tibias tres legere" in kwargs["prompt"]
+        assert "health" not in kwargs["prompt"]
+        return "Footing easy 40 min en Z2. Tension tibias legere: tu restes souple, sans forcer."
+
+    reply = compose_heartbeat_reply(context, request_text_fn=fake_request_text)
+
+    assert reply == "Footing easy 40 min en Z2. Tension tibias legere: tu restes souple, sans forcer."
