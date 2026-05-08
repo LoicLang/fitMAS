@@ -1,3 +1,12 @@
+---
+summary: implementation plan for Prompt Context Phase 0 observability
+read_when:
+  - continuing prompt context observability work
+  - modifying prompt trace metadata
+  - debugging decide None observability
+  - adding prompt snapshots
+---
+
 # Prompt Context Phase 0 Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
