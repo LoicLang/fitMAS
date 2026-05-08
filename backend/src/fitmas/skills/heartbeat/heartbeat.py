@@ -40,7 +40,7 @@ from fitmas.execution_clarification import build_execution_clarification
 from fitmas.grounding_contract import ReplyGroundingPacket, plan_window_facts_from_sessions
 from fitmas.skills.heartbeat import evaluation as heartbeat_evaluation
 from fitmas.skills.heartbeat.context import build_heartbeat_context_bundle
-from fitmas.skills.heartbeat.reply_context import build_briefing_reply_context
+from fitmas.skills.heartbeat.reply_context import build_briefing_reply_context, build_reminder_reply_context
 from fitmas.skills.heartbeat.roles import (
     BRIEFING_ROLE,
     DAY_LABELS,
@@ -674,6 +674,17 @@ def pre_session_reminder() -> CoachDraft | None:
         )
 
         signals = collect_signals(db, user)
+        active_fact_lines = get_active_fact_lines(db, user)
+        facts_block = (
+            "\n\nFaits actifs a prendre en compte:\n" + "\n".join(active_fact_lines)
+            if active_fact_lines
+            else ""
+        )
+        reply_context = build_reminder_reply_context(
+            key_session=key_session,
+            time_context=time_context,
+            active_fact_lines=active_fact_lines,
+        )
 
         # Build prompt via ReminderRole
         system, prompt = build_reminder_prompt(
@@ -681,7 +692,7 @@ def pre_session_reminder() -> CoachDraft | None:
             key_session=key_session,
             time_context=time_context,
             signals_block=format_signals_for_prompt(signals),
-            facts_block=format_active_facts_for_prompt(db, user),
+            facts_block=facts_block,
             calibration_need=calibration_need,
         )
 
@@ -694,6 +705,7 @@ def pre_session_reminder() -> CoachDraft | None:
                 user,
                 now=get_local_now(user.timezone),
             ),
+            heartbeat_reply_context=reply_context,
         )
         if llm_msg:
             memory_updates = []
@@ -710,9 +722,8 @@ def pre_session_reminder() -> CoachDraft | None:
 
         label = key_session.label or DAY_LABELS[NEXT_DAY[today_key]]
         msg = f"Demain c'est {key_session.session_title}. Tu te sens comment pour {label.lower()} ?"
-        fact_lines = get_active_fact_lines(db, user)
-        if fact_lines:
-            msg += "\nA noter: " + "; ".join(line.lstrip("- ") for line in fact_lines[:2]) + "."
+        if active_fact_lines:
+            msg += "\nA noter: " + "; ".join(line.lstrip("- ") for line in active_fact_lines[:2]) + "."
         _trace_decision("send", "fallback_after_llm_no_message")
         _trace_final(msg)
         return CoachDraft(text=msg, proactive=True)

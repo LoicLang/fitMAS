@@ -10,6 +10,11 @@ from typing import Any
 from fitmas import final_reply
 from fitmas.skills.heartbeat.context import HeartbeatContextBundle
 
+_READ_ONLY_FORBIDDEN_CLAIMS = (
+    "aucun changement planning n'a ete commit par ce heartbeat read-only",
+    "ne pas annoncer de seance deplacee, remplacee, allegee ou verrouillee comme deja faite",
+)
+
 
 def build_briefing_reply_context(
     *,
@@ -25,16 +30,26 @@ def build_briefing_reply_context(
         yesterday_truth=_yesterday_truth_lines(bundle),
         week_digest=_week_digest_lines(bundle),
         plan_window=_plan_window_lines(bundle),
-        active_facts=tuple(
-            final_reply.HeartbeatReplyFact(category="", value=_fact_line_value(line))
-            for line in active_fact_lines
-            if _fact_line_value(line)
-        ),
+        active_facts=_active_reply_facts(active_fact_lines),
         angle="message matinal utile, naturel, sans fiche interne",
-        forbidden_claims=(
-            "aucun changement planning n'a ete commit par ce heartbeat read-only",
-            "ne pas annoncer de seance deplacee, remplacee, allegee ou verrouillee comme deja faite",
-        ),
+        forbidden_claims=_READ_ONLY_FORBIDDEN_CLAIMS,
+    )
+
+
+def build_reminder_reply_context(
+    *,
+    key_session: Any,
+    time_context: dict[str, str],
+    active_fact_lines: list[str] | tuple[str, ...],
+) -> final_reply.HeartbeatReplyContext:
+    return final_reply.HeartbeatReplyContext(
+        role="reminder",
+        capability="read_only",
+        temporal=_temporal_lines(time_context),
+        plan_window=(_scheduled_session_line(key_session),),
+        active_facts=_active_reply_facts(active_fact_lines),
+        angle="rappel pre-seance court, utile, non anxiogene",
+        forbidden_claims=_READ_ONLY_FORBIDDEN_CLAIMS,
     )
 
 
@@ -121,6 +136,37 @@ def _plan_window_line(session: Any) -> str:
     pieces.append(f"[{session.completion_status}]")
     pieces.append(f"slot={session.slot_kind}")
     return " ".join(pieces)
+
+
+def _scheduled_session_line(session: Any) -> str:
+    pieces: list[str] = []
+    scheduled = getattr(session, "scheduled_date", None)
+    if scheduled is not None:
+        if hasattr(scheduled, "date"):
+            scheduled = scheduled.date()
+        pieces.append(str(scheduled))
+    label = str(getattr(session, "label", "") or "").strip()
+    if label:
+        pieces.append(f"({label.lower()})")
+    pieces.append(str(getattr(session, "sport_type", "") or "sport"))
+    title = str(getattr(session, "session_title", "") or "").strip()
+    if title:
+        pieces.append(f'"{title}"')
+    duration = getattr(session, "duration_min", None)
+    if duration is not None:
+        pieces.append(f"{duration}min")
+    status = str(getattr(session, "completion_status", "") or "").strip()
+    if status:
+        pieces.append(f"[{status}]")
+    return " ".join(pieces)
+
+
+def _active_reply_facts(active_fact_lines: list[str] | tuple[str, ...]) -> tuple[final_reply.HeartbeatReplyFact, ...]:
+    return tuple(
+        final_reply.HeartbeatReplyFact(category="", value=_fact_line_value(line))
+        for line in active_fact_lines
+        if _fact_line_value(line)
+    )
 
 
 def _fact_line_value(line: str) -> str:

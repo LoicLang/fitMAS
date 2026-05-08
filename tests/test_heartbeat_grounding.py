@@ -743,6 +743,79 @@ class HeartbeatGroundingTest(unittest.TestCase):
         self.assertTrue(any("Tibias sensibles" in fact.value for fact in context.active_facts))
         self.assertTrue(any("aucun changement planning" in item for item in context.forbidden_claims))
 
+    def test_pre_session_reminder_passes_structured_reply_context_to_composer(self) -> None:
+        now = get_local_now(self.user.timezone)
+        tomorrow_key = DAY_KEYS[(now.weekday() + 1) % 7]
+        repo.replace_plan(
+            self.db,
+            self.user.id,
+            intention="test",
+            summary="test",
+            timezone_name=self.user.timezone,
+            days=[
+                {
+                    "day": tomorrow_key,
+                    "label": day_label_fr(tomorrow_key, capitalize=True),
+                    "sport_type": "running",
+                    "session_type": "long",
+                    "session_title": "Footing long",
+                    "session_goal": "Construire l'endurance facile",
+                    "session_note": "",
+                    "session_description": "",
+                    "duration_min": 50,
+                    "intensity": "easy",
+                    "load_score": 2,
+                    "priority": "Seance cle",
+                    "nutrition_focus": "",
+                    "flexibility": "stable",
+                    "completion_status": "planned",
+                }
+            ],
+        )
+        repo.upsert_facts(
+            self.db,
+            self.user.id,
+            [
+                {
+                    "category": "fatigue",
+                    "key": "heavy_legs",
+                    "value": "Jambes un peu lourdes cette semaine.",
+                    "confidence": 0.9,
+                    "confirmed": True,
+                    "source": "conversation",
+                    "affects": ["planning", "conversation", "heartbeat"],
+                }
+            ],
+        )
+
+        captured: dict[str, HeartbeatReplyContext | None] = {}
+        original_llm = heartbeat._llm_generate
+        try:
+            def fake_llm(
+                system: str,
+                prompt: str,
+                *,
+                allow_no_send: bool = True,
+                heartbeat_reply_context: HeartbeatReplyContext | None = None,
+                **_kwargs,
+            ):
+                captured["context"] = heartbeat_reply_context
+                return "ok"
+
+            heartbeat._llm_generate = fake_llm
+            draft = heartbeat.pre_session_reminder()
+        finally:
+            heartbeat._llm_generate = original_llm
+
+        self.assertEqual(draft.text, "ok")
+        context = captured.get("context")
+        self.assertIsInstance(context, HeartbeatReplyContext)
+        self.assertEqual(context.role, "reminder")
+        self.assertEqual(context.capability, "read_only")
+        self.assertTrue(any("Footing long" in item and "50min" in item for item in context.plan_window))
+        self.assertTrue(any("Jambes un peu lourdes" in fact.value for fact in context.active_facts))
+        self.assertTrue(any("aucun changement planning" in item for item in context.forbidden_claims))
+
     def test_morning_briefing_includes_recent_proactive_messages_for_novelty(self) -> None:
         _, _ = self._create_plan_with_today_session()
         self.db.add_all(
