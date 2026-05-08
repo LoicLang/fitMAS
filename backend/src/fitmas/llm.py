@@ -188,8 +188,8 @@ _DAYS_FR_TO_EN = {
 
 _TURN_INTENT_TO_PROMPT_INTENT = {
     "close_turn": IntentCategory.CLOSE_TURN,
-    "trivial_ack": IntentCategory.CLOSE_TURN,
-    "casual_chat": IntentCategory.CLOSE_TURN,
+    "trivial_ack": IntentCategory.CASUAL_CHAT,
+    "casual_chat": IntentCategory.CASUAL_CHAT,
     "availability_constraint": IntentCategory.PLAN_NEGOTIATION,
     "plan_mutation": IntentCategory.PLAN_NEGOTIATION,
     "plan_lookup": IntentCategory.PLAN_LOOKUP,

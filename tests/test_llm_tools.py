@@ -2406,5 +2406,67 @@ class LLMToolsTest(unittest.TestCase):
         self.assertEqual(traces, [])
         self.assertNotIn("Calendrier daté utile", prompts[0])
 
+    def test_casual_chat_intent_uses_casual_no_action_contract(self) -> None:
+        original_client = llm._client
+        original_request_message = llm._request_message
+        original_log_tool_trace = llm.log_tool_trace
+        traces: list[object] = []
+        systems: list[str] = []
+        prompts: list[str] = []
+
+        def fake_request_message(*, system, messages, model="claude-haiku-4-5-20251001", max_tokens=512, tools=None, tool_choice=None, **kwargs):
+            self.assertIsNone(tools)
+            self.assertIsNone(tool_choice)
+            systems.append("\n".join(part["text"] for part in system))
+            prompts.append(messages[0]["content"] if isinstance(messages[0]["content"], str) else "")
+            return SimpleNamespace(
+                stop_reason="end_turn",
+                content=[
+                    SimpleNamespace(
+                        type="text",
+                        text='{"response_type":"reply","rationale":"conversation legere","fitmas_message":"Je te suis."}',
+                    )
+                ],
+                usage=SimpleNamespace(input_tokens=80, output_tokens=24),
+            )
+
+        llm._client = lambda: object()
+        llm._request_message = fake_request_message
+        llm.log_tool_trace = lambda trace: traces.append(trace)
+        try:
+            decision = llm.decide(
+                "Tu m'as fumé avec ton plan là",
+                "Repere",
+                timeline_summary="- id=1 | date=2026-05-06 | Footing",
+                execution_summary="Execution: planned_pending.",
+                coach_context={
+                    "turn_primary_intent": "casual_chat",
+                    "turn_secondary_intents": [],
+                },
+                tool_context=ToolContext(
+                    pipeline="conversation",
+                    user_id=1,
+                    timezone_name="Europe/Paris",
+                    scheduled_sessions=[],
+                    activities=[],
+                    active_facts=[],
+                ),
+            )
+        finally:
+            llm._client = original_client
+            llm._request_message = original_request_message
+            llm.log_tool_trace = original_log_tool_trace
+
+        self.assertIsNotNone(decision)
+        self.assertEqual(decision.response_type, "reply")
+        self.assertEqual(traces, [])
+        self.assertIn("- route: conversation_casual_chat", systems[0])
+        self.assertIn("- sortie decision: CoachDecision", systems[0])
+        self.assertIn("Contrat de sortie terminal_text:", systems[0])
+        self.assertNotIn("Workflow replan_after_constraint:", systems[0])
+        self.assertNotIn("Actions possibles:", systems[0])
+        self.assertNotIn("plan_patch = {", systems[0])
+        self.assertNotIn("Calendrier daté utile", prompts[0])
+
 if __name__ == "__main__":
     unittest.main()

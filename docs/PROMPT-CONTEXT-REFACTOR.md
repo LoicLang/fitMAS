@@ -448,6 +448,19 @@ Ordre conseille :
 Tests : snapshots doivent montrer que `close_turn`, `plan_lookup` et
 `plan_negotiation` ne recoivent plus le meme system prompt.
 
+Etat 8 mai 2026 :
+
+- `identity/voice`, `truth hierarchy`, `turn scope`, `tool workflow`,
+  `action contract` et `output schema` sont maintenant des modules separes.
+- Les prompts conversation sont composes par `PromptContract`.
+- Les routes `read_only` recoivent un schema `CoachDecision` no-action.
+- `casual_chat` et `trivial_ack` restent, pour l'instant, dans `decide()` :
+  ils doivent donc utiliser la policy `conversation_casual_chat`, sans tools,
+  avec un `CoachDecision` no-action. Ils ne doivent pas heriter du contrat
+  `close_turn` terminal.
+- `close_turn` pur continue d'etre bypass via composer terminal dans
+  `conversation_pipeline.py`.
+
 ### Phase 4 - Final Speech Boundary
 
 But : reduire la dependance de la parole finale a `CoachDecision.fitmas_message`.

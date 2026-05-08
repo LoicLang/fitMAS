@@ -34,6 +34,16 @@ def test_close_turn_contract_is_terminal_text() -> None:
     assert contract.output_schema == "final_text"
 
 
+def test_casual_chat_contract_matches_current_decide_runtime() -> None:
+    contract = get_prompt_contract("conversation_casual_chat")
+
+    assert contract.capability == "terminal_text"
+    assert contract.allowed_tools == ()
+    assert contract.allowed_actions == ()
+    assert contract.decision_output_schema == "CoachDecision"
+    assert contract.output_schema == "final_text"
+
+
 def test_contracts_distinguish_current_decision_output_from_final_output() -> None:
     plan_lookup = get_prompt_contract("conversation_plan_lookup")
     close_turn = get_prompt_contract("conversation_close_turn")

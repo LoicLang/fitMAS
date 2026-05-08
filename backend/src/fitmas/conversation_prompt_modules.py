@@ -239,10 +239,15 @@ Pas de markdown. Pas de texte autour du JSON."""
 
 
 def build_read_only_output_schema_system_text() -> str:
-    return """\
+    return build_no_action_coach_decision_output_schema_system_text("read_only")
+
+
+def build_no_action_coach_decision_output_schema_system_text(capability: str) -> str:
+    label = capability or "no_action"
+    return f"""\
 Tu reponds UNIQUEMENT avec un JSON CoachDecision valide.
 
-Contrat de sortie read_only:
+Contrat de sortie {label}:
 - response_type: reply | no_change
 - rationale: raison courte, factuelle
 - fitmas_message: message envoye TEL QUEL a l'utilisateur, 1-2 phrases, ancre dans les verites fournies
@@ -277,8 +282,12 @@ def build_conversation_system_text(contract: PromptContract | None = None) -> st
     modules.extend(
         [
             build_coach_voice_examples_system_text(),
-            build_read_only_output_schema_system_text()
-            if contract is not None and contract.capability == "read_only"
+            build_no_action_coach_decision_output_schema_system_text(contract.capability)
+            if (
+                contract is not None
+                and contract.decision_output_schema == "CoachDecision"
+                and not contract.allowed_actions
+            )
             else build_output_schema_system_text(),
         ]
     )
