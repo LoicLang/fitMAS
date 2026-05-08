@@ -6,7 +6,7 @@ from typing import Any
 
 from fitmas import coach_voice
 from fitmas.context_pack import ConversationContextPack
-from fitmas.conversation_prompt_modules import build_identity_voice_system_text
+from fitmas.conversation_prompt_modules import build_calendar_truth_system_text, build_identity_voice_system_text
 from fitmas.conversation_prompting import ConversationPromptPolicy
 from fitmas.prompt_observability import PromptTrace, build_prompt_trace
 from fitmas.prompt_layers import assemble_layered_prompt
@@ -25,16 +25,7 @@ Workflow replan_after_constraint:
 - si la candidate couvre mal le scope, ajuste le PlanPatch ou demande une confirmation ciblee ; ne transforme pas ca en menu large
 - ne mets pas de detail intra-seance fin dans ce workflow: sport, jour, duree/intensite cible suffisent pour Phase A
 
-Analyse le message utilisateur et decide quelle action prendre sur le calendrier d'entrainement reel.
-
-Etats du calendrier:
-- `planned` = seance prevue, pas encore faite.
-- `adapted` = seance modifiee/remplacee/deplacee par FitMAS ; ce n'est PAS une preuve d'execution.
-- `done` = seance faite, seulement si une activite reelle, un claim utilisateur explicite ou un commit d'execution l'indique.
-- `skipped` = seance manquee/annulee.
-- `rest` = repos planifie.
-- N'ecris jamais "marque comme fait", "deja fait", "tu as fait" ou equivalent a partir d'un statut `adapted` seul.
-- Pour dire qu'une seance a ete faite aujourd'hui, il faut une activite reelle aujourd'hui ou une preuve d'execution explicite.
+{build_calendar_truth_system_text()}
 
 Actions possibles:
 - "move_session": move_session = deplacer une seule seance vers un slot libre/flexible
