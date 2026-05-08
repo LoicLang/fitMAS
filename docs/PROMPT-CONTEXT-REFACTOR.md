@@ -466,6 +466,10 @@ Etat 8 mai 2026 :
   `conversation_casual_chat`, `heartbeat_briefing`.
 - Heartbeat briefing : les facts actifs ne rendent plus les categories
   internes (`health`, `constraint`, etc.) dans les lignes recopiables du prompt.
+- Heartbeat briefing : le role produit encore un brouillon, mais
+  `morning_briefing()` le fait maintenant repasser par
+  `compose_heartbeat_reply()` avec un `HeartbeatReplyContext` structure avant
+  read-only judge et factual verifier.
 
 ### Phase 4 - Final Speech Boundary
 
@@ -489,9 +493,11 @@ But : rattacher heartbeat au meme modele de sortie que conversation.
 
 Livrables :
 
-- `HeartbeatReplyContext` ; ✅ brique isolee ajoutee, pas encore branchee runtime
-- `compose_heartbeat_reply()` ; ✅ brique isolee ajoutee, pas encore branchee runtime
-- conversion des active facts en structures non recopiables telles quelles ;
+- `HeartbeatReplyContext` ; ✅ brique isolee ajoutee
+- `compose_heartbeat_reply()` ; ✅ brique isolee ajoutee
+- `morning_briefing()` -> role draft -> `compose_heartbeat_reply()` -> judges ;
+  ✅ branche pour le briefing matin
+- conversion des active facts en structures non recopiables telles quelles ; ✅
 - fallback outage propre ;
 - debug dump : truth, draft, composer input, composer output, judges, final.
 

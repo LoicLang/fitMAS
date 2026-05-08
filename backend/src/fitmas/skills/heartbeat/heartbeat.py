@@ -18,7 +18,7 @@ from __future__ import annotations
 import logging
 from contextlib import contextmanager
 from contextvars import ContextVar
-from dataclasses import asdict, dataclass, field, is_dataclass
+from dataclasses import asdict, dataclass, field, is_dataclass, replace
 from datetime import date, datetime, timedelta, timezone as dt_timezone
 from typing import Any, Iterator
 
@@ -40,6 +40,7 @@ from fitmas.execution_clarification import build_execution_clarification
 from fitmas.grounding_contract import ReplyGroundingPacket, plan_window_facts_from_sessions
 from fitmas.skills.heartbeat import evaluation as heartbeat_evaluation
 from fitmas.skills.heartbeat.context import build_heartbeat_context_bundle
+from fitmas.skills.heartbeat.reply_context import build_briefing_reply_context
 from fitmas.skills.heartbeat.roles import (
     BRIEFING_ROLE,
     DAY_LABELS,
@@ -225,6 +226,7 @@ def _llm_generate(
     pipeline: str = "heartbeat",
     tool_context: ToolContext | None = None,
     factual_grounding: ReplyGroundingPacket | None = None,
+    heartbeat_reply_context: final_reply.HeartbeatReplyContext | None = None,
 ) -> str | None:
     _PENDING_CONFIRMATION.set(None)
     trace = _trace()
@@ -290,6 +292,21 @@ def _llm_generate(
             )
         else:
             text = generate_heartbeat_text(system, prompt, allow_no_send=allow_no_send)
+    if text and heartbeat_reply_context is not None:
+        composed = final_reply.compose_heartbeat_reply(
+            replace(heartbeat_reply_context, draft=text),
+            request_text_fn=request_text,
+        )
+        trace = _trace()
+        if composed is None:
+            logger.warning("heartbeat.composer_blocked pipeline=%s message=%r", pipeline, text[:160])
+            if trace is not None:
+                trace.judge = {"blocked": True, "reason": "heartbeat_composer_blocked"}
+            _PENDING_CONFIRMATION.set(None)
+            return None
+        if trace is not None:
+            trace.final["composer"] = {"draft": text, "text": composed}
+        text = composed
     # Chantier 1 - Etape D : log-only receipt-style detection sur les outputs
     # heartbeat (briefing / reminder / review / signal). Permet de mesurer le
     # taux de violation par pipeline avant de promouvoir en hard guard.
@@ -518,6 +535,17 @@ def morning_briefing() -> CoachDraft | None:
             capability=BRIEFING_ROLE.capability,
         )
         _trace_context("heartbeat_bundle", bundle)
+        active_fact_lines = get_active_fact_lines(db, user)
+        facts_block = (
+            "\n\nFaits actifs a prendre en compte:\n" + "\n".join(active_fact_lines)
+            if active_fact_lines
+            else ""
+        )
+        reply_context = build_briefing_reply_context(
+            bundle=bundle,
+            time_context=time_context,
+            active_fact_lines=active_fact_lines,
+        )
 
         # Build prompt via BriefingRole
         system, prompt = build_briefing_prompt(
@@ -529,7 +557,7 @@ def morning_briefing() -> CoachDraft | None:
             clarification=clarification,
             calibration_need=effective_calibration_need,
             signals_block=format_signals_for_prompt(signals),
-            facts_block=format_active_facts_for_prompt(db, user),
+            facts_block=facts_block,
             sport_knowledge=load_sport_knowledge({today_session.sport_type}, max_tokens=500),
             recent_proactive_context=_recent_proactive_context(db, user, limit=2),
             pending_open_question=_pending_open_question_for_user(db, user),
@@ -551,6 +579,7 @@ def morning_briefing() -> CoachDraft | None:
                 timezone_name=getattr(user, "timezone", None),
                 plan_window=plan_window_facts_from_sessions(future_sessions),
             ),
+            heartbeat_reply_context=reply_context,
         )
         if llm_msg:
             memory_updates = []
@@ -578,9 +607,8 @@ def morning_briefing() -> CoachDraft | None:
         yesterday_summary = _yesterday_fallback_summary(bundle.yesterday)
         if yesterday_summary:
             msg += f"\n{yesterday_summary}"
-        fact_lines = get_active_fact_lines(db, user)
-        if fact_lines:
-            msg += "\nA noter: " + "; ".join(line.lstrip("- ") for line in fact_lines[:2]) + "."
+        if active_fact_lines:
+            msg += "\nA noter: " + "; ".join(line.lstrip("- ") for line in active_fact_lines[:2]) + "."
         _trace_decision("send", "fallback_after_llm_no_message")
         _trace_final(msg)
         return CoachDraft(text=msg, proactive=True)

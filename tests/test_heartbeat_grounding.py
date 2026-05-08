@@ -15,6 +15,7 @@ from fitmas import repository as repo, schema as s
 from fitmas.adaptation import AdaptationResult
 from fitmas.coach_messages import persist_draft
 from fitmas.db import Base, SessionLocal, engine, init_db
+from fitmas.final_reply import HeartbeatReplyContext, HeartbeatReplyFact
 from fitmas.llm import MutationDecision
 from fitmas.time_context import DAY_KEYS, day_label_fr, get_local_now
 
@@ -651,6 +652,96 @@ class HeartbeatGroundingTest(unittest.TestCase):
 
         self.assertEqual(text, "Footing easy ce matin, rien a forcer.")
         self.assertEqual(len(calls), 1)
+
+    def test_llm_generate_composes_heartbeat_reply_before_judges(self) -> None:
+        original_generate = heartbeat.generate_heartbeat_text
+        original_request_text = getattr(heartbeat, "request_text", None)
+        context = HeartbeatReplyContext(
+            role="briefing",
+            capability="read_only",
+            temporal=("vendredi 8 mai 2026, 07:30",),
+            today_truth=("Footing endurance, 40 min Z2, planned.",),
+            active_facts=(
+                HeartbeatReplyFact(category="health", value="Tension tibias legere."),
+            ),
+            forbidden_claims=("aucun changement planning commit",),
+        )
+        calls: list[dict] = []
+
+        try:
+            heartbeat.generate_heartbeat_text = (
+                lambda *args, **kwargs: "Bonjour. Vendredi — Footing endurance — 40 min Z2. [health] Tension tibias."
+            )
+
+            def fake_request_text(**kwargs):
+                calls.append(kwargs)
+                if "message heartbeat final" in kwargs["system"]:
+                    self.assertIn("Brouillon role heartbeat", kwargs["prompt"])
+                    self.assertIn("Tension tibias legere", kwargs["prompt"])
+                    self.assertNotIn("health", kwargs["prompt"])
+                    return "Footing easy 40 min en Z2. Tibias sensibles: tu restes souple."
+                return "ALLOW"
+
+            heartbeat.request_text = fake_request_text
+            text = heartbeat._llm_generate(
+                "system",
+                "prompt",
+                pipeline="heartbeat_briefing",
+                heartbeat_reply_context=context,
+            )
+        finally:
+            heartbeat.generate_heartbeat_text = original_generate
+            if original_request_text is not None:
+                heartbeat.request_text = original_request_text
+
+        self.assertEqual(text, "Footing easy 40 min en Z2. Tibias sensibles: tu restes souple.")
+        self.assertEqual(len(calls), 2)
+
+    def test_morning_briefing_passes_structured_reply_context_to_composer(self) -> None:
+        _, _ = self._create_plan_with_today_session()
+        repo.upsert_facts(
+            self.db,
+            self.user.id,
+            [
+                {
+                    "category": "health",
+                    "key": "shin_tension",
+                    "value": "Tibias sensibles depuis la derniere sortie.",
+                    "confidence": 0.9,
+                    "confirmed": True,
+                    "source": "conversation",
+                    "affects": ["planning", "conversation", "heartbeat"],
+                }
+            ],
+        )
+
+        captured: dict[str, HeartbeatReplyContext | None] = {}
+        original_llm = heartbeat._llm_generate
+        try:
+            def fake_llm(
+                system: str,
+                prompt: str,
+                *,
+                allow_no_send: bool = True,
+                heartbeat_reply_context: HeartbeatReplyContext | None = None,
+                **_kwargs,
+            ):
+                captured["context"] = heartbeat_reply_context
+                return "ok"
+
+            heartbeat._llm_generate = fake_llm
+            draft = heartbeat.morning_briefing()
+        finally:
+            heartbeat._llm_generate = original_llm
+
+        self.assertEqual(draft.text, "ok")
+        context = captured.get("context")
+        self.assertIsInstance(context, HeartbeatReplyContext)
+        self.assertEqual(context.role, "briefing")
+        self.assertEqual(context.capability, "read_only")
+        self.assertTrue(any("Footing" in item and "45min" in item for item in context.today_truth))
+        self.assertTrue(any("Tibias sensibles" in fact.value for fact in context.active_facts))
+        self.assertTrue(any("aucun changement planning" in item for item in context.forbidden_claims))
 
     def test_morning_briefing_includes_recent_proactive_messages_for_novelty(self) -> None:
         _, _ = self._create_plan_with_today_session()

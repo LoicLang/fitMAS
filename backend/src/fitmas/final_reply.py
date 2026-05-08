@@ -84,6 +84,10 @@ _HEARTBEAT_INTERNAL_VISIBLE_FRAGMENTS = (
     " runtime ",
     " fallback ",
 )
+_HEARTBEAT_CONTEXT_MARKER_RE = re.compile(
+    r"\[(health|constraint|execution|patch|runtime|fallback)\]\s*",
+    flags=re.IGNORECASE,
+)
 _COMMITTED_CONFIRMATION_FRAGMENTS = (
     "tu confirmes",
     "confirme",
@@ -387,7 +391,7 @@ def build_heartbeat_reply_prompt(context: HeartbeatReplyContext) -> tuple[str, s
     if context.angle:
         lines.append(f"Angle: {context.angle}")
     if context.draft:
-        lines.append(f"Brouillon role heartbeat: {context.draft}")
+        lines.append(f"Brouillon role heartbeat: {_heartbeat_prompt_value(context.draft)}")
     if context.forbidden_claims:
         lines.append("Claims interdits:")
         lines.extend(f"- {item}" for item in context.forbidden_claims if str(item).strip())
@@ -432,6 +436,10 @@ def _heartbeat_fact_values(facts: tuple[HeartbeatReplyFact, ...]) -> tuple[str, 
         if value:
             values.append(value)
     return tuple(values)
+
+
+def _heartbeat_prompt_value(value: str) -> str:
+    return _HEARTBEAT_CONTEXT_MARKER_RE.sub("", str(value or "")).strip()
 
 
 def compose_plan_adaptation_reply(
