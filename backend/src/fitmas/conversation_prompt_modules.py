@@ -42,6 +42,10 @@ Workflow replan_after_constraint:
 - ne mets pas de detail intra-seance fin dans ce workflow: sport, jour, duree/intensite cible suffisent pour Phase A"""
 
 
+def build_coach_voice_examples_system_text() -> str:
+    return f"{coach_voice.COACH_VOICE_FEW_SHOTS_GOOD}\n\n{coach_voice.COACH_VOICE_FEW_SHOTS_BAD}"
+
+
 def build_calendar_truth_system_text() -> str:
     return """\
 Analyse le message utilisateur et decide quelle action prendre sur le calendrier d'entrainement reel.

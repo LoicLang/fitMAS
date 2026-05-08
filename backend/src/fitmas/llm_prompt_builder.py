@@ -4,11 +4,11 @@ import re
 from dataclasses import dataclass
 from typing import Any
 
-from fitmas import coach_voice
 from fitmas.context_pack import ConversationContextPack
 from fitmas.conversation_prompt_modules import (
     build_action_contract_system_text,
     build_calendar_truth_system_text,
+    build_coach_voice_examples_system_text,
     build_identity_voice_system_text,
     build_output_schema_system_text,
     build_tool_workflow_system_text,
@@ -27,9 +27,7 @@ _CONVERSATION_SYSTEM_TEXT = f"""\
 
 {build_action_contract_system_text()}
 
-{coach_voice.COACH_VOICE_FEW_SHOTS_GOOD}
-
-{coach_voice.COACH_VOICE_FEW_SHOTS_BAD}
+{build_coach_voice_examples_system_text()}
 
 {build_output_schema_system_text()}\
 """

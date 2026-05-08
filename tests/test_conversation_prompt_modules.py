@@ -2,6 +2,7 @@ from fitmas import coach_voice
 from fitmas.conversation_prompt_modules import (
     build_action_contract_system_text,
     build_calendar_truth_system_text,
+    build_coach_voice_examples_system_text,
     build_identity_voice_system_text,
     build_output_schema_system_text,
     build_tool_workflow_system_text,
@@ -37,6 +38,16 @@ def test_tool_workflow_system_text_contains_replan_workflow() -> None:
     assert "validate_week_coherence" in text
     assert "Actions possibles:" not in text
     assert "Analyse le message utilisateur" not in text
+
+
+def test_coach_voice_examples_system_text_contains_good_and_bad_examples() -> None:
+    text = build_coach_voice_examples_system_text()
+
+    assert text == f"{coach_voice.COACH_VOICE_FEW_SHOTS_GOOD}\n\n{coach_voice.COACH_VOICE_FEW_SHOTS_BAD}"
+    assert "Exemples BONS" in text
+    assert "Exemples A NE JAMAIS ECRIRE" in text
+    assert "Actions possibles:" not in text
+    assert "Tu reponds UNIQUEMENT" not in text
 
 
 def test_action_contract_system_text_contains_actions_rules_and_examples() -> None:
