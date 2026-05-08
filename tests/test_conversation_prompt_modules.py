@@ -90,6 +90,7 @@ def test_turn_scope_contract_system_text_renders_safe_contract_subset() -> None:
     assert "- tools autorises: get_plan_window, get_session_detail" in text
     assert "- actions autorisees: aucune" in text
     assert "- verites requises: temporal, plan_window" in text
+    assert "- sortie decision: CoachDecision" in text
     assert "- parole finale: terminal_composer" in text
     assert "grounded_final_reply" not in text
     assert "output_schema" not in text

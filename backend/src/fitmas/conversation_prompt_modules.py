@@ -60,6 +60,7 @@ Contrat du tour:
 - actions autorisees: {_render_tuple(contract.allowed_actions)}
 - verites requises: {_render_tuple(contract.required_truth_blocks)}
 - verites optionnelles: {_render_tuple(contract.optional_truth_blocks)}
+- sortie decision: {contract.decision_output_schema}
 - parole finale: {contract.final_reply_mode}
 
 Regles de portee:
