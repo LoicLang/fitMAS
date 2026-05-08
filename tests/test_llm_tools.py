@@ -852,6 +852,29 @@ class LLMToolsTest(unittest.TestCase):
         self.assertEqual(decision.mutation_type, "lighten_day")
         self.assertEqual(fallback_calls[0]["provider"], "claude")
 
+    def test_decide_logs_empty_output_reason_when_provider_returns_no_data(self) -> None:
+        original_client = llm._client
+        original_request_structured_json = llm._request_structured_json
+
+        llm._client = lambda: object()
+        llm._request_structured_json = lambda *args, **kwargs: None
+        try:
+            with self.assertLogs("fitmas.llm", level="INFO") as captured:
+                decision = llm.decide(
+                    "J'ai quoi demain ?",
+                    "Repere",
+                    coach_context={"turn_primary_intent": "plan_lookup"},
+                )
+        finally:
+            llm._client = original_client
+            llm._request_structured_json = original_request_structured_json
+
+        self.assertIsNone(decision)
+        self.assertTrue(
+            any("llm.decide_none reason=empty_output" in record.getMessage() for record in captured.records),
+            [record.getMessage() for record in captured.records],
+        )
+
     def test_decide_repairs_invalid_deepseek_decision_before_claude_fallback(self) -> None:
         original_client = llm._client
         original_request_structured_json = llm._request_structured_json

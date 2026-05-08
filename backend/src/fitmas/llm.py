@@ -16,6 +16,7 @@ from fitmas.fact_memory import select_relevant_facts
 from fitmas.knowledge import load_sport_knowledge
 from fitmas.llm_prompt_builder import build_layered_conversation_prompt, render_conversation_time_block
 from fitmas.onboarding_contract import build_coach_profile, build_goal_summary
+from fitmas.prompt_observability import DecideFailureReason, PromptTrace
 from fitmas.profile_summary import build_profile_summary
 from fitmas.time_context import build_time_context, render_time_context
 from fitmas.tools.contract import ToolCall, ToolContext
@@ -399,6 +400,22 @@ def _use_deepseek_openai_structured_output() -> bool:
     return str(raw).strip().lower() in {"1", "true", "yes", "on"}
 
 
+def _log_decide_none(reason: DecideFailureReason, *, prompt_trace: PromptTrace | None = None) -> None:
+    logger.info(
+        "llm.decide_none reason=%s prompt_trace=%s",
+        reason.value,
+        prompt_trace.as_dict() if prompt_trace else None,
+    )
+
+
+def _decide_failure_reason_from_exception_type(error_type: str) -> DecideFailureReason:
+    if error_type == "timeout":
+        return DecideFailureReason.TIMEOUT
+    if error_type == "json_parse":
+        return DecideFailureReason.INVALID_JSON
+    return DecideFailureReason.PROVIDER_ERROR
+
+
 def decide(
     user_text: str,
     plan_summary: str,
@@ -419,6 +436,7 @@ def decide(
     """
     if not _client():
         logger.info("No Anthropic client available — falling back to rules")
+        _log_decide_none(DecideFailureReason.NO_CLIENT)
         return None
 
     resolved_time_context = time_context or build_time_context((coach_context or {}).get("timezone"))
@@ -450,6 +468,7 @@ def decide(
     prompt = prompt_bundle.prompt
     history_messages_used = prompt_bundle.history_messages_used
     system_prompt = prompt_bundle.system
+    prompt_trace = prompt_bundle.trace
 
     try:
         _remember_invalid_decision(None)
@@ -469,6 +488,7 @@ def decide(
                 messages=[{"role": "user", "content": prompt}],
             )
         if not data:
+            _log_decide_none(DecideFailureReason.EMPTY_OUTPUT, prompt_trace=prompt_trace)
             return None
 
         parsed_decision = _parse_llm_decision_payload(data)
@@ -490,6 +510,7 @@ def decide(
                     coach_context=coach_context,
                 )
         if parsed_decision is None:
+            _log_decide_none(DecideFailureReason.FALLBACK_FAILED, prompt_trace=prompt_trace)
             return None
 
         if isinstance(parsed_decision, CoachDecision):
@@ -533,6 +554,10 @@ def decide(
             error_type,
             str(exc)[:200],
             exc_info=True,
+        )
+        _log_decide_none(
+            _decide_failure_reason_from_exception_type(error_type),
+            prompt_trace=prompt_trace if "prompt_trace" in locals() else None,
         )
         return None
 
