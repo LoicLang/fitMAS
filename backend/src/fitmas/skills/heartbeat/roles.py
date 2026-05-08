@@ -97,7 +97,11 @@ def get_active_fact_lines(
         for fact in relevant
         if not _should_suppress_fact(fact, suppress_stable_constraints=suppress_stable_constraints)
     ]
-    return [f"- [{f.category}] {f.value}" for f in filtered[:5]]
+    return [
+        f"- {str(f.value).strip()}"
+        for f in filtered[:5]
+        if str(f.value or "").strip()
+    ]
 
 
 def format_active_facts_for_prompt(

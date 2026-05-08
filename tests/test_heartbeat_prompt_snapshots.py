@@ -97,8 +97,8 @@ def _heartbeat_briefing_snapshot() -> str:
         signals_block="",
         facts_block=(
             "\n\nFaits actifs a prendre en compte:\n"
-            "- [health] Tres legere tension aux tibias, pas de douleur a la palpation.\n"
-            "- [health] Etirements doux des mollets apres chaque seance."
+            "- Tres legere tension aux tibias, pas de douleur a la palpation.\n"
+            "- Etirements doux des mollets apres chaque seance."
         ),
         sport_knowledge="Running Z2: respiration stable, conversation possible.",
     )

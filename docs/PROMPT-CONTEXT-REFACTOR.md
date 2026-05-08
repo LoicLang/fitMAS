@@ -464,6 +464,8 @@ Etat 8 mai 2026 :
   passage par `decide()`.
 - Snapshots actifs : `conversation_plan_lookup`, `conversation_close_turn`,
   `conversation_casual_chat`, `heartbeat_briefing`.
+- Heartbeat briefing : les facts actifs ne rendent plus les categories
+  internes (`health`, `constraint`, etc.) dans les lignes recopiables du prompt.
 
 ### Phase 4 - Final Speech Boundary
 
