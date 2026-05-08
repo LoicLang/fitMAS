@@ -3,7 +3,7 @@ contract: conversation_plan_lookup
 tool_budget: ['get_plan_window', 'get_session_detail']
 truth_blocks: ['temporal', 'planning', 'execution', 'memory', 'active_thread', 'coach_profile', 'tool_budget']
 output_schema: CoachDecision
-trace: {'route': 'conversation_decide', 'provider': None, 'model': None, 'prompt_policy': 'plan_lookup_compact', 'prompt_contract': 'conversation_plan_lookup', 'intent': 'plan_lookup', 'system_chars': 9555, 'user_chars': 270, 'total_chars': 9825, 'tool_names': ('get_plan_window', 'get_session_detail'), 'truth_block_names': ('temporal', 'planning', 'execution', 'memory', 'active_thread', 'coach_profile', 'tool_budget'), 'history_messages_used': 2}
+trace: {'route': 'conversation_decide', 'provider': None, 'model': None, 'prompt_policy': 'plan_lookup_compact', 'prompt_contract': 'conversation_plan_lookup', 'intent': 'plan_lookup', 'system_chars': 9759, 'user_chars': 270, 'total_chars': 10029, 'tool_names': ('get_plan_window', 'get_session_detail'), 'truth_block_names': ('temporal', 'planning', 'execution', 'memory', 'active_thread', 'coach_profile', 'tool_budget'), 'history_messages_used': 2}
 
 ## SYSTEM
 Tu es FitMAS, un coach multisport IA.
@@ -103,12 +103,13 @@ Contrat de sortie read_only:
 - confirmation_reason: null
 - memory_actions: []
 - execution_actions: []
-- pending_resolution: null
+- pending_resolution: null sauf si un pending explicite est fourni dans le prompt et que le user y repond
 
 Regles:
 - Tu ne proposes aucune mutation planning.
 - Tu ne promets aucun changement applique.
 - Tu ne crees aucune memoire et aucune execution.
+- Tu ne resols un pending que si le contexte du prompt contient ce pending et que le message utilisateur le vise clairement.
 - Si l'information manque, dis ce qui manque sobrement dans `fitmas_message`.
 - Si la question est factuelle, reponds directement sans recadrage non demande.
 

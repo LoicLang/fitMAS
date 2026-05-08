@@ -459,7 +459,9 @@ Etat 8 mai 2026 :
   avec un `CoachDecision` no-action. Ils ne doivent pas heriter du contrat
   `close_turn` terminal.
 - `close_turn` pur continue d'etre bypass via composer terminal dans
-  `conversation_pipeline.py`.
+  `conversation_pipeline.py`, mais son prompt contract de fallback reste un
+  `CoachDecision` no-action pour les cas ou un pending/calibration force un
+  passage par `decide()`.
 
 ### Phase 4 - Final Speech Boundary
 

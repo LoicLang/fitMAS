@@ -24,13 +24,13 @@ def test_plan_negotiation_contract_can_draft_plan_patch() -> None:
     assert contract.final_reply_mode == "post_runtime"
 
 
-def test_close_turn_contract_is_terminal_text() -> None:
+def test_close_turn_contract_matches_decide_fallback_runtime() -> None:
     contract = get_prompt_contract("conversation_close_turn")
 
     assert contract.capability == "terminal_text"
     assert contract.allowed_tools == ()
     assert contract.allowed_actions == ()
-    assert contract.decision_output_schema == "final_text"
+    assert contract.decision_output_schema == "CoachDecision"
     assert contract.output_schema == "final_text"
 
 
@@ -50,4 +50,5 @@ def test_contracts_distinguish_current_decision_output_from_final_output() -> No
 
     assert plan_lookup.decision_output_schema == "CoachDecision"
     assert plan_lookup.output_schema == "grounded_final_reply"
-    assert close_turn.decision_output_schema == close_turn.output_schema == "final_text"
+    assert close_turn.decision_output_schema == "CoachDecision"
+    assert close_turn.output_schema == "final_text"

@@ -136,6 +136,24 @@ def test_casual_chat_conversation_system_text_uses_no_action_coach_decision_sche
     assert "record_execution_update" not in text
 
 
+def test_close_turn_conversation_system_text_uses_no_action_coach_decision_schema() -> None:
+    contract = get_prompt_contract("conversation_close_turn")
+
+    text = build_conversation_system_text(contract)
+
+    assert "Contrat du tour:" in text
+    assert "- route: conversation_close_turn" in text
+    assert "- sortie decision: CoachDecision" in text
+    assert "Contrat de sortie terminal_text:" in text
+    assert "response_type: reply | no_change" in text
+    assert "pending_resolution: null sauf si un pending explicite est fourni" in text
+    assert "Workflow replan_after_constraint:" not in text
+    assert "Actions possibles:" not in text
+    assert "plan_patch = {" not in text
+    assert "memory_actions: liste optionnelle" not in text
+    assert "record_execution_update" not in text
+
+
 def test_draft_action_conversation_system_text_keeps_mutation_modules() -> None:
     contract = get_prompt_contract("conversation_plan_negotiation")
 

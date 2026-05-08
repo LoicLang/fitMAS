@@ -2357,11 +2357,13 @@ class LLMToolsTest(unittest.TestCase):
         original_request_message = llm._request_message
         original_log_tool_trace = llm.log_tool_trace
         traces: list[object] = []
+        systems: list[str] = []
         prompts: list[str] = []
 
         def fake_request_message(*, system, messages, model="claude-haiku-4-5-20251001", max_tokens=512, tools=None, tool_choice=None, **kwargs):
             self.assertIsNone(tools)
             self.assertIsNone(tool_choice)
+            systems.append("\n".join(part["text"] for part in system))
             prompts.append(messages[0]["content"] if isinstance(messages[0]["content"], str) else "")
             return SimpleNamespace(
                 stop_reason="end_turn",
@@ -2404,6 +2406,12 @@ class LLMToolsTest(unittest.TestCase):
         self.assertIsNotNone(decision)
         self.assertEqual(decision.response_type, "no_change")
         self.assertEqual(traces, [])
+        self.assertIn("- route: conversation_close_turn", systems[0])
+        self.assertIn("- sortie decision: CoachDecision", systems[0])
+        self.assertIn("Contrat de sortie terminal_text:", systems[0])
+        self.assertNotIn("Workflow replan_after_constraint:", systems[0])
+        self.assertNotIn("Actions possibles:", systems[0])
+        self.assertNotIn("plan_patch = {", systems[0])
         self.assertNotIn("Calendrier daté utile", prompts[0])
 
     def test_casual_chat_intent_uses_casual_no_action_contract(self) -> None:

@@ -256,12 +256,13 @@ Contrat de sortie {label}:
 - confirmation_reason: null
 - memory_actions: []
 - execution_actions: []
-- pending_resolution: null
+- pending_resolution: null sauf si un pending explicite est fourni dans le prompt et que le user y repond
 
 Regles:
 - Tu ne proposes aucune mutation planning.
 - Tu ne promets aucun changement applique.
 - Tu ne crees aucune memoire et aucune execution.
+- Tu ne resols un pending que si le contexte du prompt contient ce pending et que le message utilisateur le vise clairement.
 - Si l'information manque, dis ce qui manque sobrement dans `fitmas_message`.
 - Si la question est factuelle, reponds directement sans recadrage non demande.
 
