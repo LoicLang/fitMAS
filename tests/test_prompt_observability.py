@@ -3,6 +3,9 @@ from fitmas.prompt_observability import (
     build_prompt_trace,
     normalize_decide_failure_reason,
 )
+from fitmas.conversation_prompting import select_conversation_prompt_policy
+from fitmas.llm_prompt_builder import build_layered_conversation_prompt
+from fitmas.tools.routing import IntentCategory
 
 
 def test_build_prompt_trace_counts_system_and_user_chars() -> None:
@@ -30,3 +33,25 @@ def test_build_prompt_trace_counts_system_and_user_chars() -> None:
 def test_normalize_decide_failure_reason_accepts_known_values_only() -> None:
     assert normalize_decide_failure_reason("empty_output") == DecideFailureReason.EMPTY_OUTPUT
     assert normalize_decide_failure_reason("not-a-real-reason") == DecideFailureReason.UNKNOWN
+
+
+def test_layered_prompt_bundle_exposes_trace_metadata() -> None:
+    policy = select_conversation_prompt_policy(intent=IntentCategory.PLAN_LOOKUP)
+    bundle = build_layered_conversation_prompt(
+        user_text="J'ai quoi demain ?",
+        prompt_policy=policy,
+        time_block="Aujourd'hui: vendredi",
+        timeline_summary="- Vendredi: Footing 40 min",
+        execution_summary=None,
+        temporal_summary=None,
+        activity_claim_summary=None,
+        signal_summary=None,
+        conversation_history=[],
+        coach_context={"turn_primary_intent": "plan_lookup"},
+        selected_facts=[],
+    )
+
+    assert bundle.trace is not None
+    assert bundle.trace.prompt_policy == "plan_lookup_compact"
+    assert bundle.trace.intent == "plan_lookup"
+    assert bundle.trace.total_chars > 0

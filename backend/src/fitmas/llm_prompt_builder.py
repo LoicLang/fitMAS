@@ -6,6 +6,7 @@ from typing import Any
 
 from fitmas import coach_voice
 from fitmas.conversation_prompting import ConversationPromptPolicy
+from fitmas.prompt_observability import PromptTrace, build_prompt_trace
 from fitmas.prompt_layers import assemble_layered_prompt
 from fitmas.time_context import render_time_context
 
@@ -281,6 +282,14 @@ class ConversationPromptBundle:
     system: list[dict[str, Any]]
     prompt: str
     history_messages_used: int
+    trace: PromptTrace | None = None
+
+
+def _trace_intent_from_context(coach_context: dict[str, Any] | None) -> str | None:
+    if not coach_context:
+        return None
+    primary_intent = coach_context.get("turn_primary_intent")
+    return str(primary_intent) if primary_intent else None
 
 
 def build_conversation_prompt_bundle(
@@ -377,16 +386,30 @@ Ignore tout repère hebdo legacy si le calendrier daté dit autre chose.
 Nouveau message de l'utilisateur:
 {user_text}"""
 
+    system = [
+        {
+            "type": "text",
+            "text": _CONVERSATION_SYSTEM_TEXT,
+            "cache_control": {"type": "ephemeral", "ttl": "1h"},
+        }
+    ]
+
     return ConversationPromptBundle(
-        system=[
-            {
-                "type": "text",
-                "text": _CONVERSATION_SYSTEM_TEXT,
-                "cache_control": {"type": "ephemeral", "ttl": "1h"},
-            }
-        ],
+        system=system,
         prompt=prompt,
         history_messages_used=history_messages_used,
+        trace=build_prompt_trace(
+            route="conversation_decide",
+            provider=None,
+            model=None,
+            prompt_policy=prompt_policy.name,
+            prompt_contract=None,
+            intent=_trace_intent_from_context(coach_context),
+            system=system,
+            user_prompt=prompt,
+            tool_names=(),
+            history_messages_used=history_messages_used,
+        ),
     )
 
 
@@ -480,4 +503,16 @@ def build_layered_conversation_prompt(
         system=system_parts,
         prompt=prompt,
         history_messages_used=history_messages_used,
+        trace=build_prompt_trace(
+            route="conversation_decide",
+            provider=None,
+            model=None,
+            prompt_policy=prompt_policy.name,
+            prompt_contract=None,
+            intent=_trace_intent_from_context(coach_context),
+            system=system_parts,
+            user_prompt=prompt,
+            tool_names=(),
+            history_messages_used=history_messages_used,
+        ),
     )
