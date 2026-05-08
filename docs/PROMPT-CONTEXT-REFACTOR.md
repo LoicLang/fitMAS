@@ -466,8 +466,8 @@ Etat 8 mai 2026 :
   `conversation_casual_chat`, `heartbeat_briefing`.
 - Heartbeat briefing : les facts actifs ne rendent plus les categories
   internes (`health`, `constraint`, etc.) dans les lignes recopiables du prompt.
-- Heartbeat briefing/reminder/review : le role produit encore un brouillon, mais
-  `morning_briefing()`, `pre_session_reminder()` et `weekly_review()` le font maintenant repasser par
+- Heartbeat briefing/reminder/review/signal : le role produit encore un brouillon, mais
+  `morning_briefing()`, `pre_session_reminder()`, `weekly_review()` et `signal_check()` le font maintenant repasser par
   `compose_heartbeat_reply()` avec un `HeartbeatReplyContext` structure avant
   read-only judge et factual verifier.
 
@@ -501,6 +501,8 @@ Livrables :
   ✅ branche pour le rappel pre-seance
 - `weekly_review()` -> role draft -> `compose_heartbeat_reply()` -> judges ;
   ✅ branche pour la revue hebdo read-only
+- `signal_check()` -> role draft -> `compose_heartbeat_reply()` -> judges ;
+  ✅ branche en `candidate_only` pour les signaux proactifs sans commit autonome
 - conversion des active facts en structures non recopiables telles quelles ; ✅
 - fallback outage propre ;
 - debug dump : truth, draft, composer input, composer output, judges, final.

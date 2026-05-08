@@ -93,6 +93,23 @@ def build_review_reply_context(
     )
 
 
+def build_signal_reply_context(
+    *,
+    actionable_signals: list[dict[str, Any]] | tuple[dict[str, Any], ...],
+    time_context: dict[str, str],
+    active_fact_lines: list[str] | tuple[str, ...],
+) -> final_reply.HeartbeatReplyContext:
+    return final_reply.HeartbeatReplyContext(
+        role="signal",
+        capability="candidate_only",
+        temporal=_temporal_lines(time_context),
+        week_digest=tuple(_signal_line(signal) for signal in actionable_signals),
+        active_facts=_active_reply_facts(active_fact_lines),
+        angle="message proactif base sur signal, avec proposition seulement si utile",
+        forbidden_claims=_READ_ONLY_FORBIDDEN_CLAIMS,
+    )
+
+
 def _capability_label(capability: Any) -> str:
     if getattr(capability, "read_only", False):
         return "read_only"
@@ -207,6 +224,13 @@ def _active_reply_facts(active_fact_lines: list[str] | tuple[str, ...]) -> tuple
         for line in active_fact_lines
         if _fact_line_value(line)
     )
+
+
+def _signal_line(signal: dict[str, Any]) -> str:
+    kind = str(signal.get("kind") or "signal").strip()
+    severity = str(signal.get("severity") or "info").strip()
+    summary = str(signal.get("summary") or "").strip()
+    return " ".join(piece for piece in (kind, severity, summary) if piece)
 
 
 def _fact_line_value(line: str) -> str:

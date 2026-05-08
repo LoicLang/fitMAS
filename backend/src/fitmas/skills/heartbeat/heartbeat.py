@@ -44,6 +44,7 @@ from fitmas.skills.heartbeat.reply_context import (
     build_briefing_reply_context,
     build_reminder_reply_context,
     build_review_reply_context,
+    build_signal_reply_context,
 )
 from fitmas.skills.heartbeat.roles import (
     BRIEFING_ROLE,
@@ -952,13 +953,24 @@ def signal_check() -> CoachDraft | None:
 
         time_context = build_time_context(user.timezone)
         _trace_context("time_context", time_context)
+        active_fact_lines = get_active_fact_lines(db, user)
+        facts_block = (
+            "\n\nFaits actifs a prendre en compte:\n" + "\n".join(active_fact_lines)
+            if active_fact_lines
+            else ""
+        )
+        reply_context = build_signal_reply_context(
+            actionable_signals=actionable,
+            time_context=time_context,
+            active_fact_lines=active_fact_lines,
+        )
 
         # Build prompt via SignalRole
         system, prompt = build_signal_prompt(
             user=user,
             time_context=time_context,
             signals_block=format_signals_for_prompt(actionable),
-            facts_block=format_active_facts_for_prompt(db, user),
+            facts_block=facts_block,
         )
 
         llm_msg = _llm_generate(
@@ -970,6 +982,7 @@ def signal_check() -> CoachDraft | None:
                 user,
                 now=get_local_now(user.timezone),
             ),
+            heartbeat_reply_context=reply_context,
         )
         if llm_msg:
             _trace_decision("send", "llm_message")
@@ -989,9 +1002,8 @@ def signal_check() -> CoachDraft | None:
         else:
             msg = "Je garde un oeil sur ta semaine. On en reparle."
 
-        fact_lines = get_active_fact_lines(db, user)
-        if fact_lines:
-            msg += "\nA noter: " + "; ".join(line.lstrip("- ") for line in fact_lines[:2]) + "."
+        if active_fact_lines:
+            msg += "\nA noter: " + "; ".join(line.lstrip("- ") for line in active_fact_lines[:2]) + "."
 
         _trace_decision("send", "fallback_after_llm_no_message")
         _trace_final(msg)

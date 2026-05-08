@@ -1172,6 +1172,75 @@ class HeartbeatGroundingTest(unittest.TestCase):
         self.assertIn("proposerais", draft.text.lower())
         self.assertEqual(events, [])
 
+    def test_signal_check_passes_structured_reply_context_to_composer(self) -> None:
+        self._create_plan_with_today_session()
+        repo.upsert_facts(
+            self.db,
+            self.user.id,
+            [
+                {
+                    "category": "fatigue",
+                    "key": "load_high",
+                    "value": "Charge ressentie haute cette semaine.",
+                    "confidence": 0.9,
+                    "confirmed": True,
+                    "source": "conversation",
+                    "affects": ["planning", "conversation", "heartbeat"],
+                }
+            ],
+        )
+
+        captured: dict[str, HeartbeatReplyContext | None] = {}
+        original_tsb = adaptation.check_and_adapt_tsb
+        original_missed = adaptation.check_and_adapt_missed
+        original_collect = heartbeat.collect_signals
+        original_gate = heartbeat.heartbeat_evaluation.evaluate_proactive_gate
+        original_llm = heartbeat._llm_generate
+        try:
+            heartbeat.heartbeat_evaluation.evaluate_proactive_gate = lambda *args, **kwargs: SimpleNamespace(
+                allowed=True,
+                reason=None,
+            )
+            adaptation.check_and_adapt_tsb = lambda *args, **kwargs: None
+            adaptation.check_and_adapt_missed = lambda *args, **kwargs: None
+            heartbeat.collect_signals = lambda *args, **kwargs: [
+                {
+                    "kind": "high_cumulative_load",
+                    "severity": "warning",
+                    "summary": "Charge cumulative haute.",
+                    "data": {"load": 19},
+                }
+            ]
+
+            def fake_llm(
+                system: str,
+                prompt: str,
+                *,
+                allow_no_send: bool = True,
+                heartbeat_reply_context: HeartbeatReplyContext | None = None,
+                **_kwargs,
+            ):
+                captured["context"] = heartbeat_reply_context
+                return "ok"
+
+            heartbeat._llm_generate = fake_llm
+            draft = heartbeat.signal_check()
+        finally:
+            adaptation.check_and_adapt_tsb = original_tsb
+            adaptation.check_and_adapt_missed = original_missed
+            heartbeat.collect_signals = original_collect
+            heartbeat.heartbeat_evaluation.evaluate_proactive_gate = original_gate
+            heartbeat._llm_generate = original_llm
+
+        self.assertEqual(draft.text, "ok")
+        context = captured.get("context")
+        self.assertIsInstance(context, HeartbeatReplyContext)
+        self.assertEqual(context.role, "signal")
+        self.assertEqual(context.capability, "candidate_only")
+        self.assertTrue(any("Charge cumulative haute" in item for item in context.week_digest))
+        self.assertTrue(any("Charge ressentie haute" in fact.value for fact in context.active_facts))
+        self.assertTrue(any("aucun changement planning" in item for item in context.forbidden_claims))
+
     def test_signal_check_adaptation_candidate_creates_pending_only_after_persist(self) -> None:
         _, session = self._create_plan_with_today_session()
         original_tsb = adaptation.check_and_adapt_tsb
