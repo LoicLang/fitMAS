@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from fitmas import coach_voice
+from fitmas.context_pack import ConversationContextPack
 from fitmas.conversation_prompting import ConversationPromptPolicy
 from fitmas.prompt_observability import PromptTrace, build_prompt_trace
 from fitmas.prompt_layers import assemble_layered_prompt
@@ -292,6 +293,18 @@ def _trace_intent_from_context(coach_context: dict[str, Any] | None) -> str | No
     return str(primary_intent) if primary_intent else None
 
 
+def _trace_tool_names(context_pack: ConversationContextPack | None) -> tuple[str, ...]:
+    if context_pack is None:
+        return ()
+    return context_pack.tool_budget.allowed_tools
+
+
+def _trace_truth_block_names(context_pack: ConversationContextPack | None) -> tuple[str, ...]:
+    if context_pack is None:
+        return ()
+    return context_pack.truth_block_names()
+
+
 def build_conversation_prompt_bundle(
     *,
     user_text: str,
@@ -308,6 +321,7 @@ def build_conversation_prompt_bundle(
     coach_context: dict[str, Any] | None,
     selected_facts: list[str],
     unresolved_execution_followup: str | None = None,
+    context_pack: ConversationContextPack | None = None,
 ) -> ConversationPromptBundle:
     profile_block = ""
     if profile_summary:
@@ -407,7 +421,8 @@ Nouveau message de l'utilisateur:
             intent=_trace_intent_from_context(coach_context),
             system=system,
             user_prompt=prompt,
-            tool_names=(),
+            tool_names=_trace_tool_names(context_pack),
+            truth_block_names=_trace_truth_block_names(context_pack),
             history_messages_used=history_messages_used,
         ),
     )
@@ -433,6 +448,7 @@ def build_layered_conversation_prompt(
     coach_context: dict[str, Any] | None = None,
     selected_facts: list[str] | None = None,
     unresolved_execution_followup: str | None = None,
+    context_pack: ConversationContextPack | None = None,
 ) -> ConversationPromptBundle:
     """Build conversation prompt using the layered system.
 
@@ -512,7 +528,8 @@ def build_layered_conversation_prompt(
             intent=_trace_intent_from_context(coach_context),
             system=system_parts,
             user_prompt=prompt,
-            tool_names=(),
+            tool_names=_trace_tool_names(context_pack),
+            truth_block_names=_trace_truth_block_names(context_pack),
             history_messages_used=history_messages_used,
         ),
     )

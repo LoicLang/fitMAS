@@ -34,6 +34,7 @@ class PromptTrace:
     user_chars: int
     total_chars: int
     tool_names: tuple[str, ...]
+    truth_block_names: tuple[str, ...]
     history_messages_used: int
 
     def as_dict(self) -> dict[str, Any]:
@@ -60,6 +61,7 @@ def build_prompt_trace(
     system: Sequence[dict[str, Any]] | str,
     user_prompt: str,
     tool_names: Sequence[str],
+    truth_block_names: Sequence[str] = (),
     history_messages_used: int,
 ) -> PromptTrace:
     if isinstance(system, str):
@@ -78,5 +80,6 @@ def build_prompt_trace(
         user_chars=user_chars,
         total_chars=system_chars + user_chars,
         tool_names=tuple(str(name) for name in tool_names),
+        truth_block_names=tuple(str(name) for name in truth_block_names),
         history_messages_used=int(history_messages_used or 0),
     )
