@@ -112,6 +112,11 @@ def test_read_only_conversation_system_text_excludes_mutation_modules() -> None:
     assert "Actions possibles:" not in text
     assert "draft_move_session" not in text
     assert "suggest_replan_candidates" not in text
+    assert "Contrat de sortie read_only:" in text
+    assert "response_type: reply | no_change" in text
+    assert "plan_patch = {" not in text
+    assert "memory_actions: liste optionnelle" not in text
+    assert "record_execution_update" not in text
 
 
 def test_draft_action_conversation_system_text_keeps_mutation_modules() -> None:
@@ -124,6 +129,8 @@ def test_draft_action_conversation_system_text_keeps_mutation_modules() -> None:
     assert "Actions possibles:" in text
     assert "draft_move_session" in text
     assert "suggest_replan_candidates" in text
+    assert "Contrat de sortie read_only:" not in text
+    assert "plan_patch = {" in text
 
 
 def test_legacy_conversation_system_text_keeps_full_module_set() -> None:

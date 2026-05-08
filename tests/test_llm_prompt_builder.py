@@ -141,6 +141,9 @@ class ConversationPromptBuilderTest(unittest.TestCase):
             self.assertIn("- sortie decision: CoachDecision", system_text)
             self.assertNotIn("Workflow replan_after_constraint:", system_text)
             self.assertNotIn("Actions possibles:", system_text)
+            self.assertIn("Contrat de sortie read_only:", system_text)
+            self.assertNotIn("plan_patch = {", system_text)
+            self.assertNotIn("memory_actions: liste optionnelle", system_text)
             self.assertNotIn("grounded_final_reply", system_text)
 
     def test_live_prompt_builders_ignore_legacy_plan_anchor_even_if_requested(self) -> None:

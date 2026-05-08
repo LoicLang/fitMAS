@@ -238,6 +238,31 @@ Compat temporaire acceptee:
 Pas de markdown. Pas de texte autour du JSON."""
 
 
+def build_read_only_output_schema_system_text() -> str:
+    return """\
+Tu reponds UNIQUEMENT avec un JSON CoachDecision valide.
+
+Contrat de sortie read_only:
+- response_type: reply | no_change
+- rationale: raison courte, factuelle
+- fitmas_message: message envoye TEL QUEL a l'utilisateur, 1-2 phrases, ancre dans les verites fournies
+- mutation_decision: null
+- plan_patch: null
+- confirmation_reason: null
+- memory_actions: []
+- execution_actions: []
+- pending_resolution: null
+
+Regles:
+- Tu ne proposes aucune mutation planning.
+- Tu ne promets aucun changement applique.
+- Tu ne crees aucune memoire et aucune execution.
+- Si l'information manque, dis ce qui manque sobrement dans `fitmas_message`.
+- Si la question est factuelle, reponds directement sans recadrage non demande.
+
+Pas de markdown. Pas de texte autour du JSON."""
+
+
 def build_conversation_system_text(contract: PromptContract | None = None) -> str:
     modules = [
         build_identity_voice_system_text(),
@@ -252,7 +277,9 @@ def build_conversation_system_text(contract: PromptContract | None = None) -> st
     modules.extend(
         [
             build_coach_voice_examples_system_text(),
-            build_output_schema_system_text(),
+            build_read_only_output_schema_system_text()
+            if contract is not None and contract.capability == "read_only"
+            else build_output_schema_system_text(),
         ]
     )
     return "\n\n".join(modules)
