@@ -462,6 +462,8 @@ Etat 8 mai 2026 :
   `conversation_pipeline.py`, mais son prompt contract de fallback reste un
   `CoachDecision` no-action pour les cas ou un pending/calibration force un
   passage par `decide()`.
+- Snapshots actifs : `conversation_plan_lookup`, `conversation_close_turn`,
+  `conversation_casual_chat`.
 
 ### Phase 4 - Final Speech Boundary
 
