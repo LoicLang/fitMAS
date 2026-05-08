@@ -10,6 +10,7 @@ from fitmas.conversation_prompt_modules import (
     build_action_contract_system_text,
     build_calendar_truth_system_text,
     build_identity_voice_system_text,
+    build_output_schema_system_text,
 )
 from fitmas.conversation_prompting import ConversationPromptPolicy
 from fitmas.prompt_observability import PromptTrace, build_prompt_trace
@@ -37,80 +38,7 @@ Workflow replan_after_constraint:
 
 {coach_voice.COACH_VOICE_FEW_SHOTS_BAD}
 
-Tu reponds UNIQUEMENT avec un JSON CoachDecision valide.
-
-Format cible:
-- response_type: reply | no_change | mutation_decision | plan_patch | requires_confirmation
-- rationale: raison courte
-- fitmas_message: message envoye TEL QUEL a l'utilisateur (voix coach, voir regles ci-dessus). Jamais une etiquette technique, jamais une promesse de mutation que le backend pourrait bloquer.
-- mutation_decision: objet legacy optionnel si une seule mutation suffit
-- plan_patch: objet optionnel si une ou plusieurs operations sont necessaires
-- confirmation_reason: obligatoire si response_type=requires_confirmation
-- memory_actions: liste optionnelle d'actions memoire proposees, jamais ecrites directement par toi.
-  Types autorises:
-  - record_health_signal: health_signal, body_area?, severity=mild|moderate|severe|unknown, status=new|ongoing|improving|worsening|resolved|unknown, confidence, evidence?
-  - record_availability: window_text, availability=unavailable|limited|available|unknown, starts_on?, ends_on?, recurrence?, confidence, evidence?
-  - record_preference: preference, polarity=prefer|avoid|like|dislike|neutral|unknown, scope?, confidence, evidence?
-- execution_actions: liste optionnelle d'actions execution proposees.
-  Type autorise: record_execution_update avec target_ref, target_session_id?, status=completed|not_completed|partially_completed|unknown, completed?, sport_type?, duration_min?, confidence, evidence?
-- pending_resolution: optionnel, uniquement si un pending existe ou si le tour y fait reference.
-  Types autorises: accept_pending | reject_pending | modify_pending | ignore | needs_clarification.
-  Pour un pending type plan_patch_choice, accept_pending exige selected_candidate_id si le user choisit une option.
-  modify_pending exige requested_changes, reason est optionnel, et ne peut modifier que le pending existant, jamais forger un patch neuf.
-  Tu ne parses jamais "oui/non" hors contexte: tu lis le message entier et le pending injecte.
-  Exemples:
-  - pending actif + "oui" clair -> pending_resolution.type=accept_pending
-  - pending plan_patch_choice + "la deuxieme / vendredi" -> pending_resolution.type=accept_pending, selected_candidate_id=<id exact de l'option>
-  - pending actif + "non" clair -> pending_resolution.type=reject_pending
-  - pending actif + "oui mais finalement vendredi" -> pending_resolution.type=modify_pending, requested_changes="deplacer/adapter vers vendredi"
-  - pending actif + "j'ai pas eu le temps hier" -> pending_resolution.type=ignore + execution_actions si pertinent
-
-Few-shots actions structurees:
-- "j'ai pas eu le temps hier" -> execution_actions=[record_execution_update status=not_completed, completed=false, target_ref="seance d'hier"]
-- "j'ai mal au genou" -> memory_actions=[record_health_signal health_signal="douleur genou", severity=unknown, confidence elevee]
-- "je peux pas nager 2 semaines" -> memory_actions=[record_availability window_text="natation impossible 2 semaines", availability=unavailable] + plan_patch si une seance nage est touchee
-- "running" ou "mercredi" en continuation courte -> lis le contexte precedent, puis complete l'action en cours; ne reponds pas par un raccourci canned
-
-Capture de contraintes — regle generale:
-Le user mentionne un fact dispo/sante/preference, meme en passant et meme pour expliquer du passe. Emets un `memory_action` avec confidence appropriee. Mieux vaut capturer en working memory avec faible confidence que perdre l'info. Si le scope (duree, sport, periode) est implicite, fais ton hypothese et marque-la dans `evidence`.
-
-Few-shots capture indirecte:
-- "la piscine est en vidange / fermee / inaccessible" -> memory_actions=[record_availability window_text="piscine indisponible (vidange/fermeture)", availability=unavailable, confidence moderate, evidence="user mentionne piscine inaccessible"]. Ajoute un plan_patch si une seance nage est touchee cette semaine.
-- "j'ai pas pu nager, piscine etait fermee" -> meme memory_action + execution_actions si seance nage prevue manquee.
-- "je voyage de mardi a vendredi" -> memory_actions=[record_availability window_text="voyage mardi-vendredi", availability=limited, starts_on/ends_on si dates inferable] + plan_patch si seances touchees.
-- "j'ai mal au dos depuis quelques jours" -> memory_actions=[record_health_signal health_signal="douleur dos", status=ongoing, confidence elevee].
-- "je prefere courir le matin" -> memory_actions=[record_preference preference="courir le matin", polarity=prefer, confidence moderate].
-- user explique pourquoi une seance a saute en mentionnant un fait stable -> capture le fait ET l'execution, pas juste l'execution.
-
-Pour une action planning, privilegie `response_type="plan_patch"`:
-plan_patch = {{
-  "coach_message": "message court",
-  "operations": [
-    {{
-      "operation_type": "move_session|swap_sessions|replace_session|update_session|lighten_day|create_session",
-      "target_session_id": null,
-      "second_session_id": null,
-      "target_date": "YYYY-MM-DD",
-      "from_day": null,
-      "to_day": null,
-      "new_title": null,
-      "new_goal": null,
-      "new_sport_type": null,
-      "new_session_type": null,
-      "new_duration_min": null,
-      "new_intensity": null,
-      "new_description": null,
-      "rationale": "raison operation"
-    }}
-  ]
-}}
-
-Compat temporaire acceptee:
-- tu peux encore retourner directement le vieux JSON `mutation_type` si tu ne sais faire qu'une mutation simple
-- types legacy autorises: move_session, lighten_day, swap_sessions, update_session, replace_session, create_session, no_change
-- create_session exige target_date, new_sport_type, new_title, new_duration_min
-
-Pas de markdown. Pas de texte autour du JSON.\
+{build_output_schema_system_text()}\
 """
 
 

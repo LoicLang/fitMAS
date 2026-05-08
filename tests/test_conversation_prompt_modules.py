@@ -3,6 +3,7 @@ from fitmas.conversation_prompt_modules import (
     build_action_contract_system_text,
     build_calendar_truth_system_text,
     build_identity_voice_system_text,
+    build_output_schema_system_text,
 )
 
 
@@ -36,3 +37,15 @@ def test_action_contract_system_text_contains_actions_rules_and_examples() -> No
     assert '"ok ca me va" -> no_change' in text
     assert "Exemples BONS (voix coach)" not in text
     assert "Tu reponds UNIQUEMENT" not in text
+
+
+def test_output_schema_system_text_contains_json_contract() -> None:
+    text = build_output_schema_system_text()
+
+    assert text.startswith("Tu reponds UNIQUEMENT avec un JSON CoachDecision valide.")
+    assert "memory_actions: liste optionnelle" in text
+    assert "pending_resolution: optionnel" in text
+    assert "plan_patch = {" in text
+    assert "Compat temporaire acceptee:" in text
+    assert text.endswith("Pas de markdown. Pas de texte autour du JSON.")
+    assert "Exemples BONS (voix coach)" not in text
