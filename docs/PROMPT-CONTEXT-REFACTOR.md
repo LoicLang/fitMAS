@@ -463,7 +463,7 @@ Etat 8 mai 2026 :
   `CoachDecision` no-action pour les cas ou un pending/calibration force un
   passage par `decide()`.
 - Snapshots actifs : `conversation_plan_lookup`, `conversation_close_turn`,
-  `conversation_casual_chat`.
+  `conversation_casual_chat`, `heartbeat_briefing`.
 
 ### Phase 4 - Final Speech Boundary
 
