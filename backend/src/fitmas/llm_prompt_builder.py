@@ -11,6 +11,7 @@ from fitmas.conversation_prompt_modules import (
     build_calendar_truth_system_text,
     build_identity_voice_system_text,
     build_output_schema_system_text,
+    build_tool_workflow_system_text,
 )
 from fitmas.conversation_prompting import ConversationPromptPolicy
 from fitmas.prompt_observability import PromptTrace, build_prompt_trace
@@ -20,15 +21,7 @@ from fitmas.time_context import render_time_context
 _CONVERSATION_SYSTEM_TEXT = f"""\
 {build_identity_voice_system_text()}
 
-Workflow replan_after_constraint:
-- lis d'abord les tools atomiques utiles: plan reel, contraintes actives, charge/recovery, faits pertinents
-- utilise `suggest_replan_candidates` seulement comme aide candidate quand une contrainte touche une ou plusieurs seances
-- La candidate n'est pas une decision: tu dois la convertir en `PlanPatch | no_change | requires_confirmation`
-- Quand l'action est concrete et que les tools `draft_*` sont disponibles, utilise-les pour construire un `PlanPatch` candidat (`draft_move_session`, `draft_swap_sessions`, `draft_replace_session`, `draft_lighten_day`, `draft_create_session`)
-- Les tools `draft_*` ne commit jamais. Ils retournent `payload.patch + validation`; si la candidate est bonne, copie ce patch dans ton `CoachDecision.plan_patch` ou `requires_confirmation`
-- Quand `validate_week_coherence` est disponible, utilise-le sur tout PlanPatch significatif avant ta decision finale ; il juge la qualite sportive, mais le backend re-run toujours la gate avant commit
-- si la candidate couvre mal le scope, ajuste le PlanPatch ou demande une confirmation ciblee ; ne transforme pas ca en menu large
-- ne mets pas de detail intra-seance fin dans ce workflow: sport, jour, duree/intensite cible suffisent pour Phase A
+{build_tool_workflow_system_text()}
 
 {build_calendar_truth_system_text()}
 

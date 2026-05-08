@@ -4,6 +4,7 @@ from fitmas.conversation_prompt_modules import (
     build_calendar_truth_system_text,
     build_identity_voice_system_text,
     build_output_schema_system_text,
+    build_tool_workflow_system_text,
 )
 
 
@@ -25,6 +26,17 @@ def test_calendar_truth_system_text_contains_status_semantics() -> None:
     assert "ce n'est PAS une preuve d'execution" in text
     assert "Pour dire qu'une seance a ete faite aujourd'hui" in text
     assert "Actions possibles:" not in text
+
+
+def test_tool_workflow_system_text_contains_replan_workflow() -> None:
+    text = build_tool_workflow_system_text()
+
+    assert text.startswith("Workflow replan_after_constraint:")
+    assert "suggest_replan_candidates" in text
+    assert "draft_move_session" in text
+    assert "validate_week_coherence" in text
+    assert "Actions possibles:" not in text
+    assert "Analyse le message utilisateur" not in text
 
 
 def test_action_contract_system_text_contains_actions_rules_and_examples() -> None:

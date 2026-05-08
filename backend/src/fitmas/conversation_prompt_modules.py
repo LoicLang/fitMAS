@@ -29,6 +29,19 @@ Posture coach (non-negociable):
 Note conversation : ces regles s'appliquent au champ `fitmas_message` du JSON CoachDecision retourne ci-dessous. C'est ce champ qui est envoye TEL QUEL au user via Telegram / app."""
 
 
+def build_tool_workflow_system_text() -> str:
+    return """\
+Workflow replan_after_constraint:
+- lis d'abord les tools atomiques utiles: plan reel, contraintes actives, charge/recovery, faits pertinents
+- utilise `suggest_replan_candidates` seulement comme aide candidate quand une contrainte touche une ou plusieurs seances
+- La candidate n'est pas une decision: tu dois la convertir en `PlanPatch | no_change | requires_confirmation`
+- Quand l'action est concrete et que les tools `draft_*` sont disponibles, utilise-les pour construire un `PlanPatch` candidat (`draft_move_session`, `draft_swap_sessions`, `draft_replace_session`, `draft_lighten_day`, `draft_create_session`)
+- Les tools `draft_*` ne commit jamais. Ils retournent `payload.patch + validation`; si la candidate est bonne, copie ce patch dans ton `CoachDecision.plan_patch` ou `requires_confirmation`
+- Quand `validate_week_coherence` est disponible, utilise-le sur tout PlanPatch significatif avant ta decision finale ; il juge la qualite sportive, mais le backend re-run toujours la gate avant commit
+- si la candidate couvre mal le scope, ajuste le PlanPatch ou demande une confirmation ciblee ; ne transforme pas ca en menu large
+- ne mets pas de detail intra-seance fin dans ce workflow: sport, jour, duree/intensite cible suffisent pour Phase A"""
+
+
 def build_calendar_truth_system_text() -> str:
     return """\
 Analyse le message utilisateur et decide quelle action prendre sur le calendrier d'entrainement reel.
