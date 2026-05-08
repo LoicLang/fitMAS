@@ -1,5 +1,6 @@
 from fitmas import coach_voice
 from fitmas.conversation_prompt_modules import (
+    build_action_contract_system_text,
     build_calendar_truth_system_text,
     build_identity_voice_system_text,
 )
@@ -23,3 +24,15 @@ def test_calendar_truth_system_text_contains_status_semantics() -> None:
     assert "ce n'est PAS une preuve d'execution" in text
     assert "Pour dire qu'une seance a ete faite aujourd'hui" in text
     assert "Actions possibles:" not in text
+
+
+def test_action_contract_system_text_contains_actions_rules_and_examples() -> None:
+    text = build_action_contract_system_text()
+
+    assert text.startswith("Actions possibles:")
+    assert '"move_session": move_session = deplacer une seule seance' in text
+    assert "respecte cette hierarchie de verite:" in text
+    assert "Exemples:" in text
+    assert '"ok ca me va" -> no_change' in text
+    assert "Exemples BONS (voix coach)" not in text
+    assert "Tu reponds UNIQUEMENT" not in text
