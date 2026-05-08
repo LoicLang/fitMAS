@@ -1,6 +1,11 @@
 from __future__ import annotations
 
 from fitmas import coach_voice
+from fitmas.prompt_contracts import PromptContract
+
+
+def _render_tuple(values: tuple[str, ...]) -> str:
+    return ", ".join(values) if values else "aucune"
 
 
 def build_identity_voice_system_text() -> str:
@@ -44,6 +49,23 @@ Workflow replan_after_constraint:
 
 def build_coach_voice_examples_system_text() -> str:
     return f"{coach_voice.COACH_VOICE_FEW_SHOTS_GOOD}\n\n{coach_voice.COACH_VOICE_FEW_SHOTS_BAD}"
+
+
+def build_turn_scope_contract_system_text(contract: PromptContract) -> str:
+    return f"""\
+Contrat du tour:
+- route: {contract.name}
+- capacite: {contract.capability}
+- tools autorises: {_render_tuple(contract.allowed_tools)}
+- actions autorisees: {_render_tuple(contract.allowed_actions)}
+- verites requises: {_render_tuple(contract.required_truth_blocks)}
+- verites optionnelles: {_render_tuple(contract.optional_truth_blocks)}
+- parole finale: {contract.final_reply_mode}
+
+Regles de portee:
+- Reste dans cette capacite pour ce tour.
+- Ne promets pas et ne demandes pas une action hors contrat.
+- Si un bloc general semble plus large, ce contrat borne le tour courant."""
 
 
 def build_calendar_truth_system_text() -> str:

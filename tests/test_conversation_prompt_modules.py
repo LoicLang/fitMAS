@@ -6,8 +6,10 @@ from fitmas.conversation_prompt_modules import (
     build_conversation_system_text,
     build_identity_voice_system_text,
     build_output_schema_system_text,
+    build_turn_scope_contract_system_text,
     build_tool_workflow_system_text,
 )
+from fitmas.prompt_contracts import get_prompt_contract
 
 
 def test_identity_voice_system_text_contains_voice_contract() -> None:
@@ -75,6 +77,22 @@ def test_conversation_system_text_composes_modules_in_order() -> None:
             build_output_schema_system_text(),
         )
     )
+
+
+def test_turn_scope_contract_system_text_renders_safe_contract_subset() -> None:
+    contract = get_prompt_contract("conversation_plan_lookup")
+
+    text = build_turn_scope_contract_system_text(contract)
+
+    assert text.startswith("Contrat du tour:")
+    assert "- route: conversation_plan_lookup" in text
+    assert "- capacite: read_only" in text
+    assert "- tools autorises: get_plan_window, get_session_detail" in text
+    assert "- actions autorisees: aucune" in text
+    assert "- verites requises: temporal, plan_window" in text
+    assert "- parole finale: terminal_composer" in text
+    assert "grounded_final_reply" not in text
+    assert "output_schema" not in text
 
 
 def test_action_contract_system_text_contains_actions_rules_and_examples() -> None:
