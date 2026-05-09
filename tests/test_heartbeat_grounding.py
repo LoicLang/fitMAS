@@ -977,8 +977,9 @@ class HeartbeatGroundingTest(unittest.TestCase):
             heartbeat._llm_generate = original_llm
 
         self.assertEqual(draft.text, "ok")
-        self.assertIn("faits actifs a prendre en compte", captured["system"].lower())
-        self.assertIn("etat de sante general degrade", captured["system"].lower())
+        self.assertNotIn("faits actifs a prendre en compte", captured["system"].lower())
+        self.assertIn("faits actifs a prendre en compte", captured["prompt"].lower())
+        self.assertIn("etat de sante general degrade", captured["prompt"].lower())
 
     def test_weekly_review_passes_structured_reply_context_to_composer(self) -> None:
         now = get_local_now(self.user.timezone)

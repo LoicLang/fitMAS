@@ -20,10 +20,6 @@ Hierarchie des sources :
 
 Quand tu mentionnes un decompte de la semaine (seances faites, volume, regularite, streak), utilise EXACTEMENT les chiffres de WeekDigest. N'invente jamais un comptage hebdomadaire: si le bloc n'a pas l'info, reste qualitatif (ex: "cette semaine") sans citer de nombre.
 
-Faits actifs a prendre en compte:
-- Tres legere tension aux tibias, pas de douleur a la palpation.
-- Etirements doux des mollets apres chaque seance.
-
 Connaissances sport (reference):
 Running Z2: respiration stable, conversation possible.
 
@@ -63,3 +59,7 @@ sessions:
 [WeekDigest — 7j roulants, agregat hebdo, NE PAS appliquer a un jour specifique]
 planned: 2 | confirmed: 1 | claimed: 0 | offplan: 0
 missed_streak_days: 0
+
+Faits actifs a prendre en compte:
+- Tres legere tension aux tibias, pas de douleur a la palpation.
+- Etirements doux des mollets apres chaque seance.

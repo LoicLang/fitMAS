@@ -287,7 +287,6 @@ def build_briefing_prompt(
             "N'ouvre pas avec le même angle ni la même récitation de contraintes stables que dans les derniers messages proactifs, "
             "sauf si quelque chose a réellement changé aujourd'hui."
         )
-    system += facts_block
     if sport_knowledge:
         system += f"\n\nConnaissances sport (reference):\n{sport_knowledge}"
 
@@ -301,6 +300,7 @@ def build_briefing_prompt(
         f"Note: {(day.session_note if day else today_session.session_note) or ''}"
     )
     prompt += "\n\n" + render_heartbeat_context_bundle(bundle)
+    prompt += facts_block
     if clarification is not None:
         prompt += (
             "\n\nClarification prioritaire:\n"
@@ -350,14 +350,13 @@ def build_reminder_prompt(
             f"\n\n{signals_block}\n"
             "Integre les signaux dans ton rappel seulement si ca renforce une action utile."
         )
-    system += facts_block
-
     prompt = (
         f"{render_time_context(time_context)}\n"
         f"Source de verite planning: calendrier date reel / app.\n"
         f"Demain {label}: {key_session.session_title} — {key_session.session_goal}.\n"
         f"Priorite: {key_session.priority}."
     )
+    prompt += facts_block
     if calibration_need is not None:
         prompt += f"\n\n{render_hidden_need_brief(calibration_need)}"
 
@@ -400,8 +399,6 @@ def build_review_prompt(
         "et ne dis pas \"zero <sport>\" si une sortie de ce sport apparait dans le bloc, "
         "meme hors plan. Si le bloc est absent, reste qualitatif sans citer de nombre."
     )
-    system += facts_block
-
     prompt = (
         f"{render_time_context(time_context)}\n"
         f"Source de verite planning: calendrier date reel / app.\n"
@@ -411,6 +408,7 @@ def build_review_prompt(
         f"Activites reelles detectees sur 7 jours: {actual_activity_count}. Duree reelle totale: {actual_duration_min} min.\n"
         f"Activites declarees non loggees sur 7 jours: {claimed_activity_count}. Duree declaree totale: {claimed_duration_min} min."
     )
+    prompt += facts_block
     if digest is not None:
         prompt += "\n\n" + render_digest_for_prompt(digest)
     if weekly_highlights:
@@ -444,9 +442,8 @@ def build_signal_prompt(
         "Si silence prolonge: prends des nouvelles simplement. "
         "Si charge elevee: suggere d'alleger."
     )
-    system += facts_block
-
     prompt = f"{render_time_context(time_context)}\nGenere un message proactif."
+    prompt += facts_block
 
     return system, prompt
 

@@ -154,3 +154,34 @@ def test_heartbeat_role_prompt_is_draft_contract_without_voice_few_shots() -> No
     assert "A NE JAMAIS ECRIRE" not in system
     assert "brouillon" in system.lower()
     assert "message final" in system.lower()
+
+
+def test_heartbeat_role_dynamic_facts_are_user_context_not_system() -> None:
+    today_session = _today_session()
+    bundle = build_heartbeat_context_bundle(
+        today=date(2026, 5, 8),
+        today_planned_session=today_session,
+        yesterday_planned_sessions=(),
+        yesterday_activities=(),
+        yesterday_claims=(),
+        week_recent_reality=_recent_reality(),
+        week_activities=(),
+        future_scheduled_sessions=(today_session, _future_session()),
+    )
+    facts_block = "\n\nFaits actifs a prendre en compte:\n- Tibias sensibles."
+    system, prompt = build_briefing_prompt(
+        user=_user(),
+        today_session=today_session,
+        day=None,
+        time_context=_time_context(),
+        bundle=bundle,
+        clarification=None,
+        calibration_need=None,
+        signals_block="",
+        facts_block=facts_block,
+        sport_knowledge="",
+    )
+
+    assert "Tibias sensibles" not in system
+    assert "Faits actifs a prendre en compte" in prompt
+    assert "Tibias sensibles" in prompt
