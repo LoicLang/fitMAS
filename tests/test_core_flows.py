@@ -2471,7 +2471,8 @@ class FitMASCoreFlowsTest(unittest.TestCase):
         self.assertIn("execution_status: off_plan_done", captured["execution_summary"])
         self.assertIn("reference principale: unspecified", captured["temporal_summary"])
         self.assertEqual(captured["activity_claim_summary"], "")
-        self.assertIn("big_session_done", captured["signal_summary"])
+        self.assertIn("Grosse seance recente", captured["signal_summary"])
+        self.assertNotIn("big_session_done", captured["signal_summary"])
         self.assertNotIn("Activite declaree par l'utilisateur", captured["selected_facts"])
 
     def test_current_user_message_is_not_duplicated_in_history_passed_to_llm(self) -> None:

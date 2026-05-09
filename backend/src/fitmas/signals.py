@@ -380,13 +380,14 @@ def _detect_streak(
 # ── Signal-based heartbeat messages ─────────────────────────────────────────
 
 def format_signals_for_prompt(signals: list[Signal]) -> str:
-    """Format signals into a block for the LLM system prompt."""
+    """Format signals into a user-context block without internal tags."""
     if not signals:
         return ""
-    lines = ["Signaux detectes:"]
+    lines = ["Signaux utiles:"]
     for sig in signals:
-        icon = {"info": "ℹ️", "warning": "⚠️", "action": "🔴"}.get(sig["severity"], "•")
-        lines.append(f"{icon} [{sig['kind']}] {sig['summary']}")
+        summary = str(sig.get("summary") or "").strip()
+        if summary:
+            lines.append(f"- {summary}")
     return "\n".join(lines)
 
 

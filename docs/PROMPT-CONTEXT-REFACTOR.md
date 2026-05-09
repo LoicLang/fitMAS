@@ -476,6 +476,8 @@ Etat 8 mai 2026 :
 - Les facts, signaux et references sport dynamiques heartbeat ne sont plus
   colles dans le system prompt : ils sont rendus dans le contexte user du role
   draft.
+- `format_signals_for_prompt()` ne rend plus les `kind`/`severity` internes :
+  le brouillon recoit seulement des puces lisibles basees sur les summaries.
 
 ### Phase 4 - Final Speech Boundary
 
@@ -513,6 +515,8 @@ Livrables :
   les prompts de brouillon ; le composer terminal applique la voix finale
 - facts, signaux actifs et references sport heartbeat dans user context : ✅ le
   system reste un contrat stable
+- signal prompt block sans tags internes recopiables (`kind`, `severity`, emoji
+  statut) : ✅
 - conversion des active facts en structures non recopiables telles quelles ; ✅
 - fallback outage propre ;
 - debug dump : truth, draft, composer input, composer output, judges, final.

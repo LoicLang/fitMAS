@@ -9,7 +9,7 @@ os.environ.setdefault("FITMAS_DB_PATH", tempfile.mktemp(prefix="fitmas-signals-"
 
 from fitmas import repository as repo, schema as s
 from fitmas.db import Base, SessionLocal, engine, init_db
-from fitmas.signals import collect_signals
+from fitmas.signals import collect_signals, format_signals_for_prompt
 from fitmas.time_context import DAY_KEYS, day_label_fr, get_local_now
 
 
@@ -33,6 +33,24 @@ class SignalsGroundingTest(unittest.TestCase):
 
     def test_collect_signals_returns_empty_without_active_plan(self) -> None:
         self.assertEqual(collect_signals(self.db, self.user), [])
+
+    def test_format_signals_for_prompt_hides_internal_tags(self) -> None:
+        block = format_signals_for_prompt(
+            [
+                {
+                    "kind": "high_cumulative_load",
+                    "severity": "warning",
+                    "summary": "Charge elevee cette semaine.",
+                    "data": {},
+                }
+            ]
+        )
+
+        self.assertIn("Signaux utiles:", block)
+        self.assertIn("- Charge elevee cette semaine.", block)
+        self.assertNotIn("high_cumulative_load", block)
+        self.assertNotIn("warning", block)
+        self.assertNotIn("\u26a0\ufe0f", block)
 
     def test_missed_key_session_uses_scheduled_session_without_active_plan(self) -> None:
         now = get_local_now(self.user.timezone)
