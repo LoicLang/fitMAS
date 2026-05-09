@@ -7,6 +7,7 @@ from fitmas import llm
 from fitmas.context_pack import build_conversation_context_pack
 from fitmas.conversation_prompting import select_conversation_prompt_policy
 from fitmas.llm_prompt_builder import build_layered_conversation_prompt
+from fitmas.tool_contract import ToolContext
 from fitmas.tools.routing import IntentCategory
 
 
@@ -94,4 +95,29 @@ def test_decide_none_trace_records_schema_repair_and_fallback_events(monkeypatch
         "schema_invalid",
         "repair_failed",
         "fallback_failed",
+    ]
+
+
+def test_decide_none_trace_records_tool_loop_then_empty_output(monkeypatch) -> None:
+    monkeypatch.setattr(llm, "_client", lambda: object())
+    monkeypatch.setattr(llm, "_request_json_with_tools", lambda **_kwargs: None)
+    monkeypatch.setattr(llm, "_request_structured_json", lambda **_kwargs: None)
+
+    decision = llm.decide(
+        "redonne le plan actuel",
+        "plan",
+        tool_context=ToolContext(
+            pipeline="conversation",
+            user_id=1,
+            timezone_name="Europe/Paris",
+        ),
+    )
+    trace = llm.get_last_decide_none()
+
+    assert decision is None
+    assert trace is not None
+    assert trace["reason"] == "empty_output"
+    assert [event["reason"] for event in trace["events"]] == [
+        "tool_loop_failed",
+        "empty_output",
     ]

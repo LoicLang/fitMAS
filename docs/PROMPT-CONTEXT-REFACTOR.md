@@ -484,8 +484,8 @@ Etat 8 mai 2026 :
   `context.decide_none.reason` avec une raison normalisee quand `decide()`
   rend `None`.
 - `decide_none.events` conserve la chaine d'echec utile (`schema_invalid`,
-  `repair_failed`, `fallback_failed`, etc.) pour diagnostiquer la cause racine,
-  pas seulement le dernier fallback.
+  `repair_failed`, `fallback_failed`, `tool_loop_failed`, `empty_output`, etc.)
+  pour diagnostiquer la cause racine, pas seulement le dernier fallback.
 
 ### Phase 4 - Final Speech Boundary
 
@@ -527,7 +527,8 @@ Livrables :
   statut) : ✅
 - signal composer context sans tags internes recopiables : ✅
 - trace `decide_none.reason` dans `ConversationTurn.context_json` : ✅
-- trace `decide_none.events` avec chaine schema / repair / fallback : ✅
+- trace `decide_none.events` avec chaine schema / repair / fallback / tool-loop
+  : ✅
 - conversion des active facts en structures non recopiables telles quelles ; ✅
 - fallback outage propre ;
 - debug dump : truth, draft, composer input, composer output, judges, final.

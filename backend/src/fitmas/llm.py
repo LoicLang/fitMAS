@@ -513,6 +513,8 @@ def decide(
                 context_policy=prompt_policy.name,
                 history_messages_used=history_messages_used,
             )
+            if data is None:
+                _record_decide_failure_event(DecideFailureReason.TOOL_LOOP_FAILED, stage="tool_loop")
         if data is None:
             data = _request_structured_json(
                 system=system_prompt,
