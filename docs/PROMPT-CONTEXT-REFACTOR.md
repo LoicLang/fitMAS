@@ -558,6 +558,11 @@ Livrables :
   verite planning et le calendrier date restent dans `immediate` / `plan` ; le
   user prompt redevient le message courant, plus les rares blocs de fil actifs
   qui ne sont pas encore representes par un layer.
+- prompt diet par capability, slice 4 : ✅ les routes no-action (`terminal_text`
+  et `read_only`) utilisent un pack voix court dedie. Elles ne recoivent plus
+  les regles de mutation/refus/confirmation du pack voix complet ; le pack
+  complet reste reserve aux routes legacy, `draft_action` et
+  `write_after_validation`.
 - fallback outage propre ;
 
 Regression cible :

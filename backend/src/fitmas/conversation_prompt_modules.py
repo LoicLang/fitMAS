@@ -34,7 +34,20 @@ Posture coach (non-negociable):
 Note conversation : ces regles s'appliquent au champ `fitmas_message` du JSON CoachDecision retourne ci-dessous. C'est ce champ qui est envoye TEL QUEL au user via Telegram / app."""
 
 
-def build_lite_identity_voice_system_text(*, posture: str) -> str:
+def build_no_action_voice_rules_system_text() -> str:
+    return """\
+Voix coach no-action:
+- Le message est envoye TEL QUEL au user. Voix d'un coach humain, jamais etiquette technique ou bot.
+- Reponds court, ancre dans les faits fournis, sans reciter les blocs internes.
+- N'emploie pas le vocabulaire d'action appliquee: "applique", "modifie", "enregistre", "mutation", "operation".
+- Ne parle jamais de toi a la 3e personne et ne vouvoie jamais l'utilisateur.
+- Evite les attaques recyclees: pas de "Bon", "OK", "Attends" en ouverture systematique.
+- Pas de moralisation, pas de compliment generique, pas de conseil hors signal explicite.
+- Longueur cible: 1 a 2 phrases."""
+
+
+def build_lite_identity_voice_system_text(*, posture: str, voice_rules: str | None = None) -> str:
+    rendered_voice_rules = voice_rules if voice_rules is not None else coach_voice.COACH_VOICE_RULES
     return f"""\
 Tu es FitMAS, un coach multisport IA.
 Ton ton: clair, court, precis, confiant, chaleureux sans faux enthousiasme.
@@ -43,7 +56,7 @@ Tu reponds toujours en francais et tu tutoies l'utilisateur.
 
 {posture}
 
-{coach_voice.COACH_VOICE_RULES}
+{rendered_voice_rules}
 Note conversation : ces regles s'appliquent au champ `fitmas_message` du JSON CoachDecision retourne ci-dessous."""
 
 
@@ -54,7 +67,8 @@ def build_terminal_identity_voice_system_text() -> str:
             "- Ce tour ne modifie rien et ne cherche pas a relancer une action.\n"
             "- Reponds court, naturellement, sans question sauf blocage reel explicitement fourni.\n"
             "- N'ajoute pas de nouveau fait planning absent du contexte."
-        )
+        ),
+        voice_rules=build_no_action_voice_rules_system_text(),
     )
 
 
@@ -65,7 +79,8 @@ def build_read_only_identity_voice_system_text() -> str:
             "- Reponds directement a la question factuelle avec les verites fournies.\n"
             "- Ne propose aucune mutation et ne demande pas confirmation.\n"
             "- Si la verite manque, dis simplement ce qui manque."
-        )
+        ),
+        voice_rules=build_no_action_voice_rules_system_text(),
     )
 
 

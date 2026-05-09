@@ -122,6 +122,21 @@ def test_read_only_conversation_system_text_excludes_mutation_modules() -> None:
     assert "record_execution_update" not in text
 
 
+def test_read_only_conversation_system_text_uses_no_action_voice_pack() -> None:
+    contract = get_prompt_contract("conversation_plan_lookup")
+
+    text = build_conversation_system_text(contract)
+
+    assert "Voix coach no-action:" in text
+    assert "Si tu annonces un changement de plan" not in text
+    assert "Si tu refuses ou demandes confirmation" not in text
+    assert "Swap applique" not in text
+    assert "Mutation enregistree" not in text
+    assert "Exemples BONS" not in text
+    assert "Le message est envoye TEL QUEL au user" in text
+    assert "Longueur cible: 1 a 2 phrases" in text
+
+
 def test_casual_chat_conversation_system_text_uses_no_action_coach_decision_schema() -> None:
     contract = get_prompt_contract("conversation_casual_chat")
 
@@ -141,6 +156,20 @@ def test_casual_chat_conversation_system_text_uses_no_action_coach_decision_sche
     assert "plan_patch = {" not in text
     assert "memory_actions: liste optionnelle" not in text
     assert "record_execution_update" not in text
+
+
+def test_terminal_conversation_system_text_uses_no_action_voice_pack() -> None:
+    contract = get_prompt_contract("conversation_close_turn")
+
+    text = build_conversation_system_text(contract)
+
+    assert "Voix coach no-action:" in text
+    assert "Si tu annonces un changement de plan" not in text
+    assert "Si tu refuses ou demandes confirmation" not in text
+    assert "Swap applique" not in text
+    assert "Mutation enregistree" not in text
+    assert "Le message est envoye TEL QUEL au user" in text
+    assert "Longueur cible: 1 a 2 phrases" in text
 
 
 def test_close_turn_conversation_system_text_uses_no_action_coach_decision_schema() -> None:
