@@ -173,6 +173,21 @@ Usage :
   composer -> judges -> decision -> final` pour auditer les fuites de contexte
   et les contradictions sans lire le prompt brut dans les logs.
 
+Debug conversation local :
+
+```bash
+curl -X POST "http://127.0.0.1:8033/ops/conversation/debug" \
+  -H "Content-Type: application/json" \
+  -d '{"text":"redonne le plan actuel"}'
+```
+
+Usage :
+- necessite `FITMAS_ENABLE_DEBUG_ENDPOINTS=1` ;
+- execute la pipeline conversation normale, avec une cle idempotence `ops-debug`
+  si aucune `client_message_key` n'est fournie ;
+- la reponse `debug.flow` expose `truth`, `draft`, `composer`, `runtime`,
+  `decision`, `final`, depuis le turn persiste.
+
 Smoke conversations reelles :
 
 ```bash

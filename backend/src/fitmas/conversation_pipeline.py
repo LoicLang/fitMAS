@@ -1560,7 +1560,21 @@ def _compose_no_change_reply_for_turn(
             execution_actions_applied=execution_actions_applied,
         )
     if not composed_reply:
+        turn_context["final_reply"] = {
+            "capability": capability,
+            "draft": original_reply,
+            "output": original_reply,
+            "source": "draft_fallback",
+            "composed": False,
+        }
         return original_reply, None
+    turn_context["final_reply"] = {
+        "capability": capability,
+        "draft": original_reply,
+        "output": composed_reply,
+        "source": "composer",
+        "composed": True,
+    }
     turn_context["final_reply_composed"] = True
     turn_context["final_reply_capability"] = capability
     return composed_reply, f"{capability}_composed"

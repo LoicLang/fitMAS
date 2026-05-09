@@ -536,8 +536,10 @@ Livrables :
 - conversion des active facts en structures non recopiables telles quelles ; ✅
 - debug dump heartbeat `flow` lisible : `truth`, `draft`, `composer`,
   `judges`, `decision`, `final` : ✅
+- debug dump conversation ops lisible : `truth`, `draft`, `composer`,
+  `runtime`, `decision`, `final` depuis le turn persiste : ✅
 - fallback outage propre ;
-- debug dump etendu conversation/final_reply hors heartbeat.
+- debug dump final_reply plus profond pour les routes mutation/pending.
 
 Regression cible :
 

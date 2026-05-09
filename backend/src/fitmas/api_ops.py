@@ -6,20 +6,150 @@ These serve the operator/developer, not the LLM or the user.
 """
 from __future__ import annotations
 
+import json
 import logging
+from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from fitmas import repository as repo, schema as s
+from fitmas.api_payloads import IncomingMessage
 from fitmas.api_support import ensure_debug_enabled
 from fitmas.coach_messages import persist_draft
+from fitmas.conversation_contract import (
+    ConversationPipelineDependencies,
+    ConversationTurnInput,
+    ConversationUserNotFoundError,
+)
 from fitmas.db import get_db
 from fitmas.telegram_channel import resolve_chat_id, send_text_message
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/ops", tags=["ops"])
+
+
+# ---------------------------------------------------------------------------
+# Conversation debug
+# ---------------------------------------------------------------------------
+
+@router.post("/conversation/debug")
+def trigger_conversation_debug(payload: IncomingMessage, db: Session = Depends(get_db)) -> dict:
+    """Run a normal conversation turn and expose the persisted debug flow."""
+    ensure_debug_enabled()
+    user = repo.get_user_optional(db)
+    if user is None:
+        raise HTTPException(status_code=404, detail="No onboarded user yet")
+
+    import fitmas.api_messages as api_messages
+    from fitmas.conversation_pipeline import run_conversation_turn
+
+    client_message_key = str(payload.client_message_key or "").strip() or f"ops-debug:{uuid4()}"
+    try:
+        reply = run_conversation_turn(
+            ConversationTurnInput(
+                text=payload.text,
+                client_message_key=client_message_key,
+                source=payload.source or "ops_debug",
+            ),
+            db=db,
+            dependencies=ConversationPipelineDependencies(
+                decide=api_messages.decide,
+                extract_facts=api_messages.extract_facts,
+                check_and_adapt_health_facts=api_messages.check_and_adapt_health_facts,
+                plan_turn=api_messages.plan_conversation_turn,
+            ),
+        )
+    except ConversationUserNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    row = repo.get_conversation_turn_by_client_message_key(db, user.id, client_message_key)
+    return {
+        "kind": "conversation",
+        "triggered": True,
+        "client_message_key": client_message_key,
+        "message": reply.assistant_message.text,
+        "reply": reply.model_dump(mode="json"),
+        "debug": _conversation_debug_payload(row) if row is not None else None,
+    }
+
+
+def _conversation_debug_payload(row: s.ConversationTurnRecord) -> dict:
+    context = _json_loads_object(row.context_json)
+    decision = _json_loads_object(row.decision_json)
+    memory_writes = _json_loads_list(row.memory_writes_json)
+    turn = {
+        "id": row.id,
+        "response_mode": row.response_mode,
+        "mutation_type": row.mutation_type,
+        "mutation_applied": row.mutation_applied,
+        "pending_confirmation": row.pending_confirmation,
+        "pending_confirmation_id": row.pending_confirmation_id,
+        "day_updated": row.day_updated,
+        "client_message_key": row.client_message_key,
+        "source": row.source,
+    }
+    final_reply = context.get("final_reply") if isinstance(context.get("final_reply"), dict) else {}
+    flow_decision = {
+        "response_mode": row.response_mode,
+        "mutation_type": row.mutation_type,
+        "mutation_applied": row.mutation_applied,
+        "pending_confirmation": row.pending_confirmation,
+        "decide_none": context.get("decide_none"),
+    }
+    return {
+        "kind": "conversation",
+        "turn": turn,
+        "context": context,
+        "decision_json": decision,
+        "memory_writes": memory_writes,
+        "flow": {
+            "truth": _conversation_flow_truth(context),
+            "draft": _conversation_flow_draft(decision, final_reply),
+            "composer": final_reply,
+            "runtime": turn,
+            "decision": flow_decision,
+            "final": {"message": row.assistant_message},
+        },
+    }
+
+
+def _conversation_flow_truth(context: dict) -> dict:
+    keys = (
+        "turn_plan",
+        "grounding",
+        "planning_contract",
+        "availability_state",
+        "week_mission",
+        "recent_reality",
+        "week_context",
+        "selected_fact_keys",
+    )
+    return {key: context[key] for key in keys if key in context}
+
+
+def _conversation_flow_draft(decision: dict, final_reply: dict) -> dict:
+    draft = dict(decision)
+    if final_reply.get("draft"):
+        draft["fitmas_message"] = final_reply.get("draft")
+    return draft
+
+
+def _json_loads_object(raw_value: str | None) -> dict:
+    try:
+        loaded = json.loads(raw_value or "{}")
+    except Exception:
+        return {}
+    return loaded if isinstance(loaded, dict) else {}
+
+
+def _json_loads_list(raw_value: str | None) -> list:
+    try:
+        loaded = json.loads(raw_value or "[]")
+    except Exception:
+        return []
+    return loaded if isinstance(loaded, list) else []
 
 
 # ---------------------------------------------------------------------------
