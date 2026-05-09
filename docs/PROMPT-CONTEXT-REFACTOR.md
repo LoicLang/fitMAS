@@ -473,8 +473,8 @@ Etat 8 mai 2026 :
 - Les role builders heartbeat ne portent plus les few-shots voix complets :
   ils ont un contrat de brouillon factuel, et la voix finale vit dans
   `compose_heartbeat_reply()`.
-- Les facts dynamiques heartbeat ne sont plus colles dans le system prompt :
-  ils sont rendus dans le contexte user du role draft.
+- Les facts et signaux dynamiques heartbeat ne sont plus colles dans le system
+  prompt : ils sont rendus dans le contexte user du role draft.
 
 ### Phase 4 - Final Speech Boundary
 
@@ -510,7 +510,8 @@ Livrables :
   ✅ branche en `candidate_only` pour les signaux proactifs sans commit autonome
 - role builders heartbeat allegés : ✅ plus de `COACH_VOICE_FEW_SHOTS_*` dans
   les prompts de brouillon ; le composer terminal applique la voix finale
-- facts actifs heartbeat dans user context : ✅ le system reste un contrat stable
+- facts et signaux actifs heartbeat dans user context : ✅ le system reste un
+  contrat stable
 - conversion des active facts en structures non recopiables telles quelles ; ✅
 - fallback outage propre ;
 - debug dump : truth, draft, composer input, composer output, judges, final.

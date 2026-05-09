@@ -272,8 +272,7 @@ def build_briefing_prompt(
     )
     if signals_block:
         system += (
-            f"\n\n{signals_block}\n"
-            "Integre les signaux dans ton message de maniere naturelle. "
+            "\n\nIntegre les signaux fournis dans le contexte user de maniere naturelle. "
             "Si un signal est un warning ou action, adapte ton ton en consequence."
         )
     if clarification is not None:
@@ -300,6 +299,7 @@ def build_briefing_prompt(
         f"Note: {(day.session_note if day else today_session.session_note) or ''}"
     )
     prompt += "\n\n" + render_heartbeat_context_bundle(bundle)
+    prompt += signals_block
     prompt += facts_block
     if clarification is not None:
         prompt += (
@@ -347,8 +347,7 @@ def build_reminder_prompt(
     system += _HEARTBEAT_DRAFT_CONTRACT
     if signals_block:
         system += (
-            f"\n\n{signals_block}\n"
-            "Integre les signaux dans ton rappel seulement si ca renforce une action utile."
+            "\n\nIntegre les signaux fournis dans le contexte user seulement si ca renforce une action utile."
         )
     prompt = (
         f"{render_time_context(time_context)}\n"
@@ -356,6 +355,7 @@ def build_reminder_prompt(
         f"Demain {label}: {key_session.session_title} — {key_session.session_goal}.\n"
         f"Priorite: {key_session.priority}."
     )
+    prompt += signals_block
     prompt += facts_block
     if calibration_need is not None:
         prompt += f"\n\n{render_hidden_need_brief(calibration_need)}"
@@ -435,14 +435,14 @@ def build_signal_prompt(
         system += f"Ame du coach: {user.coach_soul}\n"
     system += _HEARTBEAT_DRAFT_CONTRACT
     system += (
-        f"\n{signals_block}\n\n"
-        "Genere un message proactif base sur ces signaux. "
+        "\nGenere un message proactif base sur les signaux fournis dans le contexte user. "
         "Si grosse seance: felicite brievement et donne un conseil recuperation. "
         "Si seance manquee: checke sans culpabiliser. "
         "Si silence prolonge: prends des nouvelles simplement. "
         "Si charge elevee: suggere d'alleger."
     )
     prompt = f"{render_time_context(time_context)}\nGenere un message proactif."
+    prompt += signals_block
     prompt += facts_block
 
     return system, prompt

@@ -6,7 +6,11 @@ from types import SimpleNamespace
 
 from fitmas.recent_reality import RecentRealityWindow
 from fitmas.skills.heartbeat.context import build_heartbeat_context_bundle
-from fitmas.skills.heartbeat.roles import build_briefing_prompt
+from fitmas.skills.heartbeat.roles import (
+    build_briefing_prompt,
+    build_reminder_prompt,
+    build_signal_prompt,
+)
 
 
 SNAPSHOT_DIR = Path(__file__).parent / "snapshots" / "prompts"
@@ -185,3 +189,54 @@ def test_heartbeat_role_dynamic_facts_are_user_context_not_system() -> None:
     assert "Tibias sensibles" not in system
     assert "Faits actifs a prendre en compte" in prompt
     assert "Tibias sensibles" in prompt
+
+
+def test_heartbeat_role_dynamic_signals_are_user_context_not_system() -> None:
+    today_session = _today_session()
+    bundle = build_heartbeat_context_bundle(
+        today=date(2026, 5, 8),
+        today_planned_session=today_session,
+        yesterday_planned_sessions=(),
+        yesterday_activities=(),
+        yesterday_claims=(),
+        week_recent_reality=_recent_reality(),
+        week_activities=(),
+        future_scheduled_sessions=(today_session, _future_session()),
+    )
+    signals_block = "\n\nSignaux actifs:\n- warning: charge jambes elevee."
+
+    briefing_system, briefing_prompt = build_briefing_prompt(
+        user=_user(),
+        today_session=today_session,
+        day=None,
+        time_context=_time_context(),
+        bundle=bundle,
+        clarification=None,
+        calibration_need=None,
+        signals_block=signals_block,
+        facts_block="",
+        sport_knowledge="",
+    )
+    reminder_system, reminder_prompt = build_reminder_prompt(
+        user=_user(),
+        key_session=today_session,
+        time_context=_time_context(),
+        signals_block=signals_block,
+        facts_block="",
+        calibration_need=None,
+    )
+    signal_system, signal_prompt = build_signal_prompt(
+        user=_user(),
+        time_context=_time_context(),
+        signals_block=signals_block,
+        facts_block="",
+    )
+
+    for system, prompt in (
+        (briefing_system, briefing_prompt),
+        (reminder_system, reminder_prompt),
+        (signal_system, signal_prompt),
+    ):
+        assert "charge jambes elevee" not in system
+        assert "Signaux actifs" in prompt
+        assert "charge jambes elevee" in prompt
