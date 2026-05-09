@@ -120,11 +120,38 @@ Tests backend app/read-models :
 ./scripts/test-backend tests/test_calendar_resolution.py tests/test_load_projection.py tests/test_app_endpoints.py
 ```
 
+Tests backend standard :
+
+```bash
+./scripts/test-backend
+```
+
+Contrat :
+- par defaut, la suite pytest est offline et hermetique ;
+- `tests/conftest.py` retire `DEEPSEEK_API_KEY`, `ANTHROPIC_API_KEY` et
+  `OPENAI_API_KEY` avant chaque test standard, meme si le shell local les a
+  charges ;
+- les tests qui mockent explicitement un provider peuvent toujours poser des
+  fausses cles dans leur propre scope ;
+- les vrais appels LLM sont reserves au mode opt-in ci-dessous.
+
 Smoke backend conversation/tools :
 
 ```bash
 ./scripts/test-backend -q tests/test_conversation_prompting.py tests/test_llm_first_conversation_contract.py tests/test_llm_json.py tests/test_llm_tools.py tests/test_conversation_context.py tests/test_execution_context.py tests/test_tool_runtime.py tests/test_memory_mutation_service.py tests/test_memory_routing.py tests/test_memory_patterns.py tests/test_core_flows.py
 ```
+
+Tests LLM reels minimaux :
+
+```bash
+set -a; source .env; set +a
+FITMAS_RUN_REAL_LLM_TESTS=1 ./scripts/test-backend tests/test_integration_real.py -v -s
+```
+
+Usage :
+- fait de vrais appels provider ;
+- accepte latence, cout et variabilite ;
+- ne doit pas etre lance implicitement par la suite de validation standard.
 
 Smoke API minimal :
 

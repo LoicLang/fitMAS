@@ -1,6 +1,7 @@
 """Real integration tests hitting the configured LLM API.
 
-Run with: PYTHONPATH=backend/src .venv/bin/python -m pytest tests/test_integration_real.py -v -s
+Run with:
+  FITMAS_RUN_REAL_LLM_TESTS=1 PYTHONPATH=backend/src .venv/bin/python -m pytest tests/test_integration_real.py -v -s
 Requires DEEPSEEK_API_KEY (preferred) or ANTHROPIC_API_KEY in .env
 """
 from __future__ import annotations
@@ -13,7 +14,8 @@ from unittest.mock import MagicMock
 
 from dotenv import load_dotenv
 
-load_dotenv(Path(__file__).resolve().parents[1] / ".env")
+if os.getenv("FITMAS_RUN_REAL_LLM_TESTS") == "1":
+    load_dotenv(Path(__file__).resolve().parents[1] / ".env")
 
 from fitmas.llm_gateway import client, request_text, request_json, request_message, message_text, message_json
 from fitmas.tools.routing import IntentCategory
