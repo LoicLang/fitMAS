@@ -189,6 +189,55 @@ class HeartbeatDebugEndpointTest(unittest.TestCase):
         self.assertEqual(debug["tools"]["requested"], [])
         self.assertEqual(debug["llm"]["raw_text"], "On garde le footing facile ce matin.")
 
+    def test_debug_dump_exposes_normalized_heartbeat_flow(self) -> None:
+        self._create_today_plan()
+        original_generate = heartbeat.generate_heartbeat_text_with_debug
+        original_request_text = heartbeat.request_text
+        original_tools = os.environ.get("FITMAS_ENABLE_HEARTBEAT_READ_TOOLS")
+        try:
+            os.environ["FITMAS_ENABLE_HEARTBEAT_READ_TOOLS"] = "0"
+            heartbeat.generate_heartbeat_text_with_debug = lambda *args, **kwargs: {
+                "raw_text": "Bonjour. Footing 40 min Z2. [health] Tibias a surveiller.",
+                "text": "Bonjour. Footing 40 min Z2. [health] Tibias a surveiller.",
+                "reason": "generated",
+                "allow_no_send": kwargs.get("allow_no_send", True),
+            }
+
+            def fake_request_text(**kwargs):
+                system = kwargs.get("system", "")
+                if "message heartbeat final" in system:
+                    return "Footing 40 min en Z2. Tibias sensibles: tu restes souple."
+                if "verificateur factualite" in system:
+                    return '{"verdict":"allow","reason":"ok","repaired_reply":""}'
+                return "ALLOW"
+
+            heartbeat.request_text = fake_request_text
+            response = self.client.post("/api/v0/debug/heartbeat/morning?dump=true&send=false")
+        finally:
+            if original_tools is None:
+                os.environ.pop("FITMAS_ENABLE_HEARTBEAT_READ_TOOLS", None)
+            else:
+                os.environ["FITMAS_ENABLE_HEARTBEAT_READ_TOOLS"] = original_tools
+            heartbeat.generate_heartbeat_text_with_debug = original_generate
+            heartbeat.request_text = original_request_text
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        debug = payload["debug"]
+        flow = debug["flow"]
+
+        self.assertEqual(flow["truth"]["time_context"]["timezone"], "Europe/Paris")
+        self.assertIn("heartbeat_bundle", flow["truth"])
+        self.assertEqual(flow["draft"]["raw_text"], "Bonjour. Footing 40 min Z2. [health] Tibias a surveiller.")
+        self.assertIn("Brouillon role heartbeat", flow["composer"]["input"]["user"])
+        self.assertIn("Verite aujourd'hui", flow["composer"]["input"]["user"])
+        self.assertEqual(flow["composer"]["output"], "Footing 40 min en Z2. Tibias sensibles: tu restes souple.")
+        self.assertEqual(flow["judges"][0]["name"], "read_only_claim")
+        self.assertEqual(flow["judges"][0]["decision"], "ALLOW")
+        self.assertFalse(flow["judges"][0]["blocked"])
+        self.assertEqual(flow["final"]["message"], payload["message"])
+        self.assertEqual(payload["message"], "Footing 40 min en Z2. Tibias sensibles: tu restes souple.")
+
 
 if __name__ == "__main__":
     unittest.main()

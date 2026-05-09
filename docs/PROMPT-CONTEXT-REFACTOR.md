@@ -534,8 +534,10 @@ Livrables :
 - trace `decide_none.events` avec chaine schema / repair / fallback / tool-loop
   : ✅
 - conversion des active facts en structures non recopiables telles quelles ; ✅
+- debug dump heartbeat `flow` lisible : `truth`, `draft`, `composer`,
+  `judges`, `decision`, `final` : ✅
 - fallback outage propre ;
-- debug dump : truth, draft, composer input, composer output, judges, final.
+- debug dump etendu conversation/final_reply hors heartbeat.
 
 Regression cible :
 

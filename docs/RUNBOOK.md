@@ -160,6 +160,19 @@ PORT=8033 ./.venv/bin/python -m uvicorn --app-dir backend/src fitmas.api:app --h
 curl http://127.0.0.1:8033/health
 ```
 
+Debug heartbeat local :
+
+```bash
+curl -X POST "http://127.0.0.1:8033/ops/heartbeat/morning?dump=true&send=false"
+```
+
+Usage :
+- necessite `FITMAS_ENABLE_DEBUG_ENDPOINTS=1` ;
+- ne livre rien a Telegram avec `send=false` ;
+- la reponse `debug.flow` expose la chaine lisible `truth -> draft ->
+  composer -> judges -> decision -> final` pour auditer les fuites de contexte
+  et les contradictions sans lire le prompt brut dans les logs.
+
 Smoke conversations reelles :
 
 ```bash

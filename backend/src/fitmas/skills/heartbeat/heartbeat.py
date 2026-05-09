@@ -91,21 +91,35 @@ class HeartbeatDebugTrace:
     llm: dict[str, Any] = field(default_factory=dict)
     tools: dict[str, Any] = field(default_factory=dict)
     judge: dict[str, Any] = field(default_factory=dict)
+    judges: list[dict[str, Any]] = field(default_factory=list)
     decision: dict[str, Any] = field(default_factory=dict)
     final: dict[str, Any] = field(default_factory=lambda: {"message": None})
 
     def to_dict(self) -> dict[str, Any]:
+        context = _debug_jsonable(self.context)
+        tools = _debug_jsonable(self.tools)
+        final = _debug_jsonable(self.final)
+        judges = _debug_jsonable(self.judges or ([self.judge] if self.judge else []))
         return {
             "kind": self.kind,
             "pipeline": self.pipeline,
             "gate": self.gate,
-            "context": _debug_jsonable(self.context),
+            "context": context,
             "prompt": self.prompt,
             "llm": self.llm,
-            "tools": _debug_jsonable(self.tools),
+            "tools": tools,
             "judge": self.judge,
+            "judges": judges,
             "decision": self.decision,
-            "final": self.final,
+            "final": final,
+            "flow": {
+                "truth": _debug_flow_truth(context),
+                "draft": self.llm,
+                "composer": final.get("composer") or {},
+                "judges": judges,
+                "decision": self.decision,
+                "final": final,
+            },
         }
 
 
@@ -175,6 +189,19 @@ def _debug_jsonable(value: Any) -> Any:
     return str(value)
 
 
+def _debug_flow_truth(context: dict[str, Any]) -> dict[str, Any]:
+    preferred_keys = (
+        "time_context",
+        "heartbeat_bundle",
+        "local_today",
+        "tomorrow_sessions",
+        "scheduled_sessions",
+        "activities",
+    )
+    selected = {key: context[key] for key in preferred_keys if key in context}
+    return selected or context
+
+
 def _trace_gate(gate: Any) -> None:
     trace = _trace()
     if trace is None:
@@ -200,7 +227,16 @@ def _trace_decision(action: str, reason: str) -> None:
 def _trace_final(message: str | None) -> None:
     trace = _trace()
     if trace is not None:
-        trace.final = {"message": message}
+        trace.final["message"] = message
+
+
+def _trace_judge(name: str, payload: dict[str, Any]) -> None:
+    trace = _trace()
+    if trace is None:
+        return
+    entry = {"name": name, **payload}
+    trace.judge = payload
+    trace.judges.append(entry)
 
 
 def _heartbeat_tool_context(
@@ -298,19 +334,31 @@ def _llm_generate(
         else:
             text = generate_heartbeat_text(system, prompt, allow_no_send=allow_no_send)
     if text and heartbeat_reply_context is not None:
+        composer_context = replace(heartbeat_reply_context, draft=text)
+        trace = _trace()
+        if trace is not None:
+            composer_system, composer_prompt = final_reply.build_heartbeat_reply_prompt(composer_context)
+            trace.final["composer"] = {
+                "draft": text,
+                "input": {
+                    "system": composer_system,
+                    "user": composer_prompt,
+                },
+            }
         composed = final_reply.compose_heartbeat_reply(
-            replace(heartbeat_reply_context, draft=text),
+            composer_context,
             request_text_fn=request_text,
         )
         trace = _trace()
         if composed is None:
             logger.warning("heartbeat.composer_blocked pipeline=%s message=%r", pipeline, text[:160])
-            if trace is not None:
-                trace.judge = {"blocked": True, "reason": "heartbeat_composer_blocked"}
+            _trace_judge("heartbeat_composer", {"blocked": True, "reason": "heartbeat_composer_blocked"})
             _PENDING_CONFIRMATION.set(None)
             return None
         if trace is not None:
-            trace.final["composer"] = {"draft": text, "text": composed}
+            trace.final.setdefault("composer", {"draft": text})
+            trace.final["composer"]["output"] = composed
+            trace.final["composer"]["text"] = composed
         text = composed
     # Chantier 1 - Etape D : log-only receipt-style detection sur les outputs
     # heartbeat (briefing / reminder / review / signal). Permet de mesurer le
@@ -338,11 +386,10 @@ def _llm_generate(
         )
         if verified is None:
             logger.warning("heartbeat.factual_verifier_blocked pipeline=%s message=%r", pipeline, text[:160])
-            trace = _trace()
-            if trace is not None:
-                trace.judge = {"blocked": True, "reason": "factual_verifier_blocked"}
+            _trace_judge("factual_verifier", {"blocked": True, "reason": "factual_verifier_blocked"})
             _PENDING_CONFIRMATION.set(None)
             return None
+        _trace_judge("factual_verifier", {"blocked": False, "reason": "allow", "changed": verified != text})
         text = verified
     return text
 
@@ -398,29 +445,21 @@ def _heartbeat_readonly_judge_blocks(text: str, *, pipeline: str) -> bool:
         decision = request_text(system=_READONLY_CLAIM_JUDGE_SYSTEM, prompt=prompt, max_tokens=8)
     except Exception:
         logger.exception("heartbeat.readonly_claim_judge_error pipeline=%s", pipeline)
-        trace = _trace()
-        if trace is not None:
-            trace.judge = {"decision": None, "blocked": True, "reason": "judge_error"}
+        _trace_judge("read_only_claim", {"decision": None, "blocked": True, "reason": "judge_error"})
         return True
     normalized = coach_voice.normalize_for_voice_guard(decision or "")
     if normalized.startswith("allow"):
-        trace = _trace()
-        if trace is not None:
-            trace.judge = {"decision": decision, "blocked": False, "reason": "allow"}
+        _trace_judge("read_only_claim", {"decision": decision, "blocked": False, "reason": "allow"})
         return False
     if normalized.startswith("block"):
-        trace = _trace()
-        if trace is not None:
-            trace.judge = {"decision": decision, "blocked": True, "reason": "block"}
+        _trace_judge("read_only_claim", {"decision": decision, "blocked": True, "reason": "block"})
         return True
     logger.warning(
         "heartbeat.readonly_claim_judge_invalid pipeline=%s decision=%r",
         pipeline,
         decision,
     )
-    trace = _trace()
-    if trace is not None:
-        trace.judge = {"decision": decision, "blocked": True, "reason": "invalid_judge_response"}
+    _trace_judge("read_only_claim", {"decision": decision, "blocked": True, "reason": "invalid_judge_response"})
     return True
 
 
