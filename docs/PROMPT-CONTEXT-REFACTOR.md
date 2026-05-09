@@ -538,8 +538,11 @@ Livrables :
   `judges`, `decision`, `final` : ✅
 - debug dump conversation ops lisible : `truth`, `draft`, `composer`,
   `runtime`, `decision`, `final` depuis le turn persiste : ✅
+- debug dump conversation ops pour mutation/pending : ✅ `runtime` expose
+  `pending_confirmation_record` et les `plan_mutation_events` correles, et
+  `composer` distingue les reponses runtime `pending_confirmation`,
+  `mutation_result` ou `mutation_blocked`
 - fallback outage propre ;
-- debug dump final_reply plus profond pour les routes mutation/pending.
 
 Regression cible :
 

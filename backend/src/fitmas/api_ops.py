@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import logging
+from datetime import timedelta
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -71,14 +72,16 @@ def trigger_conversation_debug(payload: IncomingMessage, db: Session = Depends(g
         "client_message_key": client_message_key,
         "message": reply.assistant_message.text,
         "reply": reply.model_dump(mode="json"),
-        "debug": _conversation_debug_payload(row) if row is not None else None,
+        "debug": _conversation_debug_payload(db, row) if row is not None else None,
     }
 
 
-def _conversation_debug_payload(row: s.ConversationTurnRecord) -> dict:
+def _conversation_debug_payload(db: Session, row: s.ConversationTurnRecord) -> dict:
     context = _json_loads_object(row.context_json)
     decision = _json_loads_object(row.decision_json)
     memory_writes = _json_loads_list(row.memory_writes_json)
+    pending_record = _conversation_pending_confirmation_record(db, row)
+    mutation_events = _conversation_plan_mutation_events(db, row)
     turn = {
         "id": row.id,
         "response_mode": row.response_mode,
@@ -86,16 +89,21 @@ def _conversation_debug_payload(row: s.ConversationTurnRecord) -> dict:
         "mutation_applied": row.mutation_applied,
         "pending_confirmation": row.pending_confirmation,
         "pending_confirmation_id": row.pending_confirmation_id,
+        "pending_confirmation_record": pending_record,
+        "plan_mutation_events": mutation_events,
         "day_updated": row.day_updated,
         "client_message_key": row.client_message_key,
         "source": row.source,
     }
     final_reply = context.get("final_reply") if isinstance(context.get("final_reply"), dict) else {}
+    composer = _conversation_flow_composer(row, decision, final_reply)
     flow_decision = {
         "response_mode": row.response_mode,
         "mutation_type": row.mutation_type,
         "mutation_applied": row.mutation_applied,
         "pending_confirmation": row.pending_confirmation,
+        "pending_confirmation_id": row.pending_confirmation_id,
+        "decision_json": decision,
         "decide_none": context.get("decide_none"),
     }
     return {
@@ -107,7 +115,7 @@ def _conversation_debug_payload(row: s.ConversationTurnRecord) -> dict:
         "flow": {
             "truth": _conversation_flow_truth(context),
             "draft": _conversation_flow_draft(decision, final_reply),
-            "composer": final_reply,
+            "composer": composer,
             "runtime": turn,
             "decision": flow_decision,
             "final": {"message": row.assistant_message},
@@ -134,6 +142,124 @@ def _conversation_flow_draft(decision: dict, final_reply: dict) -> dict:
     if final_reply.get("draft"):
         draft["fitmas_message"] = final_reply.get("draft")
     return draft
+
+
+def _conversation_flow_composer(
+    row: s.ConversationTurnRecord,
+    decision: dict,
+    final_reply: dict,
+) -> dict:
+    if final_reply:
+        return final_reply
+    draft = str(decision.get("fitmas_message") or decision.get("coach_message") or "").strip()
+    base = {
+        "draft": draft,
+        "output": row.assistant_message,
+        "composed": False,
+    }
+    if row.pending_confirmation:
+        return {
+            **base,
+            "capability": "pending_confirmation",
+            "source": "runtime_pending_confirmation",
+        }
+    if row.mutation_applied or str(row.response_mode or "").endswith("_applied"):
+        return {
+            **base,
+            "capability": "mutation_result",
+            "source": "runtime_mutation_result",
+        }
+    if str(row.response_mode or "").endswith("_blocked"):
+        return {
+            **base,
+            "capability": "mutation_blocked",
+            "source": "runtime_mutation_result",
+        }
+    return {}
+
+
+def _conversation_pending_confirmation_record(
+    db: Session,
+    row: s.ConversationTurnRecord,
+) -> dict | None:
+    if row.pending_confirmation_id is None:
+        return None
+    pending = (
+        db.query(s.PendingMutationConfirmation)
+        .filter(
+            s.PendingMutationConfirmation.id == row.pending_confirmation_id,
+            s.PendingMutationConfirmation.user_id == row.user_id,
+        )
+        .first()
+    )
+    if pending is None:
+        return None
+    return {
+        "id": pending.id,
+        "status": pending.status,
+        "impact_level": pending.impact_level,
+        "reason": pending.reason,
+        "mutation_type": pending.mutation_type,
+        "summary": pending.summary,
+        "source_text": pending.source_text,
+        "decision": _json_loads_object(pending.decision_json),
+        "created_at": _isoformat_or_none(pending.created_at),
+        "expires_at": _isoformat_or_none(pending.expires_at),
+        "resolved_at": _isoformat_or_none(pending.resolved_at),
+    }
+
+
+def _conversation_plan_mutation_events(
+    db: Session,
+    row: s.ConversationTurnRecord,
+) -> list[dict]:
+    exact_rows = (
+        db.query(s.PlanMutationEventRecord)
+        .filter(
+            s.PlanMutationEventRecord.user_id == row.user_id,
+            s.PlanMutationEventRecord.conversation_turn_id == row.id,
+        )
+        .order_by(s.PlanMutationEventRecord.id.desc())
+        .all()
+    )
+    if exact_rows:
+        return [_serialize_plan_mutation_event(event, correlation="conversation_turn_id") for event in exact_rows]
+    if not row.mutation_applied:
+        return []
+    lower_bound = row.created_at - timedelta(minutes=2) if row.created_at is not None else None
+    query = db.query(s.PlanMutationEventRecord).filter(
+        s.PlanMutationEventRecord.user_id == row.user_id,
+        s.PlanMutationEventRecord.source == "conversation",
+    )
+    if lower_bound is not None:
+        query = query.filter(s.PlanMutationEventRecord.created_at >= lower_bound)
+    if row.created_at is not None:
+        query = query.filter(s.PlanMutationEventRecord.created_at <= row.created_at + timedelta(seconds=5))
+    events = query.order_by(s.PlanMutationEventRecord.id.desc()).limit(5).all()
+    return [_serialize_plan_mutation_event(event, correlation="recent_conversation_event") for event in events]
+
+
+def _serialize_plan_mutation_event(event: s.PlanMutationEventRecord, *, correlation: str) -> dict:
+    return {
+        "id": event.id,
+        "source": event.source,
+        "trigger_type": event.trigger_type,
+        "command_type": event.command_type,
+        "target_session_ids": _json_loads_list(event.target_session_ids_json),
+        "before": _json_loads_object(event.before_snapshot_json),
+        "after": _json_loads_object(event.after_snapshot_json),
+        "reason": _json_loads_object(event.reason_json),
+        "impact": _json_loads_object(event.impact_json),
+        "user_visible_summary": event.user_visible_summary,
+        "explained_to_user": event.explained_to_user,
+        "conversation_turn_id": event.conversation_turn_id,
+        "created_at": _isoformat_or_none(event.created_at),
+        "correlation": correlation,
+    }
+
+
+def _isoformat_or_none(value) -> str | None:
+    return value.isoformat() if value is not None else None
 
 
 def _json_loads_object(raw_value: str | None) -> dict:

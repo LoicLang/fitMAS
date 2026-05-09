@@ -187,6 +187,9 @@ Usage :
   si aucune `client_message_key` n'est fournie ;
 - la reponse `debug.flow` expose `truth`, `draft`, `composer`, `runtime`,
   `decision`, `final`, depuis le turn persiste.
+- sur les routes mutation/pending, `debug.flow.runtime` expose aussi les
+  artefacts DB rattaches au tour : `pending_confirmation_record` et
+  `plan_mutation_events`.
 
 Smoke conversations reelles :
 

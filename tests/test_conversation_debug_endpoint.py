@@ -12,10 +12,11 @@ from fastapi.testclient import TestClient
 import fitmas.api_messages as api_messages
 import fitmas.final_reply as final_reply
 import fitmas.plan_mutation_service as plan_mutation_service
-from fitmas import schema as s
+from fitmas import repository as repo, schema as s
 from fitmas.api import app
 from fitmas.db import Base, SessionLocal, engine, init_db
-from fitmas.llm import CoachDecision
+from fitmas.llm import CoachDecision, MutationDecision
+from fitmas.time_context import DAY_KEYS, day_label_fr, get_local_now
 from fitmas.week_coherence import WeekCoherenceReview
 
 
@@ -69,6 +70,39 @@ class ConversationDebugEndpointTest(unittest.TestCase):
         plan_mutation_service.review_week_coherence_with_llm = self._original_week_review
         self.db.close()
 
+    def _create_plan_for_today(self) -> tuple[s.WeeklyPlan, s.ScheduledSession]:
+        now = get_local_now(self.user.timezone)
+        today_key = DAY_KEYS[now.weekday()]
+        plan = repo.replace_plan(
+            self.db,
+            self.user.id,
+            intention="reprendre propre",
+            summary="test",
+            timezone_name=self.user.timezone,
+            days=[
+                {
+                    "day": today_key,
+                    "label": day_label_fr(today_key, capitalize=True),
+                    "sport_type": "running",
+                    "session_type": "easy",
+                    "session_title": "Footing facile",
+                    "session_goal": "Reprendre",
+                    "session_note": "souple",
+                    "session_description": "40 min",
+                    "duration_min": 40,
+                    "intensity": "easy",
+                    "load_score": 2,
+                    "priority": "Normal",
+                    "nutrition_focus": "Hydratation",
+                    "flexibility": "stable",
+                    "completion_status": "planned",
+                }
+            ],
+        )
+        session = repo.get_today_scheduled_session(self.db, self.user.id, timezone_name=self.user.timezone)
+        self.assertIsNotNone(session)
+        return plan, session
+
     def test_debug_message_endpoint_exposes_normalized_conversation_flow(self) -> None:
         api_messages.plan_conversation_turn = lambda *args, **kwargs: None
         api_messages.extract_facts = lambda *args, **kwargs: []
@@ -101,6 +135,78 @@ class ConversationDebugEndpointTest(unittest.TestCase):
         self.assertEqual(flow["composer"]["output"], "Phrase finale propre.")
         self.assertEqual(flow["decision"]["response_mode"], "no_change_composed")
         self.assertEqual(flow["final"]["message"], "Phrase finale propre.")
+
+    def test_debug_message_endpoint_exposes_pending_confirmation_artifact(self) -> None:
+        _, session = self._create_plan_for_today()
+        session.priority = "Seance cle"
+        self.db.commit()
+        api_messages.plan_conversation_turn = lambda *args, **kwargs: None
+        api_messages.extract_facts = lambda *args, **kwargs: []
+        api_messages.decide = lambda *args, **kwargs: MutationDecision(
+            mutation_type="replace_session",
+            target_session_id=session.id,
+            new_sport_type="swimming",
+            new_session_type="easy",
+            new_duration_min=35,
+            new_intensity="easy",
+            new_title="Natation souple",
+            new_goal="Faire tourner sans impact",
+            rationale="On bascule sans impact.",
+            fitmas_message="Je te bascule la seance en natation souple.",
+        )
+
+        response = self.client.post(
+            "/ops/conversation/debug",
+            json={
+                "text": "Tu peux remplacer ma seance ?",
+                "client_message_key": "debug-pending-flow-1",
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        flow = response.json()["debug"]["flow"]
+        runtime = flow["runtime"]
+        pending = runtime["pending_confirmation_record"]
+        self.assertTrue(runtime["pending_confirmation"])
+        self.assertEqual(pending["id"], runtime["pending_confirmation_id"])
+        self.assertEqual(pending["status"], "pending")
+        self.assertEqual(pending["mutation_type"], "replace_session")
+        self.assertEqual(pending["decision"]["mutation_type"], "replace_session")
+        self.assertEqual(flow["decision"]["pending_confirmation_id"], pending["id"])
+        self.assertEqual(flow["composer"]["capability"], "pending_confirmation")
+        self.assertEqual(flow["composer"]["source"], "runtime_pending_confirmation")
+        self.assertEqual(flow["composer"]["output"], flow["final"]["message"])
+
+    def test_debug_message_endpoint_exposes_plan_mutation_events(self) -> None:
+        _, session = self._create_plan_for_today()
+        api_messages.plan_conversation_turn = lambda *args, **kwargs: None
+        api_messages.extract_facts = lambda *args, **kwargs: []
+        api_messages.decide = lambda *args, **kwargs: MutationDecision(
+            mutation_type="lighten_day",
+            target_session_id=session.id,
+            rationale="On leve le pied aujourd'hui.",
+            fitmas_message="On allege aujourd'hui. Tu recuperes.",
+        )
+
+        response = self.client.post(
+            "/ops/conversation/debug",
+            json={
+                "text": "Tu peux me simplifier la seance ?",
+                "client_message_key": "debug-mutation-flow-1",
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        flow = response.json()["debug"]["flow"]
+        runtime = flow["runtime"]
+        events = runtime["plan_mutation_events"]
+        self.assertTrue(runtime["mutation_applied"])
+        self.assertEqual(events[0]["command_type"], "lighten_day")
+        self.assertEqual(events[0]["target_session_ids"], [session.id])
+        self.assertTrue(events[0]["explained_to_user"])
+        self.assertEqual(flow["composer"]["capability"], "mutation_result")
+        self.assertEqual(flow["composer"]["source"], "runtime_mutation_result")
+        self.assertEqual(flow["composer"]["output"], flow["final"]["message"])
 
 
 if __name__ == "__main__":
