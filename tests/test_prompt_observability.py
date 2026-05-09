@@ -1,3 +1,5 @@
+import logging
+
 from fitmas.prompt_observability import (
     DecideFailureReason,
     build_prompt_trace,
@@ -121,3 +123,45 @@ def test_decide_none_trace_records_tool_loop_then_empty_output(monkeypatch) -> N
         "tool_loop_failed",
         "empty_output",
     ]
+
+
+def test_decide_logs_prompt_trace_for_successful_tool_turn(monkeypatch, caplog) -> None:
+    monkeypatch.setattr(llm, "_client", lambda: object())
+    monkeypatch.setattr(
+        llm,
+        "_request_json_with_tools",
+        lambda **_kwargs: {
+            "response_type": "no_change",
+            "rationale": "Lecture planning simple.",
+            "fitmas_message": "Demain tu as ton footing Z2.",
+        },
+    )
+
+    with caplog.at_level(logging.INFO, logger="fitmas.llm"):
+        decision = llm.decide(
+            "J'ai quoi demain ?",
+            "plan",
+            coach_context={"turn_primary_intent": "plan_lookup"},
+            tool_context=ToolContext(
+                pipeline="conversation",
+                user_id=1,
+                timezone_name="Europe/Paris",
+            ),
+        )
+
+    assert decision is not None
+    trace_messages = [
+        record.getMessage()
+        for record in caplog.records
+        if "llm.decide_prompt_trace" in record.getMessage()
+    ]
+    assert trace_messages
+    trace_message = trace_messages[0]
+    assert "route=conversation_decide" in trace_message
+    assert "intent=plan_lookup" in trace_message
+    assert "prompt_policy=plan_lookup_compact" in trace_message
+    assert "prompt_contract=conversation_plan_lookup" in trace_message
+    assert "tools=" in trace_message
+    assert "get_plan_window" in trace_message
+    assert "validate_plan_patch" in trace_message
+    assert "total_chars=" in trace_message

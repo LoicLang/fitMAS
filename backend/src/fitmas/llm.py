@@ -438,6 +438,33 @@ def _record_decide_failure_event(reason: DecideFailureReason, *, stage: str) -> 
     _DECIDE_FAILURE_EVENTS.append(event)
 
 
+def _render_prompt_trace_tuple(values: tuple[str, ...]) -> str:
+    return ",".join(values) if values else "none"
+
+
+def _log_decide_prompt_trace(prompt_trace: PromptTrace | None, *, tool_names: tuple[str, ...]) -> None:
+    if prompt_trace is None:
+        return
+    rendered_tool_names = tool_names or prompt_trace.tool_names
+    logger.info(
+        "llm.decide_prompt_trace route=%s intent=%s provider=%s model=%s prompt_policy=%s "
+        "prompt_contract=%s tools=%s truth_blocks=%s system_chars=%s user_chars=%s "
+        "total_chars=%s history_messages_used=%s",
+        prompt_trace.route,
+        prompt_trace.intent,
+        prompt_trace.provider,
+        prompt_trace.model,
+        prompt_trace.prompt_policy,
+        prompt_trace.prompt_contract,
+        _render_prompt_trace_tuple(rendered_tool_names),
+        _render_prompt_trace_tuple(prompt_trace.truth_block_names),
+        prompt_trace.system_chars,
+        prompt_trace.user_chars,
+        prompt_trace.total_chars,
+        prompt_trace.history_messages_used,
+    )
+
+
 def _decide_failure_reason_from_exception_type(error_type: str) -> DecideFailureReason:
     if error_type == "timeout":
         return DecideFailureReason.TIMEOUT
@@ -500,6 +527,7 @@ def decide(
     history_messages_used = prompt_bundle.history_messages_used
     system_prompt = prompt_bundle.system
     prompt_trace = prompt_bundle.trace
+    _log_decide_prompt_trace(prompt_trace, tool_names=tool_names)
 
     try:
         _remember_invalid_decision(None)

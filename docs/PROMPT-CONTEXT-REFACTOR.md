@@ -486,6 +486,9 @@ Etat 8 mai 2026 :
 - `decide_none.events` conserve la chaine d'echec utile (`schema_invalid`,
   `repair_failed`, `fallback_failed`, `tool_loop_failed`, `empty_output`, etc.)
   pour diagnostiquer la cause racine, pas seulement le dernier fallback.
+- Chaque appel `decide()` logue aussi `llm.decide_prompt_trace` avec route,
+  intent, policy, contract, budget tools et tailles de prompt, sans exposer le
+  prompt brut.
 
 ### Phase 4 - Final Speech Boundary
 
@@ -526,6 +529,7 @@ Livrables :
 - signal prompt block sans tags internes recopiables (`kind`, `severity`, emoji
   statut) : ✅
 - signal composer context sans tags internes recopiables : ✅
+- log prompt size / route / intent / policy / contract / tool budget : ✅
 - trace `decide_none.reason` dans `ConversationTurn.context_json` : ✅
 - trace `decide_none.events` avec chaine schema / repair / fallback / tool-loop
   : ✅
