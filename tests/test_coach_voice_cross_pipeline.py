@@ -1,11 +1,11 @@
-"""Cross-pipeline coverage: la voix coach doit etre uniforme sur tous
-les system prompts user-facing.
+"""Cross-pipeline coverage: la voix coach doit rester source unique sur les
+prompts qui produisent directement une parole user-facing.
 
 Verrouille la cible Chantier 1 (2 mai 2026) : un changement dans
 `coach_voice.COACH_VOICE_RULES` ou les few-shots se propage automatiquement
-a la conversation runtime ET a tous les roles heartbeat
-(briefing / reminder / review / signal). Si un nouveau pipeline ajoute
-un system prompt sans importer `coach_voice`, ce test casse.
+a la conversation runtime. Depuis le composer terminal heartbeat, les roles
+heartbeat ne portent plus la voix complete : ils preparent un brouillon factuel,
+puis `final_reply.compose_heartbeat_reply()` applique la voix finale.
 """
 from __future__ import annotations
 
@@ -36,32 +36,28 @@ class ConversationPromptHasSharedVoiceTest(unittest.TestCase):
         self.assertIn("On ne refait pas le debat", _CONVERSATION_SYSTEM_TEXT)
 
 
-class HeartbeatBuildersImportSharedVoiceTest(unittest.TestCase):
-    """Verifie que les 4 builders heartbeat referencent bien `coach_voice`.
+class HeartbeatBuildersUseDraftContractTest(unittest.TestCase):
+    """Les roles heartbeat preparent le fond, pas la voix finale."""
 
-    Garde-fou structurel : si quelqu'un ajoute un nouveau builder de prompt
-    heartbeat sans importer la voix partagee, ce test ne le couvre pas
-    automatiquement. Le test cross-prompt content (en dessous) le rattrape
-    quand meme via la chaine sample du rules block.
-    """
-
-    def test_briefing_builder_uses_coach_voice(self) -> None:
+    def test_briefing_builder_uses_draft_contract(self) -> None:
         src = inspect.getsource(heartbeat_roles.build_briefing_prompt)
-        self.assertIn("coach_voice.COACH_VOICE_RULES", src)
-        self.assertIn("coach_voice.COACH_VOICE_FEW_SHOTS_GOOD", src)
-        self.assertIn("coach_voice.COACH_VOICE_FEW_SHOTS_BAD", src)
+        self.assertIn("_HEARTBEAT_DRAFT_CONTRACT", src)
+        self.assertNotIn("COACH_VOICE_FEW_SHOTS", src)
 
-    def test_reminder_builder_uses_coach_voice(self) -> None:
+    def test_reminder_builder_uses_draft_contract(self) -> None:
         src = inspect.getsource(heartbeat_roles.build_reminder_prompt)
-        self.assertIn("coach_voice.COACH_VOICE_RULES", src)
+        self.assertIn("_HEARTBEAT_DRAFT_CONTRACT", src)
+        self.assertNotIn("COACH_VOICE_FEW_SHOTS", src)
 
-    def test_review_builder_uses_coach_voice(self) -> None:
+    def test_review_builder_uses_draft_contract(self) -> None:
         src = inspect.getsource(heartbeat_roles.build_review_prompt)
-        self.assertIn("coach_voice.COACH_VOICE_RULES", src)
+        self.assertIn("_HEARTBEAT_DRAFT_CONTRACT", src)
+        self.assertNotIn("COACH_VOICE_FEW_SHOTS", src)
 
-    def test_signal_builder_uses_coach_voice(self) -> None:
+    def test_signal_builder_uses_draft_contract(self) -> None:
         src = inspect.getsource(heartbeat_roles.build_signal_prompt)
-        self.assertIn("coach_voice.COACH_VOICE_RULES", src)
+        self.assertIn("_HEARTBEAT_DRAFT_CONTRACT", src)
+        self.assertNotIn("COACH_VOICE_FEW_SHOTS", src)
 
 
 class CoachVoiceContentPropagationTest(unittest.TestCase):

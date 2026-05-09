@@ -470,6 +470,9 @@ Etat 8 mai 2026 :
   `morning_briefing()`, `pre_session_reminder()`, `weekly_review()` et `signal_check()` le font maintenant repasser par
   `compose_heartbeat_reply()` avec un `HeartbeatReplyContext` structure avant
   read-only judge et factual verifier.
+- Les role builders heartbeat ne portent plus les few-shots voix complets :
+  ils ont un contrat de brouillon factuel, et la voix finale vit dans
+  `compose_heartbeat_reply()`.
 
 ### Phase 4 - Final Speech Boundary
 
@@ -503,6 +506,8 @@ Livrables :
   ✅ branche pour la revue hebdo read-only
 - `signal_check()` -> role draft -> `compose_heartbeat_reply()` -> judges ;
   ✅ branche en `candidate_only` pour les signaux proactifs sans commit autonome
+- role builders heartbeat allegés : ✅ plus de `COACH_VOICE_FEW_SHOTS_*` dans
+  les prompts de brouillon ; le composer terminal applique la voix finale
 - conversion des active facts en structures non recopiables telles quelles ; ✅
 - fallback outage propre ;
 - debug dump : truth, draft, composer input, composer output, judges, final.

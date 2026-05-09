@@ -17,7 +17,7 @@ from typing import Any, Sequence
 
 from sqlalchemy.orm import Session
 
-from fitmas import coach_voice, repository as repo, schema as s
+from fitmas import repository as repo, schema as s
 from fitmas.activity_helpers import (
     activities_last_days as _activities_last_days,
     activities_on_local_date as _activities_on_local_date,
@@ -71,6 +71,15 @@ HEARTBEAT_FACT_CATEGORIES = ("health", "fatigue", "constraint")
 # ---------------------------------------------------------------------------
 # Shared helpers
 # ---------------------------------------------------------------------------
+
+_HEARTBEAT_DRAFT_CONTRACT = (
+    "\n\nContrat de role heartbeat:"
+    "\n- Tu prepares un brouillon de contenu, pas le message final visible."
+    "\n- Une couche terminale compose le message final ensuite."
+    "\n- Priorite au fond: faits sportifs, angle utile, points a ne pas oublier."
+    "\n- Ne recopie pas les categories internes ni les noms techniques."
+    "\n- N'annonce jamais un changement planning comme commit sans event reel."
+)
 
 def get_active_fact_lines(
     db: Session,
@@ -237,22 +246,12 @@ def build_briefing_prompt(
     system = (
         f"Tu es {user.coach_name}, coach multisport IA. "
         f"Style: {user.coach_style}. "
-        f"Ton ton: clair, court, direct, chaleureux sans cheerleading. "
-        f"Tu tutoies toujours. Reponds en francais. Max {BRIEFING_ROLE.max_output_sentences} phrases. "
-        "Varie l'ouverture. N'ouvre pas systematiquement par 'Bon', 'OK', 'Attends' ou 'On va etre honnete'. "
-        "N'essentialise pas un jour fixe de la semaine si ce n'est pas utile aujourd'hui."
+        f"Tu tutoies toujours. Reponds en francais. Max {BRIEFING_ROLE.max_output_sentences} phrases de brouillon. "
+        "Ne cherche pas la formule parfaite: prepare le contenu utile pour le composer final."
     )
     if user.coach_soul:
         system += f"\nAme du coach: {user.coach_soul}"
-    # Voix coach unifiee (Chantier 1 — 2 mai 2026) : rules + few-shots
-    # partages avec conversation/reminder/review via `coach_voice`. Adresse
-    # l'incident hallucination + receipt-style + defensive du briefing 2 mai
-    # ("On ne refait pas le debat sur le offplan...", "tient l'equilibre"...).
-    system += (
-        f"\n\n{coach_voice.COACH_VOICE_RULES}"
-        f"\n\n{coach_voice.COACH_VOICE_FEW_SHOTS_GOOD}"
-        f"\n\n{coach_voice.COACH_VOICE_FEW_SHOTS_BAD}"
-    )
+    system += _HEARTBEAT_DRAFT_CONTRACT
     # Hierarchy of sources — Truth blocks are authoritative. Defends against
     # weekly aggregates leaking into yesterday-specific claims.
     system += (
@@ -340,19 +339,12 @@ def build_reminder_prompt(
     system = (
         f"Tu es {user.coach_name}, coach multisport IA. "
         f"Style: {user.coach_style}. "
-        "Ton ton: clair, court, direct. "
-        f"Tu tutoies toujours. Reponds en francais. Max {REMINDER_ROLE.max_output_sentences} phrases. "
-        "Rappelle la seance de demain et demande comment l'utilisateur se sent. "
-        "Varie l'ouverture et evite les formules recyclees."
+        f"Tu tutoies toujours. Reponds en francais. Max {REMINDER_ROLE.max_output_sentences} phrases de brouillon. "
+        "Prepare le rappel utile de la seance de demain et le point readiness a verifier."
     )
     if user.coach_soul:
         system += f"\nAme du coach: {user.coach_soul}"
-    # Voix coach unifiee (Chantier 1 — 2 mai 2026)
-    system += (
-        f"\n\n{coach_voice.COACH_VOICE_RULES}"
-        f"\n\n{coach_voice.COACH_VOICE_FEW_SHOTS_GOOD}"
-        f"\n\n{coach_voice.COACH_VOICE_FEW_SHOTS_BAD}"
-    )
+    system += _HEARTBEAT_DRAFT_CONTRACT
     if signals_block:
         system += (
             f"\n\n{signals_block}\n"
@@ -392,19 +384,12 @@ def build_review_prompt(
     system = (
         f"Tu es {user.coach_name}, coach multisport IA. "
         f"Style: {user.coach_style}. "
-        "Ton ton: clair, court, direct, chaleureux. "
-        f"Tu tutoies toujours. Reponds en francais. Max {REVIEW_ROLE.max_output_sentences} phrases. "
-        "Fais un bilan de la semaine et donne une perspective pour la suivante. "
-        "Varie l'attaque du message et evite la recitation."
+        f"Tu tutoies toujours. Reponds en francais. Max {REVIEW_ROLE.max_output_sentences} phrases de brouillon. "
+        "Prepare le bilan de la semaine, les faits utiles et la perspective a transmettre."
     )
     if user.coach_soul:
         system += f"\nAme du coach: {user.coach_soul}"
-    # Voix coach unifiee (Chantier 1 — 2 mai 2026)
-    system += (
-        f"\n\n{coach_voice.COACH_VOICE_RULES}"
-        f"\n\n{coach_voice.COACH_VOICE_FEW_SHOTS_GOOD}"
-        f"\n\n{coach_voice.COACH_VOICE_FEW_SHOTS_BAD}"
-    )
+    system += _HEARTBEAT_DRAFT_CONTRACT
     # Anti-hallucination — same defense in depth as the morning briefing.
     # Without this the review LLM regularly invents weekly counts (eg. "zero
     # natation cette semaine" while a swim was actually logged offplan).
@@ -445,17 +430,12 @@ def build_signal_prompt(
     system = (
         f"Tu es {user.coach_name}, coach multisport IA. "
         f"Style: {user.coach_style}. "
-        f"Ton ton: clair, court, direct. Tu tutoies. Reponds en francais. Max {SIGNAL_ROLE.max_output_sentences} phrases. "
-        "Varie l'ouverture et evite les formules recyclees.\n"
+        f"Tu tutoies. Reponds en francais. Max {SIGNAL_ROLE.max_output_sentences} phrases de brouillon. "
+        "Prepare le signal utile et le compromis a proposer si besoin.\n"
     )
     if user.coach_soul:
         system += f"Ame du coach: {user.coach_soul}\n"
-    # Voix coach unifiee (Chantier 1 — 2 mai 2026)
-    system += (
-        f"\n{coach_voice.COACH_VOICE_RULES}"
-        f"\n\n{coach_voice.COACH_VOICE_FEW_SHOTS_GOOD}"
-        f"\n\n{coach_voice.COACH_VOICE_FEW_SHOTS_BAD}\n"
-    )
+    system += _HEARTBEAT_DRAFT_CONTRACT
     system += (
         f"\n{signals_block}\n\n"
         "Genere un message proactif base sur ces signaux. "
