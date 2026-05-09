@@ -111,7 +111,13 @@ def _trace_tool_names(context_pack: ConversationContextPack | None) -> tuple[str
     return context_pack.tool_budget.allowed_tools
 
 
-def _trace_truth_block_names(context_pack: ConversationContextPack | None) -> tuple[str, ...]:
+def _trace_truth_block_names(
+    context_pack: ConversationContextPack | None,
+    prompt_policy: ConversationPromptPolicy,
+) -> tuple[str, ...]:
+    if prompt_policy.contract_name:
+        contract = get_prompt_contract(prompt_policy.contract_name)
+        return tuple(dict.fromkeys(contract.required_truth_blocks + contract.optional_truth_blocks))
     if context_pack is None:
         return ()
     return context_pack.truth_block_names()
@@ -234,7 +240,7 @@ Nouveau message de l'utilisateur:
             system=system,
             user_prompt=prompt,
             tool_names=_trace_tool_names(context_pack),
-            truth_block_names=_trace_truth_block_names(context_pack),
+            truth_block_names=_trace_truth_block_names(context_pack, prompt_policy),
             history_messages_used=history_messages_used,
         ),
     )
@@ -341,7 +347,7 @@ def build_layered_conversation_prompt(
             system=system_parts,
             user_prompt=prompt,
             tool_names=_trace_tool_names(context_pack),
-            truth_block_names=_trace_truth_block_names(context_pack),
+            truth_block_names=_trace_truth_block_names(context_pack, prompt_policy),
             history_messages_used=history_messages_used,
         ),
     )

@@ -542,6 +542,12 @@ Livrables :
   `pending_confirmation_record` et les `plan_mutation_events` correles, et
   `composer` distingue les reponses runtime `pending_confirmation`,
   `mutation_result` ou `mutation_blocked`
+- prompt diet par capability, slice 1 : ✅ les routes `terminal_text`
+  (`close_turn`, `casual_chat`) utilisent maintenant un system prompt terminal
+  sans calendrier-action, workflow replan ni exemples mutation ; les routes
+  `read_only` utilisent une verite read-only compacte sans exemples mutation.
+  Les traces `truth_blocks` exposent les blocs autorises par `PromptContract`
+  plutot que tous les blocs possibles du `ContextPack`.
 - fallback outage propre ;
 
 Regression cible :

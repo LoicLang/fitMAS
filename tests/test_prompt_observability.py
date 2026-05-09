@@ -73,7 +73,12 @@ def test_layered_prompt_bundle_exposes_trace_metadata() -> None:
     assert bundle.trace.prompt_contract == "conversation_plan_lookup"
     assert bundle.trace.intent == "plan_lookup"
     assert bundle.trace.tool_names == ("get_plan_window",)
-    assert bundle.trace.truth_block_names == context_pack.truth_block_names()
+    assert bundle.trace.truth_block_names == (
+        "temporal",
+        "plan_window",
+        "execution_reality",
+        "activity_claims",
+    )
     assert bundle.trace.total_chars > 0
 
 

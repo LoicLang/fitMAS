@@ -106,8 +106,11 @@ def test_read_only_conversation_system_text_excludes_mutation_modules() -> None:
     text = build_conversation_system_text(contract)
 
     assert "Contrat du tour:" in text
-    assert "Analyse le message utilisateur" in text
+    assert "Verite read-only:" in text
+    assert "Analyse le message utilisateur et decide quelle action prendre" not in text
     assert "Tu reponds UNIQUEMENT avec un JSON CoachDecision valide." in text
+    assert "Exemples BONS" not in text
+    assert "requires_confirmation avec contre-prop" not in text
     assert "Workflow replan_after_constraint:" not in text
     assert "Actions possibles:" not in text
     assert "draft_move_session" not in text
@@ -129,6 +132,10 @@ def test_casual_chat_conversation_system_text_uses_no_action_coach_decision_sche
     assert "- sortie decision: CoachDecision" in text
     assert "Contrat de sortie terminal_text:" in text
     assert "response_type: reply | no_change" in text
+    assert "Posture terminale:" in text
+    assert "Analyse le message utilisateur" not in text
+    assert "Etats du calendrier:" not in text
+    assert "Exemples BONS" not in text
     assert "Workflow replan_after_constraint:" not in text
     assert "Actions possibles:" not in text
     assert "plan_patch = {" not in text
@@ -147,6 +154,10 @@ def test_close_turn_conversation_system_text_uses_no_action_coach_decision_schem
     assert "Contrat de sortie terminal_text:" in text
     assert "response_type: reply | no_change" in text
     assert "pending_resolution: null sauf si un pending explicite est fourni" in text
+    assert "Posture terminale:" in text
+    assert "Analyse le message utilisateur" not in text
+    assert "Etats du calendrier:" not in text
+    assert "Exemples BONS" not in text
     assert "Workflow replan_after_constraint:" not in text
     assert "Actions possibles:" not in text
     assert "plan_patch = {" not in text
