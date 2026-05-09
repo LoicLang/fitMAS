@@ -1239,6 +1239,8 @@ class HeartbeatGroundingTest(unittest.TestCase):
         self.assertEqual(context.role, "signal")
         self.assertEqual(context.capability, "candidate_only")
         self.assertTrue(any("Charge cumulative haute" in item for item in context.week_digest))
+        self.assertFalse(any("high_cumulative_load" in item for item in context.week_digest))
+        self.assertFalse(any("warning" in item for item in context.week_digest))
         self.assertTrue(any("Charge ressentie haute" in fact.value for fact in context.active_facts))
         self.assertTrue(any("aucun changement planning" in item for item in context.forbidden_claims))
 

@@ -227,10 +227,8 @@ def _active_reply_facts(active_fact_lines: list[str] | tuple[str, ...]) -> tuple
 
 
 def _signal_line(signal: dict[str, Any]) -> str:
-    kind = str(signal.get("kind") or "signal").strip()
-    severity = str(signal.get("severity") or "info").strip()
     summary = str(signal.get("summary") or "").strip()
-    return " ".join(piece for piece in (kind, severity, summary) if piece)
+    return summary
 
 
 def _fact_line_value(line: str) -> str:

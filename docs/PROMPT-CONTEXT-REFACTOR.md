@@ -478,6 +478,8 @@ Etat 8 mai 2026 :
   draft.
 - `format_signals_for_prompt()` ne rend plus les `kind`/`severity` internes :
   le brouillon recoit seulement des puces lisibles basees sur les summaries.
+- Le `HeartbeatReplyContext` du role `signal` ne transmet plus `kind`/`severity`
+  au composer terminal, seulement le summary humain du signal.
 
 ### Phase 4 - Final Speech Boundary
 
@@ -517,6 +519,7 @@ Livrables :
   system reste un contrat stable
 - signal prompt block sans tags internes recopiables (`kind`, `severity`, emoji
   statut) : ✅
+- signal composer context sans tags internes recopiables : ✅
 - conversion des active facts en structures non recopiables telles quelles ; ✅
 - fallback outage propre ;
 - debug dump : truth, draft, composer input, composer output, judges, final.
