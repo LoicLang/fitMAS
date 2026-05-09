@@ -397,7 +397,7 @@ test_prompt_snapshot_close_turn_has_no_plan_contract
 test_prompt_snapshot_plan_lookup_has_read_only_truth_contract
 test_prompt_snapshot_plan_negotiation_has_plan_patch_contract
 test_heartbeat_briefing_snapshot_contains_read_only_capability
-test_decide_none_trace_records_failure_reason
+test_decide_none_trace_records_failure_reason_and_events
 ```
 
 ### Phase 1 - PromptContract Registry
@@ -483,6 +483,9 @@ Etat 8 mai 2026 :
 - Les turns conversation `llm_unavailable` enregistrent maintenant
   `context.decide_none.reason` avec une raison normalisee quand `decide()`
   rend `None`.
+- `decide_none.events` conserve la chaine d'echec utile (`schema_invalid`,
+  `repair_failed`, `fallback_failed`, etc.) pour diagnostiquer la cause racine,
+  pas seulement le dernier fallback.
 
 ### Phase 4 - Final Speech Boundary
 
@@ -524,6 +527,7 @@ Livrables :
   statut) : ✅
 - signal composer context sans tags internes recopiables : ✅
 - trace `decide_none.reason` dans `ConversationTurn.context_json` : ✅
+- trace `decide_none.events` avec chaine schema / repair / fallback : ✅
 - conversion des active facts en structures non recopiables telles quelles ; ✅
 - fallback outage propre ;
 - debug dump : truth, draft, composer input, composer output, judges, final.

@@ -3,6 +3,7 @@ from fitmas.prompt_observability import (
     build_prompt_trace,
     normalize_decide_failure_reason,
 )
+from fitmas import llm
 from fitmas.context_pack import build_conversation_context_pack
 from fitmas.conversation_prompting import select_conversation_prompt_policy
 from fitmas.llm_prompt_builder import build_layered_conversation_prompt
@@ -71,3 +72,26 @@ def test_layered_prompt_bundle_exposes_trace_metadata() -> None:
     assert bundle.trace.tool_names == ("get_plan_window",)
     assert bundle.trace.truth_block_names == context_pack.truth_block_names()
     assert bundle.trace.total_chars > 0
+
+
+def test_decide_none_trace_records_schema_repair_and_fallback_events(monkeypatch) -> None:
+    invalid_payload = {
+        "response_type": "no_change",
+        "rationale": "ok",
+        "fitmas_message": "Je deplace la seance.",
+    }
+
+    monkeypatch.setattr(llm, "_client", lambda: object())
+    monkeypatch.setattr(llm, "_request_structured_json", lambda **_kwargs: dict(invalid_payload))
+
+    decision = llm.decide("deplace ca", "plan")
+    trace = llm.get_last_decide_none()
+
+    assert decision is None
+    assert trace is not None
+    assert trace["reason"] == "fallback_failed"
+    assert [event["reason"] for event in trace["events"]] == [
+        "schema_invalid",
+        "repair_failed",
+        "fallback_failed",
+    ]

@@ -750,6 +750,7 @@ def run_conversation_turn(
         turn_context["decide_none"] = llm_runtime.get_last_decide_none() or {
             "reason": "unknown",
             "prompt_trace": None,
+            "events": [],
         }
         outcome = ConversationTurnOutcome(
             extraction=Extraction(confidence=0.5),

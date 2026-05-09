@@ -392,6 +392,7 @@ _DEFAULT_REQUEST_MESSAGE = _request_message
 _DEFAULT_REQUEST_JSON = _request_json
 _DEFAULT_GATEWAY_STRUCTURED_JSON = gw.request_structured_json
 _LAST_DECIDE_NONE: dict[str, Any] | None = None
+_DECIDE_FAILURE_EVENTS: list[dict[str, str]] = []
 
 
 def _use_deepseek_openai_structured_output() -> bool:
@@ -403,9 +404,11 @@ def _use_deepseek_openai_structured_output() -> bool:
 
 def _log_decide_none(reason: DecideFailureReason, *, prompt_trace: PromptTrace | None = None) -> None:
     global _LAST_DECIDE_NONE
+    _record_decide_failure_event(reason, stage="final")
     _LAST_DECIDE_NONE = {
         "reason": reason.value,
         "prompt_trace": prompt_trace.as_dict() if prompt_trace else None,
+        "events": [dict(event) for event in _DECIDE_FAILURE_EVENTS],
     }
     logger.info(
         "llm.decide_none reason=%s prompt_trace=%s",
@@ -415,12 +418,24 @@ def _log_decide_none(reason: DecideFailureReason, *, prompt_trace: PromptTrace |
 
 
 def clear_last_decide_none() -> None:
-    global _LAST_DECIDE_NONE
+    global _LAST_DECIDE_NONE, _DECIDE_FAILURE_EVENTS
     _LAST_DECIDE_NONE = None
+    _DECIDE_FAILURE_EVENTS = []
 
 
 def get_last_decide_none() -> dict[str, Any] | None:
-    return dict(_LAST_DECIDE_NONE) if _LAST_DECIDE_NONE is not None else None
+    if _LAST_DECIDE_NONE is None:
+        return None
+    payload = dict(_LAST_DECIDE_NONE)
+    payload["events"] = [dict(event) for event in payload.get("events", [])]
+    return payload
+
+
+def _record_decide_failure_event(reason: DecideFailureReason, *, stage: str) -> None:
+    event = {"reason": reason.value, "stage": stage}
+    if _DECIDE_FAILURE_EVENTS and _DECIDE_FAILURE_EVENTS[-1] == event:
+        return
+    _DECIDE_FAILURE_EVENTS.append(event)
 
 
 def _decide_failure_reason_from_exception_type(error_type: str) -> DecideFailureReason:
@@ -509,6 +524,7 @@ def decide(
 
         parsed_decision = _parse_llm_decision_payload(data)
         if parsed_decision is None:
+            _record_decide_failure_event(DecideFailureReason.SCHEMA_INVALID, stage="initial_parse")
             initial_invalid_payload = _last_invalid_decision_payload
             data = _repair_invalid_decision_payload(data=initial_invalid_payload, system=system_prompt, prompt=prompt)
             parsed_decision = _parse_llm_decision_payload(data)
@@ -518,6 +534,7 @@ def decide(
                     coach_context=coach_context,
                 )
         if parsed_decision is None:
+            _record_decide_failure_event(DecideFailureReason.REPAIR_FAILED, stage="repair")
             data = _request_claude_decision_fallback(system=system_prompt, prompt=prompt)
             parsed_decision = _parse_llm_decision_payload(data)
             if parsed_decision is None:
