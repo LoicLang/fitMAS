@@ -138,6 +138,33 @@ def test_layered_prompt_filters_rendered_layers_by_contract() -> None:
     assert "Historique recent:" in lookup_system
 
 
+def test_layered_prompt_keeps_rendered_truth_out_of_user_prompt() -> None:
+    policy = select_conversation_prompt_policy(intent=IntentCategory.PLAN_LOOKUP)
+    bundle = build_layered_conversation_prompt(
+        user_text="J'ai quoi demain ?",
+        prompt_policy=policy,
+        time_block="Aujourd'hui: vendredi 8 mai 2026.",
+        timeline_summary="- Samedi 9 mai: Footing endurance, 40 min, Z2, planned.",
+        execution_summary="Execution recente: hier repos tenu.",
+        temporal_summary="References temporelles resolues: demain = 2026-05-09.",
+        activity_claim_summary="Claims recents: aucun claim non resolu.",
+        signal_summary=None,
+        conversation_history=[
+            {"role": "assistant", "text": "Vendredi tu souffles, samedi footing Z2."},
+            {"role": "user", "text": "Ok."},
+        ],
+        coach_context={"turn_primary_intent": "plan_lookup"},
+        selected_facts=[],
+    )
+    system_text = "\n\n".join(str(part.get("text") or "") for part in bundle.system)
+
+    assert "Source de verite planning conversationnelle" in system_text
+    assert "Calendrier date reel:" in system_text
+    assert "Source de vérité planning conversationnelle" not in bundle.prompt
+    assert "Calendrier daté utile:" not in bundle.prompt
+    assert bundle.prompt == "Nouveau message de l'utilisateur:\nJ'ai quoi demain ?"
+
+
 def test_decide_none_trace_records_schema_repair_and_fallback_events(monkeypatch) -> None:
     invalid_payload = {
         "response_type": "no_change",

@@ -553,6 +553,11 @@ Livrables :
   dupliquent plus l'identite coach deja presente dans le system prompt, ne
   rendent plus le profil si le contrat ne l'autorise pas, et gardent seulement
   les layers utiles (`plan`, `immediate`, `memory`) selon la route.
+- prompt diet par capability, slice 3 : ✅ le user prompt du builder layered ne
+  repete plus les blocs de verite deja rendus en system layers. La source de
+  verite planning et le calendrier date restent dans `immediate` / `plan` ; le
+  user prompt redevient le message courant, plus les rares blocs de fil actifs
+  qui ne sont pas encore representes par un layer.
 - fallback outage propre ;
 
 Regression cible :

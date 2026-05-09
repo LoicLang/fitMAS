@@ -3,7 +3,7 @@ contract: conversation_plan_lookup
 tool_budget: ['get_plan_window', 'get_session_detail']
 truth_blocks: ['temporal', 'plan_window', 'execution_reality', 'activity_claims']
 output_schema: CoachDecision
-trace: {'route': 'conversation_decide', 'provider': None, 'model': None, 'prompt_policy': 'plan_lookup_compact', 'prompt_contract': 'conversation_plan_lookup', 'intent': 'plan_lookup', 'system_chars': 5072, 'user_chars': 270, 'total_chars': 5342, 'tool_names': ('get_plan_window', 'get_session_detail'), 'truth_block_names': ('temporal', 'plan_window', 'execution_reality', 'activity_claims'), 'history_messages_used': 2}
+trace: {'route': 'conversation_decide', 'provider': None, 'model': None, 'prompt_policy': 'plan_lookup_compact', 'prompt_contract': 'conversation_plan_lookup', 'intent': 'plan_lookup', 'system_chars': 5072, 'user_chars': 52, 'total_chars': 5124, 'tool_names': ('get_plan_window', 'get_session_detail'), 'truth_block_names': ('temporal', 'plan_window', 'execution_reality', 'activity_claims'), 'history_messages_used': 2}
 
 ## SYSTEM
 Tu es FitMAS, un coach multisport IA.
@@ -106,9 +106,5 @@ FitMAS: Vendredi tu souffles, samedi footing Z2.
 Utilisateur: Ok.
 
 ## USER
-Source de vérité planning conversationnelle: calendrier daté / app.
-Ignore tout repère hebdo legacy si le calendrier daté dit autre chose.
-Calendrier daté utile:
-- Samedi 9 mai: Footing endurance, 40 min, Z2, planned.
 Nouveau message de l'utilisateur:
 J'ai quoi demain ?

@@ -3,7 +3,7 @@ contract: conversation_casual_chat
 tool_budget: []
 truth_blocks: ['conversation_frame', 'temporal']
 output_schema: CoachDecision
-trace: {'route': 'conversation_decide', 'provider': None, 'model': None, 'prompt_policy': 'casual_compact', 'prompt_contract': 'conversation_casual_chat', 'intent': 'casual_chat', 'system_chars': 4271, 'user_chars': 202, 'total_chars': 4473, 'tool_names': (), 'truth_block_names': ('conversation_frame', 'temporal'), 'history_messages_used': 2}
+trace: {'route': 'conversation_decide', 'provider': None, 'model': None, 'prompt_policy': 'casual_compact', 'prompt_contract': 'conversation_casual_chat', 'intent': 'casual_chat', 'system_chars': 4271, 'user_chars': 63, 'total_chars': 4334, 'tool_names': (), 'truth_block_names': ('conversation_frame', 'temporal'), 'history_messages_used': 2}
 
 ## SYSTEM
 Tu es FitMAS, un coach multisport IA.
@@ -85,7 +85,5 @@ FitMAS: Vendredi footing easy, tu gardes ca propre.
 Utilisateur: Tu m'as fumé avec ton plan là
 
 ## USER
-Source de vérité planning conversationnelle: calendrier daté / app.
-Ignore tout repère hebdo legacy si le calendrier daté dit autre chose.
 Nouveau message de l'utilisateur:
 Tu m'as fumé avec ton plan là

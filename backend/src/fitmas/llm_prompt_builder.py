@@ -330,12 +330,14 @@ def build_layered_conversation_prompt(
     # Separate cacheable layers for system prompt caching
     allowed_layer_names = _allowed_layer_names(prompt_policy)
     system_parts = []
+    rendered_layer_names: set[str] = set()
     for layer in sorted(layered.layers, key=lambda l: l.level):
         if allowed_layer_names is not None and layer.name not in allowed_layer_names:
             continue
         rendered = layer.render()
         if not rendered:
             continue
+        rendered_layer_names.add(layer.name)
         entry: dict[str, Any] = {"type": "text", "text": rendered}
         if layer.cacheable:
             entry["cache_control"] = {"type": "ephemeral", "ttl": "1h"}
@@ -352,11 +354,13 @@ def build_layered_conversation_prompt(
     if conversation_history and (allowed_layer_names is None or "memory" in allowed_layer_names):
         history_messages_used = min(len(conversation_history), prompt_policy.history_limit)
 
-    prompt_parts = [
-        "Source de vérité planning conversationnelle: calendrier daté / app.",
-        "Ignore tout repère hebdo legacy si le calendrier daté dit autre chose.",
-    ]
-    if prompt_policy.include_timeline and timeline_summary:
+    prompt_parts = []
+    if "immediate" not in rendered_layer_names:
+        prompt_parts.extend([
+            "Source de vérité planning conversationnelle: calendrier daté / app.",
+            "Ignore tout repère hebdo legacy si le calendrier daté dit autre chose.",
+        ])
+    if prompt_policy.include_timeline and timeline_summary and "plan" not in rendered_layer_names:
         prompt_parts.append(f"Calendrier daté utile:\n{timeline_summary}")
     open_question_block = _open_question_block(
         conversation_history,

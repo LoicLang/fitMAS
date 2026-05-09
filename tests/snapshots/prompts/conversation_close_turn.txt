@@ -3,7 +3,7 @@ contract: conversation_close_turn
 tool_budget: []
 truth_blocks: ['conversation_frame', 'temporal']
 output_schema: CoachDecision
-trace: {'route': 'conversation_decide', 'provider': None, 'model': None, 'prompt_policy': 'casual_close', 'prompt_contract': 'conversation_close_turn', 'intent': 'close_turn', 'system_chars': 4242, 'user_chars': 182, 'total_chars': 4424, 'tool_names': (), 'truth_block_names': ('conversation_frame', 'temporal'), 'history_messages_used': 2}
+trace: {'route': 'conversation_decide', 'provider': None, 'model': None, 'prompt_policy': 'casual_close', 'prompt_contract': 'conversation_close_turn', 'intent': 'close_turn', 'system_chars': 4242, 'user_chars': 43, 'total_chars': 4285, 'tool_names': (), 'truth_block_names': ('conversation_frame', 'temporal'), 'history_messages_used': 2}
 
 ## SYSTEM
 Tu es FitMAS, un coach multisport IA.
@@ -85,7 +85,5 @@ FitMAS: Tu confirmes qu'on garde vendredi ?
 Utilisateur: Okay chef
 
 ## USER
-Source de vérité planning conversationnelle: calendrier daté / app.
-Ignore tout repère hebdo legacy si le calendrier daté dit autre chose.
 Nouveau message de l'utilisateur:
 Okay chef

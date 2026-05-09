@@ -30,6 +30,15 @@ CANONICAL_CONVERSATION_TOOLS = [
 ]
 
 
+def _system_text(system) -> str:
+    if isinstance(system, list):
+        return "\n".join(
+            str(part.get("text") or "") if isinstance(part, dict) else str(part)
+            for part in system
+        )
+    return str(system or "")
+
+
 class LLMToolsTest(unittest.TestCase):
     def test_parse_coach_decision_accepts_plan_patch(self) -> None:
         decision = llm.parse_coach_decision_payload(
@@ -423,11 +432,13 @@ class LLMToolsTest(unittest.TestCase):
         original_log_tool_trace = llm.log_tool_trace
         traces: list[object] = []
         prompts: list[str] = []
+        system_prompts: list[str] = []
 
         def fake_request_message(*, system, messages, model="claude-haiku-4-5-20251001", max_tokens=512, tools=None, tool_choice=None):
             self.assertIsNotNone(tools)
             self.assertEqual([tool["name"] for tool in tools], CANONICAL_CONVERSATION_TOOLS)
             prompts.append(messages[0]["content"] if isinstance(messages[0]["content"], str) else "")
+            system_prompts.append(_system_text(system))
             return SimpleNamespace(
                 stop_reason="end_turn",
                 content=[
@@ -473,7 +484,7 @@ class LLMToolsTest(unittest.TestCase):
         self.assertEqual(traces[0].tool_count_offered, len(CANONICAL_CONVERSATION_TOOLS))
         self.assertGreaterEqual(traces[0].prompt_char_count, 1)
         self.assertNotIn("Repere legacy semaine courante", prompts[0])
-        self.assertIn("Source de vérité planning conversationnelle", prompts[0])
+        self.assertIn("Source de verite planning conversationnelle", system_prompts[0])
 
     def test_decide_offers_canonical_conversation_tools_without_intent_budget(self) -> None:
         original_client = llm._client
@@ -2216,9 +2227,11 @@ class LLMToolsTest(unittest.TestCase):
         original_client = llm._client
         original_request_message = llm._request_message
         prompts: list[str] = []
+        system_prompts: list[str] = []
 
         def fake_request_message(*, system, messages, model="claude-haiku-4-5-20251001", max_tokens=512, tools=None, tool_choice=None):
             prompts.append(messages[0]["content"] if isinstance(messages[0]["content"], str) else "")
+            system_prompts.append(_system_text(system))
             return SimpleNamespace(
                 stop_reason="end_turn",
                 content=[
@@ -2244,8 +2257,8 @@ class LLMToolsTest(unittest.TestCase):
 
         self.assertIsNotNone(decision)
         self.assertNotIn("Repere legacy semaine courante", prompts[0])
-        self.assertIn("Source de vérité planning conversationnelle", prompts[0])
-        self.assertIn("Natation app truth", prompts[0])
+        self.assertIn("Source de verite planning conversationnelle", system_prompts[0])
+        self.assertIn("Natation app truth", system_prompts[0])
 
     def test_decide_offers_plan_tools_for_app_plan_dispute(self) -> None:
         original_client = llm._client
