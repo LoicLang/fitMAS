@@ -82,6 +82,62 @@ def test_layered_prompt_bundle_exposes_trace_metadata() -> None:
     assert bundle.trace.total_chars > 0
 
 
+def test_layered_prompt_filters_rendered_layers_by_contract() -> None:
+    close_policy = select_conversation_prompt_policy(intent=IntentCategory.CLOSE_TURN)
+    close_bundle = build_layered_conversation_prompt(
+        user_text="Okay chef",
+        prompt_policy=close_policy,
+        time_block="Aujourd'hui: vendredi",
+        profile_summary="Objectif: construire 10 km regulier. Style: direct.",
+        timeline_summary="- Vendredi: Footing 40 min",
+        execution_summary="Execution recente: hier repos tenu.",
+        temporal_summary="aujourd'hui = vendredi",
+        activity_claim_summary="Claims recents: aucun",
+        signal_summary="Signal: aucun.",
+        conversation_history=[
+            {"role": "assistant", "text": "Vendredi footing easy."},
+            {"role": "user", "text": "Okay chef"},
+        ],
+        coach_context={"turn_primary_intent": "close_turn"},
+        selected_facts=["objectif 10 km"],
+    )
+    close_system = "\n\n".join(str(part.get("text") or "") for part in close_bundle.system)
+
+    assert close_system.count("Tu es FitMAS") == 1
+    assert "Profil resume:" not in close_system
+    assert "Calendrier date reel:" not in close_system
+    assert "Execution recente:" not in close_system
+    assert "Memoire utile" not in close_system
+    assert "Historique recent:" in close_system
+
+    lookup_policy = select_conversation_prompt_policy(intent=IntentCategory.PLAN_LOOKUP)
+    lookup_bundle = build_layered_conversation_prompt(
+        user_text="J'ai quoi demain ?",
+        prompt_policy=lookup_policy,
+        time_block="Aujourd'hui: vendredi",
+        profile_summary="Objectif: construire 10 km regulier. Style: direct.",
+        timeline_summary="- Samedi: Footing 40 min",
+        execution_summary="Execution recente: hier repos tenu.",
+        temporal_summary="demain = samedi",
+        activity_claim_summary="Claims recents: aucun",
+        signal_summary="Signal: aucun.",
+        conversation_history=[
+            {"role": "assistant", "text": "Vendredi repos."},
+            {"role": "user", "text": "Ok"},
+        ],
+        coach_context={"turn_primary_intent": "plan_lookup"},
+        selected_facts=["objectif 10 km"],
+    )
+    lookup_system = "\n\n".join(str(part.get("text") or "") for part in lookup_bundle.system)
+
+    assert lookup_system.count("Tu es FitMAS") == 1
+    assert "Profil resume:" not in lookup_system
+    assert "Memoire utile" not in lookup_system
+    assert "Calendrier date reel:" in lookup_system
+    assert "Execution recente:" in lookup_system
+    assert "Historique recent:" in lookup_system
+
+
 def test_decide_none_trace_records_schema_repair_and_fallback_events(monkeypatch) -> None:
     invalid_payload = {
         "response_type": "no_change",

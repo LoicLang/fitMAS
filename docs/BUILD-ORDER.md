@@ -102,7 +102,7 @@ L'audit declenche par cet incident a confirme 3 failles structurelles connexes :
 | P1-sexies | ✅ Composer final `no_change` — `CoachDecision(no_change)` + compat legacy passent par `final_reply.py`, avec faits memoire/execution appliques — implemente localement 5 mai 2026 | 0.5j | `docs/superpowers/plans/2026-05-05-no-change-final-composer.md` |
 | P1-septies | ✅ Composer final `plan_lookup` — lecture factuelle via `final_reply.py` avec guard anti-drift chiffres/jours/zones/statuts — implemente localement 5 mai 2026 | 0.5j | `docs/superpowers/plans/2026-05-05-plan-lookup-final-composer.md` |
 | P1-nonies | ✅ Grounded final speech + heartbeat future truth — temporal refs typees, grounding packet partage, verifier semantique LLM pour lookup planning/confirmation, idempotency key durable, `PlanWindowTruth` heartbeat — implemente localement 7 mai 2026 | 0.5-1j | `docs/superpowers/plans/2026-05-07-grounded-final-speech-and-heartbeat.md` |
-| P1-octies | 🔥 Prompt/context optimization pass + `decide() returned None` reduction — reduire et specialiser le contexte donne a chaque couche LLM (`turn_planner`, `decide`, composers, verifiers, heartbeat), auditer les prompts qui diluent la decision, et mesurer/reduire les retours `None` du decisionnaire — chantier actif ; slice 1 prompt diet par capability livre localement | 1-2j | `docs/PROMPT-CONTEXT-REFACTOR.md` + section ci-dessous |
+| P1-octies | 🔥 Prompt/context optimization pass + `decide() returned None` reduction — reduire et specialiser le contexte donne a chaque couche LLM (`turn_planner`, `decide`, composers, verifiers, heartbeat), auditer les prompts qui diluent la decision, et mesurer/reduire les retours `None` du decisionnaire — chantier actif ; slices 1-2 prompt diet par capability livres localement | 1-2j | `docs/PROMPT-CONTEXT-REFACTOR.md` + section ci-dessous |
 
 **Total restant avant B0 : 1-2 jours**. Phase A+ est fermee localement, et P1-nonies a retire les contradictions factuelles visibles les plus dangereuses. La prochaine lane reste P1-octies : audit prompt/contexte et baisse des `decide() returned None`, puis dogfood court et B0 si stable.
 
@@ -156,6 +156,12 @@ Slice 1 livre localement :
 - system prompts `read_only` reduits : verite factuelle compacte, no-action
   schema, pas d'exemples mutation/pending ;
 - traces `truth_blocks` alignees sur le `PromptContract` de la route.
+
+Slice 2 livre localement :
+- layers rendus filtres par `PromptContract.max_context_blocks` ;
+- plus de deuxieme bloc identite/profil sur les routes contractuelles ;
+- terminal garde seulement temps + fil conversationnel ; plan lookup garde
+  calendrier, execution recente, references temporelles et fil.
 
 Doc canonique : `docs/PROMPT-CONTEXT-REFACTOR.md`.
 

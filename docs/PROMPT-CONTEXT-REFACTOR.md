@@ -548,6 +548,11 @@ Livrables :
   `read_only` utilisent une verite read-only compacte sans exemples mutation.
   Les traces `truth_blocks` exposent les blocs autorises par `PromptContract`
   plutot que tous les blocs possibles du `ContextPack`.
+- prompt diet par capability, slice 2 : ✅ les layers rendus sont maintenant
+  filtres par `PromptContract.max_context_blocks`. Les routes contractuelles ne
+  dupliquent plus l'identite coach deja presente dans le system prompt, ne
+  rendent plus le profil si le contrat ne l'autorise pas, et gardent seulement
+  les layers utiles (`plan`, `immediate`, `memory`) selon la route.
 - fallback outage propre ;
 
 Regression cible :
