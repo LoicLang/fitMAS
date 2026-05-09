@@ -2322,10 +2322,14 @@ class FitMASCoreFlowsTest(unittest.TestCase):
             api_messages.check_and_adapt_health_facts = original_health
 
         pending = repo.get_active_pending_mutation_confirmation(self.db, self.user.id)
+        turn = repo.get_recent_conversation_turns(self.db, self.user.id, limit=1)[0]
+        context = json.loads(turn.context_json)
 
         self.assertEqual(decide_calls["count"], 1)
         self.assertIsNone(pending)
         self.assertIn("Reessaie", result["assistant_message"]["text"])
+        self.assertEqual(turn.response_mode, "llm_unavailable")
+        self.assertEqual(context["decide_none"]["reason"], "unknown")
 
     def test_compound_health_and_plan_mutation_reaches_llm_before_health_adaptation(self) -> None:
         _, session = self._create_plan_for_today()

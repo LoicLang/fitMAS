@@ -391,6 +391,7 @@ def _request_structured_json(
 _DEFAULT_REQUEST_MESSAGE = _request_message
 _DEFAULT_REQUEST_JSON = _request_json
 _DEFAULT_GATEWAY_STRUCTURED_JSON = gw.request_structured_json
+_LAST_DECIDE_NONE: dict[str, Any] | None = None
 
 
 def _use_deepseek_openai_structured_output() -> bool:
@@ -401,11 +402,25 @@ def _use_deepseek_openai_structured_output() -> bool:
 
 
 def _log_decide_none(reason: DecideFailureReason, *, prompt_trace: PromptTrace | None = None) -> None:
+    global _LAST_DECIDE_NONE
+    _LAST_DECIDE_NONE = {
+        "reason": reason.value,
+        "prompt_trace": prompt_trace.as_dict() if prompt_trace else None,
+    }
     logger.info(
         "llm.decide_none reason=%s prompt_trace=%s",
         reason.value,
-        prompt_trace.as_dict() if prompt_trace else None,
+        _LAST_DECIDE_NONE["prompt_trace"],
     )
+
+
+def clear_last_decide_none() -> None:
+    global _LAST_DECIDE_NONE
+    _LAST_DECIDE_NONE = None
+
+
+def get_last_decide_none() -> dict[str, Any] | None:
+    return dict(_LAST_DECIDE_NONE) if _LAST_DECIDE_NONE is not None else None
 
 
 def _decide_failure_reason_from_exception_type(error_type: str) -> DecideFailureReason:
@@ -434,6 +449,7 @@ def decide(
     Call the LLM to extract intent and decide a plan mutation.
     Returns None if LLM is unavailable (API key missing or error) -- caller falls back to rules.
     """
+    clear_last_decide_none()
     if not _client():
         logger.info("No Anthropic client available — falling back to rules")
         _log_decide_none(DecideFailureReason.NO_CLIENT)

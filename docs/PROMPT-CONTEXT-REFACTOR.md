@@ -480,6 +480,9 @@ Etat 8 mai 2026 :
   le brouillon recoit seulement des puces lisibles basees sur les summaries.
 - Le `HeartbeatReplyContext` du role `signal` ne transmet plus `kind`/`severity`
   au composer terminal, seulement le summary humain du signal.
+- Les turns conversation `llm_unavailable` enregistrent maintenant
+  `context.decide_none.reason` avec une raison normalisee quand `decide()`
+  rend `None`.
 
 ### Phase 4 - Final Speech Boundary
 
@@ -520,6 +523,7 @@ Livrables :
 - signal prompt block sans tags internes recopiables (`kind`, `severity`, emoji
   statut) : ✅
 - signal composer context sans tags internes recopiables : ✅
+- trace `decide_none.reason` dans `ConversationTurn.context_json` : ✅
 - conversion des active facts en structures non recopiables telles quelles ; ✅
 - fallback outage propre ;
 - debug dump : truth, draft, composer input, composer output, judges, final.

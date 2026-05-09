@@ -6,7 +6,7 @@ from typing import Any
 
 from sqlalchemy.orm import Session
 
-from fitmas import final_reply, repository as repo
+from fitmas import final_reply, llm as llm_runtime, repository as repo
 from fitmas.grounding_contract import (
     ReplyGroundingPacket,
     plan_window_facts_from_sessions,
@@ -339,6 +339,7 @@ def run_conversation_turn(
     # turn that is not a calibration-only ack. The deterministic groundings
     # (availability, adaptation, execution contestation, low-signal) are
     # exposed as prompt context, never as final replies.
+    llm_runtime.clear_last_decide_none()
     decision = dependencies.decide(
         payload.text,
         "",
@@ -746,6 +747,10 @@ def run_conversation_turn(
         # Reply soberly: do not assert any plan state, do not regurgitate
         # rule-based phrases that could lie about the situation.
         logger.warning("conversation_pipeline: decide() returned None with no fallback decision")
+        turn_context["decide_none"] = llm_runtime.get_last_decide_none() or {
+            "reason": "unknown",
+            "prompt_trace": None,
+        }
         outcome = ConversationTurnOutcome(
             extraction=Extraction(confidence=0.5),
             reply_text="Je ne peux pas te repondre tout de suite. Reessaie dans un instant.",
