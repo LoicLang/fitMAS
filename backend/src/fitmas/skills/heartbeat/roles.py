@@ -286,9 +286,6 @@ def build_briefing_prompt(
             "N'ouvre pas avec le même angle ni la même récitation de contraintes stables que dans les derniers messages proactifs, "
             "sauf si quelque chose a réellement changé aujourd'hui."
         )
-    if sport_knowledge:
-        system += f"\n\nConnaissances sport (reference):\n{sport_knowledge}"
-
     prompt = (
         f"{render_time_context(time_context)}\n"
         f"Genere un message matinal pour {label}.\n"
@@ -299,6 +296,8 @@ def build_briefing_prompt(
         f"Note: {(day.session_note if day else today_session.session_note) or ''}"
     )
     prompt += "\n\n" + render_heartbeat_context_bundle(bundle)
+    if sport_knowledge:
+        prompt += f"\n\nConnaissances sport (reference):\n{sport_knowledge}"
     prompt += signals_block
     prompt += facts_block
     if clarification is not None:

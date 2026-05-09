@@ -240,3 +240,33 @@ def test_heartbeat_role_dynamic_signals_are_user_context_not_system() -> None:
         assert "charge jambes elevee" not in system
         assert "Signaux actifs" in prompt
         assert "charge jambes elevee" in prompt
+
+
+def test_heartbeat_role_sport_knowledge_is_user_context_not_system() -> None:
+    today_session = _today_session()
+    bundle = build_heartbeat_context_bundle(
+        today=date(2026, 5, 8),
+        today_planned_session=today_session,
+        yesterday_planned_sessions=(),
+        yesterday_activities=(),
+        yesterday_claims=(),
+        week_recent_reality=_recent_reality(),
+        week_activities=(),
+        future_scheduled_sessions=(today_session, _future_session()),
+    )
+    system, prompt = build_briefing_prompt(
+        user=_user(),
+        today_session=today_session,
+        day=None,
+        time_context=_time_context(),
+        bundle=bundle,
+        clarification=None,
+        calibration_need=None,
+        signals_block="",
+        facts_block="",
+        sport_knowledge="Running Z2: respiration stable.",
+    )
+
+    assert "Running Z2" not in system
+    assert "Connaissances sport" in prompt
+    assert "Running Z2" in prompt
