@@ -3,7 +3,7 @@ contract: conversation_casual_chat
 tool_budget: []
 truth_blocks: ['conversation_frame', 'temporal']
 output_schema: CoachDecision
-trace: {'route': 'conversation_decide', 'provider': None, 'model': None, 'prompt_policy': 'casual_compact', 'prompt_contract': 'conversation_casual_chat', 'intent': 'casual_chat', 'system_chars': 2976, 'user_chars': 63, 'total_chars': 3039, 'tool_names': (), 'truth_block_names': ('conversation_frame', 'temporal'), 'history_messages_used': 2}
+trace: {'route': 'conversation_decide', 'provider': None, 'model': None, 'prompt_policy': 'casual_compact', 'prompt_contract': 'conversation_casual_chat', 'intent': 'casual_chat', 'system_chars': 2835, 'user_chars': 63, 'total_chars': 2898, 'tool_names': (), 'truth_block_names': ('conversation_frame', 'temporal'), 'history_messages_used': 2}
 
 ## SYSTEM
 Tu es FitMAS, un coach multisport IA.
@@ -67,10 +67,6 @@ Pas de markdown. Pas de texte autour du JSON.
 --- SYSTEM PART ---
 
 Aujourd'hui: vendredi 8 mai 2026.
-
-Source de verite planning conversationnelle: calendrier date / app.
-
-Ignore tout repere hebdo legacy si le calendrier date dit autre chose.
 
 References temporelles resolues: aujourd'hui = 2026-05-08.
 

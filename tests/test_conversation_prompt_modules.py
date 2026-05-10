@@ -196,6 +196,24 @@ def test_close_turn_conversation_system_text_uses_no_action_coach_decision_schem
     assert "record_execution_update" not in text
 
 
+def test_generic_question_system_text_stays_general_without_fact_promises() -> None:
+    contract = get_prompt_contract("conversation_generic_question")
+
+    text = build_conversation_system_text(contract)
+
+    assert "Posture generic_question:" in text
+    assert "pas a une opportunite de planning" in text
+    assert "get_coach_lens" in text
+    assert "contexte coach compact" in text
+    assert "Ne recite pas la lentille" in text
+    assert "aucun horizon date ou chiffre" in text
+    assert "N'annonce pas de delai, de resultat ou de progression mesurable" in text
+    assert "Contrat de sortie general_answer:" in text
+    assert "Workflow replan_after_constraint:" not in text
+    assert "Actions possibles:" not in text
+    assert "plan_patch = {" not in text
+
+
 def test_draft_action_conversation_system_text_keeps_mutation_modules() -> None:
     contract = get_prompt_contract("conversation_plan_negotiation")
 
@@ -253,6 +271,9 @@ def test_health_signal_system_text_keeps_bounded_planpatch_without_replan_manual
     assert "Contrat de sortie health_signal:" in text
     assert "record_health_signal" in text
     assert "PlanPatch minimal si adaptation evidente" in text
+    assert "copie le `payload.patch` exact" in text
+    assert "requires_confirmation exige un plan_patch valide" in text
+    assert "Ne mets jamais un PlanPatch dans mutation_decision" in text
     assert "Workflow replan_after_constraint:" not in text
     assert "Actions possibles:" not in text
     assert "suggest_replan_candidates" not in text
@@ -283,7 +304,7 @@ def test_turn_scope_contract_system_text_renders_safe_contract_subset() -> None:
     assert text.startswith("Contrat du tour:")
     assert "- route: conversation_plan_lookup" in text
     assert "- capacite: read_only" in text
-    assert "- tools autorises: get_plan_window, get_session_detail" in text
+    assert "- tools autorises: get_plan_window" in text
     assert "- actions autorisees: aucune" in text
     assert "- verites requises: temporal, plan_window" in text
     assert "- sortie decision: CoachDecision" in text

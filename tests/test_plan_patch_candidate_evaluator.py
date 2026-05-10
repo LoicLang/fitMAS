@@ -54,6 +54,136 @@ def test_candidate_evaluator_validates_simulates_scores_and_returns_score_delta(
     assert result.policy_hint == "ask_confirmation"
 
 
+def test_candidate_evaluator_resolves_backend_candidate_ref_before_runtime_validation() -> None:
+    backend_patch = PlanPatch(
+        operations=[
+            PlanPatchOperation(
+                operation_type="move_session",
+                target_session_id=2,
+                target_date="2099-05-08",
+                rationale="Backend materialized move.",
+            )
+        ],
+        coach_message="Backend candidate, not user-facing.",
+    )
+    candidate = PlanPatchCandidate(
+        id="candidate_ref_1",
+        patches=(),
+        candidate_ref="backend:move_session:2:2099-05-08",
+        rationale="Choisir la candidate backend.",
+        expected_tradeoff="La semaine simulee reste l'autorite.",
+        confidence=0.88,
+        assumptions=(),
+        risk_notes=(),
+        created_from_plan_id="123",
+        created_from_plan_version=7,
+    )
+
+    result = evaluate_plan_patch_candidate(
+        object(),
+        candidate=candidate,
+        current_plan_id="123",
+        current_plan_version=7,
+        plan_id=123,
+        scheduled_sessions=[
+            _session(1, "2099-05-04", "running", "tempo", "hard", 50, "Seance cle"),
+            _session(2, "2099-05-05", "rest", "recovery", "easy", 0, "Recovery"),
+        ],
+        current_score=_score(90),
+        timezone_name="Europe/Paris",
+        backend_candidate_patches={
+            "backend:move_session:2:2099-05-08": backend_patch,
+        },
+    )
+
+    assert result.candidate_validation.status == "valid"
+    assert result.patch is not None
+    assert result.patch.operations[0].target_session_id == 2
+    assert result.patch.operations[0].target_date == "2099-05-08"
+    assert result.patch_validation is not None
+    assert result.patch_validation.status == "valid"
+    assert result.policy_hint == "ask_confirmation"
+
+
+def test_candidate_evaluator_prefers_matching_backend_patch_over_copied_patch() -> None:
+    backend_patch = PlanPatch(
+        operations=[
+            PlanPatchOperation(
+                operation_type="move_session",
+                target_session_id=2,
+                target_date="2099-05-08",
+                rationale="Backend canonical rationale.",
+            )
+        ],
+        coach_message="Backend canonical candidate.",
+    )
+    copied_patch = PlanPatch(
+        operations=[
+            PlanPatchOperation(
+                operation_type="move_session",
+                target_session_id=2,
+                target_date="2099-05-08",
+                rationale="LLM copied rationale.",
+            )
+        ],
+        coach_message="LLM copied candidate.",
+    )
+    candidate = _candidate(patches=(copied_patch,))
+
+    result = evaluate_plan_patch_candidate(
+        object(),
+        candidate=candidate,
+        current_plan_id="123",
+        current_plan_version=7,
+        plan_id=123,
+        scheduled_sessions=[
+            _session(1, "2099-05-04", "running", "tempo", "hard", 50, "Seance cle"),
+            _session(2, "2099-05-05", "rest", "recovery", "easy", 0, "Recovery"),
+        ],
+        current_score=_score(90),
+        timezone_name="Europe/Paris",
+        backend_candidate_patches={
+            "backend:move_session:2:2099-05-08": backend_patch,
+        },
+    )
+
+    assert result.patch is not None
+    assert result.patch.coach_message == "Backend canonical candidate."
+    assert result.patch.operations[0].rationale == "Backend canonical rationale."
+
+
+def test_candidate_evaluator_blocks_unknown_backend_candidate_ref() -> None:
+    candidate = PlanPatchCandidate(
+        id="candidate_ref_1",
+        patches=(),
+        candidate_ref="backend:missing",
+        rationale="Choisir une candidate backend.",
+        expected_tradeoff="A verifier.",
+        confidence=0.88,
+        assumptions=(),
+        risk_notes=(),
+        created_from_plan_id="123",
+        created_from_plan_version=7,
+    )
+
+    result = evaluate_plan_patch_candidate(
+        object(),
+        candidate=candidate,
+        current_plan_id="123",
+        current_plan_version=7,
+        plan_id=123,
+        scheduled_sessions=[],
+        current_score=_score(90),
+        timezone_name="Europe/Paris",
+        backend_candidate_patches={},
+    )
+
+    assert result.candidate_validation.status == "blocked"
+    assert result.candidate_validation.block_reason == "unknown_candidate_ref"
+    assert result.patch is None
+    assert result.policy_hint == "block"
+
+
 def test_candidate_evaluator_blocks_stale_candidate_before_patch_validation() -> None:
     result = evaluate_plan_patch_candidate(
         object(),
@@ -132,6 +262,7 @@ def _candidate(
     return PlanPatchCandidate(
         id="candidate_1",
         patches=patches,
+        candidate_ref=None,
         rationale="Option candidate.",
         expected_tradeoff="Tradeoff a mesurer.",
         confidence=0.8,

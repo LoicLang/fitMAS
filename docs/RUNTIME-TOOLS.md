@@ -104,6 +104,7 @@ Registry V1 :
 - `get_activity_highlights`
 - `get_recent_reality_window`
 - `get_load_context`
+- `get_coach_lens`
 - `get_user_constraints`
 - `get_relevant_facts`
 - `suggest_replan_candidates`
@@ -119,12 +120,41 @@ Registry V1 :
 Tous ces tools lisent des objets deja charges par l'orchestrateur.
 Le registre actuel reste volontairement tres compact.
 
+### `get_coach_lens`
+
+Role :
+- donner au LLM une lentille coach compacte pour les questions generales ou les
+  inquietudes hors mutation ;
+- inclure les prochaines 2-3 seances, la realite recente, les signaux actifs,
+  les faits durables utiles et un snapshot de charge ;
+- eviter de charger `get_plan_window` dans `generic_question`, qui rend le plan
+  trop saillant et pousse le coach a detourner le sujet vers une revue planning.
+
+Contraintes :
+- read-only ;
+- conversation seulement en V1 ;
+- aucun argument de texte utilisateur libre ;
+- aucun write, aucune candidate, aucune recommandation finale ;
+- payload volontairement compact (`near_plan`, `recent_reality`,
+  `active_signals`, `durable_facts`, `load_snapshot`).
+
+Usage attendu :
+
+```text
+generic_question -> get_coach_lens optionnel -> reponse naturelle
+```
+
+Le LLM utilise 1-2 faits utiles de la lentille. Il ne recite pas tout le plan et
+ne transforme pas une inquietude generale en mutation planning.
+
 Direction V2 :
 - conserver les tools atomiques utiles
 - enrichir leurs descriptions et leurs payloads
 - garder `validate_plan_patch` comme tool validation-only : il aide le LLM a tester un `PlanPatch`, mais le backend revalide toujours au commit
 - garder `validate_week_coherence` comme tool validation-only : il aide le LLM a tester la qualite sportive d'un `PlanPatch`, mais le backend re-run toujours la review avant commit
-- ajouter `get_coach_state` seulement comme macro-tool read-only optionnel, pas comme remplacement des tools atomiques
+- `get_coach_lens` reste une macro-lentille read-only optionnelle, pas un
+  remplacement des tools atomiques (`get_plan_window`, `get_load_context`,
+  `get_relevant_facts`) quand la question les exige vraiment.
 
 ### `validate_week_coherence` (A+4)
 

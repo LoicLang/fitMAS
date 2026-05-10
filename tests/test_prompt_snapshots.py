@@ -3,6 +3,7 @@ from pathlib import Path
 from fitmas.context_pack import build_conversation_context_pack
 from fitmas.conversation_prompting import select_conversation_prompt_policy
 from fitmas.llm_prompt_builder import build_layered_conversation_prompt
+from fitmas.prompt_contracts import get_prompt_contract
 from fitmas.tools.routing import IntentCategory
 
 
@@ -49,7 +50,7 @@ def _conversation_plan_lookup_snapshot() -> str:
             {"role": "user", "text": "Ok."},
         ),
         coach_summary="Objectif: construire 10 km regulier. Style: direct.",
-        allowed_tools=("get_plan_window", "get_session_detail"),
+        allowed_tools=get_prompt_contract("conversation_plan_lookup").allowed_tools,
         tool_choice="auto",
     )
     bundle = build_layered_conversation_prompt(
@@ -187,7 +188,7 @@ def _conversation_execution_report_snapshot() -> str:
             {"role": "user", "text": "Je l'ai fait hier, 36 min tranquille."},
         ),
         coach_summary="Objectif: construire 10 km regulier. Style: direct.",
-        allowed_tools=("resolve_target_session", "get_recent_activities"),
+        allowed_tools=get_prompt_contract("conversation_execution_report").allowed_tools,
         tool_choice="auto",
     )
     bundle = build_layered_conversation_prompt(
@@ -233,7 +234,7 @@ def _conversation_health_signal_snapshot() -> str:
             {"role": "user", "text": "Ok mais tibias un peu sensibles."},
         ),
         coach_summary="Objectif: construire 10 km regulier. Style: direct.",
-        allowed_tools=("get_plan_window", "get_load_context", "get_relevant_facts"),
+        allowed_tools=get_prompt_contract("conversation_health_signal").allowed_tools,
         tool_choice="auto",
     )
     bundle = build_layered_conversation_prompt(
@@ -279,7 +280,7 @@ def _conversation_plan_negotiation_snapshot() -> str:
             {"role": "user", "text": "Deplace la seance de demain a dimanche."},
         ),
         coach_summary="Objectif: construire 10 km regulier. Style: direct.",
-        allowed_tools=("get_plan_window", "suggest_replan_candidates", "validate_week_coherence"),
+        allowed_tools=get_prompt_contract("conversation_plan_negotiation").allowed_tools,
         tool_choice="auto",
     )
     bundle = build_layered_conversation_prompt(

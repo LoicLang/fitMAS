@@ -16,6 +16,7 @@ from fitmas.fact_memory import select_relevant_facts
 from fitmas.knowledge import load_sport_knowledge
 from fitmas.llm_prompt_builder import build_layered_conversation_prompt, render_conversation_time_block
 from fitmas.onboarding_contract import build_coach_profile, build_goal_summary
+from fitmas.prompt_contracts import get_prompt_contract
 from fitmas.prompt_observability import DecideFailureReason, PromptTrace
 from fitmas.profile_summary import build_profile_summary
 from fitmas.time_context import build_time_context, render_time_context
@@ -190,12 +191,17 @@ _TURN_INTENT_TO_PROMPT_INTENT = {
     "close_turn": IntentCategory.CLOSE_TURN,
     "trivial_ack": IntentCategory.CASUAL_CHAT,
     "casual_chat": IntentCategory.CASUAL_CHAT,
+    "needs_clarification": IntentCategory.NEEDS_CLARIFICATION,
+    "calibration_answer": IntentCategory.CALIBRATION_ANSWER,
     "availability_constraint": IntentCategory.PLAN_NEGOTIATION,
     "plan_mutation": IntentCategory.PLAN_NEGOTIATION,
     "plan_lookup": IntentCategory.PLAN_LOOKUP,
+    "activity_review": IntentCategory.ACTIVITY_REVIEW,
+    "activity_highlights": IntentCategory.ACTIVITY_HIGHLIGHTS,
     "execution_report": IntentCategory.EXECUTION_REPORT,
     "health_signal": IntentCategory.HEALTH_SIGNAL,
     "preference_signal": IntentCategory.PLAN_NEGOTIATION,
+    "generic_question": IntentCategory.GENERIC_QUESTION,
 }
 _CONVERSATION_TOOL_BUDGET = (
     "get_today_context",
@@ -216,7 +222,13 @@ _CONVERSATION_TOOL_BUDGET = (
     "validate_plan_patch",
     "validate_week_coherence",
 )
-_TERMINAL_NO_TOOL_INTENTS = {"close_turn", "trivial_ack", "casual_chat"}
+_TERMINAL_NO_TOOL_INTENTS = {
+    "close_turn",
+    "trivial_ack",
+    "casual_chat",
+    "needs_clarification",
+    "calibration_answer",
+}
 _ALLOWED_MUTATION_TYPES = {
     "move_session",
     "lighten_day",
@@ -504,7 +516,7 @@ def decide(
         routing_reason=None,
         intent=effective_intent,
     )
-    tool_names = () if _is_terminal_no_tool_intent(coach_context) else _tool_budget_for_context(tool_context)
+    tool_names = _tool_budget_for_prompt_policy(tool_context, prompt_policy, coach_context=coach_context)
     selected_facts = (coach_context or {}).get("selected_facts") or select_prompt_facts(remembered_facts or [])
     unresolved_execution_followup = (coach_context or {}).get("unresolved_execution_followup")
     prompt_bundle = build_layered_conversation_prompt(
@@ -733,11 +745,21 @@ def parse_coach_decision_payload(data: dict[str, Any] | None) -> CoachDecision |
         logger.warning("llm.coach_decision_invalid reason=missing_rationale response_type=%s", response_type)
         return None
     fitmas_message = str(data.get("fitmas_message") or "").strip()
-    if not _valid_coach_message(fitmas_message, response_type=response_type):
+    raw_patch = data.get("plan_patch")
+    raw_mutation = data.get("mutation_decision")
+    free_requires_confirmation = (
+        response_type == "requires_confirmation"
+        and not isinstance(raw_patch, dict)
+        and not isinstance(raw_mutation, dict)
+    )
+    effective_response_type = response_type
+    if free_requires_confirmation:
+        logger.warning("llm.coach_decision_invalid reason=free_requires_confirmation_without_action")
+        return None
+    if not _valid_coach_message(fitmas_message, response_type=effective_response_type):
         return None
     if _has_unknown_memory_action(data.get("memory_actions")):
-        logger.warning("llm.coach_decision_invalid reason=unknown_memory_action")
-        return None
+        logger.info("llm.coach_decision_action_dropped reason=unknown_memory_action")
     if _has_unknown_execution_action(data.get("execution_actions")):
         logger.warning("llm.coach_decision_invalid reason=unknown_execution_action")
         return None
@@ -749,13 +771,13 @@ def parse_coach_decision_payload(data: dict[str, Any] | None) -> CoachDecision |
         return None
 
     payload: dict[str, Any] = {
-        "response_type": response_type,
+        "response_type": effective_response_type,
         "rationale": rationale,
         "fitmas_message": fitmas_message,
         "confirmation_reason": _optional_str(data.get("confirmation_reason")),
         "memory_actions": memory_actions,
         "execution_actions": execution_actions,
-        "pending_resolution": data.get("pending_resolution"),
+        "pending_resolution": _normalize_pending_resolution(data.get("pending_resolution")),
     }
     if response_type == "mutation_decision":
         mutation = _parse_nested_mutation_decision(
@@ -768,43 +790,48 @@ def parse_coach_decision_payload(data: dict[str, Any] | None) -> CoachDecision |
             return None
         payload["mutation_decision"] = mutation
     elif response_type == "plan_patch":
-        patch = _parse_nested_plan_patch(data.get("plan_patch"))
+        patch = _parse_nested_plan_patch(
+            data.get("plan_patch"),
+            fallback_coach_message=fitmas_message,
+            fallback_confirmation_reason=payload.get("confirmation_reason"),
+        )
         if patch is None:
             logger.warning("llm.coach_decision_invalid reason=invalid_plan_patch")
             return None
         payload["plan_patch"] = patch
     elif response_type == "requires_confirmation":
         if not payload["confirmation_reason"]:
-            logger.warning("llm.coach_decision_invalid reason=missing_confirmation_reason")
-            return None
-        raw_patch = data.get("plan_patch")
-        raw_mutation = data.get("mutation_decision")
-        if not isinstance(raw_patch, dict) and not isinstance(raw_mutation, dict):
-            logger.warning("llm.coach_decision_invalid reason=free_requires_confirmation_without_action")
-            return None
+            payload["confirmation_reason"] = rationale
+            logger.info("llm.coach_decision_semantic_repair reason=missing_confirmation_reason")
         if isinstance(raw_patch, dict):
-            patch = _parse_nested_plan_patch(raw_patch)
+            patch = _parse_nested_plan_patch(
+                raw_patch,
+                fallback_coach_message=fitmas_message,
+                fallback_confirmation_reason=payload.get("confirmation_reason"),
+            )
             if patch is None:
                 logger.warning("llm.coach_decision_invalid reason=invalid_confirmation_plan_patch")
                 return None
             payload["plan_patch"] = patch
         elif isinstance(raw_mutation, dict):
-            mutation = _parse_nested_mutation_decision(
+            patch_from_misplaced_mutation = _parse_nested_plan_patch(
                 raw_mutation,
-                fallback_rationale=rationale,
-                fallback_fitmas_message=fitmas_message,
+                fallback_coach_message=fitmas_message,
+                fallback_confirmation_reason=payload.get("confirmation_reason"),
             )
-            if mutation is None:
-                logger.warning("llm.coach_decision_invalid reason=invalid_confirmation_mutation_decision")
-                return None
-            payload["mutation_decision"] = mutation
-    try:
-        decision = CoachDecision(**payload)
-        _remember_invalid_decision(None)
-        return decision
-    except Exception as exc:
-        logger.warning("llm.coach_decision_invalid reason=coach_decision_model_validation_failed error=%s", str(exc)[:240])
-        return None
+            if patch_from_misplaced_mutation is not None:
+                payload["plan_patch"] = patch_from_misplaced_mutation
+            else:
+                mutation = _parse_nested_mutation_decision(
+                    raw_mutation,
+                    fallback_rationale=rationale,
+                    fallback_fitmas_message=fitmas_message,
+                )
+                if mutation is None:
+                    logger.warning("llm.coach_decision_invalid reason=invalid_confirmation_mutation_decision")
+                    return None
+                payload["mutation_decision"] = mutation
+    return _build_coach_decision_from_payload(payload)
 
 
 def _parse_nested_mutation_decision(
@@ -830,11 +857,22 @@ def _parse_nested_mutation_decision(
         return None
 
 
-def _parse_nested_plan_patch(raw: Any) -> PlanPatch | None:
+def _parse_nested_plan_patch(
+    raw: Any,
+    *,
+    fallback_coach_message: str | None = None,
+    fallback_confirmation_reason: str | None = None,
+) -> PlanPatch | None:
     from fitmas.plan_patch import PlanPatch
 
     if not isinstance(raw, dict):
         return None
+    raw = _unwrap_plan_patch_payload(raw)
+    raw = _normalize_plan_patch_payload(
+        raw,
+        fallback_coach_message=fallback_coach_message,
+        fallback_confirmation_reason=fallback_confirmation_reason,
+    )
     try:
         patch = PlanPatch(**raw)
     except Exception:
@@ -846,6 +884,64 @@ def _parse_nested_plan_patch(raw: Any) -> PlanPatch | None:
     if not _valid_coach_message(patch.coach_message, response_type="plan_patch"):
         return None
     return patch
+
+
+def _unwrap_plan_patch_payload(raw: dict[str, Any]) -> dict[str, Any]:
+    current = raw
+    for _ in range(4):
+        if "operations" in current and "coach_message" in current:
+            return current
+        review = current.get("review")
+        if isinstance(review, dict) and isinstance(review.get("revised_patch"), dict):
+            return dict(review["revised_patch"])
+        nested = next(
+            (
+                current.get(key)
+                for key in ("patch", "plan_patch", "payload")
+                if isinstance(current.get(key), dict)
+            ),
+            None,
+        )
+        if not isinstance(nested, dict):
+            return current
+        current = nested
+    return current
+
+
+def _normalize_plan_patch_payload(
+    raw: dict[str, Any],
+    *,
+    fallback_coach_message: str | None,
+    fallback_confirmation_reason: str | None,
+) -> dict[str, Any]:
+    payload = dict(raw)
+    operations = payload.get("operations")
+    if isinstance(operations, dict):
+        operations = [operations]
+    if isinstance(operations, list):
+        payload["operations"] = [
+            _normalize_plan_patch_operation(operation)
+            for operation in operations
+            if isinstance(operation, dict)
+        ]
+    if not str(payload.get("coach_message") or "").strip() and fallback_coach_message:
+        payload["coach_message"] = fallback_coach_message
+    if not str(payload.get("confirmation_reason") or "").strip() and fallback_confirmation_reason:
+        payload["confirmation_reason"] = fallback_confirmation_reason
+    return payload
+
+
+def _normalize_plan_patch_operation(operation: dict[str, Any]) -> dict[str, Any]:
+    payload = dict(operation)
+    if "operation_type" not in payload:
+        alias = payload.get("operation") or payload.get("type") or payload.get("mutation_type")
+        if alias:
+            payload["operation_type"] = alias
+    if "target_session_id" not in payload:
+        alias_target = payload.get("session_id") or payload.get("target_session")
+        if alias_target is not None:
+            payload["target_session_id"] = alias_target
+    return payload
 
 
 def _valid_coach_message(message: str, *, response_type: str) -> bool:
@@ -880,6 +976,35 @@ def _optional_int(value: Any) -> int | None:
     try:
         return int(value)
     except (TypeError, ValueError):
+        return None
+
+
+def _normalize_pending_resolution(raw: Any) -> dict[str, Any] | None:
+    if not isinstance(raw, dict):
+        return None
+    resolution_type = str(raw.get("type") or "").strip()
+    allowed_fields = {
+        "accept_pending": {"type", "reason", "selected_candidate_id"},
+        "reject_pending": {"type", "reason"},
+        "modify_pending": {"type", "requested_changes", "reason"},
+        "ignore": {"type", "reason"},
+        "needs_clarification": {"type", "reason", "question"},
+    }
+    if resolution_type not in allowed_fields:
+        logger.info("llm.coach_decision_action_dropped reason=malformed_pending_resolution")
+        return None
+    cleaned = {key: value for key, value in raw.items() if key in allowed_fields[resolution_type]}
+    cleaned["type"] = resolution_type
+    return cleaned
+
+
+def _build_coach_decision_from_payload(payload: dict[str, Any]) -> CoachDecision | None:
+    try:
+        decision = CoachDecision(**payload)
+        _remember_invalid_decision(None)
+        return decision
+    except Exception as exc:
+        logger.warning("llm.coach_decision_invalid reason=coach_decision_model_validation_failed error=%s", str(exc)[:240])
         return None
 
 
@@ -1343,6 +1468,8 @@ def _repair_invalid_decision_payload(*, data: dict[str, Any] | None, system: str
         "- pending_resolution.accept_pending peut porter selected_candidate_id pour choisir une option plan_patch_choice\n"
         "- pending_resolution.modify_pending exige requested_changes; reason est optionnel\n"
         "- requires_confirmation exige confirmation_reason et sert aux mutations planning risquees, pas aux updates execution simples\n"
+        "- requires_confirmation avec plan_patch exige un objet PlanPatch canonique: {coach_message, confirmation_reason?, operations:[{operation_type,...,rationale}]}\n"
+        "- si le payload invalide contient un wrapper de tool draft_*, copie uniquement payload.patch dans plan_patch\n"
         "- move_session/lighten_day/update_session/replace_session exigent target_session_id\n"
         "- swap_sessions exige target_session_id et second_session_id\n"
         "- create_session exige target_date, new_sport_type, new_title, new_duration_min\n"
@@ -1385,7 +1512,7 @@ def _request_claude_decision_fallback(*, system: str, prompt: str) -> dict | Non
         result.data is not None,
         result.error,
     )
-    return result.data
+    return _downgrade_free_confirmation_payload(result.data)
 
 
 def _classify_llm_exception(exc: BaseException) -> str:
@@ -1404,6 +1531,25 @@ def _tool_budget_for_context(tool_context: ToolContext | None) -> tuple[str, ...
     if tool_context.pipeline == "conversation":
         return _CONVERSATION_TOOL_BUDGET
     return ()
+
+
+def _tool_budget_for_prompt_policy(
+    tool_context: ToolContext | None,
+    prompt_policy: Any,
+    *,
+    coach_context: dict | None,
+) -> tuple[str, ...]:
+    if tool_context is None:
+        return ()
+    if _is_terminal_no_tool_intent(coach_context):
+        return ()
+    contract_name = getattr(prompt_policy, "contract_name", None)
+    if contract_name:
+        try:
+            return tuple(get_prompt_contract(contract_name).allowed_tools)
+        except KeyError:
+            logger.warning("llm.prompt_contract_missing name=%s", contract_name)
+    return _tool_budget_for_context(tool_context)
 
 
 def _deepseek_tool_thinking_kwargs() -> dict[str, dict[str, str]]:
@@ -1804,6 +1950,7 @@ def _downgrade_free_confirmation_payload(data: dict | None) -> dict | None:
     repaired = dict(data)
     repaired["response_type"] = "no_change"
     repaired["confirmation_reason"] = None
+    repaired["fitmas_message"] = "Signal pris. Je reste prudent et je ne touche pas au plan sans adaptation valide."
     return repaired
 
 

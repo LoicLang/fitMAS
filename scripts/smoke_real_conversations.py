@@ -351,6 +351,45 @@ def scenario_info_query(db: SessionLocal, client: TestClient, user: s.User) -> N
     _post_message(client, db, user, "C'etait quoi ma plus longue sortie recente ?")
 
 
+def scenario_general_weight_lens(db: SessionLocal, client: TestClient, user: s.User) -> None:
+    before = _snapshot(db, user.id)
+    payload = _post_message(client, db, user, "Putain enft je fais 100kg qu'est ce qu'on fait ?")
+    db.expire_all()
+    after = _snapshot(db, user.id)
+    reply = str((payload.get("assistant_message") or {}).get("text") or "").lower()
+    if after["sessions"] != before["sessions"]:
+        raise AssertionError("Expected generic weight concern to leave the plan unchanged")
+    if after["adaptation"] != before["adaptation"]:
+        raise AssertionError("Expected generic weight concern to avoid planning adaptation")
+    forbidden = (
+        "tu confirmes",
+        "quelle option",
+        "je deplace",
+        "je modifie",
+        "j'ai deplace",
+        "plan modifie",
+        "dans 15 jours",
+        "en 2 semaines",
+        "en deux semaines",
+        "ca va partir",
+        "ça va partir",
+    )
+    if any(token in reply for token in forbidden):
+        raise AssertionError(f"Expected natural general answer without planning menu/mutation claim, got: {reply}")
+
+    before_followup = _snapshot(db, user.id)
+    payload_followup = _post_message(client, db, user, "Rien de grave quoi")
+    db.expire_all()
+    after_followup = _snapshot(db, user.id)
+    followup_reply = str((payload_followup.get("assistant_message") or {}).get("text") or "").lower()
+    if after_followup["sessions"] != before_followup["sessions"]:
+        raise AssertionError("Expected generic reassurance follow-up to leave the plan unchanged")
+    if after_followup["adaptation"] != before_followup["adaptation"]:
+        raise AssertionError("Expected generic reassurance follow-up to avoid planning adaptation")
+    if any(token in followup_reply for token in forbidden):
+        raise AssertionError(f"Expected natural follow-up without planning menu/mutation claim, got: {followup_reply}")
+
+
 def scenario_execution_update(db: SessionLocal, client: TestClient, user: s.User) -> None:
     _post_message(client, db, user, "J'ai couru aujourd'hui 30 min")
     _post_message(client, db, user, "Non c'etait hier")
@@ -748,6 +787,11 @@ SCENARIOS: list[Scenario] = [
     ),
     Scenario("greeting", "Petit message social", scenario_greeting),
     Scenario("info_query", "Question factuelle sur l'historique", scenario_info_query),
+    Scenario(
+        "general_weight_lens",
+        "Inquietude poids: contexte coach compact sans mutation ni menu planning",
+        scenario_general_weight_lens,
+    ),
     Scenario("execution_update", "Declaration d'activite puis correction temporelle", scenario_execution_update),
     Scenario("today_unavailability", "Imprevu ce soir", scenario_today_unavailability),
     Scenario("future_unavailability", "Indispo demain soir", scenario_future_unavailability),

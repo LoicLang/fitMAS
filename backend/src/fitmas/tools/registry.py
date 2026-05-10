@@ -83,6 +83,26 @@ def build_tool_registry() -> dict[str, ToolSpec]:
             handler=_get_activity_highlights,
         ),
         ToolSpec(
+            name="get_coach_lens",
+            description=(
+                "Retourne un contexte coach compact et read-only: objectif/faits durables utiles, "
+                "signaux actifs, realite recente et prochaines seances proches. A utiliser pour "
+                "une question generale ou une inquietude hors mutation sans charger tout le planning."
+            ),
+            input_schema={
+                "type": "object",
+                "properties": {
+                    "days_back": {"type": "integer", "description": "Fenetre recente en jours pour la realite sportive."},
+                    "days_ahead": {"type": "integer", "description": "Fenetre future en jours pour les prochaines seances."},
+                    "plan_limit": {"type": "integer", "description": "Nombre max de seances proches."},
+                    "fact_limit": {"type": "integer", "description": "Nombre max de faits par famille."},
+                },
+                "required": [],
+            },
+            allowed_pipelines=("conversation",),
+            handler=_get_coach_lens,
+        ),
+        ToolSpec(
             name="get_recent_reality_window",
             description="Retourne un recap planifie vs reel sur une fenetre recente.",
             input_schema={
@@ -522,6 +542,122 @@ def _get_activity_highlights(context: ToolContext, arguments: dict[str, Any]) ->
         payload=payload,
         summary=f"{highlights} highlights activite disponibles.",
     )
+
+
+def _get_coach_lens(context: ToolContext, arguments: dict[str, Any]) -> ToolResult:
+    local_today = get_local_now(context.timezone_name, now=context.now).date()
+    days_back = _coerce_int(arguments.get("days_back"), default=7, minimum=1, maximum=30)
+    days_ahead = _coerce_int(arguments.get("days_ahead"), default=7, minimum=1, maximum=21)
+    plan_limit = _coerce_int(arguments.get("plan_limit"), default=3, minimum=1, maximum=5)
+    fact_limit = _coerce_int(arguments.get("fact_limit"), default=4, minimum=1, maximum=8)
+
+    recent_start = local_today - timedelta(days=max(0, days_back - 1))
+    upcoming_end = local_today + timedelta(days=max(0, days_ahead - 1))
+
+    near_plan: list[dict[str, Any]] = []
+    for session in sorted(
+        context.scheduled_sessions,
+        key=lambda item: _local_date(_value(item, "scheduled_date"), timezone_name=context.timezone_name) or date.max,
+    ):
+        local_date = _local_date(_value(session, "scheduled_date"), timezone_name=context.timezone_name)
+        if local_date is None or local_date < local_today or local_date > upcoming_end:
+            continue
+        near_plan.append(
+            {
+                "id": _value(session, "id"),
+                "scheduled_date": local_date.isoformat(),
+                "sport_type": _value(session, "sport_type"),
+                "session_title": _value(session, "session_title"),
+                "duration_min": _value(session, "duration_min"),
+                "completion_status": _value(session, "completion_status"),
+            }
+        )
+        if len(near_plan) >= plan_limit:
+            break
+
+    recent_activities = [
+        activity
+        for activity in context.activities
+        if (local_date := _local_date(_value(activity, "started_at") or _value(activity, "created_at"), timezone_name=context.timezone_name))
+        is not None
+        and recent_start <= local_date <= local_today
+    ]
+    recent_reality = {
+        "days": days_back,
+        "activity_count": len(recent_activities),
+        "duration_min": sum(int(_value(activity, "duration_min") or 0) for activity in recent_activities),
+        "sports": sorted({str(_value(activity, "sport_type") or "") for activity in recent_activities if _value(activity, "sport_type")}),
+    }
+
+    active_signals = _coach_lens_facts(
+        context.active_facts,
+        categories={"availability", "constraint", "fatigue", "health", "injury", "schedule"},
+        limit=fact_limit,
+        now=context.now,
+    )
+    durable_facts = _coach_lens_facts(
+        context.active_facts,
+        categories={"equipment", "goal", "limitation", "preference", "profile"},
+        limit=fact_limit,
+        now=context.now,
+    )
+    fitness = _compute_fitness_snapshot(context.activities, as_of_date=local_today)
+
+    payload = {
+        "as_of_date": local_today.isoformat(),
+        "near_plan": near_plan,
+        "recent_reality": recent_reality,
+        "active_signals": active_signals,
+        "durable_facts": durable_facts,
+        "load_snapshot": {
+            "ctl": fitness["ctl"],
+            "atl": fitness["atl"],
+            "tsb": fitness["tsb"],
+            "fitness_label": fitness["label"],
+        },
+        "usage_guidance": (
+            "read_only: utilise ces faits comme lentille de contexte, pas comme sujet obligatoire; "
+            "ne recite pas tout le plan et ne propose aucune mutation depuis ce tool."
+        ),
+    }
+    return ToolResult(
+        tool_name="get_coach_lens",
+        status="ok",
+        payload=payload,
+        summary=(
+            f"Lentille coach: {len(near_plan)} seances proches, "
+            f"{len(active_signals)} signaux actifs, {len(durable_facts)} faits durables."
+        ),
+    )
+
+
+def _coach_lens_facts(
+    facts: Sequence[Any],
+    *,
+    categories: set[str],
+    limit: int,
+    now: datetime | None,
+) -> list[dict[str, Any]]:
+    items: list[dict[str, Any]] = []
+    for fact in facts:
+        category = str(_value(fact, "category") or "").strip().lower()
+        if category not in categories:
+            continue
+        if not fact_is_current(fact, now=now):
+            continue
+        items.append(
+            {
+                "category": category,
+                "key": _value(fact, "key"),
+                "value": _value(fact, "value"),
+                "urgency": _value(fact, "urgency"),
+                "confirmed": bool(_value(fact, "confirmed")),
+                "expires_at": _datetime_iso(_value(fact, "expires_at")),
+            }
+        )
+        if len(items) >= limit:
+            break
+    return items
 
 
 def _suggest_replan_candidates(context: ToolContext, arguments: dict[str, Any]) -> ToolResult:

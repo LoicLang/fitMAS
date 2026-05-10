@@ -45,7 +45,9 @@ def test_adaptation_pending_choice_keeps_options_uncommitted() -> None:
 
     def fake_request_text(**kwargs):
         prompts.append(kwargs["prompt"])
-        return "J'ai deux options propres : vendredi ou alleger demain. Tu choisis."
+        if "Reponse sortante a verifier:" in kwargs["prompt"]:
+            return '{"verdict":"allow","reason":"options non appliquees","repaired_reply":""}'
+        return "J'ai deux options propres : vendredi ou alleger demain. Tu choisis ?"
 
     reply = compose_plan_adaptation_reply(
         policy_decision=_decision(
@@ -58,9 +60,10 @@ def test_adaptation_pending_choice_keeps_options_uncommitted() -> None:
             "reduce_tomorrow: garder demain mais alleger.",
         ),
         request_text_fn=fake_request_text,
+        verifier_text_fn=fake_request_text,
     )
 
-    assert reply == "J'ai deux options propres : vendredi ou alleger demain. Tu choisis."
+    assert reply == "J'ai deux options propres : vendredi ou alleger demain. Tu choisis ?"
     assert "Option candidate: move_friday" in prompts[0]
     assert "Contrainte: presente ces options comme des propositions non appliquees." in prompts[0]
 
@@ -70,11 +73,14 @@ def test_adaptation_block_reply_uses_blocked_context() -> None:
 
     def fake_request_text(**kwargs):
         prompts.append(kwargs["prompt"])
+        if "Reponse sortante a verifier:" in kwargs["prompt"]:
+            return '{"verdict":"allow","reason":"blocage sans commit","repaired_reply":""}'
         return "Je ne le fais pas tel quel : aucune option valide ne tient proprement."
 
     reply = compose_plan_adaptation_reply(
         policy_decision=_decision(action="block", reason="Aucune option valide."),
         request_text_fn=fake_request_text,
+        verifier_text_fn=fake_request_text,
     )
 
     assert reply == "Je ne le fais pas tel quel : aucune option valide ne tient proprement."

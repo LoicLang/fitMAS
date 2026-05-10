@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Literal, Sequence
+from typing import Any, Literal, Mapping, Sequence
 
 from sqlalchemy.orm import Session
 
@@ -48,6 +48,7 @@ def evaluate_plan_patch_candidate(
     current_score: WeekCoherenceScore | None,
     timezone_name: str | None = None,
     allowed_operations: Sequence[str] | None = None,
+    backend_candidate_patches: Mapping[str, PlanPatch | dict[str, Any]] | None = None,
     coach_state_bundle: Any | None = None,
     activities: Sequence[Any] = (),
     active_facts: Sequence[Any] = (),
@@ -65,7 +66,16 @@ def evaluate_plan_patch_candidate(
             summary=candidate_validation.summary,
         )
 
-    patch = _combine_candidate_patches(candidate)
+    patch = _resolve_candidate_patch(
+        candidate,
+        backend_candidate_patches=backend_candidate_patches or {},
+    )
+    if patch is None:
+        return _blocked_evaluation(
+            candidate=candidate,
+            candidate_validation=_blocked_candidate_ref_validation(candidate, "unknown_candidate_ref"),
+            summary="Candidate bloquee: unknown_candidate_ref.",
+        )
     patch_validation = validate_plan_patch(
         db,
         plan_id=plan_id,
@@ -122,6 +132,55 @@ def evaluate_plan_patch_candidate(
     )
 
 
+def _resolve_candidate_patch(
+    candidate: PlanPatchCandidate,
+    *,
+    backend_candidate_patches: Mapping[str, PlanPatch | dict[str, Any]],
+) -> PlanPatch | None:
+    candidate_ref = str(candidate.candidate_ref or "").strip()
+    if not candidate_ref:
+        combined = _combine_candidate_patches(candidate)
+        return _matching_backend_patch(combined, backend_candidate_patches) or combined
+    raw_patch = backend_candidate_patches.get(candidate_ref)
+    return _coerce_backend_patch(raw_patch)
+
+
+def _matching_backend_patch(
+    patch: PlanPatch,
+    backend_candidate_patches: Mapping[str, PlanPatch | dict[str, Any]],
+) -> PlanPatch | None:
+    patch_signature = _patch_operation_signature(patch)
+    for raw_backend_patch in backend_candidate_patches.values():
+        backend_patch = _coerce_backend_patch(raw_backend_patch)
+        if backend_patch is None:
+            continue
+        if _patch_operation_signature(backend_patch) == patch_signature:
+            return backend_patch
+    return None
+
+
+def _coerce_backend_patch(raw_patch: PlanPatch | dict[str, Any] | None) -> PlanPatch | None:
+    if raw_patch is None:
+        return None
+    if isinstance(raw_patch, PlanPatch):
+        return raw_patch
+    if isinstance(raw_patch, dict):
+        try:
+            return PlanPatch.model_validate(raw_patch)
+        except Exception:
+            return None
+    return None
+
+
+def _patch_operation_signature(patch: PlanPatch) -> tuple[tuple[tuple[str, str], ...], ...]:
+    signatures: list[tuple[tuple[str, str], ...]] = []
+    for operation in patch.operations:
+        payload = operation.model_dump(mode="json", exclude_none=True)
+        payload.pop("rationale", None)
+        signatures.append(tuple(sorted((str(key), str(value)) for key, value in payload.items())))
+    return tuple(signatures)
+
+
 def _combine_candidate_patches(candidate: PlanPatchCandidate) -> PlanPatch:
     operations = []
     for patch in candidate.patches:
@@ -130,6 +189,18 @@ def _combine_candidate_patches(candidate: PlanPatchCandidate) -> PlanPatch:
         operations=operations,
         coach_message=candidate.rationale or "Candidate PlanPatch.",
         confirmation_reason=candidate.expected_tradeoff or None,
+    )
+
+
+def _blocked_candidate_ref_validation(candidate: PlanPatchCandidate, reason: str) -> PlanPatchCandidateValidation:
+    return PlanPatchCandidateValidation(
+        status="blocked",
+        patch_count=len(candidate.patches),
+        operation_count=0,
+        operation_results=(),
+        block_reason=reason,
+        summary=f"Candidate bloquee: {reason}.",
+        commit_performed=False,
     )
 
 

@@ -70,7 +70,7 @@ class CoachDecisionActionsTest(unittest.TestCase):
         assert decision.pending_resolution is not None
         self.assertEqual(decision.pending_resolution.type, "ignore")
 
-    def test_parse_coach_decision_rejects_unknown_memory_action(self) -> None:
+    def test_parse_coach_decision_drops_unknown_memory_action_instead_of_failing_turn(self) -> None:
         decision = llm.parse_coach_decision_payload(
             {
                 "response_type": "no_change",
@@ -85,7 +85,9 @@ class CoachDecisionActionsTest(unittest.TestCase):
             }
         )
 
-        self.assertIsNone(decision)
+        self.assertIsNotNone(decision)
+        assert decision is not None
+        self.assertEqual(decision.memory_actions, ())
 
     def test_parse_coach_decision_rejects_modify_pending_without_payload(self) -> None:
         decision = llm.parse_coach_decision_payload(
@@ -142,6 +144,60 @@ class CoachDecisionActionsTest(unittest.TestCase):
         self.assertEqual(decision.pending_resolution.type, "accept_pending")
         self.assertEqual(decision.pending_resolution.selected_candidate_id, "llm_candidate_2")
 
+    def test_parse_coach_decision_drops_extra_pending_resolution_fields(self) -> None:
+        decision = llm.parse_coach_decision_payload(
+            {
+                "response_type": "no_change",
+                "rationale": "le user confirme une proposition en attente",
+                "fitmas_message": "Je prends cette option.",
+                "pending_resolution": {
+                    "type": "accept_pending",
+                    "selected_candidate_id": "llm_candidate_2",
+                    "payload": {"noise": "provider extra"},
+                    "id": "provider-extra-id",
+                },
+            }
+        )
+
+        self.assertIsNotNone(decision)
+        assert decision is not None
+        self.assertIsNotNone(decision.pending_resolution)
+        assert decision.pending_resolution is not None
+        self.assertEqual(decision.pending_resolution.type, "accept_pending")
+        self.assertEqual(decision.pending_resolution.selected_candidate_id, "llm_candidate_2")
+
+    def test_parse_coach_decision_drops_malformed_pending_resolution_without_failing_turn(self) -> None:
+        decision = llm.parse_coach_decision_payload(
+            {
+                "response_type": "no_change",
+                "rationale": "reponse courte sans resolution exploitable",
+                "fitmas_message": "Je reste sur l'option en attente, sans appliquer.",
+                "pending_resolution": {
+                    "payload": {"decision": "accept"},
+                },
+            }
+        )
+
+        self.assertIsNotNone(decision)
+        assert decision is not None
+        self.assertIsNone(decision.pending_resolution)
+
+    def test_parse_invalid_confirmation_action_is_rejected_for_repair(self) -> None:
+        decision = llm.parse_coach_decision_payload(
+            {
+                "response_type": "requires_confirmation",
+                "rationale": "fatigue signalee, adaptation possible mais action invalide",
+                "fitmas_message": "Je peux alleger demain si tu veux, mais je ne touche pas au plan sans action claire.",
+                "mutation_decision": {
+                    "mutation_type": "",
+                    "rationale": "fatigue signalee",
+                    "fitmas_message": "J'allege demain.",
+                },
+            }
+        )
+
+        self.assertIsNone(decision)
+
     def test_parse_coach_decision_rejects_missed_yesterday_reply_without_execution_action(self) -> None:
         decision = llm.parse_coach_decision_payload(
             {
@@ -153,6 +209,198 @@ class CoachDecisionActionsTest(unittest.TestCase):
         )
 
         self.assertIsNone(decision)
+
+    def test_parse_requires_confirmation_without_reason_derives_reason_from_rationale(self) -> None:
+        decision = llm.parse_coach_decision_payload(
+            {
+                "response_type": "requires_confirmation",
+                "rationale": "deplacement sensible d'une seance cle",
+                "fitmas_message": "Je peux le faire, mais je veux confirmation avant de toucher a cette seance.",
+                "plan_patch": {
+                    "coach_message": "Je peux deplacer la seance cle.",
+                    "operations": [
+                        {
+                            "operation_type": "move_session",
+                            "target_session_id": 42,
+                            "target_date": "2026-05-12",
+                            "rationale": "creneau demande par l'utilisateur",
+                        }
+                    ],
+                },
+            }
+        )
+
+        self.assertIsNotNone(decision)
+        assert decision is not None
+        self.assertEqual(decision.response_type, "requires_confirmation")
+        self.assertEqual(decision.confirmation_reason, "deplacement sensible d'une seance cle")
+        self.assertIsNotNone(decision.plan_patch)
+
+    def test_parse_requires_confirmation_unwraps_tool_patch_payload(self) -> None:
+        decision = llm.parse_coach_decision_payload(
+            {
+                "response_type": "requires_confirmation",
+                "rationale": "adaptation sensible issue d'un draft tool",
+                "fitmas_message": "Je peux remplacer la séance, mais je veux confirmation avant de toucher au plan.",
+                "confirmation_reason": "remplacement sensible",
+                "plan_patch": {
+                    "patch": {
+                        "coach_message": "Je peux remplacer la natation par un footing doux.",
+                        "confirmation_reason": "douleur epaule sur natation",
+                        "operations": [
+                            {
+                                "operation_type": "replace_session",
+                                "target_session_id": 42,
+                                "new_sport_type": "running",
+                                "new_session_type": "easy",
+                                "new_duration_min": 30,
+                                "new_intensity": "easy",
+                                "rationale": "eviter la nage avec epaule douloureuse",
+                            }
+                        ],
+                    },
+                    "validation": {"status": "requires_confirmation"},
+                    "next_step": "return_requires_confirmation",
+                },
+            }
+        )
+
+        self.assertIsNotNone(decision)
+        assert decision is not None
+        self.assertEqual(decision.response_type, "requires_confirmation")
+        self.assertIsNotNone(decision.plan_patch)
+        assert decision.plan_patch is not None
+        self.assertEqual(decision.plan_patch.operations[0].target_session_id, 42)
+
+    def test_parse_requires_confirmation_unwraps_patch_inside_mutation_decision(self) -> None:
+        decision = llm.parse_coach_decision_payload(
+            {
+                "response_type": "requires_confirmation",
+                "rationale": "adaptation sensible issue d'un draft tool mal range",
+                "fitmas_message": "Je peux remplacer la séance, mais je veux confirmation avant de toucher au plan.",
+                "confirmation_reason": "remplacement sensible",
+                "mutation_decision": {
+                    "mutation_type": "plan_patch",
+                    "payload": {
+                        "patch": {
+                            "coach_message": "Je peux remplacer la natation par un footing doux.",
+                            "operations": [
+                                {
+                                    "operation_type": "replace_session",
+                                    "target_session_id": 42,
+                                    "new_sport_type": "running",
+                                    "new_session_type": "easy",
+                                    "new_duration_min": 30,
+                                    "new_intensity": "easy",
+                                    "rationale": "eviter la nage avec epaule douloureuse",
+                                }
+                            ],
+                        }
+                    },
+                },
+            }
+        )
+
+        self.assertIsNotNone(decision)
+        assert decision is not None
+        self.assertEqual(decision.response_type, "requires_confirmation")
+        self.assertIsNone(decision.mutation_decision)
+        self.assertIsNotNone(decision.plan_patch)
+        assert decision.plan_patch is not None
+        self.assertEqual(decision.plan_patch.operations[0].operation_type, "replace_session")
+
+    def test_parse_requires_confirmation_normalizes_patch_aliases(self) -> None:
+        decision = llm.parse_coach_decision_payload(
+            {
+                "response_type": "requires_confirmation",
+                "rationale": "adaptation sensible avec patch mal serialise",
+                "fitmas_message": "Je peux alléger la séance, mais je veux confirmation avant de toucher au plan.",
+                "confirmation_reason": "fatigue signalee",
+                "plan_patch": {
+                    "operations": {
+                        "operation": "replace_session",
+                        "session_id": 42,
+                        "new_sport_type": "walking",
+                        "new_session_type": "recovery",
+                        "new_duration_min": 20,
+                        "new_intensity": "easy",
+                        "rationale": "garder du mouvement sans charger les jambes",
+                    }
+                },
+            }
+        )
+
+        self.assertIsNotNone(decision)
+        assert decision is not None
+        self.assertIsNotNone(decision.plan_patch)
+        assert decision.plan_patch is not None
+        self.assertEqual(decision.plan_patch.coach_message, decision.fitmas_message)
+        self.assertEqual(decision.plan_patch.operations[0].operation_type, "replace_session")
+        self.assertEqual(decision.plan_patch.operations[0].target_session_id, 42)
+
+    def test_parse_requires_confirmation_extracts_revised_patch_from_review_envelope(self) -> None:
+        decision = llm.parse_coach_decision_payload(
+            {
+                "response_type": "requires_confirmation",
+                "rationale": "review propose une version plus prudente",
+                "fitmas_message": "Je peux remplacer la natation, mais je veux confirmation avant de toucher au plan.",
+                "confirmation_reason": "douleur epaule",
+                "plan_patch": {
+                    "validation": {"status": "requires_confirmation"},
+                    "review": {
+                        "revised_patch": {
+                            "coach_message": "Je peux remplacer la natation par du vélo facile.",
+                            "operations": [
+                                {
+                                    "operation_type": "replace_session",
+                                    "target_session_id": 42,
+                                    "new_sport_type": "cycling",
+                                    "new_session_type": "easy",
+                                    "new_duration_min": 35,
+                                    "new_intensity": "easy",
+                                    "rationale": "eviter l'epaule douloureuse",
+                                }
+                            ],
+                        }
+                    },
+                },
+            }
+        )
+
+        self.assertIsNotNone(decision)
+        assert decision is not None
+        self.assertIsNotNone(decision.plan_patch)
+        assert decision.plan_patch is not None
+        self.assertEqual(decision.plan_patch.operations[0].new_sport_type, "cycling")
+
+    def test_parse_free_requires_confirmation_is_rejected_for_repair(self) -> None:
+        decision = llm.parse_coach_decision_payload(
+            {
+                "response_type": "requires_confirmation",
+                "rationale": "hypothese de mutation sans patch structure",
+                "fitmas_message": "Je peux bouger la course plus tard si tu confirmes.",
+                "confirmation_reason": "option a confirmer",
+            }
+        )
+
+        self.assertIsNone(decision)
+
+    def test_free_confirmation_repair_downgrades_to_neutral_no_change_artifact(self) -> None:
+        repaired = llm._downgrade_free_confirmation_payload(
+            {
+                "response_type": "requires_confirmation",
+                "rationale": "fatigue signalee, adaptation sensible",
+                "fitmas_message": "On zappe la seance et on remplace par marche.",
+                "confirmation_reason": "adaptation sensible",
+            }
+        )
+
+        self.assertIsNotNone(repaired)
+        assert repaired is not None
+        self.assertEqual(repaired["response_type"], "no_change")
+        self.assertIsNone(repaired["confirmation_reason"])
+        self.assertNotIn("zappe", repaired["fitmas_message"].lower())
+        self.assertIn("Signal pris", repaired["fitmas_message"])
 
 
 if __name__ == "__main__":

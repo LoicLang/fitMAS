@@ -3,6 +3,7 @@ from __future__ import annotations
 from fitmas.plan_patch import PlanPatch, PlanPatchOperation, PlanPatchValidation
 from fitmas.plan_patch_adaptation_policy import decide_adaptation_policy
 from fitmas.plan_patch_candidate_evaluator import EvaluatedPlanPatchCandidate
+from fitmas.plan_patch_candidate_reviewer import PlanPatchCandidateReviewDecision
 from fitmas.plan_patch_candidates import PlanPatchCandidate, PlanPatchCandidateValidation
 from fitmas.week_coherence import CoherenceFinding, WeekCoherenceScore
 
@@ -96,6 +97,41 @@ def test_policy_asks_choice_when_top_candidates_are_close() -> None:
         "reason": decision.requires_confirmation_reason,
         "risk_level": "medium",
     }
+
+
+def test_policy_uses_reviewer_choice_when_candidates_are_close() -> None:
+    decision = decide_adaptation_policy(
+        [
+            _evaluated("move_to_friday", score_total=84, score_delta=-2),
+            _evaluated("reduce_tomorrow", score_total=82, score_delta=-4),
+        ],
+        reviewer_decision=PlanPatchCandidateReviewDecision(
+            preferred_candidate_id="reduce_tomorrow",
+            confidence=0.78,
+            rationale=("Meilleur compromis humain.",),
+        ),
+    )
+
+    assert decision.action == "commit"
+    assert decision.selected_candidate_id == "reduce_tomorrow"
+    assert decision.reason == "Option choisie par reviewer borne."
+
+
+def test_policy_ignores_reviewer_choice_when_score_gap_is_too_large() -> None:
+    decision = decide_adaptation_policy(
+        [
+            _evaluated("clear_best", score_total=91, score_delta=1),
+            _evaluated("too_low", score_total=70, score_delta=-20),
+        ],
+        reviewer_decision=PlanPatchCandidateReviewDecision(
+            preferred_candidate_id="too_low",
+            confidence=0.9,
+            rationale=("Humainement tentant, mais trop degrade.",),
+        ),
+    )
+
+    assert decision.action == "commit"
+    assert decision.selected_candidate_id == "clear_best"
 
 
 def test_policy_selects_clear_best_when_candidates_are_not_close() -> None:

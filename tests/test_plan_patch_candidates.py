@@ -57,6 +57,33 @@ def test_plan_patch_candidate_accepts_patch_set_without_writing_or_committing() 
     assert validation.commit_performed is False
 
 
+def test_plan_patch_candidate_accepts_backend_candidate_ref_without_copied_patch() -> None:
+    candidate = PlanPatchCandidate(
+        id="cand_ref_move_friday",
+        patches=(),
+        candidate_ref="backend:move_session:42:2099-05-08",
+        rationale="Choisir l'option backend deja materialisee.",
+        expected_tradeoff="Le backend simulera la vraie semaine avant commit.",
+        confidence=0.86,
+        assumptions=("Le user valide cette option.",),
+        risk_notes=(),
+        created_from_plan_id="plan_123",
+        created_from_plan_version=7,
+    )
+
+    validation = validate_plan_patch_candidate_contract(
+        candidate,
+        current_plan_id="plan_123",
+        current_plan_version=7,
+    )
+
+    assert validation.status == "valid"
+    assert validation.patch_count == 0
+    assert validation.operation_count == 0
+    assert validation.block_reason is None
+    assert validation.commit_performed is False
+
+
 def test_plan_patch_candidate_blocks_stale_plan_version() -> None:
     candidate = _candidate(created_from_plan_version=6)
 
@@ -120,11 +147,23 @@ def test_plan_patch_candidate_blocks_empty_or_low_confidence_candidate() -> None
     assert low_confidence_validation.block_reason == "invalid_confidence"
 
 
+def test_plan_patch_candidate_blocks_candidate_ref_mixed_with_copied_patch() -> None:
+    validation = validate_plan_patch_candidate_contract(
+        _candidate(candidate_ref="backend:move_session:42:2099-05-08"),
+        current_plan_id="plan_123",
+        current_plan_version=7,
+    )
+
+    assert validation.status == "blocked"
+    assert validation.block_reason == "ambiguous_candidate_ref"
+
+
 def _candidate(
     *,
     patches: tuple[PlanPatch, ...] | None = None,
     confidence: float = 0.8,
     created_from_plan_version: int = 7,
+    candidate_ref: str | None = None,
 ) -> PlanPatchCandidate:
     if patches is None:
         patches = (
@@ -143,6 +182,7 @@ def _candidate(
     return PlanPatchCandidate(
         id="cand_1",
         patches=patches,
+        candidate_ref=candidate_ref,
         rationale="Option de changement.",
         expected_tradeoff="Compromis a evaluer.",
         confidence=confidence,

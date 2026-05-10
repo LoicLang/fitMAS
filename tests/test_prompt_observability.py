@@ -251,5 +251,5 @@ def test_decide_logs_prompt_trace_for_successful_tool_turn(monkeypatch, caplog) 
     assert "prompt_contract=conversation_plan_lookup" in trace_message
     assert "tools=" in trace_message
     assert "get_plan_window" in trace_message
-    assert "validate_plan_patch" in trace_message
+    assert "validate_plan_patch" not in trace_message
     assert "total_chars=" in trace_message

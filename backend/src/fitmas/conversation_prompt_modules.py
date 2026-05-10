@@ -84,6 +84,28 @@ def build_read_only_identity_voice_system_text() -> str:
     )
 
 
+def build_general_answer_identity_voice_system_text() -> str:
+    return build_lite_identity_voice_system_text(
+        posture=(
+            "Posture generic_question:\n"
+            "- Reponds a la preoccupation exprimee par le user, pas a une opportunite de planning.\n"
+            "- Tu peux lire `get_coach_lens` si un arriere-plan sportif aide: c'est un contexte coach compact, pas un plan a reciter.\n"
+            "- Tu peux lire les tools autorises si un fait manque, mais ne recentre pas la reponse sur le planning si le user ne le demande pas.\n"
+            "- Ne recite pas la lentille: prends seulement 1-2 faits utiles pour rendre la reponse plus juste.\n"
+            "- N'introduis pas d'horaire, de seance du jour ou de decision planning nouvelle sans demande explicite.\n"
+            "- N'annonce pas de delai, de resultat ou de progression mesurable si cette verite n'est pas fournie; reste sur une direction utile et honnete.\n"
+            "- Sur poids, doute, motivation ou inquietude generale: aucun horizon date ou chiffre invente (pas \"dans 15 jours\", \"en 2 semaines\", \"X kg\").\n"
+            "- Si une information manque, donne quand meme une reponse utile minimale; ne passe pas en formulaire.\n"
+            "\n"
+            "Exemples generic_question:\n"
+            "- User: \"Je fais 100kg, qu'est-ce qu'on fait ?\" + lentille reprise/footing Z2 -> rassure, cadre regularite, pas de promesse de perte rapide ni d'echeance.\n"
+            "- User: \"Rien de grave quoi\" -> reponds a la crainte, ne repars pas sur un menu planning.\n"
+            "- Mauvais: redonner toute la semaine, promettre \"dans 15 jours\", ou demander une confirmation planning alors que le user parle d'inquietude generale."
+        ),
+        voice_rules=build_no_action_voice_rules_system_text(),
+    )
+
+
 def build_tool_workflow_system_text() -> str:
     return """\
 Workflow replan_after_constraint:
@@ -365,6 +387,10 @@ def build_read_only_output_schema_system_text() -> str:
     return build_no_action_coach_decision_output_schema_system_text("read_only")
 
 
+def build_general_answer_output_schema_system_text() -> str:
+    return build_no_action_coach_decision_output_schema_system_text("general_answer")
+
+
 def build_execution_report_output_schema_system_text() -> str:
     return """\
 Tu reponds UNIQUEMENT avec un JSON CoachDecision valide.
@@ -426,10 +452,15 @@ memory_actions.record_health_signal:
 
 PlanPatch minimal si adaptation evidente:
 - Utilise `response_type="plan_patch"` seulement si le signal touche clairement une seance planifiee.
+- Utilise `response_type="requires_confirmation"` seulement si le signal touche clairement une seance planifiee ET que tu fournis un plan_patch valide.
+- Si tu as utilise un tool `draft_*`, copie le `payload.patch` exact dans `plan_patch`; ne copie pas `validation`, `review`, `policy_status` ou un wrapper de tool comme patch final.
+- requires_confirmation exige un plan_patch valide; sans patch complet, retourne no_change.
 - plan_patch.operations[].operation_type: replace_session | lighten_day | move_session
 - Renseigne target_session_id si la seance cible est resolue.
 - Donne une rationale courte centree sur le signal sante.
-- Si le risque est sensible ou la cible incertaine, utilise `requires_confirmation` ou `no_change`.
+- Ne mets jamais un PlanPatch dans mutation_decision; mutation_decision doit rester null sur health_signal.
+- Si tu retournes no_change, ne dis pas que la seance est zappee, remplacee, allegee ou deplacee.
+- Si le risque est sensible ou la cible incertaine, utilise `requires_confirmation` avec plan_patch valide, ou no_change neutre.
 
 Regles:
 - Ne produis pas de menu large.
@@ -483,6 +514,15 @@ def build_conversation_system_text(contract: PromptContract | None = None) -> st
                 build_turn_scope_contract_system_text(contract),
                 build_read_only_truth_system_text(),
                 build_no_action_coach_decision_output_schema_system_text(contract.capability),
+            )
+        )
+
+    if contract is not None and contract.capability == "general_answer":
+        return "\n\n".join(
+            (
+                build_general_answer_identity_voice_system_text(),
+                build_turn_scope_contract_system_text(contract),
+                build_general_answer_output_schema_system_text(),
             )
         )
 

@@ -62,6 +62,55 @@ def test_candidate_generator_parses_bounded_llm_candidates() -> None:
     assert "create_session" in calls[0]["prompt"]
 
 
+def test_candidate_generator_accepts_backend_candidate_ref_without_patch_copy() -> None:
+    calls: list[dict] = []
+
+    def _request_json(**kwargs):
+        calls.append(kwargs)
+        return {
+            "candidates": [
+                {
+                    "candidate_ref": "backend:move_session:42:2099-05-08",
+                    "rationale": "Use the backend option for the requested move.",
+                    "expected_tradeoff": "Backend validation owns the real consequences.",
+                    "confidence": 0.87,
+                    "assumptions": ["The user means the dated session."],
+                    "risk_notes": [],
+                }
+            ]
+        }
+
+    result = generate_plan_patch_candidates(
+        CandidateGenerationInput(
+            user_message="deplace la seance a vendredi",
+            parsed_user_intent={"primary_intent": "plan_mutation"},
+            current_plan_summary={"sessions": [{"id": 42, "day": "thursday"}]},
+            current_plan_id="plan_123",
+            current_plan_version=7,
+            constraints={},
+            week_facts=None,
+            coherence_findings=(),
+            allowed_operations=("move_session", "update_session"),
+            forbidden_operations=(),
+            pending_context=None,
+            backend_candidates=(
+                {
+                    "candidate_ref": "backend:move_session:42:2099-05-08",
+                    "summary": "Move session 42 to Friday.",
+                    "operations": ["move_session"],
+                },
+            ),
+        ),
+        request_json_fn=_request_json,
+    )
+
+    assert len(result) == 1
+    assert result[0].candidate_ref == "backend:move_session:42:2099-05-08"
+    assert result[0].patches == ()
+    assert "backend_candidates" in calls[0]["prompt"]
+    assert "candidate_ref" in calls[0]["prompt"]
+
+
 def test_candidate_generator_drops_invalid_or_disallowed_candidates_and_caps_to_three() -> None:
     def _request_json(**kwargs):
         del kwargs

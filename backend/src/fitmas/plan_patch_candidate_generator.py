@@ -26,6 +26,7 @@ class CandidateGenerationInput:
     allowed_operations: tuple[str, ...]
     forbidden_operations: tuple[str, ...]
     pending_context: dict[str, Any] | None
+    backend_candidates: tuple[dict[str, Any], ...] = ()
 
 
 def generate_plan_patch_candidates(
@@ -99,11 +100,14 @@ def _candidate_generator_prompt(input_payload: CandidateGenerationInput) -> str:
         "allowed_operations": list(input_payload.allowed_operations),
         "forbidden_operations": list(input_payload.forbidden_operations),
         "pending_context": input_payload.pending_context,
+        "backend_candidates": list(input_payload.backend_candidates),
     }
     return (
         "Genere entre 0 et 3 candidats d'adaptation. "
         "Utilise uniquement allowed_operations et jamais forbidden_operations. "
+        "Si backend_candidates contient une option utile, retourne son candidate_ref sans recopier son PlanPatch. "
         "Chaque candidat doit contenir patches, rationale, expected_tradeoff, confidence, assumptions, risk_notes. "
+        "Un candidat peut contenir candidate_ref a la place de patches quand il reference une option backend. "
         "Si l'intention est insuffisante ou dangereuse, retourne {\"candidates\": []}.\n\n"
         f"Contexte JSON:\n{json.dumps(context, ensure_ascii=False, default=str)}"
     )
@@ -118,7 +122,10 @@ def _parse_candidate(
 ) -> PlanPatchCandidate | None:
     if not isinstance(raw_candidate, dict):
         return None
+    candidate_ref = str(raw_candidate.get("candidate_ref") or "").strip() or None
     raw_patches = raw_candidate.get("patches")
+    if raw_patches is None and candidate_ref:
+        raw_patches = []
     if not isinstance(raw_patches, list):
         return None
     patches: list[PlanPatch] = []
@@ -143,6 +150,7 @@ def _parse_candidate(
         risk_notes=_string_tuple(raw_candidate.get("risk_notes")),
         created_from_plan_id=current_plan_id,
         created_from_plan_version=current_plan_version,
+        candidate_ref=candidate_ref,
     )
 
 

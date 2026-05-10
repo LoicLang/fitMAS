@@ -1,9 +1,9 @@
 route: conversation_plan_lookup
 contract: conversation_plan_lookup
-tool_budget: ['get_plan_window', 'get_session_detail']
+tool_budget: ['get_plan_window']
 truth_blocks: ['temporal', 'plan_window', 'execution_reality', 'activity_claims']
 output_schema: CoachDecision
-trace: {'route': 'conversation_decide', 'provider': None, 'model': None, 'prompt_policy': 'plan_lookup_compact', 'prompt_contract': 'conversation_plan_lookup', 'intent': 'plan_lookup', 'system_chars': 3777, 'user_chars': 52, 'total_chars': 3829, 'tool_names': ('get_plan_window', 'get_session_detail'), 'truth_block_names': ('temporal', 'plan_window', 'execution_reality', 'activity_claims'), 'history_messages_used': 2}
+trace: {'route': 'conversation_decide', 'provider': None, 'model': None, 'prompt_policy': 'plan_lookup_compact', 'prompt_contract': 'conversation_plan_lookup', 'intent': 'plan_lookup', 'system_chars': 3757, 'user_chars': 52, 'total_chars': 3809, 'tool_names': ('get_plan_window',), 'truth_block_names': ('temporal', 'plan_window', 'execution_reality', 'activity_claims'), 'history_messages_used': 2}
 
 ## SYSTEM
 Tu es FitMAS, un coach multisport IA.
@@ -29,7 +29,7 @@ Note conversation : ces regles s'appliquent au champ `fitmas_message` du JSON Co
 Contrat du tour:
 - route: conversation_plan_lookup
 - capacite: read_only
-- tools autorises: get_plan_window, get_session_detail
+- tools autorises: get_plan_window
 - actions autorisees: aucune
 - verites requises: temporal, plan_window
 - verites optionnelles: execution_reality, activity_claims

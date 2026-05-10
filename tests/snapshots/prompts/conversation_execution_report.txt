@@ -1,9 +1,9 @@
 route: conversation_execution_report
 contract: conversation_execution_report
-tool_budget: ['resolve_target_session', 'get_recent_activities']
+tool_budget: ['get_recent_activities']
 truth_blocks: ['temporal', 'execution_reality', 'planning', 'activity_claims', 'conversation_frame']
 output_schema: CoachDecision
-trace: {'route': 'conversation_decide', 'provider': None, 'model': None, 'prompt_policy': 'execution_report', 'prompt_contract': 'conversation_execution_report', 'intent': 'execution_report', 'system_chars': 5816, 'user_chars': 71, 'total_chars': 5887, 'tool_names': ('resolve_target_session', 'get_recent_activities'), 'truth_block_names': ('temporal', 'execution_reality', 'planning', 'activity_claims', 'conversation_frame'), 'history_messages_used': 2}
+trace: {'route': 'conversation_decide', 'provider': None, 'model': None, 'prompt_policy': 'execution_report', 'prompt_contract': 'conversation_execution_report', 'intent': 'execution_report', 'system_chars': 5792, 'user_chars': 71, 'total_chars': 5863, 'tool_names': ('get_recent_activities',), 'truth_block_names': ('temporal', 'execution_reality', 'planning', 'activity_claims', 'conversation_frame'), 'history_messages_used': 2}
 
 ## SYSTEM
 Tu es FitMAS, un coach multisport IA.
@@ -33,7 +33,7 @@ Note conversation : ces regles s'appliquent au champ `fitmas_message` du JSON Co
 Contrat du tour:
 - route: conversation_execution_report
 - capacite: write_after_validation
-- tools autorises: resolve_target_session, get_recent_activities
+- tools autorises: get_recent_activities
 - actions autorisees: record_execution_update, record_memory
 - verites requises: temporal, execution_reality, planning
 - verites optionnelles: activity_claims, conversation_frame

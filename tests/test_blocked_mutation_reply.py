@@ -8,6 +8,7 @@ from fitmas.conversation_pipeline import (
     _blocked_mutation_reply,
     _blocked_plan_patch_reply,
     _execution_applied_patch_blocked_reply,
+    _plan_patch_service_result_requires_clarification,
 )
 from fitmas.mutation_permissions import MutationImpactAssessment, build_confirmation_prompt
 from fitmas.plan_mutation_service import (
@@ -65,6 +66,35 @@ class BlockedMutationReplyTest(unittest.TestCase):
 
         self.assertIn("48h", reply)
         self.assertIn("meme sport", reply.lower())
+
+    def test_ambiguous_target_warning_requires_clarification_not_pending(self) -> None:
+        result = PlanPatchServiceResult(
+            validation=PlanPatchValidation(
+                status="requires_confirmation",
+                operation_results=(
+                    PlanPatchOperationValidation(
+                        operation_type="move_session",
+                        status="requires_confirmation",
+                        target_session_id=10,
+                        warning_codes=("ambiguous_target_reference",),
+                        warning_messages=("Plusieurs seances running peuvent correspondre a cette demande."),
+                    ),
+                ),
+            ),
+            patch=PlanPatch(
+                coach_message="Je peux deplacer la course plus tard.",
+                operations=(
+                    PlanPatchOperation(
+                        operation_type="move_session",
+                        target_session_id=10,
+                        target_date="2026-05-15",
+                        rationale="demande utilisateur ambigue",
+                    ),
+                ),
+            ),
+        )
+
+        self.assertTrue(_plan_patch_service_result_requires_clarification(result))
 
     def test_occupied_training_target_gets_specific_reply(self) -> None:
         decision = SimpleNamespace(mutation_type="move_session", target_session_id=10)
@@ -462,7 +492,13 @@ class BlockedMutationReplyTest(unittest.TestCase):
             captured_contexts.append(context)
             return "Je peux la passer au lundi 11, mais je veux ton feu vert avant de bouger cette recuperation."
 
-        with patch("fitmas.conversation_pipeline.final_reply.compose_final_reply", side_effect=fake_compose):
+        with (
+            patch("fitmas.conversation_pipeline.final_reply.compose_final_reply", side_effect=fake_compose),
+            patch(
+                "fitmas.conversation_pipeline.final_reply.verify_uncommitted_reply",
+                side_effect=lambda reply, context, **_kwargs: reply,
+            ),
+        ):
             reply = _build_plan_patch_confirmation_prompt(result)
 
         self.assertIn("lundi 11", reply)
@@ -471,6 +507,166 @@ class BlockedMutationReplyTest(unittest.TestCase):
         self.assertIn("move_session", facts)
         self.assertIn("target_session_id=3", facts)
         self.assertIn("target_date=2026-05-11", facts)
+
+    def test_plan_patch_confirmation_verifier_receives_patch_rationale_as_grounding(self) -> None:
+        from datetime import date
+
+        from fitmas.conversation_pipeline import _build_plan_patch_confirmation_prompt
+        from fitmas.grounding_contract import ReplyGroundingPacket
+
+        result = PlanPatchServiceResult(
+            patch=PlanPatch(
+                coach_message="Je peux remplacer la natation par du vélo facile.",
+                operations=[
+                    PlanPatchOperation(
+                        operation_type="replace_session",
+                        target_session_id=8,
+                        new_sport_type="cycling",
+                        new_session_type="easy",
+                        new_duration_min=35,
+                        new_intensity="easy",
+                        rationale="douleur epaule quand il nage",
+                    )
+                ],
+            ),
+            validation=PlanPatchValidation(
+                status="requires_confirmation",
+                operation_results=(
+                    PlanPatchOperationValidation(
+                        operation_type="replace_session",
+                        status="requires_confirmation",
+                        target_session_id=8,
+                    ),
+                ),
+            ),
+        )
+        grounding = ReplyGroundingPacket(local_date=date(2026, 5, 10), timezone_name="Europe/Paris")
+        captured = {}
+
+        def fake_verify(reply, *, grounding, pipeline_capability):
+            captured["grounding"] = grounding
+            captured["pipeline_capability"] = pipeline_capability
+            return reply
+
+        with (
+            patch(
+                "fitmas.conversation_pipeline.final_reply.compose_final_reply",
+                return_value="Je peux remplacer la natation par du vélo facile pour éviter l'épaule. Tu confirmes ?",
+            ),
+            patch(
+                "fitmas.conversation_pipeline.final_reply.verify_uncommitted_reply",
+                side_effect=lambda reply, context, **_kwargs: reply,
+            ),
+            patch("fitmas.conversation_pipeline.final_reply.verify_factual_reply", side_effect=fake_verify),
+        ):
+            reply = _build_plan_patch_confirmation_prompt(result, grounding=grounding)
+
+        self.assertIn("vélo facile", reply)
+        self.assertEqual(captured["pipeline_capability"], "plan_patch_confirmation")
+        extra_facts = "\n".join(captured["grounding"].extra_facts)
+        self.assertIn("douleur epaule", extra_facts)
+        self.assertIn("new_sport_type=cycling", extra_facts)
+
+    def test_plan_patch_confirmation_rechecks_uncommitted_shape_after_factual_repair(self) -> None:
+        from datetime import date
+
+        from fitmas.conversation_pipeline import _build_plan_patch_confirmation_prompt
+        from fitmas.grounding_contract import ReplyGroundingPacket
+
+        result = PlanPatchServiceResult(
+            patch=PlanPatch(
+                coach_message="Je peux déplacer la mobilité à lundi.",
+                operations=[
+                    PlanPatchOperation(
+                        operation_type="move_session",
+                        target_session_id=3,
+                        target_date="2026-05-11",
+                        rationale="recuperation a confirmer",
+                    )
+                ],
+            ),
+            validation=PlanPatchValidation(
+                status="requires_confirmation",
+                operation_results=(
+                    PlanPatchOperationValidation(
+                        operation_type="move_session",
+                        status="requires_confirmation",
+                        target_session_id=3,
+                    ),
+                ),
+            ),
+        )
+        grounding = ReplyGroundingPacket(local_date=date(2026, 5, 10), timezone_name="Europe/Paris")
+        uncommitted_calls: list[str] = []
+
+        def fake_uncommitted(reply, context, **_kwargs):
+            uncommitted_calls.append(reply)
+            if len(uncommitted_calls) == 1:
+                return "Je peux déplacer la mobilité à lundi. Tu confirmes ?"
+            self.assertIn("calée", reply)
+            return "Je peux déplacer la mobilité à lundi. Tu confirmes ?"
+
+        with (
+            patch(
+                "fitmas.conversation_pipeline.final_reply.compose_final_reply",
+                return_value="Mobilité calée lundi, c'est bon pour moi.",
+            ),
+            patch("fitmas.conversation_pipeline.final_reply.verify_uncommitted_reply", side_effect=fake_uncommitted),
+            patch(
+                "fitmas.conversation_pipeline.final_reply.verify_factual_reply",
+                return_value="Mobilité calée lundi, c'est bon pour moi.",
+            ),
+        ):
+            reply = _build_plan_patch_confirmation_prompt(result, grounding=grounding)
+
+        self.assertEqual(reply, "Je peux déplacer la mobilité à lundi. Tu confirmes ?")
+        self.assertEqual(len(uncommitted_calls), 2)
+
+    def test_plan_patch_confirmation_repairs_effective_wording_before_user(self) -> None:
+        from fitmas.conversation_pipeline import _build_plan_patch_confirmation_prompt
+
+        result = PlanPatchServiceResult(
+            patch=PlanPatch(
+                coach_message="Je peux remplacer la natation par du vélo facile.",
+                operations=[
+                    PlanPatchOperation(
+                        operation_type="replace_session",
+                        target_session_id=8,
+                        new_sport_type="cycling",
+                        new_session_type="easy",
+                        new_duration_min=35,
+                        rationale="douleur epaule quand il nage",
+                    )
+                ],
+            ),
+            validation=PlanPatchValidation(
+                status="requires_confirmation",
+                operation_results=(
+                    PlanPatchOperationValidation(
+                        operation_type="replace_session",
+                        status="requires_confirmation",
+                        target_session_id=8,
+                    ),
+                ),
+            ),
+        )
+
+        def fake_verify(reply, context, **_kwargs):
+            self.assertIn("devient", reply)
+            self.assertTrue(context.pending_summary)
+            return "Je peux remplacer la natation par du vélo facile pour proteger l'epaule. Tu confirmes ?"
+
+        with (
+            patch(
+                "fitmas.conversation_pipeline.final_reply.compose_final_reply",
+                return_value="Ta séance natation de demain devient un vélo facile de 35 minutes.",
+            ),
+            patch("fitmas.conversation_pipeline.final_reply.verify_uncommitted_reply", side_effect=fake_verify),
+        ):
+            reply = _build_plan_patch_confirmation_prompt(result)
+
+        self.assertIn("Je peux remplacer", reply)
+        self.assertNotIn("devient", reply)
 
     def test_week_review_requires_confirmation_counts_as_pending(self) -> None:
         from fitmas.conversation_pipeline import _plan_patch_confirmation_summary, _plan_patch_needs_confirmation

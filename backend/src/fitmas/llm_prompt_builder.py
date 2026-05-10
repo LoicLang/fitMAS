@@ -162,6 +162,13 @@ def _allowed_layer_names(prompt_policy: ConversationPromptPolicy) -> set[str] | 
     return allowed
 
 
+def _contract_has_planning_truth(prompt_policy: ConversationPromptPolicy) -> bool:
+    blocks = _contract_context_blocks(prompt_policy)
+    if blocks is None:
+        return True
+    return bool(blocks & {"planning", "plan_window", "load_context", "execution_reality", "activity_claims"})
+
+
 def build_conversation_prompt_bundle(
     *,
     user_text: str,
@@ -246,9 +253,15 @@ def build_conversation_prompt_bundle(
     if unresolved_execution_followup:
         followup_block = "\n" + unresolved_execution_followup.strip() + "\n"
 
+    planning_truth_block = ""
+    if _contract_has_planning_truth(prompt_policy):
+        planning_truth_block = (
+            "Source de vérité planning conversationnelle: calendrier daté / app.\n"
+            "Ignore tout repère hebdo legacy si le calendrier daté dit autre chose.\n"
+        )
+
     prompt = f"""{time_block}
-Source de vérité planning conversationnelle: calendrier daté / app.
-Ignore tout repère hebdo legacy si le calendrier daté dit autre chose.
+{planning_truth_block}
 {timeline_block}
 {execution_block}{temporal_block}{claim_block}{signal_block}
 {profile_block}
@@ -325,6 +338,7 @@ def build_layered_conversation_prompt(
         selected_facts=selected_facts if prompt_policy.include_facts else None,
         conversation_history=conversation_history,
         history_limit=prompt_policy.history_limit,
+        include_planning_truth_banner=_contract_has_planning_truth(prompt_policy),
     )
 
     # Separate cacheable layers for system prompt caching
@@ -355,7 +369,7 @@ def build_layered_conversation_prompt(
         history_messages_used = min(len(conversation_history), prompt_policy.history_limit)
 
     prompt_parts = []
-    if "immediate" not in rendered_layer_names:
+    if "immediate" not in rendered_layer_names and _contract_has_planning_truth(prompt_policy):
         prompt_parts.extend([
             "Source de vérité planning conversationnelle: calendrier daté / app.",
             "Ignore tout repère hebdo legacy si le calendrier daté dit autre chose.",
