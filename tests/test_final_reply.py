@@ -12,14 +12,18 @@ from fitmas.final_reply import (
     compose_heartbeat_reply,
     compose_final_reply,
     compose_close_turn_reply,
+    compose_execution_report_reply,
     compose_no_change_reply,
+    compose_plan_adaptation_reply,
     compose_plan_lookup_reply,
     is_valid_close_turn_reply,
     is_valid_final_reply,
     is_valid_plan_lookup_reply,
     outage_fallback_reply,
+    verify_uncommitted_reply,
     verify_post_event_reply,
 )
+from fitmas.plan_patch_adaptation_policy import AdaptationPolicyDecision
 
 
 def _blocked_context() -> FinalReplyContext:
@@ -322,6 +326,31 @@ def test_no_change_composer_can_include_applied_non_plan_actions() -> None:
     assert reply == "Renfo note non fait. Ce soir tu gardes simple."
 
 
+def test_execution_report_composer_repairs_receipt_without_applied_action() -> None:
+    calls = []
+
+    def fake_request_text(**kwargs):
+        calls.append(kwargs["prompt"])
+        if "Reponse sortante a verifier:" in kwargs["prompt"]:
+            assert "Execution appliquee:" not in kwargs["prompt"]
+            return (
+                '{"verdict":"repair","reason":"execution non appliquee",'
+                '"repaired_reply":"Je garde ca comme info, sans le noter comme fait tant que la cible reste floue."}'
+            )
+        assert "execution_report" in kwargs["prompt"]
+        return "C'est note comme fait, 30 minutes ajoutees."
+
+    reply = compose_execution_report_reply(
+        user_text="J'ai couru aujourd'hui 30 min",
+        original_llm_reply="C'est note comme fait.",
+        request_text_fn=fake_request_text,
+        verifier_text_fn=fake_request_text,
+    )
+
+    assert reply == "Je garde ca comme info, sans le noter comme fait tant que la cible reste floue."
+    assert len(calls) == 2
+
+
 def test_plan_lookup_composer_uses_fact_preservation_context() -> None:
     def fake_request_text(**kwargs):
         assert "plan_lookup" in kwargs["prompt"]
@@ -461,6 +490,100 @@ def test_post_event_verifier_rejects_invalid_repair() -> None:
         )
         is None
     )
+
+
+def test_uncommitted_verifier_repairs_pending_action_claim() -> None:
+    ctx = FinalReplyContext(
+        user_text="J'ai mal a l'epaule quand je nage, ca tire",
+        pending_summary="Remplacer la natation par du velo facile demande confirmation.",
+        allowed_to_claim_mutation=False,
+        pipeline="conversation",
+        pipeline_capability="plan_patch_confirmation",
+        extra_facts=(
+            "operation#1 | replace_session | target_session_id=8 | new_sport_type=cycling | new_duration_min=35",
+        ),
+    )
+
+    def fake_request_text(**kwargs):
+        assert "Confirmation en attente" in kwargs["prompt"]
+        assert "Ta seance natation de demain devient" in kwargs["prompt"]
+        return (
+            '{"verdict":"repair","reason":"parle comme si applique",'
+            '"repaired_reply":"Je peux remplacer la natation par du velo facile pour proteger l epaule. Tu confirmes ?"}'
+        )
+
+    reply = verify_uncommitted_reply(
+        "Ta seance natation de demain devient un velo facile de 35 minutes.",
+        ctx,
+        request_text_fn=fake_request_text,
+    )
+
+    assert reply == "Je peux remplacer la natation par du velo facile pour proteger l epaule. Tu confirmes ?"
+
+
+def test_uncommitted_verifier_retries_pending_allow_without_confirmation_question() -> None:
+    ctx = FinalReplyContext(
+        pending_summary="Allegement du footing a confirmer.",
+        allowed_to_claim_mutation=False,
+        pipeline="conversation",
+        pipeline_capability="plan_patch_confirmation",
+        extra_facts=("operation#1 | replace_session | new_duration_min=25",),
+    )
+    calls = 0
+
+    def fake_request_text(**kwargs):
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            return '{"verdict":"allow","reason":"semble proposition"}'
+        assert "Verdict precedent invalide" in kwargs["prompt"]
+        return (
+            '{"verdict":"repair","reason":"confirmation manquante",'
+            '"repaired_reply":"Je te propose de raccourcir le footing a 25 minutes faciles. Tu confirmes ?"}'
+        )
+
+    reply = verify_uncommitted_reply(
+        "Je raccourcis le footing a 25 minutes faciles.",
+        ctx,
+        request_text_fn=fake_request_text,
+    )
+
+    assert reply == "Je te propose de raccourcir le footing a 25 minutes faciles. Tu confirmes ?"
+    assert calls == 2
+
+
+def test_plan_adaptation_pending_reply_uses_uncommitted_verifier() -> None:
+    policy = AdaptationPolicyDecision(
+        action="pending_confirmation",
+        selected_candidate_id="candidate_1",
+        candidate_options=(),
+        reason="shoulder pain",
+        user_facing_reason="L'epaule tire sur la natation.",
+        requires_confirmation_reason="Remplacer la natation par du velo facile demande confirmation.",
+        risk_level="medium",
+    )
+
+    calls = []
+
+    def fake_request_text(**kwargs):
+        calls.append(kwargs["prompt"])
+        if "Reponse sortante a verifier:" in kwargs["prompt"]:
+            return (
+                '{"verdict":"repair","reason":"pending surclaim",'
+                '"repaired_reply":"Je te propose velo facile a la place de la natation, sans forcer l epaule. Tu confirmes ?"}'
+            )
+        return "Ta seance natation devient un velo facile."
+
+    reply = compose_plan_adaptation_reply(
+        policy_decision=policy,
+        user_text="J'ai mal a l'epaule quand je nage",
+        candidate_summaries=("candidate_1: replace natation -> velo facile",),
+        request_text_fn=fake_request_text,
+        verifier_text_fn=fake_request_text,
+    )
+
+    assert reply == "Je te propose velo facile a la place de la natation, sans forcer l epaule. Tu confirmes ?"
+    assert len(calls) == 2
 
 
 def test_heartbeat_reply_prompt_hides_internal_fact_categories() -> None:

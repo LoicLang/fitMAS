@@ -29,6 +29,19 @@ CANONICAL_CONVERSATION_TOOLS = [
     "validate_week_coherence",
 ]
 
+PLAN_LOOKUP_CONTRACT_TOOLS = [
+    "get_plan_window",
+]
+
+
+def _system_text(system) -> str:
+    if isinstance(system, list):
+        return "\n".join(
+            str(part.get("text") or "") if isinstance(part, dict) else str(part)
+            for part in system
+        )
+    return str(system or "")
+
 
 class LLMToolsTest(unittest.TestCase):
     def test_parse_coach_decision_accepts_plan_patch(self) -> None:
@@ -337,15 +350,15 @@ class LLMToolsTest(unittest.TestCase):
             prompts.append(messages[0]["content"] if isinstance(messages[0]["content"], str) else "")
             if captured["calls"] == 1:
                 self.assertIsNotNone(tools)
-                self.assertEqual([tool["name"] for tool in tools], CANONICAL_CONVERSATION_TOOLS)
+                self.assertEqual([tool["name"] for tool in tools], PLAN_LOOKUP_CONTRACT_TOOLS)
                 return SimpleNamespace(
                     stop_reason="tool_use",
                     content=[
                         SimpleNamespace(
                             type="tool_use",
                             id="toolu_123",
-                            name="get_activity_highlights",
-                            input={"days": 30},
+                            name="get_plan_window",
+                            input={"window": "current_week"},
                         )
                     ],
                     usage=SimpleNamespace(input_tokens=120, output_tokens=32),
@@ -356,7 +369,7 @@ class LLMToolsTest(unittest.TestCase):
                 content=[
                     SimpleNamespace(
                         type="text",
-                        text='{"mutation_type":"no_change","target_session_id":null,"second_session_id":null,"target_date":null,"from_day":null,"to_day":null,"new_title":null,"new_goal":null,"rationale":"lecture outillee","fitmas_message":"Ta plus longue sortie recente est Velo."}',
+                        text='{"mutation_type":"no_change","target_session_id":null,"second_session_id":null,"target_date":null,"from_day":null,"to_day":null,"new_title":null,"new_goal":null,"rationale":"lecture outillee","fitmas_message":"Jeudi, tu as une sortie running."}',
                     )
                 ],
                 usage=SimpleNamespace(input_tokens=180, output_tokens=48),
@@ -365,15 +378,15 @@ class LLMToolsTest(unittest.TestCase):
         def fake_execute_tool_calls(calls, *, context, **kwargs):
             self.assertEqual(len(calls), 1)
             call = calls[0]
-            self.assertEqual(call.tool_name, "get_activity_highlights")
+            self.assertEqual(call.tool_name, "get_plan_window")
             self.assertEqual(context.pipeline, "conversation")
             return [
                 SimpleNamespace(result=
                 ToolResult(
-                    tool_name="get_activity_highlights",
+                    tool_name="get_plan_window",
                     status="ok",
-                    payload={"longest_duration": {"title": "Velo", "duration_min": 90}},
-                    summary="1 highlight activite disponible.",
+                    payload={"sessions": [{"title": "Sortie running", "date": "2099-04-29"}]},
+                    summary="1 seance planning disponible.",
                 ),
                 trace=SimpleNamespace(tool_success=True, tool_called=True, tool_latency_ms=12))
             ]
@@ -404,15 +417,15 @@ class LLMToolsTest(unittest.TestCase):
 
         self.assertIsNotNone(decision)
         self.assertEqual(decision.mutation_type, "no_change")
-        self.assertIn("plus longue sortie", decision.fitmas_message.lower())
+        self.assertIn("sortie running", decision.fitmas_message.lower())
         self.assertEqual(len(traces), 1)
         self.assertTrue(traces[0].tool_offered)
         self.assertTrue(traces[0].tool_requested)
         self.assertTrue(traces[0].tool_called)
-        self.assertEqual(traces[0].tool_name, "get_activity_highlights")
+        self.assertEqual(traces[0].tool_name, "get_plan_window")
         self.assertEqual(traces[0].llm_round_trips, 2)
         self.assertEqual(traces[0].context_policy, "plan_lookup_compact")
-        self.assertEqual(traces[0].tool_count_offered, len(CANONICAL_CONVERSATION_TOOLS))
+        self.assertEqual(traces[0].tool_count_offered, len(PLAN_LOOKUP_CONTRACT_TOOLS))
         self.assertGreaterEqual(traces[0].prompt_char_count, 1)
         self.assertNotIn("Repere legacy semaine courante", prompts[0])
         self.assertNotIn("Calendrier date reel", prompts[0])
@@ -423,11 +436,13 @@ class LLMToolsTest(unittest.TestCase):
         original_log_tool_trace = llm.log_tool_trace
         traces: list[object] = []
         prompts: list[str] = []
+        system_prompts: list[str] = []
 
         def fake_request_message(*, system, messages, model="claude-haiku-4-5-20251001", max_tokens=512, tools=None, tool_choice=None):
             self.assertIsNotNone(tools)
-            self.assertEqual([tool["name"] for tool in tools], CANONICAL_CONVERSATION_TOOLS)
+            self.assertEqual([tool["name"] for tool in tools], PLAN_LOOKUP_CONTRACT_TOOLS)
             prompts.append(messages[0]["content"] if isinstance(messages[0]["content"], str) else "")
+            system_prompts.append(_system_text(system))
             return SimpleNamespace(
                 stop_reason="end_turn",
                 content=[
@@ -470,10 +485,10 @@ class LLMToolsTest(unittest.TestCase):
         self.assertEqual(traces[0].response_stop_reason, "end_turn")
         self.assertFalse(traces[0].fallback_used)
         self.assertEqual(traces[0].context_policy, "plan_lookup_compact")
-        self.assertEqual(traces[0].tool_count_offered, len(CANONICAL_CONVERSATION_TOOLS))
+        self.assertEqual(traces[0].tool_count_offered, len(PLAN_LOOKUP_CONTRACT_TOOLS))
         self.assertGreaterEqual(traces[0].prompt_char_count, 1)
         self.assertNotIn("Repere legacy semaine courante", prompts[0])
-        self.assertIn("Source de vérité planning conversationnelle", prompts[0])
+        self.assertIn("Source de verite planning conversationnelle", system_prompts[0])
 
     def test_decide_offers_canonical_conversation_tools_without_intent_budget(self) -> None:
         original_client = llm._client
@@ -2216,9 +2231,11 @@ class LLMToolsTest(unittest.TestCase):
         original_client = llm._client
         original_request_message = llm._request_message
         prompts: list[str] = []
+        system_prompts: list[str] = []
 
         def fake_request_message(*, system, messages, model="claude-haiku-4-5-20251001", max_tokens=512, tools=None, tool_choice=None):
             prompts.append(messages[0]["content"] if isinstance(messages[0]["content"], str) else "")
+            system_prompts.append(_system_text(system))
             return SimpleNamespace(
                 stop_reason="end_turn",
                 content=[
@@ -2244,8 +2261,8 @@ class LLMToolsTest(unittest.TestCase):
 
         self.assertIsNotNone(decision)
         self.assertNotIn("Repere legacy semaine courante", prompts[0])
-        self.assertIn("Source de vérité planning conversationnelle", prompts[0])
-        self.assertIn("Natation app truth", prompts[0])
+        self.assertIn("Source de verite planning conversationnelle", system_prompts[0])
+        self.assertIn("Natation app truth", system_prompts[0])
 
     def test_decide_offers_plan_tools_for_app_plan_dispute(self) -> None:
         original_client = llm._client
@@ -2255,7 +2272,7 @@ class LLMToolsTest(unittest.TestCase):
 
         def fake_request_message(*, system, messages, model="claude-haiku-4-5-20251001", max_tokens=512, tools=None, tool_choice=None):
             self.assertIsNotNone(tools)
-            self.assertEqual([tool["name"] for tool in tools], CANONICAL_CONVERSATION_TOOLS)
+            self.assertEqual([tool["name"] for tool in tools], PLAN_LOOKUP_CONTRACT_TOOLS)
             return SimpleNamespace(
                 stop_reason="end_turn",
                 content=[
@@ -2295,7 +2312,7 @@ class LLMToolsTest(unittest.TestCase):
         self.assertEqual(len(traces), 1)
         self.assertTrue(traces[0].tool_offered)
         self.assertEqual(traces[0].context_policy, "plan_lookup_compact")
-        self.assertEqual(traces[0].tool_count_offered, len(CANONICAL_CONVERSATION_TOOLS))
+        self.assertEqual(traces[0].tool_count_offered, len(PLAN_LOOKUP_CONTRACT_TOOLS))
 
     def test_turn_plan_intent_does_not_narrow_canonical_tool_budget(self) -> None:
         original_client = llm._client
@@ -2475,6 +2492,64 @@ class LLMToolsTest(unittest.TestCase):
         self.assertNotIn("Actions possibles:", systems[0])
         self.assertNotIn("plan_patch = {", systems[0])
         self.assertNotIn("Calendrier daté utile", prompts[0])
+
+    def test_generic_question_can_offer_tools_but_excludes_planning_context_by_default(self) -> None:
+        original_client = llm._client
+        original_request_message = llm._request_message
+        original_log_tool_trace = llm.log_tool_trace
+        captured: dict[str, str] = {}
+        traces: list[object] = []
+
+        def fake_request_message(*, system, messages, model="claude-haiku-4-5-20251001", max_tokens=512, tools=None, tool_choice=None, **kwargs):
+            self.assertEqual([tool["name"] for tool in tools or []], ["get_coach_lens", "get_relevant_facts"])
+            captured["system"] = _system_text(system)
+            captured["prompt"] = messages[0]["content"] if isinstance(messages[0]["content"], str) else ""
+            return SimpleNamespace(
+                stop_reason="end_turn",
+                content=[
+                    SimpleNamespace(
+                        type="text",
+                        text='{"response_type":"no_change","rationale":"inquietude poids, pas de mutation planning","fitmas_message":"Ce n est pas grave en soi. On regarde la tendance et on reprend proprement."}',
+                    )
+                ],
+                usage=SimpleNamespace(input_tokens=120, output_tokens=40),
+            )
+
+        llm._client = lambda: object()
+        llm._request_message = fake_request_message
+        llm.log_tool_trace = lambda trace: traces.append(trace)
+        try:
+            decision = llm.decide(
+                "Putain je fais 100kg, qu'est-ce qu'on fait ?",
+                "Repere legacy",
+                timeline_summary="- Aujourd'hui 14h: Footing facile",
+                execution_summary="Execution recente: aucune",
+                tool_context=ToolContext(
+                    pipeline="conversation",
+                    user_id=1,
+                    timezone_name="Europe/Paris",
+                    scheduled_sessions=[],
+                    activities=[],
+                    active_facts=[],
+                ),
+                coach_context={"turn_primary_intent": "generic_question"},
+            )
+        finally:
+            llm._client = original_client
+            llm._request_message = original_request_message
+            llm.log_tool_trace = original_log_tool_trace
+
+        self.assertIsNotNone(decision)
+        self.assertEqual(decision.response_type, "no_change")
+        self.assertEqual(traces[0].context_policy, "generic_question_compact")
+        self.assertEqual(traces[0].tool_count_offered, 2)
+        self.assertNotIn("Footing facile", captured["prompt"])
+        self.assertNotIn("14h", captured["prompt"])
+        self.assertNotIn("Source de verite planning conversationnelle", captured["system"])
+        self.assertIn("- route: conversation_generic_question", captured["system"])
+        self.assertIn("ne recentre pas la reponse sur le planning", captured["system"])
+        self.assertIn("get_coach_lens", captured["system"])
+        self.assertIn("pas en formulaire", captured["system"])
 
 if __name__ == "__main__":
     unittest.main()

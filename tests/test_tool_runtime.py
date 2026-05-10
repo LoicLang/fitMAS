@@ -81,6 +81,7 @@ class ToolRuntimeTest(unittest.TestCase):
         self.assertIn("get_relevant_facts", names)
         self.assertIn("get_recent_reality_window", names)
         self.assertIn("get_load_context", names)
+        self.assertIn("get_coach_lens", names)
         self.assertIn("validate_plan_patch", names)
         self.assertIn("draft_move_session", names)
         self.assertIn("draft_swap_sessions", names)
@@ -181,6 +182,59 @@ class ToolRuntimeTest(unittest.TestCase):
         self.assertEqual(result.payload["longest_duration"]["title"], "Velo")
         self.assertEqual(result.payload["longest_distance"]["title"], "Velo")
         self.assertEqual(result.payload["fastest"]["title"], "Velo")
+
+    def test_coach_lens_returns_compact_context_without_full_plan_window(self) -> None:
+        registry = build_tool_registry()
+        context = ToolContext(
+            pipeline="conversation",
+            user_id=1,
+            timezone_name="Europe/Paris",
+            now=datetime.fromisoformat("2026-03-22T19:56:00+01:00"),
+            scheduled_sessions=[
+                *self.context.scheduled_sessions,
+                {
+                    "id": 14,
+                    "scheduled_date": "2026-03-26T07:00:00+01:00",
+                    "sport_type": "running",
+                    "session_title": "Footing Z2",
+                    "duration_min": 40,
+                    "completion_status": "planned",
+                },
+                {
+                    "id": 15,
+                    "scheduled_date": "2026-03-28T07:00:00+01:00",
+                    "sport_type": "strength",
+                    "session_title": "Renfo",
+                    "duration_min": 45,
+                    "completion_status": "planned",
+                },
+            ],
+            activities=self.context.activities,
+            active_facts=[
+                *self.context.active_facts,
+                {
+                    "category": "health",
+                    "key": "shin_tension",
+                    "value": "Tension tibias legere a surveiller",
+                    "active": True,
+                    "urgency": "medium",
+                    "confirmed": True,
+                },
+            ],
+        )
+
+        result = registry["get_coach_lens"].handler(context, {"plan_limit": 2, "fact_limit": 4})
+
+        self.assertEqual(result.status, "ok")
+        self.assertEqual(result.payload["as_of_date"], "2026-03-22")
+        self.assertEqual([item["id"] for item in result.payload["near_plan"]], [12, 13])
+        self.assertLessEqual(len(result.payload["near_plan"]), 2)
+        self.assertEqual(result.payload["recent_reality"]["activity_count"], 2)
+        self.assertEqual(result.payload["recent_reality"]["duration_min"], 160)
+        self.assertEqual(result.payload["active_signals"][0]["key"], "shin_tension")
+        self.assertEqual(result.payload["durable_facts"][0]["key"], "running_focus")
+        self.assertIn("read_only", result.payload["usage_guidance"])
+        self.assertNotIn("sessions", result.payload)
 
     def test_resolve_planning_window_matches_single_candidate(self) -> None:
         registry = build_tool_registry()

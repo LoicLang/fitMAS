@@ -107,6 +107,7 @@ RECEIPT_PATTERNS: tuple[re.Pattern[str], ...] = (
 USER_FACING_INTERNAL_JARGON_FRAGMENTS: tuple[str, ...] = (
     "voici la reponse pour l utilisateur",
     "fallback sportif",
+    " content ",
     "review sportive",
     "reviewer",
     "planpatch",

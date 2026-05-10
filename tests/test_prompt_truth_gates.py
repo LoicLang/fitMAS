@@ -59,6 +59,29 @@ class PromptTruthGatesTest(unittest.TestCase):
         self.assertFalse(any("Repere legacy semaine courante" in part["text"] for part in bundle.system))
         self.assertFalse(any("Legacy weekly plan should never leak" in part["text"] for part in bundle.system))
 
+    def test_classic_generic_prompt_does_not_render_planning_truth_banner(self) -> None:
+        policy = select_conversation_prompt_policy(intent=IntentCategory.GENERIC_QUESTION)
+
+        bundle = build_conversation_prompt_bundle(
+            user_text="100 kg, on fait quoi ?",
+            prompt_policy=policy,
+            time_block="Contexte temporel exact.",
+            profile_summary="Objectif 10 km.",
+            plan_summary="Legacy weekly plan should never leak.",
+            timeline_summary="- id=14 | date=2026-04-10 | [running] Footing",
+            execution_summary="Execution: planned_pending.",
+            temporal_summary="Aujourd'hui = 2026-04-10.",
+            activity_claim_summary="Claim: aucun.",
+            signal_summary="Signal: aucun.",
+            conversation_history=[],
+            coach_context={"coach_name": "FitMAS"},
+            selected_facts=[],
+        )
+
+        self.assertNotIn("Source de vérité planning conversationnelle", bundle.prompt)
+        self.assertNotIn("Calendrier date reel", bundle.prompt)
+        self.assertNotIn("Execution: planned_pending", bundle.prompt)
+
 
 if __name__ == "__main__":
     unittest.main()

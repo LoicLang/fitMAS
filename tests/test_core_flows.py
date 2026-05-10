@@ -18,8 +18,10 @@ import fitmas.llm as llm
 import fitmas.plan_mutation_service as plan_mutation_service
 from fitmas.adaptation import AdaptationResult
 from fitmas.api import app
+from fitmas.conversation_contract import ConversationTurnOutcome
 from fitmas.db import Base, SessionLocal, engine, init_db
 from fitmas.llm import CoachDecision, MutationDecision
+from fitmas.models import Extraction
 from fitmas.mutation_permissions import default_confirmation_expiry, serialize_plan_patch_confirmation
 from fitmas.plan_patch import PlanPatch, PlanPatchOperation, PlanPatchOperationValidation, PlanPatchValidation
 from fitmas.plan_actions import move_session
@@ -1158,6 +1160,165 @@ class FitMASCoreFlowsTest(unittest.TestCase):
         self.assertEqual(compose_calls[0]["original_llm_reply"], "Demain: footing 36 min Z2.")
         self.assertEqual(turns[0].response_mode, "plan_lookup_composed")
         self.assertEqual(context["final_reply_capability"], "plan_lookup")
+
+    def test_execution_report_no_change_uses_execution_report_composer(self) -> None:
+        self._create_plan_for_today()
+        original_plan_turn = api_messages.plan_conversation_turn
+        original_decide = api_messages.decide
+        original_extract_facts = api_messages.extract_facts
+        original_compose = getattr(conversation_pipeline.final_reply, "compose_execution_report_reply", None)
+        compose_calls: list[dict] = []
+        try:
+            api_messages.plan_conversation_turn = lambda *args, **kwargs: SimpleNamespace(
+                primary_intent="execution_report",
+                secondary_intents=(),
+                mutation_signal=False,
+                has_plan_mutation=False,
+                requires_truth_read=False,
+                truth_scope="execution",
+                temporal_references=[],
+                confidence=0.91,
+            )
+            api_messages.decide = lambda *args, **kwargs: CoachDecision(
+                response_type="no_change",
+                rationale="execution comprise mais cible non resolue",
+                fitmas_message="C'est note comme fait.",
+            )
+            api_messages.extract_facts = lambda *args, **kwargs: []
+
+            def fake_compose(**kwargs):
+                compose_calls.append(kwargs)
+                return "Je garde l'info, mais je ne la note pas comme faite sans cible claire."
+
+            conversation_pipeline.final_reply.compose_execution_report_reply = fake_compose
+
+            result = self.client.post("/api/v0/messages", json={"text": "J'ai couru aujourd'hui 30 min"}).json()
+        finally:
+            api_messages.plan_conversation_turn = original_plan_turn
+            api_messages.decide = original_decide
+            api_messages.extract_facts = original_extract_facts
+            if original_compose is None:
+                delattr(conversation_pipeline.final_reply, "compose_execution_report_reply")
+            else:
+                conversation_pipeline.final_reply.compose_execution_report_reply = original_compose
+
+        turns = repo.get_recent_conversation_turns(self.db, self.user.id, limit=1)
+        context = json.loads(turns[0].context_json)
+
+        self.assertEqual(
+            result["assistant_message"]["text"],
+            "Je garde l'info, mais je ne la note pas comme faite sans cible claire.",
+        )
+        self.assertEqual(compose_calls[0]["original_llm_reply"], "C'est note comme fait.")
+        self.assertEqual(turns[0].response_mode, "execution_report_composed")
+        self.assertEqual(context["final_reply_capability"], "execution_report")
+
+    def test_execution_report_reply_uses_execution_report_composer(self) -> None:
+        self._create_plan_for_today()
+        original_plan_turn = api_messages.plan_conversation_turn
+        original_decide = api_messages.decide
+        original_extract_facts = api_messages.extract_facts
+        original_compose = getattr(conversation_pipeline.final_reply, "compose_execution_report_reply", None)
+        compose_calls: list[dict] = []
+        try:
+            api_messages.plan_conversation_turn = lambda *args, **kwargs: SimpleNamespace(
+                primary_intent="execution_report",
+                secondary_intents=(),
+                mutation_signal=False,
+                has_plan_mutation=False,
+                requires_truth_read=False,
+                truth_scope="execution",
+                temporal_references=[],
+                confidence=0.91,
+            )
+            api_messages.decide = lambda *args, **kwargs: CoachDecision(
+                response_type="reply",
+                rationale="execution comprise mais action oubliee",
+                fitmas_message="J'ajoute cette course comme faite.",
+            )
+            api_messages.extract_facts = lambda *args, **kwargs: []
+
+            def fake_compose(**kwargs):
+                compose_calls.append(kwargs)
+                return "Je garde l'info, mais je ne l'enregistre pas tant qu'une cible n'est pas claire."
+
+            conversation_pipeline.final_reply.compose_execution_report_reply = fake_compose
+
+            result = self.client.post("/api/v0/messages", json={"text": "J'ai couru aujourd'hui 30 min"}).json()
+        finally:
+            api_messages.plan_conversation_turn = original_plan_turn
+            api_messages.decide = original_decide
+            api_messages.extract_facts = original_extract_facts
+            if original_compose is None:
+                delattr(conversation_pipeline.final_reply, "compose_execution_report_reply")
+            else:
+                conversation_pipeline.final_reply.compose_execution_report_reply = original_compose
+
+        turns = repo.get_recent_conversation_turns(self.db, self.user.id, limit=1)
+        context = json.loads(turns[0].context_json)
+
+        self.assertEqual(
+            result["assistant_message"]["text"],
+            "Je garde l'info, mais je ne l'enregistre pas tant qu'une cible n'est pas claire.",
+        )
+        self.assertEqual(compose_calls[0]["original_llm_reply"], "J'ajoute cette course comme faite.")
+        self.assertEqual(turns[0].response_mode, "execution_report_composed")
+        self.assertEqual(context["final_reply_capability"], "execution_report")
+
+    def test_decide_none_health_signal_can_fall_back_to_candidate_flow(self) -> None:
+        self._create_plan_for_today()
+        original_plan_turn = api_messages.plan_conversation_turn
+        original_decide = api_messages.decide
+        original_extract_facts = api_messages.extract_facts
+        original_candidate_flow = conversation_pipeline._maybe_handle_plan_adaptation_candidates
+        candidate_modes: list[str] = []
+        try:
+            api_messages.plan_conversation_turn = lambda *args, **kwargs: SimpleNamespace(
+                primary_intent="health_signal",
+                secondary_intents=(),
+                mutation_signal=True,
+                has_plan_mutation=True,
+                requires_truth_read=True,
+                truth_scope="plan_window",
+                temporal_references=[],
+                confidence=0.91,
+            )
+            api_messages.decide = lambda *args, **kwargs: None
+            api_messages.extract_facts = lambda *args, **kwargs: []
+
+            def fake_candidate_flow(**kwargs):
+                mode = kwargs.get("mode", "pre_decide_pure")
+                candidate_modes.append(mode)
+                if len(candidate_modes) == 1:
+                    return None
+                return ConversationTurnOutcome(
+                    extraction=Extraction(confidence=0.85),
+                    reply_text="Je te propose d'alleger demain, sans rien appliquer sans ton feu vert. Tu confirmes ?",
+                    response_mode="plan_adaptation_pending_confirmation",
+                    mutation_applied=False,
+                    pending_confirmation=True,
+                    pending_confirmation_id=42,
+                )
+
+            conversation_pipeline._maybe_handle_plan_adaptation_candidates = fake_candidate_flow
+
+            result = self.client.post("/api/v0/messages", json={"text": "Je suis rince aujourd'hui, jambes lourdes"}).json()
+        finally:
+            api_messages.plan_conversation_turn = original_plan_turn
+            api_messages.decide = original_decide
+            api_messages.extract_facts = original_extract_facts
+            conversation_pipeline._maybe_handle_plan_adaptation_candidates = original_candidate_flow
+
+        turns = repo.get_recent_conversation_turns(self.db, self.user.id, limit=1)
+        context = json.loads(turns[0].context_json)
+
+        self.assertEqual(
+            result["assistant_message"]["text"],
+            "Je te propose d'alleger demain, sans rien appliquer sans ton feu vert. Tu confirmes ?",
+        )
+        self.assertEqual(candidate_modes, ["pre_decide_pure", "post_decide_mixed"])
+        self.assertEqual(turns[0].response_mode, "plan_adaptation_pending_confirmation")
+        self.assertEqual(context["decide_none_fallback"], "plan_adaptation_candidates")
 
     def test_pending_confirmation_blocks_terminal_close_path(self) -> None:
         repo.create_pending_mutation_confirmation(

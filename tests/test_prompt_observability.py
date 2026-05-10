@@ -73,8 +73,96 @@ def test_layered_prompt_bundle_exposes_trace_metadata() -> None:
     assert bundle.trace.prompt_contract == "conversation_plan_lookup"
     assert bundle.trace.intent == "plan_lookup"
     assert bundle.trace.tool_names == ("get_plan_window",)
-    assert bundle.trace.truth_block_names == context_pack.truth_block_names()
+    assert bundle.trace.truth_block_names == (
+        "temporal",
+        "plan_window",
+        "execution_reality",
+        "activity_claims",
+    )
     assert bundle.trace.total_chars > 0
+
+
+def test_layered_prompt_filters_rendered_layers_by_contract() -> None:
+    close_policy = select_conversation_prompt_policy(intent=IntentCategory.CLOSE_TURN)
+    close_bundle = build_layered_conversation_prompt(
+        user_text="Okay chef",
+        prompt_policy=close_policy,
+        time_block="Aujourd'hui: vendredi",
+        profile_summary="Objectif: construire 10 km regulier. Style: direct.",
+        timeline_summary="- Vendredi: Footing 40 min",
+        execution_summary="Execution recente: hier repos tenu.",
+        temporal_summary="aujourd'hui = vendredi",
+        activity_claim_summary="Claims recents: aucun",
+        signal_summary="Signal: aucun.",
+        conversation_history=[
+            {"role": "assistant", "text": "Vendredi footing easy."},
+            {"role": "user", "text": "Okay chef"},
+        ],
+        coach_context={"turn_primary_intent": "close_turn"},
+        selected_facts=["objectif 10 km"],
+    )
+    close_system = "\n\n".join(str(part.get("text") or "") for part in close_bundle.system)
+
+    assert close_system.count("Tu es FitMAS") == 1
+    assert "Profil resume:" not in close_system
+    assert "Calendrier date reel:" not in close_system
+    assert "Execution recente:" not in close_system
+    assert "Memoire utile" not in close_system
+    assert "Historique recent:" in close_system
+
+    lookup_policy = select_conversation_prompt_policy(intent=IntentCategory.PLAN_LOOKUP)
+    lookup_bundle = build_layered_conversation_prompt(
+        user_text="J'ai quoi demain ?",
+        prompt_policy=lookup_policy,
+        time_block="Aujourd'hui: vendredi",
+        profile_summary="Objectif: construire 10 km regulier. Style: direct.",
+        timeline_summary="- Samedi: Footing 40 min",
+        execution_summary="Execution recente: hier repos tenu.",
+        temporal_summary="demain = samedi",
+        activity_claim_summary="Claims recents: aucun",
+        signal_summary="Signal: aucun.",
+        conversation_history=[
+            {"role": "assistant", "text": "Vendredi repos."},
+            {"role": "user", "text": "Ok"},
+        ],
+        coach_context={"turn_primary_intent": "plan_lookup"},
+        selected_facts=["objectif 10 km"],
+    )
+    lookup_system = "\n\n".join(str(part.get("text") or "") for part in lookup_bundle.system)
+
+    assert lookup_system.count("Tu es FitMAS") == 1
+    assert "Profil resume:" not in lookup_system
+    assert "Memoire utile" not in lookup_system
+    assert "Calendrier date reel:" in lookup_system
+    assert "Execution recente:" in lookup_system
+    assert "Historique recent:" in lookup_system
+
+
+def test_layered_prompt_keeps_rendered_truth_out_of_user_prompt() -> None:
+    policy = select_conversation_prompt_policy(intent=IntentCategory.PLAN_LOOKUP)
+    bundle = build_layered_conversation_prompt(
+        user_text="J'ai quoi demain ?",
+        prompt_policy=policy,
+        time_block="Aujourd'hui: vendredi 8 mai 2026.",
+        timeline_summary="- Samedi 9 mai: Footing endurance, 40 min, Z2, planned.",
+        execution_summary="Execution recente: hier repos tenu.",
+        temporal_summary="References temporelles resolues: demain = 2026-05-09.",
+        activity_claim_summary="Claims recents: aucun claim non resolu.",
+        signal_summary=None,
+        conversation_history=[
+            {"role": "assistant", "text": "Vendredi tu souffles, samedi footing Z2."},
+            {"role": "user", "text": "Ok."},
+        ],
+        coach_context={"turn_primary_intent": "plan_lookup"},
+        selected_facts=[],
+    )
+    system_text = "\n\n".join(str(part.get("text") or "") for part in bundle.system)
+
+    assert "Source de verite planning conversationnelle" in system_text
+    assert "Calendrier date reel:" in system_text
+    assert "Source de vérité planning conversationnelle" not in bundle.prompt
+    assert "Calendrier daté utile:" not in bundle.prompt
+    assert bundle.prompt == "Nouveau message de l'utilisateur:\nJ'ai quoi demain ?"
 
 
 def test_decide_none_trace_records_schema_repair_and_fallback_events(monkeypatch) -> None:
@@ -163,5 +251,5 @@ def test_decide_logs_prompt_trace_for_successful_tool_turn(monkeypatch, caplog) 
     assert "prompt_contract=conversation_plan_lookup" in trace_message
     assert "tools=" in trace_message
     assert "get_plan_window" in trace_message
-    assert "validate_plan_patch" in trace_message
+    assert "validate_plan_patch" not in trace_message
     assert "total_chars=" in trace_message

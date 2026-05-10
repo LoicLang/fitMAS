@@ -111,10 +111,62 @@ def _trace_tool_names(context_pack: ConversationContextPack | None) -> tuple[str
     return context_pack.tool_budget.allowed_tools
 
 
-def _trace_truth_block_names(context_pack: ConversationContextPack | None) -> tuple[str, ...]:
+def _trace_truth_block_names(
+    context_pack: ConversationContextPack | None,
+    prompt_policy: ConversationPromptPolicy,
+) -> tuple[str, ...]:
+    if prompt_policy.contract_name:
+        contract = get_prompt_contract(prompt_policy.contract_name)
+        return tuple(dict.fromkeys(contract.required_truth_blocks + contract.optional_truth_blocks))
     if context_pack is None:
         return ()
     return context_pack.truth_block_names()
+
+
+def _contract_context_blocks(prompt_policy: ConversationPromptPolicy) -> set[str] | None:
+    if not prompt_policy.contract_name:
+        return None
+    contract = get_prompt_contract(prompt_policy.contract_name)
+    return set(
+        contract.required_truth_blocks
+        + contract.optional_truth_blocks
+        + contract.max_context_blocks
+    )
+
+
+def _allowed_layer_names(prompt_policy: ConversationPromptPolicy) -> set[str] | None:
+    blocks = _contract_context_blocks(prompt_policy)
+    if blocks is None:
+        return None
+    allowed: set[str] = set()
+    if "coach_profile" in blocks:
+        allowed.add("profile")
+    if blocks & {"planning", "plan_window", "load_context"}:
+        allowed.add("plan")
+    if blocks & {
+        "temporal",
+        "execution",
+        "execution_reality",
+        "activity_claims",
+        "signals",
+    }:
+        allowed.add("immediate")
+    if blocks & {
+        "memory",
+        "working_memory",
+        "active_thread",
+        "conversation_frame",
+        "pending_confirmation",
+    }:
+        allowed.add("memory")
+    return allowed
+
+
+def _contract_has_planning_truth(prompt_policy: ConversationPromptPolicy) -> bool:
+    blocks = _contract_context_blocks(prompt_policy)
+    if blocks is None:
+        return True
+    return bool(blocks & {"planning", "plan_window", "load_context", "execution_reality", "activity_claims"})
 
 
 def build_conversation_prompt_bundle(
@@ -201,9 +253,15 @@ def build_conversation_prompt_bundle(
     if unresolved_execution_followup:
         followup_block = "\n" + unresolved_execution_followup.strip() + "\n"
 
+    planning_truth_block = ""
+    if _contract_has_planning_truth(prompt_policy):
+        planning_truth_block = (
+            "Source de vérité planning conversationnelle: calendrier daté / app.\n"
+            "Ignore tout repère hebdo legacy si le calendrier daté dit autre chose.\n"
+        )
+
     prompt = f"""{time_block}
-Source de vérité planning conversationnelle: calendrier daté / app.
-Ignore tout repère hebdo legacy si le calendrier daté dit autre chose.
+{planning_truth_block}
 {timeline_block}
 {execution_block}{temporal_block}{claim_block}{signal_block}
 {profile_block}
@@ -234,7 +292,7 @@ Nouveau message de l'utilisateur:
             system=system,
             user_prompt=prompt,
             tool_names=_trace_tool_names(context_pack),
-            truth_block_names=_trace_truth_block_names(context_pack),
+            truth_block_names=_trace_truth_block_names(context_pack, prompt_policy),
             history_messages_used=history_messages_used,
         ),
     )
@@ -280,23 +338,23 @@ def build_layered_conversation_prompt(
         selected_facts=selected_facts if prompt_policy.include_facts else None,
         conversation_history=conversation_history,
         history_limit=prompt_policy.history_limit,
+        include_planning_truth_banner=_contract_has_planning_truth(prompt_policy),
     )
 
     # Separate cacheable layers for system prompt caching
-    cache_indices = layered.cache_breakpoints()
+    allowed_layer_names = _allowed_layer_names(prompt_policy)
     system_parts = []
-    for i, layer in enumerate(sorted(layered.layers, key=lambda l: l.level)):
+    rendered_layer_names: set[str] = set()
+    for layer in sorted(layered.layers, key=lambda l: l.level):
+        if allowed_layer_names is not None and layer.name not in allowed_layer_names:
+            continue
         rendered = layer.render()
         if not rendered:
             continue
-        cache_control = (
-            {"type": "ephemeral", "ttl": "1h"}
-            if i in cache_indices
-            else None
-        )
+        rendered_layer_names.add(layer.name)
         entry: dict[str, Any] = {"type": "text", "text": rendered}
-        if cache_control:
-            entry["cache_control"] = cache_control
+        if layer.cacheable:
+            entry["cache_control"] = {"type": "ephemeral", "ttl": "1h"}
         system_parts.append(entry)
 
     # The conversation instruction block is always included in system.
@@ -307,14 +365,16 @@ def build_layered_conversation_prompt(
     })
 
     history_messages_used = 0
-    if conversation_history:
+    if conversation_history and (allowed_layer_names is None or "memory" in allowed_layer_names):
         history_messages_used = min(len(conversation_history), prompt_policy.history_limit)
 
-    prompt_parts = [
-        "Source de vérité planning conversationnelle: calendrier daté / app.",
-        "Ignore tout repère hebdo legacy si le calendrier daté dit autre chose.",
-    ]
-    if prompt_policy.include_timeline and timeline_summary:
+    prompt_parts = []
+    if "immediate" not in rendered_layer_names and _contract_has_planning_truth(prompt_policy):
+        prompt_parts.extend([
+            "Source de vérité planning conversationnelle: calendrier daté / app.",
+            "Ignore tout repère hebdo legacy si le calendrier daté dit autre chose.",
+        ])
+    if prompt_policy.include_timeline and timeline_summary and "plan" not in rendered_layer_names:
         prompt_parts.append(f"Calendrier daté utile:\n{timeline_summary}")
     open_question_block = _open_question_block(
         conversation_history,
@@ -341,7 +401,7 @@ def build_layered_conversation_prompt(
             system=system_parts,
             user_prompt=prompt,
             tool_names=_trace_tool_names(context_pack),
-            truth_block_names=_trace_truth_block_names(context_pack),
+            truth_block_names=_trace_truth_block_names(context_pack, prompt_policy),
             history_messages_used=history_messages_used,
         ),
     )

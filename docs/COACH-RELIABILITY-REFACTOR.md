@@ -238,3 +238,31 @@ Diff avec `no_change` generique :
 
 Tokens surveilles : chiffres, jours, dates relatives, zones type `Z2`, statuts
 plan/execution. Le guard ne lit jamais le texte utilisateur libre.
+
+## P1-octies — Post-runtime pending / execution speech guard ✅ implemente localement 10 mai 2026
+
+Les dogfoods prompt/contexte ont montre deux fuites de parole finale :
+
+- une confirmation `PlanPatch` pouvait etre formulee comme si la seance etait
+  deja remplacee (`la seance devient...`) alors qu'aucun commit planning
+  n'existait ;
+- un `execution_report` pouvait sortir en `reply` et parler comme si une
+  execution etait notee alors qu'aucune `execution_action` n'avait ete appliquee.
+
+Fix livre :
+
+- `final_reply.verify_uncommitted_reply()` verifie/repare par LLM les replies
+  sans commit planning depuis les artefacts runtime seulement ;
+- les confirmations pending doivent rester des propositions avec confirmation
+  explicite ;
+- `compose_plan_adaptation_reply()` et `_build_plan_patch_confirmation_prompt()`
+  passent par ce verifier avant envoi ;
+- `execution_report` route les `reply` et `no_change` vers un composer dedie qui
+  ne peut claim une execution notee que si `Execution appliquee` est present ;
+- si `decide()` tombe a `None` sur un signal mixte sante/fatigue + mutation
+  planning deja identifie par le turn planner LLM, le runtime tente la candidate
+  flow d'adaptation bornee avant le fallback `llm_unavailable`.
+
+Frontiere : le verifier ne lit pas le texte utilisateur libre et ne comprend
+pas l'intention. Il compare uniquement la phrase sortante avec l'etat machine du
+tour (`committed_events`, pending, block, memory/execution actions appliquees).

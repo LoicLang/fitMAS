@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from typing import Any, Literal, Sequence
 
 from fitmas.plan_patch_candidate_evaluator import EvaluatedPlanPatchCandidate
+from fitmas.plan_patch_candidate_reviewer import PlanPatchCandidateReviewDecision
 
 AdaptationPolicyAction = Literal["commit", "pending_confirmation", "pending_choice", "block"]
 RiskLevel = Literal["low", "medium", "high"]
@@ -27,6 +28,8 @@ class AdaptationPolicyDecision:
 
 def decide_adaptation_policy(
     evaluated_candidates: Sequence[EvaluatedPlanPatchCandidate],
+    *,
+    reviewer_decision: PlanPatchCandidateReviewDecision | None = None,
 ) -> AdaptationPolicyDecision:
     """Choose commit/pending/block from already evaluated PlanPatch candidates.
 
@@ -40,6 +43,13 @@ def decide_adaptation_policy(
     )
     if not usable:
         return _block_decision("Aucune option d'adaptation valide.")
+
+    reviewer_choice = _reviewer_choice(usable, reviewer_decision=reviewer_decision)
+    if reviewer_choice is not None:
+        return _decision_for_best(
+            reviewer_choice,
+            reason_override="Option choisie par reviewer borne.",
+        )
 
     close_candidates = _close_candidates(usable)
     if len(close_candidates) > 1:
@@ -60,7 +70,14 @@ def decide_adaptation_policy(
             },
         )
 
-    best = usable[0]
+    return _decision_for_best(usable[0])
+
+
+def _decision_for_best(
+    best: EvaluatedPlanPatchCandidate,
+    *,
+    reason_override: str | None = None,
+) -> AdaptationPolicyDecision:
     risk_level = _risk_level(best)
     if risk_level != "low" or best.policy_hint == "ask_confirmation":
         reason = _confirmation_reason(best)
@@ -83,8 +100,8 @@ def decide_adaptation_policy(
         action="commit",
         selected_candidate_id=best.candidate.id,
         candidate_options=(),
-        reason="Option valide a basse friction.",
-        user_facing_reason="Option valide a basse friction.",
+        reason=reason_override or "Option valide a basse friction.",
+        user_facing_reason=reason_override or "Option valide a basse friction.",
         requires_confirmation_reason=None,
         risk_level="low",
     )
@@ -118,6 +135,29 @@ def _close_candidates(
         if top_score - _score_total(candidate) < _CLOSE_SCORE_MARGIN
     ]
     return tuple(close[:3])
+
+
+def _reviewer_choice(
+    usable: Sequence[EvaluatedPlanPatchCandidate],
+    *,
+    reviewer_decision: PlanPatchCandidateReviewDecision | None,
+) -> EvaluatedPlanPatchCandidate | None:
+    if reviewer_decision is None or reviewer_decision.confidence < 0.6:
+        return None
+    top_score = _score_total(usable[0])
+    selected = next(
+        (
+            candidate
+            for candidate in usable
+            if candidate.candidate.id == reviewer_decision.preferred_candidate_id
+        ),
+        None,
+    )
+    if selected is None:
+        return None
+    if top_score - _score_total(selected) > 8.0:
+        return None
+    return selected
 
 
 def _risk_level(candidate: EvaluatedPlanPatchCandidate) -> RiskLevel:

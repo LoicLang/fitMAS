@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
-from typing import Any
+from typing import Any, Sequence
 
 from pydantic import BaseModel, Field, ValidationError
 
@@ -16,6 +16,8 @@ _PRIMARY_INTENTS = {
     "trivial_ack",
     "casual_chat",
     "plan_lookup",
+    "activity_review",
+    "activity_highlights",
     "plan_mutation",
     "execution_report",
     "availability_constraint",
@@ -23,15 +25,20 @@ _PRIMARY_INTENTS = {
     "calibration_answer",
     "preference_signal",
     "needs_clarification",
+    "generic_question",
 }
 _SECONDARY_INTENTS = {
     "non_completion_claim",
     "activity_claim",
+    "activity_review",
+    "activity_highlights",
+    "execution_report",
     "availability_constraint",
     "health_signal",
     "plan_mutation",
     "preference_signal",
     "calibration_answer",
+    "generic_question",
 }
 
 
@@ -64,6 +71,7 @@ def plan_conversation_turn(
     execution_summary: str,
     activity_claim_summary: str,
     signal_summary: str,
+    conversation_history: Sequence[dict[str, Any]] | None = None,
 ) -> ConversationTurnPlan | None:
     data = gw.request_json(
         system=_SYSTEM,
@@ -73,6 +81,7 @@ def plan_conversation_turn(
             execution_summary=execution_summary,
             activity_claim_summary=activity_claim_summary,
             signal_summary=signal_summary,
+            conversation_history=conversation_history,
         ),
         model="claude-haiku-4-5-20251001",
         max_tokens=500,
@@ -100,14 +109,18 @@ def _build_prompt(
     execution_summary: str,
     activity_claim_summary: str,
     signal_summary: str,
+    conversation_history: Sequence[dict[str, Any]] | None = None,
 ) -> str:
     capabilities = {
-        "plan_lookup": "question sur le calendrier ou l'historique, sans changement",
+        "plan_lookup": "question sur le calendrier ou l'historique planning, sans changement",
+        "activity_review": "question factuelle sur les activites recentes ou l'historique d'execution",
+        "activity_highlights": "question sur un meilleur/pire record recent: plus longue sortie, plus grande distance, plus rapide",
         "plan_mutation": "deplacer, echanger, remplacer, alleger ou negocier une seance",
         "execution_report": "declaration de ce qui a ete fait ou pas fait",
         "health_signal": "douleur, fatigue, maladie, gene physique",
         "calibration_answer": "reponse courte a une question de calibration ouverte",
         "needs_clarification": "message ambigu dont la cible est risquee",
+        "generic_question": "question coach hors mutation immediate: poids, objectif, doute, strategie generale",
         "close_turn": (
             "accuse reception ou cloture sociale sans nouvelle contrainte, sans choix "
             "de creneau, sans question plan, sans acceptation explicite d'un pending"
@@ -133,10 +146,28 @@ def _build_prompt(
             f"- claims: {activity_claim_summary or 'aucun'}",
             f"- signaux: {signal_summary or 'aucun'}",
             "",
+            "Fil conversationnel recent:",
+            _format_recent_conversation_for_prompt(conversation_history),
+            "",
             "Message utilisateur:",
             user_text,
         ]
     )
+
+
+def _format_recent_conversation_for_prompt(conversation_history: Sequence[dict[str, Any]] | None) -> str:
+    if not conversation_history:
+        return "aucun"
+    lines: list[str] = []
+    for message in tuple(conversation_history)[-4:]:
+        role = str(message.get("role") or "unknown").strip() or "unknown"
+        text = str(message.get("text") or "").strip()
+        if len(text) > 240:
+            text = f"{text[:237]}..."
+        if not text:
+            continue
+        lines.append(f"- {role}: {text}")
+    return "\n".join(lines) if lines else "aucun"
 
 
 _SYSTEM = """\
@@ -149,7 +180,11 @@ Regles:
 - Ne force pas une seule intention si le message est compose.
 - Un wording comme "vendredi a la place ?" peut etre une mutation meme sans mot-cle swap/decale.
 - Si le user conteste ou verifie une annonce planning du coach ("t'es sur ?", "redonne le plan actuel"), primary_intent=plan_lookup, requires_truth_read=true, truth_scope=plan_window.
+- Si le user demande un fait sur les activites recentes ("ma plus longue sortie recente", "plus grosse distance", "meilleure sortie"), primary_intent=activity_highlights, requires_truth_read=true, truth_scope=execution.
+- Si le user demande une lecture d'historique d'activite sans superlatif clair, primary_intent=activity_review, requires_truth_read=true, truth_scope=execution.
 - Si la cible concrete manque, primary_intent=needs_clarification.
+- Si le user donne un poids/metric corporel et demande quoi faire ("je fais 100kg qu'est-ce qu'on fait ?"), primary_intent=generic_question, pas execution_report.
+- Pour les messages courts ou elliptiques, utilise le fil recent. Si le message continue une question generale precedente sans nouvelle douleur/fatigue/plan, garde generic_question ou casual_chat; ne bascule pas vers health_signal.
 - "Okay chef", "nickel merci", "parfait on garde ca", "carre" sans autre signal -> primary_intent=close_turn.
 - "Ok decale a vendredi" -> plan_mutation, pas close_turn.
 - "Ok mais j'ai mal au genou" -> health_signal, pas close_turn.
@@ -157,8 +192,8 @@ Regles:
 
 Reponds uniquement avec un JSON valide:
 {
-  "primary_intent": "close_turn|plan_mutation|plan_lookup|execution_report|availability_constraint|health_signal|calibration_answer|preference_signal|casual_chat|trivial_ack|needs_clarification",
-  "secondary_intents": ["non_completion_claim|activity_claim|availability_constraint|health_signal|plan_mutation|preference_signal|calibration_answer"],
+  "primary_intent": "close_turn|plan_mutation|plan_lookup|activity_review|activity_highlights|execution_report|availability_constraint|health_signal|calibration_answer|preference_signal|casual_chat|trivial_ack|needs_clarification|generic_question",
+  "secondary_intents": ["non_completion_claim|activity_claim|activity_review|activity_highlights|availability_constraint|health_signal|plan_mutation|preference_signal|calibration_answer|generic_question"],
   "user_goal": "phrase courte",
   "mutation_signal": true,
   "execution_claim": {"status": "done|not_done|unknown", "sport_type": "swimming|running|cycling|strength|climbing|unknown", "date": "YYYY-MM-DD|null"},

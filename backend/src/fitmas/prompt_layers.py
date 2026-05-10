@@ -146,13 +146,17 @@ def build_immediate_layer(
     activity_claim_summary: str | None = None,
     signal_summary: str | None = None,
     coach_reading_text: str | None = None,
+    include_planning_truth_banner: bool = True,
 ) -> PromptLayer:
     """Layer 3: Immediate context — changes every turn."""
-    parts = [
-        time_block,
-        "Source de verite planning conversationnelle: calendrier date / app.",
-        "Ignore tout repere hebdo legacy si le calendrier date dit autre chose.",
-    ]
+    parts = [time_block]
+    if include_planning_truth_banner:
+        parts.extend(
+            [
+                "Source de verite planning conversationnelle: calendrier date / app.",
+                "Ignore tout repere hebdo legacy si le calendrier date dit autre chose.",
+            ]
+        )
     if execution_summary:
         parts.append(execution_summary)
     if temporal_summary:
@@ -225,6 +229,7 @@ def assemble_layered_prompt(
     selected_facts: list[str] | None = None,
     conversation_history: list[dict[str, Any]] | None = None,
     history_limit: int = 8,
+    include_planning_truth_banner: bool = True,
 ) -> LayeredPrompt:
     """Assemble all layers into a LayeredPrompt."""
     ctx = coach_context or {}
@@ -247,6 +252,7 @@ def assemble_layered_prompt(
         activity_claim_summary=activity_claim_summary,
         signal_summary=signal_summary,
         coach_reading_text=ctx.get("coach_reading_digest_text"),
+        include_planning_truth_banner=include_planning_truth_banner,
     ))
     prompt.add(build_memory_layer(
         selected_facts=selected_facts,

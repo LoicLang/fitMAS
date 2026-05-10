@@ -96,7 +96,9 @@ class ConversationPromptBuilderTest(unittest.TestCase):
         self.assertIn("Tu varies l'attaque de tes messages", bundle.system[0]["text"])
         self.assertTrue(any("Profil resume" in part["text"] for part in bundle.system))
         self.assertTrue(any("Calendrier date reel" in part["text"] for part in bundle.system))
-        self.assertIn("Source de vérité planning conversationnelle", bundle.prompt)
+        layered_system = "\n\n".join(part["text"] for part in bundle.system)
+        self.assertIn("Source de verite planning conversationnelle", layered_system)
+        self.assertNotIn("Source de vérité planning conversationnelle", bundle.prompt)
         self.assertTrue(bundle.prompt.endswith("Nouveau message de l'utilisateur:\nJeudi c'est quoi deja ?"))
         self.assertEqual(bundle.history_messages_used, 2)
 

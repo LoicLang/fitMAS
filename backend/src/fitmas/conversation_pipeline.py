@@ -63,8 +63,10 @@ from fitmas.mutation_permissions import (
 from fitmas.plan_mutation_service import PlanPatchServiceResult, apply_decisions_for_user, apply_patch_for_user
 from fitmas.plan_patch import PlanPatch, plan_patch_from_mutation_decisions, validate_plan_patch
 from fitmas.plan_patch_adaptation_policy import AdaptationPolicyDecision, decide_adaptation_policy
+from fitmas.plan_patch_backend_candidates import build_backend_candidate_refs_for_turn
 from fitmas.plan_patch_candidate_evaluator import EvaluatedPlanPatchCandidate, evaluate_plan_patch_candidate
 from fitmas.plan_patch_candidate_generator import CandidateGenerationInput, generate_plan_patch_candidates
+from fitmas.plan_patch_candidate_reviewer import PlanPatchCandidateReviewDecision, review_plan_patch_candidates
 from fitmas.plan_patch_candidates import ALLOWED_CANDIDATE_OPERATION_TYPES, PlanPatchCandidate
 from fitmas.profile_summary import build_profile_summary
 from fitmas.signals import collect_signals
@@ -162,6 +164,7 @@ def run_conversation_turn(
         execution_summary=execution_summary_for_prompt(conversation_context),
         activity_claim_summary=claim_summary,
         signal_summary=signal_summary_for_prompt(conversation_context),
+        conversation_history=state.conversation_history[:-1],
     )
     if turn_plan is None:
         llm_plan_mutation_request = False
@@ -470,6 +473,14 @@ def run_conversation_turn(
                     response_mode="plan_patch_blocked",
                     mutation_applied=False,
                 )
+            elif _plan_patch_service_result_requires_clarification(service_result):
+                reply_text = _build_plan_patch_clarification_prompt(service_result, grounding=grounding_packet)
+                outcome = ConversationTurnOutcome(
+                    extraction=Extraction(confidence=0.85),
+                    reply_text=reply_text,
+                    response_mode="plan_patch_clarification",
+                    mutation_applied=False,
+                )
             else:
                 reply_text = _build_plan_patch_confirmation_prompt(service_result, grounding=grounding_packet)
                 if _plan_patch_confirmation_reply_requests_clarification(reply_text):
@@ -529,8 +540,8 @@ def run_conversation_turn(
                     mutation_applied=True,
                 )
             elif _plan_patch_needs_confirmation(service_result):
-                reply_text = _build_plan_patch_confirmation_prompt(service_result, grounding=grounding_packet)
-                if _plan_patch_confirmation_reply_requests_clarification(reply_text):
+                if _plan_patch_service_result_requires_clarification(service_result):
+                    reply_text = _build_plan_patch_clarification_prompt(service_result, grounding=grounding_packet)
                     outcome = ConversationTurnOutcome(
                         extraction=Extraction(confidence=0.85),
                         reply_text=reply_text,
@@ -538,27 +549,36 @@ def run_conversation_turn(
                         mutation_applied=False,
                     )
                 else:
-                    pending_row = repo.create_pending_mutation_confirmation(
-                        db,
-                        user_id=user.id,
-                        impact_level="high",
-                        reason=_plan_patch_pending_reason(
-                            service_result,
-                            fallback_reason="plan_patch_requires_confirmation",
-                        ),
-                        mutation_type="plan_patch",
-                        summary=_plan_patch_confirmation_summary(service_result),
-                        source_text=payload.text,
-                        decision_json=serialize_plan_patch_confirmation(decision.plan_patch),
-                        expires_at=default_confirmation_expiry(),
-                    )
-                    outcome = ConversationTurnOutcome(
-                        extraction=Extraction(confidence=0.85),
-                        reply_text=reply_text,
-                        response_mode="plan_patch_confirmation",
-                        pending_confirmation=True,
-                        pending_confirmation_id=pending_row.id,
-                    )
+                    reply_text = _build_plan_patch_confirmation_prompt(service_result, grounding=grounding_packet)
+                    if _plan_patch_confirmation_reply_requests_clarification(reply_text):
+                        outcome = ConversationTurnOutcome(
+                            extraction=Extraction(confidence=0.85),
+                            reply_text=reply_text,
+                            response_mode="plan_patch_clarification",
+                            mutation_applied=False,
+                        )
+                    else:
+                        pending_row = repo.create_pending_mutation_confirmation(
+                            db,
+                            user_id=user.id,
+                            impact_level="high",
+                            reason=_plan_patch_pending_reason(
+                                service_result,
+                                fallback_reason="plan_patch_requires_confirmation",
+                            ),
+                            mutation_type="plan_patch",
+                            summary=_plan_patch_confirmation_summary(service_result),
+                            source_text=payload.text,
+                            decision_json=serialize_plan_patch_confirmation(decision.plan_patch),
+                            expires_at=default_confirmation_expiry(),
+                        )
+                        outcome = ConversationTurnOutcome(
+                            extraction=Extraction(confidence=0.85),
+                            reply_text=reply_text,
+                            response_mode="plan_patch_confirmation",
+                            pending_confirmation=True,
+                            pending_confirmation_id=pending_row.id,
+                        )
             else:
                 action_result = turn_context.get("coach_decision_action_result") or {}
                 if int(action_result.get("execution_applied") or 0) > 0:
@@ -582,7 +602,10 @@ def run_conversation_turn(
         elif outcome is None and decision is not None:
             reply_text = decision.confirmation_reason or decision.fitmas_message
             response_mode = decision.response_type
-            if decision.response_type == "no_change":
+            if decision.response_type == "no_change" or (
+                decision.response_type == "reply"
+                and _turn_context_primary_intent(turn_context) == "execution_report"
+            ):
                 reply_text, composed_mode = _compose_no_change_reply_for_turn(
                     db=db,
                     user=user,
@@ -741,17 +764,45 @@ def run_conversation_turn(
                 )
                 logger.info("LLM reply (%s): %s", decision.mutation_type, reply_text[:120])
     elif outcome is None:
+        decide_none_context = llm_runtime.get_last_decide_none() or {
+            "reason": "unknown",
+            "prompt_trace": None,
+            "events": [],
+        }
+        turn_context["decide_none"] = decide_none_context
+        decide_none_adaptation_outcome = _maybe_handle_plan_adaptation_candidates(
+            db=db,
+            user=user,
+            user_text=payload.text,
+            turn_plan=turn_plan,
+            pending_confirmation=pending_confirmation,
+            open_calibration_need=open_calibration_need,
+            scheduled_sessions=state.scheduled_sessions,
+            coach_bundle=coach_bundle,
+            grounding=grounding_packet,
+            turn_context=turn_context,
+            mode="post_decide_mixed",
+            action_result=turn_context.get("coach_decision_action_result") or {},
+        )
+        if decide_none_adaptation_outcome is not None:
+            turn_context["decide_none_fallback"] = "plan_adaptation_candidates"
+            outcome = decide_none_adaptation_outcome
+
+    if outcome is None:
         # Chantier 1 (autonomy refactor): the only remaining path here is
         # "decide() returned None and there is no deterministic adaptation
         # to fall back on" — typically the Anthropic client is unavailable.
         # Reply soberly: do not assert any plan state, do not regurgitate
         # rule-based phrases that could lie about the situation.
         logger.warning("conversation_pipeline: decide() returned None with no fallback decision")
-        turn_context["decide_none"] = llm_runtime.get_last_decide_none() or {
-            "reason": "unknown",
-            "prompt_trace": None,
-            "events": [],
-        }
+        turn_context.setdefault(
+            "decide_none",
+            llm_runtime.get_last_decide_none() or {
+                "reason": "unknown",
+                "prompt_trace": None,
+                "events": [],
+            },
+        )
         outcome = ConversationTurnOutcome(
             extraction=Extraction(confidence=0.5),
             reply_text="Je ne peux pas te repondre tout de suite. Reessaie dans un instant.",
@@ -1537,10 +1588,13 @@ def _compose_no_change_reply_for_turn(
         user=user,
         action_result=action_result,
     )
+    primary_intent = _turn_context_primary_intent(turn_context)
     capability = (
         "plan_lookup"
-        if _turn_context_primary_intent(turn_context) == "plan_lookup"
+        if primary_intent == "plan_lookup"
         or _turn_context_requires_truth_read(turn_context)
+        else "execution_report"
+        if primary_intent == "execution_report"
         else "no_change"
     )
     if capability == "plan_lookup":
@@ -1551,6 +1605,13 @@ def _compose_no_change_reply_for_turn(
             memory_actions_applied=memory_actions_applied,
             execution_actions_applied=execution_actions_applied,
             grounding=lookup_grounding,
+        )
+    elif capability == "execution_report":
+        composed_reply = final_reply.compose_execution_report_reply(
+            user_text=user_text,
+            original_llm_reply=original_reply,
+            memory_actions_applied=memory_actions_applied,
+            execution_actions_applied=execution_actions_applied,
         )
     else:
         composed_reply = final_reply.compose_no_change_reply(
@@ -1611,6 +1672,53 @@ def _plan_patch_needs_confirmation(service_result: PlanPatchServiceResult | None
         service_result.week_policy_status == "requires_confirmation"
         or service_result.validation.status in {"warning", "requires_confirmation"}
     )
+
+
+def _plan_patch_service_result_requires_clarification(service_result: PlanPatchServiceResult | None) -> bool:
+    if service_result is None:
+        return False
+    clarification_warning_codes = {
+        "ambiguous_target_reference",
+    }
+    for result in service_result.validation.operation_results:
+        if clarification_warning_codes.intersection(result.warning_codes):
+            return True
+    return False
+
+
+def _build_plan_patch_clarification_prompt(
+    service_result: PlanPatchServiceResult | None,
+    *,
+    grounding: ReplyGroundingPacket | None = None,
+) -> str:
+    summary = _plan_patch_clarification_summary(service_result)
+    context = final_reply.FinalReplyContext(
+        original_llm_reply=summary,
+        allowed_to_claim_mutation=False,
+        pipeline="conversation",
+        pipeline_capability="needs_clarification",
+        extra_facts=(
+            *render_grounding_packet_for_prompt(grounding),
+            f"Clarification requise: {summary}",
+            "Aucun changement planning n'a ete commit.",
+            "Ne cree pas de pending confirmation.",
+        ),
+    )
+    composed = final_reply.compose_final_reply(context)
+    if composed:
+        return composed
+    return "Je dois identifier quelle séance tu veux bouger avant de toucher la semaine."
+
+
+def _plan_patch_clarification_summary(service_result: PlanPatchServiceResult | None) -> str:
+    if service_result is None:
+        return "Il manque la cible exacte du changement."
+    for result in service_result.validation.operation_results:
+        if "ambiguous_target_reference" in result.warning_codes:
+            if result.warning_messages:
+                return _safe_user_visible_pending_text(result.warning_messages[0])
+            return "Plusieurs séances peuvent correspondre à cette demande."
+    return "Il manque la cible exacte du changement."
 
 
 def _plan_patch_confirmation_summary(service_result: PlanPatchServiceResult | None) -> str:
@@ -1708,16 +1816,25 @@ def _build_plan_patch_confirmation_prompt(
     if composed:
         if _plan_patch_confirmation_reply_requests_clarification(composed):
             return composed
+        verified_pending = final_reply.verify_uncommitted_reply(composed, context)
+        if not verified_pending:
+            return final_reply.outage_fallback_reply(context)
         if grounding is not None:
-            verified = final_reply.verify_factual_reply(
-                composed,
+            verification_grounding = _plan_patch_confirmation_grounding(
                 grounding=grounding,
+                service_result=service_result,
+            )
+            verified = final_reply.verify_factual_reply(
+                verified_pending,
+                grounding=verification_grounding,
                 pipeline_capability="plan_patch_confirmation",
             )
             if verified:
-                return verified
+                rechecked = final_reply.verify_uncommitted_reply(verified, context)
+                if rechecked:
+                    return rechecked
             return final_reply.outage_fallback_reply(context)
-        return composed
+        return verified_pending
     return final_reply.outage_fallback_reply(context)
 
 
@@ -1752,8 +1869,27 @@ def _plan_patch_confirmation_facts(
             bits.append(f"new_duration_min={operation.new_duration_min}")
         if operation.new_intensity:
             bits.append(f"new_intensity={operation.new_intensity}")
+        if operation.rationale:
+            bits.append(f"rationale={operation.rationale}")
         facts.append(" | ".join(bits))
     return tuple(facts)
+
+
+def _plan_patch_confirmation_grounding(
+    *,
+    grounding: ReplyGroundingPacket,
+    service_result: PlanPatchServiceResult | None,
+) -> ReplyGroundingPacket:
+    patch_facts = _plan_patch_confirmation_facts(service_result, grounding=None)
+    if not patch_facts:
+        return grounding
+    return ReplyGroundingPacket(
+        local_date=grounding.local_date,
+        timezone_name=grounding.timezone_name,
+        temporal_references=grounding.temporal_references,
+        plan_window=grounding.plan_window,
+        extra_facts=tuple(grounding.extra_facts) + patch_facts,
+    )
 
 
 def _log_plan_patch_blocked(service_result: PlanPatchServiceResult | None, *, user_id: int | None) -> None:
@@ -2013,6 +2149,10 @@ def _maybe_handle_plan_adaptation_candidates(
         return None
 
     current_plan_id, current_plan_version = _current_plan_identity()
+    backend_candidate_payloads, backend_candidate_patches = build_backend_candidate_refs_for_turn(
+        grounding=grounding,
+        scheduled_sessions=scheduled_sessions,
+    )
     input_payload = CandidateGenerationInput(
         user_message=user_text,
         parsed_user_intent=_turn_plan_payload(turn_plan) or {},
@@ -2025,6 +2165,7 @@ def _maybe_handle_plan_adaptation_candidates(
         allowed_operations=tuple(sorted(ALLOWED_CANDIDATE_OPERATION_TYPES)),
         forbidden_operations=(),
         pending_context=None,
+        backend_candidates=backend_candidate_payloads,
     )
     candidates = generate_plan_patch_candidates(input_payload, request_json_fn=gw.request_json)
     if not candidates:
@@ -2045,14 +2186,17 @@ def _maybe_handle_plan_adaptation_candidates(
             current_score=None,
             timezone_name=user.timezone,
             coach_state_bundle=coach_bundle,
+            backend_candidate_patches=backend_candidate_patches,
         )
         for candidate in candidates
     )
-    policy_decision = decide_adaptation_policy(evaluated)
+    reviewer_decision = review_plan_patch_candidates(evaluated, request_json_fn=gw.request_json)
+    policy_decision = decide_adaptation_policy(evaluated, reviewer_decision=reviewer_decision)
     turn_context["adaptation_candidate_flow"] = _adaptation_candidate_trace(
         candidates=candidates,
         evaluated=evaluated,
         policy_decision=policy_decision,
+        reviewer_decision=reviewer_decision,
     )
     return _outcome_from_adaptation_policy(
         db=db,
@@ -2153,7 +2297,7 @@ def _outcome_from_adaptation_policy(
             summary=_pending_choice_summary(choice_candidates),
             source_text=user_text,
             decision_json=serialize_plan_patch_choice_confirmation(
-                tuple(item.candidate for item in choice_candidates)
+                _pending_choice_serialization_candidates(choice_candidates)
             ),
             expires_at=default_confirmation_expiry(),
         )
@@ -2310,16 +2454,27 @@ def _adaptation_candidate_trace(
     candidates: tuple[PlanPatchCandidate, ...],
     evaluated: tuple[EvaluatedPlanPatchCandidate, ...],
     policy_decision: AdaptationPolicyDecision,
+    reviewer_decision: PlanPatchCandidateReviewDecision | None = None,
 ) -> dict[str, Any]:
     return {
         "attempted": True,
         "candidates_generated": len(candidates),
         "candidates_evaluated": len(evaluated),
         "candidate_ids": [candidate.id for candidate in candidates],
+        "candidate_refs": [candidate.candidate_ref for candidate in candidates if candidate.candidate_ref],
         "policy_action": policy_decision.action,
         "selected_candidate_id": policy_decision.selected_candidate_id,
         "candidate_options": list(policy_decision.candidate_options),
         "risk_level": policy_decision.risk_level,
+        "reviewer": (
+            {
+                "preferred_candidate_id": reviewer_decision.preferred_candidate_id,
+                "confidence": reviewer_decision.confidence,
+                "rationale": list(reviewer_decision.rationale),
+            }
+            if reviewer_decision is not None
+            else None
+        ),
         "evaluations": [
             {
                 "candidate_id": item.candidate.id,
@@ -2352,6 +2507,32 @@ def _pending_choice_candidates(
     if not option_ids:
         return evaluated
     return tuple(item for item in evaluated if item.candidate.id in option_ids)
+
+
+def _pending_choice_serialization_candidates(
+    evaluated: tuple[EvaluatedPlanPatchCandidate, ...],
+) -> tuple[PlanPatchCandidate, ...]:
+    candidates: list[PlanPatchCandidate] = []
+    for item in evaluated:
+        if item.candidate.patches:
+            candidates.append(item.candidate)
+            continue
+        if item.patch is None:
+            continue
+        candidates.append(
+            PlanPatchCandidate(
+                id=item.candidate.id,
+                patches=(item.patch,),
+                rationale=item.candidate.rationale,
+                expected_tradeoff=item.candidate.expected_tradeoff,
+                confidence=item.candidate.confidence,
+                assumptions=item.candidate.assumptions,
+                risk_notes=item.candidate.risk_notes,
+                created_from_plan_id=item.candidate.created_from_plan_id,
+                created_from_plan_version=item.candidate.created_from_plan_version,
+            )
+        )
+    return tuple(candidates)
 
 
 def _pending_choice_summary(evaluated: tuple[EvaluatedPlanPatchCandidate, ...]) -> str:
@@ -2496,7 +2677,7 @@ def _selected_facts_for_prompt(conversation_context, active_facts: list[dict]) -
     return selected[:6]
 
 
-_DIGEST_INTENTS = frozenset({"plan_lookup", "execution_report", "availability_constraint"})
+_DIGEST_INTENTS = frozenset({"execution_report", "availability_constraint"})
 
 
 def _maybe_build_coach_reading_digest_text(

@@ -127,6 +127,7 @@ class InternalJargonGuardTest(unittest.TestCase):
         self.assertTrue(message_has_user_facing_internal_jargon("Le reviewer demande confirmation."))
         self.assertTrue(message_has_user_facing_internal_jargon("Deux sorties offplan cette semaine."))
         self.assertTrue(message_has_user_facing_internal_jargon("Hello. Voici la reponse pour l'utilisateur."))
+        self.assertTrue(message_has_user_facing_internal_jargon('Content : "Ça fait plaisir à entendre."'))
         self.assertTrue(message_has_user_facing_internal_jargon("Je valide avec toi avant de commiter."))
         self.assertTrue(message_has_user_facing_internal_jargon("Le validateur detecte une fragilite."))
         self.assertTrue(message_has_user_facing_internal_jargon("Demande si le user confirme."))

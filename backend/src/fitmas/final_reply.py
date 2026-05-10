@@ -145,6 +145,7 @@ def build_final_reply_prompt(context: FinalReplyContext) -> tuple[str, str]:
             lines.append("- " + " | ".join(bits))
     if context.pending_summary:
         lines.append(f"Confirmation en attente: {context.pending_summary}")
+        lines.append("Contrainte: la reponse doit presenter le changement comme une proposition et demander confirmation explicitement.")
     if context.execution_actions_applied:
         lines.append("Execution appliquee:")
         lines.extend(f"- {item}" for item in context.execution_actions_applied)
@@ -294,6 +295,35 @@ def compose_no_change_reply(
         ),
     )
     return compose_final_reply(context, request_text_fn=request_text_fn)
+
+
+def compose_execution_report_reply(
+    *,
+    user_text: str,
+    original_llm_reply: str,
+    memory_actions_applied: tuple[str, ...] = (),
+    execution_actions_applied: tuple[str, ...] = (),
+    request_text_fn: RequestTextFn = request_text,
+    verifier_text_fn: RequestTextFn = request_text,
+) -> str | None:
+    """Compose the final reply for an execution report after applied actions are known."""
+    context = FinalReplyContext(
+        user_text=user_text,
+        original_llm_reply=original_llm_reply,
+        memory_actions_applied=memory_actions_applied,
+        execution_actions_applied=execution_actions_applied,
+        allowed_to_claim_mutation=False,
+        pipeline="conversation",
+        pipeline_capability="execution_report",
+        extra_facts=(
+            "Response type: execution_report",
+            "Aucun changement planning n'a ete commit.",
+            "Ne dis pas qu'une execution est notee, enregistree, ajoutee ou marquee sauf si `Execution appliquee` est listee.",
+            "Si aucune execution n'est appliquee, reconnais le signal sans pretendre l'avoir enregistre.",
+        ),
+    )
+    reply = compose_final_reply(context, request_text_fn=request_text_fn)
+    return verify_uncommitted_reply(reply, context, request_text_fn=verifier_text_fn)
 
 
 def compose_plan_lookup_reply(
@@ -463,9 +493,7 @@ def compose_plan_adaptation_reply(
     reply = compose_final_reply(context, request_text_fn=request_text_fn, force=True)
     if context.committed_events:
         return verify_post_event_reply(reply, context, request_text_fn=verifier_text_fn)
-    if is_valid_final_reply(reply, context):
-        return str(reply).strip()
-    return None
+    return verify_uncommitted_reply(reply, context, request_text_fn=verifier_text_fn)
 
 
 def build_plan_adaptation_reply_context(
@@ -792,6 +820,117 @@ def build_post_event_reply_verifier_prompt(
         ]
     )
     return system, "\n".join(lines)
+
+
+def build_uncommitted_reply_verifier_prompt(
+    context: FinalReplyContext,
+    outgoing_reply: str,
+) -> tuple[str, str]:
+    """Build a verifier prompt for replies where no plan mutation was committed."""
+    system = (
+        f"{coach_voice.COACH_VOICE_RULES}\n\n"
+        "Tu es le verificateur post-runtime FitMAS pour un tour sans commit planning.\n"
+        "Tu ne lis pas le message utilisateur et tu ne deduis aucune intention.\n"
+        "Tu compares uniquement l'etat machine du tour avec la reponse sortante.\n"
+        "Retourne uniquement un JSON strict: "
+        '{"verdict":"allow|repair","reason":"court","repaired_reply":"texte si repair"}'
+    )
+    lines = [
+        f"Pipeline: {context.pipeline}",
+        f"Capacite pipeline: {context.pipeline_capability}",
+        "Events commits: aucun changement planning commit.",
+    ]
+    if context.pending_summary:
+        lines.append(f"Confirmation en attente: {context.pending_summary}")
+    if context.blocked_events:
+        lines.append("Events bloques:")
+        for event in context.blocked_events:
+            bits = [event.command]
+            if event.reason:
+                bits.append(f"reason={event.reason}")
+            if event.suggested_fix:
+                bits.append(f"suggested_fix={event.suggested_fix}")
+            if event.warning:
+                bits.append(f"warning={event.warning}")
+            lines.append("- " + " | ".join(bits))
+    if context.execution_actions_applied:
+        lines.append("Execution appliquee:")
+        lines.extend(f"- {item}" for item in context.execution_actions_applied)
+    if context.memory_actions_applied:
+        lines.append("Memoire appliquee:")
+        lines.extend(f"- {item}" for item in context.memory_actions_applied)
+    if context.extra_facts:
+        lines.append("Faits machine utiles:")
+        lines.extend(f"- {item}" for item in context.extra_facts)
+    lines.extend(
+        [
+            "Reponse sortante a verifier:",
+            outgoing_reply,
+            "",
+            "ALLOW seulement si la reponse respecte l'etat machine ci-dessus.",
+            "ALLOW si elle mentionne une action memoire ou execution uniquement quand elle figure dans les actions appliquees.",
+            "ALLOW si une confirmation est en attente et que le changement planning est presente comme une proposition ou une option a confirmer.",
+            "REPAIR si elle parle d'un changement planning comme deja effectif, deja cale, deja remplace, deja deplace ou deja transforme.",
+            "REPAIR si elle dit qu'une seance devient autre chose alors qu'il n'y a qu'une confirmation en attente.",
+            "REPAIR si elle invente un commit, une date, une seance, un sport ou une duree absent des faits machine.",
+            "En repair, garde 1-2 phrases courtes, sans nom technique, sans inventer de nouvelle action.",
+        ]
+    )
+    if context.pending_summary:
+        lines.append("Pour une pending: termine par une demande de confirmation courte si utile.")
+    return system, "\n".join(lines)
+
+
+def verify_uncommitted_reply(
+    reply: str | None,
+    context: FinalReplyContext,
+    *,
+    request_text_fn: RequestTextFn = request_text,
+) -> str | None:
+    """Verify or repair a reply for a turn where no planning mutation was committed."""
+    if context.committed_events:
+        return verify_post_event_reply(reply, context, request_text_fn=request_text_fn)
+    if not is_valid_final_reply(reply, context):
+        return None
+    text = str(reply).strip()
+    system, prompt = build_uncommitted_reply_verifier_prompt(context, text)
+    raw = request_text_fn(system=system, prompt=prompt, max_tokens=350)
+    verdict = _parse_post_event_verdict(raw)
+    if verdict is None:
+        return None
+    if verdict.get("verdict") == "allow":
+        if _pending_reply_shape_is_valid(text, context):
+            return text
+        retry_raw = request_text_fn(
+            system=system,
+            prompt=(
+                prompt
+                + "\n\nVerdict precedent invalide: une confirmation est en attente, "
+                "mais la reponse ne demande pas explicitement confirmation. "
+                "Retourne REPAIR avec une phrase de proposition qui se termine par une confirmation courte."
+            ),
+            max_tokens=350,
+        )
+        retry_verdict = _parse_post_event_verdict(retry_raw)
+        if retry_verdict is None or retry_verdict.get("verdict") != "repair":
+            return None
+        repaired = str(retry_verdict.get("repaired_reply") or "").strip()
+        if is_valid_final_reply(repaired, context) and _pending_reply_shape_is_valid(repaired, context):
+            return repaired
+        return None
+    if verdict.get("verdict") == "repair":
+        repaired = str(verdict.get("repaired_reply") or "").strip()
+        if is_valid_final_reply(repaired, context) and _pending_reply_shape_is_valid(repaired, context):
+            return repaired
+    return None
+
+
+def _pending_reply_shape_is_valid(text: str, context: FinalReplyContext) -> bool:
+    if not context.pending_summary:
+        return True
+    if context.committed_events:
+        return True
+    return "?" in str(text or "")
 
 
 def verify_post_event_reply(

@@ -16,6 +16,38 @@ read_when:
 
 Prochain chantier dogfood apres la stabilisation A+ adaptation candidates.
 
+Avancement 10 mai 2026 :
+
+- `generic_question` est devenu une route `general_answer` : contexte planning non
+  injecte par defaut, tools de lecture possibles seulement si utiles, pas de
+  recentrage automatique sur la seance du jour.
+- `general_answer` utilise maintenant `get_coach_lens` plutot que
+  `get_plan_window` : le LLM peut lire une lentille coach compacte
+  (objectif/faits durables, signaux actifs, realite recente, prochaines
+  seances proches) sans recevoir tout le planning brut.
+- Le turn planner recoit maintenant un court fil conversationnel recent pour
+  classer les messages elliptiques sans parser deterministe.
+- Les routes conversationnelles read-only (`plan_lookup`, activites, charge,
+  fact recall) n'injectent plus le marker de question ouverte ni le
+  `coach_context` complet. Elles restent factuelles et terminales.
+- Les questions d'historique type "plus longue sortie recente" routent vers
+  `activity_highlights` et le tool `get_activity_highlights`, pas vers
+  `plan_lookup`.
+- Le builder legacy ne rend plus le bandeau de verite planning pour les
+  contrats sans verite planning.
+- Les confirmations `PlanPatch` health/fatigue incluent maintenant les faits du
+  patch dans le grounding du verifier final, pour eviter qu'un verifier
+  calendrier efface le signal utilisateur courant.
+- Les sorties visibles qui fuient des wrappers provider (`Content: ...`) sont
+  bloquees comme jargon interne.
+- Les replies post-runtime sans commit planning passent maintenant par un
+  verifier LLM dedie quand elles presentent une confirmation/adaptation en
+  attente : une pending doit rester une proposition a confirmer, jamais une
+  phrase de commit deguisee.
+- Les tours `execution_report` qui finissent en `reply` ou `no_change` utilisent
+  un composer final specifique : il ne peut dire qu'une execution a ete notee
+  que si une `execution_action` a reellement ete appliquee.
+
 Objectif : passer d'une architecture de prompts accumules a une architecture de
 **contrats LLM explicites**. Chaque appel LLM doit savoir :
 
@@ -68,6 +100,43 @@ pas par contrat clair entre phases.
 - Exemple dogfood 8 mai : le briefing a bien compris le fond sportif, mais a
   recycle des labels internes de facts (`health`) dans le message visible. Ce
   n'est pas un bug de sport, c'est une fuite de format de contexte.
+
+### Audit De Fin De Passe - 10 Mai 2026
+
+Corrections validees par smoke reel :
+
+- `100 kg / rien de grave` reste en `generic_question` et ne tire plus le
+  planning dans la reponse. Suite 10 mai : il peut maintenant lire
+  `get_coach_lens` pour etre moins generique sans recentrer la discussion sur
+  le calendrier.
+- `C'etait quoi ma plus longue sortie recente ?` utilise
+  `activity_highlights` + `get_activity_highlights` et repond depuis les
+  activites reelles.
+- `health_signal` et `fatigue_today` ne tombent plus sur `decide_none` dans le
+  smoke cible ; ils produisent une proposition/pending structurée quand le plan
+  est touche.
+- Les wrappers provider visibles (`Content: ...`) sont bloques par le guard
+  user-facing.
+
+Dettes encore visibles :
+
+- `execution_report` corrige mal certaines corrections temporelles en deux
+  tours (`J'ai couru aujourd'hui` puis `Non c'etait hier`) : la parole finale ne
+  claim plus un enregistrement sans `execution_action`, mais l'extraction de
+  facts post-reply peut encore creer une memoire `execution:*` depuis une
+  activite offplan non resolue. Suite recommandee : faire passer ce write par
+  `execution_actions` / writer borne, pas par extraction factuelle libre.
+- Les contraintes larges de disponibilite (`voyage mercredi a vendredi`,
+  `demain soir impossible`) utilisent les bons tools mais retombent encore
+  parfois en question/menu au lieu de produire une candidate claire. C'est une
+  dette de decision policy / candidate flow, pas de parsing user.
+- Le prompt `health_signal` reste lourd : plusieurs round trips et parfois des
+  tool-calls hors format apres un brouillon. Le parser est plus tolerant aux
+  wrappers de tools, mais la vraie suite est de sortir ces adaptations vers le
+  pipeline candidates/simulation/policy.
+- Heartbeat : la couche finale bloque les labels internes, mais il manque encore
+  une eval de style/prose heartbeat pour eviter les phrases type fiche interne
+  avant meme le composer.
 
 ## Doctrine
 
@@ -542,6 +611,35 @@ Livrables :
   `pending_confirmation_record` et les `plan_mutation_events` correles, et
   `composer` distingue les reponses runtime `pending_confirmation`,
   `mutation_result` ou `mutation_blocked`
+- prompt diet par capability, slice 1 : ✅ les routes `terminal_text`
+  (`close_turn`, `casual_chat`) utilisent maintenant un system prompt terminal
+  sans calendrier-action, workflow replan ni exemples mutation ; les routes
+  `read_only` utilisent une verite read-only compacte sans exemples mutation.
+  Les traces `truth_blocks` exposent les blocs autorises par `PromptContract`
+  plutot que tous les blocs possibles du `ContextPack`.
+- prompt diet par capability, slice 2 : ✅ les layers rendus sont maintenant
+  filtres par `PromptContract.max_context_blocks`. Les routes contractuelles ne
+  dupliquent plus l'identite coach deja presente dans le system prompt, ne
+  rendent plus le profil si le contrat ne l'autorise pas, et gardent seulement
+  les layers utiles (`plan`, `immediate`, `memory`) selon la route.
+- prompt diet par capability, slice 3 : ✅ le user prompt du builder layered ne
+  repete plus les blocs de verite deja rendus en system layers. La source de
+  verite planning et le calendrier date restent dans `immediate` / `plan` ; le
+  user prompt redevient le message courant, plus les rares blocs de fil actifs
+  qui ne sont pas encore representes par un layer.
+- prompt diet par capability, slice 4 : ✅ les routes no-action (`terminal_text`
+  et `read_only`) utilisent un pack voix court dedie. Elles ne recoivent plus
+  les regles de mutation/refus/confirmation du pack voix complet ; le pack
+  complet reste reserve aux routes legacy, `draft_action` et
+  `write_after_validation`.
+- prompt diet par capability, slice 5 : ✅ les routes
+  `write_after_validation` ont des schemas cibles. `execution_report` ne voit
+  plus le workflow replan ni PlanPatch ; `health_signal` garde un PlanPatch
+  minimal pour adaptation prudente sans recevoir le manuel complet de mutation.
+- prompt diet par capability, slice 6 : ✅ `health_signal` est route vers son
+  contrat dedie au lieu de retomber sur `plan_negotiation`, et les snapshots
+  couvrent maintenant `execution_report`, `health_signal` et
+  `plan_negotiation`.
 - fallback outage propre ;
 
 Regression cible :

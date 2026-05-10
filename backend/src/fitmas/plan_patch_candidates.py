@@ -30,6 +30,7 @@ class PlanPatchCandidate:
     risk_notes: tuple[str, ...]
     created_from_plan_id: str
     created_from_plan_version: int
+    candidate_ref: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -66,6 +67,7 @@ def validate_plan_patch_candidate_contract(
     )
     patch_count = len(candidate.patches)
     operation_count = len(operation_results)
+    candidate_ref = str(candidate.candidate_ref or "").strip()
 
     if str(candidate.created_from_plan_id) != str(current_plan_id):
         return _blocked_validation(
@@ -88,7 +90,14 @@ def validate_plan_patch_candidate_contract(
             operation_count=operation_count,
             operation_results=operation_results,
         )
-    if patch_count == 0 or operation_count == 0:
+    if candidate_ref and patch_count > 0:
+        return _blocked_validation(
+            "ambiguous_candidate_ref",
+            patch_count=patch_count,
+            operation_count=operation_count,
+            operation_results=operation_results,
+        )
+    if not candidate_ref and (patch_count == 0 or operation_count == 0):
         return _blocked_validation(
             "empty_candidate",
             patch_count=patch_count,
@@ -108,7 +117,11 @@ def validate_plan_patch_candidate_contract(
         patch_count=patch_count,
         operation_count=operation_count,
         operation_results=operation_results,
-        summary=f"Candidate valide: {patch_count} patch(es), {operation_count} operation(s).",
+        summary=(
+            f"Candidate ref valide: {candidate_ref}."
+            if candidate_ref
+            else f"Candidate valide: {patch_count} patch(es), {operation_count} operation(s)."
+        ),
         commit_performed=False,
     )
 

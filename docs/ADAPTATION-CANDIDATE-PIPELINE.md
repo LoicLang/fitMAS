@@ -65,6 +65,15 @@ Implémente localement :
   et decide l'adaptation a partir des artefacts structures.
 - `pending_choice`: persiste les options comme `plan_patch_choice`; le tour suivant le LLM resout
   via `pending_resolution.accept_pending.selected_candidate_id`, puis le runtime applique seulement ce candidat.
+- `candidate_ref`: le generator peut maintenant choisir une option backend par reference structuree
+  (`candidate_ref`) au lieu de recopier un `PlanPatch`. L'evaluator resout cette ref vers le patch
+  canonique backend avant validation/simulation.
+- backend reviewer minimal : si le LLM recopie quand meme un patch equivalent a une option backend,
+  l'evaluator remplace le patch copie par le patch canonique backend avant validation.
+- refs backend etendues : `move_session`, `swap_sessions`, `lighten_day`, `replace_session`
+  sont maintenant produits depuis des artefacts structures (`temporal_references` + sessions planifiees).
+- reviewer LLM borne : apres evaluation, un reviewer optionnel peut choisir un `candidate_id`
+  parmi les options deja validees/scorées. Il ne peut pas produire de patch.
 
 ## Frontieres
 
@@ -137,6 +146,65 @@ optional. Il ne contient jamais de final reply, event committe ou plan final.
 
 Le generator est separe du coach conversationnel, meme si le provider est le
 meme.
+
+### Candidate refs backend
+
+Quand le backend peut produire des options candidates depuis des artefacts
+deja structures, il les passe au generator sous forme de `backend_candidates`.
+Le LLM ne recopie pas le `PlanPatch`; il selectionne l'option avec :
+
+```json
+{
+  "candidate_ref": "backend:move_session:42:2026-05-15",
+  "patches": [],
+  "rationale": "Option backend qui correspond a la demande.",
+  "expected_tradeoff": "La simulation backend mesure la recuperation.",
+  "confidence": 0.84,
+  "assumptions": [],
+  "risk_notes": []
+}
+```
+
+Frontiere importante :
+
+- `candidate_ref` est une reference vers un patch backend deja materialise ;
+- le LLM choisit une option, il ne reconstruit pas son JSON ;
+- une candidate ne peut pas melanger `candidate_ref` et `patches` copies ;
+- l'evaluator bloque toute ref inconnue ;
+- si une option ref part en `pending_choice`, le runtime persiste le patch
+  materialise, pas seulement la ref.
+- si le LLM recopie un patch dont les operations correspondent a une option
+  backend, l'evaluator prefere le patch backend canonique. La comparaison se
+  fait sur les operations structurees, jamais sur le texte utilisateur libre.
+
+Sources backend livrees :
+
+- `move_session` depuis `temporal_references` typees `source` + `target` ;
+- `swap_sessions` quand les dates `source` et `target` portent deux vraies seances ;
+- `lighten_day` sur les seances ciblees par une reference temporelle typee ;
+- `replace_session` vers une recuperation active bornee sur les seances ciblees.
+
+Aucune source ne lit deterministiquement le texte utilisateur libre.
+
+### Reviewer LLM borne
+
+Le reviewer intervient apres evaluation moteur :
+
+```text
+EvaluatedPlanPatchCandidate[]
+-> reviewer LLM optionnel
+-> { preferred_candidate_id, confidence, rationale[] }
+-> policy
+```
+
+Contrat :
+
+- il recoit seulement des candidates deja validees/scorées ;
+- il choisit uniquement un `candidate_id` fourni ;
+- il ne produit jamais `PlanPatch`, operations, ni texte utilisateur final ;
+- la policy ignore son choix si la confiance est faible ou si le score degrade
+  trop l'option par rapport au top candidat ;
+- la policy garde la responsabilite finale `commit | pending | choice | block`.
 
 Input :
 
