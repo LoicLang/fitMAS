@@ -540,6 +540,23 @@ Déployer seulement si :
 - la doc a été réalignée si besoin
 - le changement ne laisse pas un endpoint debug ouvert par accident
 
+Commande de deploy Fly :
+
+```bash
+fly deploy
+```
+
+Checks post-deploy minimaux :
+
+```bash
+fly status
+curl -fsS https://the deployed app/health
+```
+
+Pour un changement docs-only, `fly deploy` n'est pas techniquement necessaire
+au runtime, mais il reste acceptable si on veut aligner l'image deployee sur le
+dernier `main`.
+
 Si le changement touche heartbeat, onboarding, ou persistance :
 - test réel recommandé après deploy
 

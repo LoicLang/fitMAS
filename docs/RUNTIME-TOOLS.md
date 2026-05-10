@@ -257,7 +257,7 @@ Direction immediate :
   `get_recent_reality_window`, `get_load_context`, `get_user_constraints`,
   `get_relevant_facts` ;
 - Chantier 3B-B autorise une proposition `PlanPatch` + confirmation Telegram,
-  toujours revalidee backend avant commit (implemente localement 5 mai 2026) ;
+  toujours revalidee backend avant commit ;
 - Chantier 3B-C introduit des action-tools natifs bornes seulement apres la
   gate A+ core (`validate_plan_patch -> WeekCoherenceReviewer -> policy ->
   writer`).

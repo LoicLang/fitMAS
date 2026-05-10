@@ -46,9 +46,9 @@ User message
 -> User reply
 ```
 
-## Etat — 7 mai 2026
+## Etat — 10 mai 2026
 
-Implémente localement :
+Livre sur `main` :
 
 - `week_coherence`: `WeekFacts`, `CoherenceFinding`, `WeekCoherenceScore` ;
 - `plan_patch_candidates`: `PlanPatchCandidate` + validation de contrat patch-set ;
@@ -70,10 +70,19 @@ Implémente localement :
   canonique backend avant validation/simulation.
 - backend reviewer minimal : si le LLM recopie quand meme un patch equivalent a une option backend,
   l'evaluator remplace le patch copie par le patch canonique backend avant validation.
-- refs backend etendues : `move_session`, `swap_sessions`, `lighten_day`, `replace_session`
-  sont maintenant produits depuis des artefacts structures (`temporal_references` + sessions planifiees).
+- refs backend etendues : `move_session`, `swap_sessions`, `lighten_day`,
+  `replace_session` sont maintenant produits depuis des artefacts structures
+  (`temporal_references` + sessions planifiees).
 - reviewer LLM borne : apres evaluation, un reviewer optionnel peut choisir un `candidate_id`
   parmi les options deja validees/scorées. Il ne peut pas produire de patch.
+
+Frontiere actuelle :
+- le pipeline est en Phase A dogfood, pas encore un moteur de progression
+  Phase B ;
+- les options backend resolvent uniquement des references deja structurees par
+  le LLM ou la DB, jamais le texte libre directement ;
+- le reviewer LLM ameliore l'arbitrage entre options acceptables, mais la
+  policy peut ignorer son choix si le score/risque sort des bornes.
 
 ## Frontieres
 
@@ -378,15 +387,18 @@ change_goal
 change_phase
 ```
 
-## Commits Prevus
+## Tranches Livrees
 
-1. `week_coherence: split facts, findings and scoring`
-2. `plan_patch: add candidate contract and patch-set validation`
-3. `candidate_generator: add bounded LLM patch candidate generation`
-4. `adaptation_evaluator: simulate, validate, score and decide policy`
-5. `conversation: integrate adaptation flow and final composer`
+1. Week coherence splitte en facts, findings et score.
+2. `PlanPatchCandidate` + validation de patch-set.
+3. Generator LLM borne.
+4. Evaluator : contrat -> simulation -> validation -> facts/score/findings.
+5. Policy : `commit`, `pending_confirmation`, `pending_choice`, `block`.
+6. Composer final post-policy.
+7. `candidate_ref` backend pour eviter les JSON PlanPatch fragiles.
+8. Reviewer LLM borne qui choisit seulement un `candidate_id`.
 
-## Dogfood
+## Dogfood A Rejouer
 
 Scenarios a tester :
 

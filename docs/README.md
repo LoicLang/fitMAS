@@ -11,7 +11,7 @@ read_when:
 
 | Document | Contenu |
 |----------|---------|
-| `BUILD-ORDER.md` | Source de verite sur l'etat reel, les priorites et la dette technique |
+| `BUILD-ORDER.md` | Source de verite sur l'etat reel, les priorites et la suite immediate |
 | `LLM-FIRST-CONVERSATION.md` | Doctrine zero determinisme sur texte utilisateur libre + plan de migration conversation |
 | `ARCHITECTURE.md` | Stack, principes de harness, modele de donnees, flux techniques |
 | `SYSTEM-MAP.md` | Carte du systeme : flux, frontieres LLM/tools/skills, points d'extension |
@@ -22,7 +22,8 @@ read_when:
 | `CONVERSATION.md` | Grounding conversationnel, doctrine LLM-first, dette active des anciens extracteurs |
 | `MEMORY-V2.md` | Architecture memoire : profile vs working vs patterns, regles et migration |
 | `RUNTIME-TOOLS.md` | Contrat des tools runtime multi-tool bornes, registre read-only/candidate/validation, limites et metriques |
-| `PROMPT-CONTEXT-REFACTOR.md` | Prochain chantier prompt/contexte : PromptContract, ContextPack, snapshots, composers terminaux |
+| `PROMPT-CONTEXT-REFACTOR.md` | Etat du chantier prompt/contexte : PromptContract, context diet, snapshots, `decide_none`, dettes restantes |
+| `ADAPTATION-CANDIDATE-PIPELINE.md` | Adaptation par candidats : refs backend, evaluator, policy, pending choice, reviewer LLM borne |
 | `APP-UX.md` | Contrat UX de la webapp : calendrier, today, performance |
 | `SOUL.md` | Voix FitMAS, heartbeat, messagerie, ton |
 | `RUNBOOK.md` | Commandes, flux a tester, debug, deploiement, mapping du code |
@@ -45,21 +46,22 @@ Quand plusieurs docs semblent raconter des choses differentes :
 
 Pour un nouvel agent :
 
-1. `BUILD-ORDER.md` — etat reel et suite Phase A / Phase B
+1. `BUILD-ORDER.md` — etat reel et suite immediate
 2. `LLM-FIRST-CONVERSATION.md` — doctrine zero determinisme sur texte user
-3. `COACH-AUTONOMY-REFACTOR.md` — historique de refactor autonomie
-4. `SYSTEM-MAP.md` — carte d'ensemble
-5. `RUNTIME-TOOLS.md` — tools multi-tool bornes et workflow `replan_after_constraint`
-6. `SPORT-QUALITY-REVIEW.md` — Phase A+ reviewer sportif, week coherence, progression par stimulus
-7. `CONVERSATION.md` — grounding + indications
-8. `RUNBOOK.md` — ops, smokes, debug prod
-9. `ARCHITECTURE.md` — stack, principes, modules
-10. `PRODUCT.md` — vision et scope
-11. `COACH-COHERENCE-REFACTOR.md` — gouvernance state/mutations
+3. `PROMPT-CONTEXT-REFACTOR.md` — contrats LLM et contexte par route
+4. `ADAPTATION-CANDIDATE-PIPELINE.md` — adaptation candidates + reviewer borne
+5. `SYSTEM-MAP.md` — carte d'ensemble
+6. `RUNTIME-TOOLS.md` — tools multi-tool bornes et workflow `replan_after_constraint`
+7. `SPORT-QUALITY-REVIEW.md` — Phase A+ reviewer sportif, week coherence, progression par stimulus
+8. `CONVERSATION.md` — grounding + indications
+9. `RUNBOOK.md` — ops, smokes, debug prod
+10. `ARCHITECTURE.md` — stack, principes, modules
+11. `PRODUCT.md` — vision et scope
 12. `PLANNING.md` — contrat + moteur planning
 13. `MEMORY-V2.md` — memoire utilisateur
 14. `APP-UX.md` — contrat UX app
 15. `SOUL.md` — voix coach
+16. `COACH-AUTONOMY-REFACTOR.md` — historique long de refactor autonomie, a lire seulement pour archeologie
 
 ## Raccourcis
 
@@ -77,7 +79,8 @@ Pour un nouvel agent :
 | Pourquoi le coach se trompe sur le reel, le temps ou l'intention ? | `CONVERSATION.md` |
 | Comment evoluer la memoire sans fourre-tout ? | `MEMORY-V2.md` |
 | Comment brancher des tools runtime ? | `RUNTIME-TOOLS.md` |
-| Comment reduire les prompts, specialiser le contexte LLM et baisser les `decide() None` ? | `PROMPT-CONTEXT-REFACTOR.md` |
+| Comment reduire les prompts, specialiser le contexte LLM et analyser les `decide() None` ? | `PROMPT-CONTEXT-REFACTOR.md` |
+| Comment laisser le LLM proposer une adaptation sans lui donner le commit ? | `ADAPTATION-CANDIDATE-PIPELINE.md` |
 | Quelle est la prochaine tranche avant dogfood ? | `BUILD-ORDER.md` |
 | Comment l'app doit se comporter ? | `APP-UX.md` |
 | Pourquoi le coach hallucine, agrege au lieu de detailler, demande au lieu de decider ? | `COACH-AUTONOMY-REFACTOR.md` |

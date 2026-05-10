@@ -35,12 +35,12 @@ api_messages.py / api_plan.py / api_activities.py / heartbeat
         |
         v
 Coach LLM unique
-comprend le tour, garde le fil, choisit les read-tools utiles
-sort CoachDecision structure
+comprend le tour, garde le fil, choisit les read-tools utiles selon PromptContract
+sort CoachDecision / candidate refs / actions structurees
         |
         v
 Validation backend
-schema, permissions, hooks, confirmations, coherence guards
+schema, permissions, simulation, reviewer sportif, policy, confirmations
         |
         v
 Writers bornes
@@ -50,7 +50,7 @@ PlanMutationService / MemoryMutationService cible
 DB + events d'audit
         |
         v
-Reply derivee de la decision LLM + resultat reel valide
+Final composer derive du resultat reel valide
 ```
 
 ## Frontieres
@@ -61,7 +61,8 @@ Le LLM peut :
 
 - comprendre un message flou
 - aider a classer une intention
-- proposer une adaptation
+- proposer une adaptation sous forme de `PlanPatchCandidate` ou choisir une
+  `candidate_ref` backend
 - formuler une reponse coach
 - utiliser des tools read-only bornes
 
@@ -72,6 +73,8 @@ Le LLM ne peut pas :
 - modifier le planning sans `PlanMutationService`
 - arbitrer entre deux verites planning concurrentes
 - recevoir un write tool libre
+- produire un patch final dans le reviewer borne : le reviewer choisit seulement
+  un `candidate_id`
 
 ### Tools
 
@@ -202,8 +205,10 @@ Regle :
 
 - `conversation_pipeline.py` : tour de conversation, orchestrateur principal
 - `conversation_context.py` : contexte machine seulement ; ne parse plus claims / non-completion depuis `user_text`
-- `conversation_turn_planner.py` : legacy / transition ; la cible Phase A est une sortie `CoachDecision` unique plutot qu'un pre-classifieur qui repond deja a la question
+- `conversation_turn_planner.py` : LLM turn planner leger, peut produire des
+  refs temporelles structurees ; pas de parsing deterministe du texte libre
 - `conversation_prompting.py` : politique de prompt
+- `prompt_contracts.py` : droits, tools, truth blocks et output schema par route
 - `llm_prompt_builder.py` / `prompt_layers.py` : prompt structure
 - `llm_gateway.py` : client LLM + parseur JSON robuste partage (eea74e7)
 - `user_indications.py` / `user_indication_llm.py` : types + pre-step LLM transitoire. Plus de fallback deterministe ; cible = actions structurees dans `CoachDecision`
@@ -216,8 +221,27 @@ Regle conversation :
 - le LLM choisit les read-tools utiles dans le budget autorise
 - le LLM sort une decision structuree unique : reply, actions memoire/execution, `PlanPatch | no_change | requires_confirmation`, resolution pending eventuelle
 - le backend valide et applique seulement des artefacts machine-generes par le LLM
+- pour les adaptations, le LLM peut explorer ; le moteur simule, score, policy
+  tranche, puis le composer parle
 - aucun side-effect planning ou memoire ne doit arriver depuis un regex/keyword/parser sur le texte user
 - `plan_mutation_request = heuristic OR llm`, `low_signal`, `rich_signal`, pending `oui/non` deterministe et `_sanitize_no_change_reply` sont retires du runtime conversation. Ne pas les recreer.
+
+### Adaptation candidates
+
+- `plan_patch_backend_candidates.py` : produit des options backend a partir
+  d'artefacts structures (`temporal_references`, sessions planifiees), jamais
+  depuis du texte libre.
+- `plan_patch_candidate_generator.py` : transforme une demande en 0-3 options
+  bornees ou en `candidate_ref`.
+- `plan_patch_candidate_evaluator.py` : resout les refs, simule, valide,
+  extrait facts/findings/score.
+- `plan_patch_candidate_reviewer.py` : reviewer LLM optionnel qui choisit
+  uniquement un `candidate_id`.
+- `plan_patch_adaptation_policy.py` : decide `commit`, `pending_confirmation`,
+  `pending_choice` ou `block`.
+
+Regle : le LLM explore les compromis, le moteur mesure les consequences, la
+policy prend la responsabilite, le composer raconte la verite.
 
 ### Feedback bloquant mutations
 

@@ -14,7 +14,9 @@ read_when:
 
 ## Statut
 
-Prochain chantier dogfood apres la stabilisation A+ adaptation candidates.
+Chantier livré sur `main` le 10 mai 2026. La suite n'est plus d'ajouter du
+prompt : c'est de rejouer du dogfood reel, lire les traces, puis corriger les
+routes qui echouent encore.
 
 Avancement 10 mai 2026 :
 
@@ -48,8 +50,8 @@ Avancement 10 mai 2026 :
   un composer final specifique : il ne peut dire qu'une execution a ete notee
   que si une `execution_action` a reellement ete appliquee.
 
-Objectif : passer d'une architecture de prompts accumules a une architecture de
-**contrats LLM explicites**. Chaque appel LLM doit savoir :
+Objectif du chantier : passer d'une architecture de prompts accumules a une
+architecture de **contrats LLM explicites**. Chaque appel LLM doit savoir :
 
 - quel est son role ;
 - quel contexte il a le droit de voir ;
@@ -80,28 +82,26 @@ Le probleme n'est pas "un mauvais prompt". Le probleme est que le prompt est
 devenu le produit. FitMAS fonctionne encore trop par accumulation intelligente,
 pas par contrat clair entre phases.
 
-### Symptome recents
+### Symptomes qui ont motive le chantier
 
-- Conversation : `_CONVERSATION_SYSTEM_TEXT` reste un mega-prompt qui melange
-  identite, voix, verite, memoire, tools, mutation, confirmation, examples,
-  JSON contract et compat legacy.
-- `build_layered_conversation_prompt()` ajoute les layers autour du mega-prompt
-  au lieu de le remplacer vraiment.
-- Les policies par intent changent surtout les blocs contextuels, pas assez le
-  contrat cognitif donne au modele.
-- `decide()` recoit encore beaucoup de parametres separes et reconstruit la
-  hierarchie du contexte implicitement.
-- `fitmas_message` existe encore dans la phase decisionnelle ; le runtime doit
-  ensuite verifier, reparer ou remplacer cette parole selon ce qui a vraiment
-  ete commit.
-- Heartbeat : les roles sont mieux bornes, mais les builders injectent encore
-  de gros blocs voix/few-shots et demandent souvent au LLM de parler directement
-  au user.
+- Conversation : `_CONVERSATION_SYSTEM_TEXT` servait encore de mega-prompt
+  historique. Il a ete decoupe en modules contractuels, mais certains chemins
+  legacy peuvent encore l'activer en fallback.
+- `build_layered_conversation_prompt()` ajoutait les layers autour du
+  mega-prompt. Les layers sont maintenant filtres par `PromptContract`.
+- Les policies par intent changeaient surtout les blocs contextuels. Elles
+  portent maintenant aussi un contrat de capability, output et truth blocks.
+- `decide()` recoit encore plusieurs parametres legacy, mais les traces
+  exposent route/policy/contract/budget/taille et raisons `decide_none`.
+- `fitmas_message` existe encore dans la phase decisionnelle pour certains
+  chemins, mais les routes critiques passent par un composer final post-runtime.
+- Heartbeat : les roles produisent un brouillon factuel, puis le composer
+  terminal et les judges/verifiers stabilisent la parole visible.
 - Exemple dogfood 8 mai : le briefing a bien compris le fond sportif, mais a
   recycle des labels internes de facts (`health`) dans le message visible. Ce
   n'est pas un bug de sport, c'est une fuite de format de contexte.
 
-### Audit De Fin De Passe - 10 Mai 2026
+### Audit de fin de passe - 10 mai 2026
 
 Corrections validees par smoke reel :
 
@@ -118,7 +118,7 @@ Corrections validees par smoke reel :
 - Les wrappers provider visibles (`Content: ...`) sont bloques par le guard
   user-facing.
 
-Dettes encore visibles :
+Dettes a surveiller en dogfood :
 
 - `execution_report` corrige mal certaines corrections temporelles en deux
   tours (`J'ai couru aujourd'hui` puis `Non c'etait hier`) : la parole finale ne
@@ -127,13 +127,12 @@ Dettes encore visibles :
   activite offplan non resolue. Suite recommandee : faire passer ce write par
   `execution_actions` / writer borne, pas par extraction factuelle libre.
 - Les contraintes larges de disponibilite (`voyage mercredi a vendredi`,
-  `demain soir impossible`) utilisent les bons tools mais retombent encore
-  parfois en question/menu au lieu de produire une candidate claire. C'est une
-  dette de decision policy / candidate flow, pas de parsing user.
-- Le prompt `health_signal` reste lourd : plusieurs round trips et parfois des
-  tool-calls hors format apres un brouillon. Le parser est plus tolerant aux
-  wrappers de tools, mais la vraie suite est de sortir ces adaptations vers le
-  pipeline candidates/simulation/policy.
+  `demain soir impossible`) doivent etre retestees apres l'arrivee des
+  `candidate_ref` backend et du reviewer borne. Ne pas corriger avant
+  reproduction actuelle.
+- Le prompt `health_signal` reste plus couteux que les routes no-action. La
+  vraie suite est de confirmer en smoke reel si le pipeline candidates
+  l'absorbe correctement avant de retoucher le prompt.
 - Heartbeat : la couche finale bloque les labels internes, mais il manque encore
   une eval de style/prose heartbeat pour eviter les phrases type fiche interne
   avant meme le composer.
@@ -747,18 +746,26 @@ T'es sur du planning que tu m'annonces ?
 
 ## Critères De Fin
 
-Le chantier est ferme quand :
+Statut 10 mai 2026 :
 
-- chaque route LLM principale a un `PromptContract` inspectable ;
-- les snapshots existent et echouent si un prompt grossit ou change de contrat
-  sans intention explicite ;
-- `decide() returned None` produit une raison normalisee ;
-- `close_turn`, `plan_lookup`, `no_change`, adaptation candidates et heartbeat
-  ont une frontiere finale claire ;
-- le heartbeat ne parle plus directement depuis des facts bruts ;
-- `_CONVERSATION_SYSTEM_TEXT` n'est plus le system prompt universel ;
-- aucun nouveau determinisme sur texte utilisateur libre n'a ete introduit ;
-- `./scripts/test-backend -q` et les smokes dogfood ciblés passent.
+- ✅ chaque route LLM principale a un `PromptContract` inspectable ;
+- ✅ les snapshots couvrent les routes conversationnelles principales ;
+- ✅ `decide() returned None` produit une raison normalisee et une chaine
+  d'evenements ;
+- ✅ `close_turn`, `plan_lookup`, `no_change`, adaptation candidates et
+  heartbeat ont une frontiere finale claire ;
+- ✅ heartbeat ne livre plus directement les fact lines brutes sans composer /
+  judge / verifier ;
+- ✅ aucun nouveau determinisme sur texte utilisateur libre n'a ete introduit ;
+- ✅ `./scripts/test-backend -q` passe sur `main`.
+
+A surveiller :
+
+- `_CONVERSATION_SYSTEM_TEXT` existe encore comme artefact legacy/fallback ; il
+  ne doit plus redevenir le system prompt universel.
+- Les smokes dogfood reels restent l'autorite sur la qualite naturelle :
+  latence acceptable, pas de menus inutiles, pas de recentrage planning sur une
+  question generale, pas de fuites de jargon interne.
 
 ## Phrase Guide
 

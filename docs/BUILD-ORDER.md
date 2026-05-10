@@ -28,24 +28,23 @@ Si un autre doc diverge :
 
 **Un premier coach que Loïc reconnaît, comprend, et a envie de rouvrir demain.**
 
-## Roadmap Active — 7 mai 2026
+## Roadmap Active — 10 mai 2026
 
 Ordre courant :
 
 ```text
-1. Excellence sportive
-2. Observabilite decide() None
-3. Prompt/contexte
-4. Cadrage memoire leger
-5. Refactor global
-6. UX/UI
+1. Dogfood reel Phase A/A+ sur Telegram
+2. Verifier que les decide() None restent un probleme reel apres prompt diet
+3. Corriger seulement les routes qui echouent encore en smoke reel
+4. Cadrage memoire leger si les facts continuent de polluer le contexte
+5. Phase B progression/prescription seulement sur demande explicite
+6. UX/UI apres stabilite coach
 ```
 
-Regle d'arbitrage : sport d'abord. Le prochain gros gain produit reste une
-semaine sportivement credible, adaptable et relue. Le chantier prompt/contexte
-vient ensuite pour fiabiliser les couches LLM. La memoire reste en cadrage
-conceptuel seulement : pas de refactor structurel tant que le comportement
-sportif cible n'est pas stabilise.
+Regle d'arbitrage : on ne corrige plus un probleme presume. Depuis la passe
+prompt/context + adaptation candidates du 10 mai, la suite commence par un
+smoke reel massif et du dogfood Telegram. Si un `decide() None`, une mauvaise
+lane ou une phrase non naturelle existe encore, on corrige la cause observee.
 
 Docs a ouvrir selon le chantier :
 - excellence sportive : `docs/SPORT-QUALITY-REVIEW.md`
@@ -53,7 +52,38 @@ Docs a ouvrir selon le chantier :
 - prompt/contexte + `decide() None` : `docs/PROMPT-CONTEXT-REFACTOR.md`
 - memoire : `docs/MEMORY-V2.md`
 
-## Checkpoint courant — 4 mai 2026
+## Checkpoint courant — 10 mai 2026
+
+Etat du code sur `main` :
+
+- Phase A fiabilite coach : fermee pour le dogfood courant.
+- Phase A+ sport quality gate : livree. Les `PlanPatch` significatifs passent
+  par simulation/review/policy avant commit ou pending.
+- Prompt/context diet : livree. Les prompts sont maintenant gouvernes par
+  `PromptContract`, filtres par capability, et couverts par snapshots.
+- Adaptation candidate pipeline : livree. Le LLM explore des options bornees,
+  le backend fournit des `candidate_ref`, l'evaluator simule/score, et le
+  reviewer LLM ne choisit qu'un `candidate_id`.
+- `general_answer` a une lane naturelle avec `get_coach_lens` optionnel pour
+  lire le contexte coach compact sans noyer la reponse dans le planning.
+- Heartbeat : le composer terminal existe et bloque les fuites de categories
+  internes, mais le style doit rester surveille en dogfood reel.
+
+Verification recente :
+
+- `./scripts/test-backend -q` : 878 passed, 11 skipped, 11 subtests passed.
+- `main` contient le merge `ee4a313 Merge prompt context and adaptation candidates`.
+
+Suite immediate :
+
+1. Rejouer `./scripts/smoke-real-conversations` sur un gros panel de messages.
+2. Rejouer `./scripts/smoke-a-plus-api` avant chaque deploy touchant planning /
+   adaptation / conversation.
+3. Lire les traces `decide_none.reason` seulement si un echec reel persiste.
+4. Garder Phase B fermee tant que le coach dogfood n'est pas stable plusieurs
+   jours.
+
+## Historique recent — incident 2-5 mai 2026
 
 ### Incident dogfood briefing matin du 2 mai
 
@@ -72,7 +102,7 @@ L'audit declenche par cet incident a confirme 3 failles structurelles connexes :
 - Phase 1 voix conversation : ✅ shippe 30 avril 2026 — bloc "Voix coach (regles imperatives sur fitmas_message)" + 8 few-shots BONS et 9 MAUVAIS dans `_CONVERSATION_SYSTEM_TEXT` (`backend/src/fitmas/llm_prompt_builder.py`), detecteur `_message_looks_receipt_style` log-only avec 6 patterns dans `backend/src/fitmas/llm.py`.
 - Phase 2 `pending_resolution` typed + `memory_actions` + `execution_actions` : ✅ shippe 1 mai 2026 (commits anterieurs) — confirmations resolues structurellement par le LLM (`accept_pending` / `reject_pending` / `modify_pending` / `ignore`), plus de re-decision sauvage. Memory/execution actions executees par writers bornes post-validation.
 
-### Plan en cours — 5 chantiers
+### Historique des chantiers Phase A/A+
 
 | # | Chantier | Effort | Doc canonique |
 |---|---|---|---|
@@ -91,20 +121,22 @@ L'audit declenche par cet incident a confirme 3 failles structurelles connexes :
 | 3B-A | ✅ Tool-use loop proactive heartbeat read-only — le coach relit la verite recente avant de parler — deploye 4 mai 2026 | 0.5j | `docs/LLM-FIRST-CONVERSATION.md` section "Phase 5 - Tool-use loop unifie" |
 | P1-ter | ✅ Execution receipt repair hardening — plus d'outage generique si le LLM reconnait "pas fait hier" sans `execution_actions` et qu'une cible follow-up est structuree — deploye 4 mai 2026 | 0.5j | section ci-dessous |
 | P1-quater | ✅ Dogfood API fallout — execution action verifier + post-event date facts + target ambiguity + durable availability memory — deploye 4 mai 2026 | 0.5-1j | section ci-dessous |
-| 3B-B | ✅ Proactive PlanPatch propose + confirmation Telegram pending, pas de commit autonome — implemente localement 5 mai 2026 | 1j | section ci-dessous |
+| 3B-B | ✅ Proactive PlanPatch propose + confirmation Telegram pending, pas de commit autonome | 1j | section ci-dessous |
 | A+0 | ✅ Documentation Sport Quality / Week Coherence — doctrine reviewer sportif, policy runtime, progression par stimulus | 0.5j | `docs/SPORT-QUALITY-REVIEW.md` |
-| A+1-A+3 | ✅ **Phase A+ core gate** — simulation, contexte deterministe, LLM reviewer/fallback type, gate runtime dans `apply_patch_for_user`, smoke API reel `scripts/smoke-a-plus-api` — implemente localement 5 mai 2026 | 3-4j | `docs/SPORT-QUALITY-REVIEW.md` + section "Phase A+" ci-dessous |
-| 3B-C | ✅ Action-tools natifs bornes, **apres A+ core gate** — `draft_move_session`, `draft_swap_sessions`, `draft_replace_session`, `draft_lighten_day`, `draft_create_session`, candidates PlanPatch sans write — implemente localement 5 mai 2026 | 2-3j | `docs/RUNTIME-TOOLS.md` |
-| A+4 | ✅ Tool `validate_week_coherence` validation-only conversation/planning/heartbeat + capture pending heartbeat reviewee — implemente localement 5 mai 2026 | 0.5-1j | `docs/SPORT-QUALITY-REVIEW.md` |
-| A+5 | ✅ Review semaine generee avant commit — guard avant `replace_plan` / `ScheduledSession`, fallback conservative si policy review non `valid`, fallback persistable sauf `blocked` — implemente localement 5 mai 2026 | 1j | `docs/SPORT-QUALITY-REVIEW.md` |
-| A+6 | 🔥 Adaptation candidate pipeline — LLM propose 0-3 patch sets bornes, moteur simule/valide/score, policy commit/pending/block, composer explique le resultat reel — chantier actif | 2-4j | `docs/ADAPTATION-CANDIDATE-PIPELINE.md` |
-| P1-quinquies | ✅ Lane terminale `close_turn` — clotures sociales sans tools, sans marker question ouverte, composer final via `final_reply.py` — implemente localement 5 mai 2026 | 0.5j | `docs/superpowers/plans/2026-05-05-terminal-close-lane.md` |
-| P1-sexies | ✅ Composer final `no_change` — `CoachDecision(no_change)` + compat legacy passent par `final_reply.py`, avec faits memoire/execution appliques — implemente localement 5 mai 2026 | 0.5j | `docs/superpowers/plans/2026-05-05-no-change-final-composer.md` |
-| P1-septies | ✅ Composer final `plan_lookup` — lecture factuelle via `final_reply.py` avec guard anti-drift chiffres/jours/zones/statuts — implemente localement 5 mai 2026 | 0.5j | `docs/superpowers/plans/2026-05-05-plan-lookup-final-composer.md` |
-| P1-nonies | ✅ Grounded final speech + heartbeat future truth — temporal refs typees, grounding packet partage, verifier semantique LLM pour lookup planning/confirmation, idempotency key durable, `PlanWindowTruth` heartbeat — implemente localement 7 mai 2026 | 0.5-1j | `docs/superpowers/plans/2026-05-07-grounded-final-speech-and-heartbeat.md` |
-| P1-octies | 🔥 Prompt/context optimization pass + `decide() returned None` reduction — prompt diet par capability livre localement ; reste surtout analyse des causes `decide() None` et dogfood | 0.5-1j | `docs/PROMPT-CONTEXT-REFACTOR.md` + section ci-dessous |
+| A+1-A+3 | ✅ **Phase A+ core gate** — simulation, contexte deterministe, LLM reviewer/fallback type, gate runtime dans `apply_patch_for_user`, smoke API reel `scripts/smoke-a-plus-api` | 3-4j | `docs/SPORT-QUALITY-REVIEW.md` + section "Phase A+" ci-dessous |
+| 3B-C | ✅ Action-tools natifs bornes, **apres A+ core gate** — `draft_move_session`, `draft_swap_sessions`, `draft_replace_session`, `draft_lighten_day`, `draft_create_session`, candidates PlanPatch sans write | 2-3j | `docs/RUNTIME-TOOLS.md` |
+| A+4 | ✅ Tool `validate_week_coherence` validation-only conversation/planning/heartbeat + capture pending heartbeat reviewee | 0.5-1j | `docs/SPORT-QUALITY-REVIEW.md` |
+| A+5 | ✅ Review semaine generee avant commit — guard avant `replace_plan` / `ScheduledSession`, fallback conservative si policy review non `valid`, fallback persistable sauf `blocked` | 1j | `docs/SPORT-QUALITY-REVIEW.md` |
+| A+6 | ✅ Adaptation candidate pipeline — LLM propose 0-3 patch sets bornes, backend candidate refs, evaluator simule/score, reviewer LLM choisit seulement un `candidate_id` | 2-4j | `docs/ADAPTATION-CANDIDATE-PIPELINE.md` |
+| P1-quinquies | ✅ Lane terminale `close_turn` — clotures sociales sans tools, sans marker question ouverte, composer final via `final_reply.py` | 0.5j | `docs/superpowers/plans/2026-05-05-terminal-close-lane.md` |
+| P1-sexies | ✅ Composer final `no_change` — `CoachDecision(no_change)` + compat legacy passent par `final_reply.py`, avec faits memoire/execution appliques | 0.5j | `docs/superpowers/plans/2026-05-05-no-change-final-composer.md` |
+| P1-septies | ✅ Composer final `plan_lookup` — lecture factuelle via `final_reply.py` avec guard anti-drift chiffres/jours/zones/statuts | 0.5j | `docs/superpowers/plans/2026-05-05-plan-lookup-final-composer.md` |
+| P1-nonies | ✅ Grounded final speech + heartbeat future truth — temporal refs typees, grounding packet partage, verifier semantique LLM pour lookup planning/confirmation, idempotency key durable, `PlanWindowTruth` heartbeat | 0.5-1j | `docs/superpowers/plans/2026-05-07-grounded-final-speech-and-heartbeat.md` |
+| P1-octies | ✅ Prompt/context optimization pass + `decide() returned None` observability — prompt diet par capability, snapshots, `get_coach_lens`, routes read-only/terminal simplifiees | 0.5-1j | `docs/PROMPT-CONTEXT-REFACTOR.md` + section ci-dessous |
 
-**Total restant avant B0 : 1-2 jours**. Phase A+ est fermee localement, et P1-nonies a retire les contradictions factuelles visibles les plus dangereuses. La prochaine lane reste P1-octies : audit prompt/contexte et baisse des `decide() returned None`, puis dogfood court et B0 si stable.
+**Total restant avant Phase B : dogfood, pas chantier structurel aveugle.**
+Phase A/A+ est assez stable pour tester reellement. La prochaine decision doit
+venir de traces et de conversations reelles, pas d'une dette theorique.
 
 ### Chantier P1-nonies — Grounded final speech + heartbeat future truth ✅
 
@@ -136,9 +168,9 @@ Frontiere doctrine : aucune regex/keyword sur texte utilisateur libre. La
 comprehension reste LLM ; le code resout et verifie uniquement des artefacts
 LLM/DB structures.
 
-### Chantier P1-octies — Prompt/context optimization pass 🔥
+### Chantier P1-octies — Prompt/context optimization pass ✅
 
-Prochain chantier dogfood apres la passe sportive.
+Livre sur `main` le 10 mai 2026.
 
 But : donner a chaque couche LLM juste le contexte et le contrat dont elle a
 besoin. Commencer par tracer les `decide() returned None`, puis introduire un
@@ -182,10 +214,29 @@ Slice 5 livre localement :
   PlanPatch ;
 - `health_signal` garde un PlanPatch minimal prudent sans manuel replan.
 
-Slice 6 livre localement :
+Slice 6 livre :
 - `health_signal` route vers son contrat dedie au lieu de `plan_negotiation` ;
 - snapshots ajoutes pour `execution_report`, `health_signal` et
   `plan_negotiation`.
+
+Slice 7 livre :
+- `general_answer` remplace `generic_question` pour les questions hors planning
+  et n'injecte plus le planning brut par defaut ;
+- `get_coach_lens` donne au LLM une lentille coach compacte quand un contexte
+  personnel est utile sans faire devier le tour vers une revue planning ;
+- routes read-only sans mutation : pas de marker question ouverte, pas de
+  `coach_context` complet, tools seulement si le contrat les autorise ;
+- sortie visible sans commit/pending verifiee contre les artefacts runtime.
+
+Slice 8 livre :
+- `candidate_ref` backend pour `move_session`, `swap_sessions`, `lighten_day`,
+  `replace_session` ;
+- evaluator qui remplace une copie LLM equivalente par le patch backend
+  canonique ;
+- reviewer LLM optionnel borne a `preferred_candidate_id`, sans droit de
+  produire un patch ;
+- policy garde la responsabilite finale `commit | pending | pending_choice |
+  block`.
 
 Doc canonique : `docs/PROMPT-CONTEXT-REFACTOR.md`.
 
@@ -445,7 +496,7 @@ Regles produit :
 - le coach ne doit pas claim une action planning sans event ;
 - tant que le heartbeat est read-only, il propose ou demande confirmation.
 
-### Chantier 4 — Observabilite proactive coach loop ✅ implemente localement 4 mai 2026
+### Chantier 4 — Observabilite proactive coach loop ✅ livre
 
 Endpoint debug `POST /api/v0/debug/heartbeat/{kind}?dump=true` qui retourne :
 
@@ -491,7 +542,7 @@ Dogfood parallele 4 mai :
   cle via `PlanPatch` pouvait s'appliquer sans confirmation. Correctif local :
   pre-hook `replace_key_session_changes_sport` partage par `validate_plan_patch`.
 
-### P1 — Post-event reply verifier ✅ implemente localement 4 mai 2026
+### P1 — Post-event reply verifier ✅ livre
 
 Bloquant avant 3B-A. Ferme localement : plus on libere le coach, plus il faut
 verifier que sa phrase finale colle aux mutations effectivement appliquees.
@@ -560,7 +611,7 @@ Tests ajoutes :
 - contexte verifier enrichi avec `before -> after` pour distinguer
   `replace_session` de `move_session`.
 
-### P1-bis — PlanPatch confirmation parity ✅ implemente localement 4 mai 2026
+### P1-bis — PlanPatch confirmation parity ✅ livre
 
 Bug observe par smoke reel DeepSeek : `Tu peux remplacer ma seance cle par une
 natation ?` pouvait produire un `PlanPatch.replace_session` applique directement.
@@ -576,7 +627,7 @@ Fix :
 
 Test : `test_plan_patch_validation_requires_confirmation_when_replacing_key_session_sport`.
 
-### Chantier 3B-A — Heartbeat read-tools read-only ✅ implemente localement 4 mai 2026
+### Chantier 3B-A — Heartbeat read-tools read-only ✅ livre
 
 Objectif : le heartbeat n'est plus un one-shot texte uniquement. Avant de
 parler, il peut demander des read-tools pour relire la verite recente :
@@ -610,7 +661,7 @@ Tests :
 - debug endpoint expose la surface tools ;
 - tests heartbeat existants conserves.
 
-### Chantier 3B-B — Heartbeat PlanPatch + confirmation ✅ implemente localement 5 mai 2026
+### Chantier 3B-B — Heartbeat PlanPatch + confirmation ✅ livre
 
 Objectif : le heartbeat peut proposer un vrai ajustement planning sans jamais
 committer tout seul.
@@ -643,7 +694,7 @@ Verification locale :
   `persist_draft`, sans event mutation ;
 - suite proche heartbeat/tools/core/plan patch : 123 passed.
 
-### P1-ter — Execution receipt repair hardening ✅ implemente localement 4 mai 2026
+### P1-ter — Execution receipt repair hardening ✅ livre
 
 Smoke reel du 4 mai apres 3B-A :
 
@@ -735,7 +786,7 @@ Verification locale :
 
 1. ~~**Chantier 0-3A-bis**~~ ✅ shippe/deploye 2-4 mai 2026.
 2. ~~**Chantier 4**~~ ✅ observabilite proactive coach loop.
-3. ~~**P1 post-event reply verifier + P1-bis PlanPatch confirmation parity**~~ ✅ implemente localement.
+3. ~~**P1 post-event reply verifier + P1-bis PlanPatch confirmation parity**~~ ✅ livre.
 4. ~~**Chantier 3B-A**~~ ✅ heartbeat tool-use read-only.
 5. ~~**P1-ter execution receipt repair hardening**~~ ✅ smoke
    `heartbeat_non_completion` ferme.
@@ -744,7 +795,7 @@ Verification locale :
    commit autonome.
 8. **Maintenant : dogfood court 3B-B** — verifier pending heartbeat PlanPatch,
    sans commit autonome.
-9. ~~**Phase A+ core gate (A+1-A+3)**~~ ✅ implemente localement 5 mai 2026 —
+9. ~~**Phase A+ core gate (A+1-A+3)**~~ ✅ livre —
    simulation, reviewer LLM/fallback type, gate runtime. Objectif : aucun
    `PlanPatch` significatif ne commit sans review sportive.
 10. ~~**Smoke API reel A+**~~ ✅ `./scripts/smoke-a-plus-api` — serveur HTTP
@@ -853,9 +904,9 @@ Skip acceptable seulement pour execution pure (`done` / `skipped`), lookup, memo
 Ordre detaille :
 1. 3B-B dogfood court : confirmer que les pending heartbeat PlanPatch sont propres
 2. A+0 docs + contrats (`SPORT-QUALITY-REVIEW.md`) — fait localement
-3. A+1 simulation / context / checks deterministes — implemente localement
-4. A+2 LLM `WeekCoherenceReviewer` / fallback type — implemente localement
-5. A+3 gate runtime dans `apply_patch_for_user` — implemente localement
+3. A+1 simulation / context / checks deterministes — livre
+4. A+2 LLM `WeekCoherenceReviewer` / fallback type — livre
+5. A+3 gate runtime dans `apply_patch_for_user` — livre
 6. 3B-C action-tools natifs bornes, maintenant proteges par la gate
 7. A+4 tool validation-only `validate_week_coherence`
 8. A+5 review semaine generee
