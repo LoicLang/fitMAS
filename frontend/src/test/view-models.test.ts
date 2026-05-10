@@ -3,6 +3,7 @@ import { initialSelectedDate } from "../features/calendar/view-model";
 import { weeklyExecutionRatio } from "../features/evolution/view-model";
 import { overviewHeroTitle } from "../features/overview/view-model";
 import { workoutStats } from "../features/workout-detail/view-model";
+import { buildSvgPath } from "../lib/polyline";
 
 describe("frontend view models", () => {
   it("picks today first in calendar", () => {
@@ -34,5 +35,14 @@ describe("frontend view models", () => {
     } as never);
     expect(stats[0].value).toContain("15.2");
     expect(stats[1].value).toBe("95 min");
+  });
+
+  it("preserves route proportions when building svg paths", () => {
+    const path = buildSvgPath([
+      [0, 0],
+      [1, 1],
+    ]);
+
+    expect(path).toBe("M 26.00 48.00 L 74.00 0.00");
   });
 });

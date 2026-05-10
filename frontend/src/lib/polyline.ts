@@ -44,12 +44,19 @@ export function buildSvgPath(points: [number, number][], width = 100, height = 4
   const minLng = Math.min(...lngs);
   const maxLng = Math.max(...lngs);
   const latRange = maxLat - minLat || 0.001;
-  const lngRange = maxLng - minLng || 0.001;
+  const avgLat = (minLat + maxLat) / 2;
+  const lngScale = Math.max(Math.cos((avgLat * Math.PI) / 180), 0.001);
+  const lngRange = (maxLng - minLng || 0.001) * lngScale;
+  const scale = Math.min(width / lngRange, height / latRange);
+  const routeWidth = lngRange * scale;
+  const routeHeight = latRange * scale;
+  const offsetX = (width - routeWidth) / 2;
+  const offsetY = (height - routeHeight) / 2;
 
   return points
     .map(([lat, lng], index) => {
-      const x = ((lng - minLng) / lngRange) * width;
-      const y = height - (((lat - minLat) / latRange) * height);
+      const x = offsetX + ((lng - minLng) * lngScale * scale);
+      const y = height - offsetY - ((lat - minLat) * scale);
       return `${index === 0 ? "M" : "L"} ${x.toFixed(2)} ${y.toFixed(2)}`;
     })
     .join(" ");

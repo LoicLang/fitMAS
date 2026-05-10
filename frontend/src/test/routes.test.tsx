@@ -140,6 +140,7 @@ describe("app routes", () => {
     expect(await screen.findByText("Tempo run")).toBeInTheDocument();
     expect(screen.getAllByText("manqué").length).toBeGreaterThan(0);
     expect(screen.getAllByText("hors plan").length).toBeGreaterThan(0);
+    expect(screen.getByText("Sortie vélo off-plan").closest("[data-calendar-entry]")).toHaveClass("w-full");
   });
 
   it("renders workout detail route directly", async () => {

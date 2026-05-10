@@ -146,8 +146,8 @@ export function CalendarPage() {
 
 function DayEntry({ item }: { item: CalendarItem }) {
   const content = (
-    <div className="surface-panel flex items-center gap-4 p-4 transition hover:bg-white">
-      <span className={`shrink-0 rounded-full px-3 py-1.5 text-xs font-bold uppercase tracking-[0.12em] ${STATUS_STYLES[item.status] || STATUS_STYLES.planned}`}>
+    <div data-calendar-entry className="surface-panel flex w-full max-w-full min-w-0 items-center gap-3 overflow-hidden p-3 transition hover:bg-white sm:gap-4 sm:p-4">
+      <span className={`shrink-0 rounded-full px-2.5 py-1.5 text-[0.65rem] font-bold uppercase tracking-[0.1em] sm:px-3 sm:text-xs ${STATUS_STYLES[item.status] || STATUS_STYLES.planned}`}>
         {statusLabel(item.status)}
       </span>
       <div className="min-w-0 flex-1">
@@ -161,7 +161,7 @@ function DayEntry({ item }: { item: CalendarItem }) {
   );
 
   if (item.kind === "session") {
-    return <Link to={`/workout/${item.id}`}>{content}</Link>;
+    return <Link to={`/workout/${item.id}`} className="block w-full min-w-0 max-w-full">{content}</Link>;
   }
 
   return content;
