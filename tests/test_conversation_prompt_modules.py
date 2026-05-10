@@ -1,4 +1,5 @@
 from fitmas import coach_voice
+from fitmas.conversation_prompting import select_conversation_prompt_policy
 from fitmas.conversation_prompt_modules import (
     build_action_contract_system_text,
     build_calendar_truth_system_text,
@@ -10,6 +11,7 @@ from fitmas.conversation_prompt_modules import (
     build_tool_workflow_system_text,
 )
 from fitmas.prompt_contracts import get_prompt_contract
+from fitmas.tools.routing import IntentCategory
 
 
 def test_identity_voice_system_text_contains_voice_contract() -> None:
@@ -87,9 +89,9 @@ def test_conversation_system_text_can_include_turn_scope_contract() -> None:
     markers = [
         "Tu es FitMAS, un coach multisport IA.",
         "Contrat du tour:",
-        "Workflow replan_after_constraint:",
+        "Workflow replan_after_constraint compact:",
         "Analyse le message utilisateur",
-        "Actions possibles:",
+        "Actions possibles compactes:",
         "Tu reponds UNIQUEMENT avec un JSON CoachDecision valide.",
     ]
     positions = [text.index(marker) for marker in markers]
@@ -200,12 +202,69 @@ def test_draft_action_conversation_system_text_keeps_mutation_modules() -> None:
     text = build_conversation_system_text(contract)
 
     assert "Contrat du tour:" in text
-    assert "Workflow replan_after_constraint:" in text
-    assert "Actions possibles:" in text
+    assert "Workflow replan_after_constraint compact:" in text
+    assert "Actions possibles compactes:" in text
     assert "draft_move_session" in text
     assert "suggest_replan_candidates" in text
     assert "Contrat de sortie read_only:" not in text
-    assert "plan_patch = {" in text
+    assert "PlanPatch:" in text
+
+
+def test_draft_action_conversation_system_text_uses_compact_contract_modules() -> None:
+    contract = get_prompt_contract("conversation_plan_negotiation")
+
+    text = build_conversation_system_text(contract)
+
+    assert "Posture draft_action:" in text
+    assert "Workflow replan_after_constraint compact:" in text
+    assert "Actions possibles compactes:" in text
+    assert "Contrat de sortie draft_action:" in text
+    assert "Exemples BONS" not in text
+    assert "Exemples A NE JAMAIS ECRIRE" not in text
+    assert "Few-shots actions structurees:" not in text
+    assert "Few-shots capture indirecte:" not in text
+    assert "Compat temporaire acceptee:" not in text
+
+
+def test_execution_report_system_text_excludes_planning_mutation_modules() -> None:
+    contract = get_prompt_contract("conversation_execution_report")
+
+    text = build_conversation_system_text(contract)
+
+    assert "Contrat du tour:" in text
+    assert "- route: conversation_execution_report" in text
+    assert "Contrat de sortie execution_report:" in text
+    assert "record_execution_update" in text
+    assert "record_health_signal" in text
+    assert "Workflow replan_after_constraint:" not in text
+    assert "Actions possibles:" not in text
+    assert "suggest_replan_candidates" not in text
+    assert "draft_move_session" not in text
+    assert "plan_patch = {" not in text
+
+
+def test_health_signal_system_text_keeps_bounded_planpatch_without_replan_manual() -> None:
+    contract = get_prompt_contract("conversation_health_signal")
+
+    text = build_conversation_system_text(contract)
+
+    assert "Contrat du tour:" in text
+    assert "- route: conversation_health_signal" in text
+    assert "Contrat de sortie health_signal:" in text
+    assert "record_health_signal" in text
+    assert "PlanPatch minimal si adaptation evidente" in text
+    assert "Workflow replan_after_constraint:" not in text
+    assert "Actions possibles:" not in text
+    assert "suggest_replan_candidates" not in text
+    assert "draft_move_session" not in text
+    assert "Few-shots actions structurees:" not in text
+
+
+def test_health_signal_intent_uses_health_prompt_contract() -> None:
+    policy = select_conversation_prompt_policy(intent=IntentCategory.HEALTH_SIGNAL)
+
+    assert policy.name == "health_signal"
+    assert policy.contract_name == "conversation_health_signal"
 
 
 def test_legacy_conversation_system_text_keeps_full_module_set() -> None:

@@ -61,6 +61,18 @@ _INTENT_POLICIES: dict[IntentCategory, ConversationPromptPolicy] = {
         include_signals=False,
         include_facts=False,
     ),
+    IntentCategory.HEALTH_SIGNAL: ConversationPromptPolicy(
+        name="health_signal",
+        contract_name="conversation_health_signal",
+        history_limit=4,
+        include_plan_summary=False,
+        include_timeline=True,
+        include_execution=True,
+        include_temporal=True,
+        include_claim=True,
+        include_signals=True,
+        include_facts=True,
+    ),
     IntentCategory.PLAN_NEGOTIATION: ConversationPromptPolicy(
         name="plan_negotiation_full",
         contract_name="conversation_plan_negotiation",

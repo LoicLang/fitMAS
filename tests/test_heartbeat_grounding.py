@@ -746,32 +746,28 @@ class HeartbeatGroundingTest(unittest.TestCase):
     def test_pre_session_reminder_passes_structured_reply_context_to_composer(self) -> None:
         now = get_local_now(self.user.timezone)
         tomorrow_key = DAY_KEYS[(now.weekday() + 1) % 7]
-        repo.replace_plan(
-            self.db,
-            self.user.id,
-            intention="test",
-            summary="test",
-            timezone_name=self.user.timezone,
-            days=[
-                {
-                    "day": tomorrow_key,
-                    "label": day_label_fr(tomorrow_key, capitalize=True),
-                    "sport_type": "running",
-                    "session_type": "long",
-                    "session_title": "Footing long",
-                    "session_goal": "Construire l'endurance facile",
-                    "session_note": "",
-                    "session_description": "",
-                    "duration_min": 50,
-                    "intensity": "easy",
-                    "load_score": 2,
-                    "priority": "Seance cle",
-                    "nutrition_focus": "",
-                    "flexibility": "stable",
-                    "completion_status": "planned",
-                }
-            ],
+        self.db.add(
+            s.ScheduledSession(
+                user_id=self.user.id,
+                day=tomorrow_key,
+                label=day_label_fr(tomorrow_key, capitalize=True),
+                scheduled_date=datetime.combine((now + timedelta(days=1)).date(), datetime.min.time()),
+                sport_type="running",
+                session_type="long",
+                session_title="Footing long",
+                session_goal="Construire l'endurance facile",
+                session_note="",
+                session_description="",
+                duration_min=50,
+                intensity="easy",
+                load_score=2,
+                priority="Seance cle",
+                nutrition_focus="",
+                flexibility="stable",
+                completion_status="planned",
+            )
         )
+        self.db.commit()
         repo.upsert_facts(
             self.db,
             self.user.id,

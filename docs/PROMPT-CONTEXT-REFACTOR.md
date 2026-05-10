@@ -563,6 +563,14 @@ Livrables :
   les regles de mutation/refus/confirmation du pack voix complet ; le pack
   complet reste reserve aux routes legacy, `draft_action` et
   `write_after_validation`.
+- prompt diet par capability, slice 5 : ✅ les routes
+  `write_after_validation` ont des schemas cibles. `execution_report` ne voit
+  plus le workflow replan ni PlanPatch ; `health_signal` garde un PlanPatch
+  minimal pour adaptation prudente sans recevoir le manuel complet de mutation.
+- prompt diet par capability, slice 6 : ✅ `health_signal` est route vers son
+  contrat dedie au lieu de retomber sur `plan_negotiation`, et les snapshots
+  couvrent maintenant `execution_report`, `health_signal` et
+  `plan_negotiation`.
 - fallback outage propre ;
 
 Regression cible :

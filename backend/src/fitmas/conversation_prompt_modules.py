@@ -97,6 +97,16 @@ Workflow replan_after_constraint:
 - ne mets pas de detail intra-seance fin dans ce workflow: sport, jour, duree/intensite cible suffisent pour Phase A"""
 
 
+def build_compact_tool_workflow_system_text() -> str:
+    return """\
+Workflow replan_after_constraint compact:
+- Lis les tools read-only utiles avant de trancher une mutation.
+- Les tools `draft_move_session`, `draft_swap_sessions`, `draft_replace_session`, `draft_lighten_day`, `draft_create_session` construisent un PlanPatch candidat mais ne commit jamais.
+- `suggest_replan_candidates` donne une aide candidate, pas une decision finale.
+- `validate_week_coherence` juge le compromis sportif ; le backend revalide toujours avant commit.
+- Retourne `plan_patch`, `requires_confirmation` ou `no_change` selon les faits fournis."""
+
+
 def build_coach_voice_examples_system_text() -> str:
     return f"{coach_voice.COACH_VOICE_FEW_SHOTS_GOOD}\n\n{coach_voice.COACH_VOICE_FEW_SHOTS_BAD}"
 
@@ -225,6 +235,24 @@ Exemples:
 - "c'est pas ce qui est sur mon planning dans l'app" -> no_change"""
 
 
+def build_compact_action_contract_system_text() -> str:
+    return """\
+Actions possibles compactes:
+- move_session: deplacer une seance existante vers un jour libre/flexible.
+- swap_sessions: echanger deux seances existantes.
+- replace_session: remplacer le sport/type/duree/intensite d'une seance ou remplir une journee flexible.
+- lighten_day: alleger une seance concrete ou convertir un jour en recuperation.
+- create_session: creer une seance seulement si le creneau est libre/flexible et la demande est claire.
+- no_change: question factuelle, cible ambigue, manque de verite, ou mutation trop risquee.
+
+Regles de mutation:
+- privilegie `target_session_id` quand la seance est identifiable.
+- utilise des dates ISO `YYYY-MM-DD` pour les cibles temporelles.
+- ne bloque pas un changement seulement parce qu'il touche un repos ; la coherence semaine est jugee par validation/review.
+- si plusieurs seances correspondent, demande une clarification courte plutot que forger une cible.
+- avec `no_change`, ne parle jamais comme si une mutation etait appliquee."""
+
+
 def build_output_schema_system_text() -> str:
     return """\
 Tu reponds UNIQUEMENT avec un JSON CoachDecision valide.
@@ -303,8 +331,112 @@ Compat temporaire acceptee:
 Pas de markdown. Pas de texte autour du JSON."""
 
 
+def build_draft_action_output_schema_system_text() -> str:
+    return """\
+Tu reponds UNIQUEMENT avec un JSON CoachDecision valide.
+
+Contrat de sortie draft_action:
+- response_type: reply | no_change | plan_patch | requires_confirmation
+- rationale: raison courte
+- fitmas_message: message envoye TEL QUEL a l'utilisateur, jamais preuve de commit
+- mutation_decision: null sauf compat simple si vraiment necessaire
+- plan_patch: objet optionnel si une ou plusieurs operations sont necessaires
+- confirmation_reason: obligatoire si response_type=requires_confirmation
+- memory_actions: liste optionnelle pour facts user explicites
+- execution_actions: liste optionnelle seulement si le user declare aussi une execution claire
+- pending_resolution: optionnel, uniquement si un pending explicite existe et que le user y repond
+
+PlanPatch:
+- coach_message: brouillon court ; le runtime/composer produira la parole finale apres validation
+- operations[].operation_type: move_session | swap_sessions | replace_session | update_session | lighten_day | create_session
+- operations[].target_session_id, second_session_id, target_date, new_sport_type, new_session_type, new_duration_min, new_intensity selon besoin
+- operations[].rationale: raison operationnelle courte
+
+Regles:
+- Un PlanPatch est une intention structuree, pas une mutation appliquee.
+- Si le changement est sensible, utilise `requires_confirmation`.
+- Si la bonne reponse est factuelle ou explicative, utilise `no_change`.
+- Ne mets pas de texte autour du JSON.
+
+Pas de markdown. Pas de texte autour du JSON."""
+
+
 def build_read_only_output_schema_system_text() -> str:
     return build_no_action_coach_decision_output_schema_system_text("read_only")
+
+
+def build_execution_report_output_schema_system_text() -> str:
+    return """\
+Tu reponds UNIQUEMENT avec un JSON CoachDecision valide.
+
+Contrat de sortie execution_report:
+- response_type: reply | no_change
+- rationale: raison courte
+- fitmas_message: message envoye TEL QUEL a l'utilisateur, 1-2 phrases
+- mutation_decision: null
+- plan_patch: null
+- confirmation_reason: null
+- execution_actions: liste optionnelle, uniquement `record_execution_update`
+- memory_actions: liste optionnelle si le message contient aussi un fait durable/recent
+- pending_resolution: optionnel, uniquement si un pending explicite existe et que le user y repond
+
+execution_actions.record_execution_update:
+- target_ref: texte court de la cible telle que comprise
+- target_session_id: id si resolu par le contexte/tools, sinon null
+- status: completed | not_completed | partially_completed | unknown
+- completed: true | false | null
+- sport_type: sport si donne ou resolu
+- duration_min: duree si donnee ou resolue
+- confidence: 0.0-1.0
+- evidence: citation courte du user ou evidence tool
+
+memory_actions autorisees si pertinent:
+- record_health_signal avec health_signal, body_area?, severity, status, confidence, evidence?
+- record_availability avec window_text, availability, starts_on?, ends_on?, recurrence?, confidence, evidence?
+- record_preference avec preference, polarity, scope?, confidence, evidence?
+
+Regles:
+- Ne propose aucune mutation planning dans ce contrat.
+- Ne transforme jamais `adapted` en preuve d'execution.
+- Si la cible d'execution manque, garde `execution_actions=[]` et demande une clarification courte.
+
+Pas de markdown. Pas de texte autour du JSON."""
+
+
+def build_health_signal_output_schema_system_text() -> str:
+    return """\
+Tu reponds UNIQUEMENT avec un JSON CoachDecision valide.
+
+Contrat de sortie health_signal:
+- response_type: reply | no_change | plan_patch | requires_confirmation
+- rationale: raison courte
+- fitmas_message: message envoye TEL QUEL a l'utilisateur, prudent et concret
+- mutation_decision: null
+- memory_actions: liste optionnelle, principalement `record_health_signal`
+- execution_actions: [] sauf si le user declare aussi une execution claire
+- pending_resolution: optionnel, uniquement si un pending explicite existe et que le user y repond
+
+memory_actions.record_health_signal:
+- health_signal: signal sante/fatigue formule simplement
+- body_area: zone si connue, sinon null
+- severity: mild | moderate | severe | unknown
+- status: new | ongoing | improving | worsening | resolved | unknown
+- confidence: 0.0-1.0
+- evidence: citation courte du user
+
+PlanPatch minimal si adaptation evidente:
+- Utilise `response_type="plan_patch"` seulement si le signal touche clairement une seance planifiee.
+- plan_patch.operations[].operation_type: replace_session | lighten_day | move_session
+- Renseigne target_session_id si la seance cible est resolue.
+- Donne une rationale courte centree sur le signal sante.
+- Si le risque est sensible ou la cible incertaine, utilise `requires_confirmation` ou `no_change`.
+
+Regles:
+- Ne produis pas de menu large.
+- Ne donne pas de diagnostic medical.
+- Si douleur severe, inhabituelle ou evolutive, reste prudent et demande une verification humaine.
+
+Pas de markdown. Pas de texte autour du JSON."""
 
 
 def build_no_action_coach_decision_output_schema_system_text(capability: str) -> str:
@@ -351,6 +483,59 @@ def build_conversation_system_text(contract: PromptContract | None = None) -> st
                 build_turn_scope_contract_system_text(contract),
                 build_read_only_truth_system_text(),
                 build_no_action_coach_decision_output_schema_system_text(contract.capability),
+            )
+        )
+
+    if contract is not None and contract.name == "conversation_execution_report":
+        return "\n\n".join(
+            (
+                build_lite_identity_voice_system_text(
+                    posture=(
+                        "Posture execution_report:\n"
+                        "- Comprends ce qui a ete fait, pas fait, ou partiellement fait.\n"
+                        "- Ne change pas le planning dans ce tour.\n"
+                        "- Si une cible manque, demande une clarification courte."
+                    )
+                ),
+                build_turn_scope_contract_system_text(contract),
+                build_calendar_truth_system_text(),
+                build_execution_report_output_schema_system_text(),
+            )
+        )
+
+    if contract is not None and contract.name == "conversation_health_signal":
+        return "\n\n".join(
+            (
+                build_lite_identity_voice_system_text(
+                    posture=(
+                        "Posture health_signal:\n"
+                        "- Capture le signal sante/fatigue avant tout.\n"
+                        "- Adapte seulement si la cible planning est claire et le changement reste prudent.\n"
+                        "- Pas de diagnostic medical."
+                    )
+                ),
+                build_turn_scope_contract_system_text(contract),
+                build_calendar_truth_system_text(),
+                build_health_signal_output_schema_system_text(),
+            )
+        )
+
+    if contract is not None and contract.capability == "draft_action":
+        return "\n\n".join(
+            (
+                build_lite_identity_voice_system_text(
+                    posture=(
+                        "Posture draft_action:\n"
+                        "- Explore une mutation structuree, mais ne parle jamais comme si elle etait deja appliquee.\n"
+                        "- Utilise les tools/candidats quand ils sont disponibles.\n"
+                        "- Si la cible ou le compromis manque, demande une clarification courte."
+                    )
+                ),
+                build_turn_scope_contract_system_text(contract),
+                build_compact_tool_workflow_system_text(),
+                build_calendar_truth_system_text(),
+                build_compact_action_contract_system_text(),
+                build_draft_action_output_schema_system_text(),
             )
         )
 

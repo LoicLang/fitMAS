@@ -194,7 +194,7 @@ _TURN_INTENT_TO_PROMPT_INTENT = {
     "plan_mutation": IntentCategory.PLAN_NEGOTIATION,
     "plan_lookup": IntentCategory.PLAN_LOOKUP,
     "execution_report": IntentCategory.EXECUTION_REPORT,
-    "health_signal": IntentCategory.PLAN_NEGOTIATION,
+    "health_signal": IntentCategory.HEALTH_SIGNAL,
     "preference_signal": IntentCategory.PLAN_NEGOTIATION,
 }
 _CONVERSATION_TOOL_BUDGET = (
