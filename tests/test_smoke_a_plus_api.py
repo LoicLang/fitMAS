@@ -184,6 +184,27 @@ def test_reply_placeholders_are_reported_as_warnings_not_artifact_failures():
     assert "assistant reply contains bracket placeholder" in result.warnings
 
 
+def test_daily_scenarios_are_opt_in_and_include_multi_turn_cases():
+    smoke = _load_smoke_module()
+
+    selected = smoke._selected_scenarios(None, include_daily=True)
+    names = {scenario.name for scenario in selected}
+
+    assert "body_metric_reassurance_thread" in names
+    assert "execution_temporal_correction_thread" in names
+    assert "move_easy_then_confirm" in names
+    assert "move_hard_close" not in names
+    assert any(scenario.followups for scenario in selected)
+
+
+def test_named_selection_can_pick_daily_scenario_without_daily_flag():
+    smoke = _load_smoke_module()
+
+    selected = smoke._selected_scenarios(["body_metric_reassurance_thread"], include_daily=False)
+
+    assert [scenario.name for scenario in selected] == ["body_metric_reassurance_thread"]
+
+
 def test_generated_week_response_fails_without_scheduled_sessions():
     smoke = _load_smoke_module()
     response = {

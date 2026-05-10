@@ -275,10 +275,16 @@ Commandes utiles :
 
 ```bash
 ./scripts/smoke-a-plus-api --scenario move_hard_close --scenario replace_key_running_swim_easy
+./scripts/smoke-a-plus-api --daily --skip-generated-week
 ./scripts/smoke-a-plus-api --skip-generated-week
 ./scripts/smoke-a-plus-api --generated-workflow onboard_loaded_running
 ./scripts/smoke-a-plus-api --keep-db --port 8075
 ```
+
+`--daily` lance une batterie API/LLM plus large que les smokes A+ habituels :
+ack/close, small talk, poids/moral, lookup planning, historique activites,
+charge, execution, correction temporelle, douleur, fatigue, indisponibilites,
+swap/lighten/replace, confirmation sans pending et suites multi-tours.
 
 Smoke Phase A avant dogfood reel :
 

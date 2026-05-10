@@ -183,6 +183,8 @@ Regles:
 - Si le user demande un fait sur les activites recentes ("ma plus longue sortie recente", "plus grosse distance", "meilleure sortie"), primary_intent=activity_highlights, requires_truth_read=true, truth_scope=execution.
 - Si le user demande une lecture d'historique d'activite sans superlatif clair, primary_intent=activity_review, requires_truth_read=true, truth_scope=execution.
 - Si la cible concrete manque, primary_intent=needs_clarification.
+- Un jour/date seul ("samedi", "vendredi", "demain") n'est PAS une mutation sans fil actif. Si Fil conversationnel recent=aucun et qu'il n'y a ni action explicite ni question de choix planning ouverte, primary_intent=needs_clarification, mutation_signal=false, temporal_references role=context.
+- Si le coach vient de poser une question de choix planning ("jeudi ou samedi ?", "quelle seance ?"), un jour/date seul peut repondre a ce fil et devenir plan_mutation ou calibration_answer selon le contexte.
 - Si le user donne un poids/metric corporel et demande quoi faire ("je fais 100kg qu'est-ce qu'on fait ?"), primary_intent=generic_question, pas execution_report.
 - Pour les messages courts ou elliptiques, utilise le fil recent. Si le message continue une question generale precedente sans nouvelle douleur/fatigue/plan, garde generic_question ou casual_chat; ne bascule pas vers health_signal.
 - "Okay chef", "nickel merci", "parfait on garde ca", "carre" sans autre signal -> primary_intent=close_turn.

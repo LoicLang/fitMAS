@@ -280,3 +280,43 @@ def test_plan_conversation_turn_includes_recent_thread_for_elliptic_followup(mon
     assert "Fil conversationnel recent" in captured["prompt"]
     assert "100kg, c'est une donnee" in captured["prompt"]
     assert "messages courts ou elliptiques" in captured["system"]
+
+
+def test_plan_conversation_turn_prompts_bare_day_without_thread_as_clarification(monkeypatch) -> None:
+    captured: dict[str, str] = {}
+
+    def fake_request_json(*, system, prompt, model, max_tokens):
+        captured["system"] = system
+        captured["prompt"] = prompt
+        return {
+            "primary_intent": "needs_clarification",
+            "secondary_intents": [],
+            "user_goal": "message elliptique avec seulement un jour",
+            "mutation_signal": False,
+            "execution_claim": None,
+            "temporal_references": [{"kind": "weekday", "value": "saturday", "role": "context"}],
+            "requires_truth_read": False,
+            "truth_scope": None,
+            "needs_clarification": True,
+            "clarification_question": "Tu parles de quoi pour samedi ?",
+            "confidence": 0.76,
+        }
+
+    monkeypatch.setattr(planner.gw, "request_json", fake_request_json)
+
+    turn_plan = planner.plan_conversation_turn(
+        user_text="samedi",
+        temporal_summary="aujourd'hui = 2026-05-08",
+        execution_summary="Plan semaine disponible",
+        activity_claim_summary="aucun",
+        signal_summary="aucun",
+        conversation_history=[],
+    )
+
+    assert turn_plan is not None
+    assert turn_plan.primary_intent == "needs_clarification"
+    assert turn_plan.has_plan_mutation is False
+    assert turn_plan.temporal_references[0]["role"] == "context"
+    assert "jour/date seul" in captured["system"]
+    assert "Fil conversationnel recent=aucun" in captured["system"]
+    assert "question de choix planning" in captured["system"]

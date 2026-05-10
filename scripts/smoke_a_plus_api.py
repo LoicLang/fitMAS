@@ -31,6 +31,7 @@ class SmokeScenario:
     prompt: str
     expectation: Expectation
     description: str = ""
+    followups: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -132,6 +133,171 @@ SCENARIOS: tuple[SmokeScenario, ...] = (
         prompt="Je ne peux pas nager pendant deux semaines, adapte si besoin sans faire n'importe quoi.",
         expectation="coherent_commit_or_pending",
         description="A multi-day sport constraint may propose a guarded PlanPatch or ask follow-up.",
+    ),
+)
+
+DAILY_SCENARIOS: tuple[SmokeScenario, ...] = (
+    SmokeScenario(
+        name="close_turn_ack",
+        prompt="Okay chef",
+        expectation="no_plan_write",
+        description="Social close should stay short, terminal and no-write.",
+    ),
+    SmokeScenario(
+        name="thanks_close",
+        prompt="Nickel merci",
+        expectation="no_plan_write",
+        description="Thanks/ack should not reopen a planning thread.",
+    ),
+    SmokeScenario(
+        name="casual_banter",
+        prompt="T'es dur avec moi coach mais ca me va",
+        expectation="no_plan_write",
+        description="Banter should answer naturally without plan mutation.",
+    ),
+    SmokeScenario(
+        name="body_metric_reassurance_thread",
+        prompt="Putain enft je fais 100kg qu'est ce qu'on fait ?",
+        expectation="no_plan_write",
+        description="Body metric concern should use coach lens without turning into a planning menu.",
+        followups=(
+            "Rien de grave quoi",
+            "Je voulais dire c'est pas grave, si je m'y remets ca va redescendre proprement",
+        ),
+    ),
+    SmokeScenario(
+        name="tomorrow_lookup",
+        prompt="J'ai quoi demain ?",
+        expectation="no_plan_write",
+        description="Simple next-day plan lookup should be factual and read-only.",
+    ),
+    SmokeScenario(
+        name="current_plan_lookup",
+        prompt="Redonne le plan actuel",
+        expectation="no_plan_write",
+        description="Current plan lookup should not create events or pending confirmations.",
+    ),
+    SmokeScenario(
+        name="key_session_lookup",
+        prompt="C'est quoi la seance la plus importante de la semaine ?",
+        expectation="no_plan_write",
+        description="Planning explanation should stay read-only.",
+    ),
+    SmokeScenario(
+        name="activity_highlight_lookup",
+        prompt="C'etait quoi ma plus longue sortie recente ?",
+        expectation="no_plan_write",
+        description="Activity history question should use activity highlights, not plan lookup.",
+    ),
+    SmokeScenario(
+        name="load_review_lookup",
+        prompt="J'en suis ou niveau charge cette semaine ?",
+        expectation="no_plan_write",
+        description="Load/readiness question should read context without writing planning artifacts.",
+    ),
+    SmokeScenario(
+        name="execution_done_today",
+        prompt="J'ai fait le footing aujourd'hui, 38 minutes tranquille",
+        expectation="no_plan_write",
+        description="Execution report may update execution state but must not write plan mutation events.",
+    ),
+    SmokeScenario(
+        name="execution_temporal_correction_thread",
+        prompt="J'ai couru aujourd'hui 30 minutes",
+        expectation="no_plan_write",
+        description="Temporal correction should not create planning writes or false mutation claims.",
+        followups=("Non c'etait hier en fait",),
+    ),
+    SmokeScenario(
+        name="missed_session_report",
+        prompt="J'ai pas pu faire la seance hier, boulot trop tard",
+        expectation="no_plan_write",
+        description="Missed-session report should be execution/memory, not a planning mutation.",
+    ),
+    SmokeScenario(
+        name="future_evening_unavailable",
+        prompt="Demain soir c'est impossible pour moi",
+        expectation="coherent_commit_or_pending",
+        description="Availability constraint can propose/pending an adaptation, never claim without artifact.",
+    ),
+    SmokeScenario(
+        name="trip_constraint",
+        prompt="Je voyage de mercredi a vendredi, adapte si besoin",
+        expectation="coherent_commit_or_pending",
+        description="Multi-day availability constraint should use candidates/policy.",
+    ),
+    SmokeScenario(
+        name="new_availability",
+        prompt="Finalement je peux vendredi matin",
+        expectation="coherent_commit_or_pending",
+        description="New availability may become a candidate, but must remain artifact-coherent.",
+    ),
+    SmokeScenario(
+        name="fatigue_tomorrow",
+        prompt="Je suis rincé pour demain, jambes lourdes",
+        expectation="coherent_commit_or_pending",
+        description="Fatigue signal can trigger a lighter candidate or pending confirmation.",
+    ),
+    SmokeScenario(
+        name="shin_pain_signal",
+        prompt="J'ai une douleur au tibia ce matin, pas enorme mais je la sens",
+        expectation="coherent_commit_or_pending",
+        description="Health signal should be remembered and adaptation must be guarded.",
+    ),
+    SmokeScenario(
+        name="knee_pain_but_ack",
+        prompt="Ok mais genou douloureux quand meme",
+        expectation="coherent_commit_or_pending",
+        description="Ack plus health signal should not be swallowed as a trivial close.",
+    ),
+    SmokeScenario(
+        name="avoid_back_to_back",
+        prompt="Je veux eviter deux jours d'affilee cette semaine",
+        expectation="coherent_commit_or_pending",
+        description="Preference/constraint about spacing should not be a hardcoded rest block.",
+    ),
+    SmokeScenario(
+        name="swap_by_day",
+        prompt="Echange mercredi et jeudi si c'est mieux sportivement",
+        expectation="coherent_commit_or_pending",
+        description="Day-based swap should rely on typed refs/candidates and stay coherent.",
+    ),
+    SmokeScenario(
+        name="lighten_tomorrow",
+        prompt="Allege demain sans toucher au reste",
+        expectation="coherent_commit_or_pending",
+        description="Lightening a target day should go through candidate simulation/policy.",
+    ),
+    SmokeScenario(
+        name="replace_swim_with_bike",
+        prompt="Remplace la natation dimanche par un velo facile",
+        expectation="coherent_commit_or_pending",
+        description="Replacement by day/sport should use backend candidate refs when possible.",
+    ),
+    SmokeScenario(
+        name="move_easy_then_confirm",
+        prompt="Deplace la recuperation mobilite id 3 a lundi prochain",
+        expectation="coherent_commit_or_pending",
+        description="Pending/commit path should remain coherent through confirmation.",
+        followups=("oui je confirme si tu penses que c'est propre",),
+    ),
+    SmokeScenario(
+        name="confirm_without_pending",
+        prompt="oui je confirme",
+        expectation="no_plan_write",
+        description="Bare confirmation without pending should not create a mutation.",
+    ),
+    SmokeScenario(
+        name="short_slot_preference",
+        prompt="samedi",
+        expectation="no_plan_write",
+        description="Short elliptical answer without an active planning question should not invent a mutation.",
+    ),
+    SmokeScenario(
+        name="ignore_previous",
+        prompt="Ignore mon dernier message, on garde comme prevu",
+        expectation="no_plan_write",
+        description="Cancellation-style turn without pending should close cleanly.",
     ),
 )
 
@@ -237,6 +403,17 @@ _MUTATION_CLAIM_MARKERS = (
     "je l'ai mis",
     "j ai mis",
 )
+_INTERNAL_JARGON_MARKERS = (
+    "content:",
+    "response_mode",
+    "plan_patch",
+    "candidate_id",
+    "tool_result",
+    "json",
+    "runtime",
+    "fallback",
+    "commit event",
+)
 
 
 def evaluate_scenario_result(
@@ -256,6 +433,8 @@ def evaluate_scenario_result(
     new_pending = _new_rows(before.pending, after.pending)
     if _contains_bracket_placeholder(assistant_message):
         warnings.append("assistant reply contains bracket placeholder")
+    if _contains_internal_jargon(assistant_message):
+        reasons.append("assistant reply leaks internal jargon")
 
     if scenario.expectation == "guarded_no_commit":
         if event_delta:
@@ -386,6 +565,11 @@ def _contains_bracket_placeholder(message: str) -> bool:
     return any(marker in normalized for marker in placeholders)
 
 
+def _contains_internal_jargon(message: str) -> bool:
+    normalized = _normalize(message)
+    return any(marker in normalized for marker in _INTERNAL_JARGON_MARKERS)
+
+
 def _normalize(value: str) -> str:
     value = unicodedata.normalize("NFKD", value)
     value = "".join(ch for ch in value if not unicodedata.combining(ch))
@@ -399,8 +583,13 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     parser.add_argument(
         "--scenario",
         action="append",
-        choices=[scenario.name for scenario in SCENARIOS],
+        choices=[scenario.name for scenario in (*SCENARIOS, *DAILY_SCENARIOS)],
         help="Run only this scenario. Repeatable.",
+    )
+    parser.add_argument(
+        "--daily",
+        action="store_true",
+        help="Run the expanded daily-life conversation battery instead of the A+ core scenario set.",
     )
     parser.add_argument(
         "--generated-workflow",
@@ -441,10 +630,10 @@ def main(argv: list[str] | None = None) -> int:
         sys.stdout.reconfigure(line_buffering=True)
     args = parse_args(argv or sys.argv[1:])
     db_path = args.db_path.resolve()
-    selected = _selected_scenarios(args.scenario)
+    selected = _selected_scenarios(args.scenario, include_daily=args.daily)
     selected_generated = _selected_generated_workflows(
         args.generated_workflow,
-        include_default=not args.scenario and not args.skip_generated_week,
+        include_default=not args.scenario and not args.daily and not args.skip_generated_week,
     )
     port = _choose_port(args.port)
     base_url = f"http://127.0.0.1:{port}"
@@ -478,9 +667,13 @@ def main(argv: list[str] | None = None) -> int:
             print(f"SCENARIO {scenario.name}")
             print(f"prompt: {scenario.prompt}")
             try:
-                response = _post_message(base_url, scenario.prompt, timeout_seconds=args.timeout)
-                assistant_text = _assistant_text_from_response(response)
-                print(f"assistant: {assistant_text}")
+                messages = (scenario.prompt, *scenario.followups)
+                for index, message in enumerate(messages, start=1):
+                    if len(messages) > 1:
+                        print(f"turn#{index}: {message}")
+                    response = _post_message(base_url, message, timeout_seconds=args.timeout)
+                    assistant_text = _assistant_text_from_response(response)
+                    print(f"assistant: {assistant_text}")
             except Exception as exc:  # pragma: no cover - exercised by real smoke only
                 failures += 1
                 print(f"FAIL: HTTP/LLM error: {exc}")
@@ -525,10 +718,11 @@ def main(argv: list[str] | None = None) -> int:
         _unlink_if_exists(db_path.with_suffix(db_path.suffix + "-journal"))
 
 
-def _selected_scenarios(names: list[str] | None) -> tuple[SmokeScenario, ...]:
+def _selected_scenarios(names: list[str] | None, *, include_daily: bool = False) -> tuple[SmokeScenario, ...]:
+    available = (*SCENARIOS, *DAILY_SCENARIOS)
     if not names:
-        return SCENARIOS
-    by_name = {scenario.name: scenario for scenario in SCENARIOS}
+        return DAILY_SCENARIOS if include_daily else SCENARIOS
+    by_name = {scenario.name: scenario for scenario in available}
     return tuple(by_name[name] for name in names)
 
 
