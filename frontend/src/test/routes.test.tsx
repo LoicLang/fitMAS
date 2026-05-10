@@ -123,7 +123,7 @@ describe("app routes", () => {
   it("renders overview with today's workout", async () => {
     renderAt("/", { overview: overviewPayload });
     expect(await screen.findByText("LONG RUN")).toBeInTheDocument();
-    expect(screen.getByText("Daily brief")).toBeInTheDocument();
+    expect(screen.getByText("À venir")).toBeInTheDocument();
     expect(screen.getByText("On pose une vraie sortie d'endurance avant la semaine chargée.")).toBeInTheDocument();
     expect(screen.queryByText("20 min souple")).not.toBeInTheDocument();
   });
@@ -136,6 +136,7 @@ describe("app routes", () => {
 
   it("renders calendar with missing and offplan states", async () => {
     renderAt("/calendar", { calendar: calendarPayload });
+    expect(await screen.findByText("Planning")).toBeInTheDocument();
     expect(await screen.findByText("Tempo run")).toBeInTheDocument();
     expect(screen.getAllByText("manqué").length).toBeGreaterThan(0);
     expect(screen.getAllByText("hors plan").length).toBeGreaterThan(0);
@@ -152,13 +153,14 @@ describe("app routes", () => {
 
   it("renders evolution with historical data", async () => {
     renderAt("/evolution", { evolution: evolutionPayload });
-    expect(await screen.findByText("Historique charge réelle")).toBeInTheDocument();
-    expect(screen.getByText("4 semaines à venir")).toBeInTheDocument();
+    expect(await screen.findByText("Progression")).toBeInTheDocument();
+    expect(screen.getByText("Charge")).toBeInTheDocument();
+    expect(screen.getByText("Prévu vs fait")).toBeInTheDocument();
   });
 
   it("renders evolution without history gracefully", async () => {
     renderAt("/evolution", { evolution: { ...evolutionPayload, history: [] } });
-    expect(await screen.findByText("Historique charge réelle")).toBeInTheDocument();
+    expect(await screen.findByText("Progression")).toBeInTheDocument();
     expect(screen.getByText("48.0")).toBeInTheDocument();
   });
 });
