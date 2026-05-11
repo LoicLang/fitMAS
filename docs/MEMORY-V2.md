@@ -171,6 +171,71 @@ texte user libre
 
 Interdit : creer une fatigue, douleur, disponibilite, preference ou contrainte depuis un pattern lexical local sur le texte user.
 
+### Cycle de vie des facts — 11 mai 2026
+
+Les facts ont maintenant une temporalite explicite et un statut de vie.
+
+Champs canoniques :
+
+```text
+status            = open | new | ongoing | improving | worsening | resolved | stale | superseded
+severity          = mild | moderate | severe | medium | high | unknown
+signal_kind       = pain | injury | fatigue | sleep | illness | tension | availability_limited | ...
+observed_at       = moment ou le signal est observe
+valid_from        = debut de validite
+valid_until       = fin de validite metier
+last_seen_at      = derniere confirmation
+resolved_at       = moment de resolution
+resolution_reason = raison courte de resolution
+```
+
+Contrat important :
+
+- le LLM decide si un message contient une info memoire importante ;
+- le LLM emet une `memory_action` structuree ;
+- le writer borne persiste statut, temporalite, severite et `signal_kind` ;
+- les lecteurs runtime ne redevinent pas l'intention depuis le texte du fact.
+
+Exemples :
+
+```text
+"j'ai mal au genou"
+-> record_health_signal(signal_kind=pain, severity=unknown, status=new)
+
+"plus de tension au tibia"
+-> record_health_signal(signal_kind=tension, body_area=tibia, status=resolved)
+
+"je ne peux pas nager deux semaines"
+-> record_availability(availability=unavailable, starts_on/ends_on si inferables)
+```
+
+### Lecture readiness
+
+`readiness.py` ne lit plus les mots des contraintes, preferences, objectifs,
+notes coach ou valeurs de facts pour fabriquer des flags.
+
+Il consomme uniquement :
+
+```text
+fact.active == true
+fact.status non resolu
+fact valid temporellement
+fact.affects contient readiness
+fact.category / signal_kind / severity / status
+```
+
+Donc un vieux fact qui mentionne "sommeil", "travail", "tendon" ou "maladie"
+ne peut plus degrader le planning s'il n'est pas un signal readiness ouvert et
+structure.
+
+Cette frontiere est volontaire :
+
+```text
+LLM = comprendre le message et maintenir la memoire.
+Runtime = valider, dater, expirer, filtrer et consommer les artefacts structures.
+Readiness = etat sportif depuis facts structures + charge reelle, jamais depuis mots-cles.
+```
+
 ### Ecrit dans profile memory
 
 Faits :

@@ -5,38 +5,10 @@ from datetime import date
 from typing import Any, Sequence
 
 from fitmas.athlete_profile import AthleteProfileSnapshot
+from fitmas.fact_memory import select_readiness_facts
 from fitmas.fitness_snapshot import FitnessSnapshot
 from fitmas.planning_config import get_global_planning_config
 from fitmas.recent_reality import RecentRealityWindow
-
-PAIN_KEYWORDS = (
-    "douleur",
-    "pain",
-    "blessure",
-    "injury",
-    "tendon",
-    "genou",
-    "knee",
-    "cheville",
-    "ankle",
-    "mollet",
-    "achille",
-)
-FATIGUE_KEYWORDS = (
-    "fatigue",
-    "lourd",
-    "lourde",
-    "crame",
-    "cramé",
-    "epuise",
-    "épuisé",
-    "courbature",
-    "maladie",
-    "malade",
-)
-SLEEP_KEYWORDS = ("sommeil", "sleep", "insomnie", "mal dormi", "nuit courte")
-MENTAL_LOAD_KEYWORDS = ("stress", "pression", "culpabilite", "culpabilité", "demotive", "démotivé")
-TRAVEL_KEYWORDS = ("deplacement", "déplacement", "travel", "voyage", "famille", "boulot", "travail")
 
 
 @dataclass(frozen=True, slots=True)
@@ -58,16 +30,15 @@ def build_readiness_state(
     facts: Sequence[Any] | None = None,
     recent_reality: RecentRealityWindow | None = None,
 ) -> ReadinessState:
-    active_texts = _collect_active_texts(profile, facts or [])
+    readiness_facts = select_readiness_facts(facts or [])
     risk_flags = _derive_risk_flags(
-        profile=profile,
         fitness=fitness,
-        texts=active_texts,
+        readiness_facts=readiness_facts,
         recent_reality=recent_reality,
     )
     physical = _physical_state(fitness=fitness, risk_flags=risk_flags)
-    mental = _mental_state(fitness=fitness, texts=active_texts)
-    logistical = _logistical_state(profile=profile, texts=active_texts)
+    mental = _mental_state(fitness=fitness, risk_flags=risk_flags)
+    logistical = _logistical_state(profile=profile, risk_flags=risk_flags)
     injury_risk = _injury_risk(risk_flags)
     summary = _build_summary(
         physical=physical,
@@ -90,23 +61,15 @@ def build_readiness_state(
 
 def _derive_risk_flags(
     *,
-    profile: AthleteProfileSnapshot,
     fitness: FitnessSnapshot,
-    texts: Sequence[str],
+    readiness_facts: Sequence[Any],
     recent_reality: RecentRealityWindow | None = None,
 ) -> list[str]:
     config = get_global_planning_config()
     flags: list[str] = []
-    combined = " ".join(texts).lower()
-
-    if any(keyword in combined for keyword in PAIN_KEYWORDS):
-        flags.append("pain_reported")
-    if any(keyword in combined for keyword in FATIGUE_KEYWORDS):
-        flags.append("fatigue_reported")
-    if any(keyword in combined for keyword in SLEEP_KEYWORDS):
-        flags.append("sleep_risk")
-    if any(keyword in combined for keyword in TRAVEL_KEYWORDS):
-        flags.append("travel_constraint")
+    for flag in _structured_readiness_flags(readiness_facts):
+        if flag not in flags:
+            flags.append(flag)
     if fitness.tsb <= -10:
         flags.append("high_fatigue_load")
     if fitness.ramp_rate > config.max_weekly_ramp_rate:
@@ -120,8 +83,6 @@ def _derive_risk_flags(
             flags.append("consistency_streak_broken")
     elif fitness.completion_rate_14d and fitness.completion_rate_14d < 0.5:
         flags.append("low_recent_completion")
-    if not profile.weekly_availability:
-        flags.append("low_schedule_clarity")
     return flags
 
 
@@ -135,9 +96,8 @@ def _physical_state(*, fitness: FitnessSnapshot, risk_flags: Sequence[str]) -> s
     return "medium"
 
 
-def _mental_state(*, fitness: FitnessSnapshot, texts: Sequence[str]) -> str:
-    combined = " ".join(texts).lower()
-    if any(keyword in combined for keyword in MENTAL_LOAD_KEYWORDS):
+def _mental_state(*, fitness: FitnessSnapshot, risk_flags: Sequence[str]) -> str:
+    if "sleep_risk" in risk_flags:
         return "low"
     if fitness.completion_rate_14d >= 0.75:
         return "high"
@@ -146,9 +106,8 @@ def _mental_state(*, fitness: FitnessSnapshot, texts: Sequence[str]) -> str:
     return "medium"
 
 
-def _logistical_state(*, profile: AthleteProfileSnapshot, texts: Sequence[str]) -> str:
-    combined = " ".join(texts).lower()
-    if any(keyword in combined for keyword in TRAVEL_KEYWORDS):
+def _logistical_state(*, profile: AthleteProfileSnapshot, risk_flags: Sequence[str]) -> str:
+    if "travel_constraint" in risk_flags:
         return "constrained"
     if not profile.weekly_availability:
         return "blocked"
@@ -158,9 +117,45 @@ def _logistical_state(*, profile: AthleteProfileSnapshot, texts: Sequence[str]) 
 def _injury_risk(risk_flags: Sequence[str]) -> str:
     if "pain_reported" in risk_flags:
         return "high"
-    if "fatigue_reported" in risk_flags or "sleep_risk" in risk_flags:
+    if "health_watch" in risk_flags or "fatigue_reported" in risk_flags or "sleep_risk" in risk_flags:
         return "medium"
     return "low"
+
+
+def _structured_readiness_flags(facts: Sequence[Any]) -> list[str]:
+    flags: list[str] = []
+    for fact in facts:
+        category = str(_value(fact, "category") or "").strip().lower()
+        signal_kind = str(_value(fact, "signal_kind") or "").strip().lower()
+        severity = str(_value(fact, "severity") or _value(fact, "urgency") or "medium").strip().lower()
+        status = str(_value(fact, "status") or "open").strip().lower()
+
+        if category == "health":
+            if signal_kind in {"pain", "injury"}:
+                flags.append("pain_reported" if _is_significant(severity, status) else "health_watch")
+            elif signal_kind == "tension":
+                flags.append("pain_reported" if _is_high(severity, status) else "health_watch")
+            elif signal_kind in {"fatigue", "illness"}:
+                flags.append("fatigue_reported")
+            elif signal_kind == "sleep":
+                flags.append("sleep_risk")
+            elif _is_high(severity, status):
+                flags.append("health_watch")
+        elif category == "fatigue":
+            if _is_significant(severity, status):
+                flags.append("fatigue_reported")
+        elif category in {"availability", "schedule"}:
+            if signal_kind in {"availability_limited", "availability_unavailable"} or _is_significant(severity, status):
+                flags.append("travel_constraint")
+    return flags
+
+
+def _is_significant(severity: str, status: str) -> bool:
+    return severity in {"moderate", "medium", "severe", "high"} or status in {"new", "ongoing", "worsening"}
+
+
+def _is_high(severity: str, status: str) -> bool:
+    return severity in {"severe", "high"} or status == "worsening"
 
 
 def _build_summary(
@@ -177,23 +172,6 @@ def _build_summary(
     if risk_flags:
         summary += f" Flags: {', '.join(risk_flags[:4])}."
     return summary
-
-
-def _collect_active_texts(profile: AthleteProfileSnapshot, facts: Sequence[Any]) -> list[str]:
-    texts = [
-        *profile.constraints,
-        *profile.preferences,
-        *profile.goals,
-        profile.athlete_identity_summary,
-        profile.coach_style_notes,
-    ]
-    for fact in facts:
-        if getattr(fact, "active", True) is False:
-            continue
-        value = _value(fact, "value")
-        if isinstance(value, str) and value.strip():
-            texts.append(value.strip())
-    return texts
 
 
 def _value(obj: Any, key: str) -> Any:

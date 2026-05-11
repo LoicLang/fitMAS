@@ -87,6 +87,9 @@ def apply_memory_actions_for_user(
 def _payload_from_action(action: MemoryAction, *, source: str, now: datetime | None) -> dict | None:
     if isinstance(action, HealthSignalAction):
         key_base = action.body_area or action.health_signal
+        status = action.status if action.status != "unknown" else "open"
+        severity = action.severity if action.severity != "unknown" else "medium"
+        signal_kind = action.signal_kind if action.signal_kind != "other" else "health"
         return {
             "category": "health",
             "key": f"health_{_slugify(key_base)}",
@@ -94,6 +97,11 @@ def _payload_from_action(action: MemoryAction, *, source: str, now: datetime | N
             "source": source,
             "confidence": action.confidence,
             "confirmed": False,
+            "status": status,
+            "severity": severity,
+            "signal_kind": signal_kind,
+            "resolved_at": now if status == "resolved" else None,
+            "resolution_reason": action.evidence if status == "resolved" else "",
             "action": "upsert",
             "action_type": action.type,
         }
@@ -113,11 +121,17 @@ def _payload_from_action(action: MemoryAction, *, source: str, now: datetime | N
             "confidence": action.confidence,
             "confirmed": False,
             "ttl": "short" if starts_on or ends_on else "medium",
+            "status": "open",
+            "severity": "high" if action.availability == "unavailable" else "medium",
+            "signal_kind": f"availability_{action.availability}",
             "action": "upsert",
             "action_type": action.type,
         }
+        if starts_on is not None:
+            payload["valid_from"] = datetime.combine(starts_on, datetime.min.time())
         if ends_on is not None:
             payload["expires_at"] = datetime.combine(ends_on + timedelta(days=1), datetime.min.time())
+            payload["valid_until"] = payload["expires_at"]
         return payload
     if isinstance(action, PreferenceSignalAction):
         return {

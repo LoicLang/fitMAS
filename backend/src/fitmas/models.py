@@ -191,6 +191,15 @@ class UserFact(BaseModel):
     ttl: str = "medium"
     affects: list[str] = Field(default_factory=list)
     expires_at: str | None = None
+    status: str = "open"
+    severity: str = "medium"
+    signal_kind: str = ""
+    observed_at: str | None = None
+    valid_from: str | None = None
+    valid_until: str | None = None
+    last_seen_at: str | None = None
+    resolved_at: str | None = None
+    resolution_reason: str = ""
 
 
 class UserPattern(BaseModel):

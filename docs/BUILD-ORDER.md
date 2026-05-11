@@ -28,7 +28,7 @@ Si un autre doc diverge :
 
 **Un premier coach que Loïc reconnaît, comprend, et a envie de rouvrir demain.**
 
-## Roadmap Active — 10 mai 2026
+## Roadmap Active — 11 mai 2026
 
 Ordre courant :
 
@@ -52,7 +52,7 @@ Docs a ouvrir selon le chantier :
 - prompt/contexte + `decide() None` : `docs/PROMPT-CONTEXT-REFACTOR.md`
 - memoire : `docs/MEMORY-V2.md`
 
-## Checkpoint courant — 10 mai 2026
+## Checkpoint courant — 11 mai 2026
 
 Etat du code sur `main` :
 
@@ -68,6 +68,11 @@ Etat du code sur `main` :
   lire le contexte coach compact sans noyer la reponse dans le planning.
 - Heartbeat : le composer terminal existe et bloque les fuites de categories
   internes, mais le style doit rester surveille en dogfood reel.
+- Memoire/readiness : en cours de durcissement. Les facts portent maintenant
+  statut, temporalite, severite et `signal_kind`. `readiness.py` ne doit pas
+  retransformer des textes libres ou des vieux facts en flags via mots-cles :
+  il consomme seulement des facts ouverts, temporellement valides et
+  explicitement `affects=["readiness"]`.
 
 Verification recente :
 

@@ -270,6 +270,7 @@ def test_health_signal_system_text_keeps_bounded_planpatch_without_replan_manual
     assert "- route: conversation_health_signal" in text
     assert "Contrat de sortie health_signal:" in text
     assert "record_health_signal" in text
+    assert "signal_kind: pain | injury | fatigue | sleep | illness | tension | other" in text
     assert "PlanPatch minimal si adaptation evidente" in text
     assert "copie le `payload.patch` exact" in text
     assert "requires_confirmation exige un plan_patch valide" in text

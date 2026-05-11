@@ -13,11 +13,11 @@ TTL_WINDOWS = {
 }
 
 CATEGORY_AFFECTS = {
-    "availability": ("planning", "conversation", "heartbeat"),
-    "schedule": ("planning", "conversation", "heartbeat"),
+    "availability": ("planning", "conversation", "heartbeat", "readiness"),
+    "schedule": ("planning", "conversation", "heartbeat", "readiness"),
     "constraint": ("planning", "conversation", "heartbeat"),
-    "health": ("planning", "conversation", "heartbeat"),
-    "fatigue": ("planning", "conversation", "heartbeat"),
+    "health": ("planning", "conversation", "heartbeat", "readiness"),
+    "fatigue": ("planning", "conversation", "heartbeat", "readiness"),
     "calibration_need": ("conversation", "heartbeat"),
     "goal": ("planning", "conversation"),
     "objective": ("planning", "conversation"),
@@ -28,51 +28,7 @@ CATEGORY_AFFECTS = {
     "execution": ("conversation", "heartbeat"),
 }
 
-TEMPORAL_KEYWORDS = (
-    "aujourd",
-    "demain",
-    "hier",
-    "ce soir",
-    "cette semaine",
-    "semaine prochaine",
-)
-ACUTE_HEALTH_KEYWORDS = (
-    "fatigue",
-    "crame",
-    "cramé",
-    "malade",
-    "maladie",
-    "douleur",
-    "pain",
-    "mal dormi",
-    "sommeil",
-)
-CHRONIC_KEYWORDS = (
-    "chronique",
-    "fragile",
-    "historique",
-    "recurrent",
-    "récurrent",
-)
-INJURY_KEYWORDS = (
-    "blessure",
-    "blessé",
-    "tendon",
-    "tendinite",
-    "fracture",
-    "entorse",
-    "déchirure",
-    "rupture",
-)
-PAIN_KEYWORDS = (
-    "douleur",
-    "mal ",
-    "gêne",
-    "gene",
-    "gène",
-    "coinc",
-    "bloqu",
-)
+INACTIVE_STATUSES = {"resolved", "superseded", "stale", "archived", "closed"}
 
 
 @dataclass(frozen=True, slots=True)
@@ -91,7 +47,6 @@ def derive_fact_memory_policy(
     now: datetime | None = None,
 ) -> FactMemoryPolicy:
     normalized_category = (category or "").strip().lower() or "preference"
-    text = (value or "").strip().lower()
     affects = CATEGORY_AFFECTS.get(normalized_category, ("conversation",))
 
     ttl = "medium"
@@ -107,7 +62,7 @@ def derive_fact_memory_policy(
         ttl = "medium"
         urgency = "medium"
     elif normalized_category in {"availability", "schedule", "constraint"}:
-        ttl = "short" if any(token in text for token in TEMPORAL_KEYWORDS) else "medium"
+        ttl = "medium"
         urgency = "medium"
     elif normalized_category == "execution":
         ttl = "immediate"    # 18h — activity claim, same-day only
@@ -116,15 +71,8 @@ def derive_fact_memory_policy(
         ttl = "immediate"    # 18h — fatigue is a signal of the day, not 3 days
         urgency = "high"
     elif normalized_category == "health":
-        if any(token in text for token in CHRONIC_KEYWORDS):
-            ttl = "long"     # 180j — chronic/recurring condition
-        elif any(token in text for token in INJURY_KEYWORDS):
-            ttl = "medium"   # 21j — identified injury
-        elif any(token in text for token in PAIN_KEYWORDS):
-            ttl = "medium"   # 21j — pain/discomfort (affects planning for weeks)
-        else:
-            ttl = "short"    # 3j — general health (sick, poor sleep)
-        urgency = "high" if any(token in text for token in ACUTE_HEALTH_KEYWORDS) else "medium"
+        ttl = "medium"
+        urgency = "high"
 
     if source == "onboarding" and normalized_category in {"goal", "objective", "coaching", "preference"}:
         ttl = "permanent"
@@ -140,6 +88,7 @@ def derive_fact_memory_policy(
 
 def normalize_fact_payload(fact: dict[str, Any], *, now: datetime | None = None) -> dict[str, Any]:
     normalized = dict(fact)
+    explicit_ttl = bool(str(normalized.get("ttl") or "").strip())
     policy = derive_fact_memory_policy(
         category=str(normalized.get("category", "")),
         value=str(normalized.get("value", "")),
@@ -154,19 +103,42 @@ def normalize_fact_payload(fact: dict[str, Any], *, now: datetime | None = None)
     normalized["affects"] = [str(value) for value in affects]
     normalized["expires_at"] = _coerce_datetime(normalized.get("expires_at")) or policy.expires_at
     normalized["active"] = bool(normalized.get("active", True))
+    status = str(normalized.get("status") or "open").strip().lower()
+    normalized["status"] = status if status else "open"
+    normalized["severity"] = str(normalized.get("severity") or normalized.get("urgency") or "medium").strip().lower()
+    signal_kind = str(normalized.get("signal_kind") or "").strip().lower()
+    if signal_kind:
+        normalized["signal_kind"] = signal_kind
+    if not explicit_ttl and str(normalized.get("category") or "").strip().lower() == "health":
+        if normalized["severity"] == "mild" and signal_kind in {"tension", "fatigue", "sleep", "illness", "other", ""}:
+            normalized["ttl"] = "short"
+            normalized["expires_at"] = _compute_expires_at("short", now=now)
+    observed_at = _coerce_datetime(normalized.get("observed_at")) or _utc_now(now=now)
+    normalized["observed_at"] = observed_at
+    normalized["valid_from"] = _coerce_datetime(normalized.get("valid_from")) or observed_at
+    normalized["valid_until"] = _coerce_datetime(normalized.get("valid_until")) or normalized["expires_at"]
+    normalized["last_seen_at"] = _coerce_datetime(normalized.get("last_seen_at")) or observed_at
+    normalized["resolved_at"] = _coerce_datetime(normalized.get("resolved_at"))
+    normalized["resolution_reason"] = str(normalized.get("resolution_reason") or "")
     return normalized
 
 
 def fact_is_current(fact: Any, *, now: datetime | None = None) -> bool:
     if _value(fact, "active") is False:
         return False
-    expires_at = _coerce_datetime(_value(fact, "expires_at"))
-    if expires_at is None:
-        return True
     current = _utc_now(now=now)
-    if expires_at.tzinfo is None:
-        expires_at = expires_at.replace(tzinfo=timezone.utc)
-    return expires_at >= current
+    status = str(_value(fact, "status") or "open").strip().lower()
+    if status in INACTIVE_STATUSES:
+        return False
+    valid_from = _coerce_datetime(_value(fact, "valid_from"))
+    if valid_from is not None and _as_utc(valid_from) > current:
+        return False
+    valid_until = _coerce_datetime(_value(fact, "valid_until"))
+    expires_at = _coerce_datetime(_value(fact, "expires_at"))
+    end_at = valid_until or expires_at
+    if end_at is None:
+        return True
+    return _as_utc(end_at) >= current
 
 
 def select_relevant_facts(
@@ -198,6 +170,22 @@ def select_relevant_facts(
     return selected
 
 
+def select_readiness_facts(
+    facts: Sequence[Any],
+    *,
+    limit: int = 12,
+    now: datetime | None = None,
+) -> list[Any]:
+    selected = [
+        fact
+        for fact in facts
+        if fact_is_current(fact, now=now)
+        and "readiness" in _coerce_affects(_value(fact, "affects") or _value(fact, "affects_json"))
+    ]
+    selected.sort(key=lambda fact: _fact_sort_key(fact, preferred_affects={"readiness"}), reverse=True)
+    return selected[:limit]
+
+
 def _fact_sort_key(fact: Any, *, preferred_affects: set[str]) -> tuple[float, float, float, float]:
     urgency_score = {"high": 3.0, "medium": 2.0, "low": 1.0}.get(str(_value(fact, "urgency") or "medium"), 1.0)
     confirmed_score = 1.0 if bool(_value(fact, "confirmed")) else 0.0
@@ -213,6 +201,12 @@ def _compute_expires_at(ttl: str, *, now: datetime | None = None) -> datetime | 
         return None
     current = _utc_now(now=now)
     return (current + window).replace(tzinfo=None)
+
+
+def _as_utc(value: datetime) -> datetime:
+    if value.tzinfo is None:
+        return value.replace(tzinfo=timezone.utc)
+    return value.astimezone(timezone.utc)
 
 
 def _coerce_datetime(value: Any) -> datetime | None:

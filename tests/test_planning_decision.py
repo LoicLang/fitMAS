@@ -7,7 +7,7 @@ from fitmas.athlete_profile import AthleteProfileSnapshot
 from fitmas.fitness_snapshot import FitnessSnapshot
 from fitmas.planning_decision import build_planning_decision
 from fitmas.recent_reality import RecentRealityWindow
-from fitmas.readiness import ReadinessState
+from fitmas.readiness import ReadinessState, build_readiness_state
 
 
 def _profile() -> AthleteProfileSnapshot:
@@ -99,6 +99,66 @@ class PlanningDecisionTest(unittest.TestCase):
         self.assertGreater(decision.weekly_target_tss, fitness.weekly_target_tss)
         self.assertTrue(decision.long_session)
         self.assertGreaterEqual(decision.key_session_count, 2)
+
+    def test_planning_decision_does_not_enter_injury_mode_from_stale_textual_memory(self) -> None:
+        fitness = FitnessSnapshot(
+            user_id=7,
+            date=date(2026, 5, 11),
+            ctl=10.8,
+            atl=12.0,
+            tsb=-1.2,
+            ramp_rate=0.02,
+            weekly_target_tss=94.1,
+            weekly_actual_tss=90.0,
+            completion_rate_14d=0.75,
+            key_sessions_done_14d=2,
+            volume_sessions_done_14d=4,
+            sport_ctl={"running": 10.8, "cycling": 0.0, "swimming": 0.0, "strength": 0.0, "climbing": 0.0},
+            sport_volume_hours={"running": 2.4, "cycling": 0.0, "swimming": 0.0, "strength": 0.0, "climbing": 0.0},
+        )
+        profile = _profile()
+        noisy_facts = [
+            {
+                "category": "coaching",
+                "key": "sleep_note",
+                "value": "Douche froide interessante pour le sommeil",
+                "active": True,
+                "status": "open",
+                "affects": ["conversation"],
+            },
+            {
+                "category": "health",
+                "key": "old_tendon",
+                "value": "Ancienne tension tendon reglee",
+                "active": True,
+                "status": "resolved",
+                "signal_kind": "tension",
+                "severity": "mild",
+                "affects": ["readiness"],
+            },
+            {
+                "category": "pattern",
+                "key": "work_intense",
+                "value": "Travail IA intensif",
+                "active": True,
+                "status": "open",
+                "affects": ["planning"],
+            },
+        ]
+
+        readiness = build_readiness_state(profile=profile, fitness=fitness, facts=noisy_facts)
+        decision = build_planning_decision(
+            profile=profile,
+            fitness=fitness,
+            readiness=readiness,
+            mesocycle_week=1,
+        )
+
+        self.assertNotEqual(decision.planning_mode, "injury_protection")
+        self.assertNotIn("pain_reported", decision.risk_flags)
+        self.assertNotIn("sleep_risk", decision.risk_flags)
+        self.assertNotIn("travel_constraint", decision.risk_flags)
+        self.assertGreaterEqual(decision.weekly_target_tss, 90.0)
 
     def test_build_planning_decision_deloads_on_week_four(self) -> None:
         fitness = FitnessSnapshot(

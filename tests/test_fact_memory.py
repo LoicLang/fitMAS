@@ -1,9 +1,15 @@
 from __future__ import annotations
 
 import unittest
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
-from fitmas.fact_memory import derive_fact_memory_policy, fact_is_current, normalize_fact_payload, select_relevant_facts
+from fitmas.fact_memory import (
+    derive_fact_memory_policy,
+    fact_is_current,
+    normalize_fact_payload,
+    select_readiness_facts,
+    select_relevant_facts,
+)
 
 
 class FactMemoryTest(unittest.TestCase):
@@ -48,6 +54,44 @@ class FactMemoryTest(unittest.TestCase):
         self.assertIn("planning", payload["affects"])
         self.assertIsNotNone(payload["expires_at"])
 
+    def test_normalize_health_fact_adds_lifecycle_and_readiness_affect(self) -> None:
+        now = datetime(2026, 3, 22, 12, 0, tzinfo=timezone.utc)
+
+        payload = normalize_fact_payload(
+            {
+                "category": "health",
+                "key": "health_tibia",
+                "value": "Tension tibia gauche a surveiller",
+                "source": "conversation",
+            },
+            now=now,
+        )
+
+        self.assertEqual(payload["status"], "open")
+        self.assertEqual(payload["observed_at"], now)
+        self.assertEqual(payload["valid_from"], now)
+        self.assertEqual(payload["valid_until"], payload["expires_at"])
+        self.assertEqual(payload["last_seen_at"], now)
+        self.assertIn("readiness", payload["affects"])
+
+    def test_normalize_mild_health_signal_uses_short_validity_from_structured_severity(self) -> None:
+        now = datetime(2026, 3, 22, 12, 0, tzinfo=timezone.utc)
+
+        payload = normalize_fact_payload(
+            {
+                "category": "health",
+                "key": "health_tibia",
+                "value": "Signal sante structure",
+                "source": "conversation",
+                "signal_kind": "tension",
+                "severity": "mild",
+            },
+            now=now,
+        )
+
+        self.assertEqual(payload["ttl"], "short")
+        self.assertEqual(payload["valid_until"], now.replace(tzinfo=None) + timedelta(days=3))
+
     def test_select_relevant_facts_prefers_current_confirmed(self) -> None:
         selected = select_relevant_facts(
             [
@@ -87,6 +131,79 @@ class FactMemoryTest(unittest.TestCase):
                 now=datetime(2026, 3, 22, 12, 0, tzinfo=timezone.utc),
             )
         )
+
+    def test_fact_is_current_rejects_resolved_and_temporally_invalid_facts(self) -> None:
+        now = datetime(2026, 3, 22, 12, 0, tzinfo=timezone.utc)
+
+        self.assertFalse(
+            fact_is_current(
+                {
+                    "active": True,
+                    "status": "resolved",
+                    "valid_until": now + timedelta(days=3),
+                },
+                now=now,
+            )
+        )
+        self.assertFalse(
+            fact_is_current(
+                {
+                    "active": True,
+                    "status": "open",
+                    "valid_until": now - timedelta(minutes=1),
+                },
+                now=now,
+            )
+        )
+        self.assertFalse(
+            fact_is_current(
+                {
+                    "active": True,
+                    "status": "open",
+                    "valid_from": now + timedelta(days=1),
+                },
+                now=now,
+            )
+        )
+
+    def test_select_readiness_facts_keeps_only_open_temporal_readiness_facts(self) -> None:
+        now = datetime(2026, 3, 22, 12, 0, tzinfo=timezone.utc)
+
+        selected = select_readiness_facts(
+            [
+                {
+                    "category": "health",
+                    "key": "old_tendon",
+                    "value": "Ancienne tension tendon reglee",
+                    "active": True,
+                    "status": "resolved",
+                    "affects": ["readiness"],
+                    "valid_until": now + timedelta(days=3),
+                },
+                {
+                    "category": "coaching",
+                    "key": "sleep_preference",
+                    "value": "Douche froide interessante pour le sommeil",
+                    "active": True,
+                    "status": "open",
+                    "affects": ["conversation"],
+                },
+                {
+                    "category": "health",
+                    "key": "tibia_watch",
+                    "value": "Tension tibia legere, pas de douleur",
+                    "active": True,
+                    "status": "open",
+                    "affects": ["readiness"],
+                    "valid_from": now - timedelta(hours=1),
+                    "valid_until": now + timedelta(days=2),
+                    "urgency": "medium",
+                },
+            ],
+            now=now,
+        )
+
+        self.assertEqual([fact["key"] for fact in selected], ["tibia_watch"])
 
 
 if __name__ == "__main__":

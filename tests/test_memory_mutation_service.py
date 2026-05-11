@@ -13,6 +13,7 @@ from fitmas.execution_mutation_service import apply_execution_actions_for_user
 from fitmas.llm import (
     AvailabilityConstraintAction,
     ExecutionUpdateAction,
+    HealthSignalAction,
     PreferenceSignalAction,
 )
 from fitmas.memory_mutation_service import apply_memory_actions_for_user
@@ -73,6 +74,40 @@ class MutationActionServicesTest(unittest.TestCase):
         self.assertEqual(working[0].key, "availability_2026-05-01_2026-05-01")
         self.assertEqual(len(events), 2)
         self.assertTrue(all(event.status == "applied" for event in events))
+
+    def test_memory_service_persists_health_lifecycle_for_readiness(self) -> None:
+        now = datetime(2026, 5, 11, 8, 0)
+
+        result = apply_memory_actions_for_user(
+            self.db,
+            user=self.user,
+            actions=[
+                HealthSignalAction(
+                    type="record_health_signal",
+                    health_signal="tension tibia reglee",
+                    body_area="tibia",
+                    signal_kind="tension",
+                    severity="mild",
+                    status="resolved",
+                    confidence=0.9,
+                    evidence="plus de tension au tibia",
+                ),
+            ],
+            now=now,
+        )
+
+        facts = self.db.query(s.UserFact).all()
+        working = self.db.query(s.WorkingMemoryEntry).all()
+
+        self.assertEqual(result.applied_count, 1)
+        self.assertEqual(facts, [])
+        self.assertEqual(working[0].category, "health")
+        self.assertEqual(working[0].key, "health_tibia")
+        self.assertEqual(working[0].status, "resolved")
+        self.assertEqual(working[0].severity, "mild")
+        self.assertEqual(working[0].signal_kind, "tension")
+        self.assertIn("readiness", working[0].affects_json)
+        self.assertEqual(working[0].resolved_at, now)
 
     def test_execution_service_marks_unique_target_skipped_and_audits(self) -> None:
         session = self._scheduled_session(days_offset=-1, sport_type="strength", title="Renfo 34min")

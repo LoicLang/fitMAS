@@ -288,7 +288,7 @@ Format cible:
 - confirmation_reason: obligatoire si response_type=requires_confirmation
 - memory_actions: liste optionnelle d'actions memoire proposees, jamais ecrites directement par toi.
   Types autorises:
-  - record_health_signal: health_signal, body_area?, severity=mild|moderate|severe|unknown, status=new|ongoing|improving|worsening|resolved|unknown, confidence, evidence?
+  - record_health_signal: health_signal, body_area?, signal_kind=pain|injury|fatigue|sleep|illness|tension|other, severity=mild|moderate|severe|unknown, status=new|ongoing|improving|worsening|resolved|unknown, confidence, evidence?
   - record_availability: window_text, availability=unavailable|limited|available|unknown, starts_on?, ends_on?, recurrence?, confidence, evidence?
   - record_preference: preference, polarity=prefer|avoid|like|dislike|neutral|unknown, scope?, confidence, evidence?
 - execution_actions: liste optionnelle d'actions execution proposees.
@@ -307,18 +307,19 @@ Format cible:
 
 Few-shots actions structurees:
 - "j'ai pas eu le temps hier" -> execution_actions=[record_execution_update status=not_completed, completed=false, target_ref="seance d'hier"]
-- "j'ai mal au genou" -> memory_actions=[record_health_signal health_signal="douleur genou", severity=unknown, confidence elevee]
+- "j'ai mal au genou" -> memory_actions=[record_health_signal health_signal="douleur genou", signal_kind=pain, severity=unknown, status=new, confidence elevee]
 - "je peux pas nager 2 semaines" -> memory_actions=[record_availability window_text="natation impossible 2 semaines", availability=unavailable] + plan_patch si une seance nage est touchee
 - "running" ou "mercredi" en continuation courte -> lis le contexte precedent, puis complete l'action en cours; ne reponds pas par un raccourci canned
 
-Capture de contraintes — regle generale:
-Le user mentionne un fact dispo/sante/preference, meme en passant et meme pour expliquer du passe. Emets un `memory_action` avec confidence appropriee. Mieux vaut capturer en working memory avec faible confidence que perdre l'info. Si le scope (duree, sport, periode) est implicite, fais ton hypothese et marque-la dans `evidence`.
+Memoire — regle generale:
+Emets un `memory_action` seulement si le message apporte une information nouvelle, actuelle ou actionnable pour le coaching. N'enregistre pas les apartes, meta-discussions, preferences implicites faibles ou explications vagues. Si un signal ancien est dit regle, emets `record_health_signal` avec le meme body_area si possible, status=resolved, evidence courte.
 
 Few-shots capture indirecte:
 - "la piscine est en vidange / fermee / inaccessible" -> memory_actions=[record_availability window_text="piscine indisponible (vidange/fermeture)", availability=unavailable, confidence moderate, evidence="user mentionne piscine inaccessible"]. Ajoute un plan_patch si une seance nage est touchee cette semaine.
 - "j'ai pas pu nager, piscine etait fermee" -> meme memory_action + execution_actions si seance nage prevue manquee.
 - "je voyage de mardi a vendredi" -> memory_actions=[record_availability window_text="voyage mardi-vendredi", availability=limited, starts_on/ends_on si dates inferable] + plan_patch si seances touchees.
-- "j'ai mal au dos depuis quelques jours" -> memory_actions=[record_health_signal health_signal="douleur dos", status=ongoing, confidence elevee].
+- "j'ai mal au dos depuis quelques jours" -> memory_actions=[record_health_signal health_signal="douleur dos", signal_kind=pain, status=ongoing, confidence elevee].
+- "plus de tension au tibia" -> memory_actions=[record_health_signal health_signal="tension tibia reglee", body_area="tibia", signal_kind=tension, status=resolved, confidence elevee].
 - "je prefere courir le matin" -> memory_actions=[record_preference preference="courir le matin", polarity=prefer, confidence moderate].
 - user explique pourquoi une seance a saute en mentionnant un fait stable -> capture le fait ET l'execution, pas juste l'execution.
 
@@ -445,6 +446,7 @@ Contrat de sortie health_signal:
 memory_actions.record_health_signal:
 - health_signal: signal sante/fatigue formule simplement
 - body_area: zone si connue, sinon null
+- signal_kind: pain | injury | fatigue | sleep | illness | tension | other
 - severity: mild | moderate | severe | unknown
 - status: new | ongoing | improving | worsening | resolved | unknown
 - confidence: 0.0-1.0

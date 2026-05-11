@@ -1425,7 +1425,9 @@ class HeartbeatGroundingTest(unittest.TestCase):
             heartbeat._llm_generate = original_llm
 
         self.assertEqual(draft.text, "ok")
-        self.assertNotIn("Legacy yesterday swim", captured["prompt"])
+        yesterday_block = captured["prompt"].split("[YesterdayTruth", 1)[1].split("[TodayTruth", 1)[0]
+        self.assertNotIn("Legacy yesterday swim", yesterday_block)
+        self.assertIn("plan: aucun", yesterday_block)
 
     def test_weekly_review_surfaces_offplan_swimming_entry(self) -> None:
         """Chantier 2bis: weekly_review pre-digests deterministic facts so the

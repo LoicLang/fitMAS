@@ -71,6 +71,7 @@ class HealthSignalAction(BaseModel):
     type: Literal["record_health_signal"]
     health_signal: str
     body_area: str | None = None
+    signal_kind: Literal["pain", "injury", "fatigue", "sleep", "illness", "tension", "other"] = "other"
     severity: Literal["mild", "moderate", "severe", "unknown"] = "unknown"
     status: Literal["new", "ongoing", "improving", "worsening", "resolved", "unknown"] = "unknown"
     confidence: float = Field(default=0.75, ge=0.0, le=1.0)
@@ -1013,7 +1014,7 @@ def _normalize_memory_actions(raw: Any) -> tuple[dict[str, Any], ...]:
         return ()
     normalized: list[dict[str, Any]] = []
     allowed_fields = {
-        "record_health_signal": {"type", "health_signal", "body_area", "severity", "status", "confidence", "evidence"},
+        "record_health_signal": {"type", "health_signal", "body_area", "signal_kind", "severity", "status", "confidence", "evidence"},
         "record_availability": {"type", "window_text", "availability", "starts_on", "ends_on", "recurrence", "confidence", "evidence"},
         "record_preference": {"type", "preference", "polarity", "scope", "confidence", "evidence"},
     }

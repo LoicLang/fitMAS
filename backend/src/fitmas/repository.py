@@ -184,6 +184,15 @@ def to_pydantic_fact(fact: object) -> UserFact:
         ttl=str(getattr(fact, "ttl", "medium")),
         affects=_json_loads_list(str(getattr(fact, "affects_json", "[]") or "[]")),
         expires_at=getattr(fact, "expires_at", None).isoformat() if getattr(fact, "expires_at", None) else None,
+        status=str(getattr(fact, "status", "open") or "open"),
+        severity=str(getattr(fact, "severity", "medium") or "medium"),
+        signal_kind=str(getattr(fact, "signal_kind", "") or ""),
+        observed_at=getattr(fact, "observed_at", None).isoformat() if getattr(fact, "observed_at", None) else None,
+        valid_from=getattr(fact, "valid_from", None).isoformat() if getattr(fact, "valid_from", None) else None,
+        valid_until=getattr(fact, "valid_until", None).isoformat() if getattr(fact, "valid_until", None) else None,
+        last_seen_at=getattr(fact, "last_seen_at", None).isoformat() if getattr(fact, "last_seen_at", None) else None,
+        resolved_at=getattr(fact, "resolved_at", None).isoformat() if getattr(fact, "resolved_at", None) else None,
+        resolution_reason=str(getattr(fact, "resolution_reason", "") or ""),
     )
 
 
@@ -911,6 +920,15 @@ def replace_user_facts(db: Session, user_id: int, facts: list[dict]) -> None:
                 ttl=normalized.get("ttl", "medium"),
                 affects_json=_json_dumps(normalized.get("affects", [])),
                 expires_at=normalized.get("expires_at"),
+                status=normalized.get("status", "open"),
+                severity=normalized.get("severity", "medium"),
+                signal_kind=normalized.get("signal_kind", ""),
+                observed_at=normalized.get("observed_at"),
+                valid_from=normalized.get("valid_from"),
+                valid_until=normalized.get("valid_until"),
+                last_seen_at=normalized.get("last_seen_at"),
+                resolved_at=normalized.get("resolved_at"),
+                resolution_reason=normalized.get("resolution_reason", ""),
             )
         )
     db.commit()
@@ -958,6 +976,15 @@ def upsert_facts(db: Session, user_id: int, facts: list[dict]) -> list[s.UserFac
                 ttl=normalized.get("ttl", "medium"),
                 affects_json=_json_dumps(normalized.get("affects", [])),
                 expires_at=normalized.get("expires_at"),
+                status=normalized.get("status", "open"),
+                severity=normalized.get("severity", "medium"),
+                signal_kind=normalized.get("signal_kind", ""),
+                observed_at=normalized.get("observed_at"),
+                valid_from=normalized.get("valid_from"),
+                valid_until=normalized.get("valid_until"),
+                last_seen_at=normalized.get("last_seen_at"),
+                resolved_at=normalized.get("resolved_at"),
+                resolution_reason=normalized.get("resolution_reason", ""),
             )
             db.add(row)
         else:
@@ -970,6 +997,15 @@ def upsert_facts(db: Session, user_id: int, facts: list[dict]) -> list[s.UserFac
             row.ttl = normalized.get("ttl", row.ttl)
             row.affects_json = _json_dumps(normalized.get("affects", _json_loads_list(row.affects_json)))
             row.expires_at = normalized.get("expires_at")
+            row.status = normalized.get("status", row.status)
+            row.severity = normalized.get("severity", row.severity)
+            row.signal_kind = normalized.get("signal_kind", row.signal_kind)
+            row.observed_at = normalized.get("observed_at", row.observed_at)
+            row.valid_from = normalized.get("valid_from", row.valid_from)
+            row.valid_until = normalized.get("valid_until", row.valid_until)
+            row.last_seen_at = normalized.get("last_seen_at", row.last_seen_at)
+            row.resolved_at = normalized.get("resolved_at", row.resolved_at)
+            row.resolution_reason = normalized.get("resolution_reason", row.resolution_reason)
 
         saved.append(row)
 
@@ -1021,6 +1057,15 @@ def upsert_working_memory(db: Session, user_id: int, entries: list[dict]) -> lis
                 scope=scope,
                 affects_json=_json_dumps(normalized.get("affects", [])),
                 expires_at=normalized.get("expires_at"),
+                status=normalized.get("status", "open"),
+                severity=normalized.get("severity", "medium"),
+                signal_kind=normalized.get("signal_kind", ""),
+                observed_at=normalized.get("observed_at"),
+                valid_from=normalized.get("valid_from"),
+                valid_until=normalized.get("valid_until"),
+                last_seen_at=normalized.get("last_seen_at"),
+                resolved_at=normalized.get("resolved_at"),
+                resolution_reason=normalized.get("resolution_reason", ""),
             )
             db.add(row)
         else:
@@ -1034,6 +1079,15 @@ def upsert_working_memory(db: Session, user_id: int, entries: list[dict]) -> lis
             row.scope = scope or row.scope
             row.affects_json = _json_dumps(normalized.get("affects", _json_loads_list(row.affects_json)))
             row.expires_at = normalized.get("expires_at")
+            row.status = normalized.get("status", row.status)
+            row.severity = normalized.get("severity", row.severity)
+            row.signal_kind = normalized.get("signal_kind", row.signal_kind)
+            row.observed_at = normalized.get("observed_at", row.observed_at)
+            row.valid_from = normalized.get("valid_from", row.valid_from)
+            row.valid_until = normalized.get("valid_until", row.valid_until)
+            row.last_seen_at = normalized.get("last_seen_at", row.last_seen_at)
+            row.resolved_at = normalized.get("resolved_at", row.resolved_at)
+            row.resolution_reason = normalized.get("resolution_reason", row.resolution_reason)
 
         saved.append(row)
 

@@ -18,7 +18,7 @@ class ReadinessTest(unittest.TestCase):
             goals=("reprendre la course",),
             weekly_availability={"monday": ("Lundi matin",), "thursday": ("Jeudi matin",)},
             equipment=("gps_watch", "pool_access"),
-            constraints=("mollet droit douloureux",),
+            constraints=(),
             preferences=("plutot le matin",),
             preferred_training_times=("morning",),
             coach_tone="strict",
@@ -42,8 +42,26 @@ class ReadinessTest(unittest.TestCase):
             sport_volume_hours={"running": 3.5, "cycling": 0.0, "swimming": 1.2, "strength": 0.0, "climbing": 0.0},
         )
         facts = [
-            {"category": "health", "value": "sommeil moyen et fatigue residuelle", "active": True},
-            {"category": "availability", "value": "deplacement boulot mercredi soir", "active": True},
+            {
+                "category": "health",
+                "key": "health_calf",
+                "value": "Signal santé structuré",
+                "active": True,
+                "status": "open",
+                "signal_kind": "pain",
+                "severity": "severe",
+                "affects": ["readiness"],
+            },
+            {
+                "category": "availability",
+                "key": "availability_trip",
+                "value": "Contrainte logistique structurée",
+                "active": True,
+                "status": "open",
+                "signal_kind": "availability_limited",
+                "severity": "medium",
+                "affects": ["readiness"],
+            },
         ]
 
         readiness = build_readiness_state(profile=profile, fitness=fitness, facts=facts)
@@ -56,6 +74,68 @@ class ReadinessTest(unittest.TestCase):
         self.assertIn("high_fatigue_load", readiness.risk_flags)
         self.assertIn("ramp_rate_high", readiness.risk_flags)
         self.assertIn("travel_constraint", readiness.risk_flags)
+
+    def test_build_readiness_state_ignores_text_keywords_without_structured_readiness_fact(self) -> None:
+        profile = AthleteProfileSnapshot(
+            user_id=11,
+            primary_sports=("running",),
+            primary_sport="running",
+            level_by_sport={"running": "intermediate"},
+            goals=("sommeil et retour running mentionnes dans le profil",),
+            weekly_availability={"tuesday": ("Mardi matin",)},
+            equipment=("gps_watch",),
+            constraints=("travail IA intensif cette semaine", "ancien tendon a surveiller"),
+            preferences=("prefere parler sommeil dans le coaching",),
+            preferred_training_times=("morning",),
+            coach_tone="supportive",
+            coach_style_notes="ne pas surreagir aux vieux signaux",
+            athlete_identity_summary="Mention historique de maladie, sans signal actuel.",
+            onboarding_completed=True,
+        )
+        fitness = FitnessSnapshot(
+            user_id=11,
+            date=date(2026, 5, 11),
+            ctl=10.8,
+            atl=12.0,
+            tsb=-1.2,
+            ramp_rate=0.02,
+            weekly_target_tss=94.0,
+            weekly_actual_tss=90.0,
+            completion_rate_14d=0.75,
+            key_sessions_done_14d=2,
+            volume_sessions_done_14d=4,
+            sport_ctl={"running": 10.8, "cycling": 0.0, "swimming": 0.0, "strength": 0.0, "climbing": 0.0},
+            sport_volume_hours={"running": 2.4, "cycling": 0.0, "swimming": 0.0, "strength": 0.0, "climbing": 0.0},
+        )
+        facts = [
+            {
+                "category": "coaching",
+                "key": "sleep_note",
+                "value": "Douche froide interessante pour le sommeil",
+                "active": True,
+                "status": "open",
+                "affects": ["conversation"],
+            },
+            {
+                "category": "health",
+                "key": "old_tendon",
+                "value": "Ancienne tension tendon reglee",
+                "active": True,
+                "status": "resolved",
+                "signal_kind": "tension",
+                "severity": "mild",
+                "affects": ["readiness"],
+            },
+        ]
+
+        readiness = build_readiness_state(profile=profile, fitness=fitness, facts=facts)
+
+        self.assertEqual(readiness.physical, "medium")
+        self.assertEqual(readiness.logistical, "clear")
+        self.assertEqual(readiness.injury_risk, "low")
+        self.assertNotIn("pain_reported", readiness.risk_flags)
+        self.assertNotIn("sleep_risk", readiness.risk_flags)
+        self.assertNotIn("travel_constraint", readiness.risk_flags)
 
     def test_build_readiness_state_detects_good_readiness(self) -> None:
         profile = AthleteProfileSnapshot(

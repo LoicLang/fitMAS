@@ -3,7 +3,7 @@ contract: conversation_health_signal
 tool_budget: ['get_today_context', 'get_plan_window', 'get_load_context', 'get_relevant_facts', 'draft_lighten_day', 'draft_replace_session', 'validate_plan_patch', 'validate_week_coherence']
 truth_blocks: ['temporal', 'working_memory', 'planning', 'execution_reality', 'active_thread']
 output_schema: CoachDecision
-trace: {'route': 'conversation_decide', 'provider': None, 'model': None, 'prompt_policy': 'health_signal', 'prompt_contract': 'conversation_health_signal', 'intent': 'health_signal', 'system_chars': 6654, 'user_chars': 66, 'total_chars': 6720, 'tool_names': ('get_today_context', 'get_plan_window', 'get_load_context', 'get_relevant_facts', 'draft_lighten_day', 'draft_replace_session', 'validate_plan_patch', 'validate_week_coherence'), 'truth_block_names': ('temporal', 'working_memory', 'planning', 'execution_reality', 'active_thread'), 'history_messages_used': 2}
+trace: {'route': 'conversation_decide', 'provider': None, 'model': None, 'prompt_policy': 'health_signal', 'prompt_contract': 'conversation_health_signal', 'intent': 'health_signal', 'system_chars': 6729, 'user_chars': 66, 'total_chars': 6795, 'tool_names': ('get_today_context', 'get_plan_window', 'get_load_context', 'get_relevant_facts', 'draft_lighten_day', 'draft_replace_session', 'validate_plan_patch', 'validate_week_coherence'), 'truth_block_names': ('temporal', 'working_memory', 'planning', 'execution_reality', 'active_thread'), 'history_messages_used': 2}
 
 ## SYSTEM
 Tu es FitMAS, un coach multisport IA.
@@ -70,6 +70,7 @@ Contrat de sortie health_signal:
 memory_actions.record_health_signal:
 - health_signal: signal sante/fatigue formule simplement
 - body_area: zone si connue, sinon null
+- signal_kind: pain | injury | fatigue | sleep | illness | tension | other
 - severity: mild | moderate | severe | unknown
 - status: new | ongoing | improving | worsening | resolved | unknown
 - confidence: 0.0-1.0

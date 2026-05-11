@@ -40,7 +40,7 @@ def build_conversation_context(
     signals: Sequence[Signal] | None = None,
     now: datetime | None = None,
 ) -> ConversationContextBundle:
-    normalized_facts = tuple(_normalize_facts(active_facts))
+    normalized_facts = tuple(_normalize_facts(active_facts, now=now))
     selected_signals = tuple(select_conversation_signals(list(signals or [])))
     return ConversationContextBundle(
         time_context=build_time_context(timezone_name, now=now),
@@ -91,5 +91,5 @@ def signal_summary_for_prompt(context: ConversationContextBundle) -> str:
     return format_signals_for_prompt(list(context.selected_signals))
 
 
-def _normalize_facts(facts: Sequence[dict[str, Any]]) -> list[dict[str, Any]]:
-    return [normalize_fact_payload(dict(fact)) for fact in facts]
+def _normalize_facts(facts: Sequence[dict[str, Any]], *, now: datetime | None = None) -> list[dict[str, Any]]:
+    return [normalize_fact_payload(dict(fact), now=now) for fact in facts]
