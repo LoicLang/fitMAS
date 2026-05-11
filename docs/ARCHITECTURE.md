@@ -110,7 +110,7 @@ Les tools restent read-only. Les orchestrateurs possedent les writes.
 - Fondation charge : `tss` sur les activités + calculs `CTL/ATL/TSB`
 - Calendrier persistant partiel : `ScheduledSession` datées + timeline lecture + lien activité↔séance
 - `Today` et les CTA app passent désormais par des APIs datées déterministes
-- `/api/v0/week` reste une surface template/compat marquee `runtime_role=template_compat`; les surfaces runtime app passent par les read models dedies
+- `/api/v0/week` projette maintenant la semaine courante depuis `ScheduledSession` (`runtime_role=scheduled_runtime`) et ne retombe sur le template que si aucune session datee n'existe
 - les vues app datees exposent aussi un `load_band` dérivé pour distinguer plus clairement hard / moderate / easy / recovery / mobility
 - La boucle coach reçoit aussi la timeline datée et peut cibler une séance précise
 - `swap_sessions` sait aussi passer par des ids de séances concrètes

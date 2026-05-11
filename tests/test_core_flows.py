@@ -295,7 +295,7 @@ class FitMASCoreFlowsTest(unittest.TestCase):
         timeline = self.client.get("/api/v0/timeline")
 
         self.assertEqual(week.status_code, 200)
-        self.assertEqual(week.json()["runtime_role"], "template_compat")
+        self.assertEqual(week.json()["runtime_role"], "scheduled_runtime")
         self.assertEqual(week.json()["total_weeks"], 8)
         self.assertEqual(week.json()["mesocycle_week"], 4)
         self.assertTrue(week.json()["is_deload"])
@@ -306,6 +306,36 @@ class FitMASCoreFlowsTest(unittest.TestCase):
 
         self.assertEqual(timeline.status_code, 200)
         self.assertEqual(timeline.json()[0]["load_band"], "hard")
+
+    def test_week_endpoint_reads_scheduled_session_runtime_truth(self) -> None:
+        plan, session = self._create_plan_for_today()
+        day_plan = repo.get_day_plan(self.db, plan.id, session.day)
+        self.assertIsNotNone(day_plan)
+        self.assertEqual(day_plan.sport_type, "running")
+
+        session.sport_type = "rest"
+        session.session_type = "rest"
+        session.session_title = "Journee flexible"
+        session.session_goal = "Absorber l'imprevu"
+        session.session_note = "inondations"
+        session.session_description = "Repos adapte apres imprevu."
+        session.duration_min = None
+        session.intensity = "easy"
+        session.load_score = 0
+        session.priority = "Flexible"
+        session.nutrition_focus = ""
+        session.flexibility = "flexible"
+        session.completion_status = "adapted"
+        self.db.commit()
+
+        response = self.client.get("/api/v0/week")
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload["runtime_role"], "scheduled_runtime")
+        self.assertEqual(payload["days"][0]["sport_type"], "rest")
+        self.assertEqual(payload["days"][0]["session_title"], "Journee flexible")
+        self.assertEqual(payload["days"][0]["completion_status"], "adapted")
 
     def test_today_by_day_does_not_fall_back_to_legacy_day_plan(self) -> None:
         _, session = self._create_plan_for_today()

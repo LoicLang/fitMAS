@@ -71,10 +71,12 @@ def test_heartbeat_runtime_does_not_load_legacy_week_plan_truth() -> None:
     assert offenders == []
 
 
-def test_legacy_week_endpoint_is_marked_template_compat() -> None:
+def test_week_endpoint_uses_scheduled_runtime_truth_before_template_fallback() -> None:
     root = Path(__file__).resolve().parents[1]
-    models = (root / "backend/src/fitmas/models.py").read_text()
-    assert 'runtime_role: str = "template_compat"' in models
+    api_read = (root / "backend/src/fitmas/api_read.py").read_text()
+    assert "repo.get_scheduled_sessions_between_dates" in api_read
+    assert "_build_runtime_week_plan" in api_read
+    assert 'runtime_role="scheduled_runtime"' in api_read
 
 
 def test_telegram_plan_command_uses_dated_timeline_not_legacy_week() -> None:

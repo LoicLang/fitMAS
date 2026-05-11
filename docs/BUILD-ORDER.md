@@ -100,7 +100,7 @@ L'audit declenche par cet incident a confirme 3 failles structurelles connexes :
 
 - **Voix coach fragmentee entre pipelines** : Phase 1 voix conversation a durci `_CONVERSATION_SYSTEM_TEXT` mais le briefing/reminder/weekly review gardent leurs propres regles, sans few-shots BONS/MAUVAIS, sans detecteur receipt-style. Pas de source unique de doctrine voix en code.
 - **Dual-source de verite runtime** : ✅ core ferme le 3 mai. `plan_actions.py` et `mutations.py` ne mutent plus `DayPlan`; `signals.py` lit `ScheduledSession`; `activities.py` matche les activites contre `ScheduledSession`; `api_activities.py` et `strava.py` ne chargent plus le plan hebdo pour matcher ou marquer une activite.
-- **Lectures `DayPlan/WeeklyPlan` restantes** : limitees au template/onboarding/admin/compat (`schema.py`, `models.py`, `repository.py`, `api_onboarding.py`, `api_read.py` endpoint legacy `/week`, `seed.py`, `state.py`, `api_debug.py`, `api_ops.py`).
+- **Lectures `DayPlan/WeeklyPlan` restantes** : limitees au template/onboarding/admin/compat (`schema.py`, `models.py`, `repository.py`, `api_onboarding.py`, `api_read.py` fallback template de `/week`, `seed.py`, `state.py`, `api_debug.py`, `api_ops.py`).
 
 ### Acquis recents — Phase A LLM-first
 
@@ -1264,7 +1264,7 @@ Ce qui est vrai dans le code aujourd'hui :
   - `session detail`
 - vérité planning runtime app/chat/heartbeat = `ScheduledSession` datées
 - `WeeklyPlan` / `DayPlan` existent encore comme template planner et compat, pas comme vérité runtime
-- `/api/v0/week` est marqué `runtime_role=template_compat`
+- `/api/v0/week` lit la semaine courante depuis `ScheduledSession` et expose `runtime_role=scheduled_runtime` quand le runtime date existe
 - planner déterministe multisport + `PlanningDecision` + `planning_state`
 - activités réelles : manuel + Strava + matching + vues app
 - couche planning contract déjà visible dans l'app :
@@ -1327,7 +1327,7 @@ Ce qui est vrai dans le code aujourd'hui :
 - `CoachStateBundle`
 - `PlanMutationService` + `plan_mutation_events`
 - retrait de `WeeklyPlan` / `DayPlan` des lectures runtime app, conversation et heartbeat
-- `/api/v0/week` clarifié comme compat template
+- `/api/v0/week` garde le contrat compat mais sert la verite runtime datee avant fallback template
 - adaptation background suggestion-only
 - guard `same_sport_proximity` sur moves datés
 - ancien guard `protected_recovery_target` deprecie : repos/récupération = contrainte de plan, plus verrou runtime

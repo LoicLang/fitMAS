@@ -156,11 +156,12 @@ Compat / template :
 
 - `WeeklyPlan`
 - `DayPlan`
-- `/api/v0/week` avec `runtime_role=template_compat`
+- fallback `/api/v0/week` sans sessions datees
 
 Regle :
 
 - app, coach et heartbeat ne lisent pas `WeeklyPlan` / `DayPlan` comme verite runtime
+- `/api/v0/week` projette `ScheduledSession` pour la semaine courante avant tout fallback template
 
 ### Execution
 

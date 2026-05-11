@@ -75,7 +75,7 @@ Readers `DayPlan/WeeklyPlan` restants et role :
 | `schema.py`, `models.py` | definitions tables / schemas compat |
 | `repository.py` | converters et helpers template/compat ; hotspot a separer plus tard |
 | `api_onboarding.py` | onboarding/regeneration du template hebdo |
-| `api_read.py` | endpoint legacy `/api/v0/week`, marque template compat |
+| `api_read.py` | `/api/v0/week` projette d'abord `ScheduledSession` courant ; fallback template seulement si aucune session datee |
 | `seed.py`, `state.py` | seed/dev/static demo |
 | `api_debug.py`, `api_ops.py` | reset/admin/debug |
 | `plan_mutation_service.py` | lit `get_active_plan_optional` seulement pour `plan_id`/metadata de creation ; ne lit ni ne mute `DayPlan` runtime |
@@ -575,12 +575,12 @@ Statut courant :
 - le chemin conversation ne charge plus `WeeklyPlan` / `DayPlan` dans `ConversationTurnState`
 - le heartbeat review ne charge plus `WeeklyPlan` / `DayPlan`
 - Telegram `/plan` lit maintenant la timeline datee plutot que `/api/v0/week`
-- `/api/v0/week` reste disponible comme surface template/compat et expose `runtime_role=template_compat`
+- `/api/v0/week` reste disponible pour compat clients, mais expose la verite `ScheduledSession` de la semaine courante avec `runtime_role=scheduled_runtime` quand elle existe
 - `CoachStateBundle` accepte maintenant l'absence de template legacy et retombe sur une meta planning neutre
 
 Reste :
 
-- `/api/v0/week` en compat — les anciennes pages `frontend/src/pages` ont ete supprimees le 13 avril 2026
+- fallback template `/api/v0/week` uniquement quand aucune `ScheduledSession` datee n'existe — les anciennes pages `frontend/src/pages` ont ete supprimees le 13 avril 2026
 
 ### Phase 4 - Rebuild adaptation paths
 

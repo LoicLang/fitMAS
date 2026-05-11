@@ -10,6 +10,7 @@ from fitmas.db import get_db
 from fitmas.models import (
     Activity,
     ChangeNote,
+    DayPlan,
     DayId,
     Profile,
     RecentSportActivity,
@@ -23,7 +24,7 @@ from fitmas.models import (
 )
 from fitmas.session_metadata import compute_load_band
 from fitmas.training_load import compute_ctl_atl_tsb
-from fitmas.time_context import get_local_now
+from fitmas.time_context import current_week_dates, get_local_now
 
 router = APIRouter()
 
@@ -64,6 +65,50 @@ def _build_today_view(
         watch_items=watch_items,
         fitness=fitness,
         recent_activity=recent_activity,
+    )
+
+
+def _build_week_day_from_scheduled_session(session: s.ScheduledSession) -> DayPlan:
+    return DayPlan(
+        day=DayId(session.day),
+        label=session.label,
+        sport_type=session.sport_type,
+        session_type=session.session_type,
+        session_title=session.session_title,
+        session_goal=session.session_goal,
+        session_note=session.session_note or "",
+        session_description=session.session_description or "",
+        duration_min=session.duration_min,
+        intensity=session.intensity,
+        load_score=session.load_score,
+        load_band=compute_load_band(
+            sport_type=session.sport_type,
+            session_type=session.session_type,
+            intensity=session.intensity,
+            load_score=session.load_score,
+        ),
+        priority=session.priority,
+        nutrition_focus=session.nutrition_focus or "",
+        flexibility=session.flexibility,
+        completion_status=session.completion_status,
+        change_notes=[],
+        watch_items=[],
+    )
+
+
+def _build_runtime_week_plan(plan: s.WeeklyPlan, sessions: list[s.ScheduledSession]) -> WeeklyPlan:
+    template = repo.to_pydantic_plan(plan)
+    return WeeklyPlan(
+        runtime_role="scheduled_runtime",
+        intention=template.intention,
+        summary=template.summary,
+        mesocycle_week=template.mesocycle_week,
+        mesocycle_number=template.mesocycle_number,
+        cycle_length=template.cycle_length,
+        total_weeks=template.total_weeks,
+        is_deload=template.is_deload,
+        week_label=template.week_label,
+        days=[_build_week_day_from_scheduled_session(session) for session in sessions],
     )
 
 
@@ -128,6 +173,16 @@ def get_week(db: Session = Depends(get_db)) -> WeeklyPlan:
     if user is None:
         raise HTTPException(status_code=404, detail="No onboarded user yet")
     plan = repo.get_active_plan(db, user.id)
+    week_dates = current_week_dates(user.timezone)
+    sessions = repo.get_scheduled_sessions_between_dates(
+        db,
+        user.id,
+        start_date=week_dates["monday"],
+        end_date=week_dates["sunday"],
+        limit=32,
+    )
+    if sessions:
+        return _build_runtime_week_plan(plan, sessions)
     return repo.to_pydantic_plan(plan)
 
 
