@@ -295,6 +295,8 @@ def test_close_turn_outage_fallback_is_terminal() -> None:
 
 def test_no_change_composer_uses_original_reply_as_draft() -> None:
     def fake_request_text(**kwargs):
+        if "Reponse sortante a verifier:" in kwargs["prompt"]:
+            return '{"verdict":"allow","reason":"ok"}'
         assert "no_change" in kwargs["prompt"]
         assert "Brouillon LLM initial: Je te fais le point sans toucher au plan." in kwargs["prompt"]
         assert "Aucun changement planning n'a ete commit" in kwargs["prompt"]
@@ -309,8 +311,33 @@ def test_no_change_composer_uses_original_reply_as_draft() -> None:
     assert reply == "Tu gardes le footing facile ce soir, sans chercher a en rajouter."
 
 
+def test_no_change_composer_uses_uncommitted_verifier_for_action_claims() -> None:
+    calls = []
+
+    def fake_request_text(**kwargs):
+        calls.append(kwargs["prompt"])
+        if "Reponse sortante a verifier:" in kwargs["prompt"]:
+            return (
+                '{"verdict":"repair","reason":"parle comme si annule",'
+                '"repaired_reply":"Je l ai note; je verifie la semaine avant de toucher au plan."}'
+            )
+        return "On laisse tomber le footing de demain."
+
+    reply = compose_no_change_reply(
+        user_text="Inondation chez moi, pas de sport aujourd'hui ni demain",
+        original_llm_reply="On laisse tomber le footing de demain.",
+        request_text_fn=fake_request_text,
+        verifier_text_fn=fake_request_text,
+    )
+
+    assert reply == "Je l ai note; je verifie la semaine avant de toucher au plan."
+    assert any("Events commits: aucun changement planning commit." in prompt for prompt in calls)
+
+
 def test_no_change_composer_can_include_applied_non_plan_actions() -> None:
     def fake_request_text(**kwargs):
+        if "Reponse sortante a verifier:" in kwargs["prompt"]:
+            return '{"verdict":"allow","reason":"actions supportees"}'
         assert "Renfo 34min notee comme non faite." in kwargs["prompt"]
         assert "Memoire utilisateur mise a jour." in kwargs["prompt"]
         return "Renfo note non fait. Ce soir tu gardes simple."

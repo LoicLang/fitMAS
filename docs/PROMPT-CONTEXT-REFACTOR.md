@@ -18,7 +18,7 @@ Chantier livré sur `main` le 10 mai 2026. La suite n'est plus d'ajouter du
 prompt : c'est de rejouer du dogfood reel, lire les traces, puis corriger les
 routes qui echouent encore.
 
-Avancement 10 mai 2026 :
+Avancement 10-11 mai 2026 :
 
 - `generic_question` est devenu une route `general_answer` : contexte planning non
   injecte par defaut, tools de lecture possibles seulement si utiles, pas de
@@ -46,6 +46,10 @@ Avancement 10 mai 2026 :
   verifier LLM dedie quand elles presentent une confirmation/adaptation en
   attente : une pending doit rester une proposition a confirmer, jamais une
   phrase de commit deguisee.
+- Extension 11 mai : les replies `no_change` passent aussi par ce verifier
+  post-runtime. Même si le brouillon ou le composer dit implicitement
+  "on annule / on laisse tomber", le message final doit etre repare puisque
+  l'etat machine dit qu'aucun changement planning n'a ete commit.
 - Les tours `execution_report` qui finissent en `reply` ou `no_change` utilisent
   un composer final specifique : il ne peut dire qu'une execution a ete notee
   que si une `execution_action` a reellement ete appliquee.

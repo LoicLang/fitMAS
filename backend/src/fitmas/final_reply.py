@@ -278,8 +278,10 @@ def compose_no_change_reply(
     memory_actions_applied: tuple[str, ...] = (),
     execution_actions_applied: tuple[str, ...] = (),
     request_text_fn: RequestTextFn = request_text,
+    verifier_text_fn: RequestTextFn | None = None,
 ) -> str | None:
     """Compose the final visible reply for a validated no-plan-change turn."""
+    verifier = verifier_text_fn or request_text_fn
     context = FinalReplyContext(
         user_text=user_text,
         original_llm_reply=original_llm_reply,
@@ -294,7 +296,11 @@ def compose_no_change_reply(
             "Tu peux reformuler le brouillon, mais pas changer ses faits ni ajouter d'action.",
         ),
     )
-    return compose_final_reply(context, request_text_fn=request_text_fn)
+    reply = compose_final_reply(context, request_text_fn=request_text_fn)
+    verified = verify_uncommitted_reply(reply, context, request_text_fn=verifier)
+    if verified:
+        return verified
+    return verify_uncommitted_reply(original_llm_reply, context, request_text_fn=verifier)
 
 
 def compose_execution_report_reply(

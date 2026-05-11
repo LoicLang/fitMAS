@@ -46,7 +46,7 @@ User message
 -> User reply
 ```
 
-## Etat — 10 mai 2026
+## Etat — 10-11 mai 2026
 
 Livre sur `main` :
 
@@ -75,6 +75,11 @@ Livre sur `main` :
   (`temporal_references` + sessions planifiees).
 - reviewer LLM borne : apres evaluation, un reviewer optionnel peut choisir un `candidate_id`
   parmi les options deja validees/scorées. Il ne peut pas produire de patch.
+- extension 11 mai : un pending ancien ne bloque plus une nouvelle adaptation
+  apres que le LLM decisionnaire a rendu un legacy `no_change` alors que le
+  turn planner a deja classe le tour en `plan_mutation`. La candidate flow
+  repasse alors en post-`decide()`, supersede l'ancien pending et cree
+  `commit`/`pending`/`block` sur le nouveau sujet.
 
 Frontiere actuelle :
 - le pipeline est en Phase A dogfood, pas encore un moteur de progression

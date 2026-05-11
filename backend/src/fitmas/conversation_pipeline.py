@@ -642,6 +642,34 @@ def run_conversation_turn(
             outcome = legacy_pending_outcome
             decision = None
 
+    if (
+        outcome is None
+        and decision is not None
+        and "adaptation_candidate_flow" not in turn_context
+        and _should_try_legacy_plan_adaptation_after_decide(
+            decision=decision,
+            turn_plan=turn_plan,
+            pending_confirmation=pending_confirmation,
+        )
+    ):
+        legacy_adaptation_outcome = _maybe_handle_plan_adaptation_candidates(
+            db=db,
+            user=user,
+            user_text=payload.text,
+            turn_plan=turn_plan,
+            pending_confirmation=pending_confirmation,
+            open_calibration_need=open_calibration_need,
+            scheduled_sessions=state.scheduled_sessions,
+            coach_bundle=coach_bundle,
+            grounding=grounding_packet,
+            turn_context=turn_context,
+            mode="post_decide_plan_mutation",
+            action_result=turn_context.get("coach_decision_action_result") or {},
+        )
+        if legacy_adaptation_outcome is not None:
+            outcome = legacy_adaptation_outcome
+            decision = None
+
     if outcome is None and decision:
         extraction_confidence = adaptation.event.confidence if adaptation else 0.85
         target_session = (
@@ -2221,7 +2249,8 @@ def _should_use_plan_adaptation_candidate_flow(
 ) -> bool:
     if turn_plan is None:
         return False
-    if pending_confirmation is not None and str(getattr(pending_confirmation, "status", "") or "") == "pending":
+    pending_active = pending_confirmation is not None and str(getattr(pending_confirmation, "status", "") or "") == "pending"
+    if pending_active and mode != "post_decide_plan_mutation":
         return False
     if open_calibration_need is not None:
         return False
@@ -2234,11 +2263,27 @@ def _should_use_plan_adaptation_candidate_flow(
         if primary_intent in mixed_intents or secondary_intents.intersection(mixed_intents):
             return bool(getattr(turn_plan, "has_plan_mutation", False))
         return False
+    if mode == "post_decide_plan_mutation":
+        if primary_intent != "plan_mutation":
+            return False
+        return bool(getattr(turn_plan, "has_plan_mutation", False))
     if primary_intent != "plan_mutation":
         return False
     if secondary_intents.intersection({"health_signal", "execution_report"}):
         return False
     return bool(getattr(turn_plan, "has_plan_mutation", False))
+
+
+def _should_try_legacy_plan_adaptation_after_decide(*, decision: Any, turn_plan, pending_confirmation) -> bool:
+    if not isinstance(decision, MutationDecision):
+        return False
+    if str(getattr(decision, "mutation_type", "") or "") != "no_change":
+        return False
+    if not bool(getattr(turn_plan, "has_plan_mutation", False)):
+        return False
+    if str(getattr(turn_plan, "primary_intent", "") or "") != "plan_mutation":
+        return False
+    return pending_confirmation is not None and str(getattr(pending_confirmation, "status", "") or "") == "pending"
 
 
 def _should_try_mixed_plan_adaptation_after_decide(*, decision: Any, turn_plan) -> bool:
