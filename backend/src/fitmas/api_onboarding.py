@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import re
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
@@ -23,6 +24,8 @@ from fitmas.time_context import build_time_context, get_local_now
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+_TITLE_DURATION_RE = re.compile(r"\b\d+\s*min\b", re.IGNORECASE)
 
 
 def _build_user_profile(user: s.User) -> dict:
@@ -54,12 +57,27 @@ def _generate_enriched_week(profile: dict) -> dict:
         constraints=profile["constraints"],
         coach_name=profile["coach_name"],
     )
-    return formulate_week_plan(
+    enriched = formulate_week_plan(
         planner_output,
         user_profile=profile,
         coach_profile=profile,
         time_context=build_time_context(profile.get("timezone")),
     )
+    return _normalize_generated_week_text_durations(enriched)
+
+
+def _normalize_generated_week_text_durations(week: dict) -> dict:
+    normalized = dict(week)
+    normalized_days: list[dict] = []
+    for raw_day in week.get("days", []):
+        day = dict(raw_day)
+        duration_min = day.get("duration_min")
+        title = str(day.get("session_title") or "")
+        if isinstance(duration_min, int) and duration_min > 0 and title:
+            day["session_title"] = _TITLE_DURATION_RE.sub(f"{duration_min}min", title, count=1)
+        normalized_days.append(day)
+    normalized["days"] = normalized_days
+    return normalized
 
 
 def _compute_mesocycle(db: Session, user_id: int):
@@ -101,6 +119,7 @@ def _generate_enriched_week_for_user(db: Session, user: s.User) -> dict:
         coach_profile=profile,
         time_context=build_time_context(profile.get("timezone")),
     )
+    enriched = _normalize_generated_week_text_durations(enriched)
     enriched["_mesocycle_week"] = mesocycle.week_in_cycle
     enriched["_mesocycle_number"] = mesocycle.cycle_number
     enriched["_total_weeks"] = mesocycle.total_weeks
@@ -116,7 +135,7 @@ def _generate_enriched_week_for_user(db: Session, user: s.User) -> dict:
             user.id,
             review.review.summary,
         )
-    return review.week
+    return _normalize_generated_week_text_durations(review.week)
 
 
 @router.post("/api/v0/onboard/preview", response_model=OnboardPreview)

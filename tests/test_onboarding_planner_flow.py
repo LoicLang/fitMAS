@@ -99,6 +99,38 @@ class OnboardingPlannerFlowTest(unittest.TestCase):
             self.assertIn("Recuperation", third_regenerate.json()["week_label"])
             self.assertEqual(guard_week.call_count, 4)
 
+    def test_generated_week_titles_follow_structured_duration(self) -> None:
+        week = {
+            "intention": "ok",
+            "summary": "ok",
+            "days": [
+                {
+                    "day": "sunday",
+                    "label": "Dimanche",
+                    "sport_type": "running",
+                    "session_type": "easy",
+                    "session_title": "Sortie longue endurance 64min - version facile",
+                    "duration_min": 45,
+                },
+                {
+                    "day": "monday",
+                    "label": "Lundi",
+                    "sport_type": "rest",
+                    "session_type": "rest",
+                    "session_title": "Repos complet",
+                    "duration_min": None,
+                },
+            ],
+        }
+
+        normalized = api_onboarding._normalize_generated_week_text_durations(week)
+
+        self.assertEqual(
+            normalized["days"][0]["session_title"],
+            "Sortie longue endurance 45min - version facile",
+        )
+        self.assertEqual(normalized["days"][1]["session_title"], "Repos complet")
+
 
 if __name__ == "__main__":
     unittest.main()
