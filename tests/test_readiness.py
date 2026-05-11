@@ -178,6 +178,44 @@ class ReadinessTest(unittest.TestCase):
         self.assertEqual(readiness.injury_risk, "low")
         self.assertEqual(readiness.risk_flags, ())
 
+    def test_missing_weekly_availability_is_unknown_not_blocked(self) -> None:
+        profile = AthleteProfileSnapshot(
+            user_id=12,
+            primary_sports=("running",),
+            primary_sport="running",
+            level_by_sport={"running": "intermediate"},
+            goals=("course 10 km",),
+            weekly_availability={},
+            equipment=("gps_watch",),
+            constraints=(),
+            preferences=(),
+            preferred_training_times=(),
+            coach_tone="direct",
+            coach_style_notes="sobre",
+            athlete_identity_summary="Athlete running.",
+            onboarding_completed=True,
+        )
+        fitness = FitnessSnapshot(
+            user_id=12,
+            date=date(2026, 5, 11),
+            ctl=14.0,
+            atl=13.0,
+            tsb=1.0,
+            ramp_rate=0.02,
+            weekly_target_tss=120.0,
+            weekly_actual_tss=110.0,
+            completion_rate_14d=0.7,
+            key_sessions_done_14d=2,
+            volume_sessions_done_14d=4,
+            sport_ctl={"running": 14.0, "cycling": 0.0, "swimming": 0.0, "strength": 0.0, "climbing": 0.0},
+            sport_volume_hours={"running": 2.7, "cycling": 0.0, "swimming": 0.0, "strength": 0.0, "climbing": 0.0},
+        )
+
+        readiness = build_readiness_state(profile=profile, fitness=fitness, facts=[])
+
+        self.assertEqual(readiness.logistical, "clear")
+        self.assertNotIn("travel_constraint", readiness.risk_flags)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -236,6 +236,12 @@ Runtime = valider, dater, expirer, filtrer et consommer les artefacts structures
 Readiness = etat sportif depuis facts structures + charge reelle, jamais depuis mots-cles.
 ```
 
+Disponibilite :
+
+- une contrainte disponibilite structuree ouverte peut rendre la logistique `constrained` ;
+- l'absence de disponibilite hebdomadaire parseable ne vaut pas blocage ;
+- `blocked` ne doit pas etre deduit d'un profil incomplet ou d'un nettoyage de vieux signaux.
+
 ### Ecrit dans profile memory
 
 Faits :

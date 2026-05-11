@@ -109,8 +109,6 @@ def _mental_state(*, fitness: FitnessSnapshot, risk_flags: Sequence[str]) -> str
 def _logistical_state(*, profile: AthleteProfileSnapshot, risk_flags: Sequence[str]) -> str:
     if "travel_constraint" in risk_flags:
         return "constrained"
-    if not profile.weekly_availability:
-        return "blocked"
     return "clear"
 
 
