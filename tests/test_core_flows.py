@@ -3,7 +3,10 @@ from __future__ import annotations
 import json
 import os
 import tempfile
+import threading
+import time
 import unittest
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta
 from types import SimpleNamespace
 
@@ -18,7 +21,11 @@ import fitmas.llm as llm
 import fitmas.plan_mutation_service as plan_mutation_service
 from fitmas.adaptation import AdaptationResult
 from fitmas.api import app
-from fitmas.conversation_contract import ConversationTurnOutcome
+from fitmas.conversation_contract import (
+    ConversationPipelineDependencies,
+    ConversationTurnInput,
+    ConversationTurnOutcome,
+)
 from fitmas.db import Base, SessionLocal, engine, init_db
 from fitmas.llm import CoachDecision, MutationDecision
 from fitmas.models import Extraction
@@ -402,7 +409,7 @@ class FitMASCoreFlowsTest(unittest.TestCase):
             api_messages.decide = original_decide
             api_messages.extract_facts = original_extract_facts
 
-        self.assertEqual(result["assistant_message"]["text"], "On allège aujourd'hui. Tu récupères.")
+        self.assertEqual(result["assistant_message"]["text"], "Mardi: Journee flexible.")
         self.assertEqual(today["completion_status"], "adapted")
         self.assertEqual(today["sport_type"], "rest")
 
@@ -784,7 +791,7 @@ class FitMASCoreFlowsTest(unittest.TestCase):
         refreshed_pending = self.db.get(s.PendingMutationConfirmation, pending.id)
         turn = repo.get_recent_conversation_turns(self.db, self.user.id, limit=1)[0]
 
-        self.assertEqual(result["assistant_message"]["text"], "Je deplace cette seance a dimanche.")
+        self.assertEqual(result["assistant_message"]["text"], "Dimanche: Footing facile. 40 min.")
         self.assertEqual(turn.response_mode, "pending_accepted")
         self.assertEqual(refreshed_session.scheduled_date.date().isoformat(), target_date)
         self.assertEqual(refreshed_pending.status, "accepted")
@@ -870,6 +877,63 @@ class FitMASCoreFlowsTest(unittest.TestCase):
 
         self.assertEqual(result["assistant_message"]["text"], "C'est deja traite.")
         self.assertEqual(result["user_message"]["text"], "Remplace les natations")
+
+    def test_concurrent_message_client_key_replays_first_turn_without_reprocessing(self) -> None:
+        calls = 0
+        call_lock = threading.Lock()
+        entered_decide = threading.Event()
+
+        def slow_decide(*args, **kwargs) -> CoachDecision:
+            nonlocal calls
+            with call_lock:
+                calls += 1
+            entered_decide.set()
+            time.sleep(0.25)
+            return CoachDecision(
+                response_type="no_change",
+                rationale="stable",
+                fitmas_message="Reponse stable.",
+            )
+
+        dependencies = ConversationPipelineDependencies(
+            decide=slow_decide,
+            extract_facts=lambda *args, **kwargs: [],
+            check_and_adapt_health_facts=lambda *args, **kwargs: None,
+            plan_turn=lambda *args, **kwargs: None,
+        )
+        payload = ConversationTurnInput(
+            text="On peut echanger demain et apres demain ?",
+            client_message_key="telegram:42:race",
+            source="telegram",
+        )
+
+        def call_pipeline() -> str:
+            db = SessionLocal()
+            try:
+                reply = conversation_pipeline.run_conversation_turn(
+                    payload,
+                    db=db,
+                    dependencies=dependencies,
+                )
+                return reply.assistant_message.text
+            finally:
+                db.close()
+
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            first = executor.submit(call_pipeline)
+            self.assertTrue(entered_decide.wait(timeout=2))
+            second = executor.submit(call_pipeline)
+            replies = [first.result(timeout=5), second.result(timeout=5)]
+
+        self.assertEqual(calls, 1)
+        self.assertEqual(replies, ["Reponse stable.", "Reponse stable."])
+        self.db.expire_all()
+        turns = (
+            self.db.query(s.ConversationTurnRecord)
+            .filter(s.ConversationTurnRecord.client_message_key == "telegram:42:race")
+            .all()
+        )
+        self.assertEqual(len(turns), 1)
 
     def test_pending_reject_resolution_closes_pending_without_mutation(self) -> None:
         _, session = self._create_plan_for_today()

@@ -856,6 +856,74 @@ def test_multi_session_decision_records_one_event_with_both_targets(monkeypatch)
     assert events[0]["target_session_ids"] == [10, 11]
 
 
+def test_swap_session_event_summary_uses_committed_session_not_llm_text(monkeypatch) -> None:
+    user = SimpleNamespace(id=7)
+    first_after = SimpleNamespace(
+        id=10,
+        day="wednesday",
+        label="Mercredi",
+        scheduled_date=None,
+        sport_type="running",
+        session_type="fartlek",
+        session_title="Fartlek progressif",
+        duration_min=42,
+        intensity="hard",
+        completion_status="adapted",
+    )
+    second_after = SimpleNamespace(
+        id=11,
+        day="thursday",
+        label="Jeudi",
+        scheduled_date=None,
+        sport_type="swimming",
+        session_type="technique",
+        session_title="Natation technique",
+        duration_min=35,
+        intensity="moderate",
+        completion_status="adapted",
+    )
+    decision = MutationDecision(
+        mutation_type="swap_sessions",
+        target_session_id=10,
+        second_session_id=11,
+        rationale="Simple inversion.",
+        fitmas_message="Natation mercredi et fartlek jeudi ? Simple inversion des deux jours.",
+    )
+
+    monkeypatch.setattr(
+        "fitmas.plan_mutation_service.repo.get_active_plan_optional",
+        lambda db, user_id: SimpleNamespace(id=42),
+    )
+    monkeypatch.setattr(
+        "fitmas.plan_mutation_service.mutations.apply",
+        lambda db, plan_id, decision, **kwargs: (SimpleNamespace(allowed=True), SimpleNamespace()),
+    )
+    monkeypatch.setattr(
+        "fitmas.plan_mutation_service.repo.get_scheduled_session",
+        lambda db, user_id, session_id: {10: first_after, 11: second_after}.get(session_id),
+    )
+    monkeypatch.setattr("fitmas.plan_mutation_service.repo.get_scheduled_sessions", lambda *args, **kwargs: [])
+
+    events: list[dict] = []
+    monkeypatch.setattr(
+        "fitmas.plan_mutation_service.repo.add_plan_mutation_event",
+        lambda db, **kwargs: events.append(kwargs) or SimpleNamespace(id=203),
+    )
+
+    result = apply_decisions_for_user(object(), user=user, decisions=[decision])
+
+    assert result is not None
+    summary = result.applied_events[0].user_visible_summary
+    assert "Mercredi" in summary
+    assert "Fartlek progressif" in summary
+    assert "42 min" in summary
+    assert "Jeudi" in summary
+    assert "Natation technique" in summary
+    assert "35 min" in summary
+    assert "Natation mercredi" not in summary
+    assert events[0]["user_visible_summary"] == summary
+
+
 def test_apply_decisions_for_user_returns_event_summary_for_replace(monkeypatch) -> None:
     user = SimpleNamespace(id=7)
     updated_session = SimpleNamespace(

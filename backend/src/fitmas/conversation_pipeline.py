@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import logging
 import re
+from contextlib import contextmanager
+from threading import Lock
 from typing import Any
 
 from sqlalchemy.orm import Session
@@ -75,8 +77,44 @@ from fitmas.tools.contract import ToolContext
 logger = logging.getLogger(__name__)
 metrics_logger = logging.getLogger("fitmas.conversation_metrics")
 
+_CLIENT_MESSAGE_KEY_LOCKS_GUARD = Lock()
+_CLIENT_MESSAGE_KEY_LOCKS: dict[str, Lock] = {}
+
+
+@contextmanager
+def _client_message_key_lock(user_id: int, client_message_key: str | None):
+    key = str(client_message_key or "").strip()
+    if not key:
+        yield
+        return
+    lock_key = f"{user_id}:{key}"
+    with _CLIENT_MESSAGE_KEY_LOCKS_GUARD:
+        lock = _CLIENT_MESSAGE_KEY_LOCKS.get(lock_key)
+        if lock is None:
+            lock = Lock()
+            _CLIENT_MESSAGE_KEY_LOCKS[lock_key] = lock
+    lock.acquire()
+    try:
+        yield
+    finally:
+        lock.release()
+
 
 def run_conversation_turn(
+    payload: ConversationTurnInput,
+    *,
+    db: Session,
+    dependencies: ConversationPipelineDependencies,
+) -> MessageReply:
+    user = repo.get_user_optional(db)
+    if user is None:
+        raise ConversationUserNotFoundError("No onboarded user yet")
+
+    with _client_message_key_lock(user.id, payload.client_message_key):
+        return _run_conversation_turn_impl(payload, db=db, dependencies=dependencies)
+
+
+def _run_conversation_turn_impl(
     payload: ConversationTurnInput,
     *,
     db: Session,

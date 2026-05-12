@@ -57,6 +57,8 @@ Pour prod / déploiement :
 - `FLY_APP_NAME`
 - `FITMAS_ENABLE_DEBUG_ENDPOINTS`
 - `FITMAS_TELEGRAM_DEBOUNCE_SECONDS`
+- `FITMAS_API_POST_TIMEOUT_SECONDS` : timeout bot -> API pour les messages coach,
+  180s par defaut pour eviter les faux "FitMAS indisponible" sur tours LLM longs
 
 Notes :
 - `.env` est chargé par l'API et le bot

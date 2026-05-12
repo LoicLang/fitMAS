@@ -151,8 +151,17 @@ def apply_decisions_for_user(
                 if decision.target_session_id is not None
                 else None
             )
+            second_updated_session = (
+                repo.get_scheduled_session(db, user.id, decision.second_session_id)
+                if decision.second_session_id is not None
+                else None
+            )
             after_snapshot = _session_snapshot(updated_session)
-            user_visible_summary = _build_user_visible_summary(decision, updated_session)
+            user_visible_summary = _build_user_visible_summary(
+                decision,
+                updated_session,
+                second_updated_session,
+            )
             event = repo.add_plan_mutation_event(
                 db,
                 user_id=user.id,
@@ -765,9 +774,18 @@ def _event_id(event: Any) -> int | None:
     return int(value) if value is not None else None
 
 
-def _build_user_visible_summary(decision: MutationDecision, updated_session: Any) -> str:
+def _build_user_visible_summary(
+    decision: MutationDecision,
+    updated_session: Any,
+    second_updated_session: Any | None = None,
+) -> str:
     if decision.mutation_type != "replace_session":
-        return decision.fitmas_message
+        committed_summary = _build_committed_mutation_summary(
+            decision=decision,
+            updated_session=updated_session,
+            second_updated_session=second_updated_session,
+        )
+        return committed_summary or decision.fitmas_message
     title = str(_value(updated_session, "session_title") or decision.new_title or "seance adaptee").strip()
     duration_min = _value(updated_session, "duration_min") or decision.new_duration_min
     intensity = str(_value(updated_session, "intensity") or decision.new_intensity or "").strip().lower()
@@ -786,6 +804,40 @@ def _build_user_visible_summary(decision: MutationDecision, updated_session: Any
         parts.append(f"{', '.join(detail_bits).capitalize()}.")
     if decision.rationale:
         parts.append(decision.rationale)
+    return " ".join(parts)
+
+
+def _build_committed_mutation_summary(
+    *,
+    decision: MutationDecision,
+    updated_session: Any,
+    second_updated_session: Any | None = None,
+) -> str:
+    if decision.mutation_type == "swap_sessions":
+        parts = [
+            _build_committed_session_summary(updated_session),
+            _build_committed_session_summary(second_updated_session),
+        ]
+        return " ".join(part for part in parts if part)
+    return _build_committed_session_summary(updated_session)
+
+
+def _build_committed_session_summary(updated_session: Any) -> str:
+    if updated_session is None:
+        return ""
+    title = str(_value(updated_session, "session_title") or "").strip()
+    day_label = str(_value(updated_session, "label") or _value(updated_session, "day") or "").strip()
+    duration_min = _value(updated_session, "duration_min")
+    if day_label and title:
+        parts = [f"{day_label}: {title}."]
+    elif title:
+        parts = [f"{title}."]
+    elif day_label:
+        parts = [f"{day_label}: seance ajustee."]
+    else:
+        parts = ["Seance ajustee."]
+    if duration_min:
+        parts.append(f"{int(duration_min)} min.")
     return " ".join(parts)
 
 
