@@ -17,6 +17,7 @@ class ConversationTurnInput:
 @dataclass(slots=True)
 class ConversationTurnState:
     user: Any
+    current_user_message_id: int
     conversation_history: list[dict[str, Any]]
     previous_agent_text: str | None
     scheduled_sessions: list[Any]

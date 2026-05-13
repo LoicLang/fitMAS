@@ -3,13 +3,14 @@ from __future__ import annotations
 import logging
 import re
 from contextlib import contextmanager
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime, timedelta
 from threading import Lock
 from typing import Any
 
 from sqlalchemy.orm import Session
 
 from fitmas import final_reply, llm as llm_runtime, repository as repo
+from fitmas.adaptation_proposal import compile_adaptation_proposal, generate_adaptation_proposal
 from fitmas.grounding_contract import (
     ReplyGroundingPacket,
     plan_window_facts_from_sessions,
@@ -71,8 +72,10 @@ from fitmas.plan_patch_candidate_evaluator import EvaluatedPlanPatchCandidate, e
 from fitmas.plan_patch_candidate_generator import CandidateGenerationInput, generate_plan_patch_candidates
 from fitmas.plan_patch_candidate_reviewer import PlanPatchCandidateReviewDecision, review_plan_patch_candidates
 from fitmas.plan_patch_candidates import ALLOWED_CANDIDATE_OPERATION_TYPES, PlanPatchCandidate
+from fitmas.planning_snapshot import build_planning_snapshot
 from fitmas.profile_summary import build_profile_summary
 from fitmas.signals import collect_signals
+from fitmas.time_context import get_local_now
 from fitmas.tools.contract import ToolContext
 
 logger = logging.getLogger(__name__)
@@ -292,6 +295,7 @@ def _run_conversation_turn_impl(
     turn_context = {
         **external_turn_context,
         "profile_summary": build_profile_summary(state.active_memory_rows),
+        "current_user_message_id": state.current_user_message_id,
         "timeline_summary": api_messages.make_timeline_summary(state.timeline),
         "execution_summary": execution_summary_for_prompt(conversation_context),
         "temporal_summary": decision_temporal_summary,
@@ -363,13 +367,18 @@ def _run_conversation_turn_impl(
         turn_context=turn_context,
     )
     if adaptation_candidate_outcome is not None:
-        _apply_turn_plan_memory_actions(
-            db=db,
-            user=user,
-            turn_plan=turn_plan,
-            turn_memory_writes=turn_memory_writes,
-            turn_context=turn_context,
-        )
+        if adaptation_candidate_outcome.response_mode == "obsolete_turn_no_write":
+            pass
+        elif _turn_is_obsolete(db=db, user=user, turn_context=turn_context):
+            adaptation_candidate_outcome = _obsolete_turn_outcome(turn_context=turn_context)
+        else:
+            _apply_turn_plan_memory_actions(
+                db=db,
+                user=user,
+                turn_plan=turn_plan,
+                turn_memory_writes=turn_memory_writes,
+                turn_context=turn_context,
+            )
         return _reply_and_record_turn(
             db=db,
             user_id=user.id,
@@ -451,23 +460,27 @@ def _run_conversation_turn_impl(
     outcome: ConversationTurnOutcome | None = None
     if _is_coach_decision(decision):
         turn_context["coach_decision"] = _coach_decision_payload(decision)
-        action_result = _apply_coach_decision_actions(
-            db=db,
-            user=user,
-            decision=decision,
-            turn_memory_writes=turn_memory_writes,
-            unresolved_execution_followup=unresolved_execution_followup_text,
-        )
-        turn_context["coach_decision_action_result"] = action_result
-        pending_outcome = _apply_pending_resolution(
-            db=db,
-            user=user,
-            decision=decision,
-            pending_confirmation=pending_confirmation,
-        )
-        if pending_outcome is not None:
-            outcome = pending_outcome
+        if _turn_is_obsolete(db=db, user=user, turn_context=turn_context):
+            outcome = _obsolete_turn_outcome(turn_context=turn_context)
             decision = None
+        else:
+            action_result = _apply_coach_decision_actions(
+                db=db,
+                user=user,
+                decision=decision,
+                turn_memory_writes=turn_memory_writes,
+                unresolved_execution_followup=unresolved_execution_followup_text,
+            )
+            turn_context["coach_decision_action_result"] = action_result
+            pending_outcome = _apply_pending_resolution(
+                db=db,
+                user=user,
+                decision=decision,
+                pending_confirmation=pending_confirmation,
+            )
+            if pending_outcome is not None:
+                outcome = pending_outcome
+                decision = None
         if (
             outcome is None
             and decision is not None
@@ -677,6 +690,10 @@ def _run_conversation_turn_impl(
                 mutation_applied=False,
             )
             decision = None
+
+    if outcome is None and decision is not None and _turn_is_obsolete(db=db, user=user, turn_context=turn_context):
+        outcome = _obsolete_turn_outcome(turn_context=turn_context)
+        decision = None
 
     if outcome is None and decision:
         legacy_pending_outcome = _apply_matching_legacy_pending_acceptance(
@@ -905,7 +922,12 @@ def _run_conversation_turn_impl(
             outcome.reply_text = outage_fallback_reply()
             outcome.response_mode = "claim_without_mutation_outage_fallback"
 
-    extracted_facts = dependencies.extract_facts(payload.text, outcome.reply_text, state.active_facts)
+    extracted_facts = (
+        []
+        if outcome.response_mode == "obsolete_turn_no_write"
+        else dependencies.extract_facts(payload.text, outcome.reply_text, state.active_facts)
+    )
+    extracted_facts = _filter_legacy_extracted_facts(extracted_facts)
     if extracted_facts:
         _persist_turn_memory_updates(
             db,
@@ -970,8 +992,32 @@ def _day_id_from_row(raw: str | None) -> DayId | None:
         return None
 
 
+def _turn_is_obsolete(*, db: Session, user, turn_context: dict[str, object]) -> bool:
+    raw_message_id = turn_context.get("current_user_message_id")
+    try:
+        message_id = int(raw_message_id) if raw_message_id is not None else None
+    except (TypeError, ValueError):
+        message_id = None
+    if message_id is None:
+        return False
+    return repo.has_newer_user_message(db, user.id, message_id)
+
+
+def _obsolete_turn_outcome(*, turn_context: dict[str, object]) -> ConversationTurnOutcome:
+    turn_context["obsolete_turn_no_write"] = True
+    return ConversationTurnOutcome(
+        extraction=Extraction(confidence=0.85),
+        reply_text=(
+            "Je vois un message plus recent. "
+            "Je ne touche pas au plan sur cet ancien tour."
+        ),
+        response_mode="obsolete_turn_no_write",
+        mutation_applied=False,
+    )
+
+
 def _load_turn_state(*, db: Session, user, user_text: str) -> ConversationTurnState:
-    repo.add_message(db, user.id, "user", user_text)
+    current_message = repo.add_message(db, user.id, "user", user_text)
     logger.info("User message: %s", user_text[:120])
 
     msgs = repo.get_messages(db, user.id)
@@ -984,6 +1030,7 @@ def _load_turn_state(*, db: Session, user, user_text: str) -> ConversationTurnSt
     active_memory_rows, active_facts = _active_memory_payloads(db, user.id)
     return ConversationTurnState(
         user=user,
+        current_user_message_id=current_message.id,
         conversation_history=conversation_history,
         previous_agent_text=previous_agent_text,
         scheduled_sessions=scheduled_sessions,
@@ -1299,6 +1346,15 @@ def _apply_pending_resolution(
             extraction=Extraction(confidence=0.85),
             reply_text=str(getattr(decision, "fitmas_message", "") or "La proposition reste en attente. Dis-moi le changement concret et je reprends."),
             response_mode=f"pending_{resolution_type}",
+            mutation_applied=False,
+            pending_confirmation=True,
+            pending_confirmation_id=getattr(pending_confirmation, "id", None),
+        )
+    if resolution_type == "ignore":
+        return ConversationTurnOutcome(
+            extraction=Extraction(confidence=0.85),
+            reply_text=str(getattr(decision, "fitmas_message", "") or "La proposition reste en attente."),
+            response_mode="pending_ignore",
             mutation_applied=False,
             pending_confirmation=True,
             pending_confirmation_id=getattr(pending_confirmation, "id", None),
@@ -1623,9 +1679,60 @@ def _applied_plan_patch_reply(service_result: PlanPatchServiceResult | None, *, 
     composed = final_reply.compose_final_reply(context)
     if composed:
         verified = final_reply.verify_post_event_reply(composed, context)
-        if verified:
+        if verified and _post_event_reply_matches_plan_patch_result(verified, service_result):
             return verified
     return " ".join(committed_events) if committed_events else fallback
+
+
+def _post_event_reply_matches_plan_patch_result(
+    reply: str,
+    service_result: PlanPatchServiceResult | None,
+) -> bool:
+    if service_result is None or service_result.mutation_result is None:
+        return True
+    for event in service_result.mutation_result.applied_events:
+        if not _post_event_reply_matches_applied_event(reply, event):
+            return False
+    return True
+
+
+def _post_event_reply_matches_applied_event(reply: str, event: Any) -> bool:
+    if str(getattr(event, "command_type", "") or "") != "move_session":
+        return True
+    before = _snapshot_date_parts(getattr(event, "before_snapshot", None) or {})
+    after = _snapshot_date_parts(getattr(event, "after_snapshot", None) or {})
+    if before is None or after is None or before[0] == after[0]:
+        return True
+    before_iso, before_day = before
+    return not (
+        _reply_claims_move_destination(reply, before_day)
+        or _reply_claims_move_destination(reply, before_iso)
+    )
+
+
+def _snapshot_date_parts(snapshot: dict[str, Any]) -> tuple[str, str] | None:
+    raw = str(snapshot.get("scheduled_date") or snapshot.get("day") or "").strip()
+    if len(raw) < 10:
+        return None
+    try:
+        parsed = date.fromisoformat(raw[:10])
+    except ValueError:
+        return None
+    days = ("lundi", "mardi", "mercredi", "jeudi", "vendredi", "samedi", "dimanche")
+    return parsed.isoformat(), days[parsed.weekday()]
+
+
+def _reply_claims_move_destination(reply: str, destination: str) -> bool:
+    normalized = coach_voice.normalize_for_voice_guard(reply)
+    target = coach_voice.normalize_for_voice_guard(destination)
+    movement = r"(passe|deplace|deplacee|deplacees|cale|calee|calees|bouge|reprogramme|avance|repousse)"
+    preposition = r"(a|au|aux|vers|pour|le|la)"
+    return bool(
+        re.search(
+            rf"\b{movement}\b[^.?!]{{0,100}}\b{preposition}\s+{re.escape(target)}\b",
+            normalized,
+        )
+    )
 
 
 def _applied_event_fact(event: Any) -> str:
@@ -1971,6 +2078,23 @@ def _plan_patch_confirmation_summary(service_result: PlanPatchServiceResult | No
     return "Ce changement modifie sensiblement la semaine."
 
 
+def _plan_patch_pending_summary(
+    service_result: PlanPatchServiceResult | None,
+    *,
+    patch: PlanPatch | None = None,
+) -> str:
+    if service_result is not None and service_result.week_policy_status == "requires_confirmation":
+        return _plan_patch_confirmation_summary(service_result)
+    for candidate in (
+        getattr(patch, "confirmation_reason", None),
+        getattr(patch, "coach_message", None),
+    ):
+        value = str(candidate or "").strip()
+        if value and not coach_voice.message_has_user_facing_internal_jargon(value):
+            return value
+    return _plan_patch_confirmation_summary(service_result)
+
+
 def _plan_patch_pending_reason(
     service_result: PlanPatchServiceResult | None,
     *,
@@ -2215,6 +2339,21 @@ def _persist_turn_memory_updates(
     turn_memory_writes.extend(dict(payload) for payload in payloads)
 
 
+def _filter_legacy_extracted_facts(payloads: list[dict]) -> list[dict]:
+    """Keep the legacy extractor away from availability writes.
+
+    Availability now comes from typed LLM `memory_actions` or the typed
+    `turn_plan.availability_constraint`. This function filters only legacy
+    extracted fact payloads after the assistant output exists; it never reads
+    or classifies user text.
+    """
+    return [
+        payload
+        for payload in payloads
+        if str(payload.get("category") or "").strip().lower() != "availability"
+    ]
+
+
 def _reply_and_record_turn(
     *,
     db: Session,
@@ -2388,6 +2527,27 @@ def _maybe_handle_plan_adaptation_candidates(
         scheduled_sessions=scheduled_sessions,
         turn_plan=turn_plan,
     )
+    empty_temporal_target = _empty_temporal_plan_mutation_target(
+        turn_plan=turn_plan,
+        grounding=grounding,
+        backend_candidate_payloads=backend_candidate_payloads,
+    )
+    if empty_temporal_target is not None:
+        turn_context["adaptation_candidate_flow"] = {
+            "attempted": True,
+            "candidates_generated": 0,
+            "policy_action": "plan_mutation_empty_target_date",
+            "target_dates": [item.isoformat() for item in empty_temporal_target],
+        }
+        return ConversationTurnOutcome(
+            extraction=Extraction(confidence=float(getattr(turn_plan, "confidence", 0.85) or 0.85)),
+            reply_text=_empty_temporal_plan_mutation_target_reply(
+                dates=empty_temporal_target,
+                grounding=grounding,
+            ),
+            response_mode="plan_mutation_empty_target_date",
+            mutation_applied=False,
+        )
     no_affected_sport = _availability_no_affected_sport_session(
         turn_plan=turn_plan,
         grounding=grounding,
@@ -2413,6 +2573,22 @@ def _maybe_handle_plan_adaptation_candidates(
             response_mode="availability_no_affected_session",
             mutation_applied=False,
         )
+    snapshot_outcome = _maybe_handle_plan_adaptation_snapshot_proposal(
+        db=db,
+        user=user,
+        user_text=user_text,
+        turn_plan=turn_plan,
+        scheduled_sessions=scheduled_sessions,
+        coach_bundle=coach_bundle,
+        grounding=grounding,
+        turn_context=turn_context,
+        current_plan_id=current_plan_id,
+        current_plan_version=current_plan_version,
+        action_result=action_result,
+    )
+    if snapshot_outcome is not None:
+        return snapshot_outcome
+
     input_payload = CandidateGenerationInput(
         user_message=user_text,
         parsed_user_intent=_turn_plan_payload(turn_plan) or {},
@@ -2467,6 +2643,122 @@ def _maybe_handle_plan_adaptation_candidates(
         coach_bundle=coach_bundle,
         scheduled_sessions=scheduled_sessions,
         grounding=grounding,
+        turn_context=turn_context,
+        action_result=action_result,
+    )
+
+
+def _maybe_handle_plan_adaptation_snapshot_proposal(
+    *,
+    db: Session,
+    user,
+    user_text: str,
+    turn_plan,
+    scheduled_sessions: list[Any],
+    coach_bundle,
+    grounding: ReplyGroundingPacket | None,
+    turn_context: dict[str, object],
+    current_plan_id: str,
+    current_plan_version: int,
+    action_result: dict | None = None,
+) -> ConversationTurnOutcome | None:
+    local_date = getattr(grounding, "local_date", None) or get_local_now(user.timezone).date()
+    snapshot = build_planning_snapshot(
+        db,
+        user=user,
+        start_date=local_date,
+        end_date=local_date + timedelta(days=7),
+        now=get_local_now(user.timezone),
+    )
+    proposal = generate_adaptation_proposal(
+        user_message=user_text,
+        parsed_user_intent=_turn_plan_payload(turn_plan) or {},
+        snapshot=snapshot,
+        request_json_fn=gw.request_json,
+        model=gw.DEFAULT_FAST_MODEL,
+    )
+    if proposal is None:
+        turn_context["planning_snapshot_flow"] = {
+            "attempted": True,
+            "proposal": "none",
+            "fallback": "legacy_candidates",
+        }
+        return None
+    if proposal.response_type == "needs_clarification":
+        question = str(proposal.clarification_question or "").strip()
+        if not question:
+            turn_context["planning_snapshot_flow"] = {
+                "attempted": True,
+                "proposal": "needs_clarification_without_question",
+                "fallback": "legacy_candidates",
+            }
+            return None
+        turn_context["planning_snapshot_flow"] = {
+            "attempted": True,
+            "proposal": "needs_clarification",
+            "diagnostics": list(snapshot.diagnostics),
+        }
+        return ConversationTurnOutcome(
+            extraction=Extraction(confidence=float(proposal.confidence or getattr(turn_plan, "confidence", 0.85) or 0.85)),
+            reply_text=question,
+            response_mode="planning_snapshot_clarification",
+            mutation_applied=False,
+        )
+
+    compile_result = compile_adaptation_proposal(proposal, snapshot=snapshot)
+    if not compile_result.ok or compile_result.patch is None:
+        turn_context["planning_snapshot_flow"] = {
+            "attempted": True,
+            "proposal": "compile_failed",
+            "errors": list(compile_result.errors),
+            "diagnostics": list(snapshot.diagnostics),
+            "fallback": "legacy_candidates",
+        }
+        return None
+
+    candidate = PlanPatchCandidate(
+        id="snapshot_proposal",
+        patches=(compile_result.patch,),
+        rationale=proposal.summary,
+        expected_tradeoff="Adaptation proposee depuis PlanningSnapshot.",
+        confidence=float(proposal.confidence or 0.0),
+        assumptions=tuple(str(item) for item in proposal.assumptions),
+        risk_notes=tuple(snapshot.diagnostics),
+        created_from_plan_id=current_plan_id,
+        created_from_plan_version=current_plan_version,
+    )
+    evaluated = (
+        evaluate_plan_patch_candidate(
+            db,
+            candidate=candidate,
+            current_plan_id=current_plan_id,
+            current_plan_version=current_plan_version,
+            plan_id=0,
+            scheduled_sessions=scheduled_sessions,
+            current_score=None,
+            timezone_name=user.timezone,
+            coach_state_bundle=coach_bundle,
+            backend_candidate_patches={},
+        ),
+    )
+    policy_decision = decide_adaptation_policy(evaluated, reviewer_decision=None)
+    turn_context["planning_snapshot_flow"] = {
+        "attempted": True,
+        "proposal": "compiled",
+        "operation_count": len(compile_result.patch.operations),
+        "policy_action": policy_decision.action,
+        "diagnostics": list(snapshot.diagnostics),
+    }
+    return _outcome_from_adaptation_policy(
+        db=db,
+        user=user,
+        user_text=user_text,
+        policy_decision=policy_decision,
+        evaluated=evaluated,
+        coach_bundle=coach_bundle,
+        scheduled_sessions=scheduled_sessions,
+        grounding=grounding,
+        turn_context=turn_context,
         action_result=action_result,
     )
 
@@ -2501,7 +2793,7 @@ def _should_use_plan_adaptation_candidate_flow(
         return bool(getattr(turn_plan, "has_plan_mutation", False))
     if primary_intent != "plan_mutation":
         return False
-    if secondary_intents.intersection({"health_signal", "execution_report"}):
+    if secondary_intents.intersection({"execution_report"}):
         return False
     return bool(getattr(turn_plan, "has_plan_mutation", False))
 
@@ -2526,6 +2818,76 @@ def _availability_no_affected_sport_session(
         if _normalize_turn_sport(getattr(session, "sport_type", None)) == sport_type:
             return None
     return window
+
+
+def _empty_temporal_plan_mutation_target(
+    *,
+    turn_plan,
+    grounding: ReplyGroundingPacket | None,
+    backend_candidate_payloads: tuple[dict[str, Any], ...],
+) -> tuple[date, ...] | None:
+    if backend_candidate_payloads or turn_plan is None or grounding is None:
+        return None
+    if str(getattr(turn_plan, "primary_intent", "") or "") != "plan_mutation":
+        return None
+    if not bool(getattr(turn_plan, "has_plan_mutation", False)):
+        return None
+    planning_action = str(getattr(turn_plan, "planning_action", "") or "").strip()
+    source_dates = _grounding_ref_dates(grounding, "source")
+    target_dates = _grounding_ref_dates(grounding, "target")
+    context_dates = _grounding_ref_dates(grounding, "context")
+    if not source_dates and not target_dates and not context_dates:
+        return None
+    if source_dates:
+        if planning_action not in {"move_session", "swap_sessions", "replace_session", "lighten_day", "update_session"}:
+            return None
+        missing = source_dates - _training_dates_in_grounding(grounding, source_dates)
+        return tuple(sorted(missing)) if missing else None
+    if planning_action not in {"swap_sessions", "replace_session", "lighten_day", "update_session"}:
+        return None
+    candidate_dates = target_dates | context_dates
+    if not candidate_dates:
+        return None
+    if _training_dates_in_grounding(grounding, candidate_dates):
+        return None
+    return tuple(sorted(candidate_dates))
+
+
+def _empty_temporal_plan_mutation_target_reply(
+    *,
+    dates: tuple[date, ...],
+    grounding: ReplyGroundingPacket | None,
+) -> str:
+    labels = ", ".join(_grounding_date_label(item, grounding=grounding) for item in dates)
+    return (
+        f"Je ne vois aucune seance a modifier le {labels}. "
+        "Je ne touche pas au plan. Donne-moi la seance cible, ou dis-moi si tu veux en ajouter une."
+    )
+
+
+def _grounding_ref_dates(grounding: ReplyGroundingPacket, role: str) -> set[date]:
+    return {
+        ref.resolved_date
+        for ref in grounding.temporal_references.get(role, ())
+        if isinstance(getattr(ref, "resolved_date", None), date)
+    }
+
+
+def _training_dates_in_grounding(grounding: ReplyGroundingPacket, dates: set[date]) -> set[date]:
+    return {
+        fact.scheduled_date
+        for fact in grounding.plan_window
+        if fact.scheduled_date in dates and str(fact.slot_kind or "") == "training"
+    }
+
+
+def _grounding_date_label(value: date, *, grounding: ReplyGroundingPacket | None) -> str:
+    if grounding is not None:
+        for refs in grounding.temporal_references.values():
+            for ref in refs:
+                if ref.resolved_date == value:
+                    return f"{value.isoformat()} ({ref.day_label})"
+    return value.isoformat()
 
 
 def _availability_sport_window_from_turn_plan(
@@ -2639,6 +3001,7 @@ def _outcome_from_adaptation_policy(
     coach_bundle,
     scheduled_sessions: list[Any],
     grounding: ReplyGroundingPacket | None,
+    turn_context: dict[str, object],
     action_result: dict | None = None,
 ) -> ConversationTurnOutcome | None:
     extra_facts = _adaptation_action_extra_facts(db=db, user=user, action_result=action_result)
@@ -2646,7 +3009,7 @@ def _outcome_from_adaptation_policy(
         reply_text = final_reply.compose_plan_adaptation_reply(
             policy_decision=policy_decision,
             user_text=user_text,
-            candidate_summaries=_candidate_summaries_for_reply(evaluated),
+            candidate_summaries=_candidate_summaries_for_reply(evaluated, scheduled_sessions=scheduled_sessions),
             extra_facts=extra_facts,
         ) or final_reply.outage_fallback_reply(
             final_reply.build_plan_adaptation_reply_context(
@@ -2660,6 +3023,9 @@ def _outcome_from_adaptation_policy(
             response_mode="plan_adaptation_block",
             mutation_applied=False,
         )
+
+    if _turn_is_obsolete(db=db, user=user, turn_context=turn_context):
+        return _obsolete_turn_outcome(turn_context=turn_context)
 
     if policy_decision.action == "pending_choice":
         choice_candidates = _pending_choice_candidates(policy_decision, evaluated)
@@ -2679,7 +3045,7 @@ def _outcome_from_adaptation_policy(
         reply_text = final_reply.compose_plan_adaptation_reply(
             policy_decision=policy_decision,
             user_text=user_text,
-            candidate_summaries=_candidate_summaries_for_reply(evaluated),
+            candidate_summaries=_candidate_summaries_for_reply(evaluated, scheduled_sessions=scheduled_sessions),
             extra_facts=extra_facts,
         ) or final_reply.outage_fallback_reply(
             final_reply.build_plan_adaptation_reply_context(
@@ -2708,7 +3074,7 @@ def _outcome_from_adaptation_policy(
             impact_level="high",
             reason=policy_decision.requires_confirmation_reason or policy_decision.reason,
             mutation_type="plan_patch",
-            summary=_plan_patch_confirmation_summary(service_result),
+            summary=_plan_patch_pending_summary(service_result, patch=selected.patch),
             source_text=user_text,
             decision_json=serialize_plan_patch_confirmation(selected.patch),
             expires_at=default_confirmation_expiry(),
@@ -2716,7 +3082,7 @@ def _outcome_from_adaptation_policy(
         reply_text = final_reply.compose_plan_adaptation_reply(
             policy_decision=policy_decision,
             user_text=user_text,
-            candidate_summaries=_candidate_summaries_for_reply((selected,)),
+            candidate_summaries=_candidate_summaries_for_reply((selected,), scheduled_sessions=scheduled_sessions),
             extra_facts=extra_facts,
         ) or _build_plan_patch_confirmation_prompt(service_result, grounding=grounding)
         return ConversationTurnOutcome(
@@ -2748,7 +3114,7 @@ def _outcome_from_adaptation_policy(
             policy_decision=policy_decision,
             user_text=user_text,
             committed_events=committed_events,
-            candidate_summaries=_candidate_summaries_for_reply((selected,)),
+            candidate_summaries=_candidate_summaries_for_reply((selected,), scheduled_sessions=scheduled_sessions),
             extra_facts=extra_facts,
         ) or _applied_plan_patch_reply(service_result, fallback=selected.patch.coach_message)
         return ConversationTurnOutcome(
@@ -2767,7 +3133,7 @@ def _outcome_from_adaptation_policy(
                 fallback_reason="plan_adaptation_runtime_confirmation",
             ),
             mutation_type="plan_patch",
-            summary=_plan_patch_confirmation_summary(service_result),
+            summary=_plan_patch_pending_summary(service_result, patch=selected.patch),
             source_text=user_text,
             decision_json=serialize_plan_patch_confirmation(selected.patch),
             expires_at=default_confirmation_expiry(),
@@ -2928,15 +3294,61 @@ def _patch_from_choice_candidate(candidate: PlanPatchCandidate) -> PlanPatch:
     )
 
 
-def _candidate_summaries_for_reply(evaluated: tuple[EvaluatedPlanPatchCandidate, ...]) -> tuple[str, ...]:
+def _candidate_summaries_for_reply(
+    evaluated: tuple[EvaluatedPlanPatchCandidate, ...],
+    *,
+    scheduled_sessions: list[Any] | tuple[Any, ...] = (),
+) -> tuple[str, ...]:
+    session_labels = _session_labels_by_id(scheduled_sessions)
     summaries: list[str] = []
     for item in evaluated:
         score = f"score={item.score.total}" if item.score is not None else "score=unknown"
+        operations = _patch_operations_summary(item.patch, session_labels=session_labels)
+        ops_text = f" | ops={operations}" if operations else ""
         summaries.append(
             f"{item.candidate.id}: {item.candidate.rationale} | "
-            f"tradeoff={item.candidate.expected_tradeoff} | {score}"
+            f"tradeoff={item.candidate.expected_tradeoff}{ops_text} | {score}"
         )
     return tuple(summaries)
+
+
+def _session_labels_by_id(scheduled_sessions: list[Any] | tuple[Any, ...]) -> dict[int, str]:
+    labels: dict[int, str] = {}
+    for session in scheduled_sessions:
+        session_id = getattr(session, "id", None)
+        if session_id is None:
+            continue
+        session_date = _session_date_from_value(getattr(session, "scheduled_date", None))
+        date_text = session_date.isoformat() if session_date is not None else "date_unknown"
+        sport_type = str(getattr(session, "sport_type", "") or "sport_unknown").strip() or "sport_unknown"
+        session_type = str(getattr(session, "session_type", "") or "type_unknown").strip() or "type_unknown"
+        labels[int(session_id)] = f"session:{int(session_id)} {sport_type}/{session_type} {date_text}"
+    return labels
+
+
+def _patch_operations_summary(
+    patch: PlanPatch | None,
+    *,
+    session_labels: dict[int, str],
+) -> str:
+    if patch is None:
+        return ""
+    parts: list[str] = []
+    for operation in patch.operations:
+        operation_type = str(getattr(operation, "operation_type", "") or "operation")
+        target_id = getattr(operation, "target_session_id", None)
+        second_id = getattr(operation, "second_session_id", None)
+        target_label = session_labels.get(int(target_id), f"session:{target_id}") if target_id is not None else "session:unknown"
+        if operation_type == "swap_sessions" and second_id is not None:
+            second_label = session_labels.get(int(second_id), f"session:{second_id}")
+            parts.append(f"swap_sessions {target_label} <-> {second_label}")
+            continue
+        target_date = getattr(operation, "target_date", None)
+        if target_date:
+            parts.append(f"{operation_type} {target_label} -> {target_date}")
+        else:
+            parts.append(f"{operation_type} {target_label}")
+    return "; ".join(parts)
 
 
 def _committed_event_summaries(service_result: PlanPatchServiceResult | None) -> tuple[str, ...]:

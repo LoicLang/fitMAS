@@ -198,7 +198,10 @@ def request_json(
     raw = request_text(system=system, prompt=prompt, model=model, max_tokens=max_tokens)
     if not raw:
         return None
-    return _robust_json_loads(raw)
+    return _robust_json_loads(
+        raw,
+        normalize_decision_payload=_should_normalize_decision_payload(schema_hint),
+    )
 
 
 def request_structured_json(
@@ -324,7 +327,10 @@ def _request_deepseek_openai_json(
             )
             raw = _openai_message_text(response)
             last_raw = raw
-            data = _robust_json_loads(raw or "")
+            data = _robust_json_loads(
+                raw or "",
+                normalize_decision_payload=_should_normalize_decision_payload(schema_hint),
+            )
             if data is not None:
                 return StructuredJSONResult(
                     data=data,
@@ -430,7 +436,10 @@ def _request_claude_json(
         )
         raw = message_text(response)
         return StructuredJSONResult(
-            data=_robust_json_loads(raw or ""),
+            data=_robust_json_loads(
+                raw or "",
+                normalize_decision_payload=_should_normalize_decision_payload(schema_hint),
+            ),
             provider="claude_anthropic",
             model=model,
             raw_text=raw,
@@ -531,7 +540,7 @@ def serialize_content_blocks(blocks: list[Any]) -> list[dict[str, Any]]:
 # Robust JSON parsing
 # ---------------------------------------------------------------------------
 
-def _robust_json_loads(raw: str) -> dict | None:
+def _robust_json_loads(raw: str, *, normalize_decision_payload: bool = True) -> dict | None:
     """Parse a (possibly messy) LLM string into a dict.
 
     Tries a small cascade of candidate repairs so trailing prose,
@@ -548,12 +557,21 @@ def _robust_json_loads(raw: str) -> dict | None:
         except Exception:
             continue
         if isinstance(loaded, dict):
-            return _normalize_parsed_decision_payload(loaded)
+            return _normalize_parsed_decision_payload(loaded) if normalize_decision_payload else loaded
     repaired = _repair_deepseek_pseudo_json(cleaned)
     if repaired is not None:
         return repaired
     logger.warning("Failed to decode LLM JSON: %s", cleaned[:200])
     return None
+
+
+def _should_normalize_decision_payload(schema_hint: str | None) -> bool:
+    hint = str(schema_hint or "").strip().lower()
+    if not hint:
+        return True
+    if "adaptationproposal" in hint or "adaptation_proposal" in hint:
+        return False
+    return True
 
 
 def _strip_json_fences(raw: str) -> str:

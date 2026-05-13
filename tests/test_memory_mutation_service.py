@@ -101,6 +101,60 @@ class MutationActionServicesTest(unittest.TestCase):
         self.assertIn("availability:unavailable_swimming_2026-05-01_2026-05-14", result.saved_keys)
         self.assertEqual(events[0].target_key, "unavailable_swimming_2026-05-01_2026-05-14")
 
+    def test_available_action_resolves_overlapping_unavailability(self) -> None:
+        start = datetime(2026, 5, 13)
+        end = datetime(2026, 5, 14)
+        self.db.add(
+            s.WorkingMemoryEntry(
+                user_id=self.user.id,
+                category="availability",
+                key="availability_2026-05-13_2026-05-14",
+                value="unavailable: bloque par les inondations aujourd'hui et demain",
+                source="conversation",
+                confidence=0.9,
+                confirmed=True,
+                active=True,
+                urgency="medium",
+                ttl="short",
+                scope="week",
+                affects_json='["planning", "conversation"]',
+                expires_at=datetime(2026, 5, 15),
+                status="open",
+                signal_kind="availability_unavailable",
+                observed_at=start,
+                valid_from=start,
+                valid_until=datetime(2026, 5, 15),
+                last_seen_at=start,
+            )
+        )
+        self.db.commit()
+
+        result = apply_memory_actions_for_user(
+            self.db,
+            user=self.user,
+            actions=[
+                AvailabilityConstraintAction(
+                    type="record_availability",
+                    window_text="disponible demain",
+                    availability="available",
+                    starts_on="2026-05-14",
+                    ends_on="2026-05-14",
+                    confidence=0.92,
+                    evidence="demain je suis dispo",
+                ),
+            ],
+            now=datetime(2026, 5, 13, 17, 20),
+        )
+
+        self.db.expire_all()
+        rows = self.db.query(s.WorkingMemoryEntry).order_by(s.WorkingMemoryEntry.id).all()
+        old_unavailable = rows[0]
+
+        self.assertEqual(result.applied_count, 1)
+        self.assertFalse(old_unavailable.active)
+        self.assertEqual(old_unavailable.status, "resolved")
+        self.assertEqual(old_unavailable.resolution_reason, "availability_available_overlap")
+
     def test_memory_service_persists_health_lifecycle_for_readiness(self) -> None:
         now = datetime(2026, 5, 11, 8, 0)
 

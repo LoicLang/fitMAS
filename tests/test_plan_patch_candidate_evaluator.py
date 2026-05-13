@@ -105,6 +105,51 @@ def test_candidate_evaluator_resolves_backend_candidate_ref_before_runtime_valid
     assert result.policy_hint == "ask_confirmation"
 
 
+def test_candidate_evaluator_preserves_single_patch_summary_metadata() -> None:
+    patch = PlanPatch(
+        operations=[
+            PlanPatchOperation(
+                operation_type="move_session",
+                target_session_id=2,
+                target_date="2099-05-08",
+                rationale="Move from proposal.",
+            )
+        ],
+        coach_message="Proposal summary from snapshot.",
+        confirmation_reason="Proposal summary from snapshot.",
+    )
+    candidate = PlanPatchCandidate(
+        id="single_patch",
+        patches=(patch,),
+        candidate_ref=None,
+        rationale="Candidate wrapper rationale.",
+        expected_tradeoff="Internal evaluator tradeoff.",
+        confidence=0.8,
+        assumptions=(),
+        risk_notes=(),
+        created_from_plan_id="123",
+        created_from_plan_version=7,
+    )
+
+    result = evaluate_plan_patch_candidate(
+        object(),
+        candidate=candidate,
+        current_plan_id="123",
+        current_plan_version=7,
+        plan_id=123,
+        scheduled_sessions=[
+            _session(1, "2099-05-04", "running", "tempo", "hard", 50, "Seance cle"),
+            _session(2, "2099-05-05", "rest", "recovery", "easy", 0, "Recovery"),
+        ],
+        current_score=_score(90),
+        timezone_name="Europe/Paris",
+    )
+
+    assert result.patch is not None
+    assert result.patch.coach_message == "Proposal summary from snapshot."
+    assert result.patch.confirmation_reason == "Proposal summary from snapshot."
+
+
 def test_candidate_evaluator_prefers_matching_backend_patch_over_copied_patch() -> None:
     backend_patch = PlanPatch(
         operations=[

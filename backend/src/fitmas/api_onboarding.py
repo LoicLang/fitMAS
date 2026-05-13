@@ -71,6 +71,10 @@ def _normalize_generated_week_text_durations(week: dict) -> dict:
     normalized_days: list[dict] = []
     for raw_day in week.get("days", []):
         day = dict(raw_day)
+        if _rest_day_has_active_structured_payload(day):
+            day = _clean_generated_rest_day(day)
+            normalized_days.append(day)
+            continue
         duration_min = day.get("duration_min")
         title = str(day.get("session_title") or "")
         if isinstance(duration_min, int) and duration_min > 0 and title:
@@ -78,6 +82,47 @@ def _normalize_generated_week_text_durations(week: dict) -> dict:
         normalized_days.append(day)
     normalized["days"] = normalized_days
     return normalized
+
+
+def _rest_day_has_active_structured_payload(day: dict) -> bool:
+    sport_type = str(day.get("sport_type") or "").strip().lower()
+    if sport_type not in {"rest", "off"}:
+        return False
+    duration_min = day.get("duration_min")
+    try:
+        has_duration = int(duration_min or 0) > 0
+    except (TypeError, ValueError):
+        has_duration = False
+    try:
+        has_load = int(day.get("load_score") or 0) > 0
+    except (TypeError, ValueError):
+        has_load = False
+    has_description = bool(str(day.get("session_description") or "").strip())
+    session_type = str(day.get("session_type") or "").strip().lower()
+    has_active_type = bool(session_type and session_type not in {"rest", "off"})
+    return has_duration or has_load or has_description or has_active_type
+
+
+def _clean_generated_rest_day(day: dict) -> dict:
+    cleaned = dict(day)
+    cleaned.update(
+        {
+            "sport_type": "rest",
+            "session_type": "rest",
+            "session_title": "Repos",
+            "session_goal": "Recuperer.",
+            "session_note": "Repos.",
+            "session_description": "",
+            "duration_min": None,
+            "intensity": "easy",
+            "load_score": 0,
+            "priority": "Souplesse",
+            "nutrition_focus": "",
+            "flexibility": "flexible",
+            "watch_items": [],
+        }
+    )
+    return cleaned
 
 
 def _compute_mesocycle(db: Session, user_id: int):

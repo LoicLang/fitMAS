@@ -20,6 +20,22 @@ def get_messages(db: Session, user_id: int) -> list[s.CoachMessage]:
     )
 
 
+def has_newer_user_message(db: Session, user_id: int, message_id: int | None) -> bool:
+    if message_id is None:
+        return False
+    return (
+        db.query(s.CoachMessage.id)
+        .filter(
+            s.CoachMessage.user_id == user_id,
+            s.CoachMessage.role == "user",
+            s.CoachMessage.id > int(message_id),
+        )
+        .order_by(s.CoachMessage.id.asc())
+        .first()
+        is not None
+    )
+
+
 def get_recent_conversation_turns(
     db: Session,
     user_id: int,

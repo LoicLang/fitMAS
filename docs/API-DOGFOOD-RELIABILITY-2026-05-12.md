@@ -727,10 +727,84 @@ Plan lookup :
 
 Generated week :
 
-- separer policy generation de policy mutation runtime;
-- remplacer `requires_confirmation` par `persistable_with_adjustments` dans le
-  contexte generation;
-- fallback propre par templates, pas suffixe artificiel.
+- ✅ les jours `sport_type=rest/off` ne peuvent plus garder un contenu actif
+  structure (`duration_min`, `load_score`, `session_description`,
+  `session_type` actif). Le normalizer nettoie ces lignes en vrai repos avant
+  persistence.
+- reste a faire apres dogfood si la lenteur gene : separer policy generation
+  de policy mutation runtime; remplacer `requires_confirmation` par
+  `persistable_with_adjustments` dans le contexte generation; fallback propre
+  par templates, pas suffixe artificiel.
+
+### P7 - Fallout dogfood reel 13 mai
+
+Contexte : apres commit/push/deploy du lot P0-P6c, replay API reel local sur
+DB jetables + vrais appels LLM.
+
+Constats :
+
+- daily initiale : `46/47 OK`; echec unique `lighten_tomorrow` par timeout.
+- replay isole `lighten_tomorrow` : timeout reproduit a 300s; le tour ciblait
+  une date typee sans seance DB et partait quand meme en tool/review.
+- replay isole `replace_swim_with_bike` : pas de doublon pending. Le doublon vu
+  dans la daily venait d'une requete expiree qui continuait serveur-side apres
+  reset du harness.
+- generated workflow : checks OK, mais DB contenait une ligne dangereuse
+  `sport_type=rest/session_type=rest` avec titre/description/duree de footing.
+- replay `move_easy_then_confirm` apres resserrage du guard : event commit OK,
+  mais une phrase finale a dit "au vendredi" alors que l'event deplacait vers
+  lundi. Le verifier LLM post-event avait laisse passer.
+
+Corrections locales :
+
+- `conversation_turn_planner.ConversationTurnPlan` porte maintenant
+  `planning_action`. Le guard "date typee vide" ne s'applique qu'aux actions qui
+  doivent modifier une seance existante (`lighten_day`, `replace_session`,
+  `swap_sessions`, `update_session`, source manquante sur move/swap). Un
+  `move_session` vers un jour libre reste autorise.
+- `conversation_pipeline` stoppe un plan mutation quand l'artefact LLM cible une
+  date sans seance DB modifiable : reponse `plan_mutation_empty_target_date`,
+  aucun candidate generator, aucun `decide()`, aucun pending/event.
+- `conversation_pipeline` garde l'id du message user courant et bloque les
+  writes tardifs si un message user plus recent existe avant action/pending :
+  `obsolete_turn_no_write`.
+- `api_onboarding` nettoie les jours rest/off qui portent un payload actif avant
+  `replace_plan()`.
+- `_applied_plan_patch_reply()` ajoute un hard guard post-event sur les moves :
+  si la prose verifiee claim un deplacement vers l'ancienne date, elle est
+  rejetee et le resume event DB est rendu.
+
+Verification locale :
+
+- `./scripts/test-backend tests/test_core_flows.py -q` -> 93 passed.
+- `./scripts/test-backend tests/test_onboarding_planner_flow.py tests/test_generated_week_coherence.py -q`
+  -> 8 passed.
+- `./scripts/test-backend tests/test_smoke_a_plus_api.py -q` -> 11 passed.
+- `python3 -m py_compile backend/src/fitmas/conversation_pipeline.py backend/src/fitmas/api_onboarding.py backend/src/fitmas/conversation_turn_planner.py`
+  -> OK.
+- smoke API reel `lighten_tomorrow + move_easy_then_confirm` :
+  `./scripts/smoke-a-plus-api --scenario lighten_tomorrow --scenario move_easy_then_confirm --skip-generated-week --keep-db --db-path /tmp/fitmas-dogfood-fix-move-lighten-20260513.db --port 8129 --timeout 240 --startup-timeout 45`
+  -> `OK (2 check(s))`; `lighten_tomorrow` rend
+  `plan_mutation_empty_target_date`, aucun pending/event.
+- smoke API reel post-event `move_easy_then_confirm` :
+  `./scripts/smoke-a-plus-api --scenario move_easy_then_confirm --skip-generated-week --keep-db --db-path /tmp/fitmas-dogfood-fix-move-postevent-20260513.db --port 8130 --timeout 240 --startup-timeout 45`
+  -> `OK (1 check(s))`; pending accepte, event `move_session`, phrase finale
+  coherente avec la date de l'event DB.
+- smoke API reel generated :
+  `./scripts/smoke-a-plus-api --scenario close_turn_ack --generated-workflow onboard_loaded_running --keep-db --db-path /tmp/fitmas-dogfood-fix-generated-20260513.db --port 8127 --timeout 240 --startup-timeout 45`
+  -> `OK (4 check(s))`; inspection DB :
+  `count(rest/off avec duree/charge/description/type actif)=0`.
+- smoke API reel daily :
+  `./scripts/smoke-a-plus-api --daily --skip-generated-week --keep-db --db-path /tmp/fitmas-dogfood-fix-daily-20260513.db --port 8128 --timeout 240 --startup-timeout 45`
+  -> `OK (26 check(s))`.
+
+Dettes a garder pour le refactor Phase A :
+
+- latence encore haute sur generated week et certains moves confirmes;
+- plusieurs lectures planning sortent encore en `response_mode=reply` au lieu
+  de la lane `plan_lookup_composed`;
+- les reports execution sans cible DB claire restent conversationnels, ce qui
+  est stable mais pas encore tres utile.
 
 ## Ordre recommande
 
@@ -744,6 +818,8 @@ P5 tool budgets par route
 P6a pending hygiene + candidats sport-window
 P6b memoire sport-window
 P6c lookup guard + no-session sport constraint
+P7 fallout dogfood 13 mai : target-date empty guard, stale-turn no-write,
+   generated rest cleanup, post-event move date guard
 ```
 
 Ne pas ouvrir Phase B progression/prescription pendant ce chantier. Le but reste

@@ -35,6 +35,7 @@ def apply_memory_actions_for_user(
     inspects raw user text.
     """
     payloads: list[dict] = []
+    availability_resolutions: list[AvailabilityConstraintAction] = []
     blocked = 0
     for action in actions:
         payload = _payload_from_action(action, source=source, now=now)
@@ -54,6 +55,8 @@ def apply_memory_actions_for_user(
             )
             continue
         payloads.append(payload)
+        if isinstance(action, AvailabilityConstraintAction) and action.availability == "available":
+            availability_resolutions.append(action)
 
     profile_payloads, working_payloads = split_memory_payloads(payloads, now=now)
     saved_profile = repo.upsert_facts(db, user.id, profile_payloads)
@@ -75,6 +78,16 @@ def apply_memory_actions_for_user(
             payload=payload,
             source=source,
             conversation_turn_id=conversation_turn_id,
+        )
+
+    for action in availability_resolutions:
+        _resolve_overlapping_unavailability(
+            db,
+            user=user,
+            action=action,
+            source=source,
+            conversation_turn_id=conversation_turn_id,
+            now=now,
         )
 
     return MemoryActionApplicationResult(
@@ -148,6 +161,100 @@ def _payload_from_action(action: MemoryAction, *, source: str, now: datetime | N
             "action_type": action.type,
         }
     return None
+
+
+def _resolve_overlapping_unavailability(
+    db: Session,
+    *,
+    user: s.User,
+    action: AvailabilityConstraintAction,
+    source: str,
+    conversation_turn_id: int | None,
+    now: datetime | None,
+) -> None:
+    starts_on = _parse_date(action.starts_on)
+    ends_on = _parse_date(action.ends_on) or starts_on
+    sport_type = _normalize_sport(getattr(action, "sport_type", None))
+    if starts_on is None or ends_on is None:
+        return
+    resolved_at = now or datetime.utcnow()
+    resolved_rows: list[s.UserFact | s.WorkingMemoryEntry] = []
+    for row in [
+        *_active_unavailability_rows(db, s.UserFact, user_id=user.id),
+        *_active_unavailability_rows(db, s.WorkingMemoryEntry, user_id=user.id),
+    ]:
+        if not _availability_row_matches_sport(row, sport_type=sport_type):
+            continue
+        if not _availability_row_overlaps(row, starts_on=starts_on, ends_on=ends_on):
+            continue
+        row.active = False
+        row.status = "resolved"
+        row.resolved_at = resolved_at
+        row.resolution_reason = "availability_available_overlap"
+        resolved_rows.append(row)
+
+    if not resolved_rows:
+        return
+    db.commit()
+    for row in resolved_rows:
+        _add_event(
+            db,
+            user=user,
+            action_type="resolve_availability_unavailable",
+            target_type="availability",
+            target_key=str(getattr(row, "key", "")),
+            status="applied",
+            reason="availability_available_overlap",
+            payload={
+                "category": "availability",
+                "key": getattr(row, "key", ""),
+                "resolved_by": _availability_key(action, starts_on=starts_on, ends_on=ends_on, sport_type=sport_type),
+            },
+            source=source,
+            conversation_turn_id=conversation_turn_id,
+        )
+
+
+def _active_unavailability_rows(db: Session, model, *, user_id: int):
+    return (
+        db.query(model)
+        .filter(
+            model.user_id == user_id,
+            model.category == "availability",
+            model.active.is_(True),
+            model.signal_kind == "availability_unavailable",
+        )
+        .all()
+    )
+
+
+def _availability_row_matches_sport(row: s.UserFact | s.WorkingMemoryEntry, *, sport_type: str | None) -> bool:
+    key = str(getattr(row, "key", "") or "")
+    if key.startswith("unavailable_"):
+        parts = key.split("_")
+        row_sport = parts[1] if len(parts) >= 4 else None
+        return row_sport == sport_type
+    return sport_type is None
+
+
+def _availability_row_overlaps(row: s.UserFact | s.WorkingMemoryEntry, *, starts_on, ends_on) -> bool:
+    row_start = _as_date(getattr(row, "valid_from", None) or getattr(row, "observed_at", None))
+    row_end = _as_date(getattr(row, "valid_until", None) or getattr(row, "expires_at", None))
+    if row_end is not None:
+        # Memory valid_until/expires_at is often stored as the exclusive next-day
+        # boundary for date windows.
+        row_end = row_end - timedelta(days=1)
+    if row_start is None or row_end is None:
+        return True
+    return row_start <= ends_on and starts_on <= row_end
+
+
+def _as_date(value):
+    if value is None:
+        return None
+    if hasattr(value, "date"):
+        return value.date()
+    return _parse_date(str(value))
 
 
 def _add_event(

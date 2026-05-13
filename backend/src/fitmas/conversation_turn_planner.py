@@ -47,6 +47,7 @@ class ConversationTurnPlan(BaseModel):
     secondary_intents: tuple[str, ...] = ()
     user_goal: str = ""
     mutation_signal: bool = False
+    planning_action: str | None = None
     execution_claim: dict[str, Any] | None = None
     availability_constraint: dict[str, Any] | None = None
     temporal_references: tuple[dict[str, Any], ...] = ()
@@ -140,6 +141,7 @@ def _build_prompt(
         "ends_on": "YYYY-MM-DD|null",
         "scope": "sport|time|location|general|unknown",
     }
+    planning_action_contract = "move_session|swap_sessions|replace_session|lighten_day|update_session|create_session|unknown|null"
     return "\n".join(
         [
             "Determine l'intention principale du tour FitMAS.",
@@ -148,6 +150,8 @@ def _build_prompt(
             json.dumps(capabilities, ensure_ascii=False, sort_keys=True),
             "Temporal refs: si le user pointe un jour/date, extrais un artefact type, pas une phrase.",
             json.dumps(temporal_contract, ensure_ascii=False, sort_keys=True),
+            "Planning action: si le tour est une mutation planning, extrais l'operation visee.",
+            planning_action_contract,
             "Availability constraint: si le tour parle d'une indisponibilite, extrais cet artefact type.",
             json.dumps(availability_contract, ensure_ascii=False, sort_keys=True),
             "",
@@ -211,6 +215,7 @@ Reponds uniquement avec un JSON valide:
   "secondary_intents": ["non_completion_claim|activity_claim|activity_review|activity_highlights|availability_constraint|health_signal|plan_mutation|preference_signal|calibration_answer|generic_question"],
   "user_goal": "phrase courte",
   "mutation_signal": true,
+  "planning_action": "move_session|swap_sessions|replace_session|lighten_day|update_session|create_session|unknown|null",
   "execution_claim": {"status": "done|not_done|unknown", "sport_type": "swimming|running|cycling|strength|climbing|unknown", "date": "YYYY-MM-DD|null"},
   "availability_constraint": {"availability":"unavailable|limited|available|unknown","sport_type":"swimming|running|cycling|strength|climbing|unknown|null","starts_on":"YYYY-MM-DD|null","ends_on":"YYYY-MM-DD|null","scope":"sport|time|location|general|unknown"},
   "temporal_references": [{"kind":"relative_day|weekday|date","value":"today|tomorrow|yesterday|monday|tuesday|wednesday|thursday|friday|saturday|sunday|YYYY-MM-DD","role":"source|target|context"}],

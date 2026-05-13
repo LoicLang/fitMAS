@@ -25,6 +25,7 @@ read_when:
 | `RUNTIME-TOOLS.md` | Contrat des tools runtime multi-tool bornes, registre read-only/candidate/validation, limites et metriques |
 | `PROMPT-CONTEXT-REFACTOR.md` | Etat du chantier prompt/contexte : PromptContract, context diet, snapshots, `decide_none`, dettes restantes |
 | `ADAPTATION-CANDIDATE-PIPELINE.md` | Adaptation par candidats : refs backend, evaluator, policy, pending choice, reviewer LLM borne |
+| `PLANNING-SNAPSHOT-ADAPTATION-REFACTOR.md` | Refactor adaptation : snapshot semaine complet, proposition LLM, compilation PlanPatch et invariants repos/charge |
 | `APP-UX.md` | Contrat UX de la webapp : calendrier, today, performance |
 | `SOUL.md` | Voix FitMAS, heartbeat, messagerie, ton |
 | `RUNBOOK.md` | Commandes, flux a tester, debug, deploiement, mapping du code |
@@ -52,18 +53,19 @@ Pour un nouvel agent :
 3. `LLM-FIRST-CONVERSATION.md` — doctrine zero determinisme sur texte user
 4. `PROMPT-CONTEXT-REFACTOR.md` — contrats LLM et contexte par route
 5. `ADAPTATION-CANDIDATE-PIPELINE.md` — adaptation candidates + reviewer borne
-6. `SYSTEM-MAP.md` — carte d'ensemble
-7. `RUNTIME-TOOLS.md` — tools multi-tool bornes et workflow `replan_after_constraint`
-8. `SPORT-QUALITY-REVIEW.md` — Phase A+ reviewer sportif, week coherence, progression par stimulus
-9. `CONVERSATION.md` — grounding + indications
-10. `RUNBOOK.md` — ops, smokes, debug prod
-11. `ARCHITECTURE.md` — stack, principes, modules
-12. `PRODUCT.md` — vision et scope
-13. `PLANNING.md` — contrat + moteur planning
-14. `MEMORY-V2.md` — memoire utilisateur
-15. `APP-UX.md` — contrat UX app
-16. `SOUL.md` — voix coach
-17. `COACH-AUTONOMY-REFACTOR.md` — historique long de refactor autonomie, a lire seulement pour archeologie
+6. `PLANNING-SNAPSHOT-ADAPTATION-REFACTOR.md` — refactor snapshot/proposition/compilation pour les imprevus larges
+7. `SYSTEM-MAP.md` — carte d'ensemble
+8. `RUNTIME-TOOLS.md` — tools multi-tool bornes et workflow `replan_after_constraint`
+9. `SPORT-QUALITY-REVIEW.md` — Phase A+ reviewer sportif, week coherence, progression par stimulus
+10. `CONVERSATION.md` — grounding + indications
+11. `RUNBOOK.md` — ops, smokes, debug prod
+12. `ARCHITECTURE.md` — stack, principes, modules
+13. `PRODUCT.md` — vision et scope
+14. `PLANNING.md` — contrat + moteur planning
+15. `MEMORY-V2.md` — memoire utilisateur
+16. `APP-UX.md` — contrat UX app
+17. `SOUL.md` — voix coach
+18. `COACH-AUTONOMY-REFACTOR.md` — historique long de refactor autonomie, a lire seulement pour archeologie
 
 ## Raccourcis
 
@@ -84,6 +86,7 @@ Pour un nouvel agent :
 | Comment brancher des tools runtime ? | `RUNTIME-TOOLS.md` |
 | Comment reduire les prompts, specialiser le contexte LLM et analyser les `decide() None` ? | `PROMPT-CONTEXT-REFACTOR.md` |
 | Comment laisser le LLM proposer une adaptation sans lui donner le commit ? | `ADAPTATION-CANDIDATE-PIPELINE.md` |
+| Comment redonner au LLM une vue semaine complete avant move/swap ? | `PLANNING-SNAPSHOT-ADAPTATION-REFACTOR.md` |
 | Quelle est la prochaine tranche avant dogfood ? | `BUILD-ORDER.md` |
 | Comment l'app doit se comporter ? | `APP-UX.md` |
 | Pourquoi le coach hallucine, agrege au lieu de detailler, demande au lieu de decider ? | `COACH-AUTONOMY-REFACTOR.md` |

@@ -337,6 +337,10 @@ def get_messages(db: Session, user_id: int) -> list[s.CoachMessage]:
     return repo_conversation.get_messages(db, user_id)
 
 
+def has_newer_user_message(db: Session, user_id: int, message_id: int | None) -> bool:
+    return repo_conversation.has_newer_user_message(db, user_id, message_id)
+
+
 def get_recent_conversation_turns(
     db: Session,
     user_id: int,

@@ -33,10 +33,11 @@ Si un autre doc diverge :
 Ordre courant :
 
 ```text
-1. Checkpoint dogfood/deploy : commit propre, push, deploy, reprise Telegram
-2. Refactor Phase A : consolider les lanes stables, reduire les hotspots
-3. Generated week policy si encore observee en dogfood reel
-4. Phase B progression/prescription seulement sur demande explicite
+1. Stabilisation dogfood restante : memoire dispo stale, legacy availability, claims sans event
+2. Refactor PlanningSnapshot -> AdaptationProposal sur branche codex/planning-snapshot-adaptation
+3. Replays API reels du scenario courbatures/running demain/piscine vendredi
+4. Generated week policy si encore observee en dogfood reel
+5. Phase B progression/prescription seulement sur demande explicite
 ```
 
 Regle d'arbitrage : le dogfood API reel du 12 mai a confirme des echecs
@@ -49,18 +50,26 @@ memory-only. La prochaine tranche prioritaire est l'hygiene pending, puis les
 candidats sport-specific pour les indisponibilites longues. Ces deux points
 sont implementes localement en P6a. P6b a ferme l'hygiene tool-loop et la
 memoire disponibilite sport-window. P6c a ajoute le hard guard plan lookup et
-le cas no-session sport-specific. La prochaine decision pragmatique est un
-checkpoint deploy/dogfood, puis un refactor Phase A pour repartir sur une base
-plus lisible avant d'ouvrir de nouvelles capacites.
+le cas no-session sport-specific. Le fallout dogfood du 13 mai est traite
+localement : target-date empty guard action-aware, no-write sur tour obsolete,
+cleanup generated rest/off, et hard guard post-event sur ancienne date de move.
+Le replay courbatures/running demain/piscine vendredi du 13 mai montre que la
+candidate-flow outillee casse encore la latitude de raisonnement : memoire
+disponibilite stale, menu flou, claim sans commit et timeout sur la proposition
+multi-session. La prochaine tranche est le refactor
+`PlanningSnapshot -> AdaptationProposal -> ProposalCompiler`, documente dans
+`docs/PLANNING-SNAPSHOT-ADAPTATION-REFACTOR.md`, sur la branche
+`codex/planning-snapshot-adaptation`.
 
 Docs a ouvrir selon le chantier :
 - excellence sportive : `docs/SPORT-QUALITY-REVIEW.md`
 - adaptation LLM bornee : `docs/ADAPTATION-CANDIDATE-PIPELINE.md`
+- refactor snapshot adaptation : `docs/PLANNING-SNAPSHOT-ADAPTATION-REFACTOR.md`
 - prompt/contexte + `decide() None` : `docs/PROMPT-CONTEXT-REFACTOR.md`
 - dogfood API/gateway 12 mai : `docs/API-DOGFOOD-RELIABILITY-2026-05-12.md`
 - memoire : `docs/MEMORY-V2.md`
 
-## Checkpoint courant — 12 mai 2026
+## Checkpoint courant — 13 mai 2026
 
 Etat du code sur `main` :
 
@@ -120,6 +129,13 @@ Etat du code sur `main` :
   `get_plan_window`, `get_user_constraints`). `health_signal` passe a 5 tools.
   `plan_negotiation_full` passe a 10 tools. Les demandes dispo qui disent
   explicitement "adapte/bouge/remplace" restent en `plan_mutation`.
+- P7 fallout 13 mai : replay API reel daily `OK (26)`, generated workflow
+  `OK (4)` avec `count(rest/off actif)=0`, `lighten_tomorrow` bloque maintenant
+  sans tool-loop quand aucune seance n'existe sur la date cible, et
+  `move_easy_then_confirm` commit avec phrase finale coherente avec l'event DB.
+  Tests locaux : `tests/test_core_flows.py` 93 passed,
+  `tests/test_onboarding_planner_flow.py tests/test_generated_week_coherence.py`
+  8 passed, `tests/test_smoke_a_plus_api.py` 11 passed.
 - P6a pending hygiene 12 mai : une pending nue n'est plus applicable sauf si
   une seule pending active est exposee. Les pending expirees sont fermees avant
   exposition, l'accept revalide `status/expires_at`, et les outcomes
@@ -142,10 +158,44 @@ Etat du code sur `main` :
   claims de jour vide/repos, sport et statut; fallback DB compact; scenario
   `swim_unavailable_no_session` qui note l'indisponibilite sport-specific sans
   pending quand aucune seance du sport cible n'existe dans la fenetre.
+- PlanningSnapshot refactor 13 mai : plan pose pour redonner au LLM une vue
+  semaine complete avant compilation PlanPatch. Le refactor cible les scenarios
+  larges ou imprevus : snapshot complet, `AdaptationProposal` JSON-only sans
+  tools d'ecriture, compiler backend vers `PlanPatch`, validation/pending/commit
+  existants, et invariant strict sur `rest_total` / `active_recovery` /
+  `unscored_recovery`.
+- PlanningSnapshot tranche initiale 13 mai : `planning_snapshot.py` +
+  `adaptation_proposal.py` branches dans `plan_mutation` avant l'ancien
+  generator candidate, apres les exits typed. La gateway preserve maintenant
+  les schemas custom `AdaptationProposal`. Le compiler sait ignorer le
+  recovery non scoree `rest/rest` non supporte et transformer une chaine
+  `move A -> jour de B` + `move B -> autre jour` en `swap(A,B)` + `move(B)`.
+  Replay API cible "running demain et piscine vendredi" : pending confirmation
+  creee via `planning_snapshot_flow`, sans legacy candidate, en ~79s.
+- PlanningSnapshot polish 13 mai : `health_signal` secondaire ne force plus le
+  vieux `decide()` avant snapshot, `AdaptationProposal` est compile par
+  `deepseek-v4-flash` avec schema hint explicite, un `move` vers un jour occupe
+  peut devenir `swap_sessions`, l'evaluator preserve les metadata du patch
+  unique, `pending_resolution=ignore` garde la pending active, et les summaries
+  de final reply portent maintenant les operations + dates DB. Replay reel
+  courbatures + deplacement vendredi : `planning_snapshot_flow=compiled`,
+  pending creee, pas de commit ni fallback legacy; formulation encore a
+  surveiller en dogfood.
 
 Verification recente :
 
-- `./scripts/test-backend -q` : 924 passed, 11 skipped, 11 subtests passed.
+- `./scripts/test-backend -q` : 947 passed, 11 skipped, 11 subtests passed.
+- Snapshot adaptation local 13 mai :
+  `tests/test_llm_gateway_json.py tests/test_adaptation_proposal.py tests/test_planning_snapshot.py`
+  -> 35 passed ;
+  `tests/test_core_flows.py tests/test_llm_tools.py tests/test_conversation_turn_planner.py`
+  -> 171 passed ;
+  `tests/test_memory_mutation_service.py` + candidate/PlanPatch suites
+  -> 49 passed.
+- Snapshot polish local 13 mai :
+  `tests/test_adaptation_proposal.py tests/test_planning_snapshot.py
+  tests/test_plan_patch_candidate_evaluator.py tests/test_core_flows.py
+  tests/test_blocked_mutation_reply.py` -> 140 passed.
 - `main` contient le merge `ee4a313 Merge prompt context and adaptation candidates`.
 - Dogfood API reel 12 mai : 42 checks ad hoc, 3 fails bruts stricts, plusieurs
   conclusions manuelles a corriger avant de juger DeepSeek.

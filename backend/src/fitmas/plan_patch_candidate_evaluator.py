@@ -182,6 +182,8 @@ def _patch_operation_signature(patch: PlanPatch) -> tuple[tuple[tuple[str, str],
 
 
 def _combine_candidate_patches(candidate: PlanPatchCandidate) -> PlanPatch:
+    if len(candidate.patches) == 1:
+        return candidate.patches[0]
     operations = []
     for patch in candidate.patches:
         operations.extend(patch.operations)
