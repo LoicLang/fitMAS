@@ -613,6 +613,87 @@ Verification :
   `sport_type=swimming`, remplacée par `new_sport_type=strength`, sans cible
   running.
 
+### P6b - Hygiene tool-loop + memoire dispo sport-specific
+
+Changements 13 mai 2026 :
+
+- `execute_tool_calls()` dedup les appels exacts `tool_name + arguments` dans
+  un meme tour. Un doublon recoit quand meme un `tool_result`, pour satisfaire
+  le protocole Anthropic, mais le handler n'est pas relance et le budget tools
+  n'est pas consomme.
+- Le cache de resultats est partage entre les rounds tool-use conversationnels
+  et heartbeat.
+- `record_availability` accepte `sport_type` et `scope`.
+- `MemoryMutationService` produit la cle canonique
+  `unavailable_<sport>_<start>_<end>` quand la contrainte est une indisponibilite
+  sport-specific datee.
+- La candidate-flow qui sort avant `decide()` persiste maintenant aussi une
+  memoire disponibilite depuis l'artefact LLM `turn_plan.availability_constraint`
+  (`source=turn_plan`). Cela evite le cas "reponse propre + pending creee mais
+  contrainte non memorisee".
+
+Verification locale :
+
+- `./scripts/test-backend -q tests/test_tool_runtime.py` -> 24 passed.
+- `./scripts/test-backend -q tests/test_memory_mutation_service.py` -> 6 passed.
+- `./scripts/test-backend -q tests/test_coach_decision_actions.py` -> 16 passed.
+- `./scripts/test-backend -q tests/test_conversation_prompt_modules.py tests/test_llm_prompt_builder.py tests/test_coach_decision_actions.py`
+  -> 59 passed.
+- `./scripts/test-backend -q tests/test_llm_tools.py -k 'availability or memory or compiler or tool'`
+  -> 65 passed.
+- `./scripts/test-backend -q tests/test_heartbeat_tool_loop.py tests/test_heartbeat_debug_endpoint.py`
+  -> 8 passed.
+- smoke API reel `swim_unavailable_two_weeks` :
+  `./scripts/smoke-a-plus-api --scenario swim_unavailable_two_weeks --keep-db --db-path /tmp/fitmas-p6b2-swim-unavailable.db --port 8114 --timeout 240 --startup-timeout 45`
+  -> `OK (1 check(s))`; DB :
+  `working_memory_entries.key=unavailable_swimming_2026-05-13_2026-05-27`,
+  `source=turn_plan`, `signal_kind=availability_unavailable`.
+
+### P6c - Plan lookup hard guard + no-session sport constraint
+
+Changements 13 mai 2026 :
+
+- `verify_factual_reply()` garde son verifier LLM, mais `plan_lookup` passe
+  maintenant aussi par un hard guard deterministe sur la sortie assistant :
+  durees `min/minute`, dates ISO, claims de jour vide/repos, sport et statut
+  cites contre `ReplyGroundingPacket`.
+- Si le verifier LLM repond `allow` sur une sortie qui dit `50 minutes` alors
+  que le grounding DB dit `40 min`, la sortie est rejetee.
+- Si composer et brouillon initial restent invalides, `compose_plan_lookup_reply`
+  rend un fallback compact depuis le grounding DB au lieu de renvoyer une phrase
+  hallucinee.
+- La candidate-flow sport-specific s'arrete maintenant avant le candidate
+  generator quand `turn_plan.availability_constraint` porte un sport indisponible
+  mais qu'aucune seance de ce sport n'existe dans la fenetre. Le tour persiste
+  la memoire `unavailable_<sport>_<start>_<end>`, ne cree pas de pending et ne
+  mute aucune seance hors sport cible.
+- Nouveau smoke nomme :
+  `swim_unavailable_no_session`
+  (`Je ne peux pas nager du 2026-05-13 au 2026-05-14, adapte si besoin.`)
+  pour verifier le cas sans seance swimming touchee dans la fenetre du seed A+.
+
+Verification locale :
+
+- `./scripts/test-backend -q tests/test_final_reply_grounded_verifier.py tests/test_final_reply.py`
+  -> 38 passed.
+- `./scripts/test-backend -q tests/test_core_flows.py -k 'availability or candidate or plan_lookup or pending or choice'`
+  -> 28 passed, 60 deselected.
+- `./scripts/test-backend -q tests/test_smoke_a_plus_api.py` -> 11 passed.
+- `./scripts/test-backend -q` -> 924 passed, 11 skipped, 11 subtests passed.
+- smoke API reel `swim_unavailable_two_weeks + swim_unavailable_no_session` :
+  `./scripts/smoke-a-plus-api --scenario swim_unavailable_two_weeks --scenario swim_unavailable_no_session --keep-db --db-path /tmp/fitmas-p6c-swim-rerun2.db --port 8117 --timeout 240 --startup-timeout 45`
+  -> `OK (2 check(s))`.
+  - `swim_unavailable_two_weeks` cree une pending PlanPatch ciblee natation.
+  - `swim_unavailable_no_session` rend `availability_no_affected_session`,
+    sans pending ni event planning, avec memoire
+    `unavailable_swimming_2026-05-13_2026-05-14`.
+- smoke API reel `lookup_current_plan` :
+  `./scripts/smoke-a-plus-api --scenario lookup_current_plan --keep-db --db-path /tmp/fitmas-p6c-lookup.db --port 8118 --timeout 180 --startup-timeout 45`
+  -> `OK (1 check(s))`, aucune mutation. Note : la trace DeepSeek est sortie en
+  `response_mode=reply`; le hard guard est couvert par les tests de
+  `compose_plan_lookup_reply` / `verify_factual_reply`, mais il faudra aussi
+  surveiller les reponses directes `reply` sur plan lookup en dogfood reel.
+
 ### P6 - Corrections domaine
 
 Execution :
@@ -630,19 +711,19 @@ Sante :
 
 Disponibilite sport-specific :
 
-- memoire a finir : ajouter `sport_type`/`sport_scope` dans
-  `record_availability` pour produire des keys canoniques
-  `unavailable_<sport>_<start>_<end>` quand le sport est connu;
+- ✅ memoire : `record_availability` porte `sport_type`/`scope` et produit des
+  keys canoniques `unavailable_<sport>_<start>_<end>` quand le sport est connu;
 - brancher cette memoire sport-specific sur les clarifications execution et les
   futurs replans;
-- si aucune seance du sport cible n'existe dans la fenetre, repondre no-change
-  + memoire, sans candidat planning.
+- ✅ si aucune seance du sport cible n'existe dans la fenetre, repondre
+  no-change + memoire, sans candidat planning.
 
 Plan lookup :
 
-- forcer le grounding sur tous les `plan_lookup`;
-- ajouter un hard guard deterministe sur la reponse sortante pour les nombres
-  exacts, dates, jours, sports et statuts.
+- ✅ hard guard deterministe sur la reponse sortante pour durees, dates,
+  jours/sports/statuts supportes par le grounding DB;
+- reste a etendre si besoin : distances, zones physiologiques hors titre de
+  seance, et coverage complet des jours vides.
 
 Generated week :
 
@@ -661,7 +742,8 @@ P3 execution + health/dispo compilers
 P4 retirer validate_week_coherence du tool loop conversation
 P5 tool budgets par route
 P6a pending hygiene + candidats sport-window
-P6b memoire sport-window, lookup guard, generated week
+P6b memoire sport-window
+P6c lookup guard + no-session sport constraint
 ```
 
 Ne pas ouvrir Phase B progression/prescription pendant ce chantier. Le but reste

@@ -26,6 +26,8 @@ class CoachDecisionActionsTest(unittest.TestCase):
                         "type": "record_availability",
                         "window_text": "hier",
                         "availability": "unavailable",
+                        "sport_type": "swimming",
+                        "scope": "pool",
                         "starts_on": "2026-04-29",
                         "ends_on": "2026-04-29",
                         "confidence": 0.86,
@@ -62,6 +64,8 @@ class CoachDecisionActionsTest(unittest.TestCase):
         self.assertEqual(len(decision.memory_actions), 3)
         self.assertEqual(decision.memory_actions[0].type, "record_health_signal")
         self.assertEqual(decision.memory_actions[1].type, "record_availability")
+        self.assertEqual(decision.memory_actions[1].sport_type, "swimming")
+        self.assertEqual(decision.memory_actions[1].scope, "pool")
         self.assertEqual(decision.memory_actions[2].type, "record_preference")
         self.assertEqual(len(decision.execution_actions), 1)
         self.assertEqual(decision.execution_actions[0].type, "record_execution_update")

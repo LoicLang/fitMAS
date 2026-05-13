@@ -178,6 +178,25 @@ class ToolRuntimeTest(unittest.TestCase):
         self.assertEqual(results[-1].result.error, "tool_budget_exceeded")
         self.assertFalse(results[-1].trace.tool_called)
 
+    def test_execute_tool_calls_deduplicates_identical_calls_without_spending_budget(self) -> None:
+        results = execute_tool_calls(
+            [
+                ToolCall(tool_name="get_today_context", arguments={}),
+                ToolCall(tool_name="get_today_context", arguments={}),
+                ToolCall(tool_name="get_plan_window", arguments={}),
+            ],
+            context=self.context,
+            max_tools=1,
+        )
+
+        self.assertEqual([item.result.status for item in results], ["ok", "ok", "error"])
+        self.assertEqual(results[0].result.payload, results[1].result.payload)
+        self.assertTrue(results[0].trace.tool_called)
+        self.assertFalse(results[1].trace.tool_called)
+        self.assertTrue(results[1].trace.tool_success)
+        self.assertIn("deja lu", results[1].result.summary.lower())
+        self.assertEqual(results[2].result.error, "tool_budget_exceeded")
+
     def test_activity_highlights_returns_best_efforts(self) -> None:
         registry = build_tool_registry()
         result = registry["get_activity_highlights"].handler(self.context, {"days": 14})

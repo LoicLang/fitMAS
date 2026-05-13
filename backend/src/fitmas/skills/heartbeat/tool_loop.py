@@ -9,7 +9,7 @@ from fitmas import llm_gateway as gw
 from fitmas.llm_gateway import generate_heartbeat_text_with_debug
 from fitmas.tools.contract import ToolCall, ToolContext
 from fitmas.tools.registry import list_tools_for_pipeline
-from fitmas.tools.runtime import ToolExecution, execute_tool_calls
+from fitmas.tools.runtime import ToolExecution, count_budgeted_tool_executions, execute_tool_calls
 
 
 HEARTBEAT_TOOL_NAMES: tuple[str, ...] = (
@@ -100,6 +100,7 @@ def generate_heartbeat_text_with_tools_debug(
     requested: list[str] = []
     results_debug: list[dict[str, Any]] = []
     candidate_plan_patch: dict[str, Any] | None = None
+    tool_result_cache: dict[str, ToolExecution] = {}
     while True:
         stop_reason = str(getattr(response, "stop_reason", "") or "")
         if stop_reason != "tool_use":
@@ -134,9 +135,10 @@ def generate_heartbeat_text_with_tools_debug(
             context=tool_context,
             max_tools=remaining_budget,
             llm_round_trips=tool_rounds + 1,
+            result_cache=tool_result_cache,
         )
         candidate_plan_patch = _candidate_plan_patch_from_tools(tool_calls, executions) or candidate_plan_patch
-        tool_calls_used += min(len(tool_calls), remaining_budget)
+        tool_calls_used += count_budgeted_tool_executions(executions)
         results_debug.extend(_tool_results_debug(executions))
         messages.append({"role": "assistant", "content": gw.serialize_content_blocks(getattr(response, "content", []))})
         allow_more_tools = tool_rounds < MAX_HEARTBEAT_TOOL_ROUNDS and tool_calls_used < MAX_HEARTBEAT_TOOL_CALLS

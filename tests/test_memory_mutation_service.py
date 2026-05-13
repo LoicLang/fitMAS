@@ -75,6 +75,32 @@ class MutationActionServicesTest(unittest.TestCase):
         self.assertEqual(len(events), 2)
         self.assertTrue(all(event.status == "applied" for event in events))
 
+    def test_memory_service_uses_canonical_sport_window_key_for_availability(self) -> None:
+        result = apply_memory_actions_for_user(
+            self.db,
+            user=self.user,
+            actions=[
+                AvailabilityConstraintAction(
+                    type="record_availability",
+                    window_text="natation impossible deux semaines",
+                    availability="unavailable",
+                    sport_type="natation",
+                    starts_on="2026-05-01",
+                    ends_on="2026-05-14",
+                    confidence=0.91,
+                    evidence="je ne peux pas nager deux semaines",
+                ),
+            ],
+        )
+
+        working = self.db.query(s.WorkingMemoryEntry).order_by(s.WorkingMemoryEntry.id).all()
+        events = self.db.query(s.MemoryMutationEventRecord).order_by(s.MemoryMutationEventRecord.id).all()
+
+        self.assertEqual(result.applied_count, 1)
+        self.assertEqual(working[0].key, "unavailable_swimming_2026-05-01_2026-05-14")
+        self.assertIn("availability:unavailable_swimming_2026-05-01_2026-05-14", result.saved_keys)
+        self.assertEqual(events[0].target_key, "unavailable_swimming_2026-05-01_2026-05-14")
+
     def test_memory_service_persists_health_lifecycle_for_readiness(self) -> None:
         now = datetime(2026, 5, 11, 8, 0)
 

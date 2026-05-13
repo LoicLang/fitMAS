@@ -28,14 +28,14 @@ Si un autre doc diverge :
 
 **Un premier coach que Loïc reconnaît, comprend, et a envie de rouvrir demain.**
 
-## Roadmap Active — 12 mai 2026
+## Roadmap Active — 13 mai 2026
 
 Ordre courant :
 
 ```text
-1. Dedup/tool-loop hygiene : eviter les appels tool redondants dans un meme tour
-2. Memoire disponibilite sport-specific : key sport + fenetre quand le sport est connu
-3. Plan lookup hard guard + generated week policy si encore observe
+1. Checkpoint dogfood/deploy : commit propre, push, deploy, reprise Telegram
+2. Refactor Phase A : consolider les lanes stables, reduire les hotspots
+3. Generated week policy si encore observee en dogfood reel
 4. Phase B progression/prescription seulement sur demande explicite
 ```
 
@@ -47,8 +47,11 @@ localement. P4 a retire `validate_week_coherence` de la surface tools
 conversation. P5 a reduit les tools par route et isole la disponibilite pure en
 memory-only. La prochaine tranche prioritaire est l'hygiene pending, puis les
 candidats sport-specific pour les indisponibilites longues. Ces deux points
-sont implementes localement en P6a; la suite immediate passe a l'hygiene de
-tool-loop et a la memoire disponibilite sport-window.
+sont implementes localement en P6a. P6b a ferme l'hygiene tool-loop et la
+memoire disponibilite sport-window. P6c a ajoute le hard guard plan lookup et
+le cas no-session sport-specific. La prochaine decision pragmatique est un
+checkpoint deploy/dogfood, puis un refactor Phase A pour repartir sur une base
+plus lisible avant d'ouvrir de nouvelles capacites.
 
 Docs a ouvrir selon le chantier :
 - excellence sportive : `docs/SPORT-QUALITY-REVIEW.md`
@@ -128,10 +131,21 @@ Etat du code sur `main` :
   cibler uniquement les seances du sport concerne dans la fenetre; si swimming
   est indisponible, aucune seance running n'est proposee par les candidats
   backend.
+- P6b memoire/tool-loop 13 mai : dedup exact des tool calls
+  `tool_name + arguments` sans consommer de budget, cache partage conversation
+  + heartbeat, `record_availability.sport_type/scope`, cle memoire canonique
+  `unavailable_<sport>_<start>_<end>`, et persistance depuis
+  `turn_plan.availability_constraint` quand la candidate-flow sort avant
+  `decide()`.
+- P6c lookup/no-session 13 mai : hard guard deterministe des reponses
+  `plan_lookup` contre `ReplyGroundingPacket` pour durees minutes, dates ISO,
+  claims de jour vide/repos, sport et statut; fallback DB compact; scenario
+  `swim_unavailable_no_session` qui note l'indisponibilite sport-specific sans
+  pending quand aucune seance du sport cible n'existe dans la fenetre.
 
 Verification recente :
 
-- `./scripts/test-backend -q` : 916 passed, 11 skipped, 11 subtests passed.
+- `./scripts/test-backend -q` : 924 passed, 11 skipped, 11 subtests passed.
 - `main` contient le merge `ee4a313 Merge prompt context and adaptation candidates`.
 - Dogfood API reel 12 mai : 42 checks ad hoc, 3 fails bruts stricts, plusieurs
   conclusions manuelles a corriger avant de juger DeepSeek.
@@ -186,6 +200,61 @@ Verification recente :
     `OK (1 check(s))`; pending `plan_patch` sur session DB id 5
     `sport_type=swimming`, remplacement `new_sport_type=strength`, aucune cible
     running.
+- P6b local :
+  - tool runtime -> `./scripts/test-backend -q tests/test_tool_runtime.py`
+    -> 24 passed.
+  - memory mutation -> `./scripts/test-backend -q tests/test_memory_mutation_service.py`
+    -> 6 passed.
+  - coach action parse -> `./scripts/test-backend -q tests/test_coach_decision_actions.py`
+    -> 16 passed.
+  - prompt/action targeted ->
+    `./scripts/test-backend -q tests/test_conversation_prompt_modules.py tests/test_llm_prompt_builder.py tests/test_coach_decision_actions.py`
+    -> 59 passed.
+  - LLM tool targeted ->
+    `./scripts/test-backend -q tests/test_llm_tools.py -k 'availability or memory or compiler or tool'`
+    -> 65 passed.
+  - heartbeat tool loop/debug ->
+    `./scripts/test-backend -q tests/test_heartbeat_tool_loop.py tests/test_heartbeat_debug_endpoint.py`
+    -> 8 passed.
+  - smoke API reel `swim_unavailable_two_weeks` ->
+    `OK (1 check(s))`; DB confirme
+    `working_memory_entries.key=unavailable_swimming_2026-05-13_2026-05-27`,
+    `source=turn_plan`, `signal_kind=availability_unavailable`.
+  - changements : dedup tool exact `tool_name + arguments` par tour sans
+    consommer de budget; `record_availability.sport_type/scope`; cle memoire
+    `unavailable_<sport>_<start>_<end>` pour indispo sport-specific datee;
+    persistance de cette memoire depuis `turn_plan.availability_constraint`
+    quand la candidate-flow sort avant `decide()`; normalisation des alias
+    sportifs types (`natation` -> `swimming`).
+- P6c local :
+  - final reply grounded ->
+    `./scripts/test-backend -q tests/test_final_reply_grounded_verifier.py tests/test_final_reply.py`
+    -> 38 passed.
+  - core availability/candidate/lookup targeted ->
+    `./scripts/test-backend -q tests/test_core_flows.py -k 'availability or candidate or plan_lookup or pending or choice'`
+    -> 28 passed, 60 deselected.
+  - smoke harness -> `./scripts/test-backend -q tests/test_smoke_a_plus_api.py`
+    -> 11 passed.
+  - full backend -> `./scripts/test-backend -q` -> 924 passed, 11 skipped,
+    11 subtests passed.
+  - smoke API reel `swim_unavailable_two_weeks + swim_unavailable_no_session`
+    ->
+    `./scripts/smoke-a-plus-api --scenario swim_unavailable_two_weeks --scenario swim_unavailable_no_session --keep-db --db-path /tmp/fitmas-p6c-swim-rerun2.db --port 8117 --timeout 240 --startup-timeout 45`
+    -> `OK (2 check(s))`; le premier cree une pending PlanPatch ciblee
+    natation, le second rend `availability_no_affected_session` sans pending ni
+    event planning et persiste
+    `unavailable_swimming_2026-05-13_2026-05-14`.
+  - smoke API reel `lookup_current_plan` ->
+    `./scripts/smoke-a-plus-api --scenario lookup_current_plan --keep-db --db-path /tmp/fitmas-p6c-lookup.db --port 8118 --timeout 180 --startup-timeout 45`
+    -> `OK (1 check(s))`, aucune mutation. La trace est sortie en
+    `response_mode=reply`; le hard guard est couvert par les tests
+    `compose_plan_lookup_reply` / `verify_factual_reply`, mais les reponses
+    directes `reply` restent a surveiller en dogfood.
+  - changements : hard guard `plan_lookup` contre `ReplyGroundingPacket` pour
+    durees minutes, dates ISO, claims jour vide/repos, sport et statut; fallback
+    DB compact si composer+brouillon ne sont pas reparables; scenario
+    `swim_unavailable_no_session` ajoute au smoke; candidate-flow sport-specific
+    stoppe sans pending quand aucune seance du sport cible n'est dans la fenetre.
 - P1 replay local :
   - `./scripts/smoke-a-plus-api --daily ...` -> `FAIL (4/26)`;
   - `./scripts/smoke-a-plus-api ...` core -> stop apres deux timeouts mutation;
@@ -195,10 +264,11 @@ Verification recente :
 
 Suite immediate :
 
-1. Dedup/tool-loop hygiene : eviter les appels tool redondants dans un meme tour.
-2. Memoire disponibilite sport-specific : `record_availability` doit porter le
-   sport quand il est connu et produire une key machine lisible.
-3. Plan lookup hard guard : chiffres/dates/sports/statuts sortants contre DB.
+1. Commit/push/deploy du lot P0-P6c si la revue de diff reste propre.
+2. Dogfood Telegram reel sur `lookup_current_plan`, execution done/missed,
+   sante resolue, dispo natation deux semaines, et no-session natation.
+3. Refactor Phase A : separer les lanes stabilisees et reduire
+   `conversation_pipeline.py` avant de continuer a ajouter des cas.
 4. Garder Phase B fermee tant que le coach dogfood n'est pas stable plusieurs
    jours.
 

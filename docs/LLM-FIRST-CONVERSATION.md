@@ -91,14 +91,16 @@ peut confier la phrase visible a `final_reply.py` avec le brouillon LLM initial
 et les faits machine deja appliques (`memory_actions`, `execution_actions`).
 Le composer ne redecide pas : il reformule le resultat valide.
 
-Extension `plan_lookup` (5 mai 2026) : les tours lus comme questions factuelles
-par le turn planner LLM utilisent un composer final dedie. La sortie composee
-est comparee au brouillon LLM initial sur des tokens factuels sensibles
-(chiffres, jours, dates relatives, zones, statuts). Si elle derive, elle est
-rejetee, et le brouillon initial valide est garde comme sortie terminale
-`plan_lookup`. Une reformulation qui ajoute une question de relance est aussi
-rejetee. Cette verification ne lit pas le texte utilisateur libre ; elle juge
-une transformation post-LLM.
+Extension `plan_lookup` (5 mai 2026, durcie 13 mai 2026) : les tours lus comme
+questions factuelles par le turn planner LLM utilisent un composer final dedie.
+La sortie composee est verifiee contre le grounding DB autoritaire
+(`ReplyGroundingPacket`) : durees en minutes, dates ISO, jours, sport et statut
+ne doivent pas contredire le planning lu. Si le verifier LLM laisse passer une
+duree/date/sport/statut impossible, le hard guard deterministe bloque quand
+meme la sortie. Si le composer et le brouillon initial restent invalides, une
+reponse fallback compacte est rendue depuis le grounding DB. Cette verification
+ne lit pas le texte utilisateur libre ; elle juge seulement une sortie assistant
+contre des artefacts machine.
 
 Compat confirmations pending (5 mai 2026) : si le LLM comprend une acceptation
 mais sort encore une `MutationDecision` legacy identique a la pending `plan_patch`

@@ -108,11 +108,8 @@ def _payload_from_action(action: MemoryAction, *, source: str, now: datetime | N
     if isinstance(action, AvailabilityConstraintAction):
         starts_on = _parse_date(action.starts_on)
         ends_on = _parse_date(action.ends_on)
-        key = (
-            f"availability_{action.starts_on}_{action.ends_on}"
-            if action.starts_on and action.ends_on
-            else f"availability_{_slugify(action.window_text)}"
-        )
+        sport_type = _normalize_sport(getattr(action, "sport_type", None))
+        key = _availability_key(action, starts_on=starts_on, ends_on=ends_on, sport_type=sport_type)
         payload = {
             "category": "availability",
             "key": key,
@@ -127,6 +124,11 @@ def _payload_from_action(action: MemoryAction, *, source: str, now: datetime | N
             "action": "upsert",
             "action_type": action.type,
         }
+        if sport_type:
+            payload["sport_type"] = sport_type
+        scope = str(getattr(action, "scope", "") or "").strip()
+        if scope:
+            payload["scope"] = scope
         if starts_on is not None:
             payload["valid_from"] = datetime.combine(starts_on, datetime.min.time())
         if ends_on is not None:
@@ -190,6 +192,44 @@ def _parse_date(value: str | None):
         return datetime.fromisoformat(value).date()
     except ValueError:
         return None
+
+
+def _availability_key(
+    action: AvailabilityConstraintAction,
+    *,
+    starts_on,
+    ends_on,
+    sport_type: str | None,
+) -> str:
+    if action.availability == "unavailable" and sport_type and starts_on is not None and ends_on is not None:
+        return f"unavailable_{sport_type}_{starts_on.isoformat()}_{ends_on.isoformat()}"
+    if starts_on is not None and ends_on is not None:
+        return f"availability_{starts_on.isoformat()}_{ends_on.isoformat()}"
+    return f"availability_{_slugify(action.window_text)}"
+
+
+def _normalize_sport(value: str | None) -> str | None:
+    sport = _slugify(value or "")
+    if sport in {"", "unknown", "general", "all", "rest", "off"}:
+        return None
+    aliases = {
+        "swim": "swimming",
+        "natation": "swimming",
+        "piscine": "swimming",
+        "run": "running",
+        "course": "running",
+        "course_a_pied": "running",
+        "velo": "cycling",
+        "bike": "cycling",
+        "biking": "cycling",
+        "renfo": "strength",
+        "muscu": "strength",
+        "musculation": "strength",
+        "escalade": "climbing",
+    }
+    if sport in aliases:
+        return aliases[sport]
+    return sport
 
 
 def _strip_preference_prefix(value: str) -> str:

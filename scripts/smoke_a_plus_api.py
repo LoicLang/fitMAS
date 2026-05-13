@@ -134,6 +134,12 @@ SCENARIOS: tuple[SmokeScenario, ...] = (
         expectation="coherent_commit_or_pending",
         description="A multi-day sport constraint may propose a guarded PlanPatch or ask follow-up.",
     ),
+    SmokeScenario(
+        name="swim_unavailable_no_session",
+        prompt="Je ne peux pas nager du 2026-05-13 au 2026-05-14, adapte si besoin.",
+        expectation="no_plan_write",
+        description="A sport constraint with no matching session in the window should write memory but not create a candidate.",
+    ),
 )
 
 DAILY_SCENARIOS: tuple[SmokeScenario, ...] = (

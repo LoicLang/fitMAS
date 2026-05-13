@@ -24,7 +24,7 @@ from fitmas.tools.contract import ToolCall, ToolContext
 from fitmas.tools.metrics import build_tool_trace, log_tool_trace
 from fitmas.tools.registry import list_tools_for_pipeline
 from fitmas.tools.routing import IntentCategory
-from fitmas.tools.runtime import ToolExecution, execute_tool_calls
+from fitmas.tools.runtime import ToolExecution, count_budgeted_tool_executions, execute_tool_calls
 
 logger = logging.getLogger(__name__)
 
@@ -84,6 +84,8 @@ class AvailabilityConstraintAction(BaseModel):
     type: Literal["record_availability"]
     window_text: str
     availability: Literal["unavailable", "limited", "available", "unknown"]
+    sport_type: str | None = None
+    scope: str | None = None
     starts_on: str | None = None
     ends_on: str | None = None
     recurrence: str | None = None
@@ -1026,7 +1028,18 @@ def _normalize_memory_actions(raw: Any) -> tuple[dict[str, Any], ...]:
     normalized: list[dict[str, Any]] = []
     allowed_fields = {
         "record_health_signal": {"type", "health_signal", "body_area", "signal_kind", "severity", "status", "confidence", "evidence"},
-        "record_availability": {"type", "window_text", "availability", "starts_on", "ends_on", "recurrence", "confidence", "evidence"},
+        "record_availability": {
+            "type",
+            "window_text",
+            "availability",
+            "sport_type",
+            "scope",
+            "starts_on",
+            "ends_on",
+            "recurrence",
+            "confidence",
+            "evidence",
+        },
         "record_preference": {"type", "preference", "polarity", "scope", "confidence", "evidence"},
     }
     required_fields = {
@@ -1319,8 +1332,10 @@ def _compile_memory_actions_for_scope(
         else (
             "- si le tour est availability_constraint et que le contexte original contient une indisponibilite, contrainte horaire, voyage ou limitation sport/date, retourne record_availability meme si un plan_patch existe\n"
             "- pour record_availability, aucune seance cible n'est necessaire; une fenetre datee/relative, une contrainte horaire ou une limitation de sport suffit\n"
+            "- si la contrainte concerne un sport precis, renseigne sport_type avec le sport canonique si connu\n"
             "- si la cible planning reste ambigue ou demande clarification, record_availability reste requis quand la contrainte de disponibilite est claire\n"
             "- exemple: `Demain soir c'est impossible pour moi` -> record_availability window_text=\"demain soir impossible\", availability=unavailable\n"
+            "- exemple: `Je ne peux pas nager deux semaines` -> record_availability window_text=\"natation impossible deux semaines\", availability=unavailable, sport_type=swimming\n"
         )
     )
     compiler_payload = {
@@ -1349,7 +1364,7 @@ def _compile_memory_actions_for_scope(
         "- ne change jamais la reponse coach, le plan_patch, ni les execution_actions existantes\n\n"
         "Formes:\n"
         "- record_health_signal: health_signal, body_area?, signal_kind=pain|injury|fatigue|sleep|illness|tension|other, severity=mild|moderate|severe|unknown, status=new|ongoing|improving|worsening|resolved|unknown, confidence, evidence?\n"
-        "- record_availability: window_text, availability=unavailable|limited|available|unknown, starts_on?, ends_on?, recurrence?, confidence, evidence?\n\n"
+        "- record_availability: window_text, availability=unavailable|limited|available|unknown, sport_type?, scope?, starts_on?, ends_on?, recurrence?, confidence, evidence?\n\n"
         "ARTEFACTS_MACHINE:\n"
         f"{_json_for_compiler(compiler_payload)}\n\n"
         "CONTEXTE_ORIGINAL:\n"
@@ -1406,6 +1421,7 @@ def _strict_memory_action_compiler_prompt(
         scope_rule = (
             "- si le message utilisateur porte une indisponibilite, contrainte horaire, voyage ou limitation sport/date, retourne exactement un record_availability\n"
             "- aucune seance cible n'est necessaire pour record_availability\n"
+            "- si la contrainte concerne un sport precis, renseigne sport_type avec le sport canonique si connu\n"
             "- si la cible planning est ambigue, record_availability reste requis quand la contrainte de disponibilite est claire\n"
         )
     return (
@@ -1689,7 +1705,7 @@ def _maybe_repair_missing_availability_memory_action(
         "Retourne uniquement un JSON FitMAS CoachDecision valide.\n\n"
         "FORME record_availability:\n"
         '{"type":"record_availability","window_text":"...","availability":"unavailable|limited|available|unknown",'
-        '"starts_on":null,"ends_on":null,"confidence":0.75,"evidence":"..."}\n\n'
+        '"sport_type":null,"scope":null,"starts_on":null,"ends_on":null,"confidence":0.75,"evidence":"..."}\n\n'
         f"DECISION_A_VERIFIER:\n{json.dumps(payload, ensure_ascii=False)}\n\n"
         "CONTEXTE_ORIGINAL:\n"
         f"{prompt}\n"
@@ -1926,6 +1942,7 @@ def _request_json_with_tools(
     tool_rounds = 0
     tool_calls_used = 0
     tool_executions: list[ToolExecution] = []
+    tool_result_cache: dict[str, ToolExecution] = {}
     prompt_token_values: list[int | None] = []
     response_token_values: list[int | None] = []
     response = _request_message(
@@ -2067,8 +2084,9 @@ def _request_json_with_tools(
             llm_round_trips=round_trips + 1,
             prompt_tokens_estimate=_sum_optional_ints(prompt_token_values),
             response_tokens_estimate=_sum_optional_ints(response_token_values),
+            result_cache=tool_result_cache,
         )
-        tool_calls_used += min(len(tool_calls), remaining_tool_budget)
+        tool_calls_used += count_budgeted_tool_executions(round_executions)
         tool_executions.extend(round_executions)
         messages.append({"role": "assistant", "content": _serialize_content_blocks(getattr(response, "content", []))})
         messages.append({"role": "user", "content": _tool_followup_content(tool_use_blocks, round_executions)})

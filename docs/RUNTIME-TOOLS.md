@@ -63,6 +63,15 @@ Note dogfood API 12 mai 2026 :
   backend fabrique des `candidate_ref` uniquement pour les seances du sport
   indisponible dans la fenetre. Cela reste deterministe sur artefacts LLM/DB,
   jamais sur le texte utilisateur libre.
+- P6b 13 mai ajoute une hygiene de boucle tool : `execute_tool_calls()` dedup
+  les appels identiques `tool_name + arguments` dans un meme tour, renvoie un
+  resultat pour chaque `tool_use_id`, mais ne relance pas le handler et ne
+  consomme pas de budget pour les doublons. Le cache est partage entre rounds
+  conversation et heartbeat.
+- Meme tranche : les sorties candidate-flow qui court-circuitent `decide()`
+  peuvent persister une memoire disponibilite depuis
+  `turn_plan.availability_constraint`, donc une adaptation pending ne perd plus
+  le fait sport-specific qui l'a declenchee.
 - Voir `docs/API-DOGFOOD-RELIABILITY-2026-05-12.md` pour les traces et le plan.
 
 ## Ce qu'on fait
@@ -70,7 +79,7 @@ Note dogfood API 12 mai 2026 :
 - tools LLM-facing `read-only` ou validation-only
 - whitelist par pipeline
 - 1 registre explicite
-- 1 executor borne, qui doit maintenant supporter plusieurs tool calls read-only / validation-only par tour
+- 1 executor borne, qui doit maintenant supporter plusieurs tool calls read-only / validation-only par tour et dedup les doublons exacts
 - metriques systematiques a chaque appel tool
 - skills metier documentees quand un workflow se repete
 

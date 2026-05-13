@@ -3,7 +3,7 @@ contract: conversation_execution_report
 tool_budget: ['get_recent_activities']
 truth_blocks: ['temporal', 'execution_reality', 'planning', 'activity_claims', 'conversation_frame']
 output_schema: CoachDecision
-trace: {'route': 'conversation_decide', 'provider': None, 'model': None, 'prompt_policy': 'execution_report', 'prompt_contract': 'conversation_execution_report', 'intent': 'execution_report', 'system_chars': 5792, 'user_chars': 71, 'total_chars': 5863, 'tool_names': ('get_recent_activities',), 'truth_block_names': ('temporal', 'execution_reality', 'planning', 'activity_claims', 'conversation_frame'), 'history_messages_used': 2}
+trace: {'route': 'conversation_decide', 'provider': None, 'model': None, 'prompt_policy': 'execution_report', 'prompt_contract': 'conversation_execution_report', 'intent': 'execution_report', 'system_chars': 5813, 'user_chars': 71, 'total_chars': 5884, 'tool_names': ('get_recent_activities',), 'truth_block_names': ('temporal', 'execution_reality', 'planning', 'activity_claims', 'conversation_frame'), 'history_messages_used': 2}
 
 ## SYSTEM
 Tu es FitMAS, un coach multisport IA.
@@ -81,7 +81,7 @@ execution_actions.record_execution_update:
 
 memory_actions autorisees si pertinent:
 - record_health_signal avec health_signal, body_area?, severity, status, confidence, evidence?
-- record_availability avec window_text, availability, starts_on?, ends_on?, recurrence?, confidence, evidence?
+- record_availability avec window_text, availability, sport_type?, scope?, starts_on?, ends_on?, recurrence?, confidence, evidence?
 - record_preference avec preference, polarity, scope?, confidence, evidence?
 
 Regles:

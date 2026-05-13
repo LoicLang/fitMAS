@@ -363,6 +363,13 @@ def _run_conversation_turn_impl(
         turn_context=turn_context,
     )
     if adaptation_candidate_outcome is not None:
+        _apply_turn_plan_memory_actions(
+            db=db,
+            user=user,
+            turn_plan=turn_plan,
+            turn_memory_writes=turn_memory_writes,
+            turn_context=turn_context,
+        )
         return _reply_and_record_turn(
             db=db,
             user_id=user.id,
@@ -1155,6 +1162,104 @@ def _apply_coach_decision_actions(
     return metric_payload
 
 
+def _apply_turn_plan_memory_actions(
+    *,
+    db: Session,
+    user,
+    turn_plan,
+    turn_memory_writes: list[dict],
+    turn_context: dict[str, object],
+) -> None:
+    """Persist memory from typed turn planner artifacts on early candidate exits."""
+    action = _availability_memory_action_from_turn_plan(turn_plan)
+    if action is None:
+        return
+    memory_result = apply_memory_actions_for_user(
+        db,
+        user=user,
+        actions=(action,),
+        source="turn_plan",
+    )
+    for key in memory_result.saved_keys:
+        category, _, item_key = key.partition(":")
+        turn_memory_writes.append(
+            {
+                "category": category or "memory",
+                "key": item_key or key,
+                "source": "turn_plan",
+                "action": "applied",
+            }
+        )
+    turn_context["turn_plan_memory_action_result"] = {
+        "memory_applied": memory_result.applied_count,
+        "memory_blocked": memory_result.blocked_count,
+        "saved_keys": list(memory_result.saved_keys),
+    }
+
+
+def _availability_memory_action_from_turn_plan(turn_plan):
+    raw = getattr(turn_plan, "availability_constraint", None)
+    if not isinstance(raw, dict):
+        return None
+    availability = _clean_enum_value(
+        raw.get("availability"),
+        allowed={"unavailable", "limited", "available", "unknown"},
+        default="unknown",
+    )
+    if availability == "unknown":
+        return None
+    sport_type = _clean_optional_artifact_value(raw.get("sport_type"))
+    starts_on = _clean_optional_artifact_value(raw.get("starts_on"))
+    ends_on = _clean_optional_artifact_value(raw.get("ends_on"))
+    scope = _clean_optional_artifact_value(raw.get("scope"))
+    window_text = _availability_window_text(
+        availability=availability,
+        sport_type=sport_type,
+        starts_on=starts_on,
+        ends_on=ends_on,
+    )
+    try:
+        return llm_runtime.AvailabilityConstraintAction(
+            type="record_availability",
+            window_text=window_text,
+            availability=availability,
+            sport_type=sport_type,
+            scope=scope,
+            starts_on=starts_on,
+            ends_on=ends_on,
+            confidence=float(getattr(turn_plan, "confidence", 0.75) or 0.75),
+            evidence="turn_plan.availability_constraint",
+        )
+    except Exception as exc:
+        logger.warning("turn_plan_availability_memory_action_invalid error=%s", str(exc)[:160])
+        return None
+
+
+def _clean_enum_value(value: object, *, allowed: set[str], default: str) -> str:
+    cleaned = str(value or "").strip().lower()
+    return cleaned if cleaned in allowed else default
+
+
+def _clean_optional_artifact_value(value: object) -> str | None:
+    cleaned = str(value or "").strip()
+    if not cleaned or cleaned.lower() in {"unknown", "null", "none"}:
+        return None
+    return cleaned
+
+
+def _availability_window_text(
+    *,
+    availability: str,
+    sport_type: str | None,
+    starts_on: str | None,
+    ends_on: str | None,
+) -> str:
+    subject = sport_type or "availability"
+    if starts_on or ends_on:
+        return f"{subject} {availability} {starts_on or '?'}..{ends_on or '?'}"
+    return f"{subject} {availability}"
+
+
 def _apply_pending_resolution(
     *,
     db: Session,
@@ -1715,10 +1820,13 @@ def _compose_no_change_reply_for_turn(
         action_result=action_result,
     )
     primary_intent = _turn_context_primary_intent(turn_context)
+    plan_lookup_capability = primary_intent == "plan_lookup" or (
+        _turn_context_requires_truth_read(turn_context)
+        and primary_intent not in {"plan_mutation", "availability_constraint", "health_signal", "execution_report"}
+    )
     capability = (
         "plan_lookup"
-        if primary_intent == "plan_lookup"
-        or _turn_context_requires_truth_read(turn_context)
+        if plan_lookup_capability
         else "execution_report"
         if primary_intent == "execution_report"
         else "no_change"
@@ -2280,6 +2388,31 @@ def _maybe_handle_plan_adaptation_candidates(
         scheduled_sessions=scheduled_sessions,
         turn_plan=turn_plan,
     )
+    no_affected_sport = _availability_no_affected_sport_session(
+        turn_plan=turn_plan,
+        grounding=grounding,
+        scheduled_sessions=scheduled_sessions,
+    )
+    if no_affected_sport is not None and not backend_candidate_payloads:
+        sport_type, starts_on, ends_on = no_affected_sport
+        turn_context["adaptation_candidate_flow"] = {
+            "attempted": True,
+            "candidates_generated": 0,
+            "policy_action": "no_change_no_affected_sport_session",
+            "constraint_sport_type": sport_type,
+            "constraint_start_date": starts_on.isoformat(),
+            "constraint_end_date": ends_on.isoformat(),
+        }
+        return ConversationTurnOutcome(
+            extraction=Extraction(confidence=float(getattr(turn_plan, "confidence", 0.85) or 0.85)),
+            reply_text=_availability_no_affected_session_reply(
+                sport_type=sport_type,
+                starts_on=starts_on,
+                ends_on=ends_on,
+            ),
+            response_mode="availability_no_affected_session",
+            mutation_applied=False,
+        )
     input_payload = CandidateGenerationInput(
         user_message=user_text,
         parsed_user_intent=_turn_plan_payload(turn_plan) or {},
@@ -2371,6 +2504,104 @@ def _should_use_plan_adaptation_candidate_flow(
     if secondary_intents.intersection({"health_signal", "execution_report"}):
         return False
     return bool(getattr(turn_plan, "has_plan_mutation", False))
+
+
+def _availability_no_affected_sport_session(
+    *,
+    turn_plan,
+    grounding: ReplyGroundingPacket | None,
+    scheduled_sessions: list[Any],
+):
+    window = _availability_sport_window_from_turn_plan(turn_plan=turn_plan, grounding=grounding)
+    if window is None:
+        return None
+    sport_type, starts_on, ends_on = window
+    for session in scheduled_sessions:
+        session_date = _session_date_from_value(getattr(session, "scheduled_date", None))
+        if session_date is None or not starts_on <= session_date <= ends_on:
+            continue
+        status = str(getattr(session, "completion_status", "") or "").strip().lower()
+        if status in {"done", "completed"}:
+            continue
+        if _normalize_turn_sport(getattr(session, "sport_type", None)) == sport_type:
+            return None
+    return window
+
+
+def _availability_sport_window_from_turn_plan(
+    *,
+    turn_plan,
+    grounding: ReplyGroundingPacket | None,
+):
+    raw = getattr(turn_plan, "availability_constraint", None)
+    if not isinstance(raw, dict):
+        return None
+    availability = str(raw.get("availability") or "").strip().lower()
+    if availability not in {"unavailable", "limited"}:
+        return None
+    sport_type = _normalize_turn_sport(raw.get("sport_type"))
+    if sport_type in {None, "general", "all", "rest", "off"}:
+        return None
+    if raw.get("starts_on") in {None, "", "unknown"} or raw.get("ends_on") in {None, "", "unknown"}:
+        return None
+    starts_on = _session_date_from_value(raw.get("starts_on")) or getattr(grounding, "local_date", None)
+    ends_on = _session_date_from_value(raw.get("ends_on"))
+    if starts_on is None or ends_on is None or ends_on < starts_on:
+        return None
+    return sport_type, starts_on, ends_on
+
+
+def _availability_no_affected_session_reply(*, sport_type: str, starts_on, ends_on) -> str:
+    sport_label = _sport_label_fr(sport_type)
+    return (
+        f"Je note l'indisponibilite {sport_label} du {starts_on.isoformat()} au {ends_on.isoformat()}. "
+        f"Aucune seance {sport_label} n'est prevue dans cette fenetre, donc je ne touche pas au plan."
+    )
+
+
+def _normalize_turn_sport(value: object) -> str | None:
+    sport = str(value or "").strip().lower()
+    aliases = {
+        "swim": "swimming",
+        "natation": "swimming",
+        "piscine": "swimming",
+        "run": "running",
+        "course": "running",
+        "course_a_pied": "running",
+        "velo": "cycling",
+        "bike": "cycling",
+        "biking": "cycling",
+        "renfo": "strength",
+        "muscu": "strength",
+        "musculation": "strength",
+        "escalade": "climbing",
+    }
+    return aliases.get(sport, sport or None)
+
+
+def _sport_label_fr(sport_type: str) -> str:
+    return {
+        "swimming": "natation",
+        "running": "running",
+        "cycling": "velo",
+        "strength": "renfo",
+        "climbing": "escalade",
+    }.get(sport_type, sport_type)
+
+
+def _session_date_from_value(value: object):
+    if isinstance(value, datetime):
+        return value.date()
+    if hasattr(value, "isoformat") and hasattr(value, "weekday"):
+        return value
+    if isinstance(value, str):
+        try:
+            from datetime import date
+
+            return date.fromisoformat(value[:10])
+        except ValueError:
+            return None
+    return None
 
 
 def _should_try_legacy_plan_adaptation_after_decide(*, decision: Any, turn_plan, pending_confirmation) -> bool:

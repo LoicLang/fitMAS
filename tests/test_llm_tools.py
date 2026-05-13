@@ -3046,5 +3046,67 @@ class LLMToolsTest(unittest.TestCase):
         self.assertIn("get_coach_lens", captured["system"])
         self.assertIn("pas en formulaire", captured["system"])
 
+    def test_memory_compiler_uses_turn_plan_secondary_availability_scope(self) -> None:
+        original_client = llm._client
+        original_request_structured_json = llm._request_structured_json
+        calls: list[str] = []
+
+        def fake_request_structured_json(*, system, messages, model="claude-haiku-4-5-20251001", max_tokens=1024):
+            prompt = str(messages[0]["content"])
+            calls.append(prompt)
+            if len(calls) == 1:
+                return {
+                    "response_type": "no_change",
+                    "rationale": "adaptation traitee ailleurs mais memoire oubliee",
+                    "fitmas_message": "Je te propose une adaptation prudente.",
+                    "memory_actions": [],
+                }
+            self.assertIn("AVAILABILITY_MEMORY_COMPILER", prompt)
+            return {
+                "memory_actions": [
+                    {
+                        "type": "record_availability",
+                        "window_text": "natation impossible deux semaines",
+                        "availability": "unavailable",
+                        "sport_type": "swimming",
+                        "starts_on": "2026-05-13",
+                        "ends_on": "2026-05-27",
+                        "confidence": 0.93,
+                        "evidence": "Je ne peux pas nager pendant deux semaines",
+                    }
+                ]
+            }
+
+        llm._client = lambda: object()
+        llm._request_structured_json = fake_request_structured_json
+        try:
+            decision = llm.decide(
+                "Je ne peux pas nager pendant deux semaines, adapte si besoin.",
+                "Repere",
+                coach_context={
+                    "turn_primary_intent": "plan_mutation",
+                    "turn_plan": {
+                        "primary_intent": "plan_mutation",
+                        "secondary_intents": ["availability_constraint"],
+                        "availability_constraint": {
+                            "availability": "unavailable",
+                            "sport_type": "swimming",
+                            "starts_on": "2026-05-13",
+                            "ends_on": "2026-05-27",
+                        },
+                    },
+                },
+            )
+        finally:
+            llm._client = original_client
+            llm._request_structured_json = original_request_structured_json
+
+        self.assertIsNotNone(decision)
+        assert decision is not None
+        self.assertEqual(len(calls), 2)
+        self.assertEqual(len(decision.memory_actions), 1)
+        self.assertEqual(decision.memory_actions[0].type, "record_availability")
+        self.assertEqual(decision.memory_actions[0].sport_type, "swimming")
+
 if __name__ == "__main__":
     unittest.main()

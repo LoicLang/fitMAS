@@ -26,6 +26,7 @@ from fitmas.conversation_contract import (
     ConversationTurnInput,
     ConversationTurnOutcome,
 )
+from fitmas.conversation_turn_planner import ConversationTurnPlan
 from fitmas.db import Base, SessionLocal, engine, init_db
 from fitmas.llm import CoachDecision, MutationDecision
 from fitmas.models import Extraction
@@ -1389,6 +1390,59 @@ class FitMASCoreFlowsTest(unittest.TestCase):
         self.assertEqual(turns[0].response_mode, "plan_lookup_composed")
         self.assertEqual(context["final_reply_capability"], "plan_lookup")
 
+    def test_plan_mutation_no_change_with_truth_read_keeps_no_change_composer(self) -> None:
+        self._create_plan_for_today()
+        original_plan_turn = api_messages.plan_conversation_turn
+        original_decide = api_messages.decide
+        original_extract_facts = api_messages.extract_facts
+        original_plan_lookup_compose = conversation_pipeline.final_reply.compose_plan_lookup_reply
+        original_no_change_compose = conversation_pipeline.final_reply.compose_no_change_reply
+        try:
+            api_messages.plan_conversation_turn = lambda *args, **kwargs: ConversationTurnPlan(
+                primary_intent="plan_mutation",
+                secondary_intents=("availability_constraint",),
+                mutation_signal=True,
+                requires_truth_read=True,
+                truth_scope="plan_window",
+                temporal_references=[],
+                availability_constraint={
+                    "availability": "unavailable",
+                    "sport_type": "swimming",
+                    "starts_on": None,
+                    "ends_on": None,
+                    "scope": "sport",
+                },
+                confidence=0.91,
+            )
+            api_messages.decide = lambda *args, **kwargs: CoachDecision(
+                response_type="no_change",
+                rationale="fenetre indisponibilite incomplete",
+                fitmas_message="Je vois la contrainte natation, mais precise quand commencent ces deux jours pour adapter proprement.",
+            )
+            api_messages.extract_facts = lambda *args, **kwargs: []
+            conversation_pipeline.final_reply.compose_plan_lookup_reply = lambda **kwargs: (_ for _ in ()).throw(
+                AssertionError("plan_lookup composer should not handle plan_mutation clarification")
+            )
+            conversation_pipeline.final_reply.compose_no_change_reply = lambda **kwargs: kwargs["original_llm_reply"]
+
+            result = self.client.post(
+                "/api/v0/messages",
+                json={"text": "Je ne peux pas nager deux jours, adapte si besoin."},
+            ).json()
+        finally:
+            api_messages.plan_conversation_turn = original_plan_turn
+            api_messages.decide = original_decide
+            api_messages.extract_facts = original_extract_facts
+            conversation_pipeline.final_reply.compose_plan_lookup_reply = original_plan_lookup_compose
+            conversation_pipeline.final_reply.compose_no_change_reply = original_no_change_compose
+
+        turns = repo.get_recent_conversation_turns(self.db, self.user.id, limit=1)
+        context = json.loads(turns[0].context_json)
+
+        self.assertIn("precise quand", result["assistant_message"]["text"])
+        self.assertEqual(turns[0].response_mode, "no_change_composed")
+        self.assertEqual(context["final_reply_capability"], "no_change")
+
     def test_execution_report_no_change_uses_execution_report_composer(self) -> None:
         self._create_plan_for_today()
         original_plan_turn = api_messages.plan_conversation_turn
@@ -1600,6 +1654,9 @@ class FitMASCoreFlowsTest(unittest.TestCase):
 
     def test_plan_mutation_can_use_candidate_pipeline_without_big_decide(self) -> None:
         _, session = self._create_plan_with_tomorrow_session()
+        now = get_local_now(self.user.timezone)
+        start = now.date()
+        end = start + timedelta(days=14)
         from fitmas.plan_patch_adaptation_policy import AdaptationPolicyDecision
         from fitmas.plan_patch_candidate_evaluator import EvaluatedPlanPatchCandidate
         from fitmas.plan_patch_candidates import PlanPatchCandidate, PlanPatchCandidateValidation
@@ -1675,9 +1732,16 @@ class FitMASCoreFlowsTest(unittest.TestCase):
         try:
             api_messages.plan_conversation_turn = lambda *args, **kwargs: SimpleNamespace(
                 primary_intent="plan_mutation",
-                secondary_intents=(),
+                secondary_intents=("availability_constraint",),
                 mutation_signal=True,
                 has_plan_mutation=True,
+                availability_constraint={
+                    "availability": "unavailable",
+                    "sport_type": "running",
+                    "starts_on": start.isoformat(),
+                    "ends_on": end.isoformat(),
+                    "scope": "sport",
+                },
                 confidence=0.93,
             )
 
@@ -1695,7 +1759,7 @@ class FitMASCoreFlowsTest(unittest.TestCase):
 
             result = self.client.post(
                 "/api/v0/messages",
-                json={"text": "On deplace la seance de demain a vendredi ?"},
+                json={"text": "Je ne peux pas courir deux semaines, adapte si besoin."},
             ).json()
         finally:
             api_messages.plan_conversation_turn = original_plan_turn
@@ -1718,6 +1782,7 @@ class FitMASCoreFlowsTest(unittest.TestCase):
         turns = repo.get_recent_conversation_turns(self.db, self.user.id, limit=1)
         context = json.loads(turns[0].context_json)
         pending = repo.get_active_pending_mutation_confirmation(self.db, self.user.id)
+        working = self.db.query(s.WorkingMemoryEntry).order_by(s.WorkingMemoryEntry.id).all()
 
         self.assertEqual(
             result["assistant_message"]["text"],
@@ -1725,8 +1790,93 @@ class FitMASCoreFlowsTest(unittest.TestCase):
         )
         self.assertEqual(turns[0].response_mode, "plan_adaptation_pending_confirmation")
         self.assertEqual(context["adaptation_candidate_flow"]["policy_action"], "pending_confirmation")
+        self.assertIn('"category": "availability"', turns[0].memory_writes_json)
+        self.assertEqual(working[0].key, f"unavailable_running_{start.isoformat()}_{end.isoformat()}")
         self.assertIsNotNone(pending)
         self.assertEqual(pending.mutation_type, "plan_patch")
+
+    def test_sport_unavailable_without_matching_session_records_memory_without_candidate(self) -> None:
+        self._create_plan_with_tomorrow_session()
+        now = get_local_now(self.user.timezone)
+        start = now.date()
+        end = start + timedelta(days=14)
+
+        original_plan_turn = api_messages.plan_conversation_turn
+        original_decide = api_messages.decide
+        original_extract_facts = api_messages.extract_facts
+        original_generate = conversation_pipeline.generate_plan_patch_candidates
+        try:
+            api_messages.plan_conversation_turn = lambda *args, **kwargs: SimpleNamespace(
+                primary_intent="plan_mutation",
+                secondary_intents=("availability_constraint",),
+                mutation_signal=True,
+                has_plan_mutation=True,
+                availability_constraint={
+                    "availability": "unavailable",
+                    "sport_type": "swimming",
+                    "starts_on": start.isoformat(),
+                    "ends_on": end.isoformat(),
+                    "scope": "sport",
+                },
+                confidence=0.94,
+            )
+            api_messages.decide = lambda *args, **kwargs: (_ for _ in ()).throw(
+                AssertionError("decide() should not run when no target sport session exists")
+            )
+            api_messages.extract_facts = lambda *args, **kwargs: []
+            conversation_pipeline.generate_plan_patch_candidates = lambda *args, **kwargs: (_ for _ in ()).throw(
+                AssertionError("candidate generator should not run without a matching sport session")
+            )
+
+            result = self.client.post(
+                "/api/v0/messages",
+                json={"text": "Je ne peux pas nager pendant deux semaines, adapte si besoin."},
+            ).json()
+        finally:
+            api_messages.plan_conversation_turn = original_plan_turn
+            api_messages.decide = original_decide
+            api_messages.extract_facts = original_extract_facts
+            conversation_pipeline.generate_plan_patch_candidates = original_generate
+
+        turns = repo.get_recent_conversation_turns(self.db, self.user.id, limit=1)
+        pending = repo.get_active_pending_mutation_confirmation(self.db, self.user.id)
+        working = self.db.query(s.WorkingMemoryEntry).order_by(s.WorkingMemoryEntry.id).all()
+        events = self.db.query(s.PlanMutationEventRecord).all()
+
+        self.assertEqual(turns[0].response_mode, "availability_no_affected_session")
+        self.assertFalse(turns[0].pending_confirmation)
+        self.assertIsNone(pending)
+        self.assertEqual(events, [])
+        self.assertEqual(working[0].key, f"unavailable_swimming_{start.isoformat()}_{end.isoformat()}")
+        self.assertIn("aucune", result["assistant_message"]["text"].lower())
+        self.assertIn("natation", result["assistant_message"]["text"].lower())
+
+    def test_sport_unavailable_no_candidate_requires_resolved_window_end(self) -> None:
+        now = get_local_now(self.user.timezone)
+        turn_plan = SimpleNamespace(
+            availability_constraint={
+                "availability": "unavailable",
+                "sport_type": "swimming",
+                "starts_on": now.date().isoformat(),
+                "ends_on": None,
+                "scope": "sport",
+            }
+        )
+        scheduled = [
+            SimpleNamespace(
+                scheduled_date=now + timedelta(days=11),
+                sport_type="swimming",
+                completion_status="planned",
+            )
+        ]
+
+        result = conversation_pipeline._availability_no_affected_sport_session(
+            turn_plan=turn_plan,
+            grounding=None,
+            scheduled_sessions=scheduled,
+        )
+
+        self.assertIsNone(result)
 
     def test_new_plan_mutation_supersedes_old_pending_and_uses_candidate_flow_after_legacy_no_change(self) -> None:
         _, session = self._create_plan_with_tomorrow_session()

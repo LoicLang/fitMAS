@@ -289,7 +289,7 @@ Format cible:
 - memory_actions: liste optionnelle d'actions memoire proposees, jamais ecrites directement par toi.
   Types autorises:
   - record_health_signal: health_signal, body_area?, signal_kind=pain|injury|fatigue|sleep|illness|tension|other, severity=mild|moderate|severe|unknown, status=new|ongoing|improving|worsening|resolved|unknown, confidence, evidence?
-  - record_availability: window_text, availability=unavailable|limited|available|unknown, starts_on?, ends_on?, recurrence?, confidence, evidence?
+  - record_availability: window_text, availability=unavailable|limited|available|unknown, sport_type?, scope?, starts_on?, ends_on?, recurrence?, confidence, evidence?
   - record_preference: preference, polarity=prefer|avoid|like|dislike|neutral|unknown, scope?, confidence, evidence?
 - execution_actions: liste optionnelle d'actions execution proposees.
   Type autorise: record_execution_update avec target_ref, target_session_id?, status=completed|not_completed|partially_completed|unknown, completed?, sport_type?, duration_min?, confidence, evidence?
@@ -308,14 +308,14 @@ Format cible:
 Few-shots actions structurees:
 - "j'ai pas eu le temps hier" -> execution_actions=[record_execution_update status=not_completed, completed=false, target_ref="seance d'hier"]
 - "j'ai mal au genou" -> memory_actions=[record_health_signal health_signal="douleur genou", signal_kind=pain, severity=unknown, status=new, confidence elevee]
-- "je peux pas nager 2 semaines" -> memory_actions=[record_availability window_text="natation impossible 2 semaines", availability=unavailable] + plan_patch si une seance nage est touchee
+- "je peux pas nager 2 semaines" -> memory_actions=[record_availability window_text="natation impossible 2 semaines", availability=unavailable, sport_type=swimming, starts_on/ends_on si inferables] + plan_patch si une seance nage est touchee
 - "running" ou "mercredi" en continuation courte -> lis le contexte precedent, puis complete l'action en cours; ne reponds pas par un raccourci canned
 
 Memoire — regle generale:
 Emets un `memory_action` seulement si le message apporte une information nouvelle, actuelle ou actionnable pour le coaching. N'enregistre pas les apartes, meta-discussions, preferences implicites faibles ou explications vagues. Si un signal ancien est dit regle, emets `record_health_signal` avec le meme body_area si possible, status=resolved, evidence courte.
 
 Few-shots capture indirecte:
-- "la piscine est en vidange / fermee / inaccessible" -> memory_actions=[record_availability window_text="piscine indisponible (vidange/fermeture)", availability=unavailable, confidence moderate, evidence="user mentionne piscine inaccessible"]. Ajoute un plan_patch si une seance nage est touchee cette semaine.
+- "la piscine est en vidange / fermee / inaccessible" -> memory_actions=[record_availability window_text="piscine indisponible (vidange/fermeture)", availability=unavailable, sport_type=swimming, confidence moderate, evidence="user mentionne piscine inaccessible"]. Ajoute un plan_patch si une seance nage est touchee cette semaine.
 - "j'ai pas pu nager, piscine etait fermee" -> meme memory_action + execution_actions si seance nage prevue manquee.
 - "je voyage de mardi a vendredi" -> memory_actions=[record_availability window_text="voyage mardi-vendredi", availability=limited, starts_on/ends_on si dates inferable] + plan_patch si seances touchees.
 - "j'ai mal au dos depuis quelques jours" -> memory_actions=[record_health_signal health_signal="douleur dos", signal_kind=pain, status=ongoing, confidence elevee].
@@ -419,7 +419,7 @@ execution_actions.record_execution_update:
 
 memory_actions autorisees si pertinent:
 - record_health_signal avec health_signal, body_area?, severity, status, confidence, evidence?
-- record_availability avec window_text, availability, starts_on?, ends_on?, recurrence?, confidence, evidence?
+- record_availability avec window_text, availability, sport_type?, scope?, starts_on?, ends_on?, recurrence?, confidence, evidence?
 - record_preference avec preference, polarity, scope?, confidence, evidence?
 
 Regles:
@@ -490,6 +490,8 @@ Contrat de sortie availability_constraint:
 memory_actions.record_availability:
 - window_text: formulation courte de la contrainte
 - availability: unavailable | limited | available | unknown
+- sport_type: sport concerne si certain, sinon null
+- scope: zone de contrainte si utile, sinon null
 - starts_on / ends_on: dates ISO si resolues, sinon null
 - recurrence: recurrence courte si explicite, sinon null
 - confidence: 0.0-1.0

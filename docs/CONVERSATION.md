@@ -173,14 +173,15 @@ runtime conversation :
   et legacy `MutationDecision(no_change)` passent par `final_reply.py` avant
   l'envoi. Le backend transmet seulement des faits machine : brouillon LLM,
   absence de commit planning, actions memoire/execution deja appliquees.
-- Composer final `plan_lookup` (5 mai 2026) : quand le turn planner LLM a classe
-  le tour en lecture factuelle, le composer final utilise une capability
-  dediee. Sa sortie est rejetee si elle change les tokens factuels sensibles du
-  brouillon LLM initial (chiffres, jours, dates relatives, zones, statuts).
-  Si la reformulation derive ou echoue, le backend garde le brouillon initial
-  valide comme sortie terminale `plan_lookup`, plutot que de retomber sur la
-  voie legacy `reply`. Une reformulation qui rouvre le tour avec une question
-  est rejetee. Le guard compare des artefacts LLM, pas le texte user libre.
+- Composer final `plan_lookup` (5 mai 2026, durci 13 mai 2026) : quand le turn
+  planner LLM classe le tour en lecture factuelle, le composer final utilise une
+  capability dediee et verifie la sortie contre le grounding DB
+  (`ReplyGroundingPacket`). Un hard guard deterministe bloque les durees
+  minutes, dates ISO, jours/sports/statuts manifestement incompatibles avec le
+  planning lu, meme si le verifier LLM dit `allow`. Si le composer et le
+  brouillon initial ne sont pas reparables, le fallback liste le grounding DB
+  compact plutot que de renvoyer une hallucination. Le guard compare des
+  artefacts machine, pas le texte user libre.
 - Compat pending PlanPatch (5 mai 2026) : si une confirmation `plan_patch`
   existe et que le LLM ressort exactement la meme operation sous forme legacy
   `MutationDecision` au lieu de `pending_resolution.accept_pending`, le backend

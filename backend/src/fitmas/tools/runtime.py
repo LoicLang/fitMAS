@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import logging
 from dataclasses import dataclass
 from time import perf_counter
@@ -10,11 +11,23 @@ from fitmas.tools.registry import build_tool_registry
 
 logger = logging.getLogger(__name__)
 
+TOOL_DUPLICATE_CACHED = "tool_duplicate_cached"
+
 
 @dataclass(frozen=True, slots=True)
 class ToolExecution:
     result: ToolResult
     trace: ToolTrace
+
+
+def count_budgeted_tool_executions(executions: list[ToolExecution]) -> int:
+    """Count real tool executions that should consume the per-turn budget."""
+    return sum(
+        1
+        for execution in executions
+        if execution.result.error != "tool_budget_exceeded"
+        and getattr(execution.trace, "tool_error", None) != TOOL_DUPLICATE_CACHED
+    )
 
 
 def execute_tool_call(
@@ -128,12 +141,30 @@ def execute_tool_calls(
     llm_round_trips: int = 1,
     prompt_tokens_estimate: int | None = None,
     response_tokens_estimate: int | None = None,
+    result_cache: dict[str, ToolExecution] | None = None,
 ) -> list[ToolExecution]:
     """Execute a bounded batch of tools and preserve one result per call."""
     executions: list[ToolExecution] = []
     budget = max(0, max_tools)
-    for index, call in enumerate(calls):
-        if index >= budget:
+    budget_used = 0
+    cache = result_cache if result_cache is not None else {}
+    for call in calls:
+        cache_key = _tool_cache_key(call)
+        cached_execution = cache.get(cache_key)
+        if cached_execution is not None:
+            executions.append(
+                _cached_tool_execution(
+                    cached_execution,
+                    context=context,
+                    fallback_used=fallback_used,
+                    llm_round_trips=llm_round_trips,
+                    prompt_tokens_estimate=prompt_tokens_estimate,
+                    response_tokens_estimate=response_tokens_estimate,
+                )
+            )
+            continue
+
+        if budget_used >= budget:
             result = ToolResult(
                 tool_name=call.tool_name,
                 status="error",
@@ -164,8 +195,52 @@ def execute_tool_calls(
             prompt_tokens_estimate=prompt_tokens_estimate,
             response_tokens_estimate=response_tokens_estimate,
         )
-        executions.append(ToolExecution(result=result, trace=trace))
+        execution = ToolExecution(result=result, trace=trace)
+        executions.append(execution)
+        cache[cache_key] = execution
+        budget_used += 1
     return executions
+
+
+def _tool_cache_key(call: ToolCall) -> str:
+    arguments = json.dumps(call.arguments, sort_keys=True, default=str, ensure_ascii=True)
+    return f"{call.tool_name}:{arguments}"
+
+
+def _cached_tool_execution(
+    cached_execution: ToolExecution,
+    *,
+    context: ToolContext,
+    fallback_used: bool,
+    llm_round_trips: int,
+    prompt_tokens_estimate: int | None,
+    response_tokens_estimate: int | None,
+) -> ToolExecution:
+    cached_result = cached_execution.result
+    summary = cached_result.summary or "Resultat tool deja lu dans ce tour."
+    if "deja lu" not in summary.lower():
+        summary = f"{summary} [Resultat deja lu dans ce tour; reutilise sans nouvel appel.]"
+    result = ToolResult(
+        tool_name=cached_result.tool_name,
+        status=cached_result.status,
+        payload=cached_result.payload,
+        summary=summary,
+        error=cached_result.error,
+    )
+    trace = build_tool_trace(
+        pipeline=context.pipeline,
+        tool_name=result.tool_name,
+        tool_requested=True,
+        tool_called=False,
+        tool_success=result.status == "ok",
+        tool_error=TOOL_DUPLICATE_CACHED,
+        fallback_used=fallback_used,
+        llm_round_trips=llm_round_trips,
+        prompt_tokens_estimate=prompt_tokens_estimate,
+        response_tokens_estimate=response_tokens_estimate,
+    )
+    log_tool_trace(trace, logger=logger)
+    return ToolExecution(result=result, trace=trace)
 
 
 # ---------------------------------------------------------------------------

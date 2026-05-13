@@ -49,6 +49,20 @@ def test_factual_verifier_repairs_reply_against_grounding_packet() -> None:
     assert calls
 
 
+def test_factual_hard_guard_rejects_verifier_allow_with_wrong_duration() -> None:
+    def fake_request_text(**kwargs):
+        return '{"verdict":"allow","reason":"ok","repaired_reply":""}'
+
+    reply = verify_factual_reply(
+        "Vendredi, tu as le footing Z2 de 50 minutes.",
+        grounding=_packet(),
+        pipeline_capability="plan_lookup",
+        request_text_fn=fake_request_text,
+    )
+
+    assert reply is None
+
+
 def test_plan_lookup_uses_semantic_verifier_not_original_token_guard() -> None:
     request_calls = 0
 
@@ -72,3 +86,20 @@ def test_plan_lookup_uses_semantic_verifier_not_original_token_guard() -> None:
 
     assert reply == "Vendredi, tu as le footing Z2 de 40 minutes."
     assert request_calls == 2
+
+
+def test_plan_lookup_grounding_falls_back_to_db_summary_when_verifier_cannot_repair() -> None:
+    def fake_request_text(**kwargs):
+        if "Reponse sortante a verifier:" in kwargs["prompt"]:
+            return '{"verdict":"allow","reason":"ok","repaired_reply":""}'
+        return "Vendredi, tu as le footing Z2 de 50 minutes."
+
+    reply = compose_plan_lookup_reply(
+        user_text="J'ai quoi vendredi ?",
+        original_llm_reply="Vendredi, tu as le footing Z2 de 50 minutes.",
+        grounding=_packet(),
+        request_text_fn=fake_request_text,
+        verifier_text_fn=fake_request_text,
+    )
+
+    assert reply == "Vendredi: Footing Z2, running, 40 min, statut adapted."

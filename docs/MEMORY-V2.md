@@ -206,8 +206,28 @@ Exemples :
 -> record_health_signal(signal_kind=tension, body_area=tibia, status=resolved)
 
 "je ne peux pas nager deux semaines"
--> record_availability(availability=unavailable, starts_on/ends_on si inferables)
+-> record_availability(availability=unavailable, sport_type=swimming, starts_on/ends_on si inferables)
 ```
+
+Disponibilite sport-specific — 13 mai 2026 :
+
+- `record_availability` accepte maintenant `sport_type` et `scope` dans le
+  contrat structure.
+- Si `availability=unavailable`, `sport_type` est connu, et la fenetre
+  `starts_on/ends_on` est resolue, le writer produit une cle canonique :
+  `unavailable_<sport>_<start>_<end>`.
+- Exemple : `unavailable_swimming_2026-05-01_2026-05-14`.
+- Le writer normalise quelques alias sportifs sur le champ type
+  (`natation` -> `swimming`, `velo` -> `cycling`, `renfo` -> `strength`) avant
+  de produire la cle.
+- Cette cle est une convention machine consommee par les clarifications
+  execution et les replans futurs. Elle vient uniquement d'une action LLM
+  typee, jamais d'un regex sur le texte utilisateur.
+- Si un tour `plan_mutation` est traite par la candidate-flow avant `decide()`,
+  le writer peut aussi persister cette memoire depuis l'artefact type
+  `turn_plan.availability_constraint` (`source=turn_plan`). C'est toujours
+  LLM-first : le routeur LLM a produit l'artefact, le backend ne relit pas le
+  texte libre.
 
 ### Lecture readiness
 
