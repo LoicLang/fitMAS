@@ -1,9 +1,9 @@
 route: conversation_plan_negotiation
 contract: conversation_plan_negotiation
-tool_budget: ['get_today_context', 'get_plan_window', 'resolve_planning_window', 'get_recent_activities', 'get_activity_highlights', 'get_recent_reality_window', 'get_load_context', 'get_relevant_facts', 'get_user_constraints', 'suggest_replan_candidates', 'draft_move_session', 'draft_swap_sessions', 'draft_replace_session', 'draft_lighten_day', 'draft_create_session', 'validate_plan_patch', 'validate_week_coherence']
+tool_budget: ['get_plan_window', 'resolve_planning_window', 'get_user_constraints', 'suggest_replan_candidates', 'draft_move_session', 'draft_swap_sessions', 'draft_replace_session', 'draft_lighten_day', 'draft_create_session', 'validate_plan_patch']
 truth_blocks: ['temporal', 'planning', 'execution_reality', 'working_memory', 'active_thread', 'pending_confirmation']
 output_schema: CoachDecision
-trace: {'route': 'conversation_decide', 'provider': None, 'model': None, 'prompt_policy': 'plan_negotiation_full', 'prompt_contract': 'conversation_plan_negotiation', 'intent': 'plan_mutation', 'system_chars': 7785, 'user_chars': 73, 'total_chars': 7858, 'tool_names': ('get_today_context', 'get_plan_window', 'resolve_planning_window', 'get_recent_activities', 'get_activity_highlights', 'get_recent_reality_window', 'get_load_context', 'get_relevant_facts', 'get_user_constraints', 'suggest_replan_candidates', 'draft_move_session', 'draft_swap_sessions', 'draft_replace_session', 'draft_lighten_day', 'draft_create_session', 'validate_plan_patch', 'validate_week_coherence'), 'truth_block_names': ('temporal', 'planning', 'execution_reality', 'working_memory', 'active_thread', 'pending_confirmation'), 'history_messages_used': 2}
+trace: {'route': 'conversation_decide', 'provider': None, 'model': None, 'prompt_policy': 'plan_negotiation_full', 'prompt_contract': 'conversation_plan_negotiation', 'intent': 'plan_mutation', 'system_chars': 7647, 'user_chars': 73, 'total_chars': 7720, 'tool_names': ('get_plan_window', 'resolve_planning_window', 'get_user_constraints', 'suggest_replan_candidates', 'draft_move_session', 'draft_swap_sessions', 'draft_replace_session', 'draft_lighten_day', 'draft_create_session', 'validate_plan_patch'), 'truth_block_names': ('temporal', 'planning', 'execution_reality', 'working_memory', 'active_thread', 'pending_confirmation'), 'history_messages_used': 2}
 
 ## SYSTEM
 Tu es FitMAS, un coach multisport IA.
@@ -33,7 +33,7 @@ Note conversation : ces regles s'appliquent au champ `fitmas_message` du JSON Co
 Contrat du tour:
 - route: conversation_plan_negotiation
 - capacite: draft_action
-- tools autorises: get_today_context, get_plan_window, resolve_planning_window, get_recent_activities, get_activity_highlights, get_recent_reality_window, get_load_context, get_relevant_facts, get_user_constraints, suggest_replan_candidates, draft_move_session, draft_swap_sessions, draft_replace_session, draft_lighten_day, draft_create_session, validate_plan_patch, validate_week_coherence
+- tools autorises: get_plan_window, resolve_planning_window, get_user_constraints, suggest_replan_candidates, draft_move_session, draft_swap_sessions, draft_replace_session, draft_lighten_day, draft_create_session, validate_plan_patch
 - actions autorisees: PlanPatch, pending_resolution, memory_actions
 - verites requises: temporal, planning, execution_reality
 - verites optionnelles: working_memory, active_thread, pending_confirmation
@@ -49,7 +49,7 @@ Workflow replan_after_constraint compact:
 - Lis les tools read-only utiles avant de trancher une mutation.
 - Les tools `draft_move_session`, `draft_swap_sessions`, `draft_replace_session`, `draft_lighten_day`, `draft_create_session` construisent un PlanPatch candidat mais ne commit jamais.
 - `suggest_replan_candidates` donne une aide candidate, pas une decision finale.
-- `validate_week_coherence` juge le compromis sportif ; le backend revalide toujours avant commit.
+- Pas de review sportive longue dans le tour conversation; le backend review sportive revalide toujours avant commit.
 - Retourne `plan_patch`, `requires_confirmation` ou `no_change` selon les faits fournis.
 
 Analyse le message utilisateur et decide quelle action prendre sur le calendrier d'entrainement reel.

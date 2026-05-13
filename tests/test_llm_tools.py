@@ -10,14 +10,8 @@ from fitmas.tool_contract import ToolContext, ToolResult
 
 
 CANONICAL_CONVERSATION_TOOLS = [
-    "get_today_context",
     "get_plan_window",
     "resolve_planning_window",
-    "get_recent_activities",
-    "get_activity_highlights",
-    "get_recent_reality_window",
-    "get_load_context",
-    "get_relevant_facts",
     "get_user_constraints",
     "suggest_replan_candidates",
     "draft_move_session",
@@ -26,7 +20,20 @@ CANONICAL_CONVERSATION_TOOLS = [
     "draft_lighten_day",
     "draft_create_session",
     "validate_plan_patch",
-    "validate_week_coherence",
+]
+
+AVAILABILITY_CONSTRAINT_TOOLS = [
+    "resolve_planning_window",
+    "get_plan_window",
+    "get_user_constraints",
+]
+
+HEALTH_SIGNAL_TOOLS = [
+    "get_plan_window",
+    "get_user_constraints",
+    "draft_lighten_day",
+    "draft_replace_session",
+    "validate_plan_patch",
 ]
 
 PLAN_LOOKUP_CONTRACT_TOOLS = [
@@ -340,6 +347,7 @@ class LLMToolsTest(unittest.TestCase):
         original_client = llm._client
         original_request_message = llm._request_message
         original_execute_tool_calls = llm.execute_tool_calls
+        original_request_structured_json = llm._request_structured_json
         original_log_tool_trace = llm.log_tool_trace
         captured: dict[str, object] = {"calls": 0}
         traces: list[object] = []
@@ -391,9 +399,17 @@ class LLMToolsTest(unittest.TestCase):
                 trace=SimpleNamespace(tool_success=True, tool_called=True, tool_latency_ms=12))
             ]
 
+        def fake_request_structured_json(*, system, messages, model="claude-haiku-4-5-20251001", max_tokens=1024):
+            return {
+                "mutation_type": "no_change",
+                "rationale": "lecture outillee compilee",
+                "fitmas_message": "Jeudi, tu as une sortie running.",
+            }
+
         llm._client = lambda: object()
         llm._request_message = fake_request_message
         llm.execute_tool_calls = fake_execute_tool_calls
+        llm._request_structured_json = fake_request_structured_json
         llm.log_tool_trace = lambda trace: traces.append(trace)
         try:
             decision = llm.decide(
@@ -413,6 +429,7 @@ class LLMToolsTest(unittest.TestCase):
             llm._client = original_client
             llm._request_message = original_request_message
             llm.execute_tool_calls = original_execute_tool_calls
+            llm._request_structured_json = original_request_structured_json
             llm.log_tool_trace = original_log_tool_trace
 
         self.assertIsNotNone(decision)
@@ -423,12 +440,171 @@ class LLMToolsTest(unittest.TestCase):
         self.assertTrue(traces[0].tool_requested)
         self.assertTrue(traces[0].tool_called)
         self.assertEqual(traces[0].tool_name, "get_plan_window")
-        self.assertEqual(traces[0].llm_round_trips, 2)
+        self.assertEqual(traces[0].llm_round_trips, 3)
         self.assertEqual(traces[0].context_policy, "plan_lookup_compact")
         self.assertEqual(traces[0].tool_count_offered, len(PLAN_LOOKUP_CONTRACT_TOOLS))
         self.assertGreaterEqual(traces[0].prompt_char_count, 1)
         self.assertNotIn("Repere legacy semaine courante", prompts[0])
         self.assertNotIn("Calendrier date reel", prompts[0])
+
+    def test_tool_followup_json_is_compiled_before_decision_parse(self) -> None:
+        original_client = llm._client
+        original_request_message = llm._request_message
+        original_execute_tool_calls = llm.execute_tool_calls
+        original_request_structured_json = llm._request_structured_json
+        original_log_tool_trace = llm.log_tool_trace
+        calls = {"messages": 0, "structured": 0}
+        compiler_prompts: list[str] = []
+
+        def fake_request_message(*, system, messages, model="claude-haiku-4-5-20251001", max_tokens=512, tools=None, tool_choice=None):
+            calls["messages"] += 1
+            if calls["messages"] == 1:
+                return SimpleNamespace(
+                    stop_reason="tool_use",
+                    content=[SimpleNamespace(type="tool_use", id="toolu_1", name="get_plan_window", input={})],
+                    usage=SimpleNamespace(input_tokens=120, output_tokens=32),
+                )
+            return SimpleNamespace(
+                stop_reason="end_turn",
+                content=[
+                    SimpleNamespace(
+                        type="text",
+                        text='{"response_type":"no_change","rationale":"json direct non fiable","fitmas_message":"Message direct de la phase tool."}',
+                    )
+                ],
+                usage=SimpleNamespace(input_tokens=180, output_tokens=48),
+            )
+
+        def fake_execute_tool_calls(calls, *, context, **kwargs):
+            return [
+                SimpleNamespace(
+                    result=ToolResult(
+                        tool_name=calls[0].tool_name,
+                        status="ok",
+                        payload={"sessions": [{"id": 77, "scheduled_date": "2099-04-29", "session_title": "Sortie running"}]},
+                        summary="Une seance running trouvee.",
+                    ),
+                    trace=SimpleNamespace(tool_success=True, tool_called=True, tool_latency_ms=1),
+                )
+            ]
+
+        def fake_request_structured_json(*, system, messages, model="claude-haiku-4-5-20251001", max_tokens=1024):
+            calls["structured"] += 1
+            compiler_prompts.append(str(messages[0]["content"]))
+            return {
+                "response_type": "no_change",
+                "rationale": "decision compilee depuis les resultats tools",
+                "fitmas_message": "Je vois la sortie running du 29 avril.",
+            }
+
+        llm._client = lambda: object()
+        llm._request_message = fake_request_message
+        llm.execute_tool_calls = fake_execute_tool_calls
+        llm._request_structured_json = fake_request_structured_json
+        llm.log_tool_trace = lambda trace: None
+        try:
+            decision = llm.decide(
+                "Redonne-moi la seance du 29",
+                "Repere",
+                coach_context={"turn_primary_intent": "plan_lookup"},
+                tool_context=ToolContext(
+                    pipeline="conversation",
+                    user_id=1,
+                    timezone_name="Europe/Paris",
+                    scheduled_sessions=[],
+                    activities=[],
+                    active_facts=[],
+                ),
+            )
+        finally:
+            llm._client = original_client
+            llm._request_message = original_request_message
+            llm.execute_tool_calls = original_execute_tool_calls
+            llm._request_structured_json = original_request_structured_json
+            llm.log_tool_trace = original_log_tool_trace
+
+        self.assertIsNotNone(decision)
+        self.assertEqual(decision.fitmas_message, "Je vois la sortie running du 29 avril.")
+        self.assertEqual(calls["messages"], 2)
+        self.assertEqual(calls["structured"], 1)
+        self.assertIn("RESULTATS_TOOLS", compiler_prompts[0])
+        self.assertIn('"id": 77', compiler_prompts[0])
+        self.assertIn("Message direct de la phase tool", compiler_prompts[0])
+
+    def test_tool_compiler_provider_error_falls_back_to_tool_phase_json(self) -> None:
+        original_client = llm._client
+        original_request_message = llm._request_message
+        original_execute_tool_calls = llm.execute_tool_calls
+        original_request_structured_json = llm._request_structured_json
+        original_log_tool_trace = llm.log_tool_trace
+        calls = {"messages": 0, "structured": 0}
+
+        def fake_request_message(*, system, messages, model="claude-haiku-4-5-20251001", max_tokens=512, tools=None, tool_choice=None):
+            calls["messages"] += 1
+            if calls["messages"] == 1:
+                return SimpleNamespace(
+                    stop_reason="tool_use",
+                    content=[SimpleNamespace(type="tool_use", id="toolu_1", name="get_plan_window", input={})],
+                    usage=SimpleNamespace(input_tokens=120, output_tokens=32),
+                )
+            return SimpleNamespace(
+                stop_reason="end_turn",
+                content=[
+                    SimpleNamespace(
+                        type="text",
+                        text='{"response_type":"no_change","rationale":"fallback direct","fitmas_message":"Je garde la reponse de secours."}',
+                    )
+                ],
+                usage=SimpleNamespace(input_tokens=180, output_tokens=48),
+            )
+
+        def fake_execute_tool_calls(calls, *, context, **kwargs):
+            return [
+                SimpleNamespace(
+                    result=ToolResult(
+                        tool_name=calls[0].tool_name,
+                        status="ok",
+                        payload={"sessions": []},
+                        summary="Plan lu.",
+                    ),
+                    trace=SimpleNamespace(tool_success=True, tool_called=True, tool_latency_ms=1),
+                )
+            ]
+
+        def failing_request_structured_json(*args, **kwargs):
+            calls["structured"] += 1
+            raise RuntimeError("compiler provider unavailable")
+
+        llm._client = lambda: object()
+        llm._request_message = fake_request_message
+        llm.execute_tool_calls = fake_execute_tool_calls
+        llm._request_structured_json = failing_request_structured_json
+        llm.log_tool_trace = lambda trace: None
+        try:
+            decision = llm.decide(
+                "Relis mon plan",
+                "Repere",
+                coach_context={"turn_primary_intent": "plan_lookup"},
+                tool_context=ToolContext(
+                    pipeline="conversation",
+                    user_id=1,
+                    timezone_name="Europe/Paris",
+                    scheduled_sessions=[],
+                    activities=[],
+                    active_facts=[],
+                ),
+            )
+        finally:
+            llm._client = original_client
+            llm._request_message = original_request_message
+            llm.execute_tool_calls = original_execute_tool_calls
+            llm._request_structured_json = original_request_structured_json
+            llm.log_tool_trace = original_log_tool_trace
+
+        self.assertIsNotNone(decision)
+        self.assertEqual(decision.fitmas_message, "Je garde la reponse de secours.")
+        self.assertEqual(calls["messages"], 2)
+        self.assertEqual(calls["structured"], 1)
 
     def test_decide_logs_when_tools_are_offered_but_not_used(self) -> None:
         original_client = llm._client
@@ -548,6 +724,7 @@ class LLMToolsTest(unittest.TestCase):
         original_client = llm._client
         original_request_message = llm._request_message
         original_execute_tool_calls = llm.execute_tool_calls
+        original_request_structured_json = llm._request_structured_json
         original_log_tool_trace = llm.log_tool_trace
         calls = {"count": 0}
         followup_tool_results: list[dict[str, object]] = []
@@ -594,9 +771,17 @@ class LLMToolsTest(unittest.TestCase):
                 ),
             ]
 
+        def fake_request_structured_json(*, system, messages, model="claude-haiku-4-5-20251001", max_tokens=1024):
+            return {
+                "mutation_type": "no_change",
+                "rationale": "lecture compilee",
+                "fitmas_message": "OK.",
+            }
+
         llm._client = lambda: object()
         llm._request_message = fake_request_message
         llm.execute_tool_calls = fake_execute_tool_calls
+        llm._request_structured_json = fake_request_structured_json
         llm.log_tool_trace = lambda trace: None
         try:
             decision = llm.decide(
@@ -616,6 +801,7 @@ class LLMToolsTest(unittest.TestCase):
             llm._client = original_client
             llm._request_message = original_request_message
             llm.execute_tool_calls = original_execute_tool_calls
+            llm._request_structured_json = original_request_structured_json
             llm.log_tool_trace = original_log_tool_trace
 
         self.assertIsNotNone(decision)
@@ -630,6 +816,7 @@ class LLMToolsTest(unittest.TestCase):
         original_client = llm._client
         original_request_message = llm._request_message
         original_execute_tool_calls = llm.execute_tool_calls
+        original_request_structured_json = llm._request_structured_json
         original_log_tool_trace = llm.log_tool_trace
         calls = {"messages": 0}
         executed_batches: list[list[str]] = []
@@ -690,9 +877,17 @@ class LLMToolsTest(unittest.TestCase):
                 for call in calls
             ]
 
+        def fake_request_structured_json(*, system, messages, model="claude-haiku-4-5-20251001", max_tokens=1024):
+            return {
+                "response_type": "no_change",
+                "rationale": "lecture puis validation compilee",
+                "fitmas_message": "Je valide avant de toucher au plan.",
+            }
+
         llm._client = lambda: object()
         llm._request_message = fake_request_message
         llm.execute_tool_calls = fake_execute_tool_calls
+        llm._request_structured_json = fake_request_structured_json
         llm.log_tool_trace = lambda trace: None
         try:
             decision = llm.decide(
@@ -712,6 +907,7 @@ class LLMToolsTest(unittest.TestCase):
             llm._client = original_client
             llm._request_message = original_request_message
             llm.execute_tool_calls = original_execute_tool_calls
+            llm._request_structured_json = original_request_structured_json
             llm.log_tool_trace = original_log_tool_trace
 
         self.assertIsNotNone(decision)
@@ -723,6 +919,7 @@ class LLMToolsTest(unittest.TestCase):
         original_client = llm._client
         original_request_message = llm._request_message
         original_execute_tool_calls = llm.execute_tool_calls
+        original_request_structured_json = llm._request_structured_json
         original_log_tool_trace = llm.log_tool_trace
         thinking_calls: list[tuple[object, object]] = []
 
@@ -763,9 +960,17 @@ class LLMToolsTest(unittest.TestCase):
                 )
             ]
 
+        def fake_request_structured_json(*, system, messages, model="claude-haiku-4-5-20251001", max_tokens=1024):
+            return {
+                "response_type": "no_change",
+                "rationale": "lecture outillee compilee",
+                "fitmas_message": "Je relis avant de toucher au plan.",
+            }
+
         llm._client = lambda: object()
         llm._request_message = fake_request_message
         llm.execute_tool_calls = fake_execute_tool_calls
+        llm._request_structured_json = fake_request_structured_json
         llm.log_tool_trace = lambda trace: None
         try:
             with patch.dict(
@@ -794,6 +999,7 @@ class LLMToolsTest(unittest.TestCase):
             llm._client = original_client
             llm._request_message = original_request_message
             llm.execute_tool_calls = original_execute_tool_calls
+            llm._request_structured_json = original_request_structured_json
             llm.log_tool_trace = original_log_tool_trace
 
         self.assertIsNotNone(decision)
@@ -1649,6 +1855,244 @@ class LLMToolsTest(unittest.TestCase):
         self.assertEqual(decision.memory_actions[0].type, "record_availability")
         self.assertIn("record_availability", prompts[1])
 
+    def test_execution_compiler_uses_turn_plan_execution_claim(self) -> None:
+        original_client = llm._client
+        original_request_structured_json = llm._request_structured_json
+        prompts: list[str] = []
+
+        def fake_request_structured_json(*, system, messages, model="claude-haiku-4-5-20251001", max_tokens=1024):
+            prompts.append(str(messages[0]["content"]))
+            if len(prompts) == 1:
+                return {
+                    "response_type": "no_change",
+                    "rationale": "tour execution compris",
+                    "fitmas_message": "Compris. On garde la suite simple.",
+                }
+            return {
+                "execution_actions": [
+                    {
+                        "type": "record_execution_update",
+                        "target_ref": "seance d'hier",
+                        "status": "not_completed",
+                        "completed": False,
+                        "sport_type": "running",
+                        "confidence": 0.9,
+                        "evidence": "execution_claim turn planner",
+                    }
+                ]
+            }
+
+        llm._client = lambda: object()
+        llm._request_structured_json = fake_request_structured_json
+        try:
+            decision = llm.decide(
+                "Pas eu le temps",
+                "Repere",
+                coach_context={
+                    "turn_primary_intent": "execution_report",
+                    "turn_plan": {
+                        "primary_intent": "execution_report",
+                        "execution_claim": {
+                            "status": "not_done",
+                            "sport_type": "running",
+                            "date": "2026-05-11",
+                        },
+                    },
+                },
+            )
+        finally:
+            llm._client = original_client
+            llm._request_structured_json = original_request_structured_json
+
+        self.assertIsInstance(decision, llm.CoachDecision)
+        self.assertEqual(len(decision.execution_actions), 1)
+        self.assertEqual(decision.execution_actions[0].status, "not_completed")
+        self.assertEqual(decision.execution_actions[0].sport_type, "running")
+        self.assertIn("EXECUTION_COMPILER", prompts[1])
+        self.assertIn("PlanPatch interdit", prompts[1])
+
+    def test_health_memory_compiler_adds_resolved_health_action_only(self) -> None:
+        original_client = llm._client
+        original_request_structured_json = llm._request_structured_json
+        prompts: list[str] = []
+
+        def fake_request_structured_json(*, system, messages, model="claude-haiku-4-5-20251001", max_tokens=1024):
+            prompts.append(str(messages[0]["content"]))
+            if len(prompts) == 1:
+                return {
+                    "response_type": "no_change",
+                    "rationale": "signal sante compris sans adaptation planning",
+                    "fitmas_message": "Bonne nouvelle. On reprend prudemment.",
+                }
+            return {
+                "memory_actions": [
+                    {
+                        "action": "record_health_signal",
+                        "health_signal": "douleur genou resolue",
+                        "body_area": "genou",
+                        "signal_kind": "pain",
+                        "severity": "mild",
+                        "status": "resolved",
+                        "confidence": 0.9,
+                        "evidence": "douleur passee",
+                    }
+                ]
+            }
+
+        llm._client = lambda: object()
+        llm._request_structured_json = fake_request_structured_json
+        try:
+            decision = llm.decide(
+                "La douleur est passee",
+                "Repere",
+                coach_context={
+                    "turn_primary_intent": "health_signal",
+                    "turn_plan": {"primary_intent": "health_signal"},
+                    "selected_facts": [
+                        {
+                            "category": "health",
+                            "key": "health_genou",
+                            "value": "douleur genou",
+                            "status": "ongoing",
+                        }
+                    ],
+                },
+            )
+        finally:
+            llm._client = original_client
+            llm._request_structured_json = original_request_structured_json
+
+        self.assertIsInstance(decision, llm.CoachDecision)
+        self.assertEqual(len(decision.memory_actions), 1)
+        self.assertEqual(decision.memory_actions[0].type, "record_health_signal")
+        self.assertEqual(decision.memory_actions[0].status, "resolved")
+        self.assertIsNone(decision.plan_patch)
+        self.assertIn("HEALTH_MEMORY_COMPILER", prompts[1])
+        self.assertIn("PlanPatch interdit", prompts[1])
+        self.assertIn("meme si un plan_patch existe", prompts[1])
+        self.assertIn('"action_expected_when_scope_confident": true', prompts[1])
+        self.assertIn('"minimum_actions_when_scope_confident": 1', prompts[1])
+        self.assertIn('"turn_intents": ["health_signal"]', prompts[1])
+        self.assertIn("memory_actions=[] est autorise uniquement", prompts[1])
+
+    def test_availability_memory_compiler_preserves_existing_plan_patch(self) -> None:
+        original_client = llm._client
+        original_request_structured_json = llm._request_structured_json
+        prompts: list[str] = []
+
+        def fake_request_structured_json(*, system, messages, model="claude-haiku-4-5-20251001", max_tokens=1024):
+            prompts.append(str(messages[0]["content"]))
+            if len(prompts) == 1:
+                return {
+                    "response_type": "requires_confirmation",
+                    "rationale": "indisponibilite large, patch a confirmer",
+                    "fitmas_message": "Je peux bouger la natation, mais je veux ton feu vert.",
+                    "confirmation_reason": "deplacement sensible",
+                    "plan_patch": {
+                        "coach_message": "Je peux bouger la natation.",
+                        "operations": [
+                            {
+                                "operation_type": "move_session",
+                                "target_session_id": 44,
+                                "target_date": "2099-05-20",
+                                "rationale": "piscine indisponible",
+                            }
+                        ],
+                    },
+                }
+            return {
+                "memory_actions": [
+                    {
+                        "type": "record_availability",
+                        "window_text": "natation impossible deux semaines",
+                        "availability": "unavailable",
+                        "confidence": 0.88,
+                        "evidence": "je ne peux pas nager deux semaines",
+                    }
+                ]
+            }
+
+        llm._client = lambda: object()
+        llm._request_structured_json = fake_request_structured_json
+        try:
+            decision = llm.decide(
+                "Je ne peux pas nager deux semaines",
+                "Repere",
+                coach_context={
+                    "repair_memory_actions": True,
+                    "turn_primary_intent": "availability_constraint",
+                    "turn_plan": {"primary_intent": "availability_constraint"},
+                },
+            )
+        finally:
+            llm._client = original_client
+            llm._request_structured_json = original_request_structured_json
+
+        self.assertIsInstance(decision, llm.CoachDecision)
+        self.assertEqual(decision.response_type, "requires_confirmation")
+        self.assertIsNotNone(decision.plan_patch)
+        self.assertEqual(len(decision.memory_actions), 1)
+        self.assertEqual(decision.memory_actions[0].type, "record_availability")
+        self.assertIn("AVAILABILITY_MEMORY_COMPILER", prompts[1])
+        self.assertIn("PlanPatch interdit", prompts[1])
+        self.assertIn('"action_expected_when_scope_confident": true', prompts[1])
+        self.assertIn('"minimum_actions_when_scope_confident": 1', prompts[1])
+        self.assertIn("memory_actions=[] est autorise uniquement", prompts[1])
+        self.assertIn("aucune seance cible n'est necessaire", prompts[1])
+
+    def test_availability_memory_compiler_strict_retries_empty_first_pass(self) -> None:
+        original_client = llm._client
+        original_request_structured_json = llm._request_structured_json
+        prompts: list[str] = []
+        models: list[str] = []
+
+        def fake_request_structured_json(*, system, messages, model="claude-haiku-4-5-20251001", max_tokens=1024):
+            models.append(model)
+            prompts.append(str(messages[0]["content"]))
+            if len(prompts) == 1:
+                return {
+                    "response_type": "reply",
+                    "rationale": "contrainte dispo comprise, cible planning ambigue",
+                    "fitmas_message": "Je prefere clarifier la seance.",
+                }
+            if len(prompts) == 2:
+                return {"memory_actions": []}
+            return {
+                "memory_actions": [
+                    {
+                        "action": "record_availability",
+                        "window_text": "demain soir impossible",
+                        "availability": "unavailable",
+                        "confidence": 0.9,
+                        "evidence": "contrainte dispo du tour",
+                    }
+                ]
+            }
+
+        llm._client = lambda: object()
+        llm._request_structured_json = fake_request_structured_json
+        try:
+            decision = llm.decide(
+                "Demain soir c'est impossible pour moi",
+                "Repere",
+                coach_context={
+                    "turn_primary_intent": "availability_constraint",
+                    "turn_plan": {"primary_intent": "availability_constraint"},
+                },
+            )
+        finally:
+            llm._client = original_client
+            llm._request_structured_json = original_request_structured_json
+
+        self.assertIsInstance(decision, llm.CoachDecision)
+        self.assertEqual(len(decision.memory_actions), 1)
+        self.assertEqual(decision.memory_actions[0].type, "record_availability")
+        self.assertEqual(len(prompts), 3)
+        self.assertIn("AVAILABILITY_MEMORY_COMPILER", prompts[1])
+        self.assertIn("STRICT_AVAILABILITY_MEMORY_COMPILER", prompts[2])
+        self.assertIn("cible planning est ambigue", prompts[2])
+        self.assertEqual(models[1:], ["claude-sonnet-4-6", "claude-sonnet-4-6"])
+
     def test_decide_rejects_truncated_confirmation_message_and_repairs(self) -> None:
         original_client = llm._client
         original_request_structured_json = llm._request_structured_json
@@ -1840,7 +2284,7 @@ class LLMToolsTest(unittest.TestCase):
         self.assertIn("Je ne peux pas ce soir", repair_prompts[0])
         self.assertIn("execution_actions", repair_prompts[0])
 
-    def test_tool_followup_prose_gets_format_retry_before_structured_repair(self) -> None:
+    def test_tool_followup_prose_falls_back_to_format_retry_when_compiler_fails(self) -> None:
         original_client = llm._client
         original_request_message = llm._request_message
         original_execute_tool_calls = llm.execute_tool_calls
@@ -1939,7 +2383,7 @@ class LLMToolsTest(unittest.TestCase):
         self.assertIsNotNone(decision)
         self.assertEqual(decision.response_type, "no_change")
         self.assertEqual(calls["count"], 3)
-        self.assertEqual(structured_repair_calls["count"], 0)
+        self.assertEqual(structured_repair_calls["count"], 3)
         self.assertIn("format", retry_prompts[0].lower())
         self.assertIn("json", retry_prompts[0].lower())
 
@@ -2093,7 +2537,7 @@ class LLMToolsTest(unittest.TestCase):
         self.assertNotIn("pas reçu", decision.fitmas_message)
         self.assertEqual(calls["structured"], 1)
 
-    def test_tool_followup_dsml_markup_gets_format_retry_before_structured_fallback(self) -> None:
+    def test_tool_followup_dsml_markup_falls_back_to_format_retry_when_compiler_fails(self) -> None:
         original_client = llm._client
         original_request_message = llm._request_message
         original_execute_tool_calls = llm.execute_tool_calls
@@ -2188,7 +2632,7 @@ class LLMToolsTest(unittest.TestCase):
         self.assertIsNotNone(decision)
         self.assertEqual(decision.response_type, "no_change")
         self.assertEqual(calls["messages"], 3)
-        self.assertEqual(calls["structured"], 0)
+        self.assertEqual(calls["structured"], 3)
         self.assertIn("tools", retry_prompts[0].lower())
         self.assertIn("json", retry_prompts[0].lower())
 
@@ -2314,7 +2758,7 @@ class LLMToolsTest(unittest.TestCase):
         self.assertEqual(traces[0].context_policy, "plan_lookup_compact")
         self.assertEqual(traces[0].tool_count_offered, len(PLAN_LOOKUP_CONTRACT_TOOLS))
 
-    def test_turn_plan_intent_does_not_narrow_canonical_tool_budget(self) -> None:
+    def test_availability_turn_plan_intent_uses_dedicated_small_tool_budget(self) -> None:
         original_client = llm._client
         original_request_message = llm._request_message
         original_log_tool_trace = llm.log_tool_trace
@@ -2324,7 +2768,7 @@ class LLMToolsTest(unittest.TestCase):
 
         def fake_request_message(*, system, messages, model="claude-haiku-4-5-20251001", max_tokens=512, tools=None, tool_choice=None):
             self.assertIsNotNone(tools)
-            self.assertEqual([tool["name"] for tool in tools], CANONICAL_CONVERSATION_TOOLS)
+            self.assertEqual([tool["name"] for tool in tools], AVAILABILITY_CONSTRAINT_TOOLS)
             prompts.append(messages[0]["content"] if isinstance(messages[0]["content"], str) else "")
             systems.append("\n".join(part["text"] for part in system) if isinstance(system, list) else str(system))
             return SimpleNamespace(
@@ -2366,8 +2810,59 @@ class LLMToolsTest(unittest.TestCase):
 
         self.assertIsNotNone(decision)
         self.assertEqual(decision.mutation_type, "no_change")
-        self.assertEqual(traces[0].context_policy, "plan_negotiation_full")
+        self.assertEqual(traces[0].context_policy, "availability_constraint")
+        self.assertEqual(traces[0].tool_count_offered, len(AVAILABILITY_CONSTRAINT_TOOLS))
         self.assertIn("Contexte orchestration planning", systems[0])
+        self.assertIn("- route: conversation_availability_constraint", systems[0])
+        self.assertNotIn("suggest_replan_candidates", systems[0])
+        self.assertNotIn("draft_lighten_day", systems[0])
+        self.assertNotIn("draft_replace_session", systems[0])
+
+    def test_health_signal_intent_uses_small_health_tool_budget(self) -> None:
+        original_client = llm._client
+        original_request_message = llm._request_message
+        original_log_tool_trace = llm.log_tool_trace
+        traces: list[object] = []
+
+        def fake_request_message(*, system, messages, model="claude-haiku-4-5-20251001", max_tokens=512, tools=None, tool_choice=None):
+            self.assertIsNotNone(tools)
+            self.assertEqual([tool["name"] for tool in tools], HEALTH_SIGNAL_TOOLS)
+            return SimpleNamespace(
+                stop_reason="end_turn",
+                content=[
+                    SimpleNamespace(
+                        type="text",
+                        text='{"response_type":"no_change","rationale":"signal sante note","fitmas_message":"Je note le signal et je garde la seance prudente."}',
+                    )
+                ],
+                usage=SimpleNamespace(input_tokens=160, output_tokens=36),
+            )
+
+        llm._client = lambda: object()
+        llm._request_message = fake_request_message
+        llm.log_tool_trace = lambda trace: traces.append(trace)
+        try:
+            decision = llm.decide(
+                "J'ai une douleur tibia legere",
+                "Repere",
+                coach_context={"turn_primary_intent": "health_signal"},
+                tool_context=ToolContext(
+                    pipeline="conversation",
+                    user_id=1,
+                    timezone_name="Europe/Paris",
+                    scheduled_sessions=[],
+                    activities=[],
+                    active_facts=[],
+                ),
+            )
+        finally:
+            llm._client = original_client
+            llm._request_message = original_request_message
+            llm.log_tool_trace = original_log_tool_trace
+
+        self.assertIsNotNone(decision)
+        self.assertEqual(traces[0].context_policy, "health_signal")
+        self.assertEqual(traces[0].tool_count_offered, len(HEALTH_SIGNAL_TOOLS))
 
     def test_close_turn_intent_offers_no_tools_even_with_tool_context(self) -> None:
         original_client = llm._client

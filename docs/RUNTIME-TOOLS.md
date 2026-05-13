@@ -23,6 +23,48 @@ Objectifs :
 - soutenir la proactive coach loop : le heartbeat doit pouvoir relire plan,
   activites, constraints et charge avant de decider `send/no_send`
 
+Note dogfood API 12 mai 2026 :
+
+- Le tool-use conversationnel fonctionne, mais les routes complexes exposent
+  encore trop de tools et demandent un JSON final strict dans le meme appel.
+- P0 gateway corrige le protocole JSON-only DeepSeek, mais ne change pas encore
+  la boucle tool-use conversationnelle.
+- P1 replay confirme que le probleme restant est la latence des routes
+  `health_signal` et `plan_negotiation_full` : plusieurs tours a 80-115s,
+  timeouts client, et `validate_week_coherence` dominant dans les traces.
+- P2 core 12 mai separe maintenant la compilation finale : apres un ou plusieurs
+  tools executes, la phase tool-use n'est plus parse comme decision finale; un
+  compiler `_request_structured_json()` sans tools produit le `CoachDecision`.
+  L'ancien parse/retry reste fallback si le compiler echoue.
+- Smoke P2 cible : `trip_constraint` + `lighten_tomorrow` passent et les traces
+  finissent en `response_stop_reason=tool_compiler_json`; `confirm_without_pending`
+  ne mute plus. Le cout reste eleve quand `validate_week_coherence` tourne
+  pendant le tour utilisateur.
+- P3 12 mai ajoute des compilers action-only apres `CoachDecision` :
+  execution, sante et disponibilite. Ces compilers n'ont pas de tools et ne
+  peuvent pas produire de `PlanPatch`; ils transforment les artefacts LLM du
+  tour en `execution_actions` / `memory_actions` quand la decision principale
+  a compris le signal mais oublie l'action.
+- Direction immediate : reduire les budgets par route et sortir
+  `validate_week_coherence` de la boucle synchrone longue. Les compilers P3
+  fonctionnent quand ils sont atteints; les timeouts restants arrivent avant
+  cette phase.
+- P4 12 mai retire `validate_week_coherence` de la surface conversation. Le
+  LLM conversationnel peut toujours produire un `PlanPatch` via `draft_*` et
+  `validate_plan_patch`, puis la review sportive longue reste une gate backend
+  avant pending/commit. Le tool reste expose a `planning` et `heartbeat`.
+- P5 12 mai reduit les budgets conversationnels par route :
+  `availability_constraint` pure est memory-only avec 3 tools
+  (`resolve_planning_window`, `get_plan_window`, `get_user_constraints`),
+  `health_signal` a 5 tools, `plan_negotiation_full` a 10 tools. Les demandes
+  dispo qui demandent explicitement une adaptation restent en `plan_mutation`.
+- P6a 12 mai ajoute des candidats backend sport-window hors tool libre :
+  le turn planner extrait un artefact `availability_constraint` type, puis le
+  backend fabrique des `candidate_ref` uniquement pour les seances du sport
+  indisponible dans la fenetre. Cela reste deterministe sur artefacts LLM/DB,
+  jamais sur le texte utilisateur libre.
+- Voir `docs/API-DOGFOOD-RELIABILITY-2026-05-12.md` pour les traces et le plan.
+
 ## Ce qu'on fait
 
 - tools LLM-facing `read-only` ou validation-only
@@ -115,7 +157,7 @@ Registry V1 :
 - `draft_create_session` (3B-C, candidate PlanPatch, conversation/planning only)
 - `propose_replan` (legacy compat, non route par defaut)
 - `validate_plan_patch` (validation-only, ajoute conversation 3A puis heartbeat 3B-B)
-- `validate_week_coherence` (A+4, validation-only sport quality)
+- `validate_week_coherence` (A+4, validation-only sport quality, planning/heartbeat seulement)
 
 Tous ces tools lisent des objets deja charges par l'orchestrateur.
 Le registre actuel reste volontairement tres compact.
@@ -151,7 +193,9 @@ Direction V2 :
 - conserver les tools atomiques utiles
 - enrichir leurs descriptions et leurs payloads
 - garder `validate_plan_patch` comme tool validation-only : il aide le LLM a tester un `PlanPatch`, mais le backend revalide toujours au commit
-- garder `validate_week_coherence` comme tool validation-only : il aide le LLM a tester la qualite sportive d'un `PlanPatch`, mais le backend re-run toujours la review avant commit
+- garder `validate_week_coherence` comme tool validation-only pour planning et
+  heartbeat; en conversation, la review sportive longue reste une gate backend
+  avant pending/commit.
 - `get_coach_lens` reste une macro-lentille read-only optionnelle, pas un
   remplacement des tools atomiques (`get_plan_window`, `get_load_context`,
   `get_relevant_facts`) quand la question les exige vraiment.
@@ -168,7 +212,7 @@ Role :
 
 Contraintes :
 - validation-only, aucun write ;
-- allowed pipelines cibles : `conversation`, `planning`, `heartbeat` ;
+- allowed pipelines cibles : `planning`, `heartbeat` ;
 - input : `PlanPatch` complet ;
 - output type : `status`, `sport_quality`, `confidence`, `summary`, `findings`, `recommended_policy`, optional `revised_patch` ;
 - ne remplace pas les tools atomiques de lecture ;
@@ -192,8 +236,8 @@ V1 :
 - `block_original` -> no commit ;
 - `retry_with_revised_patch` / `confirm_revised` -> traiter comme block + proposer direction.
 
-Etat A+4 :
-- expose dans `conversation`, `planning`, `heartbeat` ;
+Etat A+4/P4 :
+- expose dans `planning`, `heartbeat` seulement depuis P4 du 12 mai ;
 - retourne `payload.validation`, `payload.deterministic_checks`,
   `payload.review`, `payload.policy_status`, `commit_performed=false`,
   `writer=none` ;

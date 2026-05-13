@@ -12,6 +12,7 @@ read_when:
 | Document | Contenu |
 |----------|---------|
 | `BUILD-ORDER.md` | Source de verite sur l'etat reel, les priorites et la suite immediate |
+| `API-DOGFOOD-RELIABILITY-2026-05-12.md` | Dogfood API reel du 12 mai : tests, conclusions DeepSeek/gateway, plan de remediation |
 | `LLM-FIRST-CONVERSATION.md` | Doctrine zero determinisme sur texte utilisateur libre + plan de migration conversation |
 | `ARCHITECTURE.md` | Stack, principes de harness, modele de donnees, flux techniques |
 | `SYSTEM-MAP.md` | Carte du systeme : flux, frontieres LLM/tools/skills, points d'extension |
@@ -47,27 +48,29 @@ Quand plusieurs docs semblent raconter des choses differentes :
 Pour un nouvel agent :
 
 1. `BUILD-ORDER.md` — etat reel et suite immediate
-2. `LLM-FIRST-CONVERSATION.md` — doctrine zero determinisme sur texte user
-3. `PROMPT-CONTEXT-REFACTOR.md` — contrats LLM et contexte par route
-4. `ADAPTATION-CANDIDATE-PIPELINE.md` — adaptation candidates + reviewer borne
-5. `SYSTEM-MAP.md` — carte d'ensemble
-6. `RUNTIME-TOOLS.md` — tools multi-tool bornes et workflow `replan_after_constraint`
-7. `SPORT-QUALITY-REVIEW.md` — Phase A+ reviewer sportif, week coherence, progression par stimulus
-8. `CONVERSATION.md` — grounding + indications
-9. `RUNBOOK.md` — ops, smokes, debug prod
-10. `ARCHITECTURE.md` — stack, principes, modules
-11. `PRODUCT.md` — vision et scope
-12. `PLANNING.md` — contrat + moteur planning
-13. `MEMORY-V2.md` — memoire utilisateur
-14. `APP-UX.md` — contrat UX app
-15. `SOUL.md` — voix coach
-16. `COACH-AUTONOMY-REFACTOR.md` — historique long de refactor autonomie, a lire seulement pour archeologie
+2. `API-DOGFOOD-RELIABILITY-2026-05-12.md` — dernier dogfood API, causes verifiees, remediation Phase A
+3. `LLM-FIRST-CONVERSATION.md` — doctrine zero determinisme sur texte user
+4. `PROMPT-CONTEXT-REFACTOR.md` — contrats LLM et contexte par route
+5. `ADAPTATION-CANDIDATE-PIPELINE.md` — adaptation candidates + reviewer borne
+6. `SYSTEM-MAP.md` — carte d'ensemble
+7. `RUNTIME-TOOLS.md` — tools multi-tool bornes et workflow `replan_after_constraint`
+8. `SPORT-QUALITY-REVIEW.md` — Phase A+ reviewer sportif, week coherence, progression par stimulus
+9. `CONVERSATION.md` — grounding + indications
+10. `RUNBOOK.md` — ops, smokes, debug prod
+11. `ARCHITECTURE.md` — stack, principes, modules
+12. `PRODUCT.md` — vision et scope
+13. `PLANNING.md` — contrat + moteur planning
+14. `MEMORY-V2.md` — memoire utilisateur
+15. `APP-UX.md` — contrat UX app
+16. `SOUL.md` — voix coach
+17. `COACH-AUTONOMY-REFACTOR.md` — historique long de refactor autonomie, a lire seulement pour archeologie
 
 ## Raccourcis
 
 | Question | Doc |
 |----------|-----|
 | Ou en est le repo et que construit-on ensuite ? | `BUILD-ORDER.md` |
+| Qu'a montre le dogfood API reel du 12 mai et quelle est la remediation ? | `API-DOGFOOD-RELIABILITY-2026-05-12.md` |
 | Quelle est la doctrine conversation LLM-first ? | `LLM-FIRST-CONVERSATION.md` |
 | Comment fonctionne FitMAS dans son ensemble ? | `SYSTEM-MAP.md` |
 | Quel contrat produit ? | `PRODUCT.md` |

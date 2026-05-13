@@ -28,31 +28,36 @@ Si un autre doc diverge :
 
 **Un premier coach que Loïc reconnaît, comprend, et a envie de rouvrir demain.**
 
-## Roadmap Active — 11 mai 2026
+## Roadmap Active — 12 mai 2026
 
 Ordre courant :
 
 ```text
-1. Dogfood reel Phase A/A+ sur Telegram
-2. Verifier que les decide() None restent un probleme reel apres prompt diet
-3. Corriger seulement les routes qui echouent encore en smoke reel
-4. Cadrage memoire leger si les facts continuent de polluer le contexte
-5. Phase B progression/prescription seulement sur demande explicite
-6. UX/UI apres stabilite coach
+1. Dedup/tool-loop hygiene : eviter les appels tool redondants dans un meme tour
+2. Memoire disponibilite sport-specific : key sport + fenetre quand le sport est connu
+3. Plan lookup hard guard + generated week policy si encore observe
+4. Phase B progression/prescription seulement sur demande explicite
 ```
 
-Regle d'arbitrage : on ne corrige plus un probleme presume. Depuis la passe
-prompt/context + adaptation candidates du 10 mai, la suite commence par un
-smoke reel massif et du dogfood Telegram. Si un `decide() None`, une mauvaise
-lane ou une phrase non naturelle existe encore, on corrige la cause observee.
+Regle d'arbitrage : le dogfood API reel du 12 mai a confirme des echecs
+integration/protocole concrets. P0 gateway JSON reliability est implemente
+localement le 12 mai, P1 a ete rejoue, et P2 core split est implemente
+localement. P3 compilers dedies execution/sante/disponibilite est implemente
+localement. P4 a retire `validate_week_coherence` de la surface tools
+conversation. P5 a reduit les tools par route et isole la disponibilite pure en
+memory-only. La prochaine tranche prioritaire est l'hygiene pending, puis les
+candidats sport-specific pour les indisponibilites longues. Ces deux points
+sont implementes localement en P6a; la suite immediate passe a l'hygiene de
+tool-loop et a la memoire disponibilite sport-window.
 
 Docs a ouvrir selon le chantier :
 - excellence sportive : `docs/SPORT-QUALITY-REVIEW.md`
 - adaptation LLM bornee : `docs/ADAPTATION-CANDIDATE-PIPELINE.md`
 - prompt/contexte + `decide() None` : `docs/PROMPT-CONTEXT-REFACTOR.md`
+- dogfood API/gateway 12 mai : `docs/API-DOGFOOD-RELIABILITY-2026-05-12.md`
 - memoire : `docs/MEMORY-V2.md`
 
-## Checkpoint courant — 11 mai 2026
+## Checkpoint courant — 12 mai 2026
 
 Etat du code sur `main` :
 
@@ -73,18 +78,127 @@ Etat du code sur `main` :
   retransformer des textes libres ou des vieux facts en flags via mots-cles :
   il consomme seulement des facts ouverts, temporellement valides et
   explicitement `affects=["readiness"]`.
+- Dogfood API reel du 12 mai : 42 checks ad hoc sur serveur local + fausse DB
+  + vrais appels LLM. Les endpoints et plusieurs lectures tiennent, mais les
+  echecs critiques montrent une fragilite de protocole : `system` listifie dans
+  la gateway DeepSeek JSON, exemple global legacy `mutation_type`, tool-use
+  final non verrouille en JSON mode, contrat `CoachDecision` trop large pour
+  execution/sante/disponibilite. Diagnostic et plan :
+  `docs/API-DOGFOOD-RELIABILITY-2026-05-12.md`.
+- P0 gateway 12 mai : `render_system_text(system)`, contrat JSON neutre sans
+  exemple legacy `mutation_type`, `schema_hint` structured JSON, et
+  `request_json()` route vers structured JSON mode quand DeepSeek est configure
+  et que le chemin legacy n'est pas monkey-patche.
+- P1 replay 12 mai : daily-life `FAIL (4/26)`, A+ core partiel timeout sur les
+  deux premiers scenarios mutation, generated-week timeout. Les erreurs de
+  format ont disparu dans les logs (`unknown_mutation_type=0`,
+  `truncated_fitmas_message=0`, `tool_budget_exceeded=0`), mais les routes
+  `health_signal` / `plan_negotiation_full` restent a 80-115s et les
+  confirmations nues peuvent encore commit un `move_session`.
+- P2 core 12 mai : apres au moins un tool execute, `decide()` passe par un
+  compiler `_request_structured_json()` sans tools avant tout parse direct de
+  la reponse tool-use. La phase tool collecte facts/candidats; le compiler
+  produit le `CoachDecision` final. Si le compiler echoue, l'ancien parse/retry
+  reste fallback.
+- Replay `move_easy_then_confirm` apres P2 : timeout avant decision finale,
+  concentre sur `validate_week_coherence` dans `plan_negotiation_full`.
+- P3 compilers dedies 12 mai : `EXECUTION_COMPILER`,
+  `HEALTH_MEMORY_COMPILER` et `AVAILABILITY_MEMORY_COMPILER` action-only apres
+  `CoachDecision`, sans tools ni `PlanPatch`. Ils utilisent le modele fort,
+  acceptent l'alias structure `action -> type`, et retry strictement la memoire
+  quand le scope LLM est confirme mais le premier compiler rend `[]`.
+- P4 conversation tool budget 12 mai : `validate_week_coherence` n'est plus
+  offert dans `conversation_plan_negotiation`, `conversation_health_signal`, la
+  registry conversation ni le fallback canonical budget. Le tool reste
+  disponible pour `planning` et `heartbeat`; la gate backend continue de
+  reviewer les `PlanPatch` avant pending/commit.
+- P5 route budgets 12 mai : `conversation_availability_constraint` est un
+  contrat dedie memory-only avec 3 tools (`resolve_planning_window`,
+  `get_plan_window`, `get_user_constraints`). `health_signal` passe a 5 tools.
+  `plan_negotiation_full` passe a 10 tools. Les demandes dispo qui disent
+  explicitement "adapte/bouge/remplace" restent en `plan_mutation`.
+- P6a pending hygiene 12 mai : une pending nue n'est plus applicable sauf si
+  une seule pending active est exposee. Les pending expirees sont fermees avant
+  exposition, l'accept revalide `status/expires_at`, et les outcomes
+  `modify_pending` / `needs_clarification` / choix invalide gardent le meme
+  pending ouvert au lieu d'etre supersedes par le cleanup final.
+- P6a disponibilite sport-specific 12 mai : le turn planner porte maintenant
+  `availability_constraint` (`availability`, `sport_type`, `starts_on`,
+  `ends_on`, `scope`). Les backend candidates utilisent cet artefact type pour
+  cibler uniquement les seances du sport concerne dans la fenetre; si swimming
+  est indisponible, aucune seance running n'est proposee par les candidats
+  backend.
 
 Verification recente :
 
-- `./scripts/test-backend -q` : 878 passed, 11 skipped, 11 subtests passed.
+- `./scripts/test-backend -q` : 916 passed, 11 skipped, 11 subtests passed.
 - `main` contient le merge `ee4a313 Merge prompt context and adaptation candidates`.
+- Dogfood API reel 12 mai : 42 checks ad hoc, 3 fails bruts stricts, plusieurs
+  conclusions manuelles a corriger avant de juger DeepSeek.
+- P0 gateway local : `./scripts/test-backend tests/test_llm_gateway_json.py -q`
+  -> 25 passed ; `./scripts/test-backend tests/test_conversation_turn_planner.py
+  tests/test_week_coherence.py tests/test_llm_tools.py -q` -> 77 passed.
+- P2 core local : `./scripts/test-backend tests/test_llm_tools.py -q`
+  -> 60 passed ; `./scripts/test-backend tests/test_llm_gateway_json.py
+  tests/test_conversation_turn_planner.py tests/test_week_coherence.py
+  tests/test_llm_tools.py -q` -> 104 passed.
+- P2 smoke API cible :
+  - `trip_constraint` + `lighten_tomorrow` -> `OK (2 check(s))`, deux traces
+    `response_stop_reason=tool_compiler_json`, zero erreur de format observee;
+  - `confirm_without_pending` -> `OK (1 check(s))`, aucune mutation/pending;
+  - warning manuel : `trip_constraint` reste mal clarifie en surface (natation
+    mentionnee sur un message voyage), donc P2 stabilise le protocole mais ne
+    remplace pas les compilers dedies.
+- P3 local :
+  - `./scripts/test-backend tests/test_llm_tools.py -q` -> 64 passed;
+  - batterie cible gateway/planner/week/LLM/memory/core writers -> 116 passed;
+  - smoke compiler isole vraie API -> health 1 action, availability 1 action,
+    execution 1 action;
+  - smoke API `execution_done_today`/`missed_session_report`/
+    `future_evening_unavailable` -> `OK (3 check(s))`;
+  - `shin_pain_signal` -> `OK (1 check(s))`, avant P4 la route restait lente
+    quand elle appelait `validate_week_coherence`.
+- P4 local :
+  - prompt/runtime targeted -> 144 passed;
+  - `move_easy_then_confirm` -> `OK (1 check(s))`;
+  - traces : plus de `validate_week_coherence` offert, turn 1 tool loop
+    `get_plan_window,draft_move_session` en ~12s, turn 2
+    `resolve_planning_window,get_plan_window` en ~16s.
+  - `shin_pain_signal` + `future_evening_unavailable` -> `OK (2 check(s))`;
+    sante a `tool_count_offered=7`, dispo garde `tool_count_offered=16`, zero
+    `validate_week_coherence` offert, memoires appliquees.
+- P5 local :
+  - prompt/planner/LLM targeted -> 125 passed, 5 subtests passed;
+  - `future_evening_unavailable` -> `OK (1 check(s))`, route
+    `availability_constraint`, `tool_count_offered=3`, `memory_applied=1`;
+  - `swim_unavailable_two_weeks` -> `OK (1 check(s))`, route `plan_mutation`,
+    `tool_count_offered=10`, pending creee, `memory_applied=1`;
+  - `future_evening_unavailable + shin_pain_signal + move_easy_then_confirm`
+    -> `OK (3 check(s))`, a revele puis confirme le besoin memory-only sur
+    disponibilite pure.
+- P6a local :
+  - pending/candidates/planner targeted ->
+    `./scripts/test-backend -q tests/test_core_flows.py -k 'pending or choice' tests/test_conversation_candidate_refs.py tests/test_conversation_turn_planner.py`
+    -> 16 passed, 86 deselected.
+  - full backend -> `./scripts/test-backend -q` -> 916 passed, 11 skipped,
+    11 subtests passed.
+  - smoke API reel `swim_unavailable_two_weeks` ->
+    `OK (1 check(s))`; pending `plan_patch` sur session DB id 5
+    `sport_type=swimming`, remplacement `new_sport_type=strength`, aucune cible
+    running.
+- P1 replay local :
+  - `./scripts/smoke-a-plus-api --daily ...` -> `FAIL (4/26)`;
+  - `./scripts/smoke-a-plus-api ...` core -> stop apres deux timeouts mutation;
+  - `./scripts/smoke-a-plus-api --scenario close_turn_ack --generated-workflow onboard_loaded_running ...` -> `FAIL (1/2)`;
+  - logs : zero `unknown_mutation_type`, zero `truncated_fitmas_message`, zero
+    `tool_budget_exceeded`; slow tool rows concentrees sur week review/tool-use.
 
 Suite immediate :
 
-1. Rejouer `./scripts/smoke-real-conversations` sur un gros panel de messages.
-2. Rejouer `./scripts/smoke-a-plus-api` avant chaque deploy touchant planning /
-   adaptation / conversation.
-3. Lire les traces `decide_none.reason` seulement si un echec reel persiste.
+1. Dedup/tool-loop hygiene : eviter les appels tool redondants dans un meme tour.
+2. Memoire disponibilite sport-specific : `record_availability` doit porter le
+   sport quand il est connu et produire une key machine lisible.
+3. Plan lookup hard guard : chiffres/dates/sports/statuts sortants contre DB.
 4. Garder Phase B fermee tant que le coach dogfood n'est pas stable plusieurs
    jours.
 
@@ -130,7 +244,7 @@ L'audit declenche par cet incident a confirme 3 failles structurelles connexes :
 | A+0 | ✅ Documentation Sport Quality / Week Coherence — doctrine reviewer sportif, policy runtime, progression par stimulus | 0.5j | `docs/SPORT-QUALITY-REVIEW.md` |
 | A+1-A+3 | ✅ **Phase A+ core gate** — simulation, contexte deterministe, LLM reviewer/fallback type, gate runtime dans `apply_patch_for_user`, smoke API reel `scripts/smoke-a-plus-api` | 3-4j | `docs/SPORT-QUALITY-REVIEW.md` + section "Phase A+" ci-dessous |
 | 3B-C | ✅ Action-tools natifs bornes, **apres A+ core gate** — `draft_move_session`, `draft_swap_sessions`, `draft_replace_session`, `draft_lighten_day`, `draft_create_session`, candidates PlanPatch sans write | 2-3j | `docs/RUNTIME-TOOLS.md` |
-| A+4 | ✅ Tool `validate_week_coherence` validation-only conversation/planning/heartbeat + capture pending heartbeat reviewee | 0.5-1j | `docs/SPORT-QUALITY-REVIEW.md` |
+| A+4/P4 | ✅ Tool `validate_week_coherence` validation-only, maintenant planning/heartbeat seulement + capture pending heartbeat reviewee | 0.5-1j | `docs/SPORT-QUALITY-REVIEW.md` |
 | A+5 | ✅ Review semaine generee avant commit — guard avant `replace_plan` / `ScheduledSession`, fallback conservative si policy review non `valid`, fallback persistable sauf `blocked` | 1j | `docs/SPORT-QUALITY-REVIEW.md` |
 | A+6 | ✅ Adaptation candidate pipeline — LLM propose 0-3 patch sets bornes, backend candidate refs, evaluator simule/score, reviewer LLM choisit seulement un `candidate_id` | 2-4j | `docs/ADAPTATION-CANDIDATE-PIPELINE.md` |
 | P1-quinquies | ✅ Lane terminale `close_turn` — clotures sociales sans tools, sans marker question ouverte, composer final via `final_reply.py` | 0.5j | `docs/superpowers/plans/2026-05-05-terminal-close-lane.md` |
@@ -809,9 +923,9 @@ Verification locale :
 11. ~~**Chantier 3B-C**~~ ✅ action-tools natifs bornes, conversation/planning
    only, candidates PlanPatch sans write. Commit toujours derriere
    `validate_plan_patch -> WeekCoherenceReviewer -> policy -> writer`.
-12. ~~**A+4**~~ ✅ tool `validate_week_coherence` validation-only,
-   conversation/planning/heartbeat, pending heartbeat possible seulement apres
-   review sportive confirmable.
+12. ~~**A+4/P4**~~ ✅ tool `validate_week_coherence` validation-only,
+   planning/heartbeat seulement depuis P4, pending heartbeat possible seulement
+   apres review sportive confirmable.
 13. ~~**A+5**~~ ✅ semaine generee relue avant commit, fallback conservative si
    policy review non `valid`.
 14. **Maintenant : dogfood court Phase A+** — verifier conversation, heartbeat,

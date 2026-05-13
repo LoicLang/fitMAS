@@ -40,7 +40,8 @@ def test_tool_workflow_system_text_contains_replan_workflow() -> None:
     assert text.startswith("Workflow replan_after_constraint:")
     assert "suggest_replan_candidates" in text
     assert "draft_move_session" in text
-    assert "validate_week_coherence" in text
+    assert "validate_week_coherence" not in text
+    assert "backend review sportive" in text
     assert "Actions possibles:" not in text
     assert "Analyse le message utilisateur" not in text
 
@@ -224,6 +225,8 @@ def test_draft_action_conversation_system_text_keeps_mutation_modules() -> None:
     assert "Actions possibles compactes:" in text
     assert "draft_move_session" in text
     assert "suggest_replan_candidates" in text
+    assert "validate_week_coherence" not in text
+    assert "backend review sportive" in text
     assert "Contrat de sortie read_only:" not in text
     assert "PlanPatch:" in text
 
@@ -279,6 +282,24 @@ def test_health_signal_system_text_keeps_bounded_planpatch_without_replan_manual
     assert "Actions possibles:" not in text
     assert "suggest_replan_candidates" not in text
     assert "draft_move_session" not in text
+    assert "Few-shots actions structurees:" not in text
+
+
+def test_availability_constraint_system_text_uses_dedicated_memory_first_contract() -> None:
+    contract = get_prompt_contract("conversation_availability_constraint")
+
+    text = build_conversation_system_text(contract)
+
+    assert "Contrat du tour:" in text
+    assert "- route: conversation_availability_constraint" in text
+    assert "Contrat de sortie availability_constraint:" in text
+    assert "record_availability" in text
+    assert "plan_patch: null" in text
+    assert "suggest_replan_candidates" not in text
+    assert "draft_lighten_day" not in text
+    assert "draft_replace_session" not in text
+    assert "Workflow replan_after_constraint:" not in text
+    assert "Actions possibles:" not in text
     assert "Few-shots actions structurees:" not in text
 
 

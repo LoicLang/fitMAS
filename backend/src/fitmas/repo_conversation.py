@@ -1,11 +1,14 @@
 from __future__ import annotations
 
 import json
+import logging
 from datetime import UTC, date, datetime
 
 from sqlalchemy.orm import Session
 
 from fitmas import schema as s
+
+logger = logging.getLogger(__name__)
 
 
 def get_messages(db: Session, user_id: int) -> list[s.CoachMessage]:
@@ -68,7 +71,24 @@ def get_conversation_turn_by_client_message_key(
 def get_active_pending_mutation_confirmation(
     db: Session, user_id: int
 ) -> s.PendingMutationConfirmation | None:
-    row = (
+    now = _utc_now()
+    expired_rows = (
+        db.query(s.PendingMutationConfirmation)
+        .filter(
+            s.PendingMutationConfirmation.user_id == user_id,
+            s.PendingMutationConfirmation.status == "pending",
+            s.PendingMutationConfirmation.expires_at.is_not(None),
+            s.PendingMutationConfirmation.expires_at <= now,
+        )
+        .all()
+    )
+    if expired_rows:
+        for row in expired_rows:
+            row.status = "expired"
+            row.resolved_at = now
+        db.commit()
+
+    rows = (
         db.query(s.PendingMutationConfirmation)
         .filter(
             s.PendingMutationConfirmation.user_id == user_id,
@@ -78,17 +98,20 @@ def get_active_pending_mutation_confirmation(
             s.PendingMutationConfirmation.created_at.desc(),
             s.PendingMutationConfirmation.id.desc(),
         )
-        .first()
+        .limit(2)
+        .all()
     )
-    if row is None:
+    if not rows:
         return None
-    if row.expires_at is not None and row.expires_at <= _utc_now():
-        row.status = "expired"
-        row.resolved_at = _utc_now()
-        db.commit()
-        db.refresh(row)
+    if len(rows) > 1:
+        logger.warning(
+            "pending_confirmation_ambiguous user=%s active_count_at_least=%s latest_ids=%s",
+            user_id,
+            len(rows),
+            [row.id for row in rows],
+        )
         return None
-    return row
+    return rows[0]
 
 
 def add_message(

@@ -7,7 +7,7 @@ import threading
 import time
 import unittest
 from concurrent.futures import ThreadPoolExecutor
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 
 os.environ.setdefault("FITMAS_DB_PATH", tempfile.mktemp(prefix="fitmas-tests-", suffix=".db"))
@@ -409,7 +409,7 @@ class FitMASCoreFlowsTest(unittest.TestCase):
             api_messages.decide = original_decide
             api_messages.extract_facts = original_extract_facts
 
-        self.assertEqual(result["assistant_message"]["text"], "Mardi: Journee flexible.")
+        self.assertEqual(result["assistant_message"]["text"], f"{session.label}: Journee flexible.")
         self.assertEqual(today["completion_status"], "adapted")
         self.assertEqual(today["sport_type"], "rest")
 
@@ -747,7 +747,9 @@ class FitMASCoreFlowsTest(unittest.TestCase):
 
     def test_pending_accepts_matching_legacy_mutation_decision(self) -> None:
         _, session = self._create_plan_for_today()
-        target_date = (get_local_now(self.user.timezone) + timedelta(days=5)).date().isoformat()
+        now = get_local_now(self.user.timezone)
+        days_until_sunday = (6 - now.weekday()) % 7 or 7
+        target_date = (now + timedelta(days=days_until_sunday)).date().isoformat()
         patch = PlanPatch(
             coach_message="Je deplace cette seance a dimanche.",
             operations=[
@@ -979,6 +981,138 @@ class FitMASCoreFlowsTest(unittest.TestCase):
         self.assertEqual(refreshed_session.sport_type, "running")
         self.assertIsNone(active_pending)
         self.assertEqual(all_pending[0].status, "rejected")
+
+    def test_active_pending_lookup_requires_unique_pending_row(self) -> None:
+        for index in range(2):
+            self.db.add(
+                s.PendingMutationConfirmation(
+                    user_id=self.user.id,
+                    impact_level="high",
+                    reason=f"manual_{index}",
+                    mutation_type="plan_patch",
+                    summary=f"pending {index}",
+                    source_text="manual fixture",
+                    decision_json="{}",
+                    expires_at=datetime.now() + timedelta(minutes=10),
+                )
+            )
+        self.db.commit()
+
+        active_pending = repo.get_active_pending_mutation_confirmation(self.db, self.user.id)
+        rows = (
+            self.db.query(s.PendingMutationConfirmation)
+            .filter(s.PendingMutationConfirmation.user_id == self.user.id)
+            .order_by(s.PendingMutationConfirmation.id)
+            .all()
+        )
+
+        self.assertIsNone(active_pending)
+        self.assertEqual([row.status for row in rows], ["pending", "pending"])
+
+    def test_modify_pending_resolution_keeps_pending_active_and_recorded(self) -> None:
+        _, session = self._create_plan_for_today()
+        patch = PlanPatch(
+            coach_message="Je reduis la seance.",
+            operations=[
+                PlanPatchOperation(
+                    operation_type="update_session",
+                    target_session_id=session.id,
+                    new_duration_min=25,
+                    new_intensity="easy",
+                    rationale="Demande utilisateur a confirmer.",
+                )
+            ],
+        )
+        pending = repo.create_pending_mutation_confirmation(
+            self.db,
+            user_id=self.user.id,
+            impact_level="high",
+            reason="week_coherence_requires_confirmation",
+            mutation_type="plan_patch",
+            summary="reduire la seance",
+            source_text="alleger demain",
+            decision_json=serialize_plan_patch_confirmation(patch),
+            expires_at=datetime.now() + timedelta(minutes=10),
+        )
+
+        original_decide = api_messages.decide
+        original_extract_facts = api_messages.extract_facts
+        try:
+            api_messages.decide = lambda *args, **kwargs: CoachDecision(
+                response_type="no_change",
+                rationale="le user veut modifier la proposition en attente",
+                fitmas_message="OK, precise la version voulue et je reprends.",
+                pending_resolution=llm.ModifyPendingResolution(
+                    type="modify_pending",
+                    requested_changes="plus court encore",
+                ),
+            )
+            api_messages.extract_facts = lambda *args, **kwargs: []
+            self.client.post("/api/v0/messages", json={"text": "plutot plus court"})
+        finally:
+            api_messages.decide = original_decide
+            api_messages.extract_facts = original_extract_facts
+
+        self.db.expire_all()
+        active_pending = repo.get_active_pending_mutation_confirmation(self.db, self.user.id)
+        turn = repo.get_recent_conversation_turns(self.db, self.user.id, limit=1)[0]
+        refreshed_session = repo.get_scheduled_session(self.db, self.user.id, session.id)
+
+        self.assertIsNotNone(active_pending)
+        self.assertEqual(active_pending.id, pending.id)
+        self.assertEqual(active_pending.status, "pending")
+        self.assertEqual(turn.response_mode, "pending_modify_pending")
+        self.assertTrue(turn.pending_confirmation)
+        self.assertEqual(turn.pending_confirmation_id, pending.id)
+        self.assertEqual(refreshed_session.duration_min, 40)
+
+    def test_expired_pending_accept_resolution_does_not_apply_patch(self) -> None:
+        _, session = self._create_plan_for_today()
+        patch = PlanPatch(
+            coach_message="Je reduis la seance.",
+            operations=[
+                PlanPatchOperation(
+                    operation_type="update_session",
+                    target_session_id=session.id,
+                    new_duration_min=25,
+                    new_intensity="easy",
+                    rationale="Demande utilisateur a confirmer.",
+                )
+            ],
+        )
+        pending = repo.create_pending_mutation_confirmation(
+            self.db,
+            user_id=self.user.id,
+            impact_level="high",
+            reason="week_coherence_requires_confirmation",
+            mutation_type="plan_patch",
+            summary="reduire la seance",
+            source_text="alleger demain",
+            decision_json=serialize_plan_patch_confirmation(patch),
+            expires_at=datetime.now(UTC).replace(tzinfo=None) - timedelta(minutes=1),
+        )
+        decision = CoachDecision(
+            response_type="no_change",
+            rationale="acceptation pending comprise",
+            fitmas_message="C'est confirme. Je l'applique.",
+            pending_resolution=llm.AcceptPendingResolution(type="accept_pending"),
+        )
+
+        outcome = conversation_pipeline._accept_pending_confirmation(
+            db=self.db,
+            user=self.user,
+            decision=decision,
+            pending_confirmation=pending,
+        )
+
+        self.db.expire_all()
+        refreshed_session = repo.get_scheduled_session(self.db, self.user.id, session.id)
+        refreshed_pending = self.db.get(s.PendingMutationConfirmation, pending.id)
+
+        self.assertEqual(outcome.response_mode, "pending_expired")
+        self.assertFalse(outcome.mutation_applied)
+        self.assertEqual(refreshed_session.duration_min, 40)
+        self.assertEqual(refreshed_pending.status, "expired")
 
     def test_conversation_turn_records_applied_mutation(self) -> None:
         _, session = self._create_plan_for_today()
@@ -2041,6 +2175,78 @@ class FitMASCoreFlowsTest(unittest.TestCase):
         self.assertEqual(refreshed.scheduled_date.date().isoformat(), "2099-05-09")
         self.assertEqual(refreshed.duration_min, 50)
         self.assertIsNone(active_pending)
+
+    def test_invalid_pending_choice_selection_keeps_pending_active(self) -> None:
+        _, session = self._create_plan_with_tomorrow_session()
+        from fitmas.mutation_permissions import serialize_plan_patch_choice_confirmation
+        from fitmas.plan_patch_candidates import PlanPatchCandidate
+
+        move_patch = PlanPatch(
+            operations=[
+                PlanPatchOperation(
+                    operation_type="move_session",
+                    target_session_id=session.id,
+                    target_date="2099-05-09",
+                    rationale="Option vendredi.",
+                )
+            ],
+            coach_message="Option vendredi.",
+        )
+        choices = (
+            PlanPatchCandidate(
+                id="move_friday",
+                patches=(move_patch,),
+                rationale="Deplacer la seance a vendredi.",
+                expected_tradeoff="Garde le volume.",
+                confidence=0.8,
+                assumptions=(),
+                risk_notes=(),
+                created_from_plan_id="plan_current",
+                created_from_plan_version=1,
+            ),
+        )
+        pending = repo.create_pending_mutation_confirmation(
+            self.db,
+            user_id=self.user.id,
+            impact_level="medium",
+            reason="Deux options proches.",
+            mutation_type="plan_patch_choice",
+            summary="move_friday",
+            source_text="On evite deux jours d'affilee ?",
+            decision_json=serialize_plan_patch_choice_confirmation(choices),
+            expires_at=datetime.now() + timedelta(minutes=10),
+        )
+
+        original_decide = api_messages.decide
+        original_extract_facts = api_messages.extract_facts
+        try:
+            api_messages.decide = lambda *args, **kwargs: CoachDecision(
+                response_type="no_change",
+                rationale="le user choisit une option inconnue",
+                fitmas_message="Je ne retrouve pas cette option.",
+                pending_resolution=llm.AcceptPendingResolution(
+                    type="accept_pending",
+                    selected_candidate_id="unknown_choice",
+                ),
+            )
+            api_messages.extract_facts = lambda *args, **kwargs: []
+            self.client.post("/api/v0/messages", json={"text": "l'autre option"}).json()
+        finally:
+            api_messages.decide = original_decide
+            api_messages.extract_facts = original_extract_facts
+
+        self.db.expire_all()
+        active_pending = repo.get_active_pending_mutation_confirmation(self.db, self.user.id)
+        turn = repo.get_recent_conversation_turns(self.db, self.user.id, limit=1)[0]
+        refreshed = repo.get_scheduled_session(self.db, self.user.id, session.id)
+
+        self.assertIsNotNone(active_pending)
+        self.assertEqual(active_pending.id, pending.id)
+        self.assertEqual(active_pending.status, "pending")
+        self.assertEqual(turn.response_mode, "pending_choice_invalid_selection")
+        self.assertTrue(turn.pending_confirmation)
+        self.assertEqual(turn.pending_confirmation_id, pending.id)
+        self.assertNotEqual(refreshed.scheduled_date.date().isoformat(), "2099-05-09")
 
     def test_mixed_health_and_plan_mutation_keeps_memory_then_uses_candidate_flow(self) -> None:
         _, session = self._create_plan_with_tomorrow_session()

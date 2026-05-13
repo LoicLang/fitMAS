@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 import re
 from contextlib import contextmanager
+from datetime import UTC, datetime
 from threading import Lock
 from typing import Any
 
@@ -401,6 +402,7 @@ def _run_conversation_turn_impl(
             "today_session_id": state.today_session.id if state.today_session else None,
             "turn_primary_intent": getattr(turn_plan, "primary_intent", None),
             "turn_secondary_intents": list(getattr(turn_plan, "secondary_intents", ()) or ()),
+            "turn_plan": _turn_plan_payload(turn_plan),
             "profile_summary": build_profile_summary(state.active_memory_rows),
             "selected_facts": _selected_facts_for_prompt(conversation_context, state.active_facts),
             "planning_contract": coach_bundle.planning_contract.as_dict(),
@@ -909,6 +911,7 @@ def _run_conversation_turn_impl(
         pending_confirmation is not None
         and pending_confirmation.status == "pending"
         and outcome.response_mode != "llm_unavailable"
+        and not _outcome_keeps_pending_confirmation(outcome, pending_confirmation)
     ):
         repo.resolve_pending_mutation_confirmation(db, pending_confirmation.id, status="superseded")
 
@@ -1163,6 +1166,13 @@ def _apply_pending_resolution(
     if resolution is None or pending_confirmation is None:
         return None
 
+    unavailable_outcome = _pending_confirmation_unavailable_outcome(
+        db=db,
+        pending_confirmation=pending_confirmation,
+    )
+    if unavailable_outcome is not None:
+        return unavailable_outcome
+
     resolution_type = str(getattr(resolution, "type", "") or "")
     if resolution_type == "accept_pending":
         return _accept_pending_confirmation(
@@ -1185,8 +1195,51 @@ def _apply_pending_resolution(
             reply_text=str(getattr(decision, "fitmas_message", "") or "La proposition reste en attente. Dis-moi le changement concret et je reprends."),
             response_mode=f"pending_{resolution_type}",
             mutation_applied=False,
+            pending_confirmation=True,
+            pending_confirmation_id=getattr(pending_confirmation, "id", None),
         )
     return None
+
+
+def _pending_confirmation_unavailable_outcome(
+    *,
+    db: Session,
+    pending_confirmation,
+) -> ConversationTurnOutcome | None:
+    status = str(getattr(pending_confirmation, "status", "") or "")
+    if status == "pending" and _pending_confirmation_is_expired(pending_confirmation):
+        repo.resolve_pending_mutation_confirmation(db, pending_confirmation.id, status="expired")
+        return ConversationTurnOutcome(
+            extraction=Extraction(confidence=0.85),
+            reply_text="Cette confirmation n'est plus active. Je ne l'applique pas.",
+            response_mode="pending_expired",
+            mutation_applied=False,
+        )
+    if status != "pending":
+        return ConversationTurnOutcome(
+            extraction=Extraction(confidence=0.85),
+            reply_text="Cette confirmation n'est plus active. Je ne l'applique pas.",
+            response_mode="pending_not_active",
+            mutation_applied=False,
+        )
+    return None
+
+
+def _pending_confirmation_is_expired(pending_confirmation) -> bool:
+    expires_at = getattr(pending_confirmation, "expires_at", None)
+    if expires_at is None:
+        return False
+    if getattr(expires_at, "tzinfo", None) is not None:
+        expires_at = expires_at.astimezone(UTC).replace(tzinfo=None)
+    return expires_at <= datetime.now(UTC).replace(tzinfo=None)
+
+
+def _outcome_keeps_pending_confirmation(outcome: ConversationTurnOutcome, pending_confirmation) -> bool:
+    return bool(
+        outcome.pending_confirmation
+        and outcome.pending_confirmation_id is not None
+        and outcome.pending_confirmation_id == getattr(pending_confirmation, "id", None)
+    )
 
 
 def _accept_pending_confirmation(
@@ -1197,6 +1250,13 @@ def _accept_pending_confirmation(
     pending_confirmation,
 ) -> ConversationTurnOutcome:
     try:
+        unavailable_outcome = _pending_confirmation_unavailable_outcome(
+            db=db,
+            pending_confirmation=pending_confirmation,
+        )
+        if unavailable_outcome is not None:
+            return unavailable_outcome
+
         if str(getattr(pending_confirmation, "mutation_type", "") or "") == "plan_patch_choice":
             return _accept_pending_plan_patch_choice(
                 db=db,
@@ -2218,6 +2278,7 @@ def _maybe_handle_plan_adaptation_candidates(
     backend_candidate_payloads, backend_candidate_patches = build_backend_candidate_refs_for_turn(
         grounding=grounding,
         scheduled_sessions=scheduled_sessions,
+        turn_plan=turn_plan,
     )
     input_payload = CandidateGenerationInput(
         user_message=user_text,

@@ -43,6 +43,17 @@ class ConversationPromptingTest(unittest.TestCase):
         self.assertTrue(policy.include_facts)
         self.assertEqual(policy.history_limit, 6)
 
+    def test_availability_constraint_uses_dedicated_compact_policy(self) -> None:
+        policy = select_conversation_prompt_policy(intent=IntentCategory.AVAILABILITY_CONSTRAINT)
+
+        self.assertEqual(policy.name, "availability_constraint")
+        self.assertEqual(policy.contract_name, "conversation_availability_constraint")
+        self.assertTrue(policy.include_timeline)
+        self.assertFalse(policy.include_execution)
+        self.assertTrue(policy.include_signals)
+        self.assertTrue(policy.include_facts)
+        self.assertEqual(policy.history_limit, 4)
+
     def test_casual_chat_is_compact(self) -> None:
         policy = select_conversation_prompt_policy(intent=IntentCategory.CASUAL_CHAT)
 

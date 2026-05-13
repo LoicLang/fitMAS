@@ -114,7 +114,7 @@ Workflow replan_after_constraint:
 - La candidate n'est pas une decision: tu dois la convertir en `PlanPatch | no_change | requires_confirmation`
 - Quand l'action est concrete et que les tools `draft_*` sont disponibles, utilise-les pour construire un `PlanPatch` candidat (`draft_move_session`, `draft_swap_sessions`, `draft_replace_session`, `draft_lighten_day`, `draft_create_session`)
 - Les tools `draft_*` ne commit jamais. Ils retournent `payload.patch + validation`; si la candidate est bonne, copie ce patch dans ton `CoachDecision.plan_patch` ou `requires_confirmation`
-- Quand `validate_week_coherence` est disponible, utilise-le sur tout PlanPatch significatif avant ta decision finale ; il juge la qualite sportive, mais le backend re-run toujours la gate avant commit
+- Ne lance pas de review sportive longue dans le tour conversation; le backend review sportive re-run toujours avant commit ou pending
 - si la candidate couvre mal le scope, ajuste le PlanPatch ou demande une confirmation ciblee ; ne transforme pas ca en menu large
 - ne mets pas de detail intra-seance fin dans ce workflow: sport, jour, duree/intensite cible suffisent pour Phase A"""
 
@@ -125,7 +125,7 @@ Workflow replan_after_constraint compact:
 - Lis les tools read-only utiles avant de trancher une mutation.
 - Les tools `draft_move_session`, `draft_swap_sessions`, `draft_replace_session`, `draft_lighten_day`, `draft_create_session` construisent un PlanPatch candidat mais ne commit jamais.
 - `suggest_replan_candidates` donne une aide candidate, pas une decision finale.
-- `validate_week_coherence` juge le compromis sportif ; le backend revalide toujours avant commit.
+- Pas de review sportive longue dans le tour conversation; le backend review sportive revalide toujours avant commit.
 - Retourne `plan_patch`, `requires_confirmation` ou `no_change` selon les faits fournis."""
 
 
@@ -198,7 +198,7 @@ Regles:
 - n'utilise jamais `move_session` pour placer une seance sur un `slot=training`: utilise `swap_sessions` si deux seances existent, sinon `no_change`
 - n'utilise jamais `move_session` pour "mettre A aujourd'hui et B demain" si A et B existent deja: c'est `swap_sessions`
 - une recuperation est une contrainte sportive a reviewer, pas un verrou de calendrier: elle fait partie du plan mais peut bouger si la semaine reste coherente
-- si tu deplaces une seance vers un jour de repos, prefere un swap quand deux slots existent pour conserver la recuperation dans la semaine; sinon laisse `validate_week_coherence` juger la coherence globale
+- si tu deplaces une seance vers un jour de repos, prefere un swap quand deux slots existent pour conserver la recuperation dans la semaine; sinon laisse la review sportive backend juger la coherence globale
 - ne bloque pas une mutation seulement parce qu'elle touche un repos: le reviewer sportif arbitre charge, recuperation et enchainements
 - si l'utilisateur dit juste "changer aujourd'hui et demain" sans dire quoi va ou, garde `no_change` et demande s'il veut echanger les deux seances
 - si une demande planning ne cible pas une seance unique et que plusieurs seances correspondent (ex: "la course plus tard" avec plusieurs seances running), garde `no_change` et demande quelle seance bouge; ne cree pas un pending confirmation sur ton interpretation
@@ -472,6 +472,38 @@ Regles:
 Pas de markdown. Pas de texte autour du JSON."""
 
 
+def build_availability_constraint_output_schema_system_text() -> str:
+    return """\
+Tu reponds UNIQUEMENT avec un JSON CoachDecision valide.
+
+Contrat de sortie availability_constraint:
+- response_type: reply | no_change
+- rationale: raison courte
+- fitmas_message: message envoye TEL QUEL a l'utilisateur, jamais preuve de commit
+- mutation_decision: null
+- plan_patch: null
+- confirmation_reason: null
+- memory_actions: liste optionnelle, principalement `record_availability`
+- execution_actions: [] sauf si le user declare aussi une execution claire
+- pending_resolution: optionnel, uniquement si un pending explicite existe et que le user y repond
+
+memory_actions.record_availability:
+- window_text: formulation courte de la contrainte
+- availability: unavailable | limited | available | unknown
+- starts_on / ends_on: dates ISO si resolues, sinon null
+- recurrence: recurrence courte si explicite, sinon null
+- confidence: 0.0-1.0
+- evidence: citation courte du user
+
+Regles:
+- La memoire de disponibilite prime: si la contrainte est claire, emets record_availability meme sans mutation planning.
+- Ce contrat ne produit aucune mutation planning. Si le user demande explicitement d'adapter, le routeur doit envoyer le tour en plan_mutation.
+- Ne produis pas de menu large.
+- Ne dis jamais qu'une seance est deplacee, annulee ou remplacee dans ce contrat.
+
+Pas de markdown. Pas de texte autour du JSON."""
+
+
 def build_no_action_coach_decision_output_schema_system_text(capability: str) -> str:
     label = capability or "no_action"
     return f"""\
@@ -559,6 +591,23 @@ def build_conversation_system_text(contract: PromptContract | None = None) -> st
                 build_turn_scope_contract_system_text(contract),
                 build_calendar_truth_system_text(),
                 build_health_signal_output_schema_system_text(),
+            )
+        )
+
+    if contract is not None and contract.name == "conversation_availability_constraint":
+        return "\n\n".join(
+            (
+                build_lite_identity_voice_system_text(
+                    posture=(
+                        "Posture availability_constraint:\n"
+                        "- Capture la contrainte de disponibilite avant tout.\n"
+                        "- Adapte seulement si une seance touchee est clairement identifiee.\n"
+                        "- Si le scope est large ou incomplet, note la contrainte et reste prudent."
+                    )
+                ),
+                build_turn_scope_contract_system_text(contract),
+                build_calendar_truth_system_text(),
+                build_availability_constraint_output_schema_system_text(),
             )
         )
 

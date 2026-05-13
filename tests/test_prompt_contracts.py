@@ -20,12 +20,61 @@ def test_plan_negotiation_contract_can_draft_plan_patch() -> None:
     contract = get_prompt_contract("conversation_plan_negotiation")
 
     assert contract.capability == "draft_action"
-    assert "draft_move_session" in contract.allowed_tools
-    assert "validate_plan_patch" in contract.allowed_tools
+    assert contract.allowed_tools == (
+        "get_plan_window",
+        "resolve_planning_window",
+        "get_user_constraints",
+        "suggest_replan_candidates",
+        "draft_move_session",
+        "draft_swap_sessions",
+        "draft_replace_session",
+        "draft_lighten_day",
+        "draft_create_session",
+        "validate_plan_patch",
+    )
+    assert len(contract.allowed_tools) == 10
+    assert "get_recent_activities" not in contract.allowed_tools
+    assert "get_activity_highlights" not in contract.allowed_tools
+    assert "get_recent_reality_window" not in contract.allowed_tools
+    assert "get_load_context" not in contract.allowed_tools
+    assert "validate_week_coherence" not in contract.allowed_tools
     assert "PlanPatch" in contract.allowed_actions
     assert contract.decision_output_schema == "CoachDecision"
     assert contract.output_schema == "CoachDecision"
     assert contract.final_reply_mode == "post_runtime"
+
+
+def test_availability_constraint_contract_uses_small_candidate_surface() -> None:
+    contract = get_prompt_contract("conversation_availability_constraint")
+
+    assert contract.capability == "write_after_validation"
+    assert contract.allowed_tools == (
+        "resolve_planning_window",
+        "get_plan_window",
+        "get_user_constraints",
+    )
+    assert "record_availability" in contract.allowed_actions
+    assert "PlanPatch" not in contract.allowed_actions
+    assert not any(tool.startswith("draft_") for tool in contract.allowed_tools)
+    assert "suggest_replan_candidates" not in contract.allowed_tools
+    assert "validate_plan_patch" not in contract.allowed_tools
+    assert "validate_week_coherence" not in contract.allowed_tools
+
+
+def test_health_signal_contract_keeps_small_adaptation_surface() -> None:
+    contract = get_prompt_contract("conversation_health_signal")
+
+    assert contract.capability == "write_after_validation"
+    assert contract.allowed_tools == (
+        "get_plan_window",
+        "get_user_constraints",
+        "draft_lighten_day",
+        "draft_replace_session",
+        "validate_plan_patch",
+    )
+    assert "get_today_context" not in contract.allowed_tools
+    assert "get_load_context" not in contract.allowed_tools
+    assert "validate_week_coherence" not in contract.allowed_tools
 
 
 def test_close_turn_contract_matches_decide_fallback_runtime() -> None:

@@ -194,7 +194,7 @@ _TURN_INTENT_TO_PROMPT_INTENT = {
     "casual_chat": IntentCategory.CASUAL_CHAT,
     "needs_clarification": IntentCategory.NEEDS_CLARIFICATION,
     "calibration_answer": IntentCategory.CALIBRATION_ANSWER,
-    "availability_constraint": IntentCategory.PLAN_NEGOTIATION,
+    "availability_constraint": IntentCategory.AVAILABILITY_CONSTRAINT,
     "plan_mutation": IntentCategory.PLAN_NEGOTIATION,
     "plan_lookup": IntentCategory.PLAN_LOOKUP,
     "activity_review": IntentCategory.ACTIVITY_REVIEW,
@@ -205,14 +205,8 @@ _TURN_INTENT_TO_PROMPT_INTENT = {
     "generic_question": IntentCategory.GENERIC_QUESTION,
 }
 _CONVERSATION_TOOL_BUDGET = (
-    "get_today_context",
     "get_plan_window",
     "resolve_planning_window",
-    "get_recent_activities",
-    "get_activity_highlights",
-    "get_recent_reality_window",
-    "get_load_context",
-    "get_relevant_facts",
     "get_user_constraints",
     "suggest_replan_candidates",
     "draft_move_session",
@@ -221,7 +215,6 @@ _CONVERSATION_TOOL_BUDGET = (
     "draft_lighten_day",
     "draft_create_session",
     "validate_plan_patch",
-    "validate_week_coherence",
 )
 _TERMINAL_NO_TOOL_INTENTS = {
     "close_turn",
@@ -359,6 +352,7 @@ def _request_structured_json(
     messages: list[dict[str, Any]],
     model: str = "claude-haiku-4-5-20251001",
     max_tokens: int = 1024,
+    schema_hint: str | None = None,
 ) -> dict | None:
     """Request structured JSON through the gateway, preserving test patchability.
 
@@ -376,11 +370,16 @@ def _request_structured_json(
         and os.getenv("DEEPSEEK_API_KEY")
         and (gateway_is_patched or not local_json_path_is_patched)
     ):
+        gateway_kwargs: dict[str, Any] = {
+            "system": system,
+            "messages": messages,
+            "model": model,
+            "max_tokens": max_tokens,
+        }
+        if schema_hint is not None:
+            gateway_kwargs["schema_hint"] = schema_hint
         result = gw.request_structured_json(
-            system=system,
-            messages=messages,
-            model=model,
-            max_tokens=max_tokens,
+            **gateway_kwargs,
         )
         if result.provider_fallback_used:
             logger.info(
@@ -590,6 +589,18 @@ def decide(
             return None
 
         if isinstance(parsed_decision, CoachDecision):
+            parsed_decision = _maybe_compile_execution_actions_for_turn(
+                decision=parsed_decision,
+                system=system_prompt,
+                prompt=prompt,
+                coach_context=coach_context,
+            )
+            parsed_decision = _maybe_compile_memory_actions_for_turn(
+                decision=parsed_decision,
+                system=system_prompt,
+                prompt=prompt,
+                coach_context=coach_context,
+            )
             parsed_decision = _maybe_repair_missing_execution_action_from_followup(
                 decision=parsed_decision,
                 system=system_prompt,
@@ -1026,7 +1037,7 @@ def _normalize_memory_actions(raw: Any) -> tuple[dict[str, Any], ...]:
     for item in raw:
         if not isinstance(item, dict):
             continue
-        action_type = str(item.get("type") or item.get("operation_type") or "").strip()
+        action_type = str(item.get("type") or item.get("action") or item.get("operation_type") or "").strip()
         if action_type not in allowed_fields:
             continue
         cleaned = {key: value for key, value in item.items() if key in allowed_fields[action_type]}
@@ -1047,7 +1058,7 @@ def _has_unknown_memory_action(raw: Any) -> bool:
     for item in raw:
         if not isinstance(item, dict):
             continue
-        action_type = str(item.get("type") or item.get("operation_type") or "").strip()
+        action_type = str(item.get("type") or item.get("action") or item.get("operation_type") or "").strip()
         if action_type and action_type not in allowed:
             return True
     return False
@@ -1071,7 +1082,7 @@ def _normalize_execution_actions(raw: Any) -> tuple[dict[str, Any], ...]:
     for item in raw:
         if not isinstance(item, dict):
             continue
-        action_type = str(item.get("type") or item.get("operation_type") or "").strip()
+        action_type = str(item.get("type") or item.get("action") or item.get("operation_type") or "").strip()
         if action_type != "record_execution_update":
             continue
         cleaned = {key: value for key, value in item.items() if key in allowed_fields}
@@ -1097,7 +1108,7 @@ def _has_unknown_execution_action(raw: Any) -> bool:
     for item in raw:
         if not isinstance(item, dict):
             continue
-        action_type = str(item.get("type") or item.get("operation_type") or "").strip()
+        action_type = str(item.get("type") or item.get("action") or item.get("operation_type") or "").strip()
         if action_type and action_type != "record_execution_update":
             return True
     return False
@@ -1201,6 +1212,330 @@ def _repair_execution_receipt_without_action_decision(
             followup_session_id,
         )
     return decision
+
+
+def _maybe_compile_execution_actions_for_turn(
+    *,
+    decision: CoachDecision,
+    system: str,
+    prompt: str,
+    coach_context: dict | None,
+) -> CoachDecision:
+    if decision.execution_actions:
+        return decision
+    if not _turn_has_execution_action_scope(coach_context):
+        return decision
+    compiler_payload = {
+        "turn_plan": _turn_plan_from_coach_context(coach_context),
+        "execution_claim": _execution_claim_from_coach_context(coach_context),
+        "unresolved_execution_followup": (coach_context or {}).get("unresolved_execution_followup"),
+        "unresolved_execution_followup_session_id": (coach_context or {}).get("unresolved_execution_followup_session_id"),
+        "unresolved_execution_followup_target_date": (coach_context or {}).get("unresolved_execution_followup_target_date"),
+        "decision": decision.model_dump(mode="json"),
+    }
+    compiler_prompt = (
+        "EXECUTION_COMPILER\n"
+        "Compile uniquement les actions d'execution FitMAS depuis les artefacts LLM et le contexte original.\n"
+        "Le backend ne lit pas le texte utilisateur libre; toi, LLM, tu arbitres l'execution.\n\n"
+        "Regles strictes:\n"
+        "- sortie JSON unique: {\"execution_actions\": [...]}\n"
+        "- PlanPatch interdit; mutation_decision interdite; memory_actions interdites; pending_resolution interdit\n"
+        "- si la cible est claire, retourne record_execution_update\n"
+        "- si la cible manque ou reste ambigue, retourne execution_actions=[]\n"
+        "- ne change jamais la reponse coach, le plan_patch, ni les memory_actions existantes\n"
+        "- action: type=record_execution_update, target_ref, target_session_id?, status=completed|not_completed|partially_completed|unknown, completed?, sport_type?, duration_min?, confidence, evidence?\n\n"
+        "ARTEFACTS_MACHINE:\n"
+        f"{_json_for_compiler(compiler_payload)}\n\n"
+        "CONTEXTE_ORIGINAL:\n"
+        f"{prompt}\n\n"
+        "Retourne uniquement le JSON action-only."
+    )
+    data = _request_action_compiler_json(
+        system=system,
+        prompt=compiler_prompt,
+        max_tokens=700,
+        compiler_name="execution",
+    )
+    actions = _parse_execution_action_compiler_payload(data)
+    if not actions:
+        return decision
+    logger.info("llm.execution_action_compiler actions=%s", len(actions))
+    return decision.model_copy(update={"execution_actions": (*decision.execution_actions, *actions)})
+
+
+def _maybe_compile_memory_actions_for_turn(
+    *,
+    decision: CoachDecision,
+    system: str,
+    prompt: str,
+    coach_context: dict | None,
+) -> CoachDecision:
+    compiled_actions: tuple[MemoryAction, ...] = ()
+    if _turn_has_health_memory_scope(coach_context) and not _has_memory_action_type(decision, "record_health_signal"):
+        compiled_actions = (
+            *compiled_actions,
+            *_compile_memory_actions_for_scope(
+                scope="health",
+                compiler_label="HEALTH_MEMORY_COMPILER",
+                allowed_action="record_health_signal",
+                decision=decision,
+                system=system,
+                prompt=prompt,
+                coach_context=coach_context,
+            ),
+        )
+    if _turn_has_availability_memory_scope(coach_context) and not _has_memory_action_type(decision, "record_availability"):
+        compiled_actions = (
+            *compiled_actions,
+            *_compile_memory_actions_for_scope(
+                scope="availability",
+                compiler_label="AVAILABILITY_MEMORY_COMPILER",
+                allowed_action="record_availability",
+                decision=decision,
+                system=system,
+                prompt=prompt,
+                coach_context=coach_context,
+            ),
+        )
+    if not compiled_actions:
+        return decision
+    logger.info("llm.memory_action_compiler actions=%s", len(compiled_actions))
+    return decision.model_copy(update={"memory_actions": (*decision.memory_actions, *compiled_actions)})
+
+
+def _compile_memory_actions_for_scope(
+    *,
+    scope: str,
+    compiler_label: str,
+    allowed_action: str,
+    decision: CoachDecision,
+    system: str,
+    prompt: str,
+    coach_context: dict | None,
+) -> tuple[MemoryAction, ...]:
+    scope_rule = (
+        "- si le tour est health_signal et que le contexte original contient une douleur, blessure, fatigue, maladie ou resolution de signal sante, retourne record_health_signal meme si un plan_patch existe\n"
+        if scope == "health"
+        else (
+            "- si le tour est availability_constraint et que le contexte original contient une indisponibilite, contrainte horaire, voyage ou limitation sport/date, retourne record_availability meme si un plan_patch existe\n"
+            "- pour record_availability, aucune seance cible n'est necessaire; une fenetre datee/relative, une contrainte horaire ou une limitation de sport suffit\n"
+            "- si la cible planning reste ambigue ou demande clarification, record_availability reste requis quand la contrainte de disponibilite est claire\n"
+            "- exemple: `Demain soir c'est impossible pour moi` -> record_availability window_text=\"demain soir impossible\", availability=unavailable\n"
+        )
+    )
+    compiler_payload = {
+        "action_expected_when_scope_confident": True,
+        "allowed_action": allowed_action,
+        "minimum_actions_when_scope_confident": 1,
+        "scope": scope,
+        "turn_intents": sorted(_turn_intents_from_coach_context(coach_context)),
+        "turn_plan": _turn_plan_from_coach_context(coach_context),
+        "selected_facts": (coach_context or {}).get("selected_facts"),
+        "decision": decision.model_dump(mode="json"),
+    }
+    compiler_prompt = (
+        f"{compiler_label}\n"
+        "Compile uniquement les actions memoire FitMAS depuis les artefacts LLM et le contexte original.\n"
+        "Le backend ne lit pas le texte utilisateur libre; toi, LLM, tu arbitres la memoire.\n\n"
+        "Regles strictes:\n"
+        "- sortie JSON unique: {\"memory_actions\": [...]}\n"
+        f"- action autorisee: {allowed_action} seulement\n"
+        "- PlanPatch interdit; mutation_decision interdite; execution_actions interdites; pending_resolution interdit\n"
+        "- ARTEFACTS_MACHINE.action_expected_when_scope_confident=true: le turn planner a classe ce tour dans ce scope; retourne l'action autorisee sauf si le contexte original est explicitement hypothetique, meta, ou insuffisant\n"
+        "- ARTEFACTS_MACHINE.minimum_actions_when_scope_confident=1: si le scope est confirme et que le message utilisateur porte bien ce signal, retourne exactement une action memoire autorisee\n"
+        "- un plan_patch existant ne remplace jamais la memoire; la memoire doit etre compilee separement\n"
+        f"{scope_rule}"
+        "- memory_actions=[] est autorise uniquement si le contexte original est explicitement hypothetique, meta, tiers, ou trop ambigu pour creer une memoire coach\n"
+        "- ne change jamais la reponse coach, le plan_patch, ni les execution_actions existantes\n\n"
+        "Formes:\n"
+        "- record_health_signal: health_signal, body_area?, signal_kind=pain|injury|fatigue|sleep|illness|tension|other, severity=mild|moderate|severe|unknown, status=new|ongoing|improving|worsening|resolved|unknown, confidence, evidence?\n"
+        "- record_availability: window_text, availability=unavailable|limited|available|unknown, starts_on?, ends_on?, recurrence?, confidence, evidence?\n\n"
+        "ARTEFACTS_MACHINE:\n"
+        f"{_json_for_compiler(compiler_payload)}\n\n"
+        "CONTEXTE_ORIGINAL:\n"
+        f"{prompt}\n\n"
+        "Retourne uniquement le JSON action-only."
+    )
+    data = _request_action_compiler_json(
+        system=system,
+        prompt=compiler_prompt,
+        max_tokens=700,
+        compiler_name=scope,
+    )
+    actions = _parse_memory_action_compiler_payload(data, allowed_action=allowed_action)
+    if not actions and isinstance(data, dict):
+        logger.info(
+            "llm.memory_action_compiler_empty scope=%s keys=%s",
+            scope,
+            sorted(str(key) for key in data.keys()),
+        )
+    if not actions:
+        strict_prompt = _strict_memory_action_compiler_prompt(
+            compiler_label=compiler_label,
+            scope=scope,
+            allowed_action=allowed_action,
+            compiler_payload=compiler_payload,
+            original_prompt=prompt,
+        )
+        strict_data = _request_action_compiler_json(
+            system=system,
+            prompt=strict_prompt,
+            max_tokens=500,
+            compiler_name=f"{scope}_strict",
+        )
+        actions = _parse_memory_action_compiler_payload(strict_data, allowed_action=allowed_action)
+        if actions:
+            logger.info("llm.memory_action_compiler_strict_retry scope=%s actions=%s", scope, len(actions))
+    return actions
+
+
+def _strict_memory_action_compiler_prompt(
+    *,
+    compiler_label: str,
+    scope: str,
+    allowed_action: str,
+    compiler_payload: dict[str, Any],
+    original_prompt: str,
+) -> str:
+    if scope == "health":
+        scope_rule = (
+            "- si le message utilisateur porte une douleur, blessure, fatigue, maladie ou resolution de signal sante, retourne exactement un record_health_signal\n"
+            "- un changement planning propose n'annule jamais la memoire sante\n"
+        )
+    else:
+        scope_rule = (
+            "- si le message utilisateur porte une indisponibilite, contrainte horaire, voyage ou limitation sport/date, retourne exactement un record_availability\n"
+            "- aucune seance cible n'est necessaire pour record_availability\n"
+            "- si la cible planning est ambigue, record_availability reste requis quand la contrainte de disponibilite est claire\n"
+        )
+    return (
+        f"STRICT_{compiler_label}\n"
+        "Le premier compiler memoire a retourne une liste vide. Re-evalue uniquement la memoire.\n"
+        "Le backend ne lit pas le texte utilisateur libre; toi, LLM, tu arbitres le signal.\n\n"
+        "Regles strictes:\n"
+        "- sortie JSON unique: {\"memory_actions\": [...]}\n"
+        f"- action autorisee: {allowed_action} seulement\n"
+        "- PlanPatch interdit; mutation_decision interdite; execution_actions interdites; pending_resolution interdit\n"
+        "- retourne memory_actions=[] uniquement si le message est explicitement hypothetique, meta, tiers, ou trop ambigu pour creer une memoire coach\n"
+        f"{scope_rule}\n"
+        "ARTEFACTS_MACHINE:\n"
+        f"{_json_for_compiler(compiler_payload)}\n\n"
+        "CONTEXTE_ORIGINAL:\n"
+        f"{original_prompt}\n\n"
+        "Retourne uniquement le JSON action-only."
+    )
+
+
+def _request_action_compiler_json(
+    *,
+    system: str,
+    prompt: str,
+    max_tokens: int,
+    compiler_name: str,
+) -> dict | None:
+    try:
+        return _request_structured_json(
+            system=(
+                "Tu es un compiler FitMAS action-only. "
+                "Tu ne produis jamais de message utilisateur, jamais de PlanPatch, jamais de tool call. "
+                "Retourne uniquement un JSON valide avec la liste d'actions demandee."
+            ),
+            messages=[{"role": "user", "content": prompt}],
+            model="claude-sonnet-4-6",
+            max_tokens=max_tokens,
+        )
+    except Exception as exc:
+        logger.warning("llm.%s_action_compiler_failed error=%s", compiler_name, exc)
+        return None
+
+
+def _parse_execution_action_compiler_payload(data: dict | None) -> tuple[ExecutionUpdateAction, ...]:
+    if not isinstance(data, dict):
+        return ()
+    actions: list[ExecutionUpdateAction] = []
+    for payload in _normalize_execution_actions(data.get("execution_actions")):
+        try:
+            actions.append(ExecutionUpdateAction(**payload))
+        except Exception:
+            logger.warning("llm.execution_action_compiler_invalid_action")
+    return tuple(actions)
+
+
+def _parse_memory_action_compiler_payload(
+    data: dict | None,
+    *,
+    allowed_action: str,
+) -> tuple[MemoryAction, ...]:
+    if not isinstance(data, dict):
+        return ()
+    actions: list[MemoryAction] = []
+    for payload in _normalize_memory_actions(data.get("memory_actions")):
+        if str(payload.get("type") or "") != allowed_action:
+            continue
+        try:
+            if allowed_action == "record_health_signal":
+                actions.append(HealthSignalAction(**payload))
+            elif allowed_action == "record_availability":
+                actions.append(AvailabilityConstraintAction(**payload))
+            elif allowed_action == "record_preference":
+                actions.append(PreferenceSignalAction(**payload))
+        except Exception:
+            logger.warning("llm.memory_action_compiler_invalid_action type=%s", allowed_action)
+    return tuple(actions)
+
+
+def _turn_has_execution_action_scope(coach_context: dict | None) -> bool:
+    if not coach_context:
+        return False
+    if coach_context.get("unresolved_execution_followup"):
+        return True
+    claim = _execution_claim_from_coach_context(coach_context)
+    if isinstance(claim, dict) and str(claim.get("status") or "").strip() in {"done", "not_done"}:
+        return True
+    intents = _turn_intents_from_coach_context(coach_context)
+    return bool(intents.intersection({"execution_report", "non_completion_claim", "activity_claim"}))
+
+
+def _turn_has_health_memory_scope(coach_context: dict | None) -> bool:
+    return "health_signal" in _turn_intents_from_coach_context(coach_context)
+
+
+def _turn_has_availability_memory_scope(coach_context: dict | None) -> bool:
+    return "availability_constraint" in _turn_intents_from_coach_context(coach_context)
+
+
+def _has_memory_action_type(decision: CoachDecision, action_type: str) -> bool:
+    return any(str(getattr(action, "type", "") or "") == action_type for action in decision.memory_actions)
+
+
+def _turn_plan_from_coach_context(coach_context: dict | None) -> dict | None:
+    raw = (coach_context or {}).get("turn_plan")
+    return raw if isinstance(raw, dict) else None
+
+
+def _execution_claim_from_coach_context(coach_context: dict | None) -> dict | None:
+    direct = (coach_context or {}).get("turn_execution_claim")
+    if isinstance(direct, dict):
+        return direct
+    turn_plan = _turn_plan_from_coach_context(coach_context)
+    claim = (turn_plan or {}).get("execution_claim")
+    return claim if isinstance(claim, dict) else None
+
+
+def _turn_intents_from_coach_context(coach_context: dict | None) -> set[str]:
+    if not coach_context:
+        return set()
+    intents = {str(coach_context.get("turn_primary_intent") or "").strip()}
+    intents.update(str(item).strip() for item in (coach_context.get("turn_secondary_intents") or ()))
+    turn_plan = _turn_plan_from_coach_context(coach_context)
+    if turn_plan:
+        intents.add(str(turn_plan.get("primary_intent") or "").strip())
+        intents.update(str(item).strip() for item in (turn_plan.get("secondary_intents") or ()))
+    return {intent for intent in intents if intent}
+
+
+def _json_for_compiler(value: Any) -> str:
+    return json.dumps(value, ensure_ascii=False, default=str, sort_keys=True)
 
 
 def _maybe_repair_missing_execution_action_from_followup(
@@ -1627,8 +1962,22 @@ def _request_json_with_tools(
         response_token_values.append(_usage_value(response, "output_tokens"))
 
         if stop_reason != "tool_use":
-            data = _message_json(response)
             raw_text_for_repair = _message_text(response)
+            compiler_succeeded = False
+            data = None
+            if tool_executions:
+                round_trips += 1
+                data = _compile_tool_decision_json(
+                    system=system,
+                    prompt=prompt,
+                    raw_tool_phase_text=raw_text_for_repair,
+                    tool_executions=tool_executions,
+                    model=model,
+                    max_tokens=max_tokens,
+                )
+                compiler_succeeded = data is not None
+            if data is None:
+                data = _message_json(response)
             if tool_executions and data is None:
                 retry_response = _retry_tool_followup_json_format(
                     system=system,
@@ -1678,7 +2027,7 @@ def _request_json_with_tools(
                 prompt_tokens_estimate=_sum_optional_ints(prompt_token_values),
                 response_tokens_estimate=_sum_optional_ints(response_token_values),
                 total_duration_ms=_elapsed_ms(started_at),
-                response_stop_reason=stop_reason or "end_turn",
+                response_stop_reason="tool_compiler_json" if compiler_succeeded else (stop_reason or "end_turn"),
             )
             return data
 
@@ -1781,6 +2130,54 @@ def _request_json_with_tools(
     return None
 
 
+def _compile_tool_decision_json(
+    *,
+    system: str,
+    prompt: str,
+    raw_tool_phase_text: str | None,
+    tool_executions: list[ToolExecution],
+    model: str,
+    max_tokens: int,
+) -> dict | None:
+    tool_result_summary = _repair_tool_result_summary(tool_executions, payload_char_limit=6000)
+    if not tool_result_summary:
+        return None
+    raw_block = (raw_tool_phase_text or "").strip() or "(vide)"
+    compiler_prompt = (
+        "Compile la decision finale FitMAS depuis le contexte original et les resultats de tools.\n"
+        "Cette phase ne parle pas a l'utilisateur: elle produit seulement le JSON final.\n\n"
+        "REGLES:\n"
+        "- n'appelle aucun tool; tous les tools autorises pour ce tour sont deja termines\n"
+        "- retourne uniquement un CoachDecision JSON valide; aucune prose hors JSON\n"
+        "- les resultats tools sont la source de verite pour ids, dates, seances, facts et validations\n"
+        "- la derniere reponse de la phase tool est un brouillon non fiable; utilise-la seulement comme indice d'intention\n"
+        "- ignore tout markup provider/tool-call visible dans la derniere reponse\n"
+        "- si un tool draft_* retourne payload.patch et que l'utilisateur demande une mutation planning, copie ce patch dans plan_patch\n"
+        "- si un patch significatif est valide mais risque, utilise response_type=\"requires_confirmation\" avec plan_patch\n"
+        "- si aucune action structuree fiable n'existe, retourne response_type=\"no_change\" ou une clarification courte\n"
+        "- ne dis jamais qu'un changement est applique sans action structuree valide\n"
+        "- preserve les memory_actions, execution_actions et pending_resolution seulement si le contexte les justifie\n\n"
+        "CONTEXTE_ORIGINAL:\n"
+        f"{prompt}\n\n"
+        "RESULTATS_TOOLS:\n"
+        f"{tool_result_summary}\n\n"
+        "DERNIERE_REPONSE_PHASE_TOOL:\n"
+        f"{raw_block}\n\n"
+        "Retourne uniquement le JSON."
+    )
+    try:
+        data = _request_structured_json(
+            system=system,
+            messages=[{"role": "user", "content": compiler_prompt}],
+            model=model,
+            max_tokens=max(max_tokens, 1400),
+        )
+    except Exception as exc:
+        logger.warning("llm.tool_decision_compiler_failed error=%s", exc)
+        return None
+    return _downgrade_free_confirmation_payload(data)
+
+
 def _retry_tool_followup_json_format(
     *,
     system: str,
@@ -1845,7 +2242,7 @@ def _tool_followup_content(tool_use_blocks: list[Any], tool_executions: list[Too
                 "Tu peux appeler d'autres tools si une information manque. "
                 "Si un tool draft_* retourne payload.patch, ne dis jamais que c'est applique; "
                 "copie ce patch dans un CoachDecision response_type=plan_patch ou requires_confirmation. "
-                "Si tu as valide un patch significatif, utilise aussi validate_week_coherence quand disponible. "
+                "Ne lance pas de review sportive longue dans ce tour; le backend re-run la gate avant tout write. "
                 "Si tu as assez d'information, retourne maintenant uniquement un JSON FitMAS CoachDecision valide; "
                 "pas de prose hors JSON."
             ),
@@ -1955,13 +2352,17 @@ def _downgrade_free_confirmation_payload(data: dict | None) -> dict | None:
     return repaired
 
 
-def _repair_tool_result_summary(tool_executions: list[ToolExecution]) -> str | None:
+def _repair_tool_result_summary(
+    tool_executions: list[ToolExecution],
+    *,
+    payload_char_limit: int = 2500,
+) -> str | None:
     lines = []
     for execution in tool_executions:
         result = execution.result
         payload_json = json.dumps(result.payload, ensure_ascii=False)
-        if len(payload_json) > 2500:
-            payload_json = payload_json[:2500] + "...[truncated]"
+        if len(payload_json) > payload_char_limit:
+            payload_json = payload_json[:payload_char_limit] + "...[truncated]"
         if result.summary or result.payload:
             lines.append(
                 f"- {result.tool_name}: {result.summary or '(pas de resume)'}\n"

@@ -1,9 +1,9 @@
 route: conversation_health_signal
 contract: conversation_health_signal
-tool_budget: ['get_today_context', 'get_plan_window', 'get_load_context', 'get_relevant_facts', 'draft_lighten_day', 'draft_replace_session', 'validate_plan_patch', 'validate_week_coherence']
+tool_budget: ['get_plan_window', 'get_user_constraints', 'draft_lighten_day', 'draft_replace_session', 'validate_plan_patch']
 truth_blocks: ['temporal', 'working_memory', 'planning', 'execution_reality', 'active_thread']
 output_schema: CoachDecision
-trace: {'route': 'conversation_decide', 'provider': None, 'model': None, 'prompt_policy': 'health_signal', 'prompt_contract': 'conversation_health_signal', 'intent': 'health_signal', 'system_chars': 6729, 'user_chars': 66, 'total_chars': 6795, 'tool_names': ('get_today_context', 'get_plan_window', 'get_load_context', 'get_relevant_facts', 'draft_lighten_day', 'draft_replace_session', 'validate_plan_patch', 'validate_week_coherence'), 'truth_block_names': ('temporal', 'working_memory', 'planning', 'execution_reality', 'active_thread'), 'history_messages_used': 2}
+trace: {'route': 'conversation_decide', 'provider': None, 'model': None, 'prompt_policy': 'health_signal', 'prompt_contract': 'conversation_health_signal', 'intent': 'health_signal', 'system_chars': 6669, 'user_chars': 66, 'total_chars': 6735, 'tool_names': ('get_plan_window', 'get_user_constraints', 'draft_lighten_day', 'draft_replace_session', 'validate_plan_patch'), 'truth_block_names': ('temporal', 'working_memory', 'planning', 'execution_reality', 'active_thread'), 'history_messages_used': 2}
 
 ## SYSTEM
 Tu es FitMAS, un coach multisport IA.
@@ -33,7 +33,7 @@ Note conversation : ces regles s'appliquent au champ `fitmas_message` du JSON Co
 Contrat du tour:
 - route: conversation_health_signal
 - capacite: write_after_validation
-- tools autorises: get_today_context, get_plan_window, get_load_context, get_relevant_facts, draft_lighten_day, draft_replace_session, validate_plan_patch, validate_week_coherence
+- tools autorises: get_plan_window, get_user_constraints, draft_lighten_day, draft_replace_session, validate_plan_patch
 - actions autorisees: record_health_signal, PlanPatch
 - verites requises: temporal, working_memory, planning
 - verites optionnelles: execution_reality, active_thread

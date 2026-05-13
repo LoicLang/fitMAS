@@ -88,10 +88,14 @@ class ToolRuntimeTest(unittest.TestCase):
         self.assertIn("draft_replace_session", names)
         self.assertIn("draft_lighten_day", names)
         self.assertIn("draft_create_session", names)
-        self.assertIn("validate_week_coherence", names)
+        self.assertNotIn("validate_week_coherence", names)
         self.assertEqual(by_name["draft_move_session"]["kind"], "candidate")
         self.assertEqual(by_name["validate_plan_patch"]["kind"], "validation")
-        self.assertEqual(by_name["validate_week_coherence"]["kind"], "validation")
+
+        planning_tools = list_tools_for_pipeline("planning")
+        planning_by_name = {tool["name"]: tool for tool in planning_tools}
+        self.assertIn("validate_week_coherence", planning_by_name)
+        self.assertEqual(planning_by_name["validate_week_coherence"]["kind"], "validation")
 
     def test_registry_exposes_heartbeat_candidate_validation_tools_without_legacy_write(self) -> None:
         names = {tool["name"] for tool in list_tools_for_pipeline("heartbeat")}

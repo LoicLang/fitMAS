@@ -344,7 +344,7 @@ def build_tool_registry() -> dict[str, ToolSpec]:
                 },
                 "required": ["patch"],
             },
-            allowed_pipelines=("conversation", "planning", "heartbeat"),
+            allowed_pipelines=("planning", "heartbeat"),
             handler=_validate_week_coherence_tool,
         ),
         ToolSpec(

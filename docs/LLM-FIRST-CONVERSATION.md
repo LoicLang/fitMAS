@@ -107,6 +107,19 @@ pending. La gate compare seulement les artefacts machine deja structures
 (operation, IDs, dates, champs mutation), jamais le texte utilisateur libre. Les
 anciennes pending legacy restent sur le contrat strict `pending_resolution`.
 
+Hygiene pending (12 mai 2026) : une confirmation nue ne peut etre appliquee que
+si le repository expose une seule pending active. Les pending expirees sont
+fermees avant exposition, l'accept revalide `status/expires_at`, et les
+outcomes `modify_pending` / `needs_clarification` / choix invalide gardent le
+meme pending ouvert. Ce garde-fou ne lit pas `oui/non` : il ne travaille que sur
+`pending_resolution` LLM et les lignes DB.
+
+Disponibilite sport-specific (12 mai 2026) : le backend peut generer des
+candidats `sport + fenetre` seulement depuis l'artefact LLM
+`turn_plan.availability_constraint` et les sessions DB. Il ne cherche jamais un
+sport dans le texte libre; si le planner n'a pas extrait `sport_type`, la lane
+sport-specific ne s'active pas.
+
 ## Contrat CoachDecision cible
 
 Le LLM peut proposer plusieurs actions dans une seule sortie structuree.

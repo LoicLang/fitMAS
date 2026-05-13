@@ -54,6 +54,40 @@ Avancement 10-11 mai 2026 :
   un composer final specifique : il ne peut dire qu'une execution a ete notee
   que si une `execution_action` a reellement ete appliquee.
 
+Post-dogfood API 12 mai :
+
+- Le smoke reel massif a deplace la priorite : le probleme restant le plus
+  urgent n'est pas d'ajouter du prompt, mais de nettoyer le protocole gateway.
+- `ConversationPromptBundle.system` est une liste de blocs, alors que la voie
+  DeepSeek OpenAI JSON la stringifie dans un message `system`. Avant de juger
+  DeepSeek, il faut rendre ces blocs en texte propre dans `llm_gateway.py`.
+- `_deepseek_json_messages()` injecte encore un exemple global legacy
+  `mutation_type`, contradictoire avec les routes modernes `CoachDecision` /
+  `response_type`.
+- P0 gateway du 12 mai corrige ces deux points : system rendu en texte propre,
+  contrat JSON neutre, `schema_hint` optionnel et `request_json()` route vers le
+  structured mode DeepSeek quand le chemin legacy n'est pas monkey-patche.
+- P2 core du 12 mai ferme la principale frontiere fragile du chemin avec tools :
+  apres tool-use Anthropic-compatible, `decide()` lance maintenant un compiler
+  `_request_structured_json()` sans tools avant tout parse direct de la reponse
+  tool-use. Le fallback parse/retry reste disponible si le compiler echoue.
+- P3 du 12 mai ajoute des compilers action-only apres `CoachDecision` pour
+  execution, sante et disponibilite. Ils utilisent le `turn_plan` LLM, les
+  facts selectionnes et la decision existante; ils ne peuvent pas produire de
+  parole utilisateur ni de `PlanPatch`.
+- P4 du 12 mai retire `validate_week_coherence` des tools et prompts
+  conversationnels. Le coach conversationnel draft/valide runtime, puis la
+  review sportive longue reste une responsabilite backend avant pending/commit.
+- P5 du 12 mai ajoute un contrat dedie `conversation_availability_constraint`
+  memory-only, corrige le routage des indisponibilites datees claires, et
+  reduit les budgets : availability 3 tools, health 5 tools, plan mutation 10
+  tools.
+- P1 replay confirme cette frontiere : les routes read-only compactes sont
+  stables, tandis que `health_signal` et `plan_negotiation_full` restent lentes
+  et timeout quand elles enchainent draft + `validate_week_coherence`.
+- Le bilan complet, les tests realises et la remediation sont dans
+  `docs/API-DOGFOOD-RELIABILITY-2026-05-12.md`.
+
 Objectif du chantier : passer d'une architecture de prompts accumules a une
 architecture de **contrats LLM explicites**. Chaque appel LLM doit savoir :
 

@@ -103,6 +103,18 @@ _INTENT_POLICIES: dict[IntentCategory, ConversationPromptPolicy] = {
         include_signals=True,
         include_facts=True,
     ),
+    IntentCategory.AVAILABILITY_CONSTRAINT: ConversationPromptPolicy(
+        name="availability_constraint",
+        contract_name="conversation_availability_constraint",
+        history_limit=4,
+        include_plan_summary=False,
+        include_timeline=True,
+        include_execution=False,
+        include_temporal=True,
+        include_claim=True,
+        include_signals=True,
+        include_facts=True,
+    ),
     IntentCategory.PLAN_NEGOTIATION: ConversationPromptPolicy(
         name="plan_negotiation_full",
         contract_name="conversation_plan_negotiation",

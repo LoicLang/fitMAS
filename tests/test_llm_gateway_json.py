@@ -356,6 +356,102 @@ class LLMGatewayProviderTest(unittest.TestCase):
         self.assertEqual(result.provider, "deepseek_openai")
         self.assertEqual(result.data["mutation_type"], "no_change")
 
+    def test_deepseek_json_messages_render_system_blocks_as_plain_text(self) -> None:
+        messages = gw._deepseek_json_messages(
+            system=[
+                {"type": "text", "text": "Bloc un", "cache_control": {"type": "ephemeral"}},
+                {"type": "text", "text": "Bloc deux"},
+            ],
+            messages=[{"role": "user", "content": "hello"}],
+            attempt=1,
+        )
+
+        system_content = messages[0]["content"]
+
+        self.assertIn("Bloc un", system_content)
+        self.assertIn("Bloc deux", system_content)
+        self.assertNotIn("{'type': 'text'", system_content)
+        self.assertNotIn("cache_control", system_content)
+
+    def test_deepseek_json_messages_do_not_inject_legacy_mutation_type_example(self) -> None:
+        messages = gw._deepseek_json_messages(
+            system="Retourne un CoachDecision avec response_type.",
+            messages=[{"role": "user", "content": "hello"}],
+            attempt=1,
+        )
+
+        system_content = messages[0]["content"]
+
+        self.assertIn("JSON", system_content)
+        self.assertNotIn("mutation_type", system_content)
+
+    def test_request_structured_json_includes_schema_hint_without_legacy_example(self) -> None:
+        calls: list[dict[str, object]] = []
+
+        class FakeOpenAIClient:
+            def __init__(self, **kwargs):
+                self.chat = SimpleNamespace(completions=self)
+
+            def create(self, **kwargs):
+                calls.append(kwargs)
+                return SimpleNamespace(
+                    choices=[
+                        SimpleNamespace(
+                            message=SimpleNamespace(content='{"response_type":"no_change","rationale":"ok","fitmas_message":"OK."}')
+                        )
+                    ]
+                )
+
+        fake_openai_module = SimpleNamespace(OpenAI=FakeOpenAIClient)
+
+        with patch.dict(sys.modules, {"openai": fake_openai_module}):
+            with patch.dict(os.environ, {"DEEPSEEK_API_KEY": "sk-ds-test"}, clear=True):
+                result = gw.request_structured_json(
+                    system=[{"type": "text", "text": "System CoachDecision"}],
+                    messages=[{"role": "user", "content": "hello"}],
+                    max_tokens=256,
+                    schema_hint='{"response_type":"no_change","rationale":"...","fitmas_message":"..."}',
+                )
+
+        system_content = calls[0]["messages"][0]["content"]
+
+        self.assertEqual(result.data["response_type"], "no_change")
+        self.assertIn("System CoachDecision", system_content)
+        self.assertIn('"response_type":"no_change"', system_content)
+        self.assertNotIn("mutation_type", system_content)
+        self.assertNotIn("{'type': 'text'", system_content)
+
+    def test_request_json_prefers_structured_deepseek_json_when_available(self) -> None:
+        calls: list[dict[str, object]] = []
+
+        class FakeOpenAIClient:
+            def __init__(self, **kwargs):
+                self.chat = SimpleNamespace(completions=self)
+
+            def create(self, **kwargs):
+                calls.append(kwargs)
+                return SimpleNamespace(
+                    choices=[
+                        SimpleNamespace(
+                            message=SimpleNamespace(content='{"primary_intent":"plan_lookup","confidence":0.9}')
+                        )
+                    ]
+                )
+
+        fake_openai_module = SimpleNamespace(OpenAI=FakeOpenAIClient)
+
+        with patch.dict(sys.modules, {"openai": fake_openai_module}):
+            with patch.dict(os.environ, {"DEEPSEEK_API_KEY": "sk-ds-test"}, clear=True):
+                data = gw.request_json(
+                    system="Turn planner",
+                    prompt="Message user",
+                    model="claude-haiku-4-5-20251001",
+                    max_tokens=200,
+                )
+
+        self.assertEqual(data["primary_intent"], "plan_lookup")
+        self.assertEqual(calls[0]["response_format"], {"type": "json_object"})
+
     def test_request_structured_json_retries_empty_deepseek_content_with_stronger_prompt(self) -> None:
         calls: list[dict[str, object]] = []
 

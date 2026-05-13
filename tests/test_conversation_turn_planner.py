@@ -58,24 +58,41 @@ def test_plan_conversation_turn_rejects_invalid_payload(monkeypatch) -> None:
 
 
 def test_plan_conversation_turn_accepts_availability_constraint(monkeypatch) -> None:
+    captured: dict[str, str] = {}
+
+    def fake_request_json(*, system, prompt, model, max_tokens):
+        captured["system"] = system
+        captured["prompt"] = prompt
+        return {
+            "primary_intent": "availability_constraint",
+            "secondary_intents": [],
+            "user_goal": "signaler une indisponibilite demain soir",
+            "mutation_signal": False,
+            "execution_claim": None,
+            "availability_constraint": {
+                "availability": "unavailable",
+                "sport_type": "swimming",
+                "starts_on": "2026-05-13",
+                "ends_on": "2026-05-27",
+                "scope": "sport",
+            },
+            "temporal_references": [{"kind": "relative_day", "value": "tomorrow", "role": "context"}],
+            "requires_truth_read": True,
+            "truth_scope": "plan_window",
+            "needs_clarification": False,
+            "clarification_question": None,
+            "confidence": 0.88,
+        }
+
     monkeypatch.setattr(
         planner.gw,
         "request_json",
-        lambda **kwargs: {
-            "primary_intent": "availability_constraint",
-            "secondary_intents": [],
-            "user_goal": "signaler un voyage cette semaine",
-            "mutation_signal": False,
-            "execution_claim": None,
-            "needs_clarification": False,
-            "clarification_question": None,
-            "confidence": 0.87,
-        },
+        fake_request_json,
     )
 
     turn_plan = planner.plan_conversation_turn(
-        user_text="Cette semaine je voyage de mercredi a vendredi",
-        temporal_summary="mercredi a vendredi",
+        user_text="Demain soir c'est impossible pour moi",
+        temporal_summary="demain = 2026-05-13, soir = evening",
         execution_summary="seances planifiees dans la fenetre",
         activity_claim_summary="Claim: aucun",
         signal_summary="Signal: aucun",
@@ -84,6 +101,13 @@ def test_plan_conversation_turn_accepts_availability_constraint(monkeypatch) -> 
     assert turn_plan is not None
     assert turn_plan.primary_intent == "availability_constraint"
     assert turn_plan.has_plan_mutation is False
+    assert turn_plan.availability_constraint["sport_type"] == "swimming"
+    assert turn_plan.availability_constraint["ends_on"] == "2026-05-27"
+    assert turn_plan.requires_truth_read is True
+    assert turn_plan.truth_scope == "plan_window"
+    assert "Availability constraint" in captured["prompt"]
+    assert "disponibilite datee claire" in captured["system"]
+    assert "Demain soir c'est impossible pour moi" in captured["prompt"]
 
 
 def test_turn_plan_can_carry_grounding_requirements() -> None:

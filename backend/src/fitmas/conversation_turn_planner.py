@@ -48,6 +48,7 @@ class ConversationTurnPlan(BaseModel):
     user_goal: str = ""
     mutation_signal: bool = False
     execution_claim: dict[str, Any] | None = None
+    availability_constraint: dict[str, Any] | None = None
     temporal_references: tuple[dict[str, Any], ...] = ()
     requires_truth_read: bool = False
     truth_scope: str | None = None
@@ -117,6 +118,7 @@ def _build_prompt(
         "activity_highlights": "question sur un meilleur/pire record recent: plus longue sortie, plus grande distance, plus rapide",
         "plan_mutation": "deplacer, echanger, remplacer, alleger ou negocier une seance",
         "execution_report": "declaration de ce qui a ete fait ou pas fait",
+        "availability_constraint": "contrainte de disponibilite datee, horaire, lieu, voyage ou sport temporairement impossible",
         "health_signal": "douleur, fatigue, maladie, gene physique",
         "calibration_answer": "reponse courte a une question de calibration ouverte",
         "needs_clarification": "message ambigu dont la cible est risquee",
@@ -131,6 +133,13 @@ def _build_prompt(
         "value": "today|tomorrow|yesterday|monday..sunday|YYYY-MM-DD",
         "role": "source|target|context",
     }
+    availability_contract = {
+        "availability": "unavailable|limited|available|unknown",
+        "sport_type": "swimming|running|cycling|strength|climbing|unknown|null",
+        "starts_on": "YYYY-MM-DD|null",
+        "ends_on": "YYYY-MM-DD|null",
+        "scope": "sport|time|location|general|unknown",
+    }
     return "\n".join(
         [
             "Determine l'intention principale du tour FitMAS.",
@@ -139,6 +148,8 @@ def _build_prompt(
             json.dumps(capabilities, ensure_ascii=False, sort_keys=True),
             "Temporal refs: si le user pointe un jour/date, extrais un artefact type, pas une phrase.",
             json.dumps(temporal_contract, ensure_ascii=False, sort_keys=True),
+            "Availability constraint: si le tour parle d'une indisponibilite, extrais cet artefact type.",
+            json.dumps(availability_contract, ensure_ascii=False, sort_keys=True),
             "",
             "Contexte borne:",
             f"- temporel: {temporal_summary or 'aucun'}",
@@ -182,6 +193,8 @@ Regles:
 - Si le user conteste ou verifie une annonce planning du coach ("t'es sur ?", "redonne le plan actuel"), primary_intent=plan_lookup, requires_truth_read=true, truth_scope=plan_window.
 - Si le user demande un fait sur les activites recentes ("ma plus longue sortie recente", "plus grosse distance", "meilleure sortie"), primary_intent=activity_highlights, requires_truth_read=true, truth_scope=execution.
 - Si le user demande une lecture d'historique d'activite sans superlatif clair, primary_intent=activity_review, requires_truth_read=true, truth_scope=execution.
+- Une disponibilite datee claire ("demain soir impossible", "jeudi matin pas dispo", "voyage mercredi-vendredi", "je ne peux pas nager 2 semaines") est primary_intent=availability_constraint, needs_clarification=false, requires_truth_read=true, truth_scope=plan_window. Le manque de seance ou de sport cible n'est pas une clarification: le coach decisionnaire lira le plan et notera la contrainte.
+- Si cette disponibilite datee demande aussi explicitement de bouger/remplacer/adapter une seance, primary_intent=plan_mutation et availability_constraint est secondaire.
 - Si la cible concrete manque, primary_intent=needs_clarification.
 - Un jour/date seul ("samedi", "vendredi", "demain") n'est PAS une mutation sans fil actif. Si Fil conversationnel recent=aucun et qu'il n'y a ni action explicite ni question de choix planning ouverte, primary_intent=needs_clarification, mutation_signal=false, temporal_references role=context.
 - Si le coach vient de poser une question de choix planning ("jeudi ou samedi ?", "quelle seance ?"), un jour/date seul peut repondre a ce fil et devenir plan_mutation ou calibration_answer selon le contexte.
@@ -199,6 +212,7 @@ Reponds uniquement avec un JSON valide:
   "user_goal": "phrase courte",
   "mutation_signal": true,
   "execution_claim": {"status": "done|not_done|unknown", "sport_type": "swimming|running|cycling|strength|climbing|unknown", "date": "YYYY-MM-DD|null"},
+  "availability_constraint": {"availability":"unavailable|limited|available|unknown","sport_type":"swimming|running|cycling|strength|climbing|unknown|null","starts_on":"YYYY-MM-DD|null","ends_on":"YYYY-MM-DD|null","scope":"sport|time|location|general|unknown"},
   "temporal_references": [{"kind":"relative_day|weekday|date","value":"today|tomorrow|yesterday|monday|tuesday|wednesday|thursday|friday|saturday|sunday|YYYY-MM-DD","role":"source|target|context"}],
   "requires_truth_read": false,
   "truth_scope": "plan_window|execution|memory|null",

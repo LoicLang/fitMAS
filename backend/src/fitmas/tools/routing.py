@@ -10,6 +10,7 @@ class IntentCategory(str, Enum):
     CALIBRATION_ANSWER = "calibration_answer"
     EXECUTION_REPORT = "execution_report"
     HEALTH_SIGNAL = "health_signal"
+    AVAILABILITY_CONSTRAINT = "availability_constraint"
     PLAN_NEGOTIATION = "plan_negotiation"
     PLAN_LOOKUP = "plan_lookup"
     ACTIVITY_REVIEW = "activity_review"

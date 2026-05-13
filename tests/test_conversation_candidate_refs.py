@@ -132,6 +132,72 @@ def test_backend_candidate_refs_include_swap_lighten_and_replace_options() -> No
     assert replace_operation.new_duration_min == 30
 
 
+def test_backend_sport_unavailable_candidates_only_target_matching_sport() -> None:
+    running = _session(
+        session_id=42,
+        scheduled_date="2099-05-06",
+        sport_type="running",
+        session_type="tempo",
+        title="Fractionne seuil",
+        duration_min=50,
+        intensity="hard",
+    )
+    swimming_inside = _session(
+        session_id=43,
+        scheduled_date="2099-05-08",
+        sport_type="swimming",
+        session_type="easy",
+        title="Natation souple",
+        duration_min=45,
+        intensity="easy",
+    )
+    swimming_later = _session(
+        session_id=44,
+        scheduled_date="2099-05-16",
+        sport_type="swimming",
+        session_type="endurance",
+        title="Endurance piscine",
+        duration_min=50,
+        intensity="moderate",
+    )
+    swimming_outside = _session(
+        session_id=45,
+        scheduled_date="2099-05-25",
+        sport_type="swimming",
+        session_type="easy",
+        title="Natation hors fenetre",
+        duration_min=40,
+        intensity="easy",
+    )
+    grounding = ReplyGroundingPacket(
+        local_date=date(2099, 5, 5),
+        timezone_name="Europe/Paris",
+    )
+    turn_plan = SimpleNamespace(
+        primary_intent="availability_constraint",
+        secondary_intents=(),
+        availability_constraint={
+            "availability": "unavailable",
+            "sport_type": "swimming",
+            "starts_on": "2099-05-05",
+            "ends_on": "2099-05-19",
+        },
+    )
+
+    payloads, patches = build_backend_candidate_refs_for_turn(
+        grounding=grounding,
+        scheduled_sessions=[running, swimming_inside, swimming_later, swimming_outside],
+        turn_plan=turn_plan,
+    )
+    target_ids = {payload["target_session_id"] for payload in payloads}
+
+    assert target_ids == {43, 44}
+    assert all(payload["constraint_sport_type"] == "swimming" for payload in payloads)
+    assert all(payload["operations"] == ["replace_session"] for payload in payloads)
+    assert all(operation.operation_type == "replace_session" for patch in patches.values() for operation in patch.operations)
+    assert all(operation.new_sport_type != "swimming" for patch in patches.values() for operation in patch.operations)
+
+
 def test_pending_choice_serialization_materializes_ref_candidates() -> None:
     patch = PlanPatch(
         operations=[

@@ -170,13 +170,31 @@ def request_text(
     return message_text(response)
 
 
+_DEFAULT_REQUEST_TEXT = request_text
+
+
 def request_json(
-    *, system: str, prompt: str, model: str = DEFAULT_MODEL, max_tokens: int = 1024,
+    *,
+    system: Any,
+    prompt: str,
+    model: str = DEFAULT_MODEL,
+    max_tokens: int = 1024,
+    schema_hint: str | None = None,
 ) -> dict | None:
     """Request JSON response from LLM. Returns parsed dict or None.
 
     Parsing goes through _json_parse_candidates() so truncated tails and
     trailing noise from the model don't drop otherwise valid payloads."""
+    if os.getenv("DEEPSEEK_API_KEY") and request_text is _DEFAULT_REQUEST_TEXT:
+        result = request_structured_json(
+            system=system,
+            messages=[{"role": "user", "content": prompt}],
+            model=model,
+            max_tokens=max_tokens,
+            schema_hint=schema_hint,
+        )
+        if result.data is not None:
+            return result.data
     raw = request_text(system=system, prompt=prompt, model=model, max_tokens=max_tokens)
     if not raw:
         return None
@@ -185,12 +203,13 @@ def request_json(
 
 def request_structured_json(
     *,
-    system: str,
+    system: Any,
     messages: list[dict[str, Any]],
     model: str = DEFAULT_FAST_MODEL,
     max_tokens: int = 1024,
     fallback_model: str = CLAUDE_FALLBACK_MODEL,
     provider: str = "auto",
+    schema_hint: str | None = None,
 ) -> StructuredJSONResult:
     """Request JSON with the best available structured-output path.
 
@@ -205,6 +224,7 @@ def request_structured_json(
             messages=messages,
             model=fallback_model,
             max_tokens=max_tokens,
+            schema_hint=schema_hint,
         )
     deepseek_result: StructuredJSONResult | None = None
     if provider in {"auto", "deepseek_openai"} and os.getenv("DEEPSEEK_API_KEY"):
@@ -213,6 +233,7 @@ def request_structured_json(
             messages=messages,
             model=_normalize_model_for_provider(model),
             max_tokens=max_tokens,
+            schema_hint=schema_hint,
         )
         if deepseek_result.data is not None:
             return deepseek_result
@@ -225,6 +246,7 @@ def request_structured_json(
             messages=messages,
             model=fallback_model,
             max_tokens=max_tokens,
+            schema_hint=schema_hint,
         )
         if deepseek_result is not None:
             return StructuredJSONResult(
@@ -274,10 +296,11 @@ def classify_llm_exception(exc: BaseException) -> str:
 
 def _request_deepseek_openai_json(
     *,
-    system: str,
+    system: Any,
     messages: list[dict[str, Any]],
     model: str,
     max_tokens: int,
+    schema_hint: str | None = None,
 ) -> StructuredJSONResult:
     client_obj = deepseek_openai_client()
     if client_obj is None:
@@ -292,7 +315,12 @@ def _request_deepseek_openai_json(
                 temperature=0,
                 max_tokens=effective_max_tokens,
                 response_format={"type": "json_object"},
-                messages=_deepseek_json_messages(system=system, messages=messages, attempt=attempt),
+                messages=_deepseek_json_messages(
+                    system=system,
+                    messages=messages,
+                    attempt=attempt,
+                    schema_hint=schema_hint,
+                ),
             )
             raw = _openai_message_text(response)
             last_raw = raw
@@ -321,35 +349,67 @@ def _request_deepseek_openai_json(
     )
 
 
-def _deepseek_json_messages(*, system: str, messages: list[dict[str, Any]], attempt: int) -> list[dict[str, Any]]:
+def render_system_text(system: Any) -> str:
+    """Render Anthropic-style system blocks into plain provider text."""
+    if system is None:
+        return ""
+    if isinstance(system, str):
+        return system.strip()
+    if isinstance(system, dict):
+        text = system.get("text")
+        return str(text).strip() if text is not None else str(system).strip()
+    if isinstance(system, list):
+        parts: list[str] = []
+        for item in system:
+            if isinstance(item, str):
+                text = item
+            elif isinstance(item, dict):
+                text = item.get("text")
+            else:
+                text = getattr(item, "text", None)
+            if text is not None and str(text).strip():
+                parts.append(str(text).strip())
+        return "\n\n".join(parts)
+    return str(system).strip()
+
+
+def _structured_json_contract(*, schema_hint: str | None = None, attempt: int | None = None) -> str:
+    lines = [
+        "Tu dois repondre uniquement en JSON valide. Le mot JSON est volontairement explicite.",
+        "Aucun markdown. Aucune prose hors JSON.",
+        "Respecte exactement le schema demande dans le prompt et le system prompt.",
+        "N'ajoute pas de champ legacy absent du schema demande.",
+    ]
+    if schema_hint:
+        lines.extend(["Schema attendu:", schema_hint.strip()])
+    if attempt is not None and attempt > 1:
+        lines.append(
+            f"Tentative {attempt}: la tentative precedente etait vide ou invalide. Corrige et retourne du JSON strict."
+        )
+    return "\n".join(line for line in lines if line)
+
+
+def _deepseek_json_messages(
+    *,
+    system: Any,
+    messages: list[dict[str, Any]],
+    attempt: int,
+    schema_hint: str | None = None,
+) -> list[dict[str, Any]]:
     """Wrap prompts for DeepSeek JSON mode according to provider guidance."""
-    attempt_note = "" if attempt <= 1 else f"\nTentative {attempt}: la tentative precedente etait vide ou invalide. Corrige et retourne du JSON strict."
-    json_contract = (
-        "Tu dois repondre uniquement en JSON valide. Le mot JSON est volontairement explicite.\n"
-        "Aucun markdown. Aucune prose hors JSON. Aucun champ vide si tu peux l'eviter.\n"
-        "Si l'action n'est pas claire, utilise mutation_type=\"no_change\" avec rationale et fitmas_message non vides.\n"
-        "Ne promets jamais une modification du plan si mutation_type=\"no_change\".\n"
-        "fitmas_message doit etre une phrase complete, courte, sans coupure en fin de phrase.\n"
-        "Exemple JSON attendu:\n"
-        "{\n"
-        '  "mutation_type": "no_change",\n'
-        '  "target_session_id": null,\n'
-        '  "second_session_id": null,\n'
-        '  "target_date": null,\n'
-        '  "rationale": "raison courte",\n'
-        '  "fitmas_message": "message utilisateur court"\n'
-        "}"
-        f"{attempt_note}"
-    )
-    return [{"role": "system", "content": f"{system}\n\n{json_contract}"}, *messages]
+    system_text = render_system_text(system)
+    json_contract = _structured_json_contract(schema_hint=schema_hint, attempt=attempt)
+    content = "\n\n".join(part for part in (system_text, json_contract) if part.strip())
+    return [{"role": "system", "content": content}, *messages]
 
 
 def _request_claude_json(
     *,
-    system: str,
+    system: Any,
     messages: list[dict[str, Any]],
     model: str,
     max_tokens: int,
+    schema_hint: str | None = None,
 ) -> StructuredJSONResult:
     client_obj = anthropic_client(provider="claude")
     if client_obj is None:
@@ -358,7 +418,14 @@ def _request_claude_json(
         response = client_obj.messages.create(
             model=model,
             max_tokens=max_tokens,
-            system=system,
+            system="\n\n".join(
+                part
+                for part in (
+                    render_system_text(system),
+                    _structured_json_contract(schema_hint=schema_hint),
+                )
+                if part.strip()
+            ),
             messages=messages,
         )
         raw = message_text(response)
