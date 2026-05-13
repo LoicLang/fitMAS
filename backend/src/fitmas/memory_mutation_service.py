@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import unicodedata
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, time, timedelta
 from typing import Iterable
 
 from sqlalchemy.orm import Session
@@ -177,7 +177,7 @@ def _resolve_overlapping_unavailability(
     sport_type = _normalize_sport(getattr(action, "sport_type", None))
     if starts_on is None or ends_on is None:
         return
-    resolved_at = now or datetime.utcnow()
+    resolved_at = now or datetime.now(UTC).replace(tzinfo=None)
     resolved_rows: list[s.UserFact | s.WorkingMemoryEntry] = []
     for row in [
         *_active_unavailability_rows(db, s.UserFact, user_id=user.id),
@@ -232,21 +232,31 @@ def _availability_row_matches_sport(row: s.UserFact | s.WorkingMemoryEntry, *, s
     key = str(getattr(row, "key", "") or "")
     if key.startswith("unavailable_"):
         parts = key.split("_")
-        row_sport = parts[1] if len(parts) >= 4 else None
+        row_sport = _normalize_sport(parts[1] if len(parts) >= 4 else None)
         return row_sport == sport_type
     return sport_type is None
 
 
 def _availability_row_overlaps(row: s.UserFact | s.WorkingMemoryEntry, *, starts_on, ends_on) -> bool:
     row_start = _as_date(getattr(row, "valid_from", None) or getattr(row, "observed_at", None))
-    row_end = _as_date(getattr(row, "valid_until", None) or getattr(row, "expires_at", None))
-    if row_end is not None:
-        # Memory valid_until/expires_at is often stored as the exclusive next-day
-        # boundary for date windows.
-        row_end = row_end - timedelta(days=1)
+    row_end = _availability_end_date(getattr(row, "valid_until", None) or getattr(row, "expires_at", None))
     if row_start is None or row_end is None:
         return True
     return row_start <= ends_on and starts_on <= row_end
+
+
+def _availability_end_date(value):
+    if value is None:
+        return None
+    if isinstance(value, datetime):
+        # Memory valid_until/expires_at is often stored as the exclusive
+        # next-day midnight boundary. Inclusive end-of-day values should keep
+        # their calendar day.
+        end = value.date()
+        if value.time() == time.min:
+            return end - timedelta(days=1)
+        return end
+    return _as_date(value)
 
 
 def _as_date(value):

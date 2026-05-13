@@ -465,6 +465,7 @@ class FitMASCoreFlowsTest(unittest.TestCase):
         self.db.commit()
         original_decide = api_messages.decide
         original_extract_facts = api_messages.extract_facts
+        original_accept_recheck = conversation_pipeline._verify_pending_accept_resolution
         try:
             api_messages.decide = lambda *args, **kwargs: MutationDecision(
                 mutation_type="replace_session",
@@ -500,6 +501,7 @@ class FitMASCoreFlowsTest(unittest.TestCase):
         self.db.commit()
         original_decide = api_messages.decide
         original_extract_facts = api_messages.extract_facts
+        original_accept_recheck = conversation_pipeline._verify_pending_accept_resolution
         try:
             api_messages.decide = lambda *args, **kwargs: MutationDecision(
                 mutation_type="replace_session",
@@ -688,6 +690,7 @@ class FitMASCoreFlowsTest(unittest.TestCase):
 
         original_decide = api_messages.decide
         original_extract_facts = api_messages.extract_facts
+        original_accept_recheck = conversation_pipeline._verify_pending_accept_resolution
         try:
             def fake_decide(user_text, *args, **kwargs):
                 if str(user_text).strip().lower() == "oui":
@@ -720,12 +723,14 @@ class FitMASCoreFlowsTest(unittest.TestCase):
 
             api_messages.decide = fake_decide
             api_messages.extract_facts = lambda *args, **kwargs: []
+            conversation_pipeline._verify_pending_accept_resolution = lambda **kwargs: "accept_pending"
             first = self.client.post("/api/v0/messages", json={"text": "Mets une seance dure a la place"}).json()
             pending = repo.get_active_pending_mutation_confirmation(self.db, self.user.id)
             second = self.client.post("/api/v0/messages", json={"text": "oui"}).json()
         finally:
             api_messages.decide = original_decide
             api_messages.extract_facts = original_extract_facts
+            conversation_pipeline._verify_pending_accept_resolution = original_accept_recheck
 
         self.db.expire_all()
         refreshed_session = repo.get_scheduled_session(self.db, self.user.id, session.id)
@@ -945,6 +950,7 @@ class FitMASCoreFlowsTest(unittest.TestCase):
         self.db.commit()
         original_decide = api_messages.decide
         original_extract_facts = api_messages.extract_facts
+        original_accept_recheck = conversation_pipeline._verify_pending_accept_resolution
         try:
             def fake_decide(user_text, *args, **kwargs):
                 if str(user_text).strip().lower() == "non":
@@ -969,11 +975,13 @@ class FitMASCoreFlowsTest(unittest.TestCase):
 
             api_messages.decide = fake_decide
             api_messages.extract_facts = lambda *args, **kwargs: []
+            conversation_pipeline._verify_pending_accept_resolution = lambda **kwargs: "reject_pending"
             self.client.post("/api/v0/messages", json={"text": "Tu peux remplacer ma seance ?"})
             self.client.post("/api/v0/messages", json={"text": "non"})
         finally:
             api_messages.decide = original_decide
             api_messages.extract_facts = original_extract_facts
+            conversation_pipeline._verify_pending_accept_resolution = original_accept_recheck
 
         self.db.expire_all()
         refreshed_session = repo.get_scheduled_session(self.db, self.user.id, session.id)
@@ -1119,6 +1127,765 @@ class FitMASCoreFlowsTest(unittest.TestCase):
         self.assertEqual(turn.response_mode, "pending_ignore")
         self.assertTrue(turn.pending_confirmation)
         self.assertEqual(turn.pending_confirmation_id, pending.id)
+
+    def test_pending_accept_recheck_blocks_weak_wait_turn(self) -> None:
+        _, session = self._create_plan_for_today()
+        target_date = (get_local_now(self.user.timezone).date() + timedelta(days=2)).isoformat()
+        patch = PlanPatch(
+            coach_message="Je deplace la seance.",
+            operations=[
+                PlanPatchOperation(
+                    operation_type="move_session",
+                    target_session_id=session.id,
+                    target_date=target_date,
+                    rationale="Demande utilisateur a confirmer.",
+                )
+            ],
+        )
+        pending = repo.create_pending_mutation_confirmation(
+            self.db,
+            user_id=self.user.id,
+            impact_level="high",
+            reason="week_coherence_requires_confirmation",
+            mutation_type="plan_patch",
+            summary="deplacer la seance",
+            source_text="deplace vendredi",
+            decision_json=serialize_plan_patch_confirmation(patch),
+            expires_at=datetime.now() + timedelta(minutes=10),
+        )
+        decision = CoachDecision(
+            response_type="reply",
+            rationale="le modele principal a sur-interprete le tour",
+            fitmas_message="Je garde la proposition ouverte.",
+            pending_resolution=llm.AcceptPendingResolution(type="accept_pending"),
+        )
+
+        original_verify = conversation_pipeline._verify_pending_accept_resolution
+        try:
+            conversation_pipeline._verify_pending_accept_resolution = lambda **kwargs: "ignore"
+            outcome = conversation_pipeline._apply_pending_resolution(
+                db=self.db,
+                user=self.user,
+                decision=decision,
+                pending_confirmation=pending,
+                user_text="j'attends",
+            )
+        finally:
+            conversation_pipeline._verify_pending_accept_resolution = original_verify
+
+        self.db.expire_all()
+        refreshed_pending = self.db.get(s.PendingMutationConfirmation, pending.id)
+        refreshed_session = repo.get_scheduled_session(self.db, self.user.id, session.id)
+
+        self.assertIsNotNone(outcome)
+        self.assertEqual(outcome.response_mode, "pending_ignore")
+        self.assertFalse(outcome.mutation_applied)
+        self.assertTrue(outcome.pending_confirmation)
+        self.assertEqual(outcome.pending_confirmation_id, pending.id)
+        self.assertEqual(refreshed_pending.status, "pending")
+        self.assertNotEqual(refreshed_session.scheduled_date.date().isoformat(), target_date)
+
+    def test_pending_accept_recheck_allows_clear_acceptance(self) -> None:
+        _, session = self._create_plan_for_today()
+        target_date = (get_local_now(self.user.timezone).date() + timedelta(days=2)).isoformat()
+        patch = PlanPatch(
+            coach_message="Je deplace la seance.",
+            operations=[
+                PlanPatchOperation(
+                    operation_type="move_session",
+                    target_session_id=session.id,
+                    target_date=target_date,
+                    rationale="Demande utilisateur a confirmer.",
+                )
+            ],
+        )
+        pending = repo.create_pending_mutation_confirmation(
+            self.db,
+            user_id=self.user.id,
+            impact_level="high",
+            reason="week_coherence_requires_confirmation",
+            mutation_type="plan_patch",
+            summary="deplacer la seance",
+            source_text="deplace vendredi",
+            decision_json=serialize_plan_patch_confirmation(patch),
+            expires_at=datetime.now() + timedelta(minutes=10),
+        )
+        decision = CoachDecision(
+            response_type="reply",
+            rationale="acceptation pending comprise",
+            fitmas_message="C'est confirme. Je l'applique.",
+            pending_resolution=llm.AcceptPendingResolution(type="accept_pending"),
+        )
+
+        original_verify = conversation_pipeline._verify_pending_accept_resolution
+        try:
+            conversation_pipeline._verify_pending_accept_resolution = lambda **kwargs: "accept_pending"
+            outcome = conversation_pipeline._apply_pending_resolution(
+                db=self.db,
+                user=self.user,
+                decision=decision,
+                pending_confirmation=pending,
+                user_text="oui confirme",
+            )
+        finally:
+            conversation_pipeline._verify_pending_accept_resolution = original_verify
+
+        self.db.expire_all()
+        refreshed_pending = self.db.get(s.PendingMutationConfirmation, pending.id)
+        refreshed_session = repo.get_scheduled_session(self.db, self.user.id, session.id)
+
+        self.assertIsNotNone(outcome)
+        self.assertEqual(outcome.response_mode, "pending_accepted")
+        self.assertTrue(outcome.mutation_applied)
+        self.assertEqual(refreshed_pending.status, "accepted")
+        self.assertEqual(refreshed_session.scheduled_date.date().isoformat(), target_date)
+
+    def test_pending_reject_recheck_blocks_ambiguous_rejection(self) -> None:
+        _, session = self._create_plan_for_today()
+        patch = PlanPatch(
+            coach_message="Je deplace la seance.",
+            operations=[
+                PlanPatchOperation(
+                    operation_type="move_session",
+                    target_session_id=session.id,
+                    target_date=(session.scheduled_date.date() + timedelta(days=2)).isoformat(),
+                    rationale="Demande utilisateur a confirmer.",
+                )
+            ],
+        )
+        pending = repo.create_pending_mutation_confirmation(
+            self.db,
+            user_id=self.user.id,
+            impact_level="high",
+            reason="week_coherence_requires_confirmation",
+            mutation_type="plan_patch",
+            summary="deplacer la seance",
+            source_text="deplace vendredi",
+            decision_json=serialize_plan_patch_confirmation(patch),
+            expires_at=datetime.now() + timedelta(minutes=10),
+        )
+        decision = CoachDecision(
+            response_type="reply",
+            rationale="le modele principal a sur-interprete le non",
+            fitmas_message="Je ne l'applique pas.",
+            pending_resolution=llm.RejectPendingResolution(type="reject_pending"),
+        )
+
+        original_verify = conversation_pipeline._verify_pending_accept_resolution
+        try:
+            conversation_pipeline._verify_pending_accept_resolution = lambda **kwargs: "ignore"
+            outcome = conversation_pipeline._apply_pending_resolution(
+                db=self.db,
+                user=self.user,
+                decision=decision,
+                pending_confirmation=pending,
+                user_text="non j'etais indispo aujourd'hui mais demain je suis dispo",
+            )
+        finally:
+            conversation_pipeline._verify_pending_accept_resolution = original_verify
+
+        self.db.expire_all()
+        refreshed_pending = self.db.get(s.PendingMutationConfirmation, pending.id)
+
+        self.assertIsNotNone(outcome)
+        self.assertEqual(outcome.response_mode, "pending_ignore")
+        self.assertTrue(outcome.pending_confirmation)
+        self.assertEqual(outcome.pending_confirmation_id, pending.id)
+        self.assertEqual(refreshed_pending.status, "pending")
+
+    def test_pending_accept_recheck_mismatch_with_plan_mutation_falls_through(self) -> None:
+        _, session = self._create_plan_for_today()
+        pending = repo.create_pending_mutation_confirmation(
+            self.db,
+            user_id=self.user.id,
+            impact_level="high",
+            reason="adaptation a confirmer",
+            mutation_type="plan_patch",
+            summary="deplacer la seance",
+            source_text="running demain",
+            decision_json=serialize_plan_patch_confirmation(
+                PlanPatch(
+                    coach_message="Je deplace la seance.",
+                    operations=[
+                        PlanPatchOperation(
+                            operation_type="move_session",
+                            target_session_id=session.id,
+                            target_date=(session.scheduled_date.date() + timedelta(days=1)).isoformat(),
+                            rationale="Adaptation a confirmer.",
+                        )
+                    ],
+                )
+            ),
+            expires_at=datetime.now() + timedelta(minutes=10),
+        )
+        decision = CoachDecision(
+            response_type="reply",
+            rationale="acceptation surestimee",
+            fitmas_message="Je le fais.",
+            pending_resolution=llm.AcceptPendingResolution(type="accept_pending"),
+        )
+        turn_plan = SimpleNamespace(
+            primary_intent="plan_mutation",
+            secondary_intents=("availability_constraint",),
+            has_plan_mutation=True,
+        )
+
+        original_verify = conversation_pipeline._verify_pending_accept_resolution
+        try:
+            conversation_pipeline._verify_pending_accept_resolution = lambda **kwargs: "ignore"
+            outcome = conversation_pipeline._apply_pending_resolution(
+                db=self.db,
+                user=self.user,
+                decision=decision,
+                pending_confirmation=pending,
+                user_text="non j'etais indispo aujourd'hui mais demain je suis dispo",
+                turn_plan=turn_plan,
+            )
+        finally:
+            conversation_pipeline._verify_pending_accept_resolution = original_verify
+
+        self.assertIsNone(outcome)
+        refreshed_pending = self.db.get(s.PendingMutationConfirmation, pending.id)
+        self.assertEqual(refreshed_pending.status, "pending")
+
+    def test_pending_ignore_does_not_swallow_new_plan_patch(self) -> None:
+        _, session = self._create_plan_for_today()
+        pending = repo.create_pending_mutation_confirmation(
+            self.db,
+            user_id=self.user.id,
+            impact_level="high",
+            reason="ancienne proposition",
+            mutation_type="plan_patch",
+            summary="ancienne proposition",
+            source_text="deplace vendredi",
+            decision_json=serialize_plan_patch_confirmation(
+                PlanPatch(
+                    coach_message="Ancienne proposition.",
+                    operations=[
+                        PlanPatchOperation(
+                            operation_type="move_session",
+                            target_session_id=session.id,
+                            target_date=(session.scheduled_date.date() + timedelta(days=2)).isoformat(),
+                            rationale="Ancienne proposition.",
+                        )
+                    ],
+                )
+            ),
+            expires_at=datetime.now() + timedelta(minutes=10),
+        )
+        decision = CoachDecision(
+            response_type="requires_confirmation",
+            rationale="nouvelle proposition structuree",
+            fitmas_message="Je te propose une nouvelle option.",
+            confirmation_reason="nouvelle proposition",
+            plan_patch=PlanPatch(
+                coach_message="Nouvelle proposition.",
+                operations=[
+                    PlanPatchOperation(
+                        operation_type="move_session",
+                        target_session_id=session.id,
+                        target_date=(session.scheduled_date.date() + timedelta(days=3)).isoformat(),
+                        rationale="Nouvelle proposition.",
+                    )
+                ],
+            ),
+            pending_resolution=llm.IgnorePendingResolution(type="ignore"),
+        )
+
+        outcome = conversation_pipeline._apply_pending_resolution(
+            db=self.db,
+            user=self.user,
+            decision=decision,
+            pending_confirmation=pending,
+            user_text="readapte plutot la semaine",
+        )
+
+        self.assertIsNone(outcome)
+        refreshed_pending = self.db.get(s.PendingMutationConfirmation, pending.id)
+        self.assertEqual(refreshed_pending.status, "pending")
+
+    def test_pending_modify_with_plan_mutation_falls_through_to_adaptation(self) -> None:
+        _, session = self._create_plan_for_today()
+        pending = repo.create_pending_mutation_confirmation(
+            self.db,
+            user_id=self.user.id,
+            impact_level="high",
+            reason="ancienne proposition",
+            mutation_type="plan_patch",
+            summary="ancienne proposition",
+            source_text="deplace vendredi",
+            decision_json=serialize_plan_patch_confirmation(
+                PlanPatch(
+                    coach_message="Ancienne proposition.",
+                    operations=[
+                        PlanPatchOperation(
+                            operation_type="move_session",
+                            target_session_id=session.id,
+                            target_date=(session.scheduled_date.date() + timedelta(days=2)).isoformat(),
+                            rationale="Ancienne proposition.",
+                        )
+                    ],
+                )
+            ),
+            expires_at=datetime.now() + timedelta(minutes=10),
+        )
+        decision = CoachDecision(
+            response_type="reply",
+            rationale="la pending doit laisser passer la nouvelle demande planning",
+            fitmas_message="Je garde la proposition en attente.",
+            pending_resolution=llm.ModifyPendingResolution(
+                type="modify_pending",
+                requested_changes="readapter la semaine",
+            ),
+        )
+        turn_plan = SimpleNamespace(
+            primary_intent="plan_mutation",
+            secondary_intents=(),
+            has_plan_mutation=True,
+        )
+
+        outcome = conversation_pipeline._apply_pending_resolution(
+            db=self.db,
+            user=self.user,
+            decision=decision,
+            pending_confirmation=pending,
+            user_text="ok readapte la semaine alors",
+            turn_plan=turn_plan,
+        )
+
+        self.assertIsNone(outcome)
+        refreshed_pending = self.db.get(s.PendingMutationConfirmation, pending.id)
+        self.assertEqual(refreshed_pending.status, "pending")
+
+    def test_availability_plus_plan_mutation_can_enter_post_decide_candidate_flow(self) -> None:
+        decision = CoachDecision(
+            response_type="reply",
+            rationale="disponibilite corrigee avec adaptation a proposer",
+            fitmas_message="Je propose running demain et piscine vendredi.",
+        )
+        turn_plan = SimpleNamespace(
+            primary_intent="availability_constraint",
+            secondary_intents=("plan_mutation",),
+            has_plan_mutation=True,
+        )
+
+        self.assertTrue(
+            conversation_pipeline._should_try_mixed_plan_adaptation_after_decide(
+                decision=decision,
+                turn_plan=turn_plan,
+            )
+        )
+
+    def test_active_pending_does_not_block_pre_decide_plan_mutation_flow(self) -> None:
+        turn_plan = SimpleNamespace(
+            primary_intent="plan_mutation",
+            secondary_intents=(),
+            has_plan_mutation=True,
+            mutation_signal=True,
+            planning_action="move_session",
+        )
+        pending = SimpleNamespace(status="pending")
+
+        self.assertTrue(
+            conversation_pipeline._should_use_plan_adaptation_candidate_flow(
+                turn_plan=turn_plan,
+                pending_confirmation=pending,
+                open_calibration_need=None,
+                scheduled_sessions=[object()],
+                mode="pre_decide_pure",
+            )
+        )
+
+    def test_active_pending_blocks_pre_decide_plan_question_without_mutation_signal(self) -> None:
+        turn_plan = SimpleNamespace(
+            primary_intent="plan_mutation",
+            secondary_intents=(),
+            has_plan_mutation=True,
+            mutation_signal=False,
+            planning_action="move_session",
+        )
+        pending = SimpleNamespace(status="pending")
+
+        self.assertFalse(
+            conversation_pipeline._should_use_plan_adaptation_candidate_flow(
+                turn_plan=turn_plan,
+                pending_confirmation=pending,
+                open_calibration_need=None,
+                scheduled_sessions=[object()],
+                mode="pre_decide_pure",
+            )
+        )
+
+    def test_active_pending_blocks_pre_decide_unknown_planning_action(self) -> None:
+        turn_plan = SimpleNamespace(
+            primary_intent="plan_mutation",
+            secondary_intents=(),
+            has_plan_mutation=True,
+            mutation_signal=True,
+            planning_action="unknown",
+        )
+        pending = SimpleNamespace(status="pending")
+
+        self.assertFalse(
+            conversation_pipeline._should_use_plan_adaptation_candidate_flow(
+                turn_plan=turn_plan,
+                pending_confirmation=pending,
+                open_calibration_need=None,
+                scheduled_sessions=[object()],
+                mode="pre_decide_pure",
+            )
+        )
+
+    def test_active_pending_blocks_pre_decide_mixed_availability_plan_turn(self) -> None:
+        turn_plan = SimpleNamespace(
+            primary_intent="plan_mutation",
+            secondary_intents=("availability_constraint",),
+            has_plan_mutation=True,
+            mutation_signal=True,
+            planning_action="move_session",
+        )
+        pending = SimpleNamespace(status="pending")
+
+        self.assertFalse(
+            conversation_pipeline._should_use_plan_adaptation_candidate_flow(
+                turn_plan=turn_plan,
+                pending_confirmation=pending,
+                open_calibration_need=None,
+                scheduled_sessions=[object()],
+                mode="pre_decide_pure",
+            )
+        )
+
+    def test_pending_pre_adaptation_gate_only_allows_modify_pending(self) -> None:
+        self.assertTrue(conversation_pipeline._pending_pre_adaptation_allows("modify_pending"))
+        self.assertFalse(conversation_pipeline._pending_pre_adaptation_allows("ignore"))
+        self.assertFalse(conversation_pipeline._pending_pre_adaptation_allows("needs_clarification"))
+        self.assertFalse(conversation_pipeline._pending_pre_adaptation_allows("accept_pending"))
+
+    def test_plan_adaptation_reply_hard_guard_rejects_unknown_duration(self) -> None:
+        sessions = [
+            SimpleNamespace(duration_min=40),
+            SimpleNamespace(duration_min=25),
+        ]
+
+        self.assertFalse(
+            conversation_pipeline._plan_adaptation_reply_hard_guard_allows(
+                "Je te propose le footing de 45 minutes demain.",
+                scheduled_sessions=sessions,
+            )
+        )
+        self.assertTrue(
+            conversation_pipeline._plan_adaptation_reply_hard_guard_allows(
+                "Je te propose le footing de 40 minutes demain.",
+                scheduled_sessions=sessions,
+            )
+        )
+
+    def test_plan_adaptation_reply_hard_guard_rejects_wrong_relative_day(self) -> None:
+        today = get_local_now(self.user.timezone).date()
+        patch = PlanPatch(
+            coach_message="Deplacer Footing facile au vendredi",
+            operations=[
+                PlanPatchOperation(
+                    operation_type="move_session",
+                    target_session_id=10,
+                    target_date=(today + timedelta(days=2)).isoformat(),
+                    rationale="Courbatures.",
+                )
+            ],
+        )
+        sessions = [
+            SimpleNamespace(id=10, scheduled_date=datetime.combine(today, datetime.min.time()), duration_min=40),
+        ]
+        grounding = SimpleNamespace(local_date=today)
+
+        self.assertFalse(
+            conversation_pipeline._plan_adaptation_reply_hard_guard_allows(
+                "Je te propose de faire ton footing demain.",
+                scheduled_sessions=sessions,
+                patch=patch,
+                grounding=grounding,
+            )
+        )
+        self.assertTrue(
+            conversation_pipeline._plan_adaptation_reply_hard_guard_allows(
+                "Je te propose de déplacer ton footing vendredi.",
+                scheduled_sessions=sessions,
+                patch=patch,
+                grounding=grounding,
+            )
+        )
+
+    def test_pending_survives_clarification_outcome(self) -> None:
+        _, session = self._create_plan_for_today()
+        pending = repo.create_pending_mutation_confirmation(
+            self.db,
+            user_id=self.user.id,
+            impact_level="high",
+            reason="adaptation a confirmer",
+            mutation_type="plan_patch",
+            summary="deplacer la seance",
+            source_text="readapte la semaine",
+            decision_json=serialize_plan_patch_confirmation(
+                PlanPatch(
+                    coach_message="Je deplace la seance.",
+                    operations=[
+                        PlanPatchOperation(
+                            operation_type="move_session",
+                            target_session_id=session.id,
+                            target_date=(session.scheduled_date.date() + timedelta(days=1)).isoformat(),
+                            rationale="Adaptation a confirmer.",
+                        )
+                    ],
+                )
+            ),
+            expires_at=datetime.now() + timedelta(minutes=10),
+        )
+        outcome = ConversationTurnOutcome(
+            extraction=Extraction(confidence=0.85),
+            reply_text="Tu parles bien de la seance de running ?",
+            response_mode="plan_patch_clarification",
+            mutation_applied=False,
+        )
+
+        self.assertTrue(conversation_pipeline._outcome_keeps_pending_confirmation(outcome, pending))
+
+    def test_non_mutating_close_turn_keeps_active_pending(self) -> None:
+        _, session = self._create_plan_for_today()
+        pending = repo.create_pending_mutation_confirmation(
+            self.db,
+            user_id=self.user.id,
+            impact_level="high",
+            reason="adaptation a confirmer",
+            mutation_type="plan_patch",
+            summary="deplacer la seance",
+            source_text="readapte la semaine",
+            decision_json=serialize_plan_patch_confirmation(
+                PlanPatch(
+                    coach_message="Je deplace la seance.",
+                    operations=[
+                        PlanPatchOperation(
+                            operation_type="move_session",
+                            target_session_id=session.id,
+                            target_date=(session.scheduled_date.date() + timedelta(days=1)).isoformat(),
+                            rationale="Adaptation a confirmer.",
+                        )
+                    ],
+                )
+            ),
+            expires_at=datetime.now() + timedelta(minutes=10),
+        )
+        outcome = ConversationTurnOutcome(
+            extraction=Extraction(confidence=0.85),
+            reply_text="D'accord, je reste en attente de ta validation.",
+            response_mode="reply",
+            mutation_applied=False,
+        )
+        turn_plan = SimpleNamespace(primary_intent="close_turn")
+
+        conversation_pipeline._keep_pending_for_non_mutating_turn(
+            outcome=outcome,
+            turn_plan=turn_plan,
+            pending_confirmation=pending,
+        )
+
+        self.assertTrue(outcome.pending_confirmation)
+        self.assertEqual(outcome.pending_confirmation_id, pending.id)
+        self.assertTrue(conversation_pipeline._outcome_keeps_pending_confirmation(outcome, pending))
+
+    def test_plan_patch_turn_defers_conflicting_not_completed_execution_action(self) -> None:
+        _, session = self._create_plan_for_today()
+        decision = CoachDecision(
+            response_type="requires_confirmation",
+            rationale="Dispo corrigee et adaptation planning a confirmer.",
+            fitmas_message="Je note demain dispo et je te propose de deplacer la seance.",
+            confirmation_reason="adaptation semaine",
+            plan_patch=PlanPatch(
+                coach_message="Je deplace la seance demain.",
+                operations=[
+                    PlanPatchOperation(
+                        operation_type="move_session",
+                        target_session_id=session.id,
+                        target_date=(session.scheduled_date.date() + timedelta(days=1)).isoformat(),
+                        rationale="Disponibilite corrigee.",
+                    )
+                ],
+            ),
+            memory_actions=(
+                llm.AvailabilityConstraintAction(
+                    type="record_availability",
+                    window_text="demain disponible",
+                    availability="available",
+                    starts_on=(session.scheduled_date.date() + timedelta(days=1)).isoformat(),
+                    ends_on=(session.scheduled_date.date() + timedelta(days=1)).isoformat(),
+                    confidence=0.9,
+                    evidence="demain je suis dispo",
+                ),
+            ),
+            execution_actions=(
+                llm.ExecutionUpdateAction(
+                    type="record_execution_update",
+                    target_ref="seance a reprogrammer",
+                    target_session_id=session.id,
+                    status="not_completed",
+                    completed=False,
+                    confidence=0.86,
+                    evidence="indispo aujourd'hui",
+                ),
+            ),
+        )
+        memory_writes: list[dict] = []
+
+        result = conversation_pipeline._apply_coach_decision_actions(
+            db=self.db,
+            user=self.user,
+            decision=decision,
+            turn_memory_writes=memory_writes,
+        )
+
+        self.db.expire_all()
+        refreshed = repo.get_scheduled_session(self.db, self.user.id, session.id)
+
+        self.assertEqual(result["memory_applied"], 1)
+        self.assertEqual(result["execution_applied"], 0)
+        self.assertEqual(result["execution_deferred"], 1)
+        self.assertEqual(refreshed.completion_status, "planned")
+        self.assertIn(
+            {
+                "category": "execution",
+                "key": "record_execution_update",
+                "value": "deferred=1",
+                "source": "coach_decision",
+                "action": "deferred",
+            },
+            memory_writes,
+        )
+
+    def test_plan_patch_turn_defers_conflicting_execution_action_from_turn_plan_availability(self) -> None:
+        _, session = self._create_plan_for_today()
+        tomorrow = session.scheduled_date.date() + timedelta(days=1)
+        decision = CoachDecision(
+            response_type="requires_confirmation",
+            rationale="Dispo typée dans le turn planner et adaptation planning a confirmer.",
+            fitmas_message="Je note demain dispo et je te propose de deplacer la seance.",
+            confirmation_reason="adaptation semaine",
+            plan_patch=PlanPatch(
+                coach_message="Je deplace la seance demain.",
+                operations=[
+                    PlanPatchOperation(
+                        operation_type="move_session",
+                        target_session_id=session.id,
+                        target_date=tomorrow.isoformat(),
+                        rationale="Disponibilite corrigee.",
+                    )
+                ],
+            ),
+            execution_actions=(
+                llm.ExecutionUpdateAction(
+                    type="record_execution_update",
+                    target_ref="seance a reprogrammer",
+                    target_session_id=session.id,
+                    status="not_completed",
+                    completed=False,
+                    confidence=0.86,
+                    evidence="indispo aujourd'hui",
+                ),
+            ),
+        )
+        turn_plan = SimpleNamespace(
+            availability_constraint={
+                "availability": "available",
+                "sport_type": None,
+                "scope": "general",
+                "starts_on": tomorrow.isoformat(),
+                "ends_on": tomorrow.isoformat(),
+            },
+            confidence=0.9,
+        )
+        memory_writes: list[dict] = []
+
+        result = conversation_pipeline._apply_coach_decision_actions(
+            db=self.db,
+            user=self.user,
+            decision=decision,
+            turn_memory_writes=memory_writes,
+            turn_plan=turn_plan,
+        )
+
+        self.db.expire_all()
+        refreshed = repo.get_scheduled_session(self.db, self.user.id, session.id)
+
+        self.assertEqual(result["memory_applied"], 1)
+        self.assertEqual(result["execution_applied"], 0)
+        self.assertEqual(result["execution_deferred"], 1)
+        self.assertEqual(refreshed.completion_status, "planned")
+
+    def test_turn_plan_available_artifact_resolves_stale_unavailability_even_if_decision_is_limited(self) -> None:
+        tomorrow = get_local_now(self.user.timezone).date() + timedelta(days=1)
+        self.db.add(
+            s.UserFact(
+                user_id=self.user.id,
+                category="availability",
+                key=f"unavailable_general_{tomorrow.isoformat()}_{tomorrow.isoformat()}",
+                value="indisponible demain",
+                source="conversation",
+                confidence=0.8,
+                confirmed=True,
+                active=True,
+                status="open",
+                signal_kind="availability_unavailable",
+                valid_from=datetime.combine(tomorrow, datetime.min.time()),
+                valid_until=datetime.combine(tomorrow + timedelta(days=1), datetime.min.time()),
+            )
+        )
+        self.db.commit()
+        decision = CoachDecision(
+            response_type="reply",
+            rationale="correction disponibilite",
+            fitmas_message="OK, demain est dispo.",
+            memory_actions=(
+                llm.AvailabilityConstraintAction(
+                    type="record_availability",
+                    window_text="indispo aujourd'hui mais dispo demain",
+                    availability="limited",
+                    starts_on=(tomorrow - timedelta(days=1)).isoformat(),
+                    ends_on=tomorrow.isoformat(),
+                    confidence=0.9,
+                    evidence="indispo aujourd'hui mais dispo demain",
+                ),
+            ),
+        )
+        turn_plan = SimpleNamespace(
+            availability_constraint={
+                "availability": "available",
+                "sport_type": None,
+                "scope": "general",
+                "starts_on": tomorrow.isoformat(),
+                "ends_on": tomorrow.isoformat(),
+            },
+            confidence=0.9,
+        )
+        memory_writes: list[dict] = []
+
+        result = conversation_pipeline._apply_coach_decision_actions(
+            db=self.db,
+            user=self.user,
+            decision=decision,
+            turn_memory_writes=memory_writes,
+            turn_plan=turn_plan,
+        )
+
+        self.db.expire_all()
+        stale_fact = (
+            self.db.query(s.UserFact)
+            .filter(s.UserFact.key == f"unavailable_general_{tomorrow.isoformat()}_{tomorrow.isoformat()}")
+            .one()
+        )
+
+        self.assertGreaterEqual(result["memory_applied"], 2)
+        self.assertEqual(stale_fact.status, "resolved")
+        self.assertFalse(stale_fact.active)
+        self.assertEqual(stale_fact.resolution_reason, "availability_available_overlap")
 
     def test_expired_pending_accept_resolution_does_not_apply_patch(self) -> None:
         _, session = self._create_plan_for_today()
@@ -2039,7 +2806,7 @@ class FitMASCoreFlowsTest(unittest.TestCase):
         self.assertEqual(context["planning_snapshot_flow"]["policy_action"], "pending_confirmation")
         self.assertIsNotNone(evaluated_holder.get("value"))
         self.assertIsNotNone(pending)
-        self.assertEqual(pending.summary, "running demain, repos preserve")
+        self.assertEqual(pending.summary, f"Deplacer Footing facile au {tomorrow.isoformat()}")
 
     def test_plan_mutation_with_health_secondary_uses_snapshot_before_decide(self) -> None:
         _, session = self._create_plan_for_today()
@@ -2687,6 +3454,7 @@ class FitMASCoreFlowsTest(unittest.TestCase):
         original_extract_facts = api_messages.extract_facts
         original_compose = conversation_pipeline.final_reply.compose_final_reply
         original_verify = conversation_pipeline.final_reply.verify_post_event_reply
+        original_accept_recheck = conversation_pipeline._verify_pending_accept_resolution
         try:
             api_messages.plan_conversation_turn = lambda *args, **kwargs: SimpleNamespace(
                 primary_intent="trivial_ack",
@@ -2709,6 +3477,7 @@ class FitMASCoreFlowsTest(unittest.TestCase):
             conversation_pipeline.final_reply.verify_post_event_reply = (
                 lambda reply, context, **kwargs: reply
             )
+            conversation_pipeline._verify_pending_accept_resolution = lambda **kwargs: "accept_pending"
 
             result = self.client.post("/api/v0/messages", json={"text": "vendredi"}).json()
         finally:
@@ -2717,6 +3486,7 @@ class FitMASCoreFlowsTest(unittest.TestCase):
             api_messages.extract_facts = original_extract_facts
             conversation_pipeline.final_reply.compose_final_reply = original_compose
             conversation_pipeline.final_reply.verify_post_event_reply = original_verify
+            conversation_pipeline._verify_pending_accept_resolution = original_accept_recheck
 
         self.db.expire_all()
         refreshed = repo.get_scheduled_session(self.db, self.user.id, session.id)
@@ -2770,6 +3540,7 @@ class FitMASCoreFlowsTest(unittest.TestCase):
 
         original_decide = api_messages.decide
         original_extract_facts = api_messages.extract_facts
+        original_accept_recheck = conversation_pipeline._verify_pending_accept_resolution
         try:
             api_messages.decide = lambda *args, **kwargs: CoachDecision(
                 response_type="no_change",
@@ -2781,10 +3552,12 @@ class FitMASCoreFlowsTest(unittest.TestCase):
                 ),
             )
             api_messages.extract_facts = lambda *args, **kwargs: []
+            conversation_pipeline._verify_pending_accept_resolution = lambda **kwargs: "accept_pending"
             self.client.post("/api/v0/messages", json={"text": "l'autre option"}).json()
         finally:
             api_messages.decide = original_decide
             api_messages.extract_facts = original_extract_facts
+            conversation_pipeline._verify_pending_accept_resolution = original_accept_recheck
 
         self.db.expire_all()
         active_pending = repo.get_active_pending_mutation_confirmation(self.db, self.user.id)

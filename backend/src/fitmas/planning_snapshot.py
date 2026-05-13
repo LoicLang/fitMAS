@@ -181,7 +181,13 @@ def _snapshot_item(session: Any, *, diagnostics: list[str]) -> PlanningSnapshotI
     load_kind = _load_kind(load_score)
     unscored_reason = None
 
-    if sport_type in REST_SPORTS and has_session_content:
+    zero_duration_rest = (
+        sport_type in REST_SPORTS
+        and session_type == "rest"
+        and load_score == 0
+        and (duration_min is None or duration_min <= 0)
+    )
+    if sport_type in REST_SPORTS and has_session_content and not zero_duration_rest:
         diagnostics.append(f"REST_WITH_SESSION_CONTENT:session:{session_id}")
         role = "recovery"
         if load_score == 0:

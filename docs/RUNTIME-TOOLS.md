@@ -49,15 +49,18 @@ Note dogfood API 12 mai 2026 :
   `validate_week_coherence` de la boucle synchrone longue. Les compilers P3
   fonctionnent quand ils sont atteints; les timeouts restants arrivent avant
   cette phase.
-- P4 12 mai retire `validate_week_coherence` de la surface conversation. Le
-  LLM conversationnel peut toujours produire un `PlanPatch` via `draft_*` et
-  `validate_plan_patch`, puis la review sportive longue reste une gate backend
-  avant pending/commit. Le tool reste expose a `planning` et `heartbeat`.
+- P4 12 mai retire `validate_week_coherence` de la surface conversation. La
+  review sportive longue reste une gate backend avant pending/commit. Le tool
+  reste expose a `planning` et `heartbeat`.
 - P5 12 mai reduit les budgets conversationnels par route :
   `availability_constraint` pure est memory-only avec 3 tools
   (`resolve_planning_window`, `get_plan_window`, `get_user_constraints`),
-  `health_signal` a 5 tools, `plan_negotiation_full` a 10 tools. Les demandes
-  dispo qui demandent explicitement une adaptation restent en `plan_mutation`.
+  `health_signal` a 5 tools. Depuis le boundary fix du 13 mai,
+  `plan_negotiation_full` n'offre plus que lecture + validation
+  (`get_plan_window`, `resolve_planning_window`, `get_user_constraints`,
+  `validate_plan_patch`). Les demandes dispo qui demandent explicitement une
+  adaptation restent en `plan_mutation`, mais les outils candidats ne sont plus
+  exposes comme surfaces concurrentes.
 - P6a 12 mai ajoute des candidats backend sport-window hors tool libre :
   le turn planner extrait un artefact `availability_constraint` type, puis le
   backend fabrique des `candidate_ref` uniquement pour les seances du sport
@@ -68,6 +71,15 @@ Note dogfood API 12 mai 2026 :
   resultat pour chaque `tool_use_id`, mais ne relance pas le handler et ne
   consomme pas de budget pour les doublons. Le cache est partage entre rounds
   conversation et heartbeat.
+- Boundary fix 13 mai ajoute aussi une garde hors tool-loop sur les
+  confirmations : `accept_pending` est revalide par un mini-appel JSON-only
+  sans tools avant commit. Ce n'est pas un parseur texte; c'est une validation
+  LLM et le backend n'agit ensuite que sur l'artefact typé.
+- Multi-tour hardening 13 mai : quand une pending active existe, la candidate
+  flow ne repart plus directement sur PlanningSnapshot sauf si ce meme mini
+  verifier classe le tour en `modify_pending`. Le fallback legacy candidat est
+  coupe en pre-decide avec pending active, pour eviter une nouvelle option
+  opportuniste apres un simple statut/question.
 - Meme tranche : les sorties candidate-flow qui court-circuitent `decide()`
   peuvent persister une memoire disponibilite depuis
   `turn_plan.availability_constraint`, donc une adaptation pending ne perd plus

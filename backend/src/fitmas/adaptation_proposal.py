@@ -79,7 +79,7 @@ def compile_adaptation_proposal(
     refs_by_date = {
         item.scheduled_date: item
         for item in refs.values()
-        if item.scheduled_date and not _is_unscored_recovery_filler(item)
+        if item.scheduled_date and not _is_non_training_placeholder(item)
     }
     operations: list[PlanPatchOperation] = []
     errors: list[str] = []
@@ -94,7 +94,7 @@ def compile_adaptation_proposal(
         if operation.op == "keep":
             continue
         if operation.op == "move":
-            if _is_unscored_recovery_filler(item):
+            if _is_non_training_placeholder(item):
                 continue
             if not operation.target_date:
                 errors.append(f"MISSING_TARGET_DATE:{operation.source_ref}")
@@ -154,6 +154,28 @@ def compile_adaptation_proposal(
             if second is None:
                 errors.append(f"UNKNOWN_REF:{operation.second_ref}")
                 continue
+            if _is_non_training_placeholder(item) and not _is_non_training_placeholder(second):
+                operations.append(
+                    PlanPatchOperation(
+                        operation_type="move_session",
+                        target_session_id=second.session_id,
+                        target_date=item.scheduled_date,
+                        rationale=operation.reason,
+                    )
+                )
+                continue
+            if _is_non_training_placeholder(second) and not _is_non_training_placeholder(item):
+                operations.append(
+                    PlanPatchOperation(
+                        operation_type="move_session",
+                        target_session_id=item.session_id,
+                        target_date=second.scheduled_date,
+                        rationale=operation.reason,
+                    )
+                )
+                continue
+            if _is_non_training_placeholder(item) and _is_non_training_placeholder(second):
+                continue
             operations.append(
                 PlanPatchOperation(
                     operation_type="swap_sessions",
@@ -167,14 +189,16 @@ def compile_adaptation_proposal(
 
     if errors:
         return AdaptationProposalCompileResult(ok=False, patch=None, errors=tuple(errors))
+    operations = _dedupe_operations(operations)
     if not operations:
         return AdaptationProposalCompileResult(ok=False, patch=None, errors=("EMPTY_PATCH",))
+    summary = _compiled_patch_summary(operations, refs=refs, fallback=proposal.summary)
     return AdaptationProposalCompileResult(
         ok=True,
         patch=PlanPatch(
             operations=operations,
-            coach_message=proposal.summary,
-            confirmation_reason=proposal.summary if proposal.requires_confirmation else None,
+            coach_message=summary,
+            confirmation_reason=summary if proposal.requires_confirmation else None,
         ),
     )
 
@@ -283,3 +307,55 @@ def _snapshot_refs(snapshot: PlanningSnapshot) -> dict[str, PlanningSnapshotItem
 
 def _is_unscored_recovery_filler(item: PlanningSnapshotItem) -> bool:
     return item.sport_type in {"rest", "off"} and item.load_kind == "unscored_recovery"
+
+
+def _is_non_training_placeholder(item: PlanningSnapshotItem) -> bool:
+    return item.sport_type in {"rest", "off"} or _is_unscored_recovery_filler(item)
+
+
+def _compiled_patch_summary(
+    operations: list[PlanPatchOperation],
+    *,
+    refs: dict[str, PlanningSnapshotItem],
+    fallback: str,
+) -> str:
+    refs_by_id = {item.session_id: item for item in refs.values()}
+    parts: list[str] = []
+    for operation in operations:
+        if operation.operation_type == "move_session":
+            item = refs_by_id.get(operation.target_session_id or 0)
+            title = item.title if item is not None else f"session {operation.target_session_id}"
+            if operation.target_date:
+                parts.append(f"Deplacer {title} au {operation.target_date}")
+            else:
+                parts.append(f"Deplacer {title}")
+        elif operation.operation_type == "swap_sessions":
+            first = refs_by_id.get(operation.target_session_id or 0)
+            second = refs_by_id.get(operation.second_session_id or 0)
+            first_title = first.title if first is not None else f"session {operation.target_session_id}"
+            second_title = second.title if second is not None else f"session {operation.second_session_id}"
+            parts.append(f"Echanger {first_title} et {second_title}")
+    return " ; ".join(parts) or fallback
+
+
+def _dedupe_operations(operations: list[PlanPatchOperation]) -> list[PlanPatchOperation]:
+    deduped: list[PlanPatchOperation] = []
+    seen: set[tuple] = set()
+    for operation in operations:
+        key = (
+            operation.operation_type,
+            operation.target_session_id,
+            operation.second_session_id,
+            operation.target_date,
+            operation.new_sport_type,
+            operation.new_session_type,
+            operation.new_title,
+            operation.new_duration_min,
+            operation.new_intensity,
+            operation.new_description,
+        )
+        if key in seen:
+            continue
+        seen.add(key)
+        deduped.append(operation)
+    return deduped

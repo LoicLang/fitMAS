@@ -210,12 +210,6 @@ _CONVERSATION_TOOL_BUDGET = (
     "get_plan_window",
     "resolve_planning_window",
     "get_user_constraints",
-    "suggest_replan_candidates",
-    "draft_move_session",
-    "draft_swap_sessions",
-    "draft_replace_session",
-    "draft_lighten_day",
-    "draft_create_session",
     "validate_plan_patch",
 )
 _TERMINAL_NO_TOOL_INTENTS = {
@@ -1332,8 +1326,11 @@ def _compile_memory_actions_for_scope(
         else (
             "- si le tour est availability_constraint et que le contexte original contient une indisponibilite, contrainte horaire, voyage ou limitation sport/date, retourne record_availability meme si un plan_patch existe\n"
             "- pour record_availability, aucune seance cible n'est necessaire; une fenetre datee/relative, une contrainte horaire ou une limitation de sport suffit\n"
+            "- si le user distingue plusieurs statuts sur plusieurs dates (`aujourd'hui indispo mais demain dispo`), retourne plusieurs actions record_availability datees plutot qu'un seul `limited` large\n"
+            "- si le user corrige une ancienne indisponibilite (`demain je suis dispo`), retourne une action `available` datee sur cette fenetre pour permettre au backend de resoudre l'ancienne contrainte\n"
             "- si la contrainte concerne un sport precis, renseigne sport_type avec le sport canonique si connu\n"
             "- si la cible planning reste ambigue ou demande clarification, record_availability reste requis quand la contrainte de disponibilite est claire\n"
+            "- exemple: `non j'etais indispo aujourd'hui mais demain je suis dispo` -> deux actions: unavailable aujourd'hui, available demain\n"
             "- exemple: `Demain soir c'est impossible pour moi` -> record_availability window_text=\"demain soir impossible\", availability=unavailable\n"
             "- exemple: `Je ne peux pas nager deux semaines` -> record_availability window_text=\"natation impossible deux semaines\", availability=unavailable, sport_type=swimming\n"
         )
@@ -1357,7 +1354,7 @@ def _compile_memory_actions_for_scope(
         f"- action autorisee: {allowed_action} seulement\n"
         "- PlanPatch interdit; mutation_decision interdite; execution_actions interdites; pending_resolution interdit\n"
         "- ARTEFACTS_MACHINE.action_expected_when_scope_confident=true: le turn planner a classe ce tour dans ce scope; retourne l'action autorisee sauf si le contexte original est explicitement hypothetique, meta, ou insuffisant\n"
-        "- ARTEFACTS_MACHINE.minimum_actions_when_scope_confident=1: si le scope est confirme et que le message utilisateur porte bien ce signal, retourne exactement une action memoire autorisee\n"
+        "- ARTEFACTS_MACHINE.minimum_actions_when_scope_confident=1: si le scope est confirme et que le message utilisateur porte bien ce signal, retourne au moins une action memoire autorisee\n"
         "- un plan_patch existant ne remplace jamais la memoire; la memoire doit etre compilee separement\n"
         f"{scope_rule}"
         "- memory_actions=[] est autorise uniquement si le contexte original est explicitement hypothetique, meta, tiers, ou trop ambigu pour creer une memoire coach\n"
@@ -1421,6 +1418,8 @@ def _strict_memory_action_compiler_prompt(
         scope_rule = (
             "- si le message utilisateur porte une indisponibilite, contrainte horaire, voyage ou limitation sport/date, retourne exactement un record_availability\n"
             "- aucune seance cible n'est necessaire pour record_availability\n"
+            "- si le user distingue plusieurs statuts sur plusieurs dates (`aujourd'hui indispo mais demain dispo`), retourne plusieurs actions record_availability datees plutot qu'un seul `limited` large\n"
+            "- si le user corrige une ancienne indisponibilite (`demain je suis dispo`), retourne une action `available` datee sur cette fenetre pour permettre au backend de resoudre l'ancienne contrainte\n"
             "- si la contrainte concerne un sport precis, renseigne sport_type avec le sport canonique si connu\n"
             "- si la cible planning est ambigue, record_availability reste requis quand la contrainte de disponibilite est claire\n"
         )
@@ -1700,6 +1699,10 @@ def _maybe_repair_missing_availability_memory_action(
         "Verifie si cette CoachDecision oublie une `memory_actions.record_availability`.\n"
         "Tu es autorise a relire le contexte original comme LLM; le backend ne parse pas ce texte.\n"
         "Si le user exprime une contrainte durable ou datee de disponibilite, ajoute une action `record_availability`.\n"
+        "Si le user distingue plusieurs statuts sur plusieurs dates (`aujourd'hui indispo mais demain dispo`), "
+        "utilise plusieurs actions `record_availability` datees plutot qu'un seul `limited` large.\n"
+        "Si le user corrige une ancienne indisponibilite (`demain je suis dispo`), ajoute une action "
+        "`available` datee sur cette fenetre pour que le backend resolve l'ancienne contrainte.\n"
         "Si aucune contrainte de disponibilite n'est presente, retourne exactement le meme JSON.\n"
         "Ne change pas les mutations planning, pending_resolution ni execution_actions.\n"
         "Retourne uniquement un JSON FitMAS CoachDecision valide.\n\n"
@@ -2258,8 +2261,8 @@ def _tool_followup_content(tool_use_blocks: list[Any], tool_executions: list[Too
             "type": "text",
             "text": (
                 "Tu peux appeler d'autres tools si une information manque. "
-                "Si un tool draft_* retourne payload.patch, ne dis jamais que c'est applique; "
-                "copie ce patch dans un CoachDecision response_type=plan_patch ou requires_confirmation. "
+                "Si un tool retourne une validation de patch, ne dis jamais que c'est applique; "
+                "retourne un CoachDecision response_type=plan_patch ou requires_confirmation avec le PlanPatch voulu. "
                 "Ne lance pas de review sportive longue dans ce tour; le backend re-run la gate avant tout write. "
                 "Si tu as assez d'information, retourne maintenant uniquement un JSON FitMAS CoachDecision valide; "
                 "pas de prose hors JSON."

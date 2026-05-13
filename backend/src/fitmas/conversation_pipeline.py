@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import logging
 import re
 from contextlib import contextmanager
@@ -470,6 +471,7 @@ def _run_conversation_turn_impl(
                 decision=decision,
                 turn_memory_writes=turn_memory_writes,
                 unresolved_execution_followup=unresolved_execution_followup_text,
+                turn_plan=turn_plan,
             )
             turn_context["coach_decision_action_result"] = action_result
             pending_outcome = _apply_pending_resolution(
@@ -477,6 +479,8 @@ def _run_conversation_turn_impl(
                 user=user,
                 decision=decision,
                 pending_confirmation=pending_confirmation,
+                user_text=payload.text,
+                turn_plan=turn_plan,
             )
             if pending_outcome is not None:
                 outcome = pending_outcome
@@ -901,6 +905,12 @@ def _run_conversation_turn_impl(
             response_mode="llm_unavailable",
         )
 
+    _keep_pending_for_non_mutating_turn(
+        outcome=outcome,
+        turn_plan=turn_plan,
+        pending_confirmation=pending_confirmation,
+    )
+
     mutation_actually_committed = bool(outcome.mutation_applied or outcome.pending_confirmation)
     if not mutation_actually_committed and looks_like_action_claim(outcome.reply_text):
         original_reply = outcome.reply_text
@@ -1138,9 +1148,19 @@ def _apply_coach_decision_actions(
     decision: Any,
     turn_memory_writes: list[dict],
     unresolved_execution_followup: str | None = None,
+    turn_plan=None,
 ) -> dict[str, int]:
     memory_actions = tuple(getattr(decision, "memory_actions", ()) or ())
+    memory_actions = _memory_actions_with_turn_plan_availability(
+        memory_actions=memory_actions,
+        turn_plan=turn_plan,
+    )
     execution_actions = tuple(getattr(decision, "execution_actions", ()) or ())
+    execution_actions, deferred_execution_count = _defer_conflicting_execution_actions(
+        decision=decision,
+        memory_actions=memory_actions,
+        execution_actions=execution_actions,
+    )
     pending_resolution = getattr(decision, "pending_resolution", None)
     memory_result = None
     execution_result = None
@@ -1188,11 +1208,22 @@ def _apply_coach_decision_actions(
                     "action": "blocked",
                 }
             )
+    if deferred_execution_count:
+        turn_memory_writes.append(
+            {
+                "category": "execution",
+                "key": "record_execution_update",
+                "value": f"deferred={deferred_execution_count}",
+                "source": "coach_decision",
+                "action": "deferred",
+            }
+        )
     metric_payload = {
         "memory_applied": int(getattr(memory_result, "applied_count", 0) or 0),
         "memory_blocked": int(getattr(memory_result, "blocked_count", 0) or 0),
         "execution_applied": int(getattr(execution_result, "applied_count", 0) or 0),
         "execution_blocked": int(getattr(execution_result, "blocked_count", 0) or 0),
+        "execution_deferred": deferred_execution_count,
         "execution_updated_session_ids": tuple(getattr(execution_result, "updated_session_ids", ()) or ()),
     }
     missing_execution_action = bool(unresolved_execution_followup and not execution_actions)
@@ -1207,6 +1238,74 @@ def _apply_coach_decision_actions(
         metric_payload["execution_applied"],
     )
     return metric_payload
+
+
+def _memory_actions_with_turn_plan_availability(*, memory_actions: tuple, turn_plan) -> tuple:
+    turn_plan_action = _availability_memory_action_from_turn_plan(turn_plan)
+    if turn_plan_action is None:
+        return memory_actions
+    if any(_availability_actions_match(existing, turn_plan_action) for existing in memory_actions):
+        return memory_actions
+    return (*memory_actions, turn_plan_action)
+
+
+def _availability_actions_match(existing: Any, candidate: Any) -> bool:
+    if str(getattr(existing, "type", "") or "") != "record_availability":
+        return False
+    fields = ("availability", "sport_type", "scope", "starts_on", "ends_on")
+    return all(
+        _normalized_pending_value(getattr(existing, field, None))
+        == _normalized_pending_value(getattr(candidate, field, None))
+        for field in fields
+    )
+
+
+def _defer_conflicting_execution_actions(
+    *,
+    decision: Any,
+    memory_actions: tuple,
+    execution_actions: tuple,
+) -> tuple[tuple, int]:
+    if not execution_actions:
+        return execution_actions, 0
+    if str(getattr(decision, "response_type", "") or "") not in {"plan_patch", "requires_confirmation"}:
+        return execution_actions, 0
+    if not _has_availability_memory_action(memory_actions):
+        return execution_actions, 0
+    patch = getattr(decision, "plan_patch", None)
+    patch_session_ids = _plan_patch_session_ids(patch)
+    if not patch_session_ids:
+        return execution_actions, 0
+    kept = []
+    deferred = 0
+    for action in execution_actions:
+        status = str(getattr(action, "status", "") or "")
+        target_session_id = getattr(action, "target_session_id", None)
+        if status == "not_completed" and target_session_id in patch_session_ids:
+            deferred += 1
+            continue
+        kept.append(action)
+    return tuple(kept), deferred
+
+
+def _has_availability_memory_action(memory_actions: tuple) -> bool:
+    return any(
+        str(getattr(action, "type", "") or "") == "record_availability"
+        for action in memory_actions
+    )
+
+
+def _plan_patch_session_ids(patch: Any) -> set[int]:
+    ids: set[int] = set()
+    for operation in tuple(getattr(patch, "operations", ()) or ()):
+        for field_name in ("target_session_id", "second_session_id"):
+            raw = getattr(operation, field_name, None)
+            try:
+                value = int(raw)
+            except (TypeError, ValueError):
+                continue
+            ids.add(value)
+    return ids
 
 
 def _apply_turn_plan_memory_actions(
@@ -1313,6 +1412,8 @@ def _apply_pending_resolution(
     user,
     decision: Any,
     pending_confirmation,
+    user_text: str | None = None,
+    turn_plan=None,
 ) -> ConversationTurnOutcome | None:
     resolution = getattr(decision, "pending_resolution", None)
     if resolution is None or pending_confirmation is None:
@@ -1326,7 +1427,31 @@ def _apply_pending_resolution(
         return unavailable_outcome
 
     resolution_type = str(getattr(resolution, "type", "") or "")
+    if (
+        resolution_type in {"ignore", "modify_pending", "needs_clarification"}
+        and str(getattr(decision, "response_type", "") or "") in {"plan_patch", "requires_confirmation"}
+        and getattr(decision, "plan_patch", None) is not None
+    ):
+        return None
+    if (
+        resolution_type in {"ignore", "modify_pending", "needs_clarification"}
+        and _turn_plan_requests_plan_adaptation(turn_plan)
+    ):
+        return None
     if resolution_type == "accept_pending":
+        verified_resolution_type = _verify_pending_accept_resolution(
+            user_text=user_text,
+            decision=decision,
+            pending_confirmation=pending_confirmation,
+        )
+        if verified_resolution_type != "accept_pending":
+            if _turn_plan_requests_plan_adaptation(turn_plan):
+                return None
+            return _pending_accept_recheck_blocked_outcome(
+                db=db,
+                pending_confirmation=pending_confirmation,
+                verified_resolution_type=verified_resolution_type,
+            )
         return _accept_pending_confirmation(
             db=db,
             user=user,
@@ -1334,6 +1459,19 @@ def _apply_pending_resolution(
             pending_confirmation=pending_confirmation,
         )
     if resolution_type == "reject_pending":
+        verified_resolution_type = _verify_pending_accept_resolution(
+            user_text=user_text,
+            decision=decision,
+            pending_confirmation=pending_confirmation,
+        )
+        if verified_resolution_type != "reject_pending":
+            if _turn_plan_requests_plan_adaptation(turn_plan):
+                return None
+            return _pending_accept_recheck_blocked_outcome(
+                db=db,
+                pending_confirmation=pending_confirmation,
+                verified_resolution_type=verified_resolution_type,
+            )
         repo.resolve_pending_mutation_confirmation(db, pending_confirmation.id, status="rejected")
         return ConversationTurnOutcome(
             extraction=Extraction(confidence=0.85),
@@ -1362,6 +1500,177 @@ def _apply_pending_resolution(
     return None
 
 
+_PENDING_ACCEPT_RECHECK_TYPES = frozenset(
+    {
+        "accept_pending",
+        "reject_pending",
+        "modify_pending",
+        "ignore",
+        "needs_clarification",
+    }
+)
+
+
+def _verify_pending_accept_resolution(
+    *,
+    user_text: str | None,
+    decision: Any,
+    pending_confirmation,
+) -> str:
+    """Recheck a high-impact pending accept with a narrow JSON-only contract."""
+    if user_text is None:
+        return "accept_pending"
+    system = (
+        "Tu es un validateur de pending planning FitMAS.\n"
+        "Ta seule mission: verifier si le dernier message utilisateur accepte, refuse, "
+        "modifie ou ignore vraiment la proposition planning en attente.\n"
+        "Retourne uniquement un JSON valide.\n"
+        "N'applique jamais la proposition toi-meme.\n"
+        "Classes possibles:\n"
+        "- accept_pending: le user valide clairement l'application du pending actif, "
+        "ou choisit clairement une option candidate.\n"
+        "- reject_pending: le user refuse clairement la proposition active.\n"
+        "- modify_pending: le user change la demande ou propose une variante.\n"
+        "- needs_clarification: le message est ambigu et demande une clarification.\n"
+        "- ignore: le user demande un statut, dit qu'il attend, parle d'autre chose, "
+        "ou donne une nouvelle information sans accepter explicitement.\n"
+        "N'utilise pas accept_pending pour une demande de refaire, readapter, revoir, expliquer, attendre, "
+        "ou pour une question. Ces cas sont modify_pending, needs_clarification ou ignore.\n"
+        "N'utilise pas accept_pending juste parce que la nouvelle information rend la proposition possible "
+        "ou compatible. `demain je suis dispo`, `je peux jeudi`, `finalement ce creneau marche` "
+        "sont des informations de disponibilite, pas des validations, sauf si le user dit aussi clairement "
+        "`je confirme`, `vas-y`, `fais ca`, `applique`.\n"
+        "Un message qui commence par `non` et corrige un fait est generalement modify_pending ou ignore, "
+        "pas accept_pending.\n"
+        "Une objection ou question qui defend une option (`pourquoi pas vendredi ?`, "
+        "`ou est le souci ?`, `si on le met vendredi ?`) n'est PAS une acceptation: "
+        "retourne needs_clarification ou modify_pending.\n"
+        "Accept_pending exige une validation imperative et non interrogative du pending actif.\n"
+        "Exemples: `oui je confirme` -> accept_pending; `ok fais ca` -> accept_pending; "
+        "`ok readapte la semaine` -> modify_pending; `j'attends` -> ignore; "
+        "`donc je force ?` -> needs_clarification; "
+        "`non j'etais indispo aujourd'hui mais demain je suis dispo` -> modify_pending; "
+        "`demain je suis dispo` -> ignore; "
+        "`si tu le mets vendredi il y a un jour de repos, ou est le souci ?` -> needs_clarification.\n"
+        "Sois conservateur: en doute, retourne ignore ou needs_clarification, jamais accept_pending."
+    )
+    prompt = json.dumps(
+        {
+            "user_text": user_text,
+            "pending_confirmation": _pending_confirmation_recheck_payload(pending_confirmation),
+            "main_model_resolution": _pending_resolution_payload(getattr(decision, "pending_resolution", None)),
+            "main_model_reply": str(getattr(decision, "fitmas_message", "") or ""),
+            "expected_json": {
+                "resolution_type": "accept_pending|reject_pending|modify_pending|ignore|needs_clarification",
+                "confidence": 0.0,
+                "reason": "court",
+            },
+        },
+        ensure_ascii=False,
+        default=str,
+    )
+    try:
+        data = gw.request_json(
+            system=system,
+            prompt=prompt,
+            model=gw.DEFAULT_STRONG_MODEL,
+            max_tokens=700,
+            schema_hint=(
+                "JSON object only: resolution_type string enum "
+                "accept_pending|reject_pending|modify_pending|ignore|needs_clarification, "
+                "confidence number, reason string."
+            ),
+        )
+    except Exception:
+        logger.exception(
+            "pending_accept_recheck_failed user_text_len=%s pending=%s",
+            len(user_text or ""),
+            getattr(pending_confirmation, "id", None),
+        )
+        return "ignore"
+    resolution_type = str(
+        (data or {}).get("resolution_type")
+        or (data or {}).get("type")
+        or (data or {}).get("pending_resolution")
+        or ""
+    ).strip()
+    if resolution_type in _PENDING_ACCEPT_RECHECK_TYPES:
+        logger.info(
+            "pending_accept_recheck result=%s confidence=%s pending=%s",
+            resolution_type,
+            (data or {}).get("confidence"),
+            getattr(pending_confirmation, "id", None),
+        )
+        return resolution_type
+    logger.warning(
+        "pending_accept_recheck_invalid result=%s pending=%s",
+        resolution_type,
+        getattr(pending_confirmation, "id", None),
+    )
+    return "ignore"
+
+
+def _pending_confirmation_recheck_payload(pending_confirmation) -> dict[str, Any]:
+    return {
+        "id": getattr(pending_confirmation, "id", None),
+        "mutation_type": str(getattr(pending_confirmation, "mutation_type", "") or ""),
+        "reason": str(getattr(pending_confirmation, "reason", "") or ""),
+        "summary": str(getattr(pending_confirmation, "summary", "") or ""),
+        "source_text": str(getattr(pending_confirmation, "source_text", "") or ""),
+        "decision_json": _truncate_for_recheck(str(getattr(pending_confirmation, "decision_json", "") or "")),
+    }
+
+
+def _pending_resolution_payload(resolution: Any) -> dict[str, Any] | None:
+    if resolution is None:
+        return None
+    if hasattr(resolution, "model_dump"):
+        return dict(resolution.model_dump(mode="json", exclude_none=True))
+    return {
+        "type": getattr(resolution, "type", None),
+        "reason": getattr(resolution, "reason", None),
+        "selected_candidate_id": getattr(resolution, "selected_candidate_id", None),
+    }
+
+
+def _truncate_for_recheck(value: str, *, limit: int = 6000) -> str:
+    if len(value) <= limit:
+        return value
+    return value[:limit] + "\n[truncated]"
+
+
+def _pending_accept_recheck_blocked_outcome(
+    *,
+    db: Session,
+    pending_confirmation,
+    verified_resolution_type: str,
+) -> ConversationTurnOutcome:
+    if verified_resolution_type == "reject_pending":
+        repo.resolve_pending_mutation_confirmation(db, pending_confirmation.id, status="rejected")
+        return ConversationTurnOutcome(
+            extraction=Extraction(confidence=0.85),
+            reply_text="Compris. Je ne l'applique pas.",
+            response_mode="pending_rejected",
+            mutation_applied=False,
+        )
+    response_mode = "pending_ignore"
+    reply_text = "Je garde la proposition en attente."
+    if verified_resolution_type == "modify_pending":
+        response_mode = "pending_modify_pending"
+        reply_text = "Je garde la proposition en attente et je reprends avec ta precision."
+    elif verified_resolution_type == "needs_clarification":
+        response_mode = "pending_needs_clarification"
+        reply_text = "Je garde la proposition en attente. Dis-moi si tu veux l'appliquer ou la modifier."
+    return ConversationTurnOutcome(
+        extraction=Extraction(confidence=0.85),
+        reply_text=reply_text,
+        response_mode=response_mode,
+        mutation_applied=False,
+        pending_confirmation=True,
+        pending_confirmation_id=getattr(pending_confirmation, "id", None),
+    )
+
+
 def _pending_confirmation_unavailable_outcome(
     *,
     db: Session,
@@ -1386,6 +1695,16 @@ def _pending_confirmation_unavailable_outcome(
     return None
 
 
+def _turn_plan_requests_plan_adaptation(turn_plan) -> bool:
+    if turn_plan is None:
+        return False
+    if not bool(getattr(turn_plan, "has_plan_mutation", False)):
+        return False
+    primary_intent = str(getattr(turn_plan, "primary_intent", "") or "")
+    secondary_intents = {str(item) for item in tuple(getattr(turn_plan, "secondary_intents", ()) or ())}
+    return primary_intent == "plan_mutation" or "plan_mutation" in secondary_intents
+
+
 def _pending_confirmation_is_expired(pending_confirmation) -> bool:
     expires_at = getattr(pending_confirmation, "expires_at", None)
     if expires_at is None:
@@ -1396,11 +1715,39 @@ def _pending_confirmation_is_expired(pending_confirmation) -> bool:
 
 
 def _outcome_keeps_pending_confirmation(outcome: ConversationTurnOutcome, pending_confirmation) -> bool:
+    if (
+        outcome.response_mode
+        in {
+            "plan_patch_clarification",
+            "planning_snapshot_clarification",
+        }
+        and getattr(pending_confirmation, "id", None) is not None
+    ):
+        return True
     return bool(
         outcome.pending_confirmation
         and outcome.pending_confirmation_id is not None
         and outcome.pending_confirmation_id == getattr(pending_confirmation, "id", None)
     )
+
+
+def _keep_pending_for_non_mutating_turn(
+    *,
+    outcome: ConversationTurnOutcome,
+    turn_plan,
+    pending_confirmation,
+) -> None:
+    if pending_confirmation is None or str(getattr(pending_confirmation, "status", "") or "") != "pending":
+        return
+    if outcome.pending_confirmation or outcome.mutation_applied:
+        return
+    if outcome.response_mode in {"llm_unavailable", "pending_rejected", "pending_accepted"}:
+        return
+    primary_intent = str(getattr(turn_plan, "primary_intent", "") or "")
+    if primary_intent not in {"casual_chat", "close_turn", "generic_question", "needs_clarification", "trivial_ack"}:
+        return
+    outcome.pending_confirmation = True
+    outcome.pending_confirmation_id = getattr(pending_confirmation, "id", None)
 
 
 def _accept_pending_confirmation(
@@ -2476,6 +2823,29 @@ def _turn_plan_payload(turn_plan) -> dict | None:
     return payload
 
 
+def _adaptation_intent_payload(turn_plan, pending_confirmation) -> dict:
+    payload = _turn_plan_payload(turn_plan) or {}
+    pending_payload = _pending_confirmation_payload_for_adaptation(pending_confirmation)
+    if pending_payload is not None:
+        payload["active_pending_confirmation"] = pending_payload
+    return payload
+
+
+def _pending_confirmation_payload_for_adaptation(pending_confirmation) -> dict[str, Any] | None:
+    if pending_confirmation is None:
+        return None
+    if str(getattr(pending_confirmation, "status", "") or "") != "pending":
+        return None
+    return {
+        "id": getattr(pending_confirmation, "id", None),
+        "mutation_type": str(getattr(pending_confirmation, "mutation_type", "") or ""),
+        "summary": str(getattr(pending_confirmation, "summary", "") or ""),
+        "reason": str(getattr(pending_confirmation, "reason", "") or ""),
+        "source_text": str(getattr(pending_confirmation, "source_text", "") or ""),
+        "decision_json": _truncate_for_recheck(str(getattr(pending_confirmation, "decision_json", "") or ""), limit=2500),
+    }
+
+
 def _should_use_terminal_close_path(
     *,
     turn_plan,
@@ -2520,6 +2890,19 @@ def _maybe_handle_plan_adaptation_candidates(
         mode=mode,
     ):
         return None
+    if (
+        mode == "pre_decide_pure"
+        and pending_confirmation is not None
+        and str(getattr(pending_confirmation, "status", "") or "") == "pending"
+    ):
+        pending_gate = _verify_pending_accept_resolution(
+            user_text=user_text,
+            decision=None,
+            pending_confirmation=pending_confirmation,
+        )
+        turn_context["pending_pre_adaptation_gate"] = pending_gate
+        if not _pending_pre_adaptation_allows(pending_gate):
+            return None
 
     current_plan_id, current_plan_version = _current_plan_identity()
     backend_candidate_payloads, backend_candidate_patches = build_backend_candidate_refs_for_turn(
@@ -2578,6 +2961,7 @@ def _maybe_handle_plan_adaptation_candidates(
         user=user,
         user_text=user_text,
         turn_plan=turn_plan,
+        pending_confirmation=pending_confirmation,
         scheduled_sessions=scheduled_sessions,
         coach_bundle=coach_bundle,
         grounding=grounding,
@@ -2588,10 +2972,16 @@ def _maybe_handle_plan_adaptation_candidates(
     )
     if snapshot_outcome is not None:
         return snapshot_outcome
+    if (
+        mode == "pre_decide_pure"
+        and pending_confirmation is not None
+        and str(getattr(pending_confirmation, "status", "") or "") == "pending"
+    ):
+        return None
 
     input_payload = CandidateGenerationInput(
         user_message=user_text,
-        parsed_user_intent=_turn_plan_payload(turn_plan) or {},
+        parsed_user_intent=_adaptation_intent_payload(turn_plan, pending_confirmation),
         current_plan_summary=_current_plan_summary_for_candidates(scheduled_sessions),
         current_plan_id=current_plan_id,
         current_plan_version=current_plan_version,
@@ -2600,7 +2990,7 @@ def _maybe_handle_plan_adaptation_candidates(
         coherence_findings=(),
         allowed_operations=tuple(sorted(ALLOWED_CANDIDATE_OPERATION_TYPES)),
         forbidden_operations=(),
-        pending_context=None,
+        pending_context=_pending_confirmation_payload_for_adaptation(pending_confirmation),
         backend_candidates=backend_candidate_payloads,
     )
     candidates = generate_plan_patch_candidates(input_payload, request_json_fn=gw.request_json)
@@ -2654,6 +3044,7 @@ def _maybe_handle_plan_adaptation_snapshot_proposal(
     user,
     user_text: str,
     turn_plan,
+    pending_confirmation,
     scheduled_sessions: list[Any],
     coach_bundle,
     grounding: ReplyGroundingPacket | None,
@@ -2672,7 +3063,7 @@ def _maybe_handle_plan_adaptation_snapshot_proposal(
     )
     proposal = generate_adaptation_proposal(
         user_message=user_text,
-        parsed_user_intent=_turn_plan_payload(turn_plan) or {},
+        parsed_user_intent=_adaptation_intent_payload(turn_plan, pending_confirmation),
         snapshot=snapshot,
         request_json_fn=gw.request_json,
         model=gw.DEFAULT_FAST_MODEL,
@@ -2719,7 +3110,7 @@ def _maybe_handle_plan_adaptation_snapshot_proposal(
     candidate = PlanPatchCandidate(
         id="snapshot_proposal",
         patches=(compile_result.patch,),
-        rationale=proposal.summary,
+        rationale=compile_result.patch.coach_message,
         expected_tradeoff="Adaptation proposee depuis PlanningSnapshot.",
         confidence=float(proposal.confidence or 0.0),
         assumptions=tuple(str(item) for item in proposal.assumptions),
@@ -2774,7 +3165,11 @@ def _should_use_plan_adaptation_candidate_flow(
     if turn_plan is None:
         return False
     pending_active = pending_confirmation is not None and str(getattr(pending_confirmation, "status", "") or "") == "pending"
-    if pending_active and mode != "post_decide_plan_mutation":
+    if (
+        pending_active
+        and mode not in {"post_decide_mixed", "post_decide_plan_mutation"}
+        and not _turn_plan_is_primary_plan_mutation(turn_plan)
+    ):
         return False
     if open_calibration_need is not None:
         return False
@@ -2783,7 +3178,7 @@ def _should_use_plan_adaptation_candidate_flow(
     primary_intent = str(getattr(turn_plan, "primary_intent", "") or "")
     secondary_intents = {str(item) for item in tuple(getattr(turn_plan, "secondary_intents", ()) or ())}
     if mode == "post_decide_mixed":
-        mixed_intents = {"health_signal", "execution_report"}
+        mixed_intents = {"availability_constraint", "execution_report", "health_signal", "plan_mutation"}
         if primary_intent in mixed_intents or secondary_intents.intersection(mixed_intents):
             return bool(getattr(turn_plan, "has_plan_mutation", False))
         return False
@@ -2796,6 +3191,26 @@ def _should_use_plan_adaptation_candidate_flow(
     if secondary_intents.intersection({"execution_report"}):
         return False
     return bool(getattr(turn_plan, "has_plan_mutation", False))
+
+
+def _turn_plan_is_primary_plan_mutation(turn_plan) -> bool:
+    if turn_plan is None:
+        return False
+    secondary_intents = {str(item) for item in tuple(getattr(turn_plan, "secondary_intents", ()) or ())}
+    if secondary_intents.intersection({"availability_constraint", "execution_report", "health_signal"}):
+        return False
+    planning_action = str(getattr(turn_plan, "planning_action", "") or "").strip()
+    if planning_action in {"", "unknown", "none", "null"}:
+        return False
+    return (
+        str(getattr(turn_plan, "primary_intent", "") or "") == "plan_mutation"
+        and bool(getattr(turn_plan, "has_plan_mutation", False))
+        and bool(getattr(turn_plan, "mutation_signal", True))
+    )
+
+
+def _pending_pre_adaptation_allows(resolution_type: str | None) -> bool:
+    return str(resolution_type or "").strip() == "modify_pending"
 
 
 def _availability_no_affected_sport_session(
@@ -2987,7 +3402,7 @@ def _should_try_mixed_plan_adaptation_after_decide(*, decision: Any, turn_plan) 
         return False
     primary_intent = str(getattr(turn_plan, "primary_intent", "") or "")
     secondary_intents = {str(item) for item in tuple(getattr(turn_plan, "secondary_intents", ()) or ())}
-    mixed_intents = {"health_signal", "execution_report"}
+    mixed_intents = {"availability_constraint", "execution_report", "health_signal", "plan_mutation"}
     return primary_intent in mixed_intents or bool(secondary_intents.intersection(mixed_intents))
 
 
@@ -3084,7 +3499,15 @@ def _outcome_from_adaptation_policy(
             user_text=user_text,
             candidate_summaries=_candidate_summaries_for_reply((selected,), scheduled_sessions=scheduled_sessions),
             extra_facts=extra_facts,
-        ) or _build_plan_patch_confirmation_prompt(service_result, grounding=grounding)
+        )
+        if not _plan_adaptation_reply_hard_guard_allows(
+            reply_text,
+            scheduled_sessions=scheduled_sessions,
+            patch=selected.patch,
+            grounding=grounding,
+        ):
+            reply_text = _plan_patch_pending_fallback_reply(selected.patch)
+        reply_text = reply_text or _build_plan_patch_confirmation_prompt(service_result, grounding=grounding)
         return ConversationTurnOutcome(
             extraction=Extraction(confidence=0.85),
             reply_text=reply_text,
@@ -3116,7 +3539,15 @@ def _outcome_from_adaptation_policy(
             committed_events=committed_events,
             candidate_summaries=_candidate_summaries_for_reply((selected,), scheduled_sessions=scheduled_sessions),
             extra_facts=extra_facts,
-        ) or _applied_plan_patch_reply(service_result, fallback=selected.patch.coach_message)
+        )
+        if not _plan_adaptation_reply_hard_guard_allows(
+            reply_text,
+            scheduled_sessions=scheduled_sessions,
+            patch=selected.patch,
+            grounding=grounding,
+        ):
+            reply_text = None
+        reply_text = reply_text or _applied_plan_patch_reply(service_result, fallback=selected.patch.coach_message)
         return ConversationTurnOutcome(
             extraction=Extraction(confidence=0.85),
             reply_text=reply_text,
@@ -3310,6 +3741,89 @@ def _candidate_summaries_for_reply(
             f"tradeoff={item.candidate.expected_tradeoff}{ops_text} | {score}"
         )
     return tuple(summaries)
+
+
+def _plan_adaptation_reply_hard_guard_allows(
+    reply_text: str | None,
+    *,
+    scheduled_sessions: list[Any] | tuple[Any, ...],
+    patch: PlanPatch | None = None,
+    grounding: ReplyGroundingPacket | None = None,
+) -> bool:
+    if not reply_text:
+        return False
+    text = str(reply_text).lower()
+    mentioned_durations = {
+        int(raw_value)
+        for raw_value in re.findall(r"\b(\d{1,3})\s*(?:min|minute|minutes)\b", text)
+    }
+    if not mentioned_durations:
+        duration_ok = True
+    else:
+        allowed_durations = {
+            int(duration)
+            for session in scheduled_sessions
+            if (duration := getattr(session, "duration_min", None)) is not None
+        }
+        duration_ok = not allowed_durations or mentioned_durations.issubset(allowed_durations)
+    if not duration_ok:
+        return False
+    if grounding is None or patch is None:
+        return True
+    mentioned_relative_dates = _mentioned_relative_dates(text, grounding=grounding)
+    if not mentioned_relative_dates:
+        return True
+    allowed_dates = _patch_related_dates(patch=patch, scheduled_sessions=scheduled_sessions)
+    return not allowed_dates or mentioned_relative_dates.issubset(allowed_dates)
+
+
+def _mentioned_relative_dates(text: str, *, grounding: ReplyGroundingPacket) -> set[date]:
+    local_date = getattr(grounding, "local_date", None)
+    if local_date is None:
+        return set()
+    dates: set[date] = set()
+    if "aujourd" in text:
+        dates.add(local_date)
+    if "demain" in text:
+        dates.add(local_date + timedelta(days=1))
+    if "hier" in text:
+        dates.add(local_date - timedelta(days=1))
+    return dates
+
+
+def _patch_related_dates(
+    *,
+    patch: PlanPatch,
+    scheduled_sessions: list[Any] | tuple[Any, ...],
+) -> set[date]:
+    sessions_by_id = {
+        int(getattr(session, "id")): session
+        for session in scheduled_sessions
+        if getattr(session, "id", None) is not None
+    }
+    dates: set[date] = set()
+    for operation in patch.operations:
+        for field_name in ("target_session_id", "second_session_id"):
+            session_id = getattr(operation, field_name, None)
+            session = sessions_by_id.get(int(session_id)) if session_id is not None else None
+            session_date = _session_date_from_value(getattr(session, "scheduled_date", None)) if session is not None else None
+            if session_date is not None:
+                dates.add(session_date)
+        target_date = _session_date_from_value(getattr(operation, "target_date", None))
+        if target_date is not None:
+            dates.add(target_date)
+    return dates
+
+
+def _plan_patch_pending_fallback_reply(patch: PlanPatch | None) -> str | None:
+    if patch is None:
+        return None
+    summary = str(getattr(patch, "coach_message", "") or "").strip()
+    if not summary:
+        summary = _patch_operations_summary(patch, session_labels={})
+    if not summary:
+        return None
+    return f"Je te propose: {summary}. Tu confirmes ?"
 
 
 def _session_labels_by_id(scheduled_sessions: list[Any] | tuple[Any, ...]) -> dict[int, str]:

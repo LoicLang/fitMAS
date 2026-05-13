@@ -71,6 +71,37 @@ def test_snapshot_marks_clean_rest_as_full_rest() -> None:
     assert snapshot.diagnostics == ()
 
 
+def test_snapshot_keeps_zero_duration_rest_with_text_as_full_rest() -> None:
+    snapshot = build_planning_snapshot_from_records(
+        user_id=1,
+        timezone_name="Europe/Paris",
+        start_date=date(2026, 5, 15),
+        end_date=date(2026, 5, 15),
+        sessions=[
+            _session(
+                session_id=12,
+                day=date(2026, 5, 15),
+                sport_type="rest",
+                session_type="rest",
+                title="Repos total",
+                goal="Recuperation",
+                description="repos total",
+                duration_min=0,
+                load_score=0,
+            )
+        ],
+        memory_rows=[],
+        now=datetime(2026, 5, 13, 12, 0),
+    )
+
+    day = snapshot.days[0]
+
+    assert day.day_kind == "rest_total"
+    assert day.is_full_rest is True
+    assert day.items[0].load_kind == "zero"
+    assert snapshot.diagnostics == ()
+
+
 def test_snapshot_exposes_rest_with_session_detail_as_unscored_recovery() -> None:
     snapshot = build_planning_snapshot_from_records(
         user_id=1,

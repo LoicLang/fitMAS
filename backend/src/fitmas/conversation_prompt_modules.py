@@ -109,13 +109,12 @@ def build_general_answer_identity_voice_system_text() -> str:
 def build_tool_workflow_system_text() -> str:
     return """\
 Workflow replan_after_constraint:
-- lis d'abord les tools atomiques utiles: plan reel, contraintes actives, charge/recovery, faits pertinents
-- utilise `suggest_replan_candidates` seulement comme aide candidate quand une contrainte touche une ou plusieurs seances
-- La candidate n'est pas une decision: tu dois la convertir en `PlanPatch | no_change | requires_confirmation`
-- Quand l'action est concrete et que les tools `draft_*` sont disponibles, utilise-les pour construire un `PlanPatch` candidat (`draft_move_session`, `draft_swap_sessions`, `draft_replace_session`, `draft_lighten_day`, `draft_create_session`)
-- Les tools `draft_*` ne commit jamais. Ils retournent `payload.patch + validation`; si la candidate est bonne, copie ce patch dans ton `CoachDecision.plan_patch` ou `requires_confirmation`
-- Ne lance pas de review sportive longue dans le tour conversation; le backend review sportive re-run toujours avant commit ou pending
-- si la candidate couvre mal le scope, ajuste le PlanPatch ou demande une confirmation ciblee ; ne transforme pas ca en menu large
+- lis d'abord les tools read-only utiles: plan reel, contraintes actives, charge/recovery, faits pertinents
+- propose directement `PlanPatch | no_change | requires_confirmation` depuis les verites fournies
+- La proposition n'est pas une mutation appliquee: le backend valide, revoit sportivement, puis commit ou cree une pending
+- utilise `validate_plan_patch` seulement comme validation optionnelle d'un PlanPatch deja forme
+- ne lance pas de review sportive longue dans le tour conversation; le backend review sportive re-run toujours avant commit ou pending
+- si la proposition couvre mal le scope, ajuste le PlanPatch ou demande une confirmation ciblee ; ne transforme pas ca en menu large
 - ne mets pas de detail intra-seance fin dans ce workflow: sport, jour, duree/intensite cible suffisent pour Phase A"""
 
 
@@ -123,9 +122,9 @@ def build_compact_tool_workflow_system_text() -> str:
     return """\
 Workflow replan_after_constraint compact:
 - Lis les tools read-only utiles avant de trancher une mutation.
-- Les tools `draft_move_session`, `draft_swap_sessions`, `draft_replace_session`, `draft_lighten_day`, `draft_create_session` construisent un PlanPatch candidat mais ne commit jamais.
-- `suggest_replan_candidates` donne une aide candidate, pas une decision finale.
-- Pas de review sportive longue dans le tour conversation; le backend review sportive revalide toujours avant commit.
+- Produis directement un PlanPatch intentionnel si la cible et le compromis sont clairs.
+- `validate_plan_patch` peut verifier un PlanPatch deja forme, mais le backend valide toujours avant write.
+- Pas de review sportive longue dans le tour conversation; le backend valide et review sportivement avant commit.
 - Retourne `plan_patch`, `requires_confirmation` ou `no_change` selon les faits fournis."""
 
 
@@ -206,10 +205,8 @@ Regles:
 - si l'utilisateur veut ajouter une seance sur une journee flexible existante, utilise `replace_session` sur l'id de cette journee flexible
 - si l'utilisateur parle de aujourd'hui, demain, hier, ce soir, demain matin ou demande la date/l'heure/jour exact, raisonne a partir du contexte temporel fourni
 - si l'utilisateur cite une activite passee avec un jour/date explicite ("j'ai nage vendredi", "j'ai couru mardi"), utilise les tools activite disponibles avant de dire que tu ne vois rien
-- si une contrainte disponibilite/sport ferme touche plusieurs jours ou plusieurs seances, utilise `suggest_replan_candidates` quand l'outil est disponible avant de redemander un menu d'options
-- si une contrainte simple du type "demain soir", "jeudi matin", "vendredi aprem" touche une seance datee et que `suggest_replan_candidates` est disponible, essaie d'abord l'outil avec la fenetre inferable avant de poser une nouvelle question
-- `suggest_replan_candidates` donne une candidate, pas une decision: transforme la candidate utile en `PlanPatch`, puis laisse le backend valider/commit
-- si `suggest_replan_candidates` retourne une mutation candidate valide, pars de cette candidate et tranche ; n'invente pas un autre plan sans raison explicite
+- si une contrainte disponibilite/sport ferme touche plusieurs jours ou plusieurs seances, raisonne sur le planning fourni et produis un PlanPatch coherent; le backend compile/valide les IDs reels
+- si une contrainte simple du type "demain soir", "jeudi matin", "vendredi aprem" touche une seance datee, propose le mouvement le plus direct ou demande la seule info bloquante
 - si ta decision finale ne commit qu'UNE mutation, ne parle jamais comme si plusieurs autres seances etaient deja annulees, deplacees ou remplacees
 - quand l'utilisateur a deja donne l'autorisation d'ajuster ("oui", "ok", "vas-y") puis precise juste un sport ou un jour ("running", "mercredi"), traite ca comme une reponse de continuation de fil, pas comme une nouvelle question generale
 - quand le user donne seulement un sport puis un jour, et que l'intensite exacte manque encore, choisis par defaut l'option la plus conservative et la plus lisible (easy/steady), au lieu d'ouvrir une nouvelle taxonomie fractionne vs volume
@@ -244,10 +241,10 @@ Exemples:
 - "jeudi je prefere faire du fractionne" -> update_session
 - "j'ai mal a l'epaule droite" -> replace_session
 - "je suis claque, pas envie de fractionne" -> replace_session
-- "Cette semaine je voyage de mercredi a vendredi" + outil `suggest_replan_candidates` disponible -> utilise l'outil pour construire une mutation candidate avant de demander un detail secondaire
-- "Je ne suis pas dispo demain soir" + outil `suggest_replan_candidates` disponible -> tente d'abord un replan sur la seance de demain, au lieu de demander un menu de preferences
+- "Cette semaine je voyage de mercredi a vendredi" + seances touchees dans le planning -> produis un PlanPatch ou une clarification ciblee, pas un menu large
+- "Je ne suis pas dispo demain soir" + seance de demain touchee -> tente d'abord un replan direct, au lieu de demander un menu de preferences
 - "J'ai nage vendredi regarde mes seances reel" + tools activite dispo -> lis d'abord les activites recentes avant de dire que tu ne vois pas la seance
-- "Piscine fermee 2 semaines" + outil `suggest_replan_candidates` retourne un remplacement valide -> tranche a partir de ce remplacement, ne repropose pas un menu running/renfo
+- "Piscine fermee 2 semaines" + natation prevue dans la fenetre -> remplace/deplace seulement la natation touchee, ne repropose pas un menu running/renfo
 - apres "oui" puis "Running" puis "Mercredi" dans le meme fil -> interprete ca comme autorisation + preference sport + preference jour, pas comme trois nouvelles clarifications independantes
 - apres "oui" puis "Running" seul, sans jour connu -> no_change et demande le jour; ne cree pas une seance lundi par defaut
 - apres "oui" puis "Running" puis "Mercredi" sans autre precision et sans session existante a remplacer -> create_session avec running easy/steady le mercredi comme hypothese la plus sure
@@ -620,7 +617,7 @@ def build_conversation_system_text(contract: PromptContract | None = None) -> st
                     posture=(
                         "Posture draft_action:\n"
                         "- Explore une mutation structuree, mais ne parle jamais comme si elle etait deja appliquee.\n"
-                        "- Utilise les tools/candidats quand ils sont disponibles.\n"
+                        "- Utilise les tools read-only/validation; la proposition planning reste dans ton PlanPatch.\n"
                         "- Si la cible ou le compromis manque, demande une clarification courte."
                     )
                 ),

@@ -535,6 +535,14 @@ Actions :
   `draft_replace_session`, `validate_plan_patch`;
 - `plan_negotiation_full` passe de 16 a 10 tools : plan/window/constraints,
   `suggest_replan_candidates`, `draft_*`, `validate_plan_patch`;
+- boundary fix 13 mai : apres le replay multi-tour courbatures, cette surface
+  est encore trop chevauchante. `conversation_plan_negotiation` est reduit a
+  lecture + validation (`get_plan_window`, `resolve_planning_window`,
+  `get_user_constraints`, `validate_plan_patch`). Les tools candidats
+  (`suggest_replan_candidates`, `draft_*`) restent dans le code pour compat /
+  pipelines specialises, mais ne sont plus exposes au LLM planning comme choix
+  concurrents. Les adaptations larges doivent passer par
+  `PlanningSnapshot -> AdaptationProposal -> compiler backend`.
 - le fallback canonical conversation utilise aussi cette surface reduite.
 
 Verification :
@@ -563,8 +571,12 @@ Limites :
   sportive backend est toujours synchrone avant pending/commit;
 - `health_signal` peut encore produire une memory action invalide avant que le
   compiler P3 ne repare;
-- deduplication des appels tool identiques reste a faire;
-- la disponibilite sport-specific multi-seances reste P6.
+- qualite restante observee en replay : le LLM peut garder une proposition
+  ancienne ouverte apres correction de disponibilite, au lieu de produire la
+  meilleure nouvelle option. C'est stable/securise (pas de commit), mais encore
+  mediocre en UX;
+- la disponibilite sport-specific multi-seances reste a dogfooder plus largement
+  hors scenario natation.
 
 ### P6a - Pending hygiene + disponibilite sport-specific candidates
 
@@ -583,6 +595,35 @@ Pending hygiene :
   l'outcome;
 - aucune comprehension deterministe de `oui/non` n'a ete ajoutee : tout part de
   `pending_resolution` LLM et d'artefacts DB.
+
+Patch 13 mai apres replay multi-tour :
+
+- un `pending_resolution.accept_pending` n'applique plus directement le payload
+  stocke si le tour vient du pipeline conversationnel;
+- avant commit, un mini-verifier LLM JSON-only sans tools reclasse le dernier
+  message en `accept_pending | reject_pending | modify_pending | ignore |
+  needs_clarification`;
+- seul `accept_pending` autorise l'application. Les messages faibles comme une
+  attente/statut gardent la pending ouverte. Si le verifier echoue ou sort un
+  JSON invalide, le comportement est fail-closed.
+- verification API reelle ciblee : en forcant le modele principal a tort sur
+  `accept_pending`, `j'attends` est reclassé `ignore` par DeepSeek, reste
+  `pending`, et ne cree aucun event ; `oui confirme le deplacement` est
+  reclassé `accept_pending`, commit le move et cree un event.
+
+Hardening multi-tour 13 mai :
+
+- le meme verifier sert de sas avant PlanningSnapshot quand une pending active
+  existe : seul `modify_pending` autorise une nouvelle adaptation pre-decide;
+- `j'attends`, une question, une information compatible (`demain je suis dispo`)
+  ou un reject ambigu ne peuvent plus appliquer le payload stocke par simple
+  compatibilite;
+- si le verifier contredit un `accept_pending/reject_pending` et que le tour
+  porte quand meme une adaptation, le pipeline laisse le flux planning reprendre
+  au lieu de clore sauvagement la pending;
+- replay reel : `j'attends` reste `pending_ignore`, aucun event; correction
+  disponibilite `aujourd'hui indispo / demain dispo` resout
+  `unavailable_general_2026-05-13_2026-05-14`.
 
 Disponibilite sport-specific :
 

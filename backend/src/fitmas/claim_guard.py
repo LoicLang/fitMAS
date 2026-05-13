@@ -75,6 +75,11 @@ _PROPOSAL_MARKERS = (
     "si tu veux",
     "si tu confirmes",
 )
+_CONFIRM_ACTION_RE = re.compile(
+    r"\b(?:je\s+|j['’]\s*)confirme\s+(?:ce|cet|cette|l['’])\s+"
+    r"(?:swap|echange|deplacement|changement|report|decalage|mutation)\b",
+    re.IGNORECASE,
+)
 
 
 def looks_like_action_claim(reply_text: str) -> bool:
@@ -89,6 +94,8 @@ def looks_like_action_claim(reply_text: str) -> bool:
     lower = normalized.lower()
     if any(marker in lower for marker in _PROPOSAL_MARKERS):
         return False
+    if _CONFIRM_ACTION_RE.search(normalized):
+        return True
     for pattern in _PRONOUN_PATTERNS:
         for match in pattern.finditer(normalized):
             preceding = normalized[: match.start()]

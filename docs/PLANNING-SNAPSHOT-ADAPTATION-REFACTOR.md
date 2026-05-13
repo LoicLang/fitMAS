@@ -530,3 +530,60 @@ Point restant observe : la formulation visible peut encore etre perfectible
 ("plusieurs seances de natation possibles") selon le run. Structurellement le
 tour est maintenant stable : artefact compile, validation, pending, pas de
 mutation annoncee sans event.
+
+## Boundary fix du 13 mai
+
+Le replay multi-tour complet a montre que l'ancien `plan_negotiation_full`
+restait une surface de secours trop large : le LLM pouvait encore hesiter entre
+`suggest_replan_candidates`, `draft_move_session`, `draft_swap_sessions`,
+`draft_replace_session` et son propre `PlanPatch`.
+
+Correction appliquee :
+
+- `conversation_plan_negotiation` n'offre plus que des tools lecture /
+  validation : `get_plan_window`, `resolve_planning_window`,
+  `get_user_constraints`, `validate_plan_patch` ;
+- les tools candidats restent disponibles pour compatibilite/pipelines
+  specialises, mais ne sont plus la surface normale de raisonnement planning ;
+- une clarification planning (`plan_patch_clarification` /
+  `planning_snapshot_clarification`) ne supersede plus la pending active ;
+- `available` general resout aussi les anciennes cles
+  `unavailable_general_<start>_<end>` ;
+- si un meme `CoachDecision` porte une disponibilite + un PlanPatch et une
+  execution `not_completed` sur la meme seance, l'execution est differee pour ne
+  pas marquer la seance `skipped` avant validation/pending.
+- `pending_resolution.accept_pending` passe par un mini-verifier JSON-only sans
+  tools avant commit. Si le dernier message utilisateur est un statut, une
+  attente, une clarification ou une variante, la pending reste ouverte. En cas
+  d'echec du verifier, le pipeline fail-closed et ne commit pas.
+
+Hardening ajoute dans la meme tranche :
+
+- avant de relancer PlanningSnapshot avec une pending active, un sas LLM classe
+  le dernier tour. Seul `modify_pending` autorise une nouvelle proposition;
+  `j'attends`, une question ou une info compatible gardent la pending ouverte;
+- les placeholders `rest/off` ne sont plus deplaces comme de vraies seances :
+  un swap avec repos est compile en move vers le creneau libre;
+- les operations PlanPatch identiques sont dedup avant validation et resume;
+- le resume visible vient du patch compile, pas du resume libre du LLM;
+- les replies d'adaptation passent un hard guard sur durees mentionnees et
+  dates relatives (`aujourd'hui`, `demain`, `hier`). Si le guard bloque, le
+  fallback visible est derive directement du PlanPatch.
+
+Replay final observe :
+
+- aucun `plan_mutation_event` sans confirmation;
+- ancienne indisponibilite generale resolue par la correction "demain dispo";
+- pending finale gardee ouverte sur `j'attends`;
+- point restant : apres correction de disponibilite, certains runs gardent une
+  proposition ancienne au lieu de regenerer la meilleure proposition. C'est une
+  dette de qualite du workflow pending/modification, pas une dette de securite
+  commit.
+
+Frontiere cible confirmee :
+
+```text
+LLM planning = snapshot + raisonnement + PlanPatch intentionnel
+Backend = resolution IDs + validation + pending/commit + audit
+Tools candidats = compat / pipelines specialises, pas buffet libre du tour
+```

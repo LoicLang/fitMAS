@@ -155,6 +155,115 @@ class MutationActionServicesTest(unittest.TestCase):
         self.assertEqual(old_unavailable.status, "resolved")
         self.assertEqual(old_unavailable.resolution_reason, "availability_available_overlap")
 
+    def test_available_action_resolves_legacy_unavailable_general_key(self) -> None:
+        start = datetime(2026, 5, 13)
+        self.db.add(
+            s.UserFact(
+                user_id=self.user.id,
+                category="availability",
+                key="unavailable_general_2026-05-13_2026-05-14",
+                value="Bloque par les inondations aujourd'hui et demain.",
+                source="conversation",
+                confidence=0.9,
+                confirmed=True,
+                active=True,
+                urgency="medium",
+                ttl="short",
+                affects_json='["planning", "conversation"]',
+                expires_at=datetime(2026, 5, 15),
+                status="open",
+                signal_kind="availability_unavailable",
+                observed_at=start,
+                valid_from=start,
+                valid_until=datetime(2026, 5, 15),
+                last_seen_at=start,
+            )
+        )
+        self.db.commit()
+
+        result = apply_memory_actions_for_user(
+            self.db,
+            user=self.user,
+            actions=[
+                AvailabilityConstraintAction(
+                    type="record_availability",
+                    window_text="disponible demain",
+                    availability="available",
+                    starts_on="2026-05-14",
+                    ends_on="2026-05-14",
+                    confidence=0.92,
+                    evidence="demain je suis dispo",
+                ),
+            ],
+            now=datetime(2026, 5, 13, 17, 20),
+        )
+
+        self.db.expire_all()
+        old_unavailable = (
+            self.db.query(s.UserFact)
+            .filter(s.UserFact.key == "unavailable_general_2026-05-13_2026-05-14")
+            .one()
+        )
+
+        self.assertEqual(result.applied_count, 1)
+        self.assertFalse(old_unavailable.active)
+        self.assertEqual(old_unavailable.status, "resolved")
+        self.assertEqual(old_unavailable.resolution_reason, "availability_available_overlap")
+
+    def test_available_action_resolves_legacy_unavailable_with_inclusive_end_of_day(self) -> None:
+        start = datetime(2026, 5, 13)
+        self.db.add(
+            s.UserFact(
+                user_id=self.user.id,
+                category="availability",
+                key="unavailable_general_2026-05-13_2026-05-14",
+                value="Bloque par les inondations aujourd'hui et demain.",
+                source="conversation",
+                confidence=0.9,
+                confirmed=True,
+                active=True,
+                urgency="medium",
+                ttl="short",
+                affects_json='["planning", "conversation"]',
+                expires_at=datetime(2026, 5, 14, 23, 59),
+                status="open",
+                signal_kind="availability_unavailable",
+                observed_at=start,
+                valid_from=start,
+                valid_until=datetime(2026, 5, 14, 23, 59),
+                last_seen_at=start,
+            )
+        )
+        self.db.commit()
+
+        apply_memory_actions_for_user(
+            self.db,
+            user=self.user,
+            actions=[
+                AvailabilityConstraintAction(
+                    type="record_availability",
+                    window_text="disponible demain",
+                    availability="available",
+                    starts_on="2026-05-14",
+                    ends_on="2026-05-14",
+                    confidence=0.92,
+                    evidence="demain je suis dispo",
+                ),
+            ],
+            now=datetime(2026, 5, 13, 17, 20),
+        )
+
+        self.db.expire_all()
+        old_unavailable = (
+            self.db.query(s.UserFact)
+            .filter(s.UserFact.key == "unavailable_general_2026-05-13_2026-05-14")
+            .one()
+        )
+
+        self.assertFalse(old_unavailable.active)
+        self.assertEqual(old_unavailable.status, "resolved")
+        self.assertEqual(old_unavailable.resolution_reason, "availability_available_overlap")
+
     def test_memory_service_persists_health_lifecycle_for_readiness(self) -> None:
         now = datetime(2026, 5, 11, 8, 0)
 

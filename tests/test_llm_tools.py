@@ -13,12 +13,6 @@ CANONICAL_CONVERSATION_TOOLS = [
     "get_plan_window",
     "resolve_planning_window",
     "get_user_constraints",
-    "suggest_replan_candidates",
-    "draft_move_session",
-    "draft_swap_sessions",
-    "draft_replace_session",
-    "draft_lighten_day",
-    "draft_create_session",
     "validate_plan_patch",
 ]
 
@@ -2039,6 +2033,8 @@ class LLMToolsTest(unittest.TestCase):
         self.assertIn('"minimum_actions_when_scope_confident": 1', prompts[1])
         self.assertIn("memory_actions=[] est autorise uniquement", prompts[1])
         self.assertIn("aucune seance cible n'est necessaire", prompts[1])
+        self.assertIn("plusieurs actions record_availability", prompts[1])
+        self.assertIn("demain je suis dispo", prompts[1])
 
     def test_availability_memory_compiler_strict_retries_empty_first_pass(self) -> None:
         original_client = llm._client

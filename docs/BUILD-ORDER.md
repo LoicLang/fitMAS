@@ -181,6 +181,29 @@ Etat du code sur `main` :
   courbatures + deplacement vendredi : `planning_snapshot_flow=compiled`,
   pending creee, pas de commit ni fallback legacy; formulation encore a
   surveiller en dogfood.
+- PlanningSnapshot boundary fix 13 mai : `conversation_plan_negotiation` n'offre
+  plus les tools candidats qui se chevauchent (`suggest_replan_candidates`,
+  `draft_*`). La surface LLM planning est maintenant lecture + validation
+  seulement (`get_plan_window`, `resolve_planning_window`,
+  `get_user_constraints`, `validate_plan_patch`), tandis que les adaptations
+  larges passent par `PlanningSnapshot -> AdaptationProposal -> compiler
+  backend`. Meme tranche : `unavailable_general_*` legacy est resolu par une
+  disponibilite generale qui overlap, les clarifications gardent la pending
+  active, et une action execution `not_completed` est differee si le meme tour
+  porte une disponibilite + PlanPatch sur la meme seance. Un
+  `accept_pending` doit maintenant etre confirme par un verifier LLM JSON-only
+  dedie avant commit; doute ou verifier indisponible = pending gardee ouverte.
+- Multi-tour dogfood hardening 13 mai : ajout d'un sas LLM
+  `pending_pre_adaptation_gate` avant de relancer PlanningSnapshot quand une
+  pending active existe. Seul `modify_pending` peut lancer une nouvelle
+  adaptation; `j'attends`, statut, question ou accept/reject ambigu gardent la
+  pending ouverte et ne commitent rien. Le compiler PlanningSnapshot ne deplace
+  plus les placeholders `rest/off`, dedup les operations identiques, et les
+  replies adaptation ont un hard guard sur durees et dates relatives avant
+  d'etre affichees. Replay multi-tour reel final : aucun event sans confirmation,
+  ancienne indispo `unavailable_general_*` resolue, pending finale ouverte.
+  Reste qualite : certains runs gardent une proposition ancienne au lieu de
+  produire la meilleure nouvelle option apres correction de disponibilite.
 
 Verification recente :
 
@@ -196,6 +219,18 @@ Verification recente :
   `tests/test_adaptation_proposal.py tests/test_planning_snapshot.py
   tests/test_plan_patch_candidate_evaluator.py tests/test_core_flows.py
   tests/test_blocked_mutation_reply.py` -> 140 passed.
+- Pending accept recheck local 13 mai :
+  `tests/test_core_flows.py -q -k "pending"` -> 20 passed ; replay API reel
+  force-false-accept + `j'attends` -> `pending_ignore`, pending ouverte, aucun
+  event ; replay API reel + `oui confirme le deplacement` ->
+  `pending_accepted`, event cree.
+- Multi-tour hardening local 13 mai :
+  `./scripts/test-backend tests/test_prompt_snapshots.py tests/test_prompt_contracts.py
+  tests/test_conversation_prompt_modules.py tests/test_llm_tools.py
+  tests/test_llm_prompt_builder.py tests/test_memory_mutation_service.py
+  tests/test_claim_guard.py tests/test_core_flows.py tests/test_adaptation_proposal.py
+  tests/test_planning_snapshot.py tests/test_plan_patch_candidate_evaluator.py -q`
+  -> 301 passed.
 - `main` contient le merge `ee4a313 Merge prompt context and adaptation candidates`.
 - Dogfood API reel 12 mai : 42 checks ad hoc, 3 fails bruts stricts, plusieurs
   conclusions manuelles a corriger avant de juger DeepSeek.

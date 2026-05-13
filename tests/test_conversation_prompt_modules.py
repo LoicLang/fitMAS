@@ -38,8 +38,8 @@ def test_tool_workflow_system_text_contains_replan_workflow() -> None:
     text = build_tool_workflow_system_text()
 
     assert text.startswith("Workflow replan_after_constraint:")
-    assert "suggest_replan_candidates" in text
-    assert "draft_move_session" in text
+    assert "suggest_replan_candidates" not in text
+    assert "draft_move_session" not in text
     assert "validate_week_coherence" not in text
     assert "backend review sportive" in text
     assert "Actions possibles:" not in text
@@ -215,7 +215,7 @@ def test_generic_question_system_text_stays_general_without_fact_promises() -> N
     assert "plan_patch = {" not in text
 
 
-def test_draft_action_conversation_system_text_keeps_mutation_modules() -> None:
+def test_draft_action_conversation_system_text_excludes_candidate_tool_overlap() -> None:
     contract = get_prompt_contract("conversation_plan_negotiation")
 
     text = build_conversation_system_text(contract)
@@ -223,10 +223,15 @@ def test_draft_action_conversation_system_text_keeps_mutation_modules() -> None:
     assert "Contrat du tour:" in text
     assert "Workflow replan_after_constraint compact:" in text
     assert "Actions possibles compactes:" in text
-    assert "draft_move_session" in text
-    assert "suggest_replan_candidates" in text
+    assert "suggest_replan_candidates" not in text
+    assert "draft_move_session" not in text
+    assert "draft_swap_sessions" not in text
+    assert "draft_replace_session" not in text
+    assert "draft_lighten_day" not in text
+    assert "draft_create_session" not in text
+    assert "candidate" not in text.lower()
     assert "validate_week_coherence" not in text
-    assert "backend review sportive" in text
+    assert "backend valide" in text
     assert "Contrat de sortie read_only:" not in text
     assert "PlanPatch:" in text
 

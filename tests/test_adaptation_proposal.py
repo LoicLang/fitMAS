@@ -98,7 +98,9 @@ def test_compiles_move_operations_from_snapshot_refs() -> None:
     assert result.patch.operations[0].second_session_id == 14
     assert result.patch.operations[1].target_session_id == 14
     assert result.patch.operations[1].target_date == "2026-05-15"
-    assert result.patch.confirmation_reason == "running demain, piscine vendredi, repos samedi preserve"
+    assert result.patch.confirmation_reason == (
+        "Echanger running easy et swimming easy ; Deplacer swimming easy au 2026-05-15"
+    )
 
 
 def test_blocks_unknown_snapshot_ref_without_guessing() -> None:
@@ -243,6 +245,89 @@ def test_compiler_rewrites_single_move_to_occupied_day_as_swap() -> None:
     assert [operation.operation_type for operation in result.patch.operations] == ["swap_sessions"]
     assert result.patch.operations[0].target_session_id == 13
     assert result.patch.operations[0].second_session_id == 14
+
+
+def test_compiler_moves_to_rest_day_without_swapping_rest_placeholder() -> None:
+    proposal = AdaptationProposal(
+        response_type="adaptation_proposal",
+        summary="running sur le jour de repos",
+        operations=[
+            AdaptationProposalOperation(
+                op="move",
+                source_ref="session:13",
+                target_date="2026-05-16",
+                reason="demain est libre mais on garde la charge basse",
+            ),
+        ],
+        requires_confirmation=True,
+        confidence=0.84,
+    )
+
+    result = compile_adaptation_proposal(proposal, snapshot=_snapshot())
+
+    assert result.ok is True
+    assert result.patch is not None
+    assert [operation.operation_type for operation in result.patch.operations] == ["move_session"]
+    assert result.patch.operations[0].target_session_id == 13
+    assert result.patch.operations[0].target_date == "2026-05-16"
+    assert result.patch.operations[0].second_session_id is None
+    assert "Echanger" not in result.patch.coach_message
+
+
+def test_compiler_rewrites_swap_with_rest_placeholder_as_move() -> None:
+    proposal = AdaptationProposal(
+        response_type="adaptation_proposal",
+        summary="running demain sans deplacer le repos",
+        operations=[
+            AdaptationProposalOperation(
+                op="swap",
+                source_ref="session:13",
+                second_ref="session:16",
+                reason="utiliser le creneau libre",
+            ),
+        ],
+        requires_confirmation=True,
+        confidence=0.84,
+    )
+
+    result = compile_adaptation_proposal(proposal, snapshot=_snapshot())
+
+    assert result.ok is True
+    assert result.patch is not None
+    assert [operation.operation_type for operation in result.patch.operations] == ["move_session"]
+    assert result.patch.operations[0].target_session_id == 13
+    assert result.patch.operations[0].target_date == "2026-05-16"
+    assert "repos" not in result.patch.coach_message.lower()
+
+
+def test_compiler_dedupes_duplicate_compiled_operations() -> None:
+    proposal = AdaptationProposal(
+        response_type="adaptation_proposal",
+        summary="piscine lundi sans doublon",
+        operations=[
+            AdaptationProposalOperation(
+                op="move",
+                source_ref="session:14",
+                target_date="2026-05-18",
+                reason="liberer vendredi",
+            ),
+            AdaptationProposalOperation(
+                op="move",
+                source_ref="session:14",
+                target_date="2026-05-18",
+                reason="liberer vendredi",
+            ),
+        ],
+        requires_confirmation=True,
+        confidence=0.8,
+    )
+
+    result = compile_adaptation_proposal(proposal, snapshot=_snapshot())
+
+    assert result.ok is True
+    assert result.patch is not None
+    assert len(result.patch.operations) == 1
+    assert result.patch.coach_message.count("Deplacer swimming easy au 2026-05-18") == 1
 
 
 def test_generate_adaptation_proposal_parses_json_only_payload() -> None:
