@@ -1,0 +1,20 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$ROOT"
+
+./scripts/test-backend -q \
+  tests/test_phase8n_provider_tool_loop_architecture.py \
+  tests/test_llm_legacy_provider.py \
+  tests/test_llm_legacy_schema_repair.py \
+  tests/test_llm_legacy_tool_loop.py \
+  tests/test_llm_package_compat.py \
+  tests/test_prompt_observability.py \
+  tests/test_llm_tools.py \
+  tests/test_decide_error_typing.py \
+  tests/test_coach_decision_actions.py
+
+./scripts/smoke-decision-runtime-decision-legacy-split
+
+echo "RESULT: OK"

@@ -276,7 +276,7 @@ async def cmd_heartbeat(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     try:
         from fitmas.heartbeat import morning_briefing
 
-        draft = morning_briefing()
+        draft = _manual_heartbeat_draft(morning_briefing)
         if draft:
             await update.message.reply_text(draft.text, parse_mode=draft.parse_mode)
             persist_draft_for_owner(draft)
@@ -285,6 +285,26 @@ async def cmd_heartbeat(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     except Exception:
         logger.exception("Error in /heartbeat")
         await update.message.reply_text("Impossible de lancer le heartbeat.")
+
+
+def _manual_heartbeat_draft(legacy_factory):
+    from fitmas.legacy import heartbeat_runtime_adapter as adapter
+
+    result = adapter.run_heartbeat_trigger(
+        trigger="morning_briefing",
+        legacy_factory=legacy_factory,
+        source="telegram",
+        delivery_channel="telegram",
+        manual=True,
+        enforce_verifier=adapter.heartbeat_runtime_verifier_enforced(),
+    )
+    logger.info(
+        "Manual heartbeat runtime outcome=%s sent=%s verifier_reason=%s",
+        result.outcome.kind,
+        bool(result.draft),
+        result.verifier_reason,
+    )
+    return result.draft
 
 
 def register_command_handlers(app: Application) -> None:

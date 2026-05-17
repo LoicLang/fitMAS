@@ -17,7 +17,7 @@ from datetime import date, timedelta
 from sqlalchemy.orm import Session
 
 from fitmas import repository as repo, schema as s
-from fitmas.llm import MutationDecision
+from fitmas.legacy.decision_contracts import MutationDecision
 from fitmas.time_context import get_local_now
 from fitmas.training_load import compute_ctl_atl_tsb
 

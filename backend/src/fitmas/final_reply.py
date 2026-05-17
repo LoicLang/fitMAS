@@ -16,6 +16,7 @@ from typing import Any, Callable
 from fitmas import coach_voice
 from fitmas.claim_guard import looks_like_action_claim
 from fitmas.grounding_contract import ReplyGroundingPacket, render_grounding_packet_for_prompt
+from fitmas.llm.prompts.reply import ReplyPromptBlockedEvent, ReplyPromptInput, build_reply_prompt
 from fitmas.llm_gateway import request_text
 from fitmas.plan_patch_adaptation_policy import AdaptationPolicyDecision
 
@@ -112,54 +113,30 @@ _UNCOMMITTED_ACTION_CLAIM_FRAGMENTS = (
 
 def build_final_reply_prompt(context: FinalReplyContext) -> tuple[str, str]:
     """Build the repair/composition prompt from machine facts only."""
-    system = (
-        f"{coach_voice.COACH_VOICE_RULES}\n\n"
-        "Tu composes la reponse finale visible au user a partir de faits backend.\n"
-        "Le backend a deja valide, bloque, commit ou cree une confirmation.\n"
-        "Tu ne dois jamais inventer un commit. Tu ne dois jamais exposer les noms techniques "
-        "(reviewer, patch, runtime, fallback, commit, JSON, tool, offplan).\n"
-        "Reponds uniquement avec le texte final, sans JSON ni markdown."
+    rendered = build_reply_prompt(
+        ReplyPromptInput(
+            pipeline=context.pipeline,
+            capability=context.pipeline_capability,
+            user_text=context.user_text,
+            original_llm_reply=context.original_llm_reply,
+            committed_events=context.committed_events,
+            blocked_events=tuple(
+                ReplyPromptBlockedEvent(
+                    command=event.command,
+                    reason=event.reason,
+                    suggested_fix=event.suggested_fix,
+                    warning=event.warning,
+                )
+                for event in context.blocked_events
+            ),
+            pending_summary=context.pending_summary,
+            memory_actions_applied=context.memory_actions_applied,
+            execution_actions_applied=context.execution_actions_applied,
+            allowed_to_claim_mutation=context.allowed_to_claim_mutation,
+            extra_facts=context.extra_facts,
+        )
     )
-    lines = [
-        f"Pipeline: {context.pipeline}",
-        f"Capacite pipeline: {context.pipeline_capability}",
-        f"Message user: {context.user_text or '(non fourni)'}",
-    ]
-    if context.original_llm_reply:
-        lines.append(f"Brouillon LLM initial: {context.original_llm_reply}")
-    if context.committed_events:
-        lines.append("Evenements commits:")
-        lines.extend(f"- {event}" for event in context.committed_events)
-        lines.append("Contrainte: l'action est deja commit; ne demande pas confirmation.")
-    else:
-        lines.append("Aucun changement planning n'a ete commit.")
-    if context.blocked_events:
-        lines.append("Evenements bloques:")
-        for event in context.blocked_events:
-            bits = [event.command]
-            if event.reason:
-                bits.append(f"reason={event.reason}")
-            if event.suggested_fix:
-                bits.append(f"suggested_fix={event.suggested_fix}")
-            if event.warning:
-                bits.append(f"warning={event.warning}")
-            lines.append("- " + " | ".join(bits))
-    if context.pending_summary:
-        lines.append(f"Confirmation en attente: {context.pending_summary}")
-        lines.append("Contrainte: la reponse doit presenter le changement comme une proposition et demander confirmation explicitement.")
-    if context.execution_actions_applied:
-        lines.append("Execution appliquee:")
-        lines.extend(f"- {item}" for item in context.execution_actions_applied)
-    if context.memory_actions_applied:
-        lines.append("Memoire appliquee:")
-        lines.extend(f"- {item}" for item in context.memory_actions_applied)
-    if context.extra_facts:
-        lines.append("Faits utiles:")
-        lines.extend(f"- {item}" for item in context.extra_facts)
-    if not context.allowed_to_claim_mutation:
-        lines.append("Contrainte: ne claim pas une action appliquee, deplacee, posee, calee ou enregistree.")
-    lines.append("Ecris 1-2 phrases. Si c'est bloque, donne la raison concrete et une alternative simple.")
-    return system, "\n".join(lines)
+    return rendered.system, rendered.prompt
 
 
 def is_valid_final_reply(reply: str | None, context: FinalReplyContext) -> bool:

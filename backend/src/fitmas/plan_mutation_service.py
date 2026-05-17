@@ -8,7 +8,7 @@ from typing import Any, Sequence
 from sqlalchemy.orm import Session
 
 from fitmas import mutations, plan_actions, repository as repo, schema as s
-from fitmas.llm import MutationDecision
+from fitmas.legacy.decision_contracts import MutationDecision
 from fitmas.mutation_hooks import run_pre_mutation_hooks
 from fitmas.plan_patch import (
     PlanPatch,
@@ -92,8 +92,8 @@ def apply_decisions_for_user(
     if not decisions:
         return None
 
-    plan = repo.get_active_plan_optional(db, user.id)
-    plan_id = int(getattr(plan, "id", 0) or 0)
+    plan = None
+    plan_id = 0
     scheduled_sessions = repo.get_scheduled_sessions(db, user.id, limit=84)
     applied_count = 0
     event_count = 0
@@ -285,8 +285,8 @@ def apply_patch_for_user(
     activities: Sequence[Any] | None = None,
     active_facts: Sequence[Any] | None = None,
 ) -> PlanPatchServiceResult:
-    plan = repo.get_active_plan_optional(db, user.id)
-    plan_id = int(getattr(plan, "id", 0) or 0)
+    plan = None
+    plan_id = 0
     scheduled_sessions = repo.get_scheduled_sessions(db, user.id, limit=84)
     if plan is None:
         patch = _normalize_targetless_replace_to_create(patch)

@@ -64,8 +64,6 @@ def test_health_signal_contract_keeps_small_adaptation_surface() -> None:
     assert contract.allowed_tools == (
         "get_plan_window",
         "get_user_constraints",
-        "draft_lighten_day",
-        "draft_replace_session",
         "validate_plan_patch",
     )
     assert "get_today_context" not in contract.allowed_tools

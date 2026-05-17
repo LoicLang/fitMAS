@@ -53,12 +53,21 @@ def trigger_debug_heartbeat(
         raise HTTPException(status_code=400, detail="Unsupported heartbeat kind")
 
     trace = None
+    runtime_result = None
     if dump:
         with heartbeat.capture_debug_trace(kind) as captured:
             draft = handler()
             trace = captured
     else:
-        draft = handler()
+        from fitmas.legacy import heartbeat_runtime_adapter as adapter
+
+        runtime_result = adapter.run_heartbeat_endpoint(
+            kind,
+            handler,
+            user_id=user.id,
+            delivery_channel="debug",
+        )
+        draft = runtime_result.draft if runtime_result is not None else handler()
     if not draft:
         payload = {
             "kind": kind,
@@ -66,6 +75,8 @@ def trigger_debug_heartbeat(
             "sent": False,
             "reason": "no_op",
         }
+        if runtime_result is not None:
+            payload["runtime"] = adapter.heartbeat_runtime_payload(runtime_result)
         if dump and trace is not None:
             if not trace.decision:
                 trace.decision = {"action": "no_send", "reason": "no_op"}
@@ -95,6 +106,8 @@ def trigger_debug_heartbeat(
         "delivery_error": delivery_error,
         "message": draft.text,
     }
+    if runtime_result is not None:
+        payload["runtime"] = adapter.heartbeat_runtime_payload(runtime_result)
     if dump and trace is not None:
         if not trace.decision:
             trace.decision = {"action": "send", "reason": "draft_generated"}

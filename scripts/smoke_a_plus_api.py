@@ -419,6 +419,9 @@ _INTERNAL_JARGON_MARKERS = (
     "runtime",
     "fallback",
     "commit event",
+    "candidate backend",
+    "candidate possible",
+    "pas une reponse finale",
 )
 
 
@@ -441,6 +444,17 @@ def evaluate_scenario_result(
         warnings.append("assistant reply contains bracket placeholder")
     if _contains_internal_jargon(assistant_message):
         reasons.append("assistant reply leaks internal jargon")
+    if _canonical_planning_cutover_enabled():
+        active_pending = _active_pending_rows(after)
+        if len(active_pending) > 1:
+            reasons.append("duplicate_pending")
+        if scenario.name == "confirm_without_pending" and (event_delta or pending_delta or mutation_applied):
+            reasons.append("confirm_without_pending wrote planning artifact")
+        if scenario.name == "move_easy_then_confirm" and scenario.followups:
+            if pending_delta > 1:
+                reasons.append("duplicate_pending")
+            if mutation_applied and not event_delta:
+                reasons.append("pending acceptance marked mutation_applied without event")
 
     if scenario.expectation == "guarded_no_commit":
         if event_delta:
@@ -534,6 +548,19 @@ def evaluate_generated_week_response(
 
 def _row_delta(before_rows: tuple[dict[str, Any], ...], after_rows: tuple[dict[str, Any], ...]) -> int:
     return len(_new_rows(before_rows, after_rows))
+
+
+def _canonical_planning_cutover_enabled() -> bool:
+    return os.getenv("FITMAS_UNDERSTANDING_RUNTIME_PLANNING_CUTOVER", "").strip().lower() in {
+        "1",
+        "true",
+        "yes",
+        "on",
+    }
+
+
+def _active_pending_rows(snapshot: DbSnapshot) -> tuple[dict[str, Any], ...]:
+    return tuple(row for row in snapshot.pending if str(row.get("status") or "") == "pending")
 
 
 def _new_rows(

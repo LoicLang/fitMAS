@@ -136,8 +136,6 @@ _PROMPT_CONTRACTS: dict[str, PromptContract] = {
         allowed_tools=(
             "get_plan_window",
             "get_user_constraints",
-            "draft_lighten_day",
-            "draft_replace_session",
             "validate_plan_patch",
         ),
         allowed_actions=("record_health_signal", "PlanPatch"),

@@ -1,0 +1,285 @@
+from __future__ import annotations
+
+import ast
+from dataclasses import fields
+from pathlib import Path
+
+
+ROOT = Path(__file__).resolve().parents[1]
+DECISION = ROOT / "backend" / "src" / "fitmas" / "decision"
+PURE_DECISION_MODULES = {
+    "__init__.py",
+    "command_bus.py",
+    "context.py",
+    "explanation.py",
+    "input_event.py",
+    "outcome.py",
+    "output_verifier.py",
+    "reply_composer.py",
+    "reply_request.py",
+    "runtime.py",
+    "understanding.py",
+}
+
+
+def _python_files() -> list[Path]:
+    return sorted(path for path in DECISION.glob("*.py") if path.name != "__pycache__")
+
+
+def _imports(path: Path) -> set[str]:
+    tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+    modules: set[str] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            modules.update(alias.name for alias in node.names)
+        elif isinstance(node, ast.ImportFrom) and node.module:
+            modules.add(node.module)
+    return modules
+
+
+def _field_names(cls: type) -> set[str]:
+    return {field.name for field in fields(cls)}
+
+
+def test_decision_runtime_phase1_modules_exist() -> None:
+    expected = {
+        "__init__.py",
+        "input_event.py",
+        "context.py",
+        "understanding.py",
+        "explanation.py",
+        "outcome.py",
+        "command_bus.py",
+        "runtime.py",
+        "reply_composer.py",
+        "reply_request.py",
+        "output_verifier.py",
+        "context_builder.py",
+    }
+
+    assert DECISION.exists()
+    assert {path.name for path in _python_files()} == expected
+
+
+def test_pure_decision_modules_have_no_database_or_legacy_imports() -> None:
+    forbidden_exact = {
+        "sqlalchemy",
+        "fitmas.db",
+        "fitmas.repository",
+        "fitmas.schema",
+        "fitmas.models",
+        "fitmas.legacy",
+    }
+    forbidden_prefixes = (
+        "sqlalchemy.",
+        "fitmas.legacy.",
+    )
+
+    offenders: list[str] = []
+    for path in _python_files():
+        if path.name not in PURE_DECISION_MODULES:
+            continue
+        for module in _imports(path):
+            if module in forbidden_exact or module.startswith(forbidden_prefixes):
+                offenders.append(f"{path.name}: {module}")
+
+    assert offenders == []
+
+
+def test_context_builder_is_the_only_decision_module_allowed_to_read_repository() -> None:
+    builder = DECISION / "context_builder.py"
+    assert builder.exists()
+
+    allowed = {
+        "sqlalchemy.orm",
+        "fitmas.repository",
+        "fitmas.schema",
+        "fitmas.coach_state_bundle",
+        "fitmas.time_context",
+    }
+    imports = _imports(builder)
+    read_imports = {module for module in imports if module in allowed}
+
+    assert read_imports
+    assert all(
+        module in allowed or not module.startswith(("sqlalchemy", "fitmas.repository", "fitmas.schema"))
+        for module in imports
+    )
+
+
+def test_context_builder_is_read_only_and_not_runtime_wired() -> None:
+    source = (DECISION / "context_builder.py").read_text(encoding="utf-8")
+    forbidden = (
+        ".add(",
+        ".delete(",
+        ".commit(",
+        ".flush(",
+        "PlanMutationService",
+        "MemoryMutationService",
+        "ExecutionCommandService",
+        "conversation_pipeline",
+        "final_reply",
+        "fitmas.llm",
+        "fitmas.tools",
+        "PlanPatch",
+        "MutationDecision",
+        "WeeklyPlan",
+        "DayPlan",
+        "get_active_plan",
+        "to_pydantic_plan",
+    )
+
+    offenders = [token for token in forbidden if token in source]
+
+    assert offenders == []
+
+
+def test_phase2_does_not_wire_existing_runtime_to_context_builder() -> None:
+    root = ROOT / "backend" / "src" / "fitmas"
+    files = [
+        root / "conversation_pipeline.py",
+        root / "skills" / "heartbeat" / "heartbeat.py",
+        root / "api_app.py",
+        root / "api_messages.py",
+    ]
+    offenders: list[str] = []
+    for path in files:
+        source = path.read_text(encoding="utf-8")
+        if "DecisionContextBuilder" in source or "fitmas.decision.context_builder" in source:
+            offenders.append(path.name)
+
+    assert offenders == []
+
+
+def test_decision_package_root_does_not_import_context_builder() -> None:
+    source = (DECISION / "__init__.py").read_text(encoding="utf-8")
+
+    assert "context_builder" not in source
+
+
+def test_decision_package_stays_free_of_legacy_understanding_adapter() -> None:
+    forbidden_exact = {
+        "fitmas.legacy",
+        "fitmas.legacy.coach_understanding_adapter",
+        "fitmas.llm",
+        "fitmas.conversation_contract",
+        "fitmas.conversation_pipeline",
+        "fitmas.plan_patch",
+        "fitmas.mutation_permissions",
+        "fitmas.final_reply",
+        "fitmas.tools.registry",
+    }
+    forbidden_prefixes = (
+        "fitmas.legacy.",
+        "fitmas.tools.",
+    )
+
+    offenders: list[str] = []
+    for path in _python_files():
+        for module in _imports(path):
+            if module in forbidden_exact or module.startswith(forbidden_prefixes):
+                offenders.append(f"{path.name}: {module}")
+
+    assert offenders == []
+
+
+def test_legacy_understanding_adapter_is_only_legacy_module_importing_llm_contracts() -> None:
+    legacy = ROOT / "backend" / "src" / "fitmas" / "legacy"
+    allowed = {
+        legacy / "coach_understanding_adapter.py",
+        legacy / "decision_contracts.py",
+        legacy / "understanding_shadow.py",
+    }
+    allowed_final_reply_imports = {
+        legacy / "final_reply_backend.py",
+    }
+    forbidden_modules = {
+        "fitmas.llm",
+        "fitmas.plan_patch",
+        "fitmas.conversation_pipeline",
+        "fitmas.final_reply",
+    }
+    offenders: list[str] = []
+
+    for path in sorted(legacy.glob("*.py")):
+        if path.name == "__init__.py" or path in allowed:
+            continue
+        for module in _imports(path):
+            if module == "fitmas.final_reply" and path in allowed_final_reply_imports:
+                continue
+            if module in forbidden_modules:
+                offenders.append(f"{path.name}: {module}")
+
+    assert offenders == []
+
+
+def test_decision_understanding_has_no_legacy_contract_fields() -> None:
+    from fitmas.decision import CoachUnderstanding, PendingResolution, RequestedPlanChange, UserSignal
+
+    checked = (CoachUnderstanding, PendingResolution, RequestedPlanChange, UserSignal)
+    forbidden = {
+        "fitmas_message",
+        "reply_text",
+        "final_reply",
+        "plan_patch",
+        "mutation_decision",
+        "coach_decision",
+        "operations",
+        "command",
+        "event_id",
+    }
+
+    for cls in checked:
+        assert _field_names(cls).isdisjoint(forbidden), cls
+
+
+def test_decision_understanding_source_does_not_mention_reply_or_patch_contracts() -> None:
+    source = (DECISION / "understanding.py").read_text(encoding="utf-8")
+    forbidden = (
+        "fitmas_message",
+        "reply_text",
+        "final_reply",
+        "PlanPatch",
+        "MutationDecision",
+        "plan_patch",
+        "mutation_decision",
+    )
+
+    offenders = [token for token in forbidden if token in source]
+
+    assert offenders == []
+
+
+def test_decision_runtime_shell_has_no_behavioral_adapters_yet() -> None:
+    source = (DECISION / "runtime.py").read_text(encoding="utf-8")
+    forbidden = (
+        "conversation_pipeline",
+        "heartbeat",
+        "telegram",
+        "PlanMutationService",
+        "MemoryMutationService",
+        "ExecutionCommandService",
+    )
+
+    offenders = [token for token in forbidden if token in source]
+
+    assert offenders == []
+
+
+def test_domain_planning_package_exists_without_free_text_parsers() -> None:
+    planning = ROOT / "backend" / "src" / "fitmas" / "domain" / "planning"
+    assert planning.exists()
+    forbidden_tokens = (
+        "user_text",
+        "payload.text",
+        "re.search",
+        "re.match",
+        ".lower() in",
+    )
+    offenders: list[str] = []
+    for path in sorted(planning.glob("*.py")):
+        source = path.read_text(encoding="utf-8")
+        for token in forbidden_tokens:
+            if token in source:
+                offenders.append(f"{path.name}: {token}")
+    assert offenders == []

@@ -74,6 +74,8 @@ class MutationActionServicesTest(unittest.TestCase):
         self.assertEqual(working[0].key, "availability_2026-05-01_2026-05-01")
         self.assertEqual(len(events), 2)
         self.assertTrue(all(event.status == "applied" for event in events))
+        self.assertEqual(len(result.event_ids), 2)
+        self.assertEqual(tuple(event.id for event in events), result.event_ids)
 
     def test_memory_service_uses_canonical_sport_window_key_for_availability(self) -> None:
         result = apply_memory_actions_for_user(
@@ -325,6 +327,34 @@ class MutationActionServicesTest(unittest.TestCase):
         self.assertEqual(updated.completion_status, "skipped")
         self.assertEqual(events[0].action_type, "record_execution_update")
         self.assertEqual(events[0].status, "applied")
+        self.assertEqual(len(result.event_ids), 1)
+        self.assertEqual(result.event_ids[0], events[0].id)
+
+    def test_execution_service_resolves_iso_date_target_ref_from_typed_llm_action(self) -> None:
+        session = self._scheduled_session(days_offset=-1, sport_type="strength", title="Renfo 34min")
+
+        result = apply_execution_actions_for_user(
+            self.db,
+            user=self.user,
+            actions=[
+                ExecutionUpdateAction(
+                    type="record_execution_update",
+                    target_ref=session.scheduled_date.date().isoformat(),
+                    status="not_completed",
+                    completed=False,
+                    sport_type="strength",
+                    confidence=0.95,
+                    evidence="pas eu le temps hier",
+                )
+            ],
+        )
+
+        self.db.expire_all()
+        updated = repo.get_scheduled_session(self.db, self.user.id, session.id)
+
+        self.assertEqual(result.applied_count, 1)
+        self.assertEqual(result.blocked_count, 0)
+        self.assertEqual(updated.completion_status, "skipped")
 
     def test_execution_service_prefers_structured_session_id(self) -> None:
         session = self._scheduled_session(days_offset=0, sport_type="running", title="Footing")
@@ -379,6 +409,8 @@ class MutationActionServicesTest(unittest.TestCase):
         self.assertEqual(repo.get_scheduled_session(self.db, self.user.id, second.id).completion_status, "planned")
         self.assertEqual(events[0].status, "blocked")
         self.assertEqual(events[0].reason, "ambiguous_target")
+        self.assertEqual(len(result.event_ids), 1)
+        self.assertEqual(result.event_ids[0], events[0].id)
 
     def _scheduled_session(self, *, days_offset: int, sport_type: str, title: str) -> s.ScheduledSession:
         target = datetime.now() + timedelta(days=days_offset)

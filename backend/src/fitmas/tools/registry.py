@@ -5,7 +5,6 @@ from typing import Any, Sequence
 
 from fitmas.execution_context import build_today_execution_context
 from fitmas.fact_memory import fact_is_current, select_relevant_facts
-from fitmas import plan_patch_tools
 from fitmas.planning_window_resolution import format_planning_window_summary, resolve_planning_window_inputs
 from fitmas.replan_proposal import build_replan_proposal
 from fitmas.time_context import get_local_now, get_timezone
@@ -183,130 +182,6 @@ def build_tool_registry() -> dict[str, ToolSpec]:
             handler=_suggest_replan_candidates,
         ),
         ToolSpec(
-            name="draft_move_session",
-            description=(
-                "Construit un PlanPatch candidat pour deplacer une seance existante vers une date cible, "
-                "puis le valide sans ecrire en base. Retourne patch + validation. Le coach doit copier le patch "
-                "dans CoachDecision; le backend revalide et applique via PlanMutationService."
-            ),
-            kind="candidate",
-            input_schema={
-                "type": "object",
-                "properties": {
-                    "target_session_id": {"type": "integer", "description": "ID ScheduledSession a deplacer."},
-                    "target_date": {"type": "string", "description": "Date cible ISO YYYY-MM-DD."},
-                    "from_day": {"type": "string", "description": "Jour source si connu."},
-                    "to_day": {"type": "string", "description": "Jour cible si connu."},
-                    "rationale": {"type": "string", "description": "Raison courte du changement."},
-                    "coach_message": {"type": "string", "description": "Message coach associe au patch candidat."},
-                    "confirmation_reason": {"type": "string", "description": "Raison de confirmation si le coach veut la demander."},
-                },
-                "required": ["target_session_id", "target_date", "rationale", "coach_message"],
-            },
-            allowed_pipelines=("conversation", "planning"),
-            handler=plan_patch_tools.draft_move_session,
-        ),
-        ToolSpec(
-            name="draft_swap_sessions",
-            description=(
-                "Construit un PlanPatch candidat pour echanger deux seances existantes, puis le valide sans ecrire en base. "
-                "A utiliser quand deux vraies seances existent deja et que le user veut inverser leurs jours."
-            ),
-            kind="candidate",
-            input_schema={
-                "type": "object",
-                "properties": {
-                    "target_session_id": {"type": "integer", "description": "Premier ID ScheduledSession."},
-                    "second_session_id": {"type": "integer", "description": "Second ID ScheduledSession."},
-                    "rationale": {"type": "string", "description": "Raison courte de l'echange."},
-                    "coach_message": {"type": "string", "description": "Message coach associe au patch candidat."},
-                    "confirmation_reason": {"type": "string", "description": "Raison de confirmation si besoin."},
-                },
-                "required": ["target_session_id", "second_session_id", "rationale", "coach_message"],
-            },
-            allowed_pipelines=("conversation", "planning"),
-            handler=plan_patch_tools.draft_swap_sessions,
-        ),
-        ToolSpec(
-            name="draft_replace_session",
-            description=(
-                "Construit un PlanPatch candidat pour remplacer le contenu d'une seance existante, puis le valide "
-                "sans ecrire en base. Retourne patch + validation; aucun commit n'est effectue."
-            ),
-            kind="candidate",
-            input_schema={
-                "type": "object",
-                "properties": {
-                    "target_session_id": {"type": "integer", "description": "ID ScheduledSession a remplacer."},
-                    "new_title": {"type": "string", "description": "Nouveau titre."},
-                    "new_goal": {"type": "string", "description": "Nouvel objectif."},
-                    "new_sport_type": {"type": "string", "description": "Nouveau sport, ex running/swimming/cycling."},
-                    "new_session_type": {"type": "string", "description": "Nouveau type de seance."},
-                    "new_duration_min": {"type": "integer", "description": "Nouvelle duree en minutes."},
-                    "new_intensity": {"type": "string", "description": "Nouvelle intensite: easy/moderate/hard."},
-                    "new_description": {"type": "string", "description": "Description courte."},
-                    "rationale": {"type": "string", "description": "Raison courte du remplacement."},
-                    "coach_message": {"type": "string", "description": "Message coach associe au patch candidat."},
-                    "confirmation_reason": {"type": "string", "description": "Raison de confirmation si besoin."},
-                },
-                "required": ["target_session_id", "new_sport_type", "new_title", "new_duration_min", "rationale", "coach_message"],
-            },
-            allowed_pipelines=("conversation", "planning"),
-            handler=plan_patch_tools.draft_replace_session,
-        ),
-        ToolSpec(
-            name="draft_lighten_day",
-            description=(
-                "Construit un PlanPatch candidat pour alleger une seance existante, puis le valide sans ecrire en base. "
-                "A utiliser pour fatigue/douleur/recuperation quand la seance reste au planning mais devient plus facile."
-            ),
-            kind="candidate",
-            input_schema={
-                "type": "object",
-                "properties": {
-                    "target_session_id": {"type": "integer", "description": "ID ScheduledSession a alleger."},
-                    "new_title": {"type": "string", "description": "Titre ajuste optionnel."},
-                    "new_goal": {"type": "string", "description": "Objectif ajuste optionnel."},
-                    "new_duration_min": {"type": "integer", "description": "Duree cible optionnelle."},
-                    "new_intensity": {"type": "string", "description": "Intensite cible, defaut easy."},
-                    "new_description": {"type": "string", "description": "Description courte optionnelle."},
-                    "rationale": {"type": "string", "description": "Raison courte de l'allegement."},
-                    "coach_message": {"type": "string", "description": "Message coach associe au patch candidat."},
-                    "confirmation_reason": {"type": "string", "description": "Raison de confirmation si besoin."},
-                },
-                "required": ["target_session_id", "rationale", "coach_message"],
-            },
-            allowed_pipelines=("conversation", "planning"),
-            handler=plan_patch_tools.draft_lighten_day,
-        ),
-        ToolSpec(
-            name="draft_create_session",
-            description=(
-                "Construit un PlanPatch candidat pour creer une nouvelle seance datee, puis le valide sans ecrire en base. "
-                "Retourne patch + validation; le backend revalide avant tout commit."
-            ),
-            kind="candidate",
-            input_schema={
-                "type": "object",
-                "properties": {
-                    "target_date": {"type": "string", "description": "Date cible ISO YYYY-MM-DD."},
-                    "new_title": {"type": "string", "description": "Titre de la nouvelle seance."},
-                    "new_goal": {"type": "string", "description": "Objectif de la nouvelle seance."},
-                    "new_sport_type": {"type": "string", "description": "Sport, ex running/swimming/cycling."},
-                    "new_session_type": {"type": "string", "description": "Type de seance."},
-                    "new_duration_min": {"type": "integer", "description": "Duree en minutes."},
-                    "new_intensity": {"type": "string", "description": "Intensite: easy/moderate/hard."},
-                    "new_description": {"type": "string", "description": "Description courte."},
-                    "rationale": {"type": "string", "description": "Raison courte de creation."},
-                    "coach_message": {"type": "string", "description": "Message coach associe au patch candidat."},
-                    "confirmation_reason": {"type": "string", "description": "Raison de confirmation si besoin."},
-                },
-                "required": ["target_date", "new_sport_type", "new_title", "new_duration_min", "rationale", "coach_message"],
-            },
-            allowed_pipelines=("conversation", "planning"),
-            handler=plan_patch_tools.draft_create_session,
-        ),
-        ToolSpec(
             name="validate_plan_patch",
             description=(
                 "Valide un PlanPatch sans l'appliquer. Retourne valid/warning/"
@@ -346,23 +221,6 @@ def build_tool_registry() -> dict[str, ToolSpec]:
             },
             allowed_pipelines=("planning", "heartbeat"),
             handler=_validate_week_coherence_tool,
-        ),
-        ToolSpec(
-            name="propose_replan",
-            description="Compat legacy: utilise suggest_replan_candidates. Retourne une candidate de replan read-only, pas une decision finale.",
-            kind="candidate",
-            input_schema={
-                "type": "object",
-                "properties": {
-                    "start_date": {"type": "string", "description": "Date debut ISO YYYY-MM-DD si l'user vient d'annoncer la contrainte."},
-                    "end_date": {"type": "string", "description": "Date fin ISO YYYY-MM-DD si connue."},
-                    "sport_type": {"type": "string", "description": "Sport bloque si connu, ex: swimming."},
-                    "preferred_replacement_sport": {"type": "string", "description": "Sport de remplacement prefere si le user l'a deja dit."},
-                },
-                "required": [],
-            },
-            allowed_pipelines=("conversation", "planning"),
-            handler=_propose_replan,
         ),
     )
     return {spec.name: spec for spec in specs}
@@ -666,10 +524,6 @@ def _suggest_replan_candidates(context: ToolContext, arguments: dict[str, Any]) 
         arguments,
         tool_name="suggest_replan_candidates",
     )
-
-
-def _propose_replan(context: ToolContext, arguments: dict[str, Any]) -> ToolResult:
-    return _build_replan_candidate_result(context, arguments, tool_name="propose_replan")
 
 
 def _validate_plan_patch_tool(context: ToolContext, arguments: dict[str, Any]) -> ToolResult:

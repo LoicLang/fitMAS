@@ -497,11 +497,6 @@ def test_apply_decisions_for_user_routes_all_decisions_through_mutations(monkeyp
         MutationDecision(mutation_type="replace_session", target_session_id=11, rationale="douleur", fitmas_message=""),
     ]
 
-    monkeypatch.setattr(
-        "fitmas.plan_mutation_service.repo.get_active_plan_optional",
-        lambda db, user_id: SimpleNamespace(id=42),
-    )
-
     calls: list[tuple[int, str]] = []
 
     def _fake_apply(db, plan_id, decision, **kwargs):
@@ -520,11 +515,11 @@ def test_apply_decisions_for_user_routes_all_decisions_through_mutations(monkeyp
     )
 
     assert result is not None
-    assert result.plan_id == 42
+    assert result.plan_id == 0
     assert result.attempted_count == 2
     assert result.applied_count == 2
     assert result.event_count == 2
-    assert calls == [(42, "lighten_day"), (42, "replace_session")]
+    assert calls == [(0, "lighten_day"), (0, "replace_session")]
 
 
 def test_apply_decisions_for_user_routes_create_session_through_patch_path(monkeypatch) -> None:

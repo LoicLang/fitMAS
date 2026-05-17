@@ -170,6 +170,6 @@ def _blocked_validation(
         operation_count=operation_count,
         operation_results=operation_results,
         block_reason=reason,
-        summary=f"Candidate bloquee: {reason}.",
+        summary=f"Option bloquee: {reason}.",
         commit_performed=False,
     )

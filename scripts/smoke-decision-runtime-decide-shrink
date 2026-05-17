@@ -1,0 +1,19 @@
+#!/usr/bin/env zsh
+
+set -euo pipefail
+
+script_dir="$(cd "$(dirname "$0")" && pwd)"
+repo_root="$(cd "$script_dir/.." && pwd)"
+cd "$repo_root"
+
+./scripts/test-backend -q \
+  tests/test_phase8l_decide_authority_architecture.py \
+  tests/test_coach_decision_provider.py \
+  tests/test_conversation_decide_bridge.py \
+  tests/test_conversation_coach_decision_reply_bridge.py \
+  tests/test_conversation_understanding_bridge.py \
+  tests/test_conversation_command_bridge.py \
+  tests/test_conversation_pending_bridge.py
+
+./scripts/smoke-decision-runtime-canonical-defaults
+./scripts/smoke-decision-runtime-canonical-planning

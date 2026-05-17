@@ -74,7 +74,7 @@ def evaluate_plan_patch_candidate(
         return _blocked_evaluation(
             candidate=candidate,
             candidate_validation=_blocked_candidate_ref_validation(candidate, "unknown_candidate_ref"),
-            summary="Candidate bloquee: unknown_candidate_ref.",
+            summary="Option bloquee: unknown_candidate_ref.",
         )
     patch_validation = validate_plan_patch(
         db,
@@ -201,7 +201,7 @@ def _blocked_candidate_ref_validation(candidate: PlanPatchCandidate, reason: str
         operation_count=0,
         operation_results=(),
         block_reason=reason,
-        summary=f"Candidate bloquee: {reason}.",
+        summary=f"Option bloquee: {reason}.",
         commit_performed=False,
     )
 
@@ -230,14 +230,14 @@ def _policy_hint(
 
 def _evaluation_summary(*, policy_hint: PolicyHint, score_delta: float | None) -> str:
     if policy_hint == "block":
-        return "Candidate bloquee avant application."
+        return "Option bloquee avant application."
     if policy_hint == "ask_confirmation":
         if score_delta is not None:
-            return f"Candidate possible, confirmation recommandee (score_delta={score_delta})."
-        return "Candidate possible, confirmation recommandee."
+            return f"Option possible, confirmation recommandee (score_delta={score_delta})."
+        return "Option possible, confirmation recommandee."
     if score_delta is not None:
-        return f"Candidate basse friction (score_delta={score_delta})."
-    return "Candidate basse friction."
+        return f"Option simple a appliquer (score_delta={score_delta})."
+    return "Option simple a appliquer."
 
 
 def _blocked_evaluation(

@@ -452,7 +452,6 @@ memory_actions.record_health_signal:
 PlanPatch minimal si adaptation evidente:
 - Utilise `response_type="plan_patch"` seulement si le signal touche clairement une seance planifiee.
 - Utilise `response_type="requires_confirmation"` seulement si le signal touche clairement une seance planifiee ET que tu fournis un plan_patch valide.
-- Si tu as utilise un tool `draft_*`, copie le `payload.patch` exact dans `plan_patch`; ne copie pas `validation`, `review`, `policy_status` ou un wrapper de tool comme patch final.
 - requires_confirmation exige un plan_patch valide; sans patch complet, retourne no_change.
 - plan_patch.operations[].operation_type: replace_session | lighten_day | move_session
 - Renseigne target_session_id si la seance cible est resolue.

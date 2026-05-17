@@ -18,6 +18,7 @@ class ExecutionActionApplicationResult:
     applied_count: int
     blocked_count: int
     updated_session_ids: tuple[int, ...]
+    event_ids: tuple[int, ...] = ()
 
 
 def apply_execution_actions_for_user(
@@ -37,33 +38,43 @@ def apply_execution_actions_for_user(
     applied = 0
     blocked = 0
     updated_ids: list[int] = []
+    event_ids: list[int] = []
     for action in actions:
         status = _session_status_from_action(action)
         if status is None:
             blocked += 1
-            _add_event(db, user=user, action=action, status="blocked", reason="unsupported_status", source=source, conversation_turn_id=conversation_turn_id)
+            event_ids.append(
+                _add_event(db, user=user, action=action, status="blocked", reason="unsupported_status", source=source, conversation_turn_id=conversation_turn_id)
+            )
             continue
 
         resolution = _resolve_target_session(db, user=user, action=action, now=now)
         if resolution.reason != "ok" or resolution.session is None:
             blocked += 1
-            _add_event(db, user=user, action=action, status="blocked", reason=resolution.reason, source=source, conversation_turn_id=conversation_turn_id)
+            event_ids.append(
+                _add_event(db, user=user, action=action, status="blocked", reason=resolution.reason, source=source, conversation_turn_id=conversation_turn_id)
+            )
             continue
 
         updated = repo.set_scheduled_session_status(db, resolution.session.id, status)
         if updated is None:
             blocked += 1
-            _add_event(db, user=user, action=action, status="blocked", reason="target_missing", source=source, conversation_turn_id=conversation_turn_id)
+            event_ids.append(
+                _add_event(db, user=user, action=action, status="blocked", reason="target_missing", source=source, conversation_turn_id=conversation_turn_id)
+            )
             continue
 
         applied += 1
         updated_ids.append(updated.id)
-        _add_event(db, user=user, action=action, status="applied", reason="", source=source, conversation_turn_id=conversation_turn_id, target_session_id=updated.id)
+        event_ids.append(
+            _add_event(db, user=user, action=action, status="applied", reason="", source=source, conversation_turn_id=conversation_turn_id, target_session_id=updated.id)
+        )
 
     return ExecutionActionApplicationResult(
         applied_count=applied,
         blocked_count=blocked,
         updated_session_ids=tuple(updated_ids),
+        event_ids=tuple(event_ids),
     )
 
 
@@ -110,6 +121,11 @@ def _session_status_from_action(action: ExecutionUpdateAction) -> str | None:
 def _target_date_from_ref(target_ref: str, *, user: s.User, now: datetime | None) -> date | None:
     local_now = get_local_now(user.timezone, now=now)
     normalized = _normalize_token(target_ref)
+    iso_candidate = normalized.removeprefix("date:").strip()
+    try:
+        return date.fromisoformat(iso_candidate)
+    except ValueError:
+        pass
     if "hier" in normalized or "yesterday" in normalized:
         return local_now.date() - timedelta(days=1)
     if "aujourd" in normalized or "today" in normalized:
@@ -129,24 +145,25 @@ def _add_event(
     source: str,
     conversation_turn_id: int | None,
     target_session_id: int | None = None,
-) -> None:
+) -> int:
     payload = action.model_dump(mode="json")
     if target_session_id is not None:
         payload["target_session_id"] = target_session_id
-    db.add(
-        s.MemoryMutationEventRecord(
-            user_id=user.id,
-            source=source,
-            action_type=action.type,
-            target_type="scheduled_session",
-            target_key=str(target_session_id or ""),
-            status=status,
-            reason=reason,
-            payload_json=json.dumps(payload, ensure_ascii=True, sort_keys=True),
-            conversation_turn_id=conversation_turn_id,
-        )
+    record = s.MemoryMutationEventRecord(
+        user_id=user.id,
+        source=source,
+        action_type=action.type,
+        target_type="scheduled_session",
+        target_key=str(target_session_id or ""),
+        status=status,
+        reason=reason,
+        payload_json=json.dumps(payload, ensure_ascii=True, sort_keys=True),
+        conversation_turn_id=conversation_turn_id,
     )
+    db.add(record)
     db.commit()
+    db.refresh(record)
+    return int(record.id)
 
 
 def _normalize_token(value: str) -> str:

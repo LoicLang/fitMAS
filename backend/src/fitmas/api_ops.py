@@ -24,6 +24,7 @@ from fitmas.conversation_contract import (
     ConversationUserNotFoundError,
 )
 from fitmas.db import get_db
+from fitmas.legacy.heartbeat_runtime_adapter import heartbeat_runtime_payload, run_heartbeat_endpoint, run_heartbeat_trigger
 from fitmas.telegram_channel import resolve_chat_id, send_text_message
 
 logger = logging.getLogger(__name__)
@@ -168,6 +169,12 @@ def _conversation_flow_composer(
             **base,
             "capability": "mutation_result",
             "source": "runtime_mutation_result",
+        }
+    if row.response_mode == "legacy_decision_contract_disabled":
+        return {
+            **base,
+            "capability": "legacy_decision_contract_disabled",
+            "source": "runtime_no_mutation",
         }
     if str(row.response_mode or "").endswith("_blocked"):
         return {
@@ -324,14 +331,23 @@ def trigger_heartbeat(
         raise HTTPException(status_code=400, detail=f"Unsupported heartbeat kind: {kind}")
 
     trace = None
+    runtime_result = None
     if dump:
         with heartbeat.capture_debug_trace(kind) as captured:
             draft = handler()
             trace = captured
     else:
-        draft = handler()
+        runtime_result = run_heartbeat_endpoint(
+            kind,
+            handler,
+            user_id=user.id,
+            delivery_channel="ops",
+        )
+        draft = runtime_result.draft if runtime_result is not None else handler()
     if not draft:
         payload = {"kind": kind, "triggered": False, "sent": False, "reason": "no_op"}
+        if runtime_result is not None:
+            payload["runtime"] = heartbeat_runtime_payload(runtime_result)
         if dump and trace is not None:
             if not trace.decision:
                 trace.decision = {"action": "no_send", "reason": "no_op"}
@@ -361,6 +377,8 @@ def trigger_heartbeat(
         "delivery_error": delivery_error,
         "message": draft.text,
     }
+    if runtime_result is not None:
+        payload["runtime"] = heartbeat_runtime_payload(runtime_result)
     if dump and trace is not None:
         if not trace.decision:
             trace.decision = {"action": "send", "reason": "draft_generated"}

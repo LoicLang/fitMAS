@@ -1,0 +1,20 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+./scripts/test-backend -q \
+  tests/test_phase8t_canonical_planning_provider_architecture.py \
+  tests/test_conversation_canonical_planning_bridge.py \
+  tests/test_conversation_understanding_bridge.py::test_canonical_planning_provider_runs_understanding_for_plan_mutation \
+  tests/test_conversation_planning_runtime_adapter.py \
+  tests/test_conversation_planning_runtime_reply_composer.py \
+  tests/test_domain_planning_decision_service.py \
+  tests/test_domain_planning_mutation_service.py \
+  tests/test_planning_outcome_adapter.py \
+  tests/test_llm_understanding_service.py::test_parse_coach_understanding_payload_normalizes_typed_session_ref_aliases \
+  tests/test_llm_understanding_service.py::test_parse_coach_understanding_payload_normalizes_structured_ref_objects \
+  tests/test_core_flows.py::FitMASCoreFlowsTest::test_canonical_planning_provider_preempts_pre_decide_candidate_flow \
+  tests/test_core_flows.py::FitMASCoreFlowsTest::test_canonical_pending_accept_preempts_pre_decide_candidate_flow
+
+./scripts/smoke-decision-runtime-canonical-readonly
+
+echo "RESULT: OK"

@@ -18,6 +18,7 @@ class MemoryActionApplicationResult:
     applied_count: int
     blocked_count: int
     saved_keys: tuple[str, ...]
+    event_ids: tuple[int, ...] = ()
 
 
 def apply_memory_actions_for_user(
@@ -36,22 +37,25 @@ def apply_memory_actions_for_user(
     """
     payloads: list[dict] = []
     availability_resolutions: list[AvailabilityConstraintAction] = []
+    event_ids: list[int] = []
     blocked = 0
     for action in actions:
         payload = _payload_from_action(action, source=source, now=now)
         if payload is None:
             blocked += 1
-            _add_event(
-                db,
-                user=user,
-                action_type=str(getattr(action, "type", "")),
-                target_type="memory",
-                target_key="",
-                status="blocked",
-                reason="invalid_action",
-                payload=_dump_action(action),
-                source=source,
-                conversation_turn_id=conversation_turn_id,
+            event_ids.append(
+                _add_event(
+                    db,
+                    user=user,
+                    action_type=str(getattr(action, "type", "")),
+                    target_type="memory",
+                    target_key="",
+                    status="blocked",
+                    reason="invalid_action",
+                    payload=_dump_action(action),
+                    source=source,
+                    conversation_turn_id=conversation_turn_id,
+                )
             )
             continue
         payloads.append(payload)
@@ -67,33 +71,38 @@ def apply_memory_actions_for_user(
     )
 
     for payload in payloads:
-        _add_event(
-            db,
-            user=user,
-            action_type=str(payload.get("action_type") or "memory_action"),
-            target_type=str(payload.get("category") or "memory"),
-            target_key=str(payload.get("key") or ""),
-            status="applied",
-            reason="",
-            payload=payload,
-            source=source,
-            conversation_turn_id=conversation_turn_id,
+        event_ids.append(
+            _add_event(
+                db,
+                user=user,
+                action_type=str(payload.get("action_type") or "memory_action"),
+                target_type=str(payload.get("category") or "memory"),
+                target_key=str(payload.get("key") or ""),
+                status="applied",
+                reason="",
+                payload=payload,
+                source=source,
+                conversation_turn_id=conversation_turn_id,
+            )
         )
 
     for action in availability_resolutions:
-        _resolve_overlapping_unavailability(
-            db,
-            user=user,
-            action=action,
-            source=source,
-            conversation_turn_id=conversation_turn_id,
-            now=now,
+        event_ids.extend(
+            _resolve_overlapping_unavailability(
+                db,
+                user=user,
+                action=action,
+                source=source,
+                conversation_turn_id=conversation_turn_id,
+                now=now,
+            )
         )
 
     return MemoryActionApplicationResult(
         applied_count=len(saved_profile) + len(saved_working),
         blocked_count=blocked,
         saved_keys=saved_keys,
+        event_ids=tuple(event_ids),
     )
 
 
@@ -171,12 +180,12 @@ def _resolve_overlapping_unavailability(
     source: str,
     conversation_turn_id: int | None,
     now: datetime | None,
-) -> None:
+) -> tuple[int, ...]:
     starts_on = _parse_date(action.starts_on)
     ends_on = _parse_date(action.ends_on) or starts_on
     sport_type = _normalize_sport(getattr(action, "sport_type", None))
     if starts_on is None or ends_on is None:
-        return
+        return ()
     resolved_at = now or datetime.now(UTC).replace(tzinfo=None)
     resolved_rows: list[s.UserFact | s.WorkingMemoryEntry] = []
     for row in [
@@ -194,25 +203,29 @@ def _resolve_overlapping_unavailability(
         resolved_rows.append(row)
 
     if not resolved_rows:
-        return
+        return ()
     db.commit()
+    event_ids: list[int] = []
     for row in resolved_rows:
-        _add_event(
-            db,
-            user=user,
-            action_type="resolve_availability_unavailable",
-            target_type="availability",
-            target_key=str(getattr(row, "key", "")),
-            status="applied",
-            reason="availability_available_overlap",
-            payload={
-                "category": "availability",
-                "key": getattr(row, "key", ""),
-                "resolved_by": _availability_key(action, starts_on=starts_on, ends_on=ends_on, sport_type=sport_type),
-            },
-            source=source,
-            conversation_turn_id=conversation_turn_id,
+        event_ids.append(
+            _add_event(
+                db,
+                user=user,
+                action_type="resolve_availability_unavailable",
+                target_type="availability",
+                target_key=str(getattr(row, "key", "")),
+                status="applied",
+                reason="availability_available_overlap",
+                payload={
+                    "category": "availability",
+                    "key": getattr(row, "key", ""),
+                    "resolved_by": _availability_key(action, starts_on=starts_on, ends_on=ends_on, sport_type=sport_type),
+                },
+                source=source,
+                conversation_turn_id=conversation_turn_id,
+            )
         )
+    return tuple(event_ids)
 
 
 def _active_unavailability_rows(db: Session, model, *, user_id: int):
@@ -279,21 +292,22 @@ def _add_event(
     payload: dict,
     source: str,
     conversation_turn_id: int | None,
-) -> None:
-    db.add(
-        s.MemoryMutationEventRecord(
-            user_id=user.id,
-            source=source,
-            action_type=action_type,
-            target_type=target_type,
-            target_key=target_key,
-            status=status,
-            reason=reason,
-            payload_json=json.dumps(payload, ensure_ascii=True, sort_keys=True, default=str),
-            conversation_turn_id=conversation_turn_id,
-        )
+) -> int:
+    record = s.MemoryMutationEventRecord(
+        user_id=user.id,
+        source=source,
+        action_type=action_type,
+        target_type=target_type,
+        target_key=target_key,
+        status=status,
+        reason=reason,
+        payload_json=json.dumps(payload, ensure_ascii=True, sort_keys=True, default=str),
+        conversation_turn_id=conversation_turn_id,
     )
+    db.add(record)
     db.commit()
+    db.refresh(record)
+    return int(record.id)
 
 
 def _dump_action(action: object) -> dict:

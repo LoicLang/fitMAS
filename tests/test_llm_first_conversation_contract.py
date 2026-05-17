@@ -74,7 +74,7 @@ def test_conversation_context_does_not_parse_free_user_text() -> None:
 
 
 def test_llm_decide_does_not_route_tools_from_raw_user_text() -> None:
-    source = _source("llm.py")
+    source = _source("llm/decision_legacy.py")
 
     forbidden = (
         "route_tools_for_query(user_text",

@@ -1,0 +1,184 @@
+from __future__ import annotations
+
+import ast
+from pathlib import Path
+
+
+ROOT = Path(__file__).resolve().parents[1]
+SRC = ROOT / "backend" / "src" / "fitmas"
+SCRIPTS = ROOT / "scripts"
+
+
+def _source(relative: str) -> str:
+    return (SRC / relative).read_text(encoding="utf-8")
+
+
+def _tree(relative: str) -> ast.Module:
+    return ast.parse(_source(relative), filename=relative)
+
+
+def _imports(relative: str) -> set[str]:
+    modules: set[str] = set()
+    for node in ast.walk(_tree(relative)):
+        if isinstance(node, ast.Import):
+            modules.update(alias.name for alias in node.names)
+        elif isinstance(node, ast.ImportFrom) and node.module:
+            modules.add(node.module)
+            modules.update(f"{node.module}.{alias.name}" for alias in node.names)
+    return modules
+
+
+def _attribute_names(relative: str) -> set[str]:
+    return {
+        node.attr
+        for node in ast.walk(_tree(relative))
+        if isinstance(node, ast.Attribute)
+    }
+
+
+def _constant_strings(relative: str) -> tuple[str, ...]:
+    return tuple(
+        str(node.value)
+        for node in ast.walk(_tree(relative))
+        if isinstance(node, ast.Constant) and isinstance(node.value, str)
+    )
+
+
+def _script_source(name: str) -> str:
+    return (SCRIPTS / name).read_text(encoding="utf-8")
+
+
+def test_8o_artifact_module_exists() -> None:
+    assert (SRC / "legacy" / "coach_decision_artifact.py").exists()
+
+
+def test_8o_provider_and_decide_bridge_use_artifact_boundary() -> None:
+    provider_imports = _imports("legacy/coach_decision_provider.py")
+    decide_source = _source("legacy/conversation_decide_bridge.py")
+
+    assert "fitmas.legacy.coach_decision_artifact.LegacyCoachDecisionArtifact" in provider_imports
+    assert "artifact=result.artifact" in decide_source or "return result.artifact" in decide_source
+    assert "result.decision" not in decide_source
+
+
+def test_8o_conversation_facing_modules_do_not_access_fitmas_message_directly() -> None:
+    for relative in (
+        "conversation_pipeline.py",
+        "legacy/conversation_decision_bridge.py",
+        "legacy/conversation_command_bridge.py",
+        "legacy/coach_command_adapter.py",
+        "legacy/conversation_pending_bridge.py",
+        "legacy/conversation_planning_bridge.py",
+        "legacy/conversation_coach_decision_reply_bridge.py",
+        "legacy/planning_runtime_adapter.py",
+        "legacy/understanding_shadow.py",
+    ):
+        assert "fitmas_message" not in _attribute_names(relative), relative
+        assert "fitmas_message" not in _constant_strings(relative), relative
+
+
+def test_8o_conversation_facing_modules_do_not_import_raw_legacy_models() -> None:
+    forbidden = {
+        "fitmas.llm.CoachDecision",
+        "fitmas.llm.MutationDecision",
+        "fitmas.llm.legacy_models.CoachDecision",
+        "fitmas.llm.legacy_models.MutationDecision",
+    }
+    for relative in (
+        "conversation_pipeline.py",
+        "legacy/conversation_decide_bridge.py",
+        "legacy/conversation_command_bridge.py",
+        "legacy/conversation_pending_bridge.py",
+        "legacy/conversation_planning_bridge.py",
+        "legacy/conversation_coach_decision_reply_bridge.py",
+        "legacy/planning_runtime_adapter.py",
+        "legacy/understanding_shadow.py",
+    ):
+        assert not forbidden.intersection(_imports(relative)), relative
+
+
+def test_8o_raw_legacy_model_imports_stay_in_compat_zone() -> None:
+    allowed = {
+        "llm/legacy_models.py",
+        "llm/legacy_parser.py",
+        "llm/legacy_action_compile.py",
+        "llm/decision_legacy.py",
+        "legacy/coach_understanding_adapter.py",
+        "legacy/decision_contracts.py",
+    }
+    offenders: list[str] = []
+    for path in SRC.rglob("*.py"):
+        relative = path.relative_to(SRC).as_posix()
+        if relative in allowed:
+            continue
+        imports = _imports(relative)
+        if {
+            "fitmas.llm.CoachDecision",
+            "fitmas.llm.MutationDecision",
+            "fitmas.llm.legacy_models.CoachDecision",
+            "fitmas.llm.legacy_models.MutationDecision",
+        }.intersection(imports):
+            offenders.append(relative)
+    assert offenders == []
+
+
+def test_8o_conversation_pipeline_names_artifact_boundary() -> None:
+    source = _source("conversation_pipeline.py")
+
+    assert "legacy_decision_artifact = conversation_decide_bridge.run_legacy_coach_decision" in source
+    assert "shadow_understanding_from_legacy_decision(user_id=user.id, decision=decision)" not in source
+    assert "decision = conversation_decide_bridge.run_legacy_coach_decision" not in source
+
+
+def test_8o_conversation_pipeline_does_not_pass_raw_decision_to_bridges() -> None:
+    source = _source("conversation_pipeline.py")
+
+    assert "apply_coach_decision_commands(\n        db=db,\n        user=user,\n        decision=decision" not in source
+    assert "apply_pending_resolution(\n            db=db,\n            user=user,\n            decision=decision" not in source
+    assert "maybe_handle_planning_runtime_cutover(\n            decision=decision" not in source
+    assert "compose_coach_decision_reply(\n            db=db,\n            user=user,\n            user_text=payload.text,\n            decision=decision" not in source
+
+
+def test_8o_coach_decision_result_decision_property_is_not_runtime_consumed() -> None:
+    offenders: list[str] = []
+    for relative in (
+        "conversation_pipeline.py",
+        "legacy/conversation_decide_bridge.py",
+        "legacy/conversation_command_bridge.py",
+        "legacy/conversation_pending_bridge.py",
+        "legacy/conversation_planning_bridge.py",
+        "legacy/conversation_coach_decision_reply_bridge.py",
+    ):
+        source = _source(relative)
+        if "result.decision" in source or "CoachDecisionResult(decision=" in source:
+            offenders.append(relative)
+    assert offenders == []
+
+
+def test_8o_planning_cutover_remains_default_off() -> None:
+    source = _source("legacy/conversation_understanding_bridge.py")
+
+    assert 'FITMAS_UNDERSTANDING_RUNTIME_PLANNING_CUTOVER", default=False' in source
+
+
+def test_8o_smoke_wrapper_is_deterministic_only() -> None:
+    source = _script_source("smoke-decision-runtime-coachdecision-artifact")
+
+    assert "tests/test_phase8o_coachdecision_artifact_architecture.py" in source
+    assert "tests/test_coach_decision_artifact.py" in source
+    assert "tests/test_phase8n_provider_tool_loop_architecture.py" in source
+    assert "tests/test_llm_legacy_tool_loop.py" in source
+    assert 'echo "RESULT: OK"' in source
+
+    forbidden_live_smokes = (
+        "smoke-decision-runtime-provider-tool-loop",
+        "smoke-decision-runtime-decision-legacy-split",
+        "smoke-decision-runtime-decide-shrink",
+        "smoke-decision-runtime-canonical-defaults",
+        "smoke-decision-runtime-canonical-planning",
+        "smoke-real-conversations",
+        "smoke-a-plus-api",
+        "smoke_a_plus_api.py",
+    )
+    for forbidden in forbidden_live_smokes:
+        assert forbidden not in source

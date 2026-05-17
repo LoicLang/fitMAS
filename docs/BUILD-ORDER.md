@@ -28,7 +28,673 @@ Si un autre doc diverge :
 
 **Un premier coach que Loïc reconnaît, comprend, et a envie de rouvrir demain.**
 
-## Roadmap Active — 13 mai 2026
+## Roadmap Active — 15 mai 2026
+
+Le chantier actif bascule sur le refactor canonique
+`docs/DECISION-RUNTIME-REFACTOR.md`.
+
+Ordre courant :
+
+```text
+1. Phase 8 : kill legacy et activation progressive du runtime complet
+2. Parite flag-on planning + heartbeat avant suppression des wrappers
+3. Dogfood reel Telegram avec runtime cutovers actives en local/staging
+```
+
+Etat local 15 mai :
+
+- Phase 0/1 initiale livree localement :
+  - `backend/src/fitmas/decision/` cree comme package pur ;
+  - types centraux poses sans DB, sans LLM, sans prompt, sans legacy ;
+  - `tests/test_decision_types.py` et
+    `tests/test_decision_runtime_architecture.py` verrouillent les frontieres ;
+  - aucun comportement runtime branche sur le nouveau package.
+- Phase 2 initiale livree localement :
+  - `CoachContext` decoupe en contextes domaines ;
+  - `DecisionContextBuilder` read-only dans `fitmas.decision.context_builder` ;
+  - le builder construit depuis `InputEvent + DB` via `ScheduledSession`,
+    `Activity`, memoire active et `CoachStateBundle` ;
+  - le root package `fitmas.decision` ne charge pas le builder pour garder les
+    imports purs legers ;
+  - aucun comportement runtime branche sur le builder.
+- Phase 3 initiale livree localement :
+  - `CoachUnderstanding` porte maintenant `UserSignal`, `PendingResolution` et
+    `ClarificationNeed` ;
+  - `CoachDecision -> CoachUnderstanding` existe uniquement dans `legacy/` ;
+  - `conversation_pipeline.py` logge un shadow understanding apres `decide()`,
+    sans l'utiliser pour write, reply ou commit ;
+  - la bascule planning reste reservee a Phase 4.
+- Phase 4 initiale livree localement :
+  - `backend/src/fitmas/domain/planning/` existe comme bounded context cible ;
+  - `RequestedPlanChange` passe par
+    `ReferenceResolver -> PlanCandidateBuilder -> PlanCandidateEvaluator -> SportPolicy` ;
+  - `PlanningCommandService` est le seul writer introduit par Phase 4 ;
+  - `decide_plan_change()` expose l'entrypoint domaine sans write direct ;
+  - `legacy/planning_runtime_adapter.py` relie l'ancien contrat au nouveau
+    pipeline planning ;
+  - le cutover conversation est opt-in via `FITMAS_PLANNING_RUNTIME_CUTOVER=1`
+    pour garder le dogfood stable jusqu'a Phase 5 ReplyComposer.
+- Phase 5 initiale livree localement :
+  - `ReplyRequest`, `ReplyResult`, `DecisionReplyComposer` et
+    `DecisionOutputVerifier` existent dans `decision/` ;
+  - `legacy/final_reply_backend.py` est le seul pont Phase 5 vers l'ancien
+    `final_reply.py` ;
+  - `planning_outcome_adapter.py` et `plan_patch_reply_adapter.py`
+    convertissent les resultats legacy en `DecisionOutcome` avant parole ;
+  - les helpers visibles PlanPatch de `conversation_pipeline.py` deleguent au
+    composer ;
+  - les verifications legacy PlanPatch restent preservees derriere l'adapter :
+    post-event, uncommitted et factual grounding ;
+  - `FITMAS_PLANNING_RUNTIME_CUTOVER` reste off par defaut.
+  - verification locale : `./scripts/test-backend -q` -> 1052 passed,
+    11 skipped, 11 subtests passed.
+- Phase 6 initiale livree localement :
+  - plan :
+    `docs/superpowers/plans/2026-05-14-decision-runtime-phase-6-prompts.md` ;
+  - `fitmas.llm` est converti en package compatible ;
+  - `fitmas.llm.gateway` porte l'implementation gateway ;
+  - `fitmas.llm_gateway` reste wrapper compat temporaire ;
+  - `fitmas.llm.prompts.{understanding,reviewer,reply}` existe ;
+  - reviewer/reply routent vers les nouveaux builders ;
+  - Understanding reste en shadow avant cutover ;
+  - ne pas migrer heartbeat ni supprimer les prompts legacy dans cette phase.
+  - verification locale : `./scripts/test-backend -q` -> 1070 passed,
+    11 skipped, 11 subtests passed.
+- Phase 7 initiale livree localement :
+  - plan :
+    `docs/superpowers/plans/2026-05-14-decision-runtime-phase-7-heartbeat-runtime.md` ;
+  - `legacy/heartbeat_runtime_adapter.py` mappe heartbeat legacy vers
+    `InputEvent + DecisionOutcome + CoachDraft` ;
+  - outcomes proactifs couverts : `answer`, `plan_pending`, `no_send` ;
+  - verifier commun disponible en shadow, enforcement via
+    `FITMAS_HEARTBEAT_RUNTIME_VERIFY_ENFORCE=1` ;
+  - scheduler Telegram deplace vers `fitmas.app.telegram.scheduler` ;
+  - root `fitmas.telegram_scheduler` reste wrapper compat ;
+  - `FITMAS_HEARTBEAT_RUNTIME_CUTOVER=1` route scheduler, `/heartbeat`,
+    debug heartbeat et ops heartbeat via l'adapter ;
+  - cutover off par defaut pour proteger le dogfood ;
+  - stabilisation associee : `execution_mutation_service` accepte les
+    `target_ref` dates ISO produits par le LLM (`YYYY-MM-DD` ou
+    `date:YYYY-MM-DD`) pour appliquer les execution updates contre
+    `ScheduledSession` ;
+  - legacy restant : `skills/heartbeat/heartbeat.py`, prompts/tool-loop,
+    guards heartbeat, root `heartbeat.py`, debug trace internals.
+  - verification heartbeat existante :
+    `./scripts/test-backend -q tests/test_heartbeat_tool_loop.py tests/test_heartbeat_debug_endpoint.py tests/test_heartbeat_grounding.py`
+    -> 40 passed.
+  - smoke reel :
+    `./scripts/smoke-real-conversations --scenario heartbeat_non_completion`
+    -> exit 0, renfo J-1 marque `skipped`.
+  - verification locale complete : `./scripts/test-backend -q` ->
+    1094 passed, 11 skipped, 11 subtests passed.
+- Phase 8A livree localement :
+  - plan :
+    `docs/superpowers/plans/2026-05-14-decision-runtime-phase-8a-legacy-audit.md` ;
+  - kill list canonique :
+    `docs/DECISION-RUNTIME-LEGACY-KILL-LIST.md` ;
+  - importeurs `CoachDecision` / `MutationDecision` listes et testes ;
+  - callers directs de `fitmas.final_reply` listes et testes ;
+  - flags de cutover et tools legacy documentes ;
+  - aucune suppression runtime, aucun cutover active par defaut.
+  - verification ciblee :
+    `./scripts/test-backend -q tests/test_phase8a_legacy_audit.py`
+    -> 5 passed.
+- Phase 8B livree localement :
+  - plan :
+    `docs/superpowers/plans/2026-05-14-decision-runtime-phase-8b-cutover-parity.md` ;
+  - harness :
+    `scripts/smoke-decision-runtime-cutover` ;
+  - `PlanningRuntimeAdapterAttempt` ajoute la distinction
+    applicable / non applicable / applicable non gere ;
+  - sous `FITMAS_PLANNING_RUNTIME_CUTOVER=1`, une demande planning applicable
+    passe par le runtime avant les branches legacy mixed adaptation ;
+  - les demandes applicables non gerees deviennent
+    `planning_runtime_unhandled`, sans commit ni pending legacy silencieux ;
+  - heartbeat cutover teste avec verifier enforce ;
+  - aucun cutover active par defaut, aucun legacy supprime.
+  - verification flag-on :
+    `FITMAS_PLANNING_RUNTIME_CUTOVER=1 FITMAS_HEARTBEAT_RUNTIME_CUTOVER=1 FITMAS_HEARTBEAT_RUNTIME_VERIFY_ENFORCE=1 ./scripts/test-backend -q tests/test_conversation_planning_runtime_adapter.py tests/test_conversation_planning_runtime_reply_composer.py tests/test_phase8b_planning_cutover.py tests/test_heartbeat_runtime_adapter.py tests/test_telegram_scheduler_runtime_adapter.py tests/test_phase8b_heartbeat_cutover.py`
+    -> 30 passed.
+  - harness reel :
+    `./scripts/smoke-decision-runtime-cutover`
+    -> exit 0 ; unit gates 28 passed ; smokes conversation critiques executes ;
+    A+ API `move_easy_then_confirm` -> OK.
+  - verification locale complete : `./scripts/test-backend -q` ->
+    1111 passed, 11 skipped, 11 subtests passed.
+- Phase 8C livree localement :
+  - plan :
+    `docs/superpowers/plans/2026-05-14-decision-runtime-phase-8c-legacy-kill.md` ;
+  - `conversation_pipeline.py` ne write plus depuis les routes directes
+    `MutationDecision`, `plan_patch` ou `requires_confirmation` legacy ;
+  - les `MutationDecision` mutantes sont bloquees sans write, le no-change
+    legacy reste read-only via composer commun ;
+  - heartbeat Telegram passe par l'adapter runtime par defaut ;
+  - `tools/registry.py` n'expose plus `propose_replan` ni les `draft_*` ;
+  - `plan_mutation_service.py` et `api_read.py` ne lisent plus
+    `WeeklyPlan` / `DayPlan` dans les chemins runtime controles ;
+  - `legacy/{decision_contracts,tools_compat,weekly_plan_compat}.py`
+    concentre les ponts historiques restants.
+  - verification architecture Phase 8 :
+    `./scripts/test-backend -q tests/test_decision_runtime_architecture.py tests/test_phase8a_legacy_audit.py tests/test_phase8b_cutover_architecture.py tests/test_phase8c_legacy_kill_architecture.py`
+    -> 24 passed.
+  - verification locale complete : `./scripts/test-backend -q` ->
+    1116 passed, 11 skipped, 11 subtests passed.
+  - harness reel :
+    `./scripts/smoke-decision-runtime-cutover` -> exit 0.
+- Phase 8D livree localement :
+  - plan :
+    `docs/superpowers/plans/2026-05-14-decision-runtime-phase-8d-bridge-shrink.md` ;
+  - `DecisionRuntimeService` existe dans `decision/runtime.py` comme shell
+    pur, sans import legacy ;
+  - `/api/v0/messages` vit sous `fitmas.app.api.routes_messages` ;
+    `fitmas.api_messages` reste wrapper compat ;
+  - `conversation_pipeline.py` descend a 3459 lignes, sous le budget 8D ;
+  - `legacy/conversation_planning_bridge.py` porte les helpers cutover
+    planning ;
+  - `legacy/conversation_readonly_reply_bridge.py` porte les replies
+    read-only/no-change ;
+  - `legacy/conversation_decision_bridge.py` porte les helpers de forme
+    `CoachDecision` / legacy readonly ;
+  - `legacy/heartbeat_skill_bridge.py` isole les wrappers racine vers
+    `skills/heartbeat`.
+  - verification ciblee :
+    `./scripts/test-backend -q tests/test_phase8d_bridge_shrink_architecture.py tests/test_app_api_routes_messages.py tests/test_decision_runtime_service.py`
+    -> passed.
+  - verification locale complete :
+    `./scripts/test-backend -q` -> 1130 passed, 11 skipped,
+    11 subtests passed.
+  - harness cutover :
+    `./scripts/smoke-decision-runtime-cutover` -> unit gates 28 passed ;
+    tentative full harness final interrompue pendant `smoke-real-conversations`
+    apres stall provider, sans assertion code exploitable.
+- Phase 8E livree localement :
+  - plan :
+    `docs/superpowers/plans/2026-05-14-decision-runtime-phase-8e-understanding-cutover.md` ;
+  - `LLMUnderstandingService` existe sous `fitmas.llm.understanding_service` ;
+  - `CoachUnderstanding` canonique est produit en shadow opt-in apres
+    `CoachDecision` legacy, mais avant toute consommation planning runtime ;
+  - le parser neutralise les artefacts planning/pending/clarification quand
+    l'intent canonique ne correspond pas ;
+  - `FITMAS_UNDERSTANDING_RUNTIME_SHADOW` est off par defaut ;
+  - `FITMAS_UNDERSTANDING_RUNTIME_PLANNING_CUTOVER` est off par defaut ;
+  - `planning_runtime_adapter.py` peut consommer le
+    `RequestedPlanChange` canonique si le flag cutover est actif et que
+    l'intent est `plan_change` ;
+  - `conversation_pipeline.py` ne depend que du bridge
+    `legacy/conversation_understanding_bridge.py` ;
+  - le legacy provider reste en place pour memory/execution/pending jusqu'a la
+    phase suivante.
+  - verification locale complete :
+    `./scripts/test-backend -q` -> 1153 passed, 11 skipped,
+    11 subtests passed.
+  - harness reel :
+    `./scripts/smoke-decision-runtime-cutover` -> RESULT: OK.
+  - smoke Understanding shadow :
+    `FITMAS_UNDERSTANDING_RUNTIME_SHADOW=1 ./scripts/smoke-real-conversations --scenario heartbeat_non_completion`
+    -> exit 0, log `decision_runtime.canonical_understanding`
+    avec `requested_change=0` sur `execution_report`.
+- Phase 8F livree localement :
+  - plan :
+    `docs/superpowers/plans/2026-05-14-decision-runtime-phase-8f-command-extraction.md` ;
+  - `legacy/coach_command_adapter.py` compile les artefacts types en
+    `Command` ;
+  - `legacy/conversation_command_bus.py` applique memoire/execution via les
+    services existants ;
+  - `legacy/conversation_command_bridge.py` devient la frontiere conversation
+    des actions memoire/execution ;
+  - `conversation_pipeline.py` ne call plus directement
+    `apply_memory_actions_for_user` ni `apply_execution_actions_for_user` ;
+  - `conversation_pipeline.py` descend a 3219 lignes ;
+  - `CommandResult` applique reference un event persiste ;
+  - `FITMAS_COMMANDS_FROM_UNDERSTANDING` est off par defaut ;
+  - le prompt Understanding documente les payloads types sans autoriser de
+    write ;
+  - dette restante : `pending_resolution` et provider `CoachDecision`.
+  - verification ciblee 8F :
+    35 passed.
+  - architecture pack Phase 8 :
+    45 passed.
+  - verification locale complete :
+    `./scripts/test-backend -q` -> 1167 passed, 11 skipped,
+    11 subtests passed.
+  - smoke Understanding shadow :
+    `FITMAS_UNDERSTANDING_RUNTIME_SHADOW=1 ./scripts/smoke-real-conversations --scenario heartbeat_non_completion`
+    -> exit 0, `command_source=coach_decision`, session renfo marquee
+    `skipped`.
+  - harness cutover :
+    `./scripts/smoke-decision-runtime-cutover` -> unit gates 28 passed ;
+    run interrompu ensuite pendant un stall provider DeepSeek JSON sur un cas
+    planning, sans assertion code exploitable.
+- Phase 8G livree localement :
+  - plan :
+    `docs/superpowers/plans/2026-05-14-decision-runtime-phase-8g-pending-resolution.md` ;
+  - `legacy/conversation_pending_bridge.py` devient la frontiere conversation
+    des confirmations pending ;
+  - `conversation_pipeline.py` ne definit plus les helpers apply/recheck/accept
+    pending et ne lit plus `decision.pending_resolution` directement ;
+  - `plan_patch` et `plan_patch_choice` pending restent appliques via
+    `apply_patch_for_user` / `PlanMutationService` ;
+  - `FITMAS_PENDING_FROM_UNDERSTANDING` est off par defaut et prepare la
+    consommation de `CoachUnderstanding.pending_resolution` ;
+  - `conversation_pipeline.py` descend a 2731 lignes ;
+  - verification ciblee 8G :
+    8 passed.
+  - parite pending/confirmation :
+    33 passed.
+  - architecture pack Phase 8 :
+    49 passed.
+  - verification locale complete :
+    `./scripts/test-backend -q` -> 1175 passed, 11 skipped,
+    11 subtests passed.
+  - smokes API reels :
+    `move_easy_then_confirm` -> RESULT: OK, clarification provider sans pending ;
+    `confirm_without_pending` -> RESULT: OK, events=+0, pending=+0.
+  - dette restante : `CoachDecision` provider par defaut, replies pending
+    legacy-compat, migration finale des writes domaine.
+- Phase 8H livree localement :
+  - plan :
+    `docs/superpowers/plans/2026-05-15-decision-runtime-phase-8h-pending-reply-cleanup.md` ;
+  - `legacy/pending_reply_adapter.py` convertit les replies pending non
+    commitantes en `DecisionOutcome` ;
+  - `legacy/conversation_pending_bridge.py` ne lit plus
+    `decision.fitmas_message` pour parler au user ;
+  - reject / ignore / modify / clarification / expired / inactive /
+    choice-error passent par `DecisionReplyComposer` ;
+  - pending creee = demande de confirmation explicite via le contrat commun ;
+  - `await_user_confirmation` / `await_user_choice` ne sortent plus comme
+    `next_step` visible ;
+  - verification ciblee 8H :
+    24 passed.
+  - parite pending/confirmation :
+    33 passed.
+  - architecture pack Phase 8 :
+    52 passed.
+  - verification locale complete :
+    `./scripts/test-backend -q` -> 1187 passed, 11 skipped,
+    11 subtests passed.
+  - smokes API reels :
+    `move_easy_then_confirm` -> RESULT: OK, pending plan_patch creee,
+    events=+0 ;
+    `confirm_without_pending` -> RESULT: OK, events=+0, pending=+0.
+  - dette restante : `CoachDecision` provider par defaut,
+    `FITMAS_PENDING_FROM_UNDERSTANDING` off, shrink final de
+    `conversation_pipeline.py`, migration finale des services domaine.
+- Phase 8I livree localement :
+  - plan :
+    `docs/superpowers/plans/2026-05-15-decision-runtime-phase-8i-canonical-flag-dogfood.md` ;
+  - `tests/test_phase8i_canonical_flag_dogfood_architecture.py` verrouille les
+    flags canoniques et le wrapper dogfood ;
+  - `FITMAS_COMMANDS_FROM_UNDERSTANDING=1` peut appliquer des commandes memoire
+    et execution depuis `CoachUnderstanding` dans les tests de bridge ;
+  - `FITMAS_PENDING_FROM_UNDERSTANDING=1` peut faire gagner une resolution
+    pending canonique dans les tests de bridge ;
+  - les fallbacks vers `CoachDecision` restent explicites quand l'understanding
+    canonique ne fournit pas d'artefact exploitable ;
+  - `scripts/smoke-decision-runtime-canonical-flags` active
+    `FITMAS_UNDERSTANDING_RUNTIME_SHADOW=1`,
+    `FITMAS_COMMANDS_FROM_UNDERSTANDING=1` et
+    `FITMAS_PENDING_FROM_UNDERSTANDING=1` ;
+  - `FITMAS_UNDERSTANDING_RUNTIME_PLANNING_CUTOVER=1` reste volontairement hors
+    wrapper par defaut.
+  - verification ciblee 8I :
+    21 passed.
+  - architecture pack Phase 8 :
+    55 passed.
+  - verification locale complete :
+    `./scripts/test-backend -q` -> 1197 passed, 11 skipped,
+    11 subtests passed.
+  - wrapper canonical :
+    `./scripts/smoke-decision-runtime-canonical-flags` -> unit gates
+    18 passed, smokes conversation termines, smokes API
+    `move_easy_then_confirm` et `confirm_without_pending` -> RESULT: OK
+    (2 checks).
+  - durcissement duplicate pending :
+    tests rouges/verts `canonical_pending_accept_survives_legacy_decide_none`
+    et `post_decide_candidate_flow_respects_active_pending_gate` -> 2 passed.
+  - gate pending/core apres durcissement :
+    40 passed.
+  - probe planning cutover explicite :
+    `FITMAS_UNDERSTANDING_RUNTIME_PLANNING_CUTOVER=1 ./scripts/smoke-a-plus-api --scenario move_easy_then_confirm --timeout 240`
+    -> RESULT: OK, `events=+1`, `pending=+1`, `mode=pending_accepted` ;
+    plus de deuxieme pending creee.
+  - dette restante : flags canoniques off par defaut, provider `CoachDecision`
+    toujours actif, latence shadow Understanding, certains tours reels restent
+    `command_source=coach_decision`, planning cutover canonique a dogfooder
+    plus largement avant activation globale.
+- Phase 8J livree localement :
+  - plan :
+    `docs/superpowers/plans/2026-05-15-decision-runtime-phase-8j-canonical-planning-cutover.md` ;
+  - `scripts/smoke-decision-runtime-canonical-planning` active shadow
+    Understanding, commandes canoniques, pending canonique et planning cutover ;
+  - gates ajoutees : duplicate pending = hard fail,
+    `confirm_without_pending` = no-write strict, `move_easy_then_confirm`
+    = acceptation sans deuxieme pending ;
+  - le smoke harness bloque maintenant les fuites de jargon visible
+    `Candidate backend`, `Candidate possible` et `pas une reponse finale` ;
+  - les `PlanPatch` candidates backend ne portent plus de `coach_message`
+    interne ; `planning_outcome_adapter.py` ne donne plus les ids `backend:*`
+    au composer comme summaries visibles ;
+  - scenarios API passes : `move_easy_then_confirm`, `swap_by_day`,
+    `lighten_tomorrow`, `replace_swim_with_bike`,
+    `future_evening_unavailable`, `fatigue_tomorrow`, `avoid_back_to_back`,
+    `swim_unavailable_two_weeks`, `confirm_without_pending` ;
+  - verification ciblee 8J :
+    8 passed.
+  - pending/core cutover :
+    3 passed.
+  - architecture pack Phase 8 :
+    59 passed.
+  - wrapper canonical planning :
+    `./scripts/smoke-decision-runtime-canonical-planning` -> RESULT: OK
+    (9 checks).
+  - verification locale complete :
+    `./scripts/test-backend -q` -> 1207 passed, 11 skipped,
+    11 subtests passed.
+  - decision apres 8J :
+    8K default-enable un sous-ensemble canonique si la matrice passe ;
+    sinon 8J-fix par classification avant de toucher a `decide()`.
+- Phase 8K livree localement :
+  - plan :
+    `docs/superpowers/plans/2026-05-15-decision-runtime-phase-8k-canonical-default-lanes.md` ;
+  - decision CTO : default-enable commands/pending depuis
+    `CoachUnderstanding`, pas le planning cutover complet ;
+  - `FITMAS_COMMANDS_FROM_UNDERSTANDING` et
+    `FITMAS_PENDING_FROM_UNDERSTANDING` deviennent default-on avec opt-out
+    `0` ;
+  - `FITMAS_CANONICAL_NON_PLANNING_CUTOVER` lance Understanding par defaut
+    uniquement si un consumer non-planning peut utiliser l'artefact :
+    pending actif, execution, sante, disponibilite, preference, memoire ;
+  - `FITMAS_UNDERSTANDING_RUNTIME_PLANNING_CUTOVER` reste off par defaut ;
+  - wrapper cible :
+    `scripts/smoke-decision-runtime-canonical-defaults`, qui prouve les
+    defaults sans exporter les flags commands/pending ;
+  - tests ajoutes :
+    `tests/test_phase8k_canonical_default_lanes_architecture.py` ;
+  - tests de bridge ajoutes :
+    default-on / opt-out commands, pending, gate Understanding scope ;
+  - verification ciblee 8K :
+    33 passed.
+  - architecture pack Phase 8 :
+    64 passed.
+  - wrapper defaults :
+    `./scripts/smoke-decision-runtime-canonical-defaults` -> RESULT: OK
+    (2 checks API, smokes conversation OK).
+  - wrapper planning opt-in :
+    `./scripts/smoke-decision-runtime-canonical-planning` -> RESULT: OK
+    (9 checks).
+  - verification locale complete :
+    `./scripts/test-backend -q` -> 1222 passed, 11 skipped,
+    11 subtests passed.
+  - decision apres 8K :
+    preferer 8L = shrink/refactor `decide()` avant de default-enable le
+    planning cutover.
+- Phase 8L livree localement :
+  - plan :
+    `docs/superpowers/plans/2026-05-15-decision-runtime-phase-8l-decide-authority-shrink.md` ;
+  - decision CTO : ne pas splitter `decision_legacy.py` en aveugle ;
+    retirer d'abord son autorite directe dans le runtime conversation ;
+  - `conversation_pipeline.py` ne call plus `dependencies.decide`
+    directement, ne depend plus de `llm_runtime`, et ne lit plus
+    `decision.fitmas_message` ;
+  - nouveaux ponts livres :
+    `legacy/coach_decision_provider.py`,
+    `legacy/conversation_decide_bridge.py`,
+    `legacy/conversation_coach_decision_reply_bridge.py` ;
+  - tests ajoutes :
+    `tests/test_phase8l_decide_authority_architecture.py`,
+    `tests/test_coach_decision_provider.py`,
+    `tests/test_conversation_decide_bridge.py`,
+    `tests/test_conversation_coach_decision_reply_bridge.py` ;
+  - verification ciblee 8L :
+    40 passed.
+  - architecture pack Phase 8 :
+    70 passed.
+  - wrapper decide shrink :
+    `./scripts/smoke-decision-runtime-decide-shrink` -> RESULT: OK
+    (8L gates, defaults canoniques, planning opt-in).
+  - verification locale complete :
+    `./scripts/test-backend -q` -> 1234 passed, 11 skipped,
+    11 subtests passed.
+  - commands/pending canoniques restent default-on ;
+  - planning cutover canonique reste opt-in ;
+  - prochaine phase probable : 8M split interne de `decision_legacy.py`
+    une fois son autorite runtime bornee.
+- Phase 8M livree localement :
+  - plan :
+    `docs/superpowers/plans/2026-05-16-decision-runtime-phase-8m-decision-legacy-split.md` ;
+  - decision CTO : splitter `decision_legacy.py` par responsabilite sans
+    changer le comportement runtime ni supprimer `CoachDecision` ;
+  - `decision_legacy.py` passe de 2873 a 1467 lignes ;
+  - modules livres :
+    `llm/legacy_models.py`,
+    `llm/legacy_parser.py`,
+    `llm/legacy_prompt.py`,
+    `llm/legacy_action_compile.py` ;
+  - tests ajoutes :
+    `tests/test_phase8m_decision_legacy_split_architecture.py`,
+    `tests/test_llm_legacy_parser.py`,
+    `tests/test_llm_legacy_action_compile.py` ;
+  - verification ciblee 8M :
+    31 passed.
+  - tool/decide regression :
+    67 passed, 126 deselected.
+  - pending compat regression :
+    18 passed.
+  - wrapper decision legacy split :
+    `./scripts/smoke-decision-runtime-decision-legacy-split` -> RESULT: OK
+    (8M, 8L, defaults canoniques, planning opt-in).
+  - architecture pack Phase 8 complet :
+    76 passed.
+  - verification locale complete :
+    `./scripts/test-backend -q` -> 1245 passed, 11 skipped,
+    11 subtests passed.
+  - commands/pending canoniques restent default-on ;
+  - planning cutover canonique reste opt-in.
+- Phase 8N livree localement :
+  - plan :
+    `docs/superpowers/plans/2026-05-17-decision-runtime-phase-8n-provider-tool-loop-extraction.md` ;
+  - decision CTO : extraire provider, schema repair et tool-loop de
+    `decision_legacy.py` sans changer le comportement runtime ;
+  - `decision_legacy.py` passe de 1467 a 941 lignes ;
+  - modules livres :
+    `llm/legacy_provider.py`,
+    `llm/legacy_schema_repair.py`,
+    `llm/legacy_tool_loop.py` ;
+  - tests ajoutes :
+    `tests/test_phase8n_provider_tool_loop_architecture.py`,
+    `tests/test_llm_legacy_provider.py`,
+    `tests/test_llm_legacy_schema_repair.py`,
+    `tests/test_llm_legacy_tool_loop.py` ;
+  - verification provider/schema/tool-loop/compat :
+    23 passed.
+  - prompt observability :
+    8 passed.
+  - decide/tools/CoachDecision regression :
+    87 passed.
+  - tool-loop regression :
+    70 passed.
+  - wrapper provider/tool-loop :
+    `./scripts/smoke-decision-runtime-provider-tool-loop` -> RESULT: OK
+    (8N, 8M, 8L, defaults canoniques, planning opt-in).
+  - architecture pack Phase 8 complet :
+    83 passed.
+  - verification locale complete :
+    `./scripts/test-backend -q` -> 1266 passed, 11 skipped,
+    11 subtests passed.
+  - commands/pending canoniques restent default-on ;
+  - planning cutover canonique reste opt-in.
+- Phase 8O livree localement :
+  - plan :
+    `docs/superpowers/plans/2026-05-17-decision-runtime-phase-8o-coachdecision-artifact-boundary.md` ;
+  - decision CTO : interdire au runtime conversation de consommer directement
+    le raw `CoachDecision` / `MutationDecision` ;
+  - module livre :
+    `backend/src/fitmas/legacy/coach_decision_artifact.py` ;
+  - provider legacy :
+    `CoachDecisionResult` expose `artifact` et conserve `raw_decision` pour
+    compat seulement ;
+  - conversation :
+    `conversation_pipeline.py` manipule `legacy_decision_artifact` ;
+  - bridges migres :
+    command, pending, planning, reply, readonly, shadow Understanding et
+    planning runtime adapter ;
+  - tests ajoutes :
+    `tests/test_phase8o_coachdecision_artifact_architecture.py`,
+    `tests/test_coach_decision_artifact.py` ;
+  - verification artifact/provider/bridges :
+    57 passed.
+  - core conversation regression :
+    122 passed.
+  - architecture pack Phase 8 complet :
+    93 passed.
+  - wrapper 8O :
+    deterministe uniquement : 52 tests 8O + 118 tests 8N, puis `RESULT: OK`.
+    Il ne lance plus de smoke API/LLM reel herite ; le dogfood reel reste dans
+    les wrappers explicites.
+  - verification locale complete :
+    `./scripts/test-backend` -> 1281 passed, 11 skipped.
+  - commands/pending canoniques restent default-on ;
+  - planning cutover canonique reste opt-in.
+- Phase 8P livree localement :
+  - plan :
+    `docs/superpowers/plans/2026-05-17-decision-runtime-phase-8p-decision-legacy-support-split.md` ;
+  - decision CTO : continuer Option A avant le pivot provider canonique ;
+  - `decision_legacy.py` ne porte plus les corps support onboarding,
+    week-plan enrichment, fact memory extraction ni timeline summaries ;
+  - modules livres :
+    `llm/legacy_summaries.py`,
+    `llm/legacy_onboarding.py`,
+    `llm/legacy_fact_memory.py` ;
+  - imports publics `fitmas.llm` preserves via wrappers patchables ;
+  - `decision_legacy.py` descend a 556 lignes et reste centre sur
+    `decide()` / provider / tool-loop / schema repair / action compile ;
+  - verification architecture 8P :
+    5 passed.
+  - support modules :
+    14 passed.
+  - compat llm :
+    28 passed.
+  - wrapper 8P :
+    deterministe uniquement : 21 tests 8P + wrapper 8O imbrique
+    (52 tests 8O + 118 tests 8N), puis `RESULT: OK`.
+  - architecture pack Phase 8 complet :
+    98 passed.
+  - verification locale complete :
+    `./scripts/test-backend` -> 1300 passed, 11 skipped.
+  - commands/pending canoniques restent default-on ;
+  - planning cutover canonique reste opt-in.
+- Phase 8Q livree localement :
+  - plan :
+    `docs/superpowers/plans/2026-05-17-decision-runtime-phase-8q-canonical-provider-pivot.md` ;
+  - decision CTO : couper `decide()` du chemin heureux non-planning quand
+    `CoachUnderstanding` porte deja un pending ou des commandes consommables ;
+  - nouveau flag rollback :
+    `FITMAS_CANONICAL_PROVIDER_NON_PLANNING`, on par defaut, opt-out explicite ;
+  - `conversation_pipeline.py` lance l'Understanding canonique avant
+    `run_legacy_coach_decision(...)` ;
+  - `should_use_canonical_understanding_without_legacy(...)` refuse planning,
+    `requested_change`, Understanding vide, pending non actif et commandes
+    absentes ;
+  - `LegacyCoachDecisionArtifact(source="coach_understanding")` reste un shim
+    compat, sans `plan_patch`, sans actions legacy et sans texte visible
+    legacy ;
+  - trace :
+    `turn_context["legacy_decide"]["legacy_skipped"] = True` quand le provider
+    legacy est contourne ;
+  - verification pivot bridge + architecture :
+    18 passed.
+  - wrapper 8Q :
+    deterministe uniquement : 35 tests 8Q/bridges + wrapper 8P imbrique
+    (21 tests 8P + 52 tests 8O + 118 tests 8N), puis `RESULT: OK`.
+  - architecture pack Phase 8 complet :
+    101 passed.
+  - verification locale complete :
+    `./scripts/test-backend` -> 1307 passed, 11 skipped.
+  - `CoachDecision` reste fallback provider/parser pour planning et tours
+    canoniques non actionnables ;
+  - planning cutover canonique reste opt-in.
+- Phases 8R / 8S livrees localement :
+  - plans :
+    `docs/superpowers/plans/2026-05-17-decision-runtime-phase-8r-canonical-readonly-reply.md`,
+    `docs/superpowers/plans/2026-05-17-decision-runtime-phase-8s-readonly-default.md` ;
+  - decision CTO : couper `decide()` des read-only truth lanes avant
+    d'attaquer le planning ;
+  - nouveau bridge :
+    `backend/src/fitmas/legacy/conversation_canonical_readonly_bridge.py` ;
+  - `CoachUnderstanding` peut produire un `DecisionOutcome(kind="answer")`
+    compose par `DecisionReplyComposer` sans `CoachDecision` ;
+  - `FITMAS_CANONICAL_READONLY_PROVIDER` est on par defaut, opt-out `0` ;
+  - le gate refuse planning, `requested_change`, pending actif,
+    `pending_resolution`, commands memoire/execution et close-turn ;
+  - si la composition read-only canonique echoue, fallback legacy `decide()`
+    conserve ;
+  - verification bridge + architecture :
+    11 passed.
+  - regressions conversation ciblees :
+    160 passed.
+  - wrapper 8R/8S :
+    deterministe uniquement : 28 tests read-only + wrapper 8Q imbrique
+    (35 tests 8Q/bridges + 21 tests 8P + 52 tests 8O + 118 tests 8N), puis
+    `RESULT: OK`.
+  - architecture pack Phase 8 complet :
+    105 passed.
+  - verification locale complete :
+    `./scripts/test-backend` -> 1318 passed, 11 skipped.
+  - `CoachDecision` reste fallback provider/parser pour planning, close-turn et
+    tours canoniques non supportes ;
+  - planning cutover canonique reste opt-in.
+- Phase 8T-A / 8T-B / 8T-C livree localement :
+  - plan :
+    `docs/superpowers/plans/2026-05-17-decision-runtime-phase-8t-canonical-planning-provider.md` ;
+  - decision CTO : ouvrir le provider planning canonique en opt-in, sans
+    default-enable avant dogfood reel ;
+  - nouveau bridge :
+    `backend/src/fitmas/legacy/conversation_canonical_planning_bridge.py` ;
+  - `FITMAS_CANONICAL_PLANNING_PROVIDER` est off par defaut, opt-in `1` ;
+  - le gate accepte seulement `CoachUnderstanding.intent=plan_change` avec un
+    `RequestedPlanChange` supporte et des refs typees (`session_id:*`,
+    `date:*`, `day:*`) ;
+  - pending actif, `pending_resolution`, commands memoire/execution, refs
+    libres et tours non planning restent exclus ;
+  - le pipeline route ce chemin avant `run_legacy_coach_decision(...)` ;
+  - en cas d'echec runtime applicable, le tour bloque en
+    `planning_runtime_unhandled`, sans fallthrough legacy ;
+  - `PlanningCommandService` reutilise une pending active identique au lieu de
+    recreer un doublon ;
+  - `planning_outcome_adapter.py` exige `event_count > 0` pour commit et un
+    `pending_confirmation_id` pour pending avant d'autoriser les claims ;
+  - 8T-C a passe le smoke API/LLM reel sous
+    `FITMAS_CANONICAL_PLANNING_PROVIDER=1` ;
+  - le provider planning canonique preempte maintenant le flow candidates
+    pre-decide pour les demandes planning supportees ;
+  - un pending actif est resolu par `CoachUnderstanding` avant candidate flow,
+    puis verifie par un seul recheck LLM avant write ;
+  - le parser Understanding normalise les refs provider `session:*` et les
+    refs objet (`session_id`, `date`, `day`) avant le gate planning ;
+  - les metadata preferences planning sont admises dans ce provider, tandis
+    que les signaux memoire/execution bloquent toujours le skip legacy ;
+  - verification bridge + hardening + architecture :
+    25 passed.
+  - hardening 8T-C cible :
+    15 passed.
+  - smoke API/LLM 8T-C :
+    `FITMAS_CANONICAL_PLANNING_PROVIDER=1 ./scripts/smoke-decision-runtime-canonical-planning`
+    -> `RESULT: OK (9 check(s))`.
+  - wrapper 8T :
+    deterministe uniquement : tests 8T/planning + refs Understanding + pending
+    preemption + wrapper 8R/8S imbrique
+    (28 tests read-only + 35 tests 8Q/bridges + 21 tests 8P + 52 tests 8O +
+    118 tests 8N), puis `RESULT: OK`.
+  - architecture pack Phase 8 complet :
+    111 passed.
+  - verification locale complete :
+    `./scripts/test-backend -q` -> 1337 passed, 11 skipped, 11 subtests passed.
+  - prochaine etape : decider le default-on progressif du provider planning
+    canonique, avec surveillance de la latence provider multi-LLM.
+- Les anciens plans PlanningSnapshot / prompt-context / candidate-flow restent
+  lisibles comme historique mais ne tranchent plus la cible.
+
+## Roadmap precedente — 13 mai 2026
 
 Ordre courant :
 

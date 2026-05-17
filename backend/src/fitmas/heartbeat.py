@@ -1,5 +1,5 @@
 import sys
 
-from fitmas.skills.heartbeat import heartbeat as _impl
+from fitmas.legacy.heartbeat_skill_bridge import heartbeat as _impl
 
 sys.modules[__name__] = _impl

@@ -132,6 +132,8 @@ class InternalJargonGuardTest(unittest.TestCase):
         self.assertTrue(message_has_user_facing_internal_jargon("Le validateur detecte une fragilite."))
         self.assertTrue(message_has_user_facing_internal_jargon("Demande si le user confirme."))
         self.assertTrue(message_has_user_facing_internal_jargon("swap_sessions touche une seance cle."))
+        self.assertTrue(message_has_user_facing_internal_jargon("Candidate backend, pas une reponse finale."))
+        self.assertTrue(message_has_user_facing_internal_jargon("Candidate possible, confirmation recommandee."))
 
     def test_does_not_flag_human_equivalents(self) -> None:
         ok = [

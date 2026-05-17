@@ -25,8 +25,6 @@ AVAILABILITY_CONSTRAINT_TOOLS = [
 HEALTH_SIGNAL_TOOLS = [
     "get_plan_window",
     "get_user_constraints",
-    "draft_lighten_day",
-    "draft_replace_session",
     "validate_plan_patch",
 ]
 

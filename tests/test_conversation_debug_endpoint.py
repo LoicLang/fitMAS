@@ -135,6 +135,50 @@ class ConversationDebugEndpointTest(unittest.TestCase):
         self.assertEqual(flow["composer"]["output"], "Phrase finale propre.")
         self.assertEqual(flow["decision"]["response_mode"], "no_change_composed")
         self.assertEqual(flow["final"]["message"], "Phrase finale propre.")
+        self.assertEqual(debug["context"]["coach_decision_action_result"]["command_source"], "coach_decision")
+
+    def test_debug_message_endpoint_exposes_canonical_understanding_when_shadow_enabled(self) -> None:
+        from fitmas.decision import CoachUnderstanding
+        from fitmas.legacy import conversation_understanding_bridge
+
+        api_messages.plan_conversation_turn = lambda *args, **kwargs: None
+        api_messages.extract_facts = lambda *args, **kwargs: []
+        api_messages.decide = lambda *args, **kwargs: CoachDecision(
+            response_type="no_change",
+            rationale="Lecture simple.",
+            fitmas_message="Brouillon brut.",
+        )
+
+        class FakeService:
+            def understand(self, request):
+                return CoachUnderstanding(
+                    intent="plan_lookup",
+                    confidence=0.88,
+                    user_summary="lookup",
+                    extracted_signals=(),
+                    requested_change=None,
+                    pending_resolution=None,
+                    clarification_need=None,
+                )
+
+        original_service = conversation_understanding_bridge.LLMUnderstandingService
+        try:
+            conversation_understanding_bridge.LLMUnderstandingService = lambda: FakeService()
+            os.environ["FITMAS_UNDERSTANDING_RUNTIME_SHADOW"] = "1"
+            response = self.client.post(
+                "/ops/conversation/debug",
+                json={
+                    "text": "redonne le plan actuel",
+                    "client_message_key": "debug-understanding-shadow-1",
+                },
+            )
+        finally:
+            conversation_understanding_bridge.LLMUnderstandingService = original_service
+            os.environ.pop("FITMAS_UNDERSTANDING_RUNTIME_SHADOW", None)
+
+        self.assertEqual(response.status_code, 200)
+        context = response.json()["debug"]["context"]
+        self.assertEqual(context["canonical_understanding"]["intent"], "plan_lookup")
 
     def test_debug_message_endpoint_exposes_pending_confirmation_artifact(self) -> None:
         _, session = self._create_plan_for_today()
@@ -166,15 +210,13 @@ class ConversationDebugEndpointTest(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         flow = response.json()["debug"]["flow"]
         runtime = flow["runtime"]
-        pending = runtime["pending_confirmation_record"]
-        self.assertTrue(runtime["pending_confirmation"])
-        self.assertEqual(pending["id"], runtime["pending_confirmation_id"])
-        self.assertEqual(pending["status"], "pending")
-        self.assertEqual(pending["mutation_type"], "replace_session")
-        self.assertEqual(pending["decision"]["mutation_type"], "replace_session")
-        self.assertEqual(flow["decision"]["pending_confirmation_id"], pending["id"])
-        self.assertEqual(flow["composer"]["capability"], "pending_confirmation")
-        self.assertEqual(flow["composer"]["source"], "runtime_pending_confirmation")
+        self.assertFalse(runtime["pending_confirmation"])
+        self.assertIsNone(runtime["pending_confirmation_id"])
+        self.assertIsNone(runtime["pending_confirmation_record"])
+        self.assertEqual(runtime["response_mode"], "legacy_decision_contract_disabled")
+        self.assertEqual(flow["decision"]["pending_confirmation_id"], None)
+        self.assertEqual(flow["composer"]["capability"], "legacy_decision_contract_disabled")
+        self.assertEqual(flow["composer"]["source"], "runtime_no_mutation")
         self.assertEqual(flow["composer"]["output"], flow["final"]["message"])
 
     def test_debug_message_endpoint_exposes_plan_mutation_events(self) -> None:
@@ -200,12 +242,11 @@ class ConversationDebugEndpointTest(unittest.TestCase):
         flow = response.json()["debug"]["flow"]
         runtime = flow["runtime"]
         events = runtime["plan_mutation_events"]
-        self.assertTrue(runtime["mutation_applied"])
-        self.assertEqual(events[0]["command_type"], "lighten_day")
-        self.assertEqual(events[0]["target_session_ids"], [session.id])
-        self.assertTrue(events[0]["explained_to_user"])
-        self.assertEqual(flow["composer"]["capability"], "mutation_result")
-        self.assertEqual(flow["composer"]["source"], "runtime_mutation_result")
+        self.assertFalse(runtime["mutation_applied"])
+        self.assertEqual(events, [])
+        self.assertEqual(runtime["response_mode"], "legacy_decision_contract_disabled")
+        self.assertEqual(flow["composer"]["capability"], "legacy_decision_contract_disabled")
+        self.assertEqual(flow["composer"]["source"], "runtime_no_mutation")
         self.assertEqual(flow["composer"]["output"], flow["final"]["message"])
 
 

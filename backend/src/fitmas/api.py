@@ -13,7 +13,7 @@ from fitmas.api_activities import router as activities_router
 from fitmas.api_app import router as app_router
 from fitmas.api_debug import router as debug_router
 from fitmas.api_ops import router as ops_router
-from fitmas.api_messages import router as messages_router
+from fitmas.app.api.routes_messages import router as messages_router
 from fitmas.api_onboarding import router as onboarding_router
 from fitmas.api_plan import router as plan_router
 from fitmas.api_read import router as read_router

@@ -5,7 +5,7 @@ import unicodedata
 from dataclasses import dataclass
 from datetime import UTC, date, datetime, timedelta
 
-from fitmas.llm import MutationDecision
+from fitmas.legacy.decision_contracts import MutationDecision
 from fitmas.plan_patch import PlanPatch
 from fitmas.plan_patch_candidates import PlanPatchCandidate
 

@@ -7,6 +7,9 @@ from fitmas.grounding_contract import ReplyGroundingPacket
 from fitmas.plan_patch import PlanPatch
 
 
+_USER_SAFE_PATCH_MESSAGE = "Je te propose un ajustement prudent, a confirmer avant application."
+
+
 def build_backend_candidate_refs_for_turn(
     *,
     grounding: ReplyGroundingPacket | None,
@@ -160,7 +163,7 @@ def _append_sport_unavailable_replace_candidate(
                 "rationale": "Candidate backend construite depuis une contrainte sport indisponible typee.",
             }
         ],
-        coach_message="Candidate backend, pas une reponse finale.",
+        coach_message=_USER_SAFE_PATCH_MESSAGE,
     )
     payloads.append(
         {
@@ -203,7 +206,7 @@ def _append_move_candidate(
                 "rationale": "Candidate backend construite depuis les dates structurees du tour.",
             }
         ],
-        coach_message="Candidate backend, pas une reponse finale.",
+        coach_message=_USER_SAFE_PATCH_MESSAGE,
     )
     payloads.append(
         {
@@ -237,7 +240,7 @@ def _append_swap_candidate(
                 "rationale": "Candidate backend d'echange entre deux seances datees.",
             }
         ],
-        coach_message="Candidate backend, pas une reponse finale.",
+        coach_message=_USER_SAFE_PATCH_MESSAGE,
     )
     payloads.append(
         {
@@ -274,7 +277,7 @@ def _append_lighten_candidate(
                 "rationale": "Candidate backend d'allegement de charge.",
             }
         ],
-        coach_message="Candidate backend, pas une reponse finale.",
+        coach_message=_USER_SAFE_PATCH_MESSAGE,
     )
     payloads.append(
         {
@@ -314,7 +317,7 @@ def _append_recovery_replace_candidate(
                 "rationale": "Candidate backend de remplacement par récupération active.",
             }
         ],
-        coach_message="Candidate backend, pas une reponse finale.",
+        coach_message=_USER_SAFE_PATCH_MESSAGE,
     )
     payloads.append(
         {

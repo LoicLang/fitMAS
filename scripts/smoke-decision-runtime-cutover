@@ -1,0 +1,31 @@
+#!/usr/bin/env zsh
+
+set -euo pipefail
+
+script_dir="$(cd "$(dirname "$0")" && pwd)"
+repo_root="$(cd "$script_dir/.." && pwd)"
+
+export FITMAS_PLANNING_RUNTIME_CUTOVER=1
+export FITMAS_HEARTBEAT_RUNTIME_CUTOVER=1
+export FITMAS_HEARTBEAT_RUNTIME_VERIFY_ENFORCE=1
+
+echo "== Decision Runtime cutover unit gates =="
+"$repo_root/scripts/test-backend" -q \
+  tests/test_decision_runtime_architecture.py \
+  tests/test_phase7_heartbeat_architecture.py \
+  tests/test_phase8a_legacy_audit.py \
+  tests/test_phase8b_planning_cutover.py \
+  tests/test_phase8b_heartbeat_cutover.py
+
+echo "== Decision Runtime conversation smokes =="
+"$repo_root/scripts/smoke-real-conversations" \
+  --scenario heartbeat_non_completion \
+  --scenario compound_non_completion_swap \
+  --scenario golden_case_autonomy \
+  --scenario today_unavailability
+
+echo "== Decision Runtime A+ API smoke =="
+"$repo_root/scripts/smoke-a-plus-api" \
+  --scenario move_easy_then_confirm \
+  --timeout 240 \
+  --startup-timeout 45

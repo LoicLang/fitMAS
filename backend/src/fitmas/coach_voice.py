@@ -125,6 +125,11 @@ USER_FACING_INTERNAL_JARGON_FRAGMENTS: tuple[str, ...] = (
     " commit ",
     " commiter ",
     " commite ",
+    " candidate backend ",
+    " candidate possible ",
+    " candidate basse friction ",
+    " candidate bloquee ",
+    " pas une reponse finale ",
 )
 
 

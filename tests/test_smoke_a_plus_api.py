@@ -158,6 +158,106 @@ def test_coherent_commit_or_pending_fails_on_backend_claim_guard_phrasing():
     assert "assistant claimed a mutation without event or pending confirmation" in result.reasons
 
 
+def test_canonical_planning_fails_on_duplicate_active_pending(monkeypatch):
+    smoke = _load_smoke_module()
+    monkeypatch.setenv("FITMAS_UNDERSTANDING_RUNTIME_PLANNING_CUTOVER", "1")
+    scenario = smoke.SmokeScenario(
+        name="move_easy_then_confirm",
+        prompt="deplace la recuperation puis confirme",
+        expectation="coherent_commit_or_pending",
+        followups=("oui je confirme",),
+    )
+    before = smoke.DbSnapshot(events=(), pending=(), sessions=(), latest_turn=None)
+    after = smoke.DbSnapshot(
+        events=(),
+        pending=(
+            {"id": 1, "status": "pending", "mutation_type": "plan_patch"},
+            {"id": 2, "status": "pending", "mutation_type": "plan_patch"},
+        ),
+        sessions=(),
+        latest_turn={"response_mode": "plan_patch_confirmation", "assistant_message": "Tu confirmes ?"},
+    )
+
+    result = smoke.evaluate_scenario_result(scenario, before, after)
+
+    assert not result.ok
+    assert "duplicate_pending" in result.reasons
+
+
+def test_canonical_planning_confirm_without_pending_cannot_write(monkeypatch):
+    smoke = _load_smoke_module()
+    monkeypatch.setenv("FITMAS_UNDERSTANDING_RUNTIME_PLANNING_CUTOVER", "1")
+    scenario = smoke.SmokeScenario(
+        name="confirm_without_pending",
+        prompt="oui je confirme",
+        expectation="no_plan_write",
+    )
+    before = smoke.DbSnapshot(events=(), pending=(), sessions=(), latest_turn=None)
+    after = smoke.DbSnapshot(
+        events=({"id": 1, "command_type": "move_session"},),
+        pending=(),
+        sessions=(),
+        latest_turn={"response_mode": "mutation_applied", "assistant_message": "C'est fait."},
+    )
+
+    result = smoke.evaluate_scenario_result(scenario, before, after)
+
+    assert not result.ok
+    assert "confirm_without_pending wrote planning artifact" in result.reasons
+
+
+def test_canonical_planning_followup_path_allows_one_pending_row(monkeypatch):
+    smoke = _load_smoke_module()
+    monkeypatch.setenv("FITMAS_UNDERSTANDING_RUNTIME_PLANNING_CUTOVER", "1")
+    scenario = smoke.SmokeScenario(
+        name="move_easy_then_confirm",
+        prompt="deplace la recuperation",
+        expectation="coherent_commit_or_pending",
+        followups=("oui je confirme",),
+    )
+    before = smoke.DbSnapshot(events=(), pending=(), sessions=(), latest_turn=None)
+    after = smoke.DbSnapshot(
+        events=({"id": 7, "command_type": "apply_plan_patch"},),
+        pending=({"id": 3, "status": "accepted", "mutation_type": "plan_patch"},),
+        sessions=(),
+        latest_turn={
+            "response_mode": "pending_accepted",
+            "mutation_applied": True,
+            "assistant_message": "C'est applique.",
+        },
+    )
+
+    result = smoke.evaluate_scenario_result(scenario, before, after)
+
+    assert result.ok
+    assert result.reasons == []
+
+
+def test_canonical_planning_fails_on_candidate_backend_jargon(monkeypatch):
+    smoke = _load_smoke_module()
+    monkeypatch.setenv("FITMAS_UNDERSTANDING_RUNTIME_PLANNING_CUTOVER", "1")
+    scenario = smoke.SmokeScenario(
+        name="swim_unavailable_two_weeks",
+        prompt="je ne peux pas nager deux semaines",
+        expectation="coherent_commit_or_pending",
+    )
+    before = smoke.DbSnapshot(events=(), pending=(), sessions=(), latest_turn=None)
+    after = smoke.DbSnapshot(
+        events=(),
+        pending=({"id": 1, "status": "pending", "mutation_type": "plan_patch"},),
+        sessions=(),
+        latest_turn={
+            "response_mode": "plan_adaptation_pending_confirmation",
+            "assistant_message": "Je te propose: Candidate backend, pas une reponse finale. Tu confirmes ?",
+        },
+    )
+
+    result = smoke.evaluate_scenario_result(scenario, before, after)
+
+    assert not result.ok
+    assert "assistant reply leaks internal jargon" in result.reasons
+
+
 def test_reply_placeholders_are_reported_as_warnings_not_artifact_failures():
     smoke = _load_smoke_module()
     scenario = smoke.SmokeScenario(

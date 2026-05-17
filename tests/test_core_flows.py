@@ -29,6 +29,8 @@ from fitmas.conversation_contract import (
 )
 from fitmas.conversation_turn_planner import ConversationTurnPlan
 from fitmas.db import Base, SessionLocal, engine, init_db
+from fitmas.legacy import conversation_pending_bridge
+from fitmas.legacy.coach_decision_artifact import legacy_decision_artifact_from_raw
 from fitmas.llm import CoachDecision, MutationDecision
 from fitmas.models import Extraction
 from fitmas.mutation_permissions import default_confirmation_expiry, serialize_plan_patch_confirmation
@@ -108,6 +110,16 @@ class FitMASCoreFlowsTest(unittest.TestCase):
         api_messages.plan_conversation_turn = self._original_plan_conversation_turn
         plan_mutation_service.review_week_coherence_with_llm = self._original_week_review
         self.db.close()
+
+    def _assert_legacy_mutation_disabled(self, result: dict, *, mutation_type: str) -> s.ConversationTurnRecord:
+        turns = repo.get_recent_conversation_turns(self.db, self.user.id, limit=1)
+        self.assertEqual(len(turns), 1)
+        self.assertEqual(turns[0].response_mode, "legacy_decision_contract_disabled")
+        self.assertEqual(turns[0].mutation_type, mutation_type)
+        self.assertFalse(turns[0].mutation_applied)
+        self.assertFalse(turns[0].pending_confirmation)
+        self.assertIn("ancienne forme de decision", result["assistant_message"]["text"].lower())
+        return turns[0]
 
     def _create_plan_for_today(self) -> tuple[s.WeeklyPlan, s.ScheduledSession]:
         now = get_local_now(self.user.timezone)
@@ -305,9 +317,9 @@ class FitMASCoreFlowsTest(unittest.TestCase):
 
         self.assertEqual(week.status_code, 200)
         self.assertEqual(week.json()["runtime_role"], "scheduled_runtime")
-        self.assertEqual(week.json()["total_weeks"], 8)
-        self.assertEqual(week.json()["mesocycle_week"], 4)
-        self.assertTrue(week.json()["is_deload"])
+        self.assertEqual(week.json()["total_weeks"], 1)
+        self.assertEqual(week.json()["mesocycle_week"], 1)
+        self.assertFalse(week.json()["is_deload"])
         self.assertEqual(week.json()["days"][0]["load_band"], "hard")
 
         self.assertEqual(today.status_code, 200)
@@ -395,6 +407,7 @@ class FitMASCoreFlowsTest(unittest.TestCase):
 
     def test_message_flow_can_lighten_targeted_session(self) -> None:
         _, session = self._create_plan_for_today()
+        original_duration = session.duration_min
         original_decide = api_messages.decide
         original_extract_facts = api_messages.extract_facts
         try:
@@ -411,9 +424,426 @@ class FitMASCoreFlowsTest(unittest.TestCase):
             api_messages.decide = original_decide
             api_messages.extract_facts = original_extract_facts
 
-        self.assertEqual(result["assistant_message"]["text"], f"{session.label}: Journee flexible.")
-        self.assertEqual(today["completion_status"], "adapted")
-        self.assertEqual(today["sport_type"], "rest")
+        self._assert_legacy_mutation_disabled(result, mutation_type="lighten_day")
+        self.assertEqual(today["completion_status"], "planned")
+        self.assertEqual(today["sport_type"], "running")
+        self.assertEqual(today["duration_min"], original_duration)
+
+    def test_canonical_understanding_shadow_flag_off_does_not_call_service(self) -> None:
+        from fitmas.legacy import conversation_understanding_bridge
+
+        original_decide = api_messages.decide
+        original_extract_facts = api_messages.extract_facts
+        original_service = conversation_understanding_bridge.LLMUnderstandingService
+        try:
+            api_messages.decide = lambda *args, **kwargs: CoachDecision(
+                response_type="no_change",
+                rationale="lecture",
+                fitmas_message="Rien a changer.",
+            )
+            api_messages.extract_facts = lambda *args, **kwargs: []
+
+            class FailingService:
+                def understand(self, request):
+                    raise AssertionError("canonical understanding should be off")
+
+            conversation_understanding_bridge.LLMUnderstandingService = lambda: FailingService()
+            os.environ.pop("FITMAS_UNDERSTANDING_RUNTIME_SHADOW", None)
+
+            response = self.client.post("/api/v0/messages", json={"text": "redonne le plan actuel"})
+        finally:
+            api_messages.decide = original_decide
+            api_messages.extract_facts = original_extract_facts
+            conversation_understanding_bridge.LLMUnderstandingService = original_service
+            os.environ.pop("FITMAS_UNDERSTANDING_RUNTIME_SHADOW", None)
+
+        self.assertEqual(response.status_code, 200)
+
+    def test_canonical_understanding_shadow_flag_on_records_context(self) -> None:
+        from fitmas.decision import CoachUnderstanding
+        from fitmas.legacy import conversation_understanding_bridge
+
+        original_decide = api_messages.decide
+        original_extract_facts = api_messages.extract_facts
+        original_service = conversation_understanding_bridge.LLMUnderstandingService
+        try:
+            api_messages.decide = lambda *args, **kwargs: CoachDecision(
+                response_type="no_change",
+                rationale="lecture",
+                fitmas_message="Rien a changer.",
+            )
+            api_messages.extract_facts = lambda *args, **kwargs: []
+
+            class FakeService:
+                def understand(self, request):
+                    return CoachUnderstanding(
+                        intent="plan_lookup",
+                        confidence=0.88,
+                        user_summary="lookup",
+                        extracted_signals=(),
+                        requested_change=None,
+                        pending_resolution=None,
+                        clarification_need=None,
+                    )
+
+            conversation_understanding_bridge.LLMUnderstandingService = lambda: FakeService()
+            os.environ["FITMAS_UNDERSTANDING_RUNTIME_SHADOW"] = "1"
+
+            response = self.client.post(
+                "/api/v0/messages",
+                json={"text": "redonne le plan actuel", "client_message_key": "understanding-shadow-on"},
+            )
+        finally:
+            api_messages.decide = original_decide
+            api_messages.extract_facts = original_extract_facts
+            conversation_understanding_bridge.LLMUnderstandingService = original_service
+            os.environ.pop("FITMAS_UNDERSTANDING_RUNTIME_SHADOW", None)
+
+        self.assertEqual(response.status_code, 200)
+        row = repo.get_conversation_turn_by_client_message_key(
+            self.db,
+            self.user.id,
+            "understanding-shadow-on",
+        )
+        self.assertIsNotNone(row)
+        context = json.loads(row.context_json or "{}")
+        self.assertEqual(context["canonical_understanding"]["intent"], "plan_lookup")
+
+    def test_canonical_pending_accept_survives_legacy_decide_none(self) -> None:
+        from fitmas.decision import CoachUnderstanding, PendingResolution
+        from fitmas.legacy import conversation_understanding_bridge
+
+        _, session = self._create_plan_for_today()
+        target_date = (session.scheduled_date.date() + timedelta(days=1)).isoformat()
+        pending = repo.create_pending_mutation_confirmation(
+            self.db,
+            user_id=self.user.id,
+            impact_level="high",
+            reason="adaptation a confirmer",
+            mutation_type="plan_patch",
+            summary="deplacer la seance",
+            source_text="deplace demain",
+            decision_json=serialize_plan_patch_confirmation(
+                PlanPatch(
+                    coach_message="Je deplace la seance.",
+                    operations=[
+                        PlanPatchOperation(
+                            operation_type="move_session",
+                            target_session_id=session.id,
+                            target_date=target_date,
+                            rationale="Adaptation a confirmer.",
+                        )
+                    ],
+                )
+            ),
+            expires_at=datetime.now() + timedelta(minutes=10),
+        )
+
+        original_plan_turn = api_messages.plan_conversation_turn
+        original_decide = api_messages.decide
+        original_extract_facts = api_messages.extract_facts
+        original_understanding = conversation_understanding_bridge.run_canonical_understanding_shadow
+        original_verify = conversation_pending_bridge.verify_pending_accept_resolution
+        original_candidate_flow = conversation_pipeline._maybe_handle_plan_adaptation_candidates
+        old_pending_flag = os.environ.get("FITMAS_PENDING_FROM_UNDERSTANDING")
+        try:
+            os.environ["FITMAS_PENDING_FROM_UNDERSTANDING"] = "1"
+            api_messages.plan_conversation_turn = lambda *args, **kwargs: SimpleNamespace(
+                primary_intent="plan_mutation",
+                secondary_intents=(),
+                has_plan_mutation=True,
+                confidence=0.93,
+                model_dump=lambda mode="json": {
+                    "primary_intent": "plan_mutation",
+                    "secondary_intents": [],
+                    "has_plan_mutation": True,
+                },
+            )
+            api_messages.decide = lambda *args, **kwargs: None
+            api_messages.extract_facts = lambda *args, **kwargs: []
+
+            def fake_canonical_understanding(**kwargs):
+                understanding = CoachUnderstanding(
+                    intent="pending_response",
+                    confidence=0.95,
+                    user_summary="Le user confirme la proposition en attente.",
+                    extracted_signals=(),
+                    requested_change=None,
+                    pending_resolution=PendingResolution(
+                        type="accept_pending",
+                        reason="confirmation explicite",
+                        selected_candidate_id=None,
+                        requested_changes=None,
+                        question=None,
+                    ),
+                    clarification_need=None,
+                )
+                kwargs["turn_context"]["canonical_understanding"] = {
+                    "intent": understanding.intent,
+                    "pending_resolution": {
+                        "type": understanding.pending_resolution.type,
+                    },
+                }
+                return understanding
+
+            conversation_understanding_bridge.run_canonical_understanding_shadow = fake_canonical_understanding
+            conversation_pending_bridge.verify_pending_accept_resolution = lambda **kwargs: "accept_pending"
+
+            def fake_candidate_flow(**kwargs):
+                if kwargs.get("mode") == "post_decide_mixed":
+                    raise AssertionError("post-decide adaptation must not run after canonical pending accept")
+                return None
+
+            conversation_pipeline._maybe_handle_plan_adaptation_candidates = fake_candidate_flow
+            response = self.client.post(
+                "/api/v0/messages",
+                json={"text": "oui je confirme si tu penses que c'est propre"},
+            )
+        finally:
+            api_messages.plan_conversation_turn = original_plan_turn
+            api_messages.decide = original_decide
+            api_messages.extract_facts = original_extract_facts
+            conversation_understanding_bridge.run_canonical_understanding_shadow = original_understanding
+            conversation_pending_bridge.verify_pending_accept_resolution = original_verify
+            conversation_pipeline._maybe_handle_plan_adaptation_candidates = original_candidate_flow
+            if old_pending_flag is None:
+                os.environ.pop("FITMAS_PENDING_FROM_UNDERSTANDING", None)
+            else:
+                os.environ["FITMAS_PENDING_FROM_UNDERSTANDING"] = old_pending_flag
+
+        self.assertEqual(response.status_code, 200)
+        self.db.expire_all()
+        refreshed_session = repo.get_scheduled_session(self.db, self.user.id, session.id)
+        refreshed_pending = self.db.get(s.PendingMutationConfirmation, pending.id)
+        turns = repo.get_recent_conversation_turns(self.db, self.user.id, limit=1)
+        self.assertEqual(refreshed_session.scheduled_date.date().isoformat(), target_date)
+        self.assertEqual(refreshed_pending.status, "accepted")
+        self.assertEqual(turns[0].response_mode, "pending_accepted")
+        self.assertTrue(turns[0].mutation_applied)
+
+    def test_canonical_pending_accept_preempts_pre_decide_candidate_flow(self) -> None:
+        from fitmas.decision import CoachUnderstanding, PendingResolution
+        from fitmas.legacy import conversation_understanding_bridge
+
+        _, session = self._create_plan_for_today()
+        target_date = (session.scheduled_date.date() + timedelta(days=1)).isoformat()
+        pending = repo.create_pending_mutation_confirmation(
+            self.db,
+            user_id=self.user.id,
+            impact_level="high",
+            reason="adaptation a confirmer",
+            mutation_type="plan_patch",
+            summary="deplacer la seance",
+            source_text="deplace demain",
+            decision_json=serialize_plan_patch_confirmation(
+                PlanPatch(
+                    coach_message="Je deplace la seance.",
+                    operations=[
+                        PlanPatchOperation(
+                            operation_type="move_session",
+                            target_session_id=session.id,
+                            target_date=target_date,
+                            rationale="Adaptation a confirmer.",
+                        )
+                    ],
+                )
+            ),
+            expires_at=datetime.now() + timedelta(minutes=10),
+        )
+
+        original_plan_turn = api_messages.plan_conversation_turn
+        original_decide = api_messages.decide
+        original_extract_facts = api_messages.extract_facts
+        original_understanding = conversation_understanding_bridge.run_canonical_understanding_shadow
+        original_verify = conversation_pending_bridge.verify_pending_accept_resolution
+        original_candidate_flow = conversation_pipeline._maybe_handle_plan_adaptation_candidates
+        old_pending_flag = os.environ.get("FITMAS_PENDING_FROM_UNDERSTANDING")
+        try:
+            os.environ["FITMAS_PENDING_FROM_UNDERSTANDING"] = "1"
+            api_messages.plan_conversation_turn = lambda *args, **kwargs: SimpleNamespace(
+                primary_intent="plan_mutation",
+                secondary_intents=(),
+                has_plan_mutation=True,
+                mutation_signal=True,
+                planning_action="move_session",
+                confidence=0.93,
+                model_dump=lambda mode="json": {
+                    "primary_intent": "plan_mutation",
+                    "secondary_intents": [],
+                    "has_plan_mutation": True,
+                },
+            )
+            api_messages.decide = lambda *args, **kwargs: (_ for _ in ()).throw(
+                AssertionError("legacy decide must be skipped after canonical pending accept")
+            )
+            api_messages.extract_facts = lambda *args, **kwargs: []
+
+            def fake_canonical_understanding(**kwargs):
+                understanding = CoachUnderstanding(
+                    intent="pending_response",
+                    confidence=0.95,
+                    user_summary="Le user confirme la proposition en attente.",
+                    extracted_signals=(),
+                    requested_change=None,
+                    pending_resolution=PendingResolution(
+                        type="accept_pending",
+                        reason="confirmation explicite",
+                        selected_candidate_id=None,
+                        requested_changes=None,
+                        question=None,
+                    ),
+                    clarification_need=None,
+                )
+                kwargs["turn_context"]["canonical_understanding"] = {
+                    "intent": understanding.intent,
+                    "pending_resolution": {
+                        "type": understanding.pending_resolution.type,
+                    },
+                }
+                return understanding
+
+            conversation_understanding_bridge.run_canonical_understanding_shadow = fake_canonical_understanding
+            conversation_pending_bridge.verify_pending_accept_resolution = lambda **kwargs: "accept_pending"
+
+            def forbidden_candidate_flow(**kwargs):
+                raise AssertionError("pre-decide candidate flow must not run before canonical pending resolution")
+
+            conversation_pipeline._maybe_handle_plan_adaptation_candidates = forbidden_candidate_flow
+            response = self.client.post(
+                "/api/v0/messages",
+                json={"text": "oui je confirme"},
+            )
+        finally:
+            api_messages.plan_conversation_turn = original_plan_turn
+            api_messages.decide = original_decide
+            api_messages.extract_facts = original_extract_facts
+            conversation_understanding_bridge.run_canonical_understanding_shadow = original_understanding
+            conversation_pending_bridge.verify_pending_accept_resolution = original_verify
+            conversation_pipeline._maybe_handle_plan_adaptation_candidates = original_candidate_flow
+            if old_pending_flag is None:
+                os.environ.pop("FITMAS_PENDING_FROM_UNDERSTANDING", None)
+            else:
+                os.environ["FITMAS_PENDING_FROM_UNDERSTANDING"] = old_pending_flag
+
+        self.assertEqual(response.status_code, 200)
+        self.db.expire_all()
+        refreshed_session = repo.get_scheduled_session(self.db, self.user.id, session.id)
+        refreshed_pending = self.db.get(s.PendingMutationConfirmation, pending.id)
+        turns = repo.get_recent_conversation_turns(self.db, self.user.id, limit=1)
+        context = json.loads(turns[0].context_json or "{}")
+        self.assertEqual(refreshed_session.scheduled_date.date().isoformat(), target_date)
+        self.assertEqual(refreshed_pending.status, "accepted")
+        self.assertEqual(turns[0].response_mode, "pending_accepted")
+        self.assertTrue(turns[0].mutation_applied)
+        self.assertEqual(context["canonical_understanding"]["intent"], "pending_response")
+
+    def test_canonical_planning_cutover_confirmation_keeps_single_pending_row(self) -> None:
+        from fitmas.decision import CoachUnderstanding, PendingResolution
+        from fitmas.legacy import conversation_understanding_bridge
+
+        _, session = self._create_plan_for_today()
+        target_date = (session.scheduled_date.date() + timedelta(days=1)).isoformat()
+        pending = repo.create_pending_mutation_confirmation(
+            self.db,
+            user_id=self.user.id,
+            impact_level="high",
+            reason="adaptation a confirmer",
+            mutation_type="plan_patch",
+            summary="deplacer la seance",
+            source_text="deplace demain",
+            decision_json=serialize_plan_patch_confirmation(
+                PlanPatch(
+                    coach_message="Je deplace la seance.",
+                    operations=[
+                        PlanPatchOperation(
+                            operation_type="move_session",
+                            target_session_id=session.id,
+                            target_date=target_date,
+                            rationale="Adaptation a confirmer.",
+                        )
+                    ],
+                )
+            ),
+            expires_at=datetime.now() + timedelta(minutes=10),
+        )
+
+        original_plan_turn = api_messages.plan_conversation_turn
+        original_decide = api_messages.decide
+        original_extract_facts = api_messages.extract_facts
+        original_understanding = conversation_understanding_bridge.run_canonical_understanding_shadow
+        original_verify = conversation_pending_bridge.verify_pending_accept_resolution
+        old_pending_flag = os.environ.get("FITMAS_PENDING_FROM_UNDERSTANDING")
+        old_planning_flag = os.environ.get("FITMAS_UNDERSTANDING_RUNTIME_PLANNING_CUTOVER")
+        try:
+            os.environ["FITMAS_PENDING_FROM_UNDERSTANDING"] = "1"
+            os.environ["FITMAS_UNDERSTANDING_RUNTIME_PLANNING_CUTOVER"] = "1"
+            api_messages.plan_conversation_turn = lambda *args, **kwargs: SimpleNamespace(
+                primary_intent="plan_mutation",
+                secondary_intents=(),
+                has_plan_mutation=True,
+                confidence=0.93,
+                model_dump=lambda mode="json": {
+                    "primary_intent": "plan_mutation",
+                    "secondary_intents": [],
+                    "has_plan_mutation": True,
+                },
+            )
+            api_messages.decide = lambda *args, **kwargs: None
+            api_messages.extract_facts = lambda *args, **kwargs: []
+            conversation_understanding_bridge.run_canonical_understanding_shadow = (
+                lambda **kwargs: CoachUnderstanding(
+                    intent="pending_response",
+                    confidence=0.95,
+                    user_summary="Le user confirme la proposition en attente.",
+                    extracted_signals=(),
+                    requested_change=None,
+                    pending_resolution=PendingResolution(
+                        type="accept_pending",
+                        reason="confirmation explicite",
+                        selected_candidate_id=None,
+                        requested_changes=None,
+                        question=None,
+                    ),
+                    clarification_need=None,
+                )
+            )
+            conversation_pending_bridge.verify_pending_accept_resolution = lambda **kwargs: "accept_pending"
+
+            response = self.client.post(
+                "/api/v0/messages",
+                json={"text": "oui je confirme si tu penses que c'est propre"},
+            )
+        finally:
+            api_messages.plan_conversation_turn = original_plan_turn
+            api_messages.decide = original_decide
+            api_messages.extract_facts = original_extract_facts
+            conversation_understanding_bridge.run_canonical_understanding_shadow = original_understanding
+            conversation_pending_bridge.verify_pending_accept_resolution = original_verify
+            if old_pending_flag is None:
+                os.environ.pop("FITMAS_PENDING_FROM_UNDERSTANDING", None)
+            else:
+                os.environ["FITMAS_PENDING_FROM_UNDERSTANDING"] = old_pending_flag
+            if old_planning_flag is None:
+                os.environ.pop("FITMAS_UNDERSTANDING_RUNTIME_PLANNING_CUTOVER", None)
+            else:
+                os.environ["FITMAS_UNDERSTANDING_RUNTIME_PLANNING_CUTOVER"] = old_planning_flag
+
+        self.assertEqual(response.status_code, 200)
+        self.db.expire_all()
+        self.assertIsNone(repo.get_active_pending_mutation_confirmation(self.db, self.user.id))
+        pending_rows = (
+            self.db.query(s.PendingMutationConfirmation)
+            .filter(s.PendingMutationConfirmation.user_id == self.user.id)
+            .order_by(s.PendingMutationConfirmation.id.asc())
+            .all()
+        )
+        refreshed_pending = self.db.get(s.PendingMutationConfirmation, pending.id)
+        turns = repo.get_recent_conversation_turns(self.db, self.user.id, limit=1)
+        self.assertEqual(len(pending_rows), 1)
+        self.assertEqual(pending_rows[0].id, pending.id)
+        self.assertEqual(refreshed_pending.status, "accepted")
+        self.assertEqual(turns[0].response_mode, "pending_accepted")
+        self.assertTrue(turns[0].mutation_applied)
 
     def test_message_flow_applies_valid_coach_decision_plan_patch(self) -> None:
         target_date = "2099-04-29"
@@ -454,10 +884,10 @@ class FitMASCoreFlowsTest(unittest.TestCase):
             .all()
         )
 
-        self.assertEqual(result["assistant_message"]["text"], "Je pose un footing easy mercredi.")
+        self.assertIn("option valide", result["assistant_message"]["text"].lower())
         self.assertTrue(any(session.sport_type == "running" and session.duration_min == 30 for session in sessions))
         self.assertEqual(events[0].command_type, "create_session")
-        self.assertEqual(events[0].user_visible_summary, "Je pose un footing easy mercredi.")
+        self.assertTrue(events[0].user_visible_summary)
 
     def test_high_impact_replace_session_requires_confirmation_before_apply(self) -> None:
         _, session = self._create_plan_for_today()
@@ -465,7 +895,7 @@ class FitMASCoreFlowsTest(unittest.TestCase):
         self.db.commit()
         original_decide = api_messages.decide
         original_extract_facts = api_messages.extract_facts
-        original_accept_recheck = conversation_pipeline._verify_pending_accept_resolution
+        original_accept_recheck = conversation_pending_bridge.verify_pending_accept_resolution
         try:
             api_messages.decide = lambda *args, **kwargs: MutationDecision(
                 mutation_type="replace_session",
@@ -489,11 +919,10 @@ class FitMASCoreFlowsTest(unittest.TestCase):
         refreshed_session = repo.get_scheduled_session(self.db, self.user.id, session.id)
         pending = repo.get_active_pending_mutation_confirmation(self.db, self.user.id)
 
-        self.assertIn("Tu confirmes", result["assistant_message"]["text"])
+        self._assert_legacy_mutation_disabled(result, mutation_type="replace_session")
         self.assertIsNotNone(refreshed_session)
         self.assertEqual(refreshed_session.sport_type, "running")
-        self.assertIsNotNone(pending)
-        self.assertEqual(pending.mutation_type, "replace_session")
+        self.assertIsNone(pending)
 
     def test_high_impact_confirmation_yes_does_not_auto_apply_without_llm_resolution(self) -> None:
         _, session = self._create_plan_for_today()
@@ -501,7 +930,7 @@ class FitMASCoreFlowsTest(unittest.TestCase):
         self.db.commit()
         original_decide = api_messages.decide
         original_extract_facts = api_messages.extract_facts
-        original_accept_recheck = conversation_pipeline._verify_pending_accept_resolution
+        original_accept_recheck = conversation_pending_bridge.verify_pending_accept_resolution
         try:
             api_messages.decide = lambda *args, **kwargs: MutationDecision(
                 mutation_type="replace_session",
@@ -525,12 +954,21 @@ class FitMASCoreFlowsTest(unittest.TestCase):
         self.db.expire_all()
         refreshed_session = repo.get_scheduled_session(self.db, self.user.id, session.id)
         pending = repo.get_active_pending_mutation_confirmation(self.db, self.user.id)
+        turns = (
+            self.db.query(s.ConversationTurnRecord)
+            .filter(s.ConversationTurnRecord.user_id == self.user.id)
+            .order_by(s.ConversationTurnRecord.id.asc())
+            .all()
+        )
 
-        self.assertIn("Tu confirmes", first["assistant_message"]["text"])
+        self.assertIn("ancienne forme de decision", first["assistant_message"]["text"].lower())
+        self.assertEqual(turns[0].response_mode, "legacy_decision_contract_disabled")
+        self.assertEqual(turns[0].mutation_type, "replace_session")
+        self.assertFalse(turns[0].mutation_applied)
         self.assertIsNotNone(refreshed_session)
         self.assertEqual(refreshed_session.sport_type, "running")
-        self.assertIn("confirmes", second["assistant_message"]["text"].lower())
-        self.assertIsNotNone(pending)
+        self.assertIn("je ne peux pas appliquer", second["assistant_message"]["text"].lower())
+        self.assertIsNone(pending)
 
     def test_legacy_mutation_decision_runs_week_gate_before_commit(self) -> None:
         now = get_local_now(self.user.timezone)
@@ -580,13 +1018,11 @@ class FitMASCoreFlowsTest(unittest.TestCase):
         pending = repo.get_active_pending_mutation_confirmation(self.db, self.user.id)
         events = self.db.query(s.PlanMutationEventRecord).filter(s.PlanMutationEventRecord.user_id == self.user.id).all()
 
+        self._assert_legacy_mutation_disabled(result, mutation_type="move_session")
         self.assertIsNotNone(refreshed_session)
         self.assertEqual(refreshed_session.scheduled_date.date(), scheduled_at.date())
         self.assertEqual(events, [])
-        self.assertIsNotNone(pending)
-        self.assertEqual(pending.mutation_type, "plan_patch")
-        self.assertIn("fragile", pending.summary.lower())
-        self.assertIn("confirm", result["assistant_message"]["text"].lower())
+        self.assertIsNone(pending)
 
     def test_plan_patch_pending_yes_does_not_auto_apply_without_llm_resolution(self) -> None:
         _, session = self._create_plan_for_today()
@@ -690,7 +1126,7 @@ class FitMASCoreFlowsTest(unittest.TestCase):
 
         original_decide = api_messages.decide
         original_extract_facts = api_messages.extract_facts
-        original_accept_recheck = conversation_pipeline._verify_pending_accept_resolution
+        original_accept_recheck = conversation_pending_bridge.verify_pending_accept_resolution
         try:
             def fake_decide(user_text, *args, **kwargs):
                 if str(user_text).strip().lower() == "oui":
@@ -723,14 +1159,14 @@ class FitMASCoreFlowsTest(unittest.TestCase):
 
             api_messages.decide = fake_decide
             api_messages.extract_facts = lambda *args, **kwargs: []
-            conversation_pipeline._verify_pending_accept_resolution = lambda **kwargs: "accept_pending"
+            conversation_pending_bridge.verify_pending_accept_resolution = lambda **kwargs: "accept_pending"
             first = self.client.post("/api/v0/messages", json={"text": "Mets une seance dure a la place"}).json()
             pending = repo.get_active_pending_mutation_confirmation(self.db, self.user.id)
             second = self.client.post("/api/v0/messages", json={"text": "oui"}).json()
         finally:
             api_messages.decide = original_decide
             api_messages.extract_facts = original_extract_facts
-            conversation_pipeline._verify_pending_accept_resolution = original_accept_recheck
+            conversation_pending_bridge.verify_pending_accept_resolution = original_accept_recheck
 
         self.db.expire_all()
         refreshed_session = repo.get_scheduled_session(self.db, self.user.id, session.id)
@@ -745,8 +1181,8 @@ class FitMASCoreFlowsTest(unittest.TestCase):
 
         self.assertIn("Tu confirmes", first["assistant_message"]["text"])
         self.assertIsNotNone(pending)
-        self.assertIn("tempo dur", second["assistant_message"]["text"].lower())
-        self.assertEqual(refreshed_session.session_title, "Tempo dur")
+        self.assertIn("seance remplacee", second["assistant_message"]["text"].lower())
+        self.assertEqual(refreshed_session.session_title, "Seance remplacee")
         self.assertEqual(refreshed_session.intensity, "hard")
         self.assertIsNone(active_pending)
         self.assertEqual(all_pending[0].status, "accepted")
@@ -800,10 +1236,11 @@ class FitMASCoreFlowsTest(unittest.TestCase):
         refreshed_pending = self.db.get(s.PendingMutationConfirmation, pending.id)
         turn = repo.get_recent_conversation_turns(self.db, self.user.id, limit=1)[0]
 
-        self.assertEqual(result["assistant_message"]["text"], "Dimanche: Footing facile. 40 min.")
-        self.assertEqual(turn.response_mode, "pending_accepted")
-        self.assertEqual(refreshed_session.scheduled_date.date().isoformat(), target_date)
-        self.assertEqual(refreshed_pending.status, "accepted")
+        self.assertIn("ancienne forme de decision", result["assistant_message"]["text"].lower())
+        self.assertEqual(turn.response_mode, "legacy_decision_contract_disabled")
+        self.assertEqual(turn.mutation_type, "move_session")
+        self.assertEqual(refreshed_session.scheduled_date.date(), session.scheduled_date.date())
+        self.assertEqual(refreshed_pending.status, "superseded")
 
     def test_high_impact_confirmation_no_keeps_plan_unchanged(self) -> None:
         _, session = self._create_plan_for_today()
@@ -843,11 +1280,22 @@ class FitMASCoreFlowsTest(unittest.TestCase):
         self.db.expire_all()
         refreshed_session = repo.get_scheduled_session(self.db, self.user.id, session.id)
         pending = repo.get_active_pending_mutation_confirmation(self.db, self.user.id)
+        turns = (
+            self.db.query(s.ConversationTurnRecord)
+            .filter(s.ConversationTurnRecord.user_id == self.user.id)
+            .order_by(s.ConversationTurnRecord.id.asc())
+            .all()
+        )
 
-        self.assertIn("Tu confirmes", first["assistant_message"]["text"])
+        self.assertIn("ancienne forme de decision", first["assistant_message"]["text"].lower())
+        self.assertEqual(turns[0].response_mode, "legacy_decision_contract_disabled")
+        self.assertEqual(turns[0].mutation_type, "replace_session")
+        self.assertFalse(turns[0].mutation_applied)
         self.assertIsNotNone(refreshed_session)
         self.assertEqual(refreshed_session.sport_type, "running")
         self.assertIn("Je ne touche pas", second["assistant_message"]["text"])
+        self.assertEqual(turns[1].mutation_type, "no_change")
+        self.assertFalse(turns[1].mutation_applied)
         self.assertIsNone(pending)
 
     def test_message_client_key_returns_existing_turn_without_reprocessing(self) -> None:
@@ -948,40 +1396,51 @@ class FitMASCoreFlowsTest(unittest.TestCase):
         _, session = self._create_plan_for_today()
         session.priority = "Seance cle"
         self.db.commit()
-        original_decide = api_messages.decide
-        original_extract_facts = api_messages.extract_facts
-        original_accept_recheck = conversation_pipeline._verify_pending_accept_resolution
-        try:
-            def fake_decide(user_text, *args, **kwargs):
-                if str(user_text).strip().lower() == "non":
-                    return CoachDecision(
-                        response_type="no_change",
-                        rationale="refus pending compris par le LLM",
-                        fitmas_message="OK. Je ne touche pas au planning.",
-                        pending_resolution=llm.RejectPendingResolution(type="reject_pending"),
-                    )
-                return MutationDecision(
-                    mutation_type="replace_session",
+        pending_patch = PlanPatch(
+            coach_message="Je remplace par une natation souple.",
+            operations=[
+                PlanPatchOperation(
+                    operation_type="replace_session",
                     target_session_id=session.id,
                     new_sport_type="swimming",
                     new_session_type="easy",
                     new_duration_min=35,
                     new_intensity="easy",
-                    new_title="Natation souple",
-                    new_goal="Faire tourner sans impact",
-                    rationale="On bascule sans impact.",
-                    fitmas_message="Je te bascule la seance en natation souple.",
+                    rationale="Proposition a refuser.",
+                )
+            ],
+        )
+        repo.create_pending_mutation_confirmation(
+            self.db,
+            user_id=self.user.id,
+            impact_level="high",
+            reason="test pending",
+            mutation_type="plan_patch",
+            summary="remplacer par natation",
+            source_text="test",
+            decision_json=serialize_plan_patch_confirmation(pending_patch),
+            expires_at=default_confirmation_expiry(),
+        )
+        original_decide = api_messages.decide
+        original_extract_facts = api_messages.extract_facts
+        original_accept_recheck = conversation_pending_bridge.verify_pending_accept_resolution
+        try:
+            def fake_decide(user_text, *args, **kwargs):
+                return CoachDecision(
+                    response_type="no_change",
+                    rationale="refus pending compris par le LLM",
+                    fitmas_message="OK. Je ne touche pas au planning.",
+                    pending_resolution=llm.RejectPendingResolution(type="reject_pending"),
                 )
 
             api_messages.decide = fake_decide
             api_messages.extract_facts = lambda *args, **kwargs: []
-            conversation_pipeline._verify_pending_accept_resolution = lambda **kwargs: "reject_pending"
-            self.client.post("/api/v0/messages", json={"text": "Tu peux remplacer ma seance ?"})
+            conversation_pending_bridge.verify_pending_accept_resolution = lambda **kwargs: "reject_pending"
             self.client.post("/api/v0/messages", json={"text": "non"})
         finally:
             api_messages.decide = original_decide
             api_messages.extract_facts = original_extract_facts
-            conversation_pipeline._verify_pending_accept_resolution = original_accept_recheck
+            conversation_pending_bridge.verify_pending_accept_resolution = original_accept_recheck
 
         self.db.expire_all()
         refreshed_session = repo.get_scheduled_session(self.db, self.user.id, session.id)
@@ -1160,18 +1619,19 @@ class FitMASCoreFlowsTest(unittest.TestCase):
             pending_resolution=llm.AcceptPendingResolution(type="accept_pending"),
         )
 
-        original_verify = conversation_pipeline._verify_pending_accept_resolution
+        original_verify = conversation_pending_bridge.verify_pending_accept_resolution
         try:
-            conversation_pipeline._verify_pending_accept_resolution = lambda **kwargs: "ignore"
-            outcome = conversation_pipeline._apply_pending_resolution(
+            conversation_pending_bridge.verify_pending_accept_resolution = lambda **kwargs: "ignore"
+            outcome = conversation_pending_bridge.apply_pending_resolution(
                 db=self.db,
                 user=self.user,
-                decision=decision,
+                decision_artifact=legacy_decision_artifact_from_raw(decision),
+                canonical_understanding=None,
                 pending_confirmation=pending,
                 user_text="j'attends",
             )
         finally:
-            conversation_pipeline._verify_pending_accept_resolution = original_verify
+            conversation_pending_bridge.verify_pending_accept_resolution = original_verify
 
         self.db.expire_all()
         refreshed_pending = self.db.get(s.PendingMutationConfirmation, pending.id)
@@ -1217,18 +1677,19 @@ class FitMASCoreFlowsTest(unittest.TestCase):
             pending_resolution=llm.AcceptPendingResolution(type="accept_pending"),
         )
 
-        original_verify = conversation_pipeline._verify_pending_accept_resolution
+        original_verify = conversation_pending_bridge.verify_pending_accept_resolution
         try:
-            conversation_pipeline._verify_pending_accept_resolution = lambda **kwargs: "accept_pending"
-            outcome = conversation_pipeline._apply_pending_resolution(
+            conversation_pending_bridge.verify_pending_accept_resolution = lambda **kwargs: "accept_pending"
+            outcome = conversation_pending_bridge.apply_pending_resolution(
                 db=self.db,
                 user=self.user,
-                decision=decision,
+                decision_artifact=legacy_decision_artifact_from_raw(decision),
+                canonical_understanding=None,
                 pending_confirmation=pending,
                 user_text="oui confirme",
             )
         finally:
-            conversation_pipeline._verify_pending_accept_resolution = original_verify
+            conversation_pending_bridge.verify_pending_accept_resolution = original_verify
 
         self.db.expire_all()
         refreshed_pending = self.db.get(s.PendingMutationConfirmation, pending.id)
@@ -1271,18 +1732,19 @@ class FitMASCoreFlowsTest(unittest.TestCase):
             pending_resolution=llm.RejectPendingResolution(type="reject_pending"),
         )
 
-        original_verify = conversation_pipeline._verify_pending_accept_resolution
+        original_verify = conversation_pending_bridge.verify_pending_accept_resolution
         try:
-            conversation_pipeline._verify_pending_accept_resolution = lambda **kwargs: "ignore"
-            outcome = conversation_pipeline._apply_pending_resolution(
+            conversation_pending_bridge.verify_pending_accept_resolution = lambda **kwargs: "ignore"
+            outcome = conversation_pending_bridge.apply_pending_resolution(
                 db=self.db,
                 user=self.user,
-                decision=decision,
+                decision_artifact=legacy_decision_artifact_from_raw(decision),
+                canonical_understanding=None,
                 pending_confirmation=pending,
                 user_text="non j'etais indispo aujourd'hui mais demain je suis dispo",
             )
         finally:
-            conversation_pipeline._verify_pending_accept_resolution = original_verify
+            conversation_pending_bridge.verify_pending_accept_resolution = original_verify
 
         self.db.expire_all()
         refreshed_pending = self.db.get(s.PendingMutationConfirmation, pending.id)
@@ -1330,19 +1792,20 @@ class FitMASCoreFlowsTest(unittest.TestCase):
             has_plan_mutation=True,
         )
 
-        original_verify = conversation_pipeline._verify_pending_accept_resolution
+        original_verify = conversation_pending_bridge.verify_pending_accept_resolution
         try:
-            conversation_pipeline._verify_pending_accept_resolution = lambda **kwargs: "ignore"
-            outcome = conversation_pipeline._apply_pending_resolution(
+            conversation_pending_bridge.verify_pending_accept_resolution = lambda **kwargs: "ignore"
+            outcome = conversation_pending_bridge.apply_pending_resolution(
                 db=self.db,
                 user=self.user,
-                decision=decision,
+                decision_artifact=legacy_decision_artifact_from_raw(decision),
+                canonical_understanding=None,
                 pending_confirmation=pending,
                 user_text="non j'etais indispo aujourd'hui mais demain je suis dispo",
                 turn_plan=turn_plan,
             )
         finally:
-            conversation_pipeline._verify_pending_accept_resolution = original_verify
+            conversation_pending_bridge.verify_pending_accept_resolution = original_verify
 
         self.assertIsNone(outcome)
         refreshed_pending = self.db.get(s.PendingMutationConfirmation, pending.id)
@@ -1392,10 +1855,11 @@ class FitMASCoreFlowsTest(unittest.TestCase):
             pending_resolution=llm.IgnorePendingResolution(type="ignore"),
         )
 
-        outcome = conversation_pipeline._apply_pending_resolution(
+        outcome = conversation_pending_bridge.apply_pending_resolution(
             db=self.db,
             user=self.user,
-            decision=decision,
+            decision_artifact=legacy_decision_artifact_from_raw(decision),
+            canonical_understanding=None,
             pending_confirmation=pending,
             user_text="readapte plutot la semaine",
         )
@@ -1444,10 +1908,11 @@ class FitMASCoreFlowsTest(unittest.TestCase):
             has_plan_mutation=True,
         )
 
-        outcome = conversation_pipeline._apply_pending_resolution(
+        outcome = conversation_pending_bridge.apply_pending_resolution(
             db=self.db,
             user=self.user,
-            decision=decision,
+            decision_artifact=legacy_decision_artifact_from_raw(decision),
+            canonical_understanding=None,
             pending_confirmation=pending,
             user_text="ok readapte la semaine alors",
             turn_plan=turn_plan,
@@ -1458,22 +1923,8 @@ class FitMASCoreFlowsTest(unittest.TestCase):
         self.assertEqual(refreshed_pending.status, "pending")
 
     def test_availability_plus_plan_mutation_can_enter_post_decide_candidate_flow(self) -> None:
-        decision = CoachDecision(
-            response_type="reply",
-            rationale="disponibilite corrigee avec adaptation a proposer",
-            fitmas_message="Je propose running demain et piscine vendredi.",
-        )
-        turn_plan = SimpleNamespace(
-            primary_intent="availability_constraint",
-            secondary_intents=("plan_mutation",),
-            has_plan_mutation=True,
-        )
-
-        self.assertTrue(
-            conversation_pipeline._should_try_mixed_plan_adaptation_after_decide(
-                decision=decision,
-                turn_plan=turn_plan,
-            )
+        self.assertFalse(
+            hasattr(conversation_pipeline, "_should_try_mixed_plan_adaptation_after_decide")
         )
 
     def test_active_pending_does_not_block_pre_decide_plan_mutation_flow(self) -> None:
@@ -1557,10 +2008,50 @@ class FitMASCoreFlowsTest(unittest.TestCase):
         )
 
     def test_pending_pre_adaptation_gate_only_allows_modify_pending(self) -> None:
-        self.assertTrue(conversation_pipeline._pending_pre_adaptation_allows("modify_pending"))
-        self.assertFalse(conversation_pipeline._pending_pre_adaptation_allows("ignore"))
-        self.assertFalse(conversation_pipeline._pending_pre_adaptation_allows("needs_clarification"))
-        self.assertFalse(conversation_pipeline._pending_pre_adaptation_allows("accept_pending"))
+        self.assertTrue(conversation_pending_bridge.pending_pre_adaptation_allows("modify_pending"))
+        self.assertFalse(conversation_pending_bridge.pending_pre_adaptation_allows("ignore"))
+        self.assertFalse(conversation_pending_bridge.pending_pre_adaptation_allows("needs_clarification"))
+        self.assertFalse(conversation_pending_bridge.pending_pre_adaptation_allows("accept_pending"))
+
+    def test_post_decide_candidate_flow_respects_active_pending_gate(self) -> None:
+        _, session = self._create_plan_for_today()
+        pending = SimpleNamespace(status="pending", id=123)
+        turn_plan = SimpleNamespace(
+            primary_intent="plan_mutation",
+            secondary_intents=(),
+            has_plan_mutation=True,
+            confidence=0.9,
+            model_dump=lambda mode="json": {
+                "primary_intent": "plan_mutation",
+                "secondary_intents": [],
+                "has_plan_mutation": True,
+            },
+        )
+        original_generate = conversation_pipeline.generate_adaptation_proposal
+        try:
+            conversation_pipeline.generate_adaptation_proposal = (
+                lambda *args, **kwargs: (_ for _ in ()).throw(
+                    AssertionError("post-decide adaptation must be gated by active pending state")
+                )
+            )
+            outcome = conversation_pipeline._maybe_handle_plan_adaptation_candidates(
+                db=self.db,
+                user=self.user,
+                user_text="oui je confirme",
+                turn_plan=turn_plan,
+                pending_confirmation=pending,
+                open_calibration_need=None,
+                scheduled_sessions=[session],
+                coach_bundle=SimpleNamespace(),
+                grounding=None,
+                turn_context={"pending_pre_adaptation_gate": "accept_pending"},
+                mode="post_decide_mixed",
+                action_result={},
+            )
+        finally:
+            conversation_pipeline.generate_adaptation_proposal = original_generate
+
+        self.assertIsNone(outcome)
 
     def test_plan_adaptation_reply_hard_guard_rejects_unknown_duration(self) -> None:
         sessions = [
@@ -1648,7 +2139,7 @@ class FitMASCoreFlowsTest(unittest.TestCase):
             mutation_applied=False,
         )
 
-        self.assertTrue(conversation_pipeline._outcome_keeps_pending_confirmation(outcome, pending))
+        self.assertTrue(conversation_pending_bridge.outcome_keeps_pending_confirmation(outcome, pending))
 
     def test_non_mutating_close_turn_keeps_active_pending(self) -> None:
         _, session = self._create_plan_for_today()
@@ -1683,7 +2174,7 @@ class FitMASCoreFlowsTest(unittest.TestCase):
         )
         turn_plan = SimpleNamespace(primary_intent="close_turn")
 
-        conversation_pipeline._keep_pending_for_non_mutating_turn(
+        conversation_pending_bridge.keep_pending_for_non_mutating_turn(
             outcome=outcome,
             turn_plan=turn_plan,
             pending_confirmation=pending,
@@ -1691,7 +2182,7 @@ class FitMASCoreFlowsTest(unittest.TestCase):
 
         self.assertTrue(outcome.pending_confirmation)
         self.assertEqual(outcome.pending_confirmation_id, pending.id)
-        self.assertTrue(conversation_pipeline._outcome_keeps_pending_confirmation(outcome, pending))
+        self.assertTrue(conversation_pending_bridge.outcome_keeps_pending_confirmation(outcome, pending))
 
     def test_plan_patch_turn_defers_conflicting_not_completed_execution_action(self) -> None:
         _, session = self._create_plan_for_today()
@@ -1739,7 +2230,7 @@ class FitMASCoreFlowsTest(unittest.TestCase):
         result = conversation_pipeline._apply_coach_decision_actions(
             db=self.db,
             user=self.user,
-            decision=decision,
+            decision_artifact=legacy_decision_artifact_from_raw(decision),
             turn_memory_writes=memory_writes,
         )
 
@@ -1807,7 +2298,7 @@ class FitMASCoreFlowsTest(unittest.TestCase):
         result = conversation_pipeline._apply_coach_decision_actions(
             db=self.db,
             user=self.user,
-            decision=decision,
+            decision_artifact=legacy_decision_artifact_from_raw(decision),
             turn_memory_writes=memory_writes,
             turn_plan=turn_plan,
         )
@@ -1870,7 +2361,7 @@ class FitMASCoreFlowsTest(unittest.TestCase):
         result = conversation_pipeline._apply_coach_decision_actions(
             db=self.db,
             user=self.user,
-            decision=decision,
+            decision_artifact=legacy_decision_artifact_from_raw(decision),
             turn_memory_writes=memory_writes,
             turn_plan=turn_plan,
         )
@@ -1919,10 +2410,10 @@ class FitMASCoreFlowsTest(unittest.TestCase):
             pending_resolution=llm.AcceptPendingResolution(type="accept_pending"),
         )
 
-        outcome = conversation_pipeline._accept_pending_confirmation(
+        outcome = conversation_pending_bridge.accept_pending_confirmation(
             db=self.db,
             user=self.user,
-            decision=decision,
+            decision_artifact=legacy_decision_artifact_from_raw(decision),
             pending_confirmation=pending,
         )
 
@@ -1955,10 +2446,10 @@ class FitMASCoreFlowsTest(unittest.TestCase):
         turns = repo.get_recent_conversation_turns(self.db, self.user.id, limit=1)
 
         self.assertEqual(len(turns), 1)
-        self.assertEqual(turns[0].response_mode, "mutation_applied")
-        self.assertTrue(turns[0].mutation_applied)
+        self.assertEqual(turns[0].response_mode, "legacy_decision_contract_disabled")
+        self.assertFalse(turns[0].mutation_applied)
         self.assertEqual(turns[0].mutation_type, "lighten_day")
-        self.assertIn('"mutation_type": "lighten_day"', turns[0].decision_json)
+        self.assertIn('"mutation_type":"lighten_day"', turns[0].decision_json)
 
     def test_conversation_turn_records_no_change_as_not_applied(self) -> None:
         self._create_plan_for_today()
@@ -2422,6 +2913,95 @@ class FitMASCoreFlowsTest(unittest.TestCase):
         self.assertEqual(turns[0].response_mode, "plan_adaptation_pending_confirmation")
         self.assertEqual(context["decide_none_fallback"], "plan_adaptation_candidates")
 
+    def test_canonical_planning_provider_preempts_pre_decide_candidate_flow(self) -> None:
+        from fitmas.decision import CoachUnderstanding, RequestedPlanChange
+        from fitmas.legacy import conversation_canonical_planning_bridge, conversation_understanding_bridge
+
+        _, session = self._create_plan_for_today()
+        target_date = (session.scheduled_date.date() + timedelta(days=2)).isoformat()
+        original_plan_turn = api_messages.plan_conversation_turn
+        original_decide = api_messages.decide
+        original_extract_facts = api_messages.extract_facts
+        original_understanding = conversation_understanding_bridge.run_canonical_understanding_shadow
+        original_candidate_flow = conversation_pipeline._maybe_handle_plan_adaptation_candidates
+        original_canonical_planning = conversation_canonical_planning_bridge.handle_canonical_planning
+        old_flag = os.environ.get("FITMAS_CANONICAL_PLANNING_PROVIDER")
+        try:
+            os.environ["FITMAS_CANONICAL_PLANNING_PROVIDER"] = "1"
+            api_messages.plan_conversation_turn = lambda *args, **kwargs: SimpleNamespace(
+                primary_intent="plan_mutation",
+                secondary_intents=(),
+                has_plan_mutation=True,
+                mutation_signal=True,
+                requires_truth_read=True,
+                truth_scope="plan_window",
+                temporal_references=[],
+                confidence=0.94,
+            )
+            api_messages.decide = lambda *args, **kwargs: (_ for _ in ()).throw(
+                AssertionError("legacy decide must be skipped")
+            )
+            api_messages.extract_facts = lambda *args, **kwargs: []
+            conversation_understanding_bridge.run_canonical_understanding_shadow = (
+                lambda **kwargs: CoachUnderstanding(
+                    intent="plan_change",
+                    confidence=0.93,
+                    user_summary="Deplacement planning type.",
+                    extracted_signals=(),
+                    requested_change=RequestedPlanChange(
+                        kind="move",
+                        source_ref=f"session_id:{session.id}",
+                        target_ref=f"date:{target_date}",
+                        desired_sport=None,
+                        desired_duration_min=None,
+                        desired_intensity=None,
+                        reason="Demande user.",
+                        risk_signals=(),
+                    ),
+                    pending_resolution=None,
+                    clarification_need=None,
+                )
+            )
+
+            def forbidden_candidate_flow(**kwargs):
+                raise AssertionError("pre-decide candidate flow must not run before canonical planning provider")
+
+            def fake_canonical_planning(**kwargs):
+                kwargs["turn_context"]["canonical_planning_provider"] = {
+                    "applicable": True,
+                    "result": "handled",
+                }
+                return ConversationTurnOutcome(
+                    extraction=Extraction(confidence=0.9),
+                    reply_text="Je bloque proprement via le runtime canonique.",
+                    response_mode="planning_runtime_block",
+                    mutation_applied=False,
+                    pending_confirmation=False,
+                )
+
+            conversation_pipeline._maybe_handle_plan_adaptation_candidates = forbidden_candidate_flow
+            conversation_canonical_planning_bridge.handle_canonical_planning = fake_canonical_planning
+
+            result = self.client.post("/api/v0/messages", json={"text": "Deplace la seance a vendredi"}).json()
+        finally:
+            api_messages.plan_conversation_turn = original_plan_turn
+            api_messages.decide = original_decide
+            api_messages.extract_facts = original_extract_facts
+            conversation_understanding_bridge.run_canonical_understanding_shadow = original_understanding
+            conversation_pipeline._maybe_handle_plan_adaptation_candidates = original_candidate_flow
+            conversation_canonical_planning_bridge.handle_canonical_planning = original_canonical_planning
+            if old_flag is None:
+                os.environ.pop("FITMAS_CANONICAL_PLANNING_PROVIDER", None)
+            else:
+                os.environ["FITMAS_CANONICAL_PLANNING_PROVIDER"] = old_flag
+
+        turns = repo.get_recent_conversation_turns(self.db, self.user.id, limit=1)
+        context = json.loads(turns[0].context_json)
+
+        self.assertEqual(result["assistant_message"]["text"], "Je bloque proprement via le runtime canonique.")
+        self.assertEqual(turns[0].response_mode, "planning_runtime_block")
+        self.assertEqual(context["canonical_planning_provider"]["result"], "handled")
+
     def test_pending_confirmation_blocks_terminal_close_path(self) -> None:
         repo.create_pending_mutation_confirmation(
             self.db,
@@ -2530,15 +3110,15 @@ class FitMASCoreFlowsTest(unittest.TestCase):
             findings=(),
             score_delta=-4,
             policy_hint="ask_confirmation",
-            evaluation_summary="Candidate possible, confirmation recommandee.",
+            evaluation_summary="Option possible, confirmation recommandee.",
         )
         policy_decision = AdaptationPolicyDecision(
             action="pending_confirmation",
             selected_candidate_id="cand_move",
             candidate_options=(),
-            reason="Candidate possible, confirmation recommandee.",
-            user_facing_reason="Candidate possible, confirmation recommandee.",
-            requires_confirmation_reason="Candidate possible, confirmation recommandee.",
+            reason="Option possible, confirmation recommandee.",
+            user_facing_reason="Option possible, confirmation recommandee.",
+            requires_confirmation_reason="Option possible, confirmation recommandee.",
             risk_level="medium",
         )
 
@@ -3220,16 +3800,15 @@ class FitMASCoreFlowsTest(unittest.TestCase):
         pending = repo.get_active_pending_mutation_confirmation(self.db, self.user.id)
         self.db.refresh(old_pending)
 
-        self.assertEqual(captured["generate_calls"], 1)
+        self.assertEqual(captured["generate_calls"], 0)
         self.assertEqual(
             result["assistant_message"]["text"],
-            "Je te propose de remplacer demain par recuperation active; tu confirmes ?",
+            "On laisse tomber demain.",
         )
-        self.assertEqual(turns[0].response_mode, "plan_adaptation_pending_confirmation")
-        self.assertEqual(context["adaptation_candidate_flow"]["policy_action"], "pending_confirmation")
+        self.assertEqual(turns[0].response_mode, "no_change_composed")
+        self.assertNotIn("adaptation_candidate_flow", context)
         self.assertEqual(old_pending.status, "superseded")
-        self.assertIsNotNone(pending)
-        self.assertNotEqual(pending.id, old_pending.id)
+        self.assertIsNone(pending)
 
     def test_candidate_pending_choice_is_persisted_as_structured_options(self) -> None:
         _, session = self._create_plan_with_tomorrow_session()
@@ -3454,7 +4033,7 @@ class FitMASCoreFlowsTest(unittest.TestCase):
         original_extract_facts = api_messages.extract_facts
         original_compose = conversation_pipeline.final_reply.compose_final_reply
         original_verify = conversation_pipeline.final_reply.verify_post_event_reply
-        original_accept_recheck = conversation_pipeline._verify_pending_accept_resolution
+        original_accept_recheck = conversation_pending_bridge.verify_pending_accept_resolution
         try:
             api_messages.plan_conversation_turn = lambda *args, **kwargs: SimpleNamespace(
                 primary_intent="trivial_ack",
@@ -3477,7 +4056,7 @@ class FitMASCoreFlowsTest(unittest.TestCase):
             conversation_pipeline.final_reply.verify_post_event_reply = (
                 lambda reply, context, **kwargs: reply
             )
-            conversation_pipeline._verify_pending_accept_resolution = lambda **kwargs: "accept_pending"
+            conversation_pending_bridge.verify_pending_accept_resolution = lambda **kwargs: "accept_pending"
 
             result = self.client.post("/api/v0/messages", json={"text": "vendredi"}).json()
         finally:
@@ -3486,7 +4065,7 @@ class FitMASCoreFlowsTest(unittest.TestCase):
             api_messages.extract_facts = original_extract_facts
             conversation_pipeline.final_reply.compose_final_reply = original_compose
             conversation_pipeline.final_reply.verify_post_event_reply = original_verify
-            conversation_pipeline._verify_pending_accept_resolution = original_accept_recheck
+            conversation_pending_bridge.verify_pending_accept_resolution = original_accept_recheck
 
         self.db.expire_all()
         refreshed = repo.get_scheduled_session(self.db, self.user.id, session.id)
@@ -3540,7 +4119,7 @@ class FitMASCoreFlowsTest(unittest.TestCase):
 
         original_decide = api_messages.decide
         original_extract_facts = api_messages.extract_facts
-        original_accept_recheck = conversation_pipeline._verify_pending_accept_resolution
+        original_accept_recheck = conversation_pending_bridge.verify_pending_accept_resolution
         try:
             api_messages.decide = lambda *args, **kwargs: CoachDecision(
                 response_type="no_change",
@@ -3552,12 +4131,12 @@ class FitMASCoreFlowsTest(unittest.TestCase):
                 ),
             )
             api_messages.extract_facts = lambda *args, **kwargs: []
-            conversation_pipeline._verify_pending_accept_resolution = lambda **kwargs: "accept_pending"
+            conversation_pending_bridge.verify_pending_accept_resolution = lambda **kwargs: "accept_pending"
             self.client.post("/api/v0/messages", json={"text": "l'autre option"}).json()
         finally:
             api_messages.decide = original_decide
             api_messages.extract_facts = original_extract_facts
-            conversation_pipeline._verify_pending_accept_resolution = original_accept_recheck
+            conversation_pending_bridge.verify_pending_accept_resolution = original_accept_recheck
 
         self.db.expire_all()
         active_pending = repo.get_active_pending_mutation_confirmation(self.db, self.user.id)
@@ -3628,15 +4207,15 @@ class FitMASCoreFlowsTest(unittest.TestCase):
             findings=(),
             score_delta=-6,
             policy_hint="ask_confirmation",
-            evaluation_summary="Candidate possible, confirmation recommandee.",
+            evaluation_summary="Option possible, confirmation recommandee.",
         )
         policy_decision = AdaptationPolicyDecision(
             action="pending_confirmation",
             selected_candidate_id="reduce_tomorrow",
             candidate_options=(),
-            reason="Candidate possible, confirmation recommandee.",
-            user_facing_reason="Candidate possible, confirmation recommandee.",
-            requires_confirmation_reason="Candidate possible, confirmation recommandee.",
+            reason="Option possible, confirmation recommandee.",
+            user_facing_reason="Option possible, confirmation recommandee.",
+            requires_confirmation_reason="Option possible, confirmation recommandee.",
             risk_level="medium",
         )
         compose_calls: list[dict] = []
@@ -3704,13 +4283,12 @@ class FitMASCoreFlowsTest(unittest.TestCase):
 
         self.assertEqual(
             result["assistant_message"]["text"],
-            "Genou note. Je te propose d'alleger demain; tu confirmes ?",
+            "Memoire seule.",
         )
-        self.assertEqual(turns[0].response_mode, "plan_adaptation_pending_confirmation")
+        self.assertEqual(turns[0].response_mode, "no_change_composed")
         self.assertIn('"category": "health"', turns[0].memory_writes_json)
-        self.assertIsNotNone(pending)
-        self.assertEqual(pending.mutation_type, "plan_patch")
-        self.assertIn("Memoire utilisateur mise a jour.", compose_calls[0]["extra_facts"])
+        self.assertIsNone(pending)
+        self.assertEqual(compose_calls, [])
 
     def test_plan_mutation_on_empty_typed_target_date_does_not_call_llm_mutation_paths(self) -> None:
         self._create_plan_for_today()
@@ -3891,6 +4469,7 @@ class FitMASCoreFlowsTest(unittest.TestCase):
         self.assertNotIn("OK. Je deplace", result["assistant_message"]["text"])
         self.assertEqual(len(turns), 1)
         self.assertEqual(turns[0].mutation_type, "move_session")
+        self.assertEqual(turns[0].response_mode, "legacy_decision_contract_disabled")
         self.assertFalse(turns[0].mutation_applied)
 
     def test_conversation_turn_records_pending_confirmation(self) -> None:
@@ -3921,10 +4500,10 @@ class FitMASCoreFlowsTest(unittest.TestCase):
         turns = repo.get_recent_conversation_turns(self.db, self.user.id, limit=1)
 
         self.assertEqual(len(turns), 1)
-        self.assertEqual(turns[0].response_mode, "mutation_confirmation")
+        self.assertEqual(turns[0].response_mode, "legacy_decision_contract_disabled")
         self.assertFalse(turns[0].mutation_applied)
-        self.assertTrue(turns[0].pending_confirmation)
-        self.assertIsNotNone(turns[0].pending_confirmation_id)
+        self.assertFalse(turns[0].pending_confirmation)
+        self.assertIsNone(turns[0].pending_confirmation_id)
 
     def test_coach_decision_requires_confirmation_plan_patch_creates_pending(self) -> None:
         _, session = self._create_plan_for_today()
@@ -3962,12 +4541,11 @@ class FitMASCoreFlowsTest(unittest.TestCase):
         turns = repo.get_recent_conversation_turns(self.db, self.user.id, limit=1)
 
         self.assertIsNotNone(refreshed)
-        self.assertEqual(refreshed.scheduled_date.date(), original_date)
-        self.assertIsNotNone(pending)
-        self.assertEqual(pending.mutation_type, "plan_patch")
-        self.assertEqual(turns[0].response_mode, "plan_patch_confirmation")
-        self.assertTrue(turns[0].pending_confirmation)
-        self.assertIn("confirm", result["assistant_message"]["text"].lower())
+        self.assertEqual(refreshed.scheduled_date.date().isoformat(), target_date)
+        self.assertIsNone(pending)
+        self.assertEqual(turns[0].response_mode, "planning_runtime_commit")
+        self.assertFalse(turns[0].pending_confirmation)
+        self.assertTrue(turns[0].mutation_applied)
 
     def test_plan_patch_confirmation_reply_that_clarifies_does_not_create_pending(self) -> None:
         _, session = self._create_plan_for_today()
@@ -4015,9 +4593,9 @@ class FitMASCoreFlowsTest(unittest.TestCase):
         self.assertIsNotNone(refreshed)
         self.assertEqual(refreshed.scheduled_date.date(), original_date)
         self.assertIsNone(pending)
-        self.assertEqual(turns[0].response_mode, "plan_patch_clarification")
+        self.assertEqual(turns[0].response_mode, "planning_runtime_block")
         self.assertFalse(turns[0].pending_confirmation)
-        self.assertIn("tu parlais", result["assistant_message"]["text"].lower())
+        self.assertFalse(turns[0].mutation_applied)
 
     def test_conversation_turn_serializes_datetime_memory_writes(self) -> None:
         row = repo.add_conversation_turn(
@@ -4870,12 +5448,10 @@ class FitMASCoreFlowsTest(unittest.TestCase):
             api_messages.extract_facts = lambda *args, **kwargs: []
 
             def fake_decide(*args, **kwargs):
-                return MutationDecision(
-                    mutation_type="swap_sessions",
-                    target_session_id=renfo.id,
-                    second_session_id=swim.id,
+                return CoachDecision(
+                    response_type="reply",
                     rationale="Echange mercredi et jeudi.",
-                    fitmas_message="Je peux echanger mercredi et jeudi.",
+                    fitmas_message="Je peux echanger mercredi et jeudi. Tu confirmes ?",
                 )
 
             api_messages.decide = fake_decide
@@ -5432,6 +6008,7 @@ class FitMASCoreFlowsTest(unittest.TestCase):
         self.assertIn("execution_actions_per_turn=1", metric_line)
         self.assertIn("memory_actions_per_turn=0", metric_line)
         self.assertIn("pending_resolution_per_turn=0", metric_line)
+        self.assertIn("command_source=coach_decision", metric_line)
 
     def test_execution_action_survives_blocked_plan_patch_reply(self) -> None:
         now = get_local_now(self.user.timezone)
@@ -5494,8 +6071,8 @@ class FitMASCoreFlowsTest(unittest.TestCase):
         updated = repo.get_scheduled_session(self.db, self.user.id, session.id)
 
         self.assertEqual(updated.completion_status, "skipped")
-        self.assertIn("Renfo 34min", result["assistant_message"]["text"])
-        self.assertIn("non faite", result["assistant_message"]["text"])
+        self.assertIn("Renfo", result["assistant_message"]["text"])
+        self.assertIn("non fait", result["assistant_message"]["text"])
         self.assertNotIn("Je ne l'ai pas applique", result["assistant_message"]["text"])
 
     def test_execution_fact_correction_archives_conflicting_working_memory(self) -> None:
@@ -5590,8 +6167,8 @@ class FitMASCoreFlowsTest(unittest.TestCase):
         finally:
             verify_db.close()
 
-        self.assertEqual(updated.duration_min, 30)
-        self.assertIn("30 min", result["assistant_message"]["text"])
+        self.assertEqual(updated.duration_min, 40)
+        self._assert_legacy_mutation_disabled(result, mutation_type="replace_session")
         self.assertNotIn("40 min", result["assistant_message"]["text"])
 
     def test_post_reply_health_adaptation_stays_off_for_non_health_message(self) -> None:
