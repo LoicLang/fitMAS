@@ -489,6 +489,43 @@ def test_smoke_fails_closed_when_fallback_census_import_fails(monkeypatch):
     assert "fallback_census_import_failed" in result.reasons
 
 
+def test_smoke_fails_closed_when_fallback_census_runtime_fails(monkeypatch):
+    smoke = _load_smoke_module()
+    monkeypatch.delenv("FITMAS_CANONICAL_PLANNING_PROVIDER", raising=False)
+    if str(smoke.BACKEND_SRC) not in sys.path:
+        sys.path.insert(0, str(smoke.BACKEND_SRC))
+    from fitmas.decision import fallback_census
+
+    def broken_check(_context):
+        raise RuntimeError("census broken")
+
+    monkeypatch.setattr(fallback_census, "unclassified_legacy_fallback_reasons", broken_check)
+    scenario = smoke.SmokeScenario(
+        name="memory_preference",
+        prompt="je prefere courir le matin",
+        expectation="no_plan_write",
+    )
+    before = smoke.DbSnapshot(events=(), pending=(), sessions=(), latest_turn=None)
+    after = smoke.DbSnapshot(
+        events=(),
+        pending=(),
+        sessions=(),
+        latest_turn={
+            "response_mode": "no_change_composed",
+            "mutation_applied": False,
+            "assistant_message": "C'est note.",
+        },
+        turns=(
+            {"id": 1, "context_json": '{"legacy_decide":{"legacy_skipped":false}}'},
+        ),
+    )
+
+    result = smoke.evaluate_scenario_result(scenario, before, after)
+
+    assert not result.ok
+    assert "fallback_census_runtime_failed" in result.reasons
+
+
 def test_canonical_planning_fails_on_candidate_backend_jargon(monkeypatch):
     smoke = _load_smoke_module()
     monkeypatch.setenv("FITMAS_UNDERSTANDING_RUNTIME_PLANNING_CUTOVER", "1")

@@ -615,7 +615,11 @@ def _unclassified_legacy_fallback_reasons(turns: tuple[dict[str, Any], ...]) -> 
 
     reasons: list[str] = []
     for row in turns:
-        for reason in check_turn_context(_turn_context(row)):
+        try:
+            row_reasons = check_turn_context(_turn_context(row))
+        except Exception:
+            return ["fallback_census_runtime_failed"]
+        for reason in row_reasons:
             if reason not in reasons:
                 reasons.append(reason)
     return reasons
