@@ -413,6 +413,11 @@ def _run_conversation_turn_impl(
         turn_plan=turn_plan,
         pending_confirmation=pending_confirmation,
     ):
+        conversation_canonical_planning_bridge.trace_canonical_planning_prepared(
+            turn_context,
+            turn_plan=turn_plan,
+            pending_confirmation=pending_confirmation,
+        )
         canonical_understanding = conversation_understanding_bridge.run_canonical_understanding_shadow(
             user=user,
             user_text=payload.text,
@@ -423,13 +428,19 @@ def _run_conversation_turn_impl(
             pending_confirmation=pending_confirmation,
             turn_context=turn_context,
         )
-        if conversation_canonical_planning_bridge.should_use_canonical_planning_without_legacy(
+        planning_understanding = conversation_canonical_planning_bridge.planning_understanding_for_provider(
             understanding=canonical_understanding,
+            turn_plan=turn_plan,
+        )
+        if planning_understanding is not canonical_understanding:
+            turn_context["canonical_planning_provider"]["understanding_source"] = "turn_plan"
+        if conversation_canonical_planning_bridge.should_use_canonical_planning_without_legacy(
+            understanding=planning_understanding,
             turn_plan=turn_plan,
             pending_confirmation=pending_confirmation,
         ):
             canonical_planning_outcome = conversation_canonical_planning_bridge.handle_canonical_planning(
-                understanding=canonical_understanding,
+                understanding=planning_understanding,
                 context=_planning_context_from_turn_state(
                     state=state,
                     conversation_context=conversation_context,
@@ -458,6 +469,13 @@ def _run_conversation_turn_impl(
                     turn_context=turn_context,
                     memory_writes=turn_memory_writes,
                 )
+        else:
+            conversation_canonical_planning_bridge.trace_canonical_planning_not_used(
+                turn_context,
+                understanding=planning_understanding,
+                turn_plan=turn_plan,
+                pending_confirmation=pending_confirmation,
+            )
 
     adaptation_candidate_outcome = _maybe_handle_plan_adaptation_candidates(
         db=db,
@@ -574,13 +592,19 @@ def _run_conversation_turn_impl(
                 grounding_facts=tuple(render_grounding_packet_for_prompt(grounding_packet)),
             )
         if outcome is None:
-            if conversation_canonical_planning_bridge.should_use_canonical_planning_without_legacy(
+            planning_understanding = conversation_canonical_planning_bridge.planning_understanding_for_provider(
                 understanding=canonical_understanding,
+                turn_plan=turn_plan,
+            )
+            if planning_understanding is not canonical_understanding:
+                turn_context.setdefault("canonical_planning_provider", {})["understanding_source"] = "turn_plan"
+            if conversation_canonical_planning_bridge.should_use_canonical_planning_without_legacy(
+                understanding=planning_understanding,
                 turn_plan=turn_plan,
                 pending_confirmation=pending_confirmation,
             ):
                 outcome = conversation_canonical_planning_bridge.handle_canonical_planning(
-                    understanding=canonical_understanding,
+                    understanding=planning_understanding,
                     context=_planning_context_from_turn_state(
                         state=state,
                         conversation_context=conversation_context,

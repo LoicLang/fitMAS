@@ -49,20 +49,264 @@ def _turn_plan(primary_intent: str = "plan_mutation"):
     return SimpleNamespace(primary_intent=primary_intent, secondary_intents=())
 
 
-def test_canonical_planning_provider_defaults_off(monkeypatch) -> None:
+def test_canonical_planning_provider_defaults_on(monkeypatch) -> None:
     monkeypatch.delenv("FITMAS_CANONICAL_PLANNING_PROVIDER", raising=False)
+
+    assert bridge.canonical_planning_provider_enabled() is True
+
+
+def test_canonical_planning_provider_can_be_disabled_with_opt_out(monkeypatch) -> None:
+    monkeypatch.setenv("FITMAS_CANONICAL_PLANNING_PROVIDER", "0")
 
     assert bridge.canonical_planning_provider_enabled() is False
 
 
 def test_canonical_planning_provider_accepts_typed_move_when_enabled(monkeypatch) -> None:
-    monkeypatch.setenv("FITMAS_CANONICAL_PLANNING_PROVIDER", "1")
+    monkeypatch.delenv("FITMAS_CANONICAL_PLANNING_PROVIDER", raising=False)
 
     assert bridge.should_use_canonical_planning_without_legacy(
         understanding=_understanding(),
         turn_plan=_turn_plan(),
         pending_confirmation=None,
     )
+
+
+def test_canonical_planning_provider_accepts_iso_date_target_ref(monkeypatch) -> None:
+    monkeypatch.delenv("FITMAS_CANONICAL_PLANNING_PROVIDER", raising=False)
+
+    assert bridge.should_use_canonical_planning_without_legacy(
+        understanding=_understanding(requested_change=_requested_change(target_ref="2026-05-22")),
+        turn_plan=_turn_plan(),
+        pending_confirmation=None,
+    )
+
+
+def test_canonical_planning_provider_accepts_underscore_ref_aliases(monkeypatch) -> None:
+    monkeypatch.delenv("FITMAS_CANONICAL_PLANNING_PROVIDER", raising=False)
+
+    assert bridge.should_use_canonical_planning_without_legacy(
+        understanding=_understanding(
+            requested_change=_requested_change(source_ref="session_3", target_ref="date_2026-05-22")
+        ),
+        turn_plan=_turn_plan(),
+        pending_confirmation=None,
+    )
+
+
+def test_canonical_planning_provider_accepts_date_based_swap_refs(monkeypatch) -> None:
+    monkeypatch.delenv("FITMAS_CANONICAL_PLANNING_PROVIDER", raising=False)
+
+    assert bridge.should_use_canonical_planning_without_legacy(
+        understanding=_understanding(
+            requested_change=_requested_change(
+                kind="swap",
+                source_ref="date:2026-05-20",
+                target_ref="date:2026-05-21",
+            )
+        ),
+        turn_plan=_turn_plan(),
+        pending_confirmation=None,
+    )
+
+
+def test_canonical_planning_provider_accepts_date_based_source_refs(monkeypatch) -> None:
+    monkeypatch.delenv("FITMAS_CANONICAL_PLANNING_PROVIDER", raising=False)
+
+    for kind in ("move", "lighten", "replace"):
+        assert bridge.should_use_canonical_planning_without_legacy(
+            understanding=_understanding(
+                requested_change=_requested_change(
+                    kind=kind,
+                    source_ref="date:2026-05-20",
+                    target_ref="date:2026-05-22" if kind == "move" else None,
+                    desired_sport="cycling" if kind == "replace" else None,
+                )
+            ),
+            turn_plan=_turn_plan(),
+            pending_confirmation=None,
+        )
+
+
+def test_turn_plan_swap_can_supply_planning_understanding_when_understanding_misclassifies(monkeypatch) -> None:
+    monkeypatch.delenv("FITMAS_CANONICAL_PLANNING_PROVIDER", raising=False)
+    general = _understanding(intent="general_answer", requested_change=None)
+    turn_plan = SimpleNamespace(
+        primary_intent="plan_mutation",
+        secondary_intents=(),
+        has_plan_mutation=True,
+        mutation_signal=True,
+        planning_action="swap_sessions",
+        user_goal="echanger mercredi et jeudi",
+        confidence=0.95,
+        temporal_references=(
+            {"kind": "weekday", "value": "wednesday", "role": "target"},
+            {"kind": "weekday", "value": "thursday", "role": "target"},
+        ),
+    )
+
+    planned = bridge.planning_understanding_for_provider(understanding=general, turn_plan=turn_plan)
+
+    assert planned is not None
+    assert planned.intent == "plan_change"
+    assert planned.requested_change is not None
+    assert planned.requested_change.kind == "swap"
+    assert planned.requested_change.source_ref == "day:wednesday"
+    assert planned.requested_change.target_ref == "day:thursday"
+    assert bridge.should_use_canonical_planning_without_legacy(
+        understanding=planned,
+        turn_plan=turn_plan,
+        pending_confirmation=None,
+    )
+
+
+def test_turn_plan_swap_replaces_unsupported_planning_understanding(monkeypatch) -> None:
+    monkeypatch.delenv("FITMAS_CANONICAL_PLANNING_PROVIDER", raising=False)
+    availability_signal = UserSignal(
+        type="availability",
+        label="swap days availability",
+        status="new",
+        severity="low",
+        confidence=0.9,
+        evidence="Echange mercredi et jeudi",
+        payload={
+            "action_type": "record_availability",
+            "availability": "available",
+            "window_text": "mercredi et jeudi",
+            "scope": "day",
+        },
+    )
+    preference_signal = UserSignal(
+        type="preference",
+        label="sport optimization",
+        status="new",
+        severity="low",
+        confidence=0.8,
+        evidence="si c'est mieux sportivement",
+        payload={
+            "action_type": "record_preference",
+            "preference": "sportivement mieux",
+            "polarity": "prefer",
+            "scope": "general",
+        },
+    )
+    unsupported = _understanding(
+        requested_change=_requested_change(
+            kind="swap",
+            source_ref=None,
+            target_ref="mercredi et jeudi",
+        ),
+        signals=(availability_signal, preference_signal),
+    )
+    turn_plan = SimpleNamespace(
+        primary_intent="plan_mutation",
+        secondary_intents=(),
+        planning_action="swap_sessions",
+        user_goal="swapper les seances du mercredi et du jeudi",
+        confidence=0.95,
+        temporal_references=(
+            {"kind": "weekday", "value": "wednesday", "role": "target"},
+            {"kind": "weekday", "value": "thursday", "role": "target"},
+        ),
+    )
+
+    planned = bridge.planning_understanding_for_provider(understanding=unsupported, turn_plan=turn_plan)
+
+    assert planned is not None
+    assert planned.intent == "plan_change"
+    assert planned.requested_change is not None
+    assert planned.requested_change.source_ref == "day:wednesday"
+    assert planned.requested_change.target_ref == "day:thursday"
+    assert bridge.should_use_canonical_planning_without_legacy(
+        understanding=planned,
+        turn_plan=turn_plan,
+        pending_confirmation=None,
+    )
+
+
+def test_turn_plan_move_can_supply_planning_understanding_when_understanding_has_free_refs(monkeypatch) -> None:
+    monkeypatch.delenv("FITMAS_CANONICAL_PLANNING_PROVIDER", raising=False)
+    unsupported = _understanding(
+        requested_change=_requested_change(
+            kind="move",
+            source_ref="seance 2 jeudi",
+            target_ref="mercredi",
+        ),
+    )
+    turn_plan = SimpleNamespace(
+        primary_intent="plan_mutation",
+        secondary_intents=(),
+        planning_action="move_session",
+        user_goal="deplacer la seance du jeudi au mercredi",
+        confidence=1.0,
+        temporal_references=(
+            {"kind": "weekday", "value": "thursday", "role": "source"},
+            {"kind": "weekday", "value": "wednesday", "role": "target"},
+        ),
+    )
+
+    planned = bridge.planning_understanding_for_provider(understanding=unsupported, turn_plan=turn_plan)
+
+    assert planned is not None
+    assert planned.intent == "plan_change"
+    assert planned.requested_change is not None
+    assert planned.requested_change.kind == "move"
+    assert planned.requested_change.source_ref == "day:thursday"
+    assert planned.requested_change.target_ref == "day:wednesday"
+    assert bridge.should_use_canonical_planning_without_legacy(
+        understanding=planned,
+        turn_plan=turn_plan,
+        pending_confirmation=None,
+    )
+
+
+def test_turn_plan_move_can_reuse_machine_source_from_understanding(monkeypatch) -> None:
+    monkeypatch.delenv("FITMAS_CANONICAL_PLANNING_PROVIDER", raising=False)
+    unsupported = _understanding(
+        requested_change=_requested_change(
+            kind="move",
+            source_ref="session_id:3",
+            target_ref="lundi prochain",
+        ),
+    )
+    turn_plan = SimpleNamespace(
+        primary_intent="plan_mutation",
+        secondary_intents=(),
+        planning_action="move_session",
+        user_goal="deplacer la seance id 3 a lundi prochain",
+        confidence=0.95,
+        temporal_references=(
+            {"kind": "relative_day", "value": "monday", "role": "target"},
+        ),
+    )
+
+    planned = bridge.planning_understanding_for_provider(understanding=unsupported, turn_plan=turn_plan)
+
+    assert planned is not None
+    assert planned.requested_change is not None
+    assert planned.requested_change.kind == "move"
+    assert planned.requested_change.source_ref == "session_id:3"
+    assert planned.requested_change.target_ref == "day:monday"
+    assert bridge.should_use_canonical_planning_without_legacy(
+        understanding=planned,
+        turn_plan=turn_plan,
+        pending_confirmation=None,
+    )
+
+
+def test_canonical_planning_prepared_trace_records_default_state(monkeypatch) -> None:
+    monkeypatch.delenv("FITMAS_CANONICAL_PLANNING_PROVIDER", raising=False)
+    turn_context: dict[str, object] = {}
+
+    bridge.trace_canonical_planning_prepared(
+        turn_context,
+        turn_plan=_turn_plan(),
+        pending_confirmation=None,
+    )
+
+    trace = turn_context["canonical_planning_provider"]
+    assert trace["default_enabled"] is True
+    assert trace["env_value"] is None
+    assert trace["result"] == "prepared"
 
 
 def test_canonical_planning_provider_rejects_free_text_refs(monkeypatch) -> None:

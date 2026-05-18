@@ -11,6 +11,7 @@ from fitmas.legacy.coach_decision_artifact import (
     LegacyCoachDecisionArtifact,
     legacy_decision_artifact_payload,
 )
+from fitmas.decision.fallback_census import record_legacy_provider_fallback
 
 
 def build_legacy_coach_decision_request(
@@ -91,6 +92,11 @@ def run_legacy_coach_decision(
     turn_context: dict[str, object],
 ) -> LegacyCoachDecisionArtifact:
     result = provider.decide(request)
+    record_legacy_provider_fallback(
+        turn_context,
+        response_type=result.artifact.response_type,
+        ok=result.ok,
+    )
     turn_context["legacy_decide"] = _result_trace(result)
     if result.decide_none_context is not None:
         turn_context["decide_none"] = result.decide_none_context

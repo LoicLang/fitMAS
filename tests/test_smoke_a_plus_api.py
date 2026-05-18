@@ -225,6 +225,224 @@ def test_canonical_planning_followup_path_allows_one_pending_row(monkeypatch):
             "mutation_applied": True,
             "assistant_message": "C'est applique.",
         },
+        turns=(
+            {
+                "id": 1,
+                "context_json": (
+                    '{"canonical_planning_provider":{"result":"handled"},'
+                    '"legacy_decide":{"legacy_skipped":true}}'
+                ),
+            },
+            {
+                "id": 2,
+                "context_json": '{"canonical_pending_provider":{"result":"handled"}}',
+            },
+        ),
+    )
+
+    result = smoke.evaluate_scenario_result(scenario, before, after)
+
+    assert result.ok
+    assert result.reasons == []
+
+
+def test_default_planning_provider_requires_canonical_trace_for_supported_turn(monkeypatch):
+    smoke = _load_smoke_module()
+    monkeypatch.delenv("FITMAS_CANONICAL_PLANNING_PROVIDER", raising=False)
+    scenario = smoke.SmokeScenario(
+        name="move_easy_then_confirm",
+        prompt="deplace la recuperation",
+        expectation="coherent_commit_or_pending",
+        followups=("oui je confirme",),
+    )
+    before = smoke.DbSnapshot(events=(), pending=(), sessions=(), latest_turn=None)
+    after = smoke.DbSnapshot(
+        events=({"id": 7, "command_type": "move_session"},),
+        pending=({"id": 3, "status": "accepted", "mutation_type": "plan_patch"},),
+        sessions=(),
+        latest_turn={
+            "response_mode": "pending_accepted",
+            "mutation_applied": True,
+            "assistant_message": "C'est applique.",
+        },
+        turns=(
+            {
+                "id": 1,
+                "context_json": '{"legacy_decide":{"legacy_skipped":false}}',
+            },
+            {
+                "id": 2,
+                "context_json": '{"canonical_pending_provider":{"result":"handled"}}',
+            },
+        ),
+    )
+
+    result = smoke.evaluate_scenario_result(scenario, before, after)
+
+    assert not result.ok
+    assert "canonical planning provider did not handle supported planning turn" in result.reasons
+
+
+def test_default_planning_provider_requires_canonical_trace_for_swap_by_day(monkeypatch):
+    smoke = _load_smoke_module()
+    monkeypatch.delenv("FITMAS_CANONICAL_PLANNING_PROVIDER", raising=False)
+    scenario = smoke.SmokeScenario(
+        name="swap_by_day",
+        prompt="echange mercredi et jeudi",
+        expectation="coherent_commit_or_pending",
+    )
+    before = smoke.DbSnapshot(events=(), pending=(), sessions=(), latest_turn=None)
+    after = smoke.DbSnapshot(
+        events=(),
+        pending=({"id": 3, "status": "pending", "mutation_type": "plan_patch"},),
+        sessions=(),
+        latest_turn={
+            "response_mode": "plan_adaptation_pending_confirmation",
+            "pending_confirmation": True,
+            "assistant_message": "Tu confirmes ?",
+        },
+        turns=(
+            {"id": 1, "context_json": '{"legacy_decide":{"legacy_skipped":false}}'},
+        ),
+    )
+
+    result = smoke.evaluate_scenario_result(scenario, before, after)
+
+    assert not result.ok
+    assert "canonical planning provider did not handle supported planning turn" in result.reasons
+
+
+def test_default_planning_provider_requires_canonical_trace_for_move_hard_close(monkeypatch):
+    smoke = _load_smoke_module()
+    monkeypatch.delenv("FITMAS_CANONICAL_PLANNING_PROVIDER", raising=False)
+    scenario = smoke.SmokeScenario(
+        name="move_hard_close",
+        prompt="deplace la sortie longue de jeudi a mercredi",
+        expectation="guarded_no_commit",
+    )
+    before = smoke.DbSnapshot(events=(), pending=(), sessions=(), latest_turn=None)
+    after = smoke.DbSnapshot(
+        events=(),
+        pending=({"id": 3, "status": "pending", "mutation_type": "plan_patch"},),
+        sessions=(),
+        latest_turn={
+            "response_mode": "plan_adaptation_pending_confirmation",
+            "pending_confirmation": True,
+            "assistant_message": "Tu confirmes ?",
+        },
+        turns=(
+            {
+                "id": 1,
+                "context_json": '{"canonical_planning_provider":{"result":"fallback_legacy"}}',
+            },
+        ),
+    )
+
+    result = smoke.evaluate_scenario_result(scenario, before, after)
+
+    assert not result.ok
+    assert "canonical planning provider did not handle supported planning turn" in result.reasons
+
+
+def test_smoke_fails_unclassified_active_legacy_fallback(monkeypatch):
+    smoke = _load_smoke_module()
+    monkeypatch.delenv("FITMAS_CANONICAL_PLANNING_PROVIDER", raising=False)
+    scenario = smoke.SmokeScenario(
+        name="memory_preference",
+        prompt="je prefere courir le matin",
+        expectation="no_plan_write",
+    )
+    before = smoke.DbSnapshot(events=(), pending=(), sessions=(), latest_turn=None)
+    after = smoke.DbSnapshot(
+        events=(),
+        pending=(),
+        sessions=(),
+        latest_turn={
+            "response_mode": "no_change_composed",
+            "mutation_applied": False,
+            "assistant_message": "C'est note.",
+        },
+        turns=(
+            {"id": 1, "context_json": '{"legacy_decide":{"legacy_skipped":false}}'},
+        ),
+    )
+
+    result = smoke.evaluate_scenario_result(scenario, before, after)
+
+    assert not result.ok
+    assert "legacy fallback used without fallback census" in result.reasons
+
+
+def test_default_planning_provider_accepts_canonical_planning_and_pending_traces(monkeypatch):
+    smoke = _load_smoke_module()
+    monkeypatch.delenv("FITMAS_CANONICAL_PLANNING_PROVIDER", raising=False)
+    scenario = smoke.SmokeScenario(
+        name="move_easy_then_confirm",
+        prompt="deplace la recuperation",
+        expectation="coherent_commit_or_pending",
+        followups=("oui je confirme",),
+    )
+    before = smoke.DbSnapshot(events=(), pending=(), sessions=(), latest_turn=None)
+    after = smoke.DbSnapshot(
+        events=({"id": 7, "command_type": "move_session"},),
+        pending=({"id": 3, "status": "accepted", "mutation_type": "plan_patch"},),
+        sessions=(),
+        latest_turn={
+            "response_mode": "pending_accepted",
+            "mutation_applied": True,
+            "assistant_message": "C'est applique.",
+        },
+        turns=(
+            {
+                "id": 1,
+                "context_json": (
+                    '{"canonical_planning_provider":{"result":"handled"},'
+                    '"legacy_decide":{"legacy_skipped":true}}'
+                ),
+            },
+            {
+                "id": 2,
+                "context_json": '{"canonical_pending_provider":{"result":"handled"}}',
+            },
+        ),
+    )
+
+    result = smoke.evaluate_scenario_result(scenario, before, after)
+
+    assert result.ok
+    assert result.reasons == []
+
+
+def test_default_planning_provider_accepts_planning_runtime_mode_with_legacy_skipped(monkeypatch):
+    smoke = _load_smoke_module()
+    monkeypatch.delenv("FITMAS_CANONICAL_PLANNING_PROVIDER", raising=False)
+    scenario = smoke.SmokeScenario(
+        name="move_easy_then_confirm",
+        prompt="deplace la recuperation",
+        expectation="coherent_commit_or_pending",
+        followups=("oui je confirme",),
+    )
+    before = smoke.DbSnapshot(events=(), pending=(), sessions=(), latest_turn=None)
+    after = smoke.DbSnapshot(
+        events=({"id": 7, "command_type": "move_session"},),
+        pending=({"id": 3, "status": "accepted", "mutation_type": "plan_patch"},),
+        sessions=(),
+        latest_turn={
+            "response_mode": "pending_accepted",
+            "mutation_applied": True,
+            "assistant_message": "C'est applique.",
+        },
+        turns=(
+            {
+                "id": 1,
+                "response_mode": "planning_runtime_pending_confirmation",
+                "context_json": '{"legacy_decide":{"legacy_skipped":true}}',
+            },
+            {
+                "id": 2,
+                "context_json": '{"canonical_pending_provider":{"result":"handled"}}',
+            },
+        ),
     )
 
     result = smoke.evaluate_scenario_result(scenario, before, after)

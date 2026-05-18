@@ -59,13 +59,16 @@ def parse_coach_understanding_payload(payload: Mapping[str, Any] | None) -> Coac
     if FORBIDDEN_UNDERSTANDING_KEYS.intersection(payload.keys()):
         return None
     intent = str(payload.get("intent") or "general_answer")
+    signals = _signals(payload.get("extracted_signals"))
     try:
         return CoachUnderstanding(
             intent=intent,
             confidence=_confidence(payload.get("confidence"), default=0.5),
             user_summary=str(payload.get("user_summary") or "").strip(),
-            extracted_signals=_signals(payload.get("extracted_signals")),
-            requested_change=_requested_change(payload.get("requested_change")) if intent == "plan_change" else None,
+            extracted_signals=signals,
+            requested_change=_requested_change(payload.get("requested_change"), signals=signals)
+            if intent == "plan_change"
+            else None,
             pending_resolution=_pending_resolution(payload.get("pending_resolution"))
             if intent == "pending_response"
             else None,
@@ -99,13 +102,15 @@ def _signals(value: Any) -> tuple[UserSignal, ...]:
     return tuple(signals)
 
 
-def _requested_change(value: Any) -> RequestedPlanChange | None:
+def _requested_change(value: Any, *, signals: tuple[UserSignal, ...]) -> RequestedPlanChange | None:
     if not isinstance(value, Mapping):
         return None
+    source_ref = _normalize_plan_ref(value.get("source_ref")) or _source_ref_from_signals(signals)
+    target_ref = _normalize_plan_ref(value.get("target_ref")) or _target_ref_from_signals(signals)
     return RequestedPlanChange(
         kind=str(value.get("kind") or "unknown"),
-        source_ref=_normalize_plan_ref(value.get("source_ref")),
-        target_ref=_normalize_plan_ref(value.get("target_ref")),
+        source_ref=source_ref,
+        target_ref=target_ref,
         desired_sport=_optional_str(value.get("desired_sport")),
         desired_duration_min=_optional_int(value.get("desired_duration_min")),
         desired_intensity=_optional_str(value.get("desired_intensity")),
@@ -175,11 +180,57 @@ def _normalize_plan_ref(value: Any) -> str | None:
     text = _optional_str(value)
     if text is None:
         return None
-    if text.startswith("session:"):
-        raw_id = text.split(":", 1)[1].strip()
-        if raw_id.isdigit():
-            return f"session_id:{raw_id}"
+    for prefix in ("session_id:", "session:", "session_"):
+        if text.startswith(prefix):
+            raw_id = text.split(prefix, 1)[1].strip()
+            if raw_id.isdigit():
+                return f"session_id:{raw_id}"
+    for prefix in ("date:", "date_"):
+        if text.startswith(prefix):
+            raw_date = text.split(prefix, 1)[1].strip()
+            if _looks_like_iso_date(raw_date):
+                return f"date:{raw_date[:10]}"
+    for prefix in ("day:", "day_"):
+        if text.startswith(prefix):
+            raw_day = text.split(prefix, 1)[1].strip()
+            if _looks_like_iso_date(raw_day):
+                return f"date:{raw_day[:10]}"
+            if raw_day:
+                return f"day:{raw_day}"
+    if _looks_like_iso_date(text):
+        return f"date:{text[:10]}"
     return text
+
+
+def _source_ref_from_signals(signals: tuple[UserSignal, ...]) -> str | None:
+    for signal in signals:
+        payload = signal.payload
+        raw_id = payload.get("target_session_id") or payload.get("session_id") or payload.get("source_session_id")
+        if raw_id is None:
+            continue
+        text = str(raw_id).strip()
+        if text.isdigit():
+            return f"session_id:{text}"
+    return None
+
+
+def _target_ref_from_signals(signals: tuple[UserSignal, ...]) -> str | None:
+    for signal in signals:
+        payload = signal.payload
+        raw_ref = payload.get("target_ref") or payload.get("target_date") or payload.get("starts_on")
+        normalized = _normalize_plan_ref(raw_ref)
+        if normalized is not None:
+            return normalized
+    return None
+
+
+def _looks_like_iso_date(text: str) -> bool:
+    if len(text) < 10:
+        return False
+    if len(text) > 10 and text[10] not in {"T", " "}:
+        return False
+    parts = text[:10].split("-")
+    return len(parts) == 3 and all(part.isdigit() for part in parts)
 
 
 def _optional_int(value: Any) -> int | None:

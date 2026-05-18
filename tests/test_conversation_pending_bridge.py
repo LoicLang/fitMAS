@@ -138,6 +138,38 @@ class ConversationPendingBridgeTest(unittest.TestCase):
         self.assertNotEqual(refreshed.scheduled_date.date().isoformat(), target_date)
         self.assertEqual(refreshed_pending.status, "pending")
 
+    def test_pending_recheck_prompt_treats_coach_judgment_condition_as_acceptance(self) -> None:
+        captured: dict[str, str] = {}
+
+        def fake_request_json(**kwargs):
+            captured["system"] = kwargs["system"]
+            return {
+                "resolution_type": "accept_pending",
+                "confidence": 0.95,
+                "reason": "validation conditionnelle explicite",
+            }
+
+        result = conversation_pending_bridge.verify_pending_accept_resolution(
+            user_text="oui je confirme si tu penses que c'est propre",
+            pending_resolution=conversation_pending_bridge.PendingResolutionArtifact(
+                type="accept_pending",
+                reason="confirmation",
+                source="coach_understanding",
+            ),
+            pending_confirmation=SimpleNamespace(
+                id=1,
+                mutation_type="plan_patch",
+                reason="a confirmer",
+                summary="Deplacer recuperation",
+                source_text="deplace la recuperation",
+                decision_json="{}",
+            ),
+            request_json_fn=fake_request_json,
+        )
+
+        self.assertEqual(result, "accept_pending")
+        self.assertIn("si tu penses que c'est propre", captured["system"])
+
     def test_canonical_understanding_can_drive_pending_accept_when_enabled(self) -> None:
         session = self._scheduled_session()
         target_date = (session.scheduled_date.date() + timedelta(days=2)).isoformat()

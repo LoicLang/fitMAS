@@ -52,6 +52,24 @@ class PlanCandidateBuilder:
         target_date = resolved_change.target.date
         if session_id is None or target_date is None:
             return None
+        target_session = _single_session_on_date(self._context, target_date.isoformat(), excluding_session_id=session_id)
+        if target_session is not None:
+            second_session_id = _value(target_session, "id")
+            try:
+                second_session_id = int(second_session_id)
+            except (TypeError, ValueError):
+                return None
+            return PlanPatch(
+                operations=[
+                    PlanPatchOperation(
+                        operation_type="swap_sessions",
+                        target_session_id=session_id,
+                        second_session_id=second_session_id,
+                        rationale=resolved_change.reason,
+                    )
+                ],
+                coach_message=_USER_SAFE_PATCH_MESSAGE,
+            )
         return PlanPatch(
             operations=[
                 PlanPatchOperation(
@@ -168,6 +186,17 @@ def _candidate_ref(resolved_change: ResolvedPlanChange, patch: PlanPatch) -> str
 def _session_by_id(context: Any, session_id: int) -> Any | None:
     sessions = tuple(getattr(getattr(context, "plan", None), "scheduled_sessions", ()) or ())
     return next((session for session in sessions if _value(session, "id") == session_id), None)
+
+
+def _single_session_on_date(context: Any, target_date: str, *, excluding_session_id: int) -> Any | None:
+    sessions = tuple(getattr(getattr(context, "plan", None), "scheduled_sessions", ()) or ())
+    matches = tuple(
+        session
+        for session in sessions
+        if str(_value(session, "scheduled_date") or "")[:10] == target_date
+        and _value(session, "id") != excluding_session_id
+    )
+    return matches[0] if len(matches) == 1 else None
 
 
 def _light_duration(session: Any | None) -> int:

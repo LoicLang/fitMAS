@@ -13,7 +13,7 @@ import time
 import unicodedata
 import urllib.error
 import urllib.request
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any, Literal
@@ -40,6 +40,7 @@ class DbSnapshot:
     pending: tuple[dict[str, Any], ...]
     sessions: tuple[dict[str, Any], ...]
     latest_turn: dict[str, Any] | None
+    turns: tuple[dict[str, Any], ...] = field(default_factory=tuple)
 
 
 @dataclass(frozen=True, slots=True)
@@ -382,6 +383,9 @@ _PENDING_OR_BLOCKED_MODES = {
     "pending_accepted",
     "pending_accept_blocked",
 }
+_CANONICAL_PLANNING_PROVIDER_REQUIRED_SCENARIOS = frozenset(
+    {"move_easy_then_confirm", "swap_by_day", "move_hard_close"}
+)
 _MUTATION_CLAIM_MARKERS = (
     "echange fait",
     "swap fait",
@@ -444,7 +448,8 @@ def evaluate_scenario_result(
         warnings.append("assistant reply contains bracket placeholder")
     if _contains_internal_jargon(assistant_message):
         reasons.append("assistant reply leaks internal jargon")
-    if _canonical_planning_cutover_enabled():
+    reasons.extend(_unclassified_legacy_fallback_reasons(after.turns))
+    if _canonical_planning_guard_enabled():
         active_pending = _active_pending_rows(after)
         if len(active_pending) > 1:
             reasons.append("duplicate_pending")
@@ -455,6 +460,14 @@ def evaluate_scenario_result(
                 reasons.append("duplicate_pending")
             if mutation_applied and not event_delta:
                 reasons.append("pending acceptance marked mutation_applied without event")
+    if (
+        _canonical_planning_provider_enabled()
+        and scenario.name in _CANONICAL_PLANNING_PROVIDER_REQUIRED_SCENARIOS
+    ):
+        if not _has_canonical_planning_handled_trace(after.turns):
+            reasons.append("canonical planning provider did not handle supported planning turn")
+        if scenario.followups and after.pending and not _has_canonical_pending_handled_trace(after.turns):
+            reasons.append("canonical pending provider did not handle supported pending confirmation")
 
     if scenario.expectation == "guarded_no_commit":
         if event_delta:
@@ -557,6 +570,70 @@ def _canonical_planning_cutover_enabled() -> bool:
         "yes",
         "on",
     }
+
+
+def _canonical_planning_provider_enabled() -> bool:
+    raw = os.getenv("FITMAS_CANONICAL_PLANNING_PROVIDER")
+    if raw is None:
+        return True
+    return raw.strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _canonical_planning_guard_enabled() -> bool:
+    return _canonical_planning_cutover_enabled() or _canonical_planning_provider_enabled()
+
+
+def _has_canonical_planning_handled_trace(turns: tuple[dict[str, Any], ...]) -> bool:
+    for row in turns:
+        context = _turn_context(row)
+        provider = context.get("canonical_planning_provider")
+        legacy = context.get("legacy_decide")
+        if isinstance(provider, dict) and isinstance(legacy, dict):
+            if provider.get("result") == "handled" and legacy.get("legacy_skipped") is True:
+                return True
+        response_mode = str(row.get("response_mode") or "")
+        if response_mode.startswith("planning_runtime_") and isinstance(legacy, dict):
+            if legacy.get("legacy_skipped") is True:
+                return True
+    return False
+
+
+def _has_canonical_pending_handled_trace(turns: tuple[dict[str, Any], ...]) -> bool:
+    for row in turns:
+        context = _turn_context(row)
+        provider = context.get("canonical_pending_provider")
+        if isinstance(provider, dict) and provider.get("result") == "handled":
+            return True
+    return False
+
+
+def _unclassified_legacy_fallback_reasons(turns: tuple[dict[str, Any], ...]) -> list[str]:
+    try:
+        if str(BACKEND_SRC) not in sys.path:
+            sys.path.insert(0, str(BACKEND_SRC))
+        from fitmas.decision.fallback_census import (
+            unclassified_legacy_fallback_reasons as check_turn_context,
+        )
+    except Exception:
+        return []
+
+    reasons: list[str] = []
+    for row in turns:
+        for reason in check_turn_context(_turn_context(row)):
+            if reason not in reasons:
+                reasons.append(reason)
+    return reasons
+
+
+def _turn_context(row: dict[str, Any]) -> dict[str, Any]:
+    raw = row.get("context_json")
+    if not raw:
+        return {}
+    try:
+        context = json.loads(str(raw))
+    except (TypeError, ValueError):
+        return {}
+    return context if isinstance(context, dict) else {}
 
 
 def _active_pending_rows(snapshot: DbSnapshot) -> tuple[dict[str, Any], ...]:
@@ -1069,10 +1146,21 @@ def load_db_snapshot(db_path: Path) -> DbSnapshot:
                 connection,
                 """
                 select id, user_message, assistant_message, response_mode, mutation_type,
-                       mutation_applied, pending_confirmation, pending_confirmation_id, created_at
+                       mutation_applied, pending_confirmation, pending_confirmation_id,
+                       context_json, created_at
                 from conversation_turns
                 order by id desc
                 limit 1
+                """,
+            ),
+            turns=_fetch_all(
+                connection,
+                """
+                select id, user_message, assistant_message, response_mode, mutation_type,
+                       mutation_applied, pending_confirmation, pending_confirmation_id,
+                       context_json, created_at
+                from conversation_turns
+                order by id
                 """,
             ),
         )

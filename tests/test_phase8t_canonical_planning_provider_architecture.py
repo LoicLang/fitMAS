@@ -12,12 +12,12 @@ def _source(relative: str) -> str:
     return (SRC / relative).read_text(encoding="utf-8")
 
 
-def test_8t_canonical_planning_bridge_exists_and_is_opt_in() -> None:
+def test_8t_canonical_planning_bridge_exists_and_is_default_on_with_opt_out() -> None:
     source = _source("legacy/conversation_canonical_planning_bridge.py")
 
     assert "def canonical_planning_provider_enabled(" in source
     assert "FITMAS_CANONICAL_PLANNING_PROVIDER" in source
-    assert 'default=False' in source
+    assert 'default=True' in source
     assert "def should_use_canonical_planning_without_legacy(" in source
     assert "def handle_canonical_planning(" in source
     assert "run_planning_runtime_attempt_from_understanding" in source
@@ -63,3 +63,13 @@ def test_8t_smoke_wrapper_is_deterministic_only() -> None:
     assert "smoke-decision-runtime-canonical-readonly" in source
     assert "smoke-a-plus-api" not in source
     assert "smoke-real-conversations" not in source
+
+
+def test_8u_default_planning_smoke_wrapper_exists_without_provider_export() -> None:
+    source = (SCRIPTS / "smoke-decision-runtime-canonical-planning-default").read_text(encoding="utf-8")
+
+    assert "FITMAS_CANONICAL_PLANNING_PROVIDER=1" not in source
+    assert "unset FITMAS_CANONICAL_PLANNING_PROVIDER" in source
+    assert "smoke-a-plus-api" in source
+    assert "move_hard_close" in source
+    assert "move_easy_then_confirm" in source

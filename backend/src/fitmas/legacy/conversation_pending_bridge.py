@@ -258,6 +258,8 @@ def verify_pending_accept_resolution(
         "`ou est le souci ?`, `si on le met vendredi ?`) n'est PAS une acceptation: "
         "retourne needs_clarification ou modify_pending.\n"
         "Accept_pending exige une validation imperative et non interrogative du pending actif.\n"
+        "Une validation conditionnelle sur ton jugement de coach (`oui je confirme si tu penses que c'est propre`, "
+        "`vas-y si c'est coherent`) reste une acceptation: le backend revalide ensuite la securite sportive.\n"
         "Exemples: `oui je confirme` -> accept_pending; `ok fais ca` -> accept_pending; "
         "`ok readapte la semaine` -> modify_pending; `j'attends` -> ignore; "
         "`donc je force ?` -> needs_clarification; "

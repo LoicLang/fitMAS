@@ -132,3 +132,48 @@ def test_run_legacy_coach_decision_records_trace() -> None:
     assert turn_context["legacy_decide"]["response_type"] == "no_change"
     assert turn_context["legacy_decide"]["decision_present"] is True
     assert "raw_decision" not in turn_context["legacy_decide"]
+    assert turn_context["fallback_census"][0]["owner"] == "legacy_provider"
+    assert turn_context["fallback_census"][0]["source"] == "legacy_decide"
+    assert turn_context["fallback_census"][0]["legacy_path"] == "CoachDecision"
+
+
+def test_run_legacy_coach_decision_records_planning_fallback_owner() -> None:
+    returned = SimpleNamespace(response_type="no_change", fitmas_message="ok")
+    provider = FakeProvider(
+        CoachDecisionResult(
+            artifact=legacy_decision_artifact_from_raw(returned),
+            raw_decision=returned,
+        )
+    )
+    turn_context: dict[str, object] = {
+        "canonical_planning_provider": {
+            "result": "fallback_legacy",
+            "fallback_reason": "unsupported_requested_change",
+        }
+    }
+    request = build_legacy_coach_decision_request(
+        user_text="ok",
+        user=_user(),
+        state=_state(),
+        turn_plan=SimpleNamespace(primary_intent="plan_mutation", secondary_intents=()),
+        coach_bundle=_coach_bundle(),
+        conversation_context=SimpleNamespace(time_context={}),
+        timeline_summary="",
+        execution_summary="",
+        temporal_summary="",
+        activity_claim_summary="",
+        signal_summary="",
+        selected_facts=[],
+        profile_summary="",
+        coach_reading_digest_text=None,
+        unresolved_execution_followup_text=None,
+        unresolved_execution_followup_session_id=None,
+        unresolved_execution_followup_target_date=None,
+        tool_context=None,
+    )
+
+    run_legacy_coach_decision(provider=provider, request=request, turn_context=turn_context)
+
+    assert turn_context["fallback_census"][0]["owner"] == "planning"
+    assert turn_context["fallback_census"][0]["source"] == "canonical_planning_provider"
+    assert turn_context["fallback_census"][0]["reason"] == "unsupported_requested_change"

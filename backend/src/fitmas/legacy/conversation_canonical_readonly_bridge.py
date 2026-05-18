@@ -47,6 +47,8 @@ def should_use_canonical_readonly_without_legacy(
         return False
     if understanding is None:
         return False
+    if _turn_plan_has_non_readonly_primary_intent(turn_plan):
+        return False
     if understanding.intent in _NON_READONLY_INTENTS:
         return False
     if understanding.intent == "plan_change" or understanding.requested_change is not None:
@@ -155,6 +157,13 @@ def _turn_plan_is_readonly_answer(turn_plan: Any) -> bool:
     if bool(getattr(turn_plan, "requires_truth_read", False)):
         return True
     return str(getattr(turn_plan, "truth_scope", "") or "") in {"plan_window", "facts", "memory"}
+
+
+def _turn_plan_has_non_readonly_primary_intent(turn_plan: Any) -> bool:
+    if turn_plan is None:
+        return False
+    primary_intent = str(getattr(turn_plan, "primary_intent", "") or "")
+    return primary_intent in _NON_READONLY_PRIMARY_INTENTS
 
 
 def _has_active_pending(pending_confirmation: Any) -> bool:

@@ -73,6 +73,16 @@ def test_readonly_gate_rejects_planning(monkeypatch) -> None:
     )
 
 
+def test_readonly_gate_rejects_plan_mutation_even_if_understanding_says_general_answer(monkeypatch) -> None:
+    monkeypatch.delenv("FITMAS_CANONICAL_READONLY_PROVIDER", raising=False)
+
+    assert not bridge.should_use_canonical_readonly_without_legacy(
+        understanding=_understanding("general_answer"),
+        turn_plan=SimpleNamespace(primary_intent="plan_mutation", secondary_intents=()),
+        pending_confirmation=None,
+    )
+
+
 def test_readonly_gate_rejects_active_pending(monkeypatch) -> None:
     monkeypatch.delenv("FITMAS_CANONICAL_READONLY_PROVIDER", raising=False)
 

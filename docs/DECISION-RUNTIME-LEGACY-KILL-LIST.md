@@ -12,7 +12,7 @@ read_when:
 
 ## Statut
 
-Phase 8T-A / 8T-B / 8T-C est livree localement.
+Phase 8Y est livree localement.
 
 Phase 8A ne supprime pas de code runtime ; elle a rendu le legacy visible.
 Phase 8B a prouve la parite sous flags.
@@ -251,6 +251,60 @@ Phase 8T-C dogfood le provider planning canonique avec le vrai stack API/LLM :
 - le flag planning provider reste off par defaut tant que le default-on
   progressif n'est pas decide.
 
+Phase 8U-A / 8U-B / 8U-C default-enable le provider planning canonique :
+
+- `FITMAS_CANONICAL_PLANNING_PROVIDER` est on par defaut, opt-out `0` ;
+- le provider planning trace toujours son etat : `prepared`, `handled`,
+  `blocked` ou `fallback_legacy` avec `fallback_reason` ;
+- le smoke API hard-fail les tours supportes qui ecrivent ou confirment sans
+  trace canonique `handled` ;
+- le wrapper
+  `scripts/smoke-decision-runtime-canonical-planning-default` prouve le
+  default-on sans exporter le flag provider ;
+- `LLMUnderstandingService` canonicalise les refs typees observees en prod-like
+  dogfood : `session_3`, `date_YYYY-MM-DD`, `day:YYYY-MM-DD`, ISO brut, et
+  `target_session_id` porte par `extracted_signals.payload` ;
+- `ReferenceResolver` accepte ces variantes machine et continue de refuser les
+  references libres non typees ;
+- `CoachDecision` reste fallback planning seulement pour les demandes non
+  supportees ou les fallbacks explicites documentes.
+
+Phase 8V reduit les fallbacks planning restants sans rouvrir `decide()` :
+
+- `ReferenceResolver` transforme une ref `date:` / `day:` en ref session
+  seulement si le role planning exige une seance et qu'une seule
+  `ScheduledSession` existe sur cette date ;
+- `swap_by_day` est maintenant un scenario obligatoire du smoke canonique ;
+- le read-only provider ne peut plus preempter un `plan_mutation` meme si
+  l'Understanding sort `general_answer` ;
+- le planning provider peut utiliser un `TurnPlan` type pour reconstruire un
+  `RequestedPlanChange(kind="swap")` quand l'Understanding a des refs non
+  exploitables ;
+- les sidecars faibles de planning ne forcent plus un fallback legacy, mais les
+  vrais signaux commande restent bloquants.
+
+Phase 8W rend tout fallback actif audit-able avant suppression :
+
+- `decision/fallback_census.py` est le ledger unique des fallbacks runtime
+  encore actifs ;
+- `CoachDecision` ne peut plus etre appele par `conversation_decide_bridge`
+  sans inscrire `owner`, `source`, `reason`, `legacy_path`, `next_step` et
+  `severity` dans `turn_context.fallback_census` ;
+- le smoke API fail tout `legacy_decide.legacy_skipped=false` sans census ;
+- un fallback documente peut rester temporairement, mais un fallback non
+  classe est une regression bloquante.
+
+Phase 8X / 8Y retirent l'autorite legacy de la lane `move_hard_close` :
+
+- `TurnPlan.planning_action="move_session"` peut produire un
+  `RequestedPlanChange(kind="move")` depuis refs source/target typees ;
+- un move vers une date occupee par une seule seance devient une candidate
+  canonique `swap_sessions` ;
+- `move_hard_close` est dans la liste des scenarios smoke qui exigent
+  `canonical_planning_provider.result=handled` et `legacy_skipped=true` ;
+- le wrapper default-on execute `move_hard_close`, donc une regression vers le
+  candidate flow legacy est bloquante.
+
 Regle d'arbitrage :
 
 ```text
@@ -283,7 +337,7 @@ Un chemin legacy non documente est une regression.
 | `FITMAS_CANONICAL_NON_PLANNING_CUTOVER` | on par defaut, opt-out explicite | lance Understanding seulement si pending ou commands peuvent consommer l'artefact |
 | `FITMAS_CANONICAL_PROVIDER_NON_PLANNING` | on par defaut, opt-out explicite | saute le provider legacy quand l'Understanding non-planning est directement consommable |
 | `FITMAS_CANONICAL_READONLY_PROVIDER` | on par defaut, opt-out explicite | saute le provider legacy pour les replies read-only supportees via DecisionOutcome + ReplyComposer |
-| `FITMAS_CANONICAL_PLANNING_PROVIDER` | off par defaut, opt-in explicite | saute le provider legacy pour les plan_change supportes par RequestedPlanChange type |
+| `FITMAS_CANONICAL_PLANNING_PROVIDER` | on par defaut, opt-out explicite | saute le provider legacy pour les plan_change supportes par RequestedPlanChange type |
 | `FITMAS_COMMANDS_FROM_UNDERSTANDING` | on par defaut, opt-out explicite | autorise les commandes memoire/execution depuis `CoachUnderstanding.extracted_signals` |
 | `FITMAS_PENDING_FROM_UNDERSTANDING` | on par defaut, opt-out explicite | autorise la resolution pending depuis `CoachUnderstanding.pending_resolution` |
 

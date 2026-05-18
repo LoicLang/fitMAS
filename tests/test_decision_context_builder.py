@@ -90,26 +90,8 @@ def test_context_builder_builds_canonical_context_from_scheduled_runtime_truth()
             timezone_name=user.timezone,
             days=[plan_day],
         )
-        session = s.ScheduledSession(
-            user_id=user.id,
-            day=today_key,
-            label=plan_day["label"],
-            scheduled_date=local_now.replace(hour=8, minute=0, second=0, microsecond=0).replace(tzinfo=None),
-            sport_type=plan_day["sport_type"],
-            session_type=plan_day["session_type"],
-            session_title=plan_day["session_title"],
-            session_goal=plan_day["session_goal"],
-            session_note=plan_day["session_note"],
-            session_description=plan_day["session_description"],
-            duration_min=plan_day["duration_min"],
-            intensity=plan_day["intensity"],
-            load_score=plan_day["load_score"],
-            priority=plan_day["priority"],
-            nutrition_focus=plan_day["nutrition_focus"],
-            flexibility=plan_day["flexibility"],
-            completion_status=plan_day["completion_status"],
-        )
-        db.add(session)
+        session = repo.get_scheduled_sessions(db, user.id)[0]
+        session.scheduled_date = local_now.replace(hour=8, minute=0, second=0, microsecond=0).replace(tzinfo=None)
         db.commit()
         db.refresh(session)
         event = InputEvent(

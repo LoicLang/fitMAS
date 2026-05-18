@@ -139,7 +139,7 @@ def _pending_from_understanding_default_enabled() -> bool:
 
 
 def _canonical_planning_provider_enabled() -> bool:
-    return _env_flag_enabled("FITMAS_CANONICAL_PLANNING_PROVIDER", default=False)
+    return _env_flag_enabled("FITMAS_CANONICAL_PLANNING_PROVIDER", default=True)
 
 
 def _has_active_pending(pending_confirmation) -> bool:

@@ -49,7 +49,7 @@ def test_understanding_to_turn_context_payload_is_safe() -> None:
     assert "plan_patch" not in repr(payload)
 
 
-def test_run_canonical_understanding_shadow_skips_when_flag_off(monkeypatch) -> None:
+def test_run_canonical_understanding_shadow_skips_when_provider_opted_out(monkeypatch) -> None:
     calls: list[str] = []
 
     class FakeService:
@@ -58,6 +58,7 @@ def test_run_canonical_understanding_shadow_skips_when_flag_off(monkeypatch) -> 
             return _understanding()
 
     monkeypatch.delenv("FITMAS_UNDERSTANDING_RUNTIME_SHADOW", raising=False)
+    monkeypatch.setenv("FITMAS_CANONICAL_PLANNING_PROVIDER", "0")
 
     result = bridge.run_canonical_understanding_shadow(
         service=FakeService(),
@@ -158,9 +159,19 @@ def test_default_non_planning_cutover_skips_read_only_lookup(monkeypatch) -> Non
 
 def test_canonical_planning_provider_runs_understanding_for_plan_mutation(monkeypatch) -> None:
     monkeypatch.delenv("FITMAS_UNDERSTANDING_RUNTIME_SHADOW", raising=False)
-    monkeypatch.setenv("FITMAS_CANONICAL_PLANNING_PROVIDER", "1")
+    monkeypatch.delenv("FITMAS_CANONICAL_PLANNING_PROVIDER", raising=False)
 
     assert bridge.should_run_canonical_understanding(
+        turn_plan=SimpleNamespace(primary_intent="plan_mutation", secondary_intents=(), has_plan_mutation=True),
+        pending_confirmation=None,
+    )
+
+
+def test_canonical_planning_provider_opt_out_skips_understanding_for_plan_mutation(monkeypatch) -> None:
+    monkeypatch.delenv("FITMAS_UNDERSTANDING_RUNTIME_SHADOW", raising=False)
+    monkeypatch.setenv("FITMAS_CANONICAL_PLANNING_PROVIDER", "0")
+
+    assert not bridge.should_run_canonical_understanding(
         turn_plan=SimpleNamespace(primary_intent="plan_mutation", secondary_intents=(), has_plan_mutation=True),
         pending_confirmation=None,
     )

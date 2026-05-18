@@ -1157,6 +1157,170 @@ Dette restante apres 8T-C :
 - `CoachDecision` reste provider/parser fallback tant que le flag planning
   canonique n'est pas active par defaut.
 
+Livres en Phase 8U-A / 8U-B / 8U-C :
+
+- `FITMAS_CANONICAL_PLANNING_PROVIDER` est active par defaut, opt-out `0` ;
+- l'Understanding planning est lance par defaut pour les tours
+  `plan_mutation` admissibles ;
+- le provider planning canonique trace explicitement `prepared`, `handled`,
+  `blocked` ou `fallback_legacy`, avec `fallback_reason` quand il ne prend pas
+  le tour ;
+- le smoke API verifie les traces, pas seulement l'absence de mensonge visible :
+  un tour planning supporte doit porter
+  `canonical_planning_provider.result=handled` et `legacy_decide.legacy_skipped=true` ;
+- la confirmation multi-turn supportee doit porter
+  `canonical_pending_provider.result=handled` ;
+- les aliases de refs typees renvoyes en vrai par le provider sont normalises
+  avant le gate planning : `session_3`, `date_YYYY-MM-DD`, `day:YYYY-MM-DD`,
+  ISO brut, et `target_session_id` dans `extracted_signals.payload` ;
+- `ReferenceResolver` accepte ces aliases machine sans ajouter de parsing sur
+  texte utilisateur libre ;
+- le recheck pending traite les validations conditionnelles sur le jugement du
+  coach comme des acceptations, puis le backend garde la validation sportive
+  avant write ;
+- `scripts/smoke-decision-runtime-canonical-planning-default` prouve le
+  default-on sans exporter `FITMAS_CANONICAL_PLANNING_PROVIDER=1` ;
+- verification 8U :
+  - ciblee : 70 passed ;
+  - wrapper default-on reel :
+    `./scripts/smoke-decision-runtime-canonical-planning-default`
+    -> `RESULT: OK (9 check(s))` ;
+  - complete :
+    `./scripts/test-backend -q` -> 1357 passed, 11 skipped,
+    11 subtests passed.
+
+Dette restante apres 8U-C :
+
+- les tours planning hors `RequestedPlanChange` supporte restent en fallback
+  legacy explicite ;
+- certains no-write replies restent corrects mais peu ambitieux quand la cible
+  planning manque ;
+- la prochaine phase logique est 8V : reduire les fallbacks legacy planning
+  restants sans rouvrir `decide()` comme autorite.
+
+Livres en Phase 8V :
+
+- les refs typees `date:` / `day:` sont promues vers `ScheduledSession` par
+  `ReferenceResolver` quand le role planning exige une seance et qu'une seule
+  seance existe sur cette date ;
+- le gate provider planning accepte les refs date/day machine pour `move`,
+  `swap`, `lighten` et `replace`, tout en refusant les refs libres ;
+- le provider read-only ne peut plus absorber un tour `plan_mutation` quand
+  l'Understanding LLM le classe a tort en `general_answer` ;
+- le provider planning peut utiliser le `TurnPlan` type comme source de refs
+  pour `swap_sessions` si l'Understanding renvoie un `plan_change` avec refs
+  non exploitables ;
+- les sidecars faibles de planning ne bloquent plus la lane canonique :
+  `record_preference` day/week/general et `record_availability` available sans
+  ancre durable ; les vrais signaux memoire/execution restent bloquants ;
+- `swap_by_day` devient un smoke obligatoire du provider planning canonique.
+
+Tests Phase 8V :
+
+- resolver + planning decision + bridges read-only/planning + smoke evaluator :
+  33 passed ;
+- smoke reel cible `swap_by_day` :
+  `mode=planning_runtime_pending_confirmation`, `RESULT: OK (1 check)` ;
+- wrapper default-on reel :
+  `./scripts/smoke-decision-runtime-canonical-planning-default`
+  -> `RESULT: OK (9 check(s))`.
+
+Dette restante apres 8V :
+
+- le bridge `TurnPlan -> RequestedPlanChange` est volontairement limite a
+  `swap_sessions` ; `move/lighten/replace` restent gouvernes par
+  l'Understanding canonique ou par fallback explicite quand les refs ne sont
+  pas machine ;
+- les commandes memoire faibles ne sont pas appliquees dans cette lane
+  planning ; une phase ulterieure devra fusionner commandes + planning dans un
+  `DecisionOutcome` unique avant de supprimer davantage de legacy ;
+- `decide()` reste fallback parser/provider pour les demandes planning non
+  supportees ou ambigues.
+
+Livres en Phase 8W :
+
+- `decision/fallback_census.py` devient le ledger canonique des fallbacks
+  runtime encore actifs ;
+- chaque entree porte un owner fini (`planning`, `pending`, `command`,
+  `reply`, `readonly`, `legacy_provider`, `clarification`, `integration`),
+  une source, une raison, un `legacy_path`, une prochaine action et une
+  severite ;
+- `conversation_decide_bridge.run_legacy_coach_decision()` enregistre une
+  entree `fallback_census` des que `CoachDecision` est encore appele ;
+- la classification reprend le contexte deja present :
+  `canonical_planning_provider`, `canonical_pending_provider`,
+  `canonical_readonly_reply`, puis fallback provider generique ;
+- le smoke API hard-fail tout `legacy_decide.legacy_skipped=false` sans
+  `fallback_census`, ce qui empeche un nouveau fallback magique.
+
+Tests Phase 8W :
+
+- module census + bridge legacy + evaluator smoke :
+  `tests/test_decision_fallback_census.py`,
+  `tests/test_conversation_decide_bridge.py`,
+  `tests/test_smoke_a_plus_api.py` -> 25 passed ;
+- wrapper default-on reel :
+  `./scripts/smoke-decision-runtime-canonical-planning-default`
+  -> `RESULT: OK (9 check(s))` ;
+- verification complete :
+  `./scripts/test-backend -q` -> 1371 passed, 11 skipped,
+  11 subtests passed.
+
+Dette restante apres 8W :
+
+- `fallback_census` rend les fallbacks visibles, mais ne les supprime pas ;
+- la prochaine suppression legacy doit viser les owners les plus frequents
+  observes en dogfood, en commencant par `planning` puis `reply/read-only` ;
+- le critere de suppression finale devient mesurable : zero active
+  `CoachDecision` fallback dans les lanes dogfood principales.
+
+Livres en Phase 8X :
+
+- la recovery `TurnPlan -> RequestedPlanChange` couvre maintenant
+  `move_session` en plus de `swap_sessions` ;
+- cette recovery reste bornee aux artefacts typees du TurnPlan
+  (`temporal_references` source/target), sans parser le texte utilisateur ;
+- `PlanCandidateBuilder` transforme un `move` vers un jour occupe par une
+  seule seance differente en `swap_sessions`, ce qui remplace le vieux
+  candidate flow pour `move_hard_close` ;
+- smoke reel cible `move_hard_close` :
+  `mode=planning_runtime_pending_confirmation`, provider canonique `handled`,
+  `legacy_skipped=true`.
+
+Livres en Phase 8Y :
+
+- `move_hard_close` est ajoute aux scenarios obligatoires du provider
+  planning canonique ;
+- `scripts/smoke-decision-runtime-canonical-planning-default` execute
+  maintenant `move_hard_close` en plus des lanes deja couvertes ;
+- la suppression legacy est appliquee comme gate produit : les lanes couvertes
+  ne peuvent plus passer par `CoachDecision` ou candidate fallback sans faire
+  echouer le smoke.
+
+Tests Phase 8X / 8Y :
+
+- pack cible planning/smoke :
+  `tests/test_conversation_canonical_planning_bridge.py`,
+  `tests/test_domain_planning_decision_service.py`,
+  `tests/test_smoke_a_plus_api.py`,
+  `tests/test_phase8t_canonical_planning_provider_architecture.py`
+  -> 50 passed ;
+- wrapper default-on reel :
+  `./scripts/smoke-decision-runtime-canonical-planning-default`
+  -> `RESULT: OK (10 check(s))` ;
+- verification complete :
+  `./scripts/test-backend -q` -> 1376 passed, 11 skipped,
+  11 subtests passed.
+
+Dette restante apres 8Y :
+
+- les scenarios planning non couverts par la gate restent possibles en legacy
+  explicite et doivent etre migres par ordre d'occurrence dans
+  `fallback_census` ;
+- `legacy/` ne peut etre supprime physiquement qu'apres zero fallback actif sur
+  les dogfood lanes principales et apres remplacement des replies restantes
+  par `DecisionOutcome`.
+
 Portee volontaire Phases 0-3 :
 
 ```text

@@ -1,0 +1,41 @@
+#!/usr/bin/env zsh
+
+set -euo pipefail
+
+script_dir="$(cd "$(dirname "$0")" && pwd)"
+repo_root="$(cd "$script_dir/.." && pwd)"
+cd "$repo_root"
+
+unset FITMAS_CANONICAL_PLANNING_PROVIDER
+unset FITMAS_UNDERSTANDING_RUNTIME_PLANNING_CUTOVER
+
+export FITMAS_UNDERSTANDING_RUNTIME_SHADOW=1
+export FITMAS_COMMANDS_FROM_UNDERSTANDING=1
+export FITMAS_PENDING_FROM_UNDERSTANDING=1
+
+echo "canonical planning default smoke:"
+echo "  FITMAS_CANONICAL_PLANNING_PROVIDER=${FITMAS_CANONICAL_PLANNING_PROVIDER:-default-on}"
+echo "  FITMAS_UNDERSTANDING_RUNTIME_PLANNING_CUTOVER=${FITMAS_UNDERSTANDING_RUNTIME_PLANNING_CUTOVER:-off}"
+
+./scripts/test-backend -q \
+  tests/test_conversation_canonical_planning_bridge.py \
+  tests/test_conversation_understanding_bridge.py::test_canonical_planning_provider_runs_understanding_for_plan_mutation \
+  tests/test_conversation_understanding_bridge.py::test_canonical_planning_provider_opt_out_skips_understanding_for_plan_mutation \
+  tests/test_phase8t_canonical_planning_provider_architecture.py \
+  tests/test_smoke_a_plus_api.py -k "default_planning_provider or canonical_planning"
+
+./scripts/smoke-a-plus-api \
+  --skip-generated-week \
+  --scenario move_hard_close \
+  --scenario move_easy_then_confirm \
+  --scenario swap_by_day \
+  --scenario lighten_tomorrow \
+  --scenario replace_swim_with_bike \
+  --scenario future_evening_unavailable \
+  --scenario fatigue_tomorrow \
+  --scenario avoid_back_to_back \
+  --scenario swim_unavailable_two_weeks \
+  --scenario confirm_without_pending \
+  --timeout 420
+
+echo "RESULT: OK"
