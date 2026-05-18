@@ -39,6 +39,26 @@ def test_resolver_resolves_session_id_and_date_refs() -> None:
     assert resolved.warnings == ()
 
 
+def test_resolver_accepts_id_session_ref_alias() -> None:
+    requested = RequestedPlanChange(
+        kind="move",
+        source_ref="id:42",
+        target_ref="date:2026-05-15",
+        desired_sport=None,
+        desired_duration_min=None,
+        desired_intensity=None,
+        reason="typed llm artifact",
+        risk_signals=(),
+    )
+
+    resolved = ReferenceResolver(_context(_session(42, "2026-05-14"))).resolve(requested)
+
+    assert resolved.source.kind == "session"
+    assert resolved.source.session_id == 42
+    assert resolved.target.kind == "date"
+    assert resolved.warnings == ()
+
+
 def test_resolver_resolves_day_ref_against_current_week() -> None:
     requested = RequestedPlanChange(
         kind="move",

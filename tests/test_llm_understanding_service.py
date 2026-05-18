@@ -92,6 +92,29 @@ def test_parse_coach_understanding_payload_normalizes_typed_session_ref_aliases(
     assert understanding.requested_change.target_ref == "date:2026-05-18"
 
 
+def test_parse_coach_understanding_payload_normalizes_id_session_ref_alias() -> None:
+    understanding = parse_coach_understanding_payload(
+        {
+            "intent": "plan_change",
+            "confidence": 0.86,
+            "user_summary": "deplace la seance id 3",
+            "extracted_signals": [],
+            "requested_change": {
+                "kind": "move",
+                "source_ref": "id:3",
+                "target_ref": "date:2026-05-18",
+                "reason": "demande typee",
+            },
+            "pending_resolution": None,
+            "clarification_need": None,
+        }
+    )
+
+    assert understanding is not None
+    assert understanding.requested_change is not None
+    assert understanding.requested_change.source_ref == "session_id:3"
+
+
 def test_parse_coach_understanding_payload_normalizes_underscore_ref_aliases() -> None:
     understanding = parse_coach_understanding_payload(
         {

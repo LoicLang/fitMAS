@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import builtins
 import importlib.util
 import sys
 from pathlib import Path
@@ -413,7 +414,7 @@ def test_default_planning_provider_accepts_canonical_planning_and_pending_traces
     assert result.reasons == []
 
 
-def test_default_planning_provider_accepts_planning_runtime_mode_with_legacy_skipped(monkeypatch):
+def test_default_planning_provider_rejects_planning_runtime_mode_without_canonical_provider_trace(monkeypatch):
     smoke = _load_smoke_module()
     monkeypatch.delenv("FITMAS_CANONICAL_PLANNING_PROVIDER", raising=False)
     scenario = smoke.SmokeScenario(
@@ -447,8 +448,45 @@ def test_default_planning_provider_accepts_planning_runtime_mode_with_legacy_ski
 
     result = smoke.evaluate_scenario_result(scenario, before, after)
 
-    assert result.ok
-    assert result.reasons == []
+    assert not result.ok
+    assert "canonical planning provider did not handle supported planning turn" in result.reasons
+
+
+def test_smoke_fails_closed_when_fallback_census_import_fails(monkeypatch):
+    smoke = _load_smoke_module()
+    monkeypatch.delenv("FITMAS_CANONICAL_PLANNING_PROVIDER", raising=False)
+    real_import = builtins.__import__
+
+    def broken_import(name, globals=None, locals=None, fromlist=(), level=0):
+        if name == "fitmas.decision.fallback_census":
+            raise ImportError("fallback census unavailable")
+        return real_import(name, globals, locals, fromlist, level)
+
+    monkeypatch.setattr(builtins, "__import__", broken_import)
+    scenario = smoke.SmokeScenario(
+        name="memory_preference",
+        prompt="je prefere courir le matin",
+        expectation="no_plan_write",
+    )
+    before = smoke.DbSnapshot(events=(), pending=(), sessions=(), latest_turn=None)
+    after = smoke.DbSnapshot(
+        events=(),
+        pending=(),
+        sessions=(),
+        latest_turn={
+            "response_mode": "no_change_composed",
+            "mutation_applied": False,
+            "assistant_message": "C'est note.",
+        },
+        turns=(
+            {"id": 1, "context_json": '{"legacy_decide":{"legacy_skipped":false}}'},
+        ),
+    )
+
+    result = smoke.evaluate_scenario_result(scenario, before, after)
+
+    assert not result.ok
+    assert "fallback_census_import_failed" in result.reasons
 
 
 def test_canonical_planning_fails_on_candidate_backend_jargon(monkeypatch):

@@ -591,10 +591,6 @@ def _has_canonical_planning_handled_trace(turns: tuple[dict[str, Any], ...]) -> 
         if isinstance(provider, dict) and isinstance(legacy, dict):
             if provider.get("result") == "handled" and legacy.get("legacy_skipped") is True:
                 return True
-        response_mode = str(row.get("response_mode") or "")
-        if response_mode.startswith("planning_runtime_") and isinstance(legacy, dict):
-            if legacy.get("legacy_skipped") is True:
-                return True
     return False
 
 
@@ -615,7 +611,7 @@ def _unclassified_legacy_fallback_reasons(turns: tuple[dict[str, Any], ...]) -> 
             unclassified_legacy_fallback_reasons as check_turn_context,
         )
     except Exception:
-        return []
+        return ["fallback_census_import_failed"]
 
     reasons: list[str] = []
     for row in turns:

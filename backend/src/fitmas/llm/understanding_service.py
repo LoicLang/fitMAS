@@ -180,7 +180,7 @@ def _normalize_plan_ref(value: Any) -> str | None:
     text = _optional_str(value)
     if text is None:
         return None
-    for prefix in ("session_id:", "session:", "session_"):
+    for prefix in ("session_id:", "session:", "session_", "id:"):
         if text.startswith(prefix):
             raw_id = text.split(prefix, 1)[1].strip()
             if raw_id.isdigit():

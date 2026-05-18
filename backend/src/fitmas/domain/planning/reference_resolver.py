@@ -43,7 +43,7 @@ class ReferenceResolver:
         raw = str(raw_ref or "").strip()
         if not raw:
             return PlanChangeReference(kind="unknown", raw=raw_ref, session_id=None, date=None)
-        if raw.startswith(("session_id:", "session_", "session:")):
+        if raw.startswith(("session_id:", "session_", "session:", "id:")):
             return self._session_ref(raw)
         if raw.startswith(("date:", "date_")):
             return self._date_ref(raw)
