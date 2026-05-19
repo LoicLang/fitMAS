@@ -37,7 +37,7 @@ def test_8t_planning_adapter_has_direct_understanding_entrypoint() -> None:
     source = _source("legacy/planning_runtime_adapter.py")
 
     assert "def run_planning_runtime_attempt_from_understanding(" in source
-    assert "coach_decision_artifact_to_understanding" in source
+    assert "coach_decision_artifact_to_understanding" not in source
 
 
 def test_8t_planning_command_service_reuses_matching_active_pending() -> None:

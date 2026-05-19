@@ -5,7 +5,7 @@ from types import SimpleNamespace
 from fitmas.domain.planning.evaluator import PlanCandidateEvaluator
 from fitmas.domain.planning.models import PlanningCandidateSet
 from fitmas.domain.planning.policy import SportPolicy
-from fitmas.plan_patch import PlanPatch, PlanPatchOperation
+from fitmas.plan_patch import PlanPatch, PlanPatchOperation, PlanPatchValidation
 from fitmas.plan_patch_candidate_evaluator import EvaluatedPlanPatchCandidate
 from fitmas.plan_patch_candidates import PlanPatchCandidate, PlanPatchCandidateValidation
 from fitmas.week_coherence import WeekCoherenceScore
@@ -23,6 +23,37 @@ def _candidate() -> PlanPatchCandidate:
         created_from_plan_id="plan_current",
         created_from_plan_version=1,
         candidate_ref="backend:move_session:42:2026-05-15",
+    )
+
+
+def _evaluated(candidate: PlanPatchCandidate | None = None) -> EvaluatedPlanPatchCandidate:
+    candidate = candidate or _candidate()
+    return EvaluatedPlanPatchCandidate(
+        candidate=candidate,
+        candidate_validation=PlanPatchCandidateValidation(
+            status="valid",
+            patch_count=1,
+            operation_count=1,
+            operation_results=(),
+        ),
+        patch=PlanPatch(coach_message="ok", operations=[]),
+        patch_validation=PlanPatchValidation(status="valid", operation_results=()),
+        week_context=None,
+        facts=None,
+        score=WeekCoherenceScore(
+            total=90,
+            recovery=90,
+            goal_alignment=90,
+            progression=90,
+            adherence=90,
+            readiness_fit=90,
+            constraint_fit=90,
+            risk=90,
+        ),
+        findings=(),
+        score_delta=0,
+        policy_hint="commit_safe",
+        evaluation_summary="ok",
     )
 
 
@@ -96,3 +127,20 @@ def test_policy_maps_existing_policy_result() -> None:
 
     assert decision.action == "block"
     assert decision.reason == "Aucune option d'adaptation valide."
+
+
+def test_policy_forces_pending_confirmation_when_requested() -> None:
+    decision = SportPolicy().decide(
+        (_evaluated(),),
+        force_confirmation_reason="Fenetre large: confirmation obligatoire.",
+    )
+
+    assert decision.action == "pending_confirmation"
+    assert decision.selected_candidate_id == "candidate_a"
+    assert decision.reason == "Fenetre large: confirmation obligatoire."
+    assert decision.requires_confirmation_reason == "Fenetre large: confirmation obligatoire."
+    assert decision.pending_event == {
+        "candidate_id": "candidate_a",
+        "reason": "Fenetre large: confirmation obligatoire.",
+        "risk_level": "medium",
+    }

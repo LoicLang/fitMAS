@@ -32,7 +32,8 @@ def test_8j_has_dedicated_canonical_planning_wrapper() -> None:
     assert "FITMAS_UNDERSTANDING_RUNTIME_SHADOW=1" in source
     assert "FITMAS_COMMANDS_FROM_UNDERSTANDING=1" in source
     assert "FITMAS_PENDING_FROM_UNDERSTANDING=1" in source
-    assert "FITMAS_UNDERSTANDING_RUNTIME_PLANNING_CUTOVER=1" in source
+    assert "FITMAS_UNDERSTANDING_RUNTIME_PLANNING_CUTOVER" not in source
+    assert "FITMAS_CANONICAL_PLANNING_PROVIDER" in source
     assert "move_easy_then_confirm" in source
     assert "swap_by_day" in source
     assert "lighten_tomorrow" in source
@@ -50,12 +51,10 @@ def test_8j_keeps_8i_wrapper_without_planning_cutover() -> None:
     assert "FITMAS_UNDERSTANDING_RUNTIME_PLANNING_CUTOVER=1" not in source
 
 
-def test_8j_planning_cutover_flag_stays_opt_in() -> None:
+def test_8j_retired_planning_cutover_flag_is_not_read() -> None:
     bridge = _source("legacy/conversation_understanding_bridge.py")
 
-    assert "FITMAS_UNDERSTANDING_RUNTIME_PLANNING_CUTOVER" in bridge
-    assert 'FITMAS_UNDERSTANDING_RUNTIME_PLANNING_CUTOVER", default=False' in bridge
-    assert 'setdefault("FITMAS_UNDERSTANDING_RUNTIME_PLANNING_CUTOVER"' not in bridge
+    assert "FITMAS_UNDERSTANDING_RUNTIME_PLANNING_CUTOVER" not in bridge
 
 
 def test_8j_decision_package_stays_pure() -> None:

@@ -76,7 +76,30 @@ def compose_canonical_readonly_reply(
         user_text=user_text,
         grounding_facts=grounding_facts,
     )
-    if result is None or not getattr(result, "text", None):
+    text = str((getattr(result, "text", None) if result is not None else None) or "").strip()
+    if not text:
+        text = _grounded_readonly_fallback(
+            understanding=understanding,
+            turn_plan=turn_plan,
+            grounding_facts=grounding_facts,
+        )
+        if text:
+            turn_context["canonical_readonly_reply"] = {
+                "intent": understanding.intent,
+                "source": "grounding_fallback",
+                "composed": True,
+                "verified": True,
+                "fallback_used": True,
+                "reason": getattr(result, "reason", None) if result is not None else "empty",
+            }
+            _trace_legacy_skipped(turn_context)
+            return ConversationTurnOutcome(
+                extraction=Extraction(confidence=understanding.confidence),
+                reply_text=text,
+                response_mode="canonical_readonly_answer",
+                decision=None,
+                mutation_applied=False,
+            )
         turn_context["canonical_readonly_reply"] = {
             "intent": understanding.intent,
             "source": "coach_understanding",
@@ -92,23 +115,10 @@ def compose_canonical_readonly_reply(
         "verified": bool(getattr(result, "verified", False)),
         "fallback_used": bool(getattr(result, "fallback_used", False)),
     }
-    turn_context["legacy_decide"] = {
-        "source": "coach_understanding_readonly",
-        "ok": True,
-        "error_type": None,
-        "artifact_kind": "none",
-        "response_type": "canonical_readonly_answer",
-        "decision_present": False,
-        "has_plan_patch": False,
-        "has_pending_resolution": False,
-        "memory_action_count": 0,
-        "execution_action_count": 0,
-        "decide_none_present": False,
-        "legacy_skipped": True,
-    }
+    _trace_legacy_skipped(turn_context)
     return ConversationTurnOutcome(
         extraction=Extraction(confidence=understanding.confidence),
-        reply_text=str(result.text),
+        reply_text=text,
         response_mode="canonical_readonly_answer",
         decision=None,
         mutation_applied=False,
@@ -144,6 +154,93 @@ def _answer_outcome_from_understanding(
             forbidden_claims=("mutation_committed", "pending_created", "plan_changed"),
         ),
     )
+
+
+def _grounded_readonly_fallback(
+    *,
+    understanding: CoachUnderstanding,
+    turn_plan: Any,
+    grounding_facts: tuple[str, ...],
+) -> str | None:
+    primary_intent = str(getattr(turn_plan, "primary_intent", "") or "")
+    if understanding.intent != "plan_lookup" and primary_intent != "plan_lookup":
+        return None
+    lines = tuple(_humanize_plan_window_line(line) for line in grounding_facts)
+    plan_lines = tuple(line for line in lines if line)
+    if not plan_lines:
+        return None
+    return "Voici ce que j'ai dans le planning : " + " ".join(plan_lines[:8])
+
+
+def _humanize_plan_window_line(line: str) -> str | None:
+    text = str(line or "").strip()
+    if not text.startswith("- ") or " id=" not in text:
+        return None
+    text = text.removeprefix("- ").strip()
+    date_part, _, rest = text.partition(" id=")
+    date_part = date_part.strip()
+    date_label = _date_label(date_part)
+    title = _quoted_title(rest)
+    duration = _duration_label(rest)
+    if not title:
+        title = _sport_label(rest)
+    pieces = [date_label, title]
+    if duration:
+        pieces.append(duration)
+    return f"{pieces[0]} : {', '.join(pieces[1:])}."
+
+
+def _date_label(value: str) -> str:
+    text = str(value or "").strip()
+    if "(" in text and ")" in text:
+        date_text, _, remainder = text.partition("(")
+        day_label, _, _ = remainder.partition(")")
+        date_text = date_text.strip()
+        day_label = day_label.strip()
+        if date_text and day_label:
+            return f"{day_label} {date_text}"
+    return text
+
+
+def _quoted_title(value: str) -> str | None:
+    parts = str(value or "").split('"')
+    if len(parts) >= 3:
+        title = parts[1].strip()
+        if title:
+            return title
+    return None
+
+
+def _duration_label(value: str) -> str | None:
+    for token in str(value or "").split():
+        if token.endswith("min"):
+            raw = token.removesuffix("min").strip()
+            return f"{raw} min" if raw else None
+    return None
+
+
+def _sport_label(value: str) -> str:
+    tokens = str(value or "").split()
+    if len(tokens) >= 2:
+        return tokens[1]
+    return "seance"
+
+
+def _trace_legacy_skipped(turn_context: dict[str, object]) -> None:
+    turn_context["legacy_decide"] = {
+        "source": "coach_understanding_readonly",
+        "ok": True,
+        "error_type": None,
+        "artifact_kind": "none",
+        "response_type": "canonical_readonly_answer",
+        "decision_present": False,
+        "has_plan_patch": False,
+        "has_pending_resolution": False,
+        "memory_action_count": 0,
+        "execution_action_count": 0,
+        "decide_none_present": False,
+        "legacy_skipped": True,
+    }
 
 
 def _turn_plan_is_readonly_answer(turn_plan: Any) -> bool:

@@ -115,6 +115,30 @@ def test_parse_coach_understanding_payload_normalizes_id_session_ref_alias() -> 
     assert understanding.requested_change.source_ref == "session_id:3"
 
 
+def test_parse_coach_understanding_payload_normalizes_session_id_underscore_alias() -> None:
+    understanding = parse_coach_understanding_payload(
+        {
+            "intent": "plan_change",
+            "confidence": 0.86,
+            "user_summary": "deplace la seance id 3",
+            "extracted_signals": [],
+            "requested_change": {
+                "kind": "move",
+                "source_ref": "session_id_3",
+                "target_ref": "date:2026-05-25",
+                "reason": "demande typee",
+            },
+            "pending_resolution": None,
+            "clarification_need": None,
+        }
+    )
+
+    assert understanding is not None
+    assert understanding.requested_change is not None
+    assert understanding.requested_change.source_ref == "session_id:3"
+    assert understanding.requested_change.target_ref == "date:2026-05-25"
+
+
 def test_parse_coach_understanding_payload_normalizes_underscore_ref_aliases() -> None:
     understanding = parse_coach_understanding_payload(
         {
@@ -170,6 +194,39 @@ def test_parse_coach_understanding_payload_fills_missing_source_ref_from_typed_s
     assert understanding.requested_change is not None
     assert understanding.requested_change.source_ref == "session_id:3"
     assert understanding.requested_change.target_ref == "date:2026-05-18"
+
+
+def test_parse_coach_understanding_payload_prefers_typed_signal_over_free_source_ref() -> None:
+    understanding = parse_coach_understanding_payload(
+        {
+            "intent": "plan_change",
+            "confidence": 0.86,
+            "user_summary": "deplace la recuperation id 3",
+            "extracted_signals": [
+                {
+                    "type": "planning",
+                    "label": "move_session",
+                    "status": "new",
+                    "severity": "low",
+                    "confidence": 0.9,
+                    "payload": {"target_session_id": 3},
+                }
+            ],
+            "requested_change": {
+                "kind": "move",
+                "source_ref": "recuperation mobilite id 3",
+                "target_ref": "date:2026-05-25",
+                "reason": "demande typee",
+            },
+            "pending_resolution": None,
+            "clarification_need": None,
+        }
+    )
+
+    assert understanding is not None
+    assert understanding.requested_change is not None
+    assert understanding.requested_change.source_ref == "session_id:3"
+    assert understanding.requested_change.target_ref == "date:2026-05-25"
 
 
 def test_parse_coach_understanding_payload_normalizes_day_iso_ref_as_date() -> None:

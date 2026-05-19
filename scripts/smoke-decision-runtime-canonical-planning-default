@@ -7,7 +7,6 @@ repo_root="$(cd "$script_dir/.." && pwd)"
 cd "$repo_root"
 
 unset FITMAS_CANONICAL_PLANNING_PROVIDER
-unset FITMAS_UNDERSTANDING_RUNTIME_PLANNING_CUTOVER
 
 export FITMAS_UNDERSTANDING_RUNTIME_SHADOW=1
 export FITMAS_COMMANDS_FROM_UNDERSTANDING=1
@@ -15,7 +14,6 @@ export FITMAS_PENDING_FROM_UNDERSTANDING=1
 
 echo "canonical planning default smoke:"
 echo "  FITMAS_CANONICAL_PLANNING_PROVIDER=${FITMAS_CANONICAL_PLANNING_PROVIDER:-default-on}"
-echo "  FITMAS_UNDERSTANDING_RUNTIME_PLANNING_CUTOVER=${FITMAS_UNDERSTANDING_RUNTIME_PLANNING_CUTOVER:-off}"
 
 ./scripts/test-backend -q \
   tests/test_conversation_canonical_planning_bridge.py \

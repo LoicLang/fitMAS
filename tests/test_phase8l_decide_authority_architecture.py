@@ -64,10 +64,10 @@ def test_8l_decision_package_stays_pure() -> None:
         assert not forbidden.intersection(imports), f"{path.name}: {forbidden.intersection(imports)}"
 
 
-def test_8l_planning_cutover_remains_default_off() -> None:
+def test_8l_retired_planning_cutover_flag_is_not_read() -> None:
     source = _source("legacy/conversation_understanding_bridge.py")
 
-    assert 'FITMAS_UNDERSTANDING_RUNTIME_PLANNING_CUTOVER", default=False' in source
+    assert "FITMAS_UNDERSTANDING_RUNTIME_PLANNING_CUTOVER" not in source
 
 
 def test_8l_smoke_wrapper_exists() -> None:

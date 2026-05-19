@@ -11,7 +11,7 @@ def test_cutover_harness_exists_and_sets_runtime_flags() -> None:
     assert SCRIPT.exists()
     source = SCRIPT.read_text(encoding="utf-8")
 
-    assert "FITMAS_PLANNING_RUNTIME_CUTOVER=1" in source
+    assert "FITMAS_PLANNING_RUNTIME_CUTOVER=1" not in source
     assert "FITMAS_HEARTBEAT_RUNTIME_CUTOVER=1" in source
     assert "FITMAS_HEARTBEAT_RUNTIME_VERIFY_ENFORCE=1" in source
 
@@ -19,7 +19,7 @@ def test_cutover_harness_exists_and_sets_runtime_flags() -> None:
 def test_cutover_harness_runs_targeted_tests_before_real_smokes() -> None:
     source = SCRIPT.read_text(encoding="utf-8")
 
-    test_index = source.index("tests/test_phase8b_planning_cutover.py")
+    test_index = source.index("tests/test_phase9a_legacy_physical_delete_architecture.py")
     smoke_index = source.index("smoke-real-conversations")
     assert test_index < smoke_index
 

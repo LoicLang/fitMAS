@@ -4,6 +4,7 @@ from types import SimpleNamespace
 
 from fitmas.domain.planning.models import PlanningCommandResult, PlanningDecisionResult
 from fitmas.legacy.planning_outcome_adapter import planning_decision_to_outcome
+from fitmas.plan_patch import PlanPatch, PlanPatchOperation
 
 
 def _decision(kind: str, *, command_result: PlanningCommandResult | None = None) -> PlanningDecisionResult:
@@ -133,3 +134,128 @@ def test_adapter_does_not_expose_backend_candidate_ids_to_reply_context() -> Non
     outcome = planning_decision_to_outcome(decision)
 
     assert outcome.candidates == ("Remplacer la natation par recuperation active.",)
+
+
+def test_adapter_exposes_selected_patch_operation_summary_before_llm_rationale() -> None:
+    decision = PlanningDecisionResult(
+        kind="pending_confirmation",
+        selected_candidate_id="cand_1",
+        candidate_options=(),
+        reason="Option possible, confirmation recommandee.",
+        policy_decision=SimpleNamespace(risk_level="medium"),
+        selected_patch=PlanPatch(
+            coach_message="patch",
+            operations=(
+                PlanPatchOperation(
+                    operation_type="move_session",
+                    target_session_id=3,
+                    target_date="2026-05-25",
+                    rationale="move",
+                ),
+            ),
+        ),
+        evaluated_candidates=(
+            SimpleNamespace(candidate=SimpleNamespace(id="cand_1", rationale="Option vague avec jeudi")),
+        ),
+        command_result=PlanningCommandResult(
+            status="pending",
+            event_count=0,
+            pending_confirmation_id=44,
+            service_result=None,
+            payload={"selected_candidate_id": "cand_1"},
+        ),
+        pending_confirmation_id=44,
+    )
+
+    outcome = planning_decision_to_outcome(decision)
+
+    assert outcome.candidates[0] == "deplacer la seance ciblee au 2026-05-25 (lundi)"
+
+
+def test_adapter_exposes_multi_move_patch_as_one_user_safe_summary() -> None:
+    decision = PlanningDecisionResult(
+        kind="pending_confirmation",
+        selected_candidate_id="cand_1",
+        candidate_options=(),
+        reason="Fenetre large: confirmation requise avant de deplacer plusieurs seances.",
+        policy_decision=SimpleNamespace(risk_level="medium"),
+        selected_patch=PlanPatch(
+            coach_message="patch",
+            operations=(
+                PlanPatchOperation(
+                    operation_type="move_session",
+                    target_session_id=1,
+                    target_date="2026-05-23",
+                    rationale="travel",
+                ),
+                PlanPatchOperation(
+                    operation_type="move_session",
+                    target_session_id=2,
+                    target_date="2026-05-25",
+                    rationale="travel",
+                ),
+            ),
+        ),
+        evaluated_candidates=(
+            SimpleNamespace(candidate=SimpleNamespace(id="cand_1", rationale="Option vague")),
+        ),
+        command_result=PlanningCommandResult(
+            status="pending",
+            event_count=0,
+            pending_confirmation_id=44,
+            service_result=None,
+            payload={"selected_candidate_id": "cand_1"},
+        ),
+        pending_confirmation_id=44,
+    )
+
+    outcome = planning_decision_to_outcome(decision)
+
+    assert outcome.candidates[0] == (
+        "deplacer les 2 seances touchees apres la fenetre, en gardant leur ordre: "
+        "2026-05-23 (samedi), puis 2026-05-25 (lundi)"
+    )
+    assert len(tuple(candidate for candidate in outcome.candidates if "move_session" in candidate)) == 0
+    assert outcome.explanation.impact["operation_count"] == 2
+    assert outcome.explanation.impact["move_session_count"] == 2
+    assert outcome.explanation.impact["target_dates"] == ("2026-05-23", "2026-05-25")
+    assert outcome.explanation.impact["requires_confirmation"] is True
+
+
+def test_adapter_exposes_replace_operation_sport_duration_and_intensity() -> None:
+    decision = PlanningDecisionResult(
+        kind="pending_confirmation",
+        selected_candidate_id="cand_1",
+        candidate_options=(),
+        reason="Option possible, confirmation recommandee.",
+        policy_decision=SimpleNamespace(risk_level="medium"),
+        selected_patch=PlanPatch(
+            coach_message="patch",
+            operations=(
+                PlanPatchOperation(
+                    operation_type="replace_session",
+                    target_session_id=4,
+                    new_sport_type="cycling",
+                    new_duration_min=30,
+                    new_intensity="easy",
+                    rationale="replace",
+                ),
+            ),
+        ),
+        evaluated_candidates=(),
+        command_result=PlanningCommandResult(
+            status="pending",
+            event_count=0,
+            pending_confirmation_id=44,
+            service_result=None,
+            payload={"selected_candidate_id": "cand_1"},
+        ),
+        pending_confirmation_id=44,
+    )
+
+    outcome = planning_decision_to_outcome(decision)
+
+    assert outcome.candidates[0] == (
+        "replace_session | target_session_id=4 | new_sport_type=cycling | "
+        "new_duration_min=30 | new_intensity=easy"
+    )

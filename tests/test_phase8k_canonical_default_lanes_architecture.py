@@ -34,10 +34,10 @@ def test_8k_defaults_commands_and_pending_from_understanding_on() -> None:
     assert "return _env_flag_enabled(" in pending_bridge
 
 
-def test_8k_keeps_planning_cutover_default_off() -> None:
+def test_8k_retired_planning_cutover_flag_is_not_read_by_understanding_bridge() -> None:
     understanding = _source("legacy/conversation_understanding_bridge.py")
 
-    assert 'FITMAS_UNDERSTANDING_RUNTIME_PLANNING_CUTOVER", default=False' in understanding
+    assert "FITMAS_UNDERSTANDING_RUNTIME_PLANNING_CUTOVER" not in understanding
 
 
 def test_8k_has_scoped_non_planning_understanding_gate() -> None:
@@ -54,7 +54,7 @@ def test_8k_default_smoke_wrapper_proves_defaults_without_exporting_command_or_p
 
     assert script.exists()
     source = script.read_text(encoding="utf-8")
-    assert "FITMAS_UNDERSTANDING_RUNTIME_PLANNING_CUTOVER=0" in source
+    assert "FITMAS_UNDERSTANDING_RUNTIME_PLANNING_CUTOVER" not in source
     assert "FITMAS_COMMANDS_FROM_UNDERSTANDING=1" not in source
     assert "FITMAS_PENDING_FROM_UNDERSTANDING=1" not in source
     assert "smoke-real-conversations" in source

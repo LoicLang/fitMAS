@@ -9,21 +9,20 @@ cd "$repo_root"
 export FITMAS_UNDERSTANDING_RUNTIME_SHADOW=1
 export FITMAS_COMMANDS_FROM_UNDERSTANDING=1
 export FITMAS_PENDING_FROM_UNDERSTANDING=1
-export FITMAS_UNDERSTANDING_RUNTIME_PLANNING_CUTOVER=1
 
 echo "canonical planning flags:"
 echo "  FITMAS_UNDERSTANDING_RUNTIME_SHADOW=$FITMAS_UNDERSTANDING_RUNTIME_SHADOW"
 echo "  FITMAS_COMMANDS_FROM_UNDERSTANDING=$FITMAS_COMMANDS_FROM_UNDERSTANDING"
 echo "  FITMAS_PENDING_FROM_UNDERSTANDING=$FITMAS_PENDING_FROM_UNDERSTANDING"
-echo "  FITMAS_UNDERSTANDING_RUNTIME_PLANNING_CUTOVER=$FITMAS_UNDERSTANDING_RUNTIME_PLANNING_CUTOVER"
 echo "  FITMAS_CANONICAL_PLANNING_PROVIDER=${FITMAS_CANONICAL_PLANNING_PROVIDER:-default-on}"
 
 ./scripts/test-backend -q \
-  tests/test_phase8j_canonical_planning_cutover_architecture.py \
+  tests/test_phase9a_legacy_physical_delete_architecture.py \
+  tests/test_conversation_canonical_planning_bridge.py \
   tests/test_smoke_a_plus_api.py -k "canonical_planning"
 
 ./scripts/test-backend -q \
-  tests/test_core_flows.py -k "canonical_pending_accept_survives_legacy_decide_none or canonical_pending_accept_preempts_pre_decide_candidate_flow or post_decide_candidate_flow_respects_active_pending_gate or canonical_planning_cutover_confirmation_keeps_single_pending_row"
+  tests/test_core_flows.py -k "canonical_pending_accept_survives_legacy_decide_none or canonical_pending_accept_preempts_legacy_decide or canonical_planning_cutover_confirmation_keeps_single_pending_row or canonical_planning_provider_preempts_legacy_decide"
 
 ./scripts/smoke-a-plus-api \
   --skip-generated-week \

@@ -5,6 +5,7 @@ from typing import Any
 
 from fitmas.decision import RequestedPlanChange
 from fitmas.domain.planning.models import PlanChangeReference, ResolvedPlanChange
+from fitmas.domain.planning.reference_tokens import is_iso_date, normalize_plan_ref, plan_ref_payload
 
 _DAY_INDEX = {
     "monday": 0,
@@ -21,6 +22,14 @@ _DAY_INDEX = {
     "vendredi": 4,
     "samedi": 5,
     "dimanche": 6,
+}
+_RELATIVE_DAY_OFFSET = {
+    "today": 0,
+    "aujourd'hui": 0,
+    "tomorrow": 1,
+    "demain": 1,
+    "yesterday": -1,
+    "hier": -1,
 }
 
 
@@ -43,19 +52,24 @@ class ReferenceResolver:
         raw = str(raw_ref or "").strip()
         if not raw:
             return PlanChangeReference(kind="unknown", raw=raw_ref, session_id=None, date=None)
-        if raw.startswith(("session_id:", "session_", "session:", "id:")):
-            return self._session_ref(raw)
-        if raw.startswith(("date:", "date_")):
-            return self._date_ref(raw)
-        if _is_iso_date(raw):
-            return self._date_ref(f"date:{raw}")
-        if raw.startswith("day:"):
-            return self._day_ref(raw)
+        if raw.startswith("sport_window:"):
+            return self._sport_window_ref(raw)
+        if raw.startswith("availability_window:"):
+            return self._availability_window_ref(raw)
+        normalized = normalize_plan_ref(raw, preserve_unknown=False)
+        if normalized is None:
+            return PlanChangeReference(kind="unknown", raw=raw, session_id=None, date=None)
+        if normalized.startswith("session_id:"):
+            return self._session_ref(normalized)
+        if normalized.startswith("date:"):
+            return self._date_ref(normalized)
+        if normalized.startswith("day:"):
+            return self._day_ref(normalized)
         return PlanChangeReference(kind="unknown", raw=raw, session_id=None, date=None)
 
     def _session_ref(self, raw: str) -> PlanChangeReference:
         try:
-            session_id = int(_ref_payload(raw))
+            session_id = int(plan_ref_payload(raw))
         except (IndexError, TypeError, ValueError):
             return PlanChangeReference(kind="unknown", raw=raw, session_id=None, date=None)
         if not any(_session_id(session) == session_id for session in _scheduled_sessions(self._context)):
@@ -64,15 +78,25 @@ class ReferenceResolver:
 
     def _date_ref(self, raw: str) -> PlanChangeReference:
         try:
-            resolved_date = date.fromisoformat(_ref_payload(raw)[:10])
+            resolved_date = date.fromisoformat(plan_ref_payload(raw)[:10])
         except (IndexError, ValueError):
             return PlanChangeReference(kind="unknown", raw=raw, session_id=None, date=None)
         return PlanChangeReference(kind="date", raw=raw, session_id=None, date=resolved_date)
 
     def _day_ref(self, raw: str) -> PlanChangeReference:
-        day_name = _ref_payload(raw).lower()
-        if _is_iso_date(day_name):
+        day_name = plan_ref_payload(raw).lower()
+        if is_iso_date(day_name):
             return self._date_ref(f"date:{day_name}")
+        if day_name in _RELATIVE_DAY_OFFSET:
+            today = _today(self._context)
+            if today is None:
+                return PlanChangeReference(kind="unknown", raw=raw, session_id=None, date=None)
+            return PlanChangeReference(
+                kind="date",
+                raw=raw,
+                session_id=None,
+                date=today + timedelta(days=_RELATIVE_DAY_OFFSET[day_name]),
+            )
         if day_name not in _DAY_INDEX:
             return PlanChangeReference(kind="unknown", raw=raw, session_id=None, date=None)
         today = _today(self._context)
@@ -80,6 +104,37 @@ class ReferenceResolver:
             return PlanChangeReference(kind="unknown", raw=raw, session_id=None, date=None)
         delta = (_DAY_INDEX[day_name] - today.weekday()) % 7
         return PlanChangeReference(kind="date", raw=raw, session_id=None, date=today + timedelta(days=delta))
+
+    def _sport_window_ref(self, raw: str) -> PlanChangeReference:
+        _, _, payload = raw.partition(":")
+        sport_type, starts_on, ends_on = _parse_sport_window_payload(payload)
+        if sport_type is None or starts_on is None or ends_on is None:
+            return PlanChangeReference(kind="unknown", raw=raw, session_id=None, date=None)
+        return PlanChangeReference(
+            kind="sport_window",
+            raw=raw,
+            session_id=None,
+            date=None,
+            sport_type=sport_type,
+            starts_on=starts_on,
+            ends_on=ends_on,
+        )
+
+    def _availability_window_ref(self, raw: str) -> PlanChangeReference:
+        _, _, payload = raw.partition(":")
+        availability, scope, starts_on, ends_on = _parse_availability_window_payload(payload)
+        if availability is None or scope is None or starts_on is None or ends_on is None:
+            return PlanChangeReference(kind="unknown", raw=raw, session_id=None, date=None)
+        return PlanChangeReference(
+            kind="availability_window",
+            raw=raw,
+            session_id=None,
+            date=None,
+            availability=availability,
+            scope=scope,
+            starts_on=starts_on,
+            ends_on=ends_on,
+        )
 
     def _promote_role_refs(
         self,
@@ -119,12 +174,17 @@ class ReferenceResolver:
             _append_once(warnings, "unresolved_source_ref")
         if target.raw and target.kind == "unknown":
             _append_once(warnings, "unresolved_target_ref")
-        if kind in {"move", "lighten", "replace", "swap"} and source.raw and source.kind != "session":
+        if (
+            kind in {"move", "lighten", "swap"}
+            or (kind == "replace" and source.kind != "sport_window")
+        ) and source.raw and source.kind != "session":
             _append_once(warnings, "unresolved_source_ref")
         if kind == "swap" and target.raw and target.kind != "session":
             _append_once(warnings, "unresolved_target_ref")
         if kind in {"move", "create"} and target.raw and target.kind != "date":
             _append_once(warnings, "unresolved_target_ref")
+        if kind == "constraint_window" and source.raw and source.kind != "availability_window":
+            _append_once(warnings, "unresolved_source_ref")
         return tuple(warnings)
 
 
@@ -165,24 +225,60 @@ def _today(context: Any) -> date | None:
         return None
 
 
-def _is_iso_date(raw: str) -> bool:
-    if len(raw) < 10:
-        return False
-    if len(raw) > 10 and raw[10] not in {"T", " "}:
-        return False
+def _parse_sport_window_payload(payload: str) -> tuple[str | None, date | None, date | None]:
+    parts = [part.strip() for part in str(payload or "").split(":")]
+    if len(parts) != 3:
+        return None, None, None
+    sport_type, raw_start, raw_end = parts
+    if not sport_type:
+        return None, None, None
     try:
-        date.fromisoformat(raw[:10])
+        starts_on = date.fromisoformat(raw_start[:10])
+        ends_on = date.fromisoformat(raw_end[:10])
     except ValueError:
-        return False
-    return True
+        return None, None, None
+    if ends_on < starts_on:
+        return None, None, None
+    return sport_type, starts_on, ends_on
 
 
-def _ref_payload(raw: str) -> str:
-    if ":" in raw:
-        return raw.split(":", 1)[1].strip()
-    if "_" in raw:
-        return raw.split("_", 1)[1].strip()
-    return raw
+def _parse_availability_window_payload(payload: str) -> tuple[str | None, str | None, date | None, date | None]:
+    parts = [part.strip() for part in str(payload or "").split(":")]
+    if len(parts) == 3:
+        raw_availability = "unavailable"
+        raw_scope, raw_start, raw_end = parts
+    elif len(parts) == 4:
+        raw_availability, raw_scope, raw_start, raw_end = parts
+    else:
+        return None, None, None, None
+    availability = _availability_status(raw_availability)
+    scope = _availability_window_scope(raw_scope)
+    if availability is None or scope is None:
+        return None, None, None, None
+    try:
+        starts_on = date.fromisoformat(raw_start[:10])
+        ends_on = date.fromisoformat(raw_end[:10])
+    except ValueError:
+        return None, None, None, None
+    if ends_on < starts_on:
+        return None, None, None, None
+    return availability, scope, starts_on, ends_on
+
+
+def _availability_status(value: str) -> str | None:
+    status = str(value or "").strip().lower()
+    if status in {"unavailable", "limited"}:
+        return status
+    return None
+
+
+def _availability_window_scope(value: str) -> str | None:
+    scope = str(value or "").strip().lower()
+    if scope in {"general", "time", "location"}:
+        return scope
+    if scope in {"day", "week", "planning", "plan"}:
+        return "general"
+    return None
 
 
 def _value(obj: Any, key: str) -> Any:

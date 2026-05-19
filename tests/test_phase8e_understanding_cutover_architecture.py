@@ -56,7 +56,7 @@ def test_8e_understanding_bridge_is_legacy_boundary() -> None:
     source = _source("legacy/conversation_understanding_bridge.py")
 
     assert "FITMAS_UNDERSTANDING_RUNTIME_SHADOW" in source
-    assert "FITMAS_UNDERSTANDING_RUNTIME_PLANNING_CUTOVER" in source
+    assert "FITMAS_UNDERSTANDING_RUNTIME_PLANNING_CUTOVER" not in source
     assert "run_canonical_understanding_shadow" in source
     assert "understanding_to_turn_context_payload" in source
     assert "from fitmas.llm.understanding_service import" in source
@@ -64,12 +64,12 @@ def test_8e_understanding_bridge_is_legacy_boundary() -> None:
 
 def test_8e_planning_runtime_accepts_canonical_understanding_input() -> None:
     adapter = _source("legacy/planning_runtime_adapter.py")
-    bridge = _source("legacy/conversation_planning_bridge.py")
+    bridge = _source("legacy/conversation_canonical_planning_bridge.py")
 
     assert "understanding: CoachUnderstanding | None" in adapter
     assert "if understanding is None" in adapter
     assert "understanding.requested_change" in adapter
-    assert "canonical_understanding" in bridge
+    assert "run_planning_runtime_attempt_from_understanding" in bridge
 
 
 def test_8e_decision_package_still_has_no_llm_or_legacy_imports() -> None:

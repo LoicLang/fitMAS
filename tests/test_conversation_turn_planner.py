@@ -110,6 +110,15 @@ def test_plan_conversation_turn_accepts_availability_constraint(monkeypatch) -> 
     assert "Demain soir c'est impossible pour moi" in captured["prompt"]
 
 
+def test_turn_planner_prompt_splits_memory_only_availability_from_planning_request() -> None:
+    system = planner._SYSTEM
+
+    assert "Disponibilite seule" in system
+    assert "ne declenche pas de planning" in system
+    assert "si le user demande d'adapter" in system
+    assert "secondary_intents inclut plan_mutation" in system
+
+
 def test_turn_plan_can_carry_grounding_requirements() -> None:
     plan = planner.ConversationTurnPlan(
         primary_intent="plan_mutation",

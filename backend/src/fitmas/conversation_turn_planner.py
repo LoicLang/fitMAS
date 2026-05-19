@@ -198,7 +198,8 @@ Regles:
 - Si le user demande un fait sur les activites recentes ("ma plus longue sortie recente", "plus grosse distance", "meilleure sortie"), primary_intent=activity_highlights, requires_truth_read=true, truth_scope=execution.
 - Si le user demande une lecture d'historique d'activite sans superlatif clair, primary_intent=activity_review, requires_truth_read=true, truth_scope=execution.
 - Une disponibilite datee claire ("demain soir impossible", "jeudi matin pas dispo", "voyage mercredi-vendredi", "je ne peux pas nager 2 semaines") est primary_intent=availability_constraint, needs_clarification=false, requires_truth_read=true, truth_scope=plan_window. Le manque de seance ou de sport cible n'est pas une clarification: le coach decisionnaire lira le plan et notera la contrainte.
-- Si cette disponibilite datee demande aussi explicitement de bouger/remplacer/adapter une seance, primary_intent=plan_mutation et availability_constraint est secondaire.
+- Disponibilite seule ("je voyage mercredi-vendredi") = availability_constraint, mutation_signal=false, planning_action=null; elle ne declenche pas de planning.
+- si le user demande d'adapter/bouger/remplacer le plan avec cette disponibilite, secondary_intents inclut plan_mutation, mutation_signal=true, planning_action=update_session.
 - Si la cible concrete manque, primary_intent=needs_clarification.
 - Un jour/date seul ("samedi", "vendredi", "demain") n'est PAS une mutation sans fil actif. Si Fil conversationnel recent=aucun et qu'il n'y a ni action explicite ni question de choix planning ouverte, primary_intent=needs_clarification, mutation_signal=false, temporal_references role=context.
 - Si le coach vient de poser une question de choix planning ("jeudi ou samedi ?", "quelle seance ?"), un jour/date seul peut repondre a ce fil et devenir plan_mutation ou calibration_answer selon le contexte.

@@ -1,85 +1,11 @@
 from __future__ import annotations
 
-import os
 from typing import Any, Callable
 
 from fitmas.conversation_contract import ConversationTurnOutcome
 from fitmas.decision import DecisionExplanation, DecisionOutcome, ReplyContract
 from fitmas.legacy.planning_outcome_adapter import planning_decision_to_outcome
-from fitmas.legacy.planning_runtime_adapter import run_planning_runtime_attempt_from_legacy_decision
 from fitmas.models import Extraction
-
-
-def planning_runtime_cutover_enabled() -> bool:
-    return str(os.getenv("FITMAS_PLANNING_RUNTIME_CUTOVER") or "").strip() not in {"0", "false", "False", "off"}
-
-
-def maybe_handle_planning_runtime_cutover(
-    *,
-    decision_artifact,
-    canonical_understanding=None,
-    understanding_planning_cutover_enabled: bool = False,
-    state,
-    conversation_context,
-    coach_bundle,
-    db,
-    user,
-    source_text: str,
-    reviewer_request_json_fn,
-    grounding_facts: tuple[str, ...],
-    planning_context_from_turn_state_fn: Callable[..., Any],
-    decision_reply_composer_fn: Callable[[], Any],
-    compose_no_change_reply_for_turn_fn: Callable[..., tuple[str, str | None]],
-    turn_context: dict[str, object] | None = None,
-    action_result: dict | None = None,
-) -> ConversationTurnOutcome | None:
-    if not planning_runtime_cutover_enabled():
-        return None
-    planning_context = planning_context_from_turn_state_fn(
-        state=state,
-        conversation_context=conversation_context,
-        coach_bundle=coach_bundle,
-    )
-    planning_understanding = (
-        canonical_understanding
-        if understanding_planning_cutover_enabled and getattr(canonical_understanding, "intent", None) == "plan_change"
-        else None
-    )
-    attempt = run_planning_runtime_attempt_from_legacy_decision(
-        decision_artifact=decision_artifact,
-        context=planning_context,
-        db=db,
-        user=user,
-        source_text=source_text,
-        coach_state_bundle=coach_bundle,
-        reviewer_request_json_fn=reviewer_request_json_fn,
-        understanding=planning_understanding,
-    )
-    if turn_context is not None and canonical_understanding is not None:
-        turn_context["planning_runtime_understanding_source"] = (
-            "canonical" if planning_understanding is not None else "legacy_adapter"
-        )
-    if attempt.result is not None:
-        return conversation_outcome_from_planning_runtime_result(
-            attempt.result,
-            db=db,
-            user=user,
-            user_text=source_text,
-            grounding_facts=grounding_facts,
-            original_reply=str(getattr(decision_artifact, "reply_hint", "") or ""),
-            turn_context=turn_context or {},
-            action_result=action_result or {},
-            decision_reply_composer_fn=decision_reply_composer_fn,
-            compose_no_change_reply_for_turn_fn=compose_no_change_reply_for_turn_fn,
-        )
-    if attempt.applicable:
-        return planning_runtime_unhandled_outcome(
-            reason=attempt.reason,
-            user_text=source_text,
-            grounding_facts=grounding_facts,
-            decision_reply_composer_fn=decision_reply_composer_fn,
-        )
-    return None
 
 
 def planning_runtime_unhandled_outcome(

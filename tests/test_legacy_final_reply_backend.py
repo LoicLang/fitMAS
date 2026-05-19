@@ -55,4 +55,27 @@ def test_backend_uses_committed_events_for_commit() -> None:
         _request("plan_committed")
     )
 
-    assert reply == "C'est cale vendredi."
+    assert reply == "Footing deplace vendredi."
+
+
+def test_backend_humanizes_machine_replace_summary_for_user() -> None:
+    request = _request("plan_pending")
+    request = ReplyRequest(
+        kind=request.kind,
+        user_text=request.user_text,
+        committed_events=request.committed_events,
+        blocked_reasons=request.blocked_reasons,
+        pending_summary=request.pending_summary,
+        memory_updates=request.memory_updates,
+        execution_updates=request.execution_updates,
+        candidate_summaries=(
+            "replace_session | target_session_id=4 | new_sport_type=cycling | "
+            "new_duration_min=30 | new_intensity=easy",
+        ),
+        explanation=request.explanation,
+        contract=request.contract,
+    )
+
+    reply = LegacyFinalReplyBackend(request_text_fn=lambda **_kwargs: "draft").compose(request)
+
+    assert reply == "Je te propose: remplacer la seance ciblee par velo facile, 30 min. Tu confirmes ?"

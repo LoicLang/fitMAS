@@ -1,9 +1,13 @@
 from __future__ import annotations
 
+from types import SimpleNamespace
+
 from fitmas import conversation_pipeline
-from fitmas.decision.reply_request import ReplyResult
+from fitmas.decision import DecisionExplanation, DecisionReplyComposer, ReplyContract
+from fitmas.decision.reply_request import ReplyRequest, ReplyResult
 from fitmas.domain.planning.models import PlanningCommandResult, PlanningDecisionResult
 from fitmas.legacy import conversation_planning_bridge
+from fitmas.legacy.final_reply_backend import LegacyFinalReplyBackend
 from fitmas.plan_mutation_service import PlanPatchServiceResult
 from fitmas.plan_patch import PlanPatch, PlanPatchOperation, PlanPatchValidation
 
@@ -50,6 +54,126 @@ def test_planning_runtime_mapper_uses_reply_composer(monkeypatch) -> None:
     assert outcome.pending_confirmation_id == 55
 
 
+def test_planning_runtime_pending_reply_uses_machine_candidate_over_grounding_drift() -> None:
+    backend = LegacyFinalReplyBackend(request_text_fn=lambda **_kwargs: "Je propose lundi 18. Tu confirmes ?")
+    composer = DecisionReplyComposer(reply_backend=backend)
+    result = _planning_result("pending_confirmation")
+    result = PlanningDecisionResult(
+        kind=result.kind,
+        selected_candidate_id=result.selected_candidate_id,
+        candidate_options=result.candidate_options,
+        reason=result.reason,
+        policy_decision=result.policy_decision,
+        selected_patch=PlanPatch(
+            coach_message="Deplacer Recuperation mobilite au lundi suivant.",
+            operations=[
+                PlanPatchOperation(
+                    operation_type="move_session",
+                    target_session_id=3,
+                    target_date="2026-05-25",
+                    rationale="Deplacer Recuperation mobilite au lundi suivant.",
+                )
+            ]
+        ),
+        evaluated_candidates=(
+            SimpleNamespace(
+                candidate=SimpleNamespace(rationale="Deplacer Recuperation mobilite au 2026-05-25")
+            ),
+        ),
+        command_result=result.command_result,
+        pending_confirmation_id=result.pending_confirmation_id,
+    )
+
+    outcome = conversation_planning_bridge.conversation_outcome_from_planning_runtime_result(
+        result,
+        user_text="deplace lundi prochain",
+        grounding_facts=("TemporalRefs: target monday -> 2026-05-18",),
+        decision_reply_composer_fn=lambda: composer,
+    )
+
+    assert "2026-05-25" in outcome.reply_text
+    assert "2026-05-18" not in outcome.reply_text
+
+
+def test_planning_runtime_pending_reply_uses_multi_move_machine_summary() -> None:
+    backend = LegacyFinalReplyBackend(request_text_fn=lambda **_kwargs: "Je propose une seance ciblee. Tu confirmes ?")
+    composer = DecisionReplyComposer(reply_backend=backend)
+    result = _planning_result("pending_confirmation")
+    result = PlanningDecisionResult(
+        kind=result.kind,
+        selected_candidate_id=result.selected_candidate_id,
+        candidate_options=result.candidate_options,
+        reason="Fenetre large: confirmation requise avant de deplacer plusieurs seances.",
+        policy_decision=result.policy_decision,
+        selected_patch=PlanPatch(
+            coach_message="patch",
+            operations=[
+                PlanPatchOperation(
+                    operation_type="move_session",
+                    target_session_id=1,
+                    target_date="2026-05-23",
+                    rationale="travel",
+                ),
+                PlanPatchOperation(
+                    operation_type="move_session",
+                    target_session_id=2,
+                    target_date="2026-05-25",
+                    rationale="travel",
+                ),
+            ],
+        ),
+        evaluated_candidates=(),
+        command_result=result.command_result,
+        pending_confirmation_id=result.pending_confirmation_id,
+    )
+
+    outcome = conversation_planning_bridge.conversation_outcome_from_planning_runtime_result(
+        result,
+        user_text="je voyage de mercredi a vendredi, adapte si besoin",
+        grounding_facts=(),
+        decision_reply_composer_fn=lambda: composer,
+    )
+
+    assert "2 seances touchees" in outcome.reply_text
+    assert "2026-05-23" in outcome.reply_text
+    assert "2026-05-25" in outcome.reply_text
+    assert "seance ciblee" not in outcome.reply_text
+    assert "confirmes" in outcome.reply_text.lower()
+
+
+def test_canonical_plan_committed_reply_uses_committed_event_summary() -> None:
+    backend = LegacyFinalReplyBackend(request_text_fn=lambda **_kwargs: "J'ai remplace la seance.")
+    request = ReplyRequest(
+        kind="plan_committed",
+        user_text="deplace lundi prochain",
+        committed_events=("Recuperation mobilite deplacee au 2026-05-25.",),
+        blocked_reasons=(),
+        pending_summary=None,
+        memory_updates=(),
+        execution_updates=(),
+        candidate_summaries=(),
+        explanation=DecisionExplanation(
+            decision_label="Adaptation appliquee",
+            reason_summary="Deplacement applique.",
+            evidence=(),
+            tradeoff=None,
+            impact={},
+            protected=("verite planning",),
+            next_step=None,
+        ),
+        contract=ReplyContract(
+            mode="plan_committed",
+            audience="telegram",
+            allowed_claims=("plan_committed",),
+            forbidden_claims=(),
+        ),
+    )
+
+    reply = backend.compose(request)
+
+    assert reply == "Recuperation mobilite deplacee au 2026-05-25."
+
+
 def test_plan_patch_pending_helper_uses_decision_reply_composer(monkeypatch) -> None:
     calls = []
 
@@ -85,18 +209,6 @@ def test_plan_patch_pending_helper_uses_decision_reply_composer(monkeypatch) -> 
     assert calls
     assert calls[0].kind == "plan_pending"
     assert reply == "Je te propose ce changement. Tu confirmes ?"
-
-
-def test_planning_runtime_cutover_is_enabled_by_default(monkeypatch) -> None:
-    monkeypatch.delenv("FITMAS_PLANNING_RUNTIME_CUTOVER", raising=False)
-
-    assert conversation_pipeline._planning_runtime_cutover_enabled() is True
-
-
-def test_planning_runtime_cutover_can_be_disabled_explicitly(monkeypatch) -> None:
-    monkeypatch.setenv("FITMAS_PLANNING_RUNTIME_CUTOVER", "0")
-
-    assert conversation_pipeline._planning_runtime_cutover_enabled() is False
 
 
 def test_planning_runtime_mapper_uses_fallback_if_composer_rejects(monkeypatch) -> None:

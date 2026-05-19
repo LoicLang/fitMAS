@@ -6,7 +6,7 @@ from typing import Any, Literal, Mapping
 
 from fitmas.decision import RequestedPlanChange
 
-ReferenceKind = Literal["session", "date", "unknown"]
+ReferenceKind = Literal["session", "date", "sport_window", "availability_window", "unknown"]
 PlanningDecisionKind = Literal["commit", "pending_confirmation", "pending_choice", "block"]
 
 
@@ -16,6 +16,11 @@ class PlanChangeReference:
     raw: str | None
     session_id: int | None
     date: date | None
+    sport_type: str | None = None
+    availability: str | None = None
+    scope: str | None = None
+    starts_on: date | None = None
+    ends_on: date | None = None
 
 
 @dataclass(frozen=True, slots=True)

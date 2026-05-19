@@ -29,6 +29,27 @@ def _patch() -> PlanPatch:
     )
 
 
+def _multi_move_patch() -> PlanPatch:
+    return PlanPatch(
+        coach_message="Candidate backend.",
+        confirmation_reason="Fenetre large.",
+        operations=[
+            PlanPatchOperation(
+                operation_type="move_session",
+                target_session_id=1,
+                target_date="2026-05-23",
+                rationale="travel",
+            ),
+            PlanPatchOperation(
+                operation_type="move_session",
+                target_session_id=2,
+                target_date="2026-05-25",
+                rationale="travel",
+            ),
+        ],
+    )
+
+
 def _decision(kind: str, *, patch: PlanPatch | None = None) -> PlanningDecisionResult:
     return PlanningDecisionResult(
         kind=kind,
@@ -103,6 +124,40 @@ def test_command_service_persists_pending_confirmation(monkeypatch) -> None:
     assert result.status == "pending"
     assert result.pending_confirmation_id == 99
     assert pending_rows[0]["mutation_type"] == "plan_patch"
+
+
+def test_command_service_persists_multi_operation_pending_confirmation(monkeypatch) -> None:
+    pending_rows = []
+
+    def fake_create_pending_mutation_confirmation(db, **kwargs):
+        pending_rows.append(kwargs)
+        return SimpleNamespace(id=101)
+
+    monkeypatch.setattr(
+        "fitmas.domain.planning.mutation_service.repo.create_pending_mutation_confirmation",
+        fake_create_pending_mutation_confirmation,
+    )
+    monkeypatch.setattr(
+        "fitmas.domain.planning.mutation_service.repo.get_active_pending_mutation_confirmation",
+        lambda db, user_id: None,
+    )
+
+    result = PlanningCommandService(db=object(), user=SimpleNamespace(id=1)).apply(
+        _decision("pending_confirmation", patch=_multi_move_patch()),
+        source_text="je suis absent du 20 au 22",
+        coach_state_bundle=None,
+        activities=(),
+        active_facts=(),
+    )
+
+    stored_patch = serialize_plan_patch_confirmation(_multi_move_patch())
+    assert result.status == "pending"
+    assert result.event_count == 0
+    assert result.pending_confirmation_id == 101
+    assert pending_rows[0]["mutation_type"] == "plan_patch"
+    assert pending_rows[0]["decision_json"] == stored_patch
+    assert "move_session" in pending_rows[0]["decision_json"]
+    assert "2026-05-25" in pending_rows[0]["decision_json"]
 
 
 def test_command_service_reuses_matching_active_pending_confirmation(monkeypatch) -> None:

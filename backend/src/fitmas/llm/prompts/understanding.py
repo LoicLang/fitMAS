@@ -39,7 +39,7 @@ def build_understanding_prompt(data: UnderstandingPromptInput) -> PromptRender:
                     "availability": "available | unavailable | limited | unknown",
                     "window_text": "availability window in user words",
                     "sport_type": "running | cycling | swimming | strength | null",
-                    "scope": "sport | day | week | general | null",
+                    "scope": "sport | day | week | general | time | location | null",
                     "starts_on": "YYYY-MM-DD or null",
                     "ends_on": "YYYY-MM-DD or null",
                     "preference": "preference text when action_type=record_preference",
@@ -52,7 +52,7 @@ def build_understanding_prompt(data: UnderstandingPromptInput) -> PromptRender:
             }
         ],
         "requested_change": {
-            "kind": "move | swap | lighten | replace | create | remove_optional | unknown",
+            "kind": "move | swap | lighten | replace | create | constraint_window | remove_optional | unknown",
             "source_ref": "typed reference or null",
             "target_ref": "typed reference or null",
             "desired_sport": "sport or null",

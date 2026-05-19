@@ -9,8 +9,6 @@ from fitmas.decision import CoachUnderstanding
 from fitmas.domain.planning.decision_service import decide_plan_change
 from fitmas.domain.planning.models import PlanningDecisionResult
 from fitmas.domain.planning.mutation_service import PlanningCommandService
-from fitmas.legacy.coach_decision_artifact import LegacyCoachDecisionArtifact
-from fitmas.legacy.coach_understanding_adapter import coach_decision_artifact_to_understanding
 
 
 @dataclass(frozen=True, slots=True)
@@ -18,51 +16,6 @@ class PlanningRuntimeAdapterAttempt:
     applicable: bool
     result: PlanningDecisionResult | None
     reason: str
-
-
-def maybe_run_planning_runtime_from_legacy_decision(
-    *,
-    decision_artifact: LegacyCoachDecisionArtifact,
-    context: Any,
-    db: Session,
-    user: Any,
-    source_text: str,
-    coach_state_bundle: Any | None,
-    reviewer_request_json_fn,
-) -> PlanningDecisionResult | None:
-    return run_planning_runtime_attempt_from_legacy_decision(
-        decision_artifact=decision_artifact,
-        context=context,
-        db=db,
-        user=user,
-        source_text=source_text,
-        coach_state_bundle=coach_state_bundle,
-        reviewer_request_json_fn=reviewer_request_json_fn,
-    ).result
-
-
-def run_planning_runtime_attempt_from_legacy_decision(
-    *,
-    decision_artifact: LegacyCoachDecisionArtifact,
-    context: Any,
-    db: Session,
-    user: Any,
-    source_text: str,
-    coach_state_bundle: Any | None,
-    reviewer_request_json_fn,
-    understanding: CoachUnderstanding | None = None,
-) -> PlanningRuntimeAdapterAttempt:
-    if understanding is None:
-        understanding = coach_decision_artifact_to_understanding(decision_artifact)
-    return run_planning_runtime_attempt_from_understanding(
-        understanding=understanding,
-        context=context,
-        db=db,
-        user=user,
-        source_text=source_text,
-        coach_state_bundle=coach_state_bundle,
-        reviewer_request_json_fn=reviewer_request_json_fn,
-    )
 
 
 def run_planning_runtime_attempt_from_understanding(

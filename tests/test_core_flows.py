@@ -21,7 +21,6 @@ import fitmas.llm as llm
 import fitmas.plan_mutation_service as plan_mutation_service
 from fitmas.adaptation import AdaptationResult
 from fitmas.api import app
-from fitmas.adaptation_proposal import AdaptationProposal, AdaptationProposalOperation
 from fitmas.conversation_contract import (
     ConversationPipelineDependencies,
     ConversationTurnInput,
@@ -544,7 +543,6 @@ class FitMASCoreFlowsTest(unittest.TestCase):
         original_extract_facts = api_messages.extract_facts
         original_understanding = conversation_understanding_bridge.run_canonical_understanding_shadow
         original_verify = conversation_pending_bridge.verify_pending_accept_resolution
-        original_candidate_flow = conversation_pipeline._maybe_handle_plan_adaptation_candidates
         old_pending_flag = os.environ.get("FITMAS_PENDING_FROM_UNDERSTANDING")
         try:
             os.environ["FITMAS_PENDING_FROM_UNDERSTANDING"] = "1"
@@ -589,12 +587,6 @@ class FitMASCoreFlowsTest(unittest.TestCase):
             conversation_understanding_bridge.run_canonical_understanding_shadow = fake_canonical_understanding
             conversation_pending_bridge.verify_pending_accept_resolution = lambda **kwargs: "accept_pending"
 
-            def fake_candidate_flow(**kwargs):
-                if kwargs.get("mode") == "post_decide_mixed":
-                    raise AssertionError("post-decide adaptation must not run after canonical pending accept")
-                return None
-
-            conversation_pipeline._maybe_handle_plan_adaptation_candidates = fake_candidate_flow
             response = self.client.post(
                 "/api/v0/messages",
                 json={"text": "oui je confirme si tu penses que c'est propre"},
@@ -605,7 +597,6 @@ class FitMASCoreFlowsTest(unittest.TestCase):
             api_messages.extract_facts = original_extract_facts
             conversation_understanding_bridge.run_canonical_understanding_shadow = original_understanding
             conversation_pending_bridge.verify_pending_accept_resolution = original_verify
-            conversation_pipeline._maybe_handle_plan_adaptation_candidates = original_candidate_flow
             if old_pending_flag is None:
                 os.environ.pop("FITMAS_PENDING_FROM_UNDERSTANDING", None)
             else:
@@ -621,7 +612,7 @@ class FitMASCoreFlowsTest(unittest.TestCase):
         self.assertEqual(turns[0].response_mode, "pending_accepted")
         self.assertTrue(turns[0].mutation_applied)
 
-    def test_canonical_pending_accept_preempts_pre_decide_candidate_flow(self) -> None:
+    def test_canonical_pending_accept_preempts_legacy_decide(self) -> None:
         from fitmas.decision import CoachUnderstanding, PendingResolution
         from fitmas.legacy import conversation_understanding_bridge
 
@@ -656,7 +647,6 @@ class FitMASCoreFlowsTest(unittest.TestCase):
         original_extract_facts = api_messages.extract_facts
         original_understanding = conversation_understanding_bridge.run_canonical_understanding_shadow
         original_verify = conversation_pending_bridge.verify_pending_accept_resolution
-        original_candidate_flow = conversation_pipeline._maybe_handle_plan_adaptation_candidates
         old_pending_flag = os.environ.get("FITMAS_PENDING_FROM_UNDERSTANDING")
         try:
             os.environ["FITMAS_PENDING_FROM_UNDERSTANDING"] = "1"
@@ -705,10 +695,6 @@ class FitMASCoreFlowsTest(unittest.TestCase):
             conversation_understanding_bridge.run_canonical_understanding_shadow = fake_canonical_understanding
             conversation_pending_bridge.verify_pending_accept_resolution = lambda **kwargs: "accept_pending"
 
-            def forbidden_candidate_flow(**kwargs):
-                raise AssertionError("pre-decide candidate flow must not run before canonical pending resolution")
-
-            conversation_pipeline._maybe_handle_plan_adaptation_candidates = forbidden_candidate_flow
             response = self.client.post(
                 "/api/v0/messages",
                 json={"text": "oui je confirme"},
@@ -719,7 +705,6 @@ class FitMASCoreFlowsTest(unittest.TestCase):
             api_messages.extract_facts = original_extract_facts
             conversation_understanding_bridge.run_canonical_understanding_shadow = original_understanding
             conversation_pending_bridge.verify_pending_accept_resolution = original_verify
-            conversation_pipeline._maybe_handle_plan_adaptation_candidates = original_candidate_flow
             if old_pending_flag is None:
                 os.environ.pop("FITMAS_PENDING_FROM_UNDERSTANDING", None)
             else:
@@ -773,10 +758,8 @@ class FitMASCoreFlowsTest(unittest.TestCase):
         original_understanding = conversation_understanding_bridge.run_canonical_understanding_shadow
         original_verify = conversation_pending_bridge.verify_pending_accept_resolution
         old_pending_flag = os.environ.get("FITMAS_PENDING_FROM_UNDERSTANDING")
-        old_planning_flag = os.environ.get("FITMAS_UNDERSTANDING_RUNTIME_PLANNING_CUTOVER")
         try:
             os.environ["FITMAS_PENDING_FROM_UNDERSTANDING"] = "1"
-            os.environ["FITMAS_UNDERSTANDING_RUNTIME_PLANNING_CUTOVER"] = "1"
             api_messages.plan_conversation_turn = lambda *args, **kwargs: SimpleNamespace(
                 primary_intent="plan_mutation",
                 secondary_intents=(),
@@ -823,10 +806,6 @@ class FitMASCoreFlowsTest(unittest.TestCase):
                 os.environ.pop("FITMAS_PENDING_FROM_UNDERSTANDING", None)
             else:
                 os.environ["FITMAS_PENDING_FROM_UNDERSTANDING"] = old_pending_flag
-            if old_planning_flag is None:
-                os.environ.pop("FITMAS_UNDERSTANDING_RUNTIME_PLANNING_CUTOVER", None)
-            else:
-                os.environ["FITMAS_UNDERSTANDING_RUNTIME_PLANNING_CUTOVER"] = old_planning_flag
 
         self.assertEqual(response.status_code, 200)
         self.db.expire_all()
@@ -884,10 +863,14 @@ class FitMASCoreFlowsTest(unittest.TestCase):
             .all()
         )
 
-        self.assertIn("option valide", result["assistant_message"]["text"].lower())
-        self.assertTrue(any(session.sport_type == "running" and session.duration_min == 30 for session in sessions))
-        self.assertEqual(events[0].command_type, "create_session")
-        self.assertTrue(events[0].user_visible_summary)
+        turns = repo.get_recent_conversation_turns(self.db, self.user.id, limit=1)
+        self.assertEqual(turns[0].response_mode, "legacy_decision_contract_disabled")
+        self.assertEqual(turns[0].mutation_type, "")
+        self.assertFalse(turns[0].mutation_applied)
+        self.assertFalse(turns[0].pending_confirmation)
+        self.assertIn("ancienne forme de decision", result["assistant_message"]["text"].lower())
+        self.assertFalse(any(session.sport_type == "running" and session.duration_min == 30 for session in sessions))
+        self.assertEqual(events, [])
 
     def test_high_impact_replace_session_requires_confirmation_before_apply(self) -> None:
         _, session = self._create_plan_for_today()
@@ -1089,16 +1072,22 @@ class FitMASCoreFlowsTest(unittest.TestCase):
             .all()
         )
 
-        self.assertIn("Tu confirmes", first["assistant_message"]["text"])
-        self.assertIsNotNone(pending)
-        self.assertEqual(pending.mutation_type, "plan_patch")
-        self.assertIn('"kind": "plan_patch"', pending.decision_json)
+        turns = (
+            self.db.query(s.ConversationTurnRecord)
+            .filter(s.ConversationTurnRecord.user_id == self.user.id)
+            .order_by(s.ConversationTurnRecord.id.asc())
+            .all()
+        )
+
+        self.assertIn("ancienne forme de decision", first["assistant_message"]["text"].lower())
+        self.assertIsNone(pending)
         self.assertIsNotNone(refreshed_session)
         self.assertEqual(refreshed_session.session_title, "Footing facile")
         self.assertNotEqual(refreshed_session.intensity, "hard")
-        self.assertIn("confirmes", second["assistant_message"]["text"].lower())
-        self.assertIsNotNone(active_pending)
+        self.assertIn("ancienne forme de decision", second["assistant_message"]["text"].lower())
+        self.assertIsNone(active_pending)
         self.assertEqual(events, [])
+        self.assertEqual([turn.response_mode for turn in turns], ["legacy_decision_contract_disabled"] * 2)
 
     def test_plan_patch_pending_accept_resolution_applies_pending_patch(self) -> None:
         _, session = self._create_plan_for_today()
@@ -1179,14 +1168,14 @@ class FitMASCoreFlowsTest(unittest.TestCase):
             .all()
         )
 
-        self.assertIn("Tu confirmes", first["assistant_message"]["text"])
-        self.assertIsNotNone(pending)
-        self.assertIn("seance remplacee", second["assistant_message"]["text"].lower())
-        self.assertEqual(refreshed_session.session_title, "Seance remplacee")
-        self.assertEqual(refreshed_session.intensity, "hard")
+        self.assertIn("ancienne forme de decision", first["assistant_message"]["text"].lower())
+        self.assertIsNone(pending)
+        self.assertNotIn("seance remplacee", second["assistant_message"]["text"].lower())
+        self.assertEqual(refreshed_session.session_title, "Footing facile")
+        self.assertNotEqual(refreshed_session.intensity, "hard")
         self.assertIsNone(active_pending)
-        self.assertEqual(all_pending[0].status, "accepted")
-        self.assertEqual(events[0].command_type, "replace_session")
+        self.assertEqual(all_pending, [])
+        self.assertEqual(events, [])
 
     def test_pending_accepts_matching_legacy_mutation_decision(self) -> None:
         _, session = self._create_plan_for_today()
@@ -1922,89 +1911,9 @@ class FitMASCoreFlowsTest(unittest.TestCase):
         refreshed_pending = self.db.get(s.PendingMutationConfirmation, pending.id)
         self.assertEqual(refreshed_pending.status, "pending")
 
-    def test_availability_plus_plan_mutation_can_enter_post_decide_candidate_flow(self) -> None:
+    def test_old_mixed_plan_adaptation_hook_is_absent(self) -> None:
         self.assertFalse(
             hasattr(conversation_pipeline, "_should_try_mixed_plan_adaptation_after_decide")
-        )
-
-    def test_active_pending_does_not_block_pre_decide_plan_mutation_flow(self) -> None:
-        turn_plan = SimpleNamespace(
-            primary_intent="plan_mutation",
-            secondary_intents=(),
-            has_plan_mutation=True,
-            mutation_signal=True,
-            planning_action="move_session",
-        )
-        pending = SimpleNamespace(status="pending")
-
-        self.assertTrue(
-            conversation_pipeline._should_use_plan_adaptation_candidate_flow(
-                turn_plan=turn_plan,
-                pending_confirmation=pending,
-                open_calibration_need=None,
-                scheduled_sessions=[object()],
-                mode="pre_decide_pure",
-            )
-        )
-
-    def test_active_pending_blocks_pre_decide_plan_question_without_mutation_signal(self) -> None:
-        turn_plan = SimpleNamespace(
-            primary_intent="plan_mutation",
-            secondary_intents=(),
-            has_plan_mutation=True,
-            mutation_signal=False,
-            planning_action="move_session",
-        )
-        pending = SimpleNamespace(status="pending")
-
-        self.assertFalse(
-            conversation_pipeline._should_use_plan_adaptation_candidate_flow(
-                turn_plan=turn_plan,
-                pending_confirmation=pending,
-                open_calibration_need=None,
-                scheduled_sessions=[object()],
-                mode="pre_decide_pure",
-            )
-        )
-
-    def test_active_pending_blocks_pre_decide_unknown_planning_action(self) -> None:
-        turn_plan = SimpleNamespace(
-            primary_intent="plan_mutation",
-            secondary_intents=(),
-            has_plan_mutation=True,
-            mutation_signal=True,
-            planning_action="unknown",
-        )
-        pending = SimpleNamespace(status="pending")
-
-        self.assertFalse(
-            conversation_pipeline._should_use_plan_adaptation_candidate_flow(
-                turn_plan=turn_plan,
-                pending_confirmation=pending,
-                open_calibration_need=None,
-                scheduled_sessions=[object()],
-                mode="pre_decide_pure",
-            )
-        )
-
-    def test_active_pending_blocks_pre_decide_mixed_availability_plan_turn(self) -> None:
-        turn_plan = SimpleNamespace(
-            primary_intent="plan_mutation",
-            secondary_intents=("availability_constraint",),
-            has_plan_mutation=True,
-            mutation_signal=True,
-            planning_action="move_session",
-        )
-        pending = SimpleNamespace(status="pending")
-
-        self.assertFalse(
-            conversation_pipeline._should_use_plan_adaptation_candidate_flow(
-                turn_plan=turn_plan,
-                pending_confirmation=pending,
-                open_calibration_need=None,
-                scheduled_sessions=[object()],
-                mode="pre_decide_pure",
-            )
         )
 
     def test_pending_pre_adaptation_gate_only_allows_modify_pending(self) -> None:
@@ -2012,100 +1921,6 @@ class FitMASCoreFlowsTest(unittest.TestCase):
         self.assertFalse(conversation_pending_bridge.pending_pre_adaptation_allows("ignore"))
         self.assertFalse(conversation_pending_bridge.pending_pre_adaptation_allows("needs_clarification"))
         self.assertFalse(conversation_pending_bridge.pending_pre_adaptation_allows("accept_pending"))
-
-    def test_post_decide_candidate_flow_respects_active_pending_gate(self) -> None:
-        _, session = self._create_plan_for_today()
-        pending = SimpleNamespace(status="pending", id=123)
-        turn_plan = SimpleNamespace(
-            primary_intent="plan_mutation",
-            secondary_intents=(),
-            has_plan_mutation=True,
-            confidence=0.9,
-            model_dump=lambda mode="json": {
-                "primary_intent": "plan_mutation",
-                "secondary_intents": [],
-                "has_plan_mutation": True,
-            },
-        )
-        original_generate = conversation_pipeline.generate_adaptation_proposal
-        try:
-            conversation_pipeline.generate_adaptation_proposal = (
-                lambda *args, **kwargs: (_ for _ in ()).throw(
-                    AssertionError("post-decide adaptation must be gated by active pending state")
-                )
-            )
-            outcome = conversation_pipeline._maybe_handle_plan_adaptation_candidates(
-                db=self.db,
-                user=self.user,
-                user_text="oui je confirme",
-                turn_plan=turn_plan,
-                pending_confirmation=pending,
-                open_calibration_need=None,
-                scheduled_sessions=[session],
-                coach_bundle=SimpleNamespace(),
-                grounding=None,
-                turn_context={"pending_pre_adaptation_gate": "accept_pending"},
-                mode="post_decide_mixed",
-                action_result={},
-            )
-        finally:
-            conversation_pipeline.generate_adaptation_proposal = original_generate
-
-        self.assertIsNone(outcome)
-
-    def test_plan_adaptation_reply_hard_guard_rejects_unknown_duration(self) -> None:
-        sessions = [
-            SimpleNamespace(duration_min=40),
-            SimpleNamespace(duration_min=25),
-        ]
-
-        self.assertFalse(
-            conversation_pipeline._plan_adaptation_reply_hard_guard_allows(
-                "Je te propose le footing de 45 minutes demain.",
-                scheduled_sessions=sessions,
-            )
-        )
-        self.assertTrue(
-            conversation_pipeline._plan_adaptation_reply_hard_guard_allows(
-                "Je te propose le footing de 40 minutes demain.",
-                scheduled_sessions=sessions,
-            )
-        )
-
-    def test_plan_adaptation_reply_hard_guard_rejects_wrong_relative_day(self) -> None:
-        today = get_local_now(self.user.timezone).date()
-        patch = PlanPatch(
-            coach_message="Deplacer Footing facile au vendredi",
-            operations=[
-                PlanPatchOperation(
-                    operation_type="move_session",
-                    target_session_id=10,
-                    target_date=(today + timedelta(days=2)).isoformat(),
-                    rationale="Courbatures.",
-                )
-            ],
-        )
-        sessions = [
-            SimpleNamespace(id=10, scheduled_date=datetime.combine(today, datetime.min.time()), duration_min=40),
-        ]
-        grounding = SimpleNamespace(local_date=today)
-
-        self.assertFalse(
-            conversation_pipeline._plan_adaptation_reply_hard_guard_allows(
-                "Je te propose de faire ton footing demain.",
-                scheduled_sessions=sessions,
-                patch=patch,
-                grounding=grounding,
-            )
-        )
-        self.assertTrue(
-            conversation_pipeline._plan_adaptation_reply_hard_guard_allows(
-                "Je te propose de déplacer ton footing vendredi.",
-                scheduled_sessions=sessions,
-                patch=patch,
-                grounding=grounding,
-            )
-        )
 
     def test_pending_survives_clarification_outcome(self) -> None:
         _, session = self._create_plan_for_today()
@@ -2858,62 +2673,7 @@ class FitMASCoreFlowsTest(unittest.TestCase):
         self.assertEqual(turns[0].response_mode, "execution_report_composed")
         self.assertEqual(context["final_reply_capability"], "execution_report")
 
-    def test_decide_none_health_signal_can_fall_back_to_candidate_flow(self) -> None:
-        self._create_plan_for_today()
-        original_plan_turn = api_messages.plan_conversation_turn
-        original_decide = api_messages.decide
-        original_extract_facts = api_messages.extract_facts
-        original_candidate_flow = conversation_pipeline._maybe_handle_plan_adaptation_candidates
-        candidate_modes: list[str] = []
-        try:
-            api_messages.plan_conversation_turn = lambda *args, **kwargs: SimpleNamespace(
-                primary_intent="health_signal",
-                secondary_intents=(),
-                mutation_signal=True,
-                has_plan_mutation=True,
-                requires_truth_read=True,
-                truth_scope="plan_window",
-                temporal_references=[],
-                confidence=0.91,
-            )
-            api_messages.decide = lambda *args, **kwargs: None
-            api_messages.extract_facts = lambda *args, **kwargs: []
-
-            def fake_candidate_flow(**kwargs):
-                mode = kwargs.get("mode", "pre_decide_pure")
-                candidate_modes.append(mode)
-                if len(candidate_modes) == 1:
-                    return None
-                return ConversationTurnOutcome(
-                    extraction=Extraction(confidence=0.85),
-                    reply_text="Je te propose d'alleger demain, sans rien appliquer sans ton feu vert. Tu confirmes ?",
-                    response_mode="plan_adaptation_pending_confirmation",
-                    mutation_applied=False,
-                    pending_confirmation=True,
-                    pending_confirmation_id=42,
-                )
-
-            conversation_pipeline._maybe_handle_plan_adaptation_candidates = fake_candidate_flow
-
-            result = self.client.post("/api/v0/messages", json={"text": "Je suis rince aujourd'hui, jambes lourdes"}).json()
-        finally:
-            api_messages.plan_conversation_turn = original_plan_turn
-            api_messages.decide = original_decide
-            api_messages.extract_facts = original_extract_facts
-            conversation_pipeline._maybe_handle_plan_adaptation_candidates = original_candidate_flow
-
-        turns = repo.get_recent_conversation_turns(self.db, self.user.id, limit=1)
-        context = json.loads(turns[0].context_json)
-
-        self.assertEqual(
-            result["assistant_message"]["text"],
-            "Je te propose d'alleger demain, sans rien appliquer sans ton feu vert. Tu confirmes ?",
-        )
-        self.assertEqual(candidate_modes, ["pre_decide_pure", "post_decide_mixed"])
-        self.assertEqual(turns[0].response_mode, "plan_adaptation_pending_confirmation")
-        self.assertEqual(context["decide_none_fallback"], "plan_adaptation_candidates")
-
-    def test_canonical_planning_provider_preempts_pre_decide_candidate_flow(self) -> None:
+    def test_canonical_planning_provider_preempts_legacy_decide(self) -> None:
         from fitmas.decision import CoachUnderstanding, RequestedPlanChange
         from fitmas.legacy import conversation_canonical_planning_bridge, conversation_understanding_bridge
 
@@ -2923,7 +2683,6 @@ class FitMASCoreFlowsTest(unittest.TestCase):
         original_decide = api_messages.decide
         original_extract_facts = api_messages.extract_facts
         original_understanding = conversation_understanding_bridge.run_canonical_understanding_shadow
-        original_candidate_flow = conversation_pipeline._maybe_handle_plan_adaptation_candidates
         original_canonical_planning = conversation_canonical_planning_bridge.handle_canonical_planning
         old_flag = os.environ.get("FITMAS_CANONICAL_PLANNING_PROVIDER")
         try:
@@ -2963,9 +2722,6 @@ class FitMASCoreFlowsTest(unittest.TestCase):
                 )
             )
 
-            def forbidden_candidate_flow(**kwargs):
-                raise AssertionError("pre-decide candidate flow must not run before canonical planning provider")
-
             def fake_canonical_planning(**kwargs):
                 kwargs["turn_context"]["canonical_planning_provider"] = {
                     "applicable": True,
@@ -2979,7 +2735,6 @@ class FitMASCoreFlowsTest(unittest.TestCase):
                     pending_confirmation=False,
                 )
 
-            conversation_pipeline._maybe_handle_plan_adaptation_candidates = forbidden_candidate_flow
             conversation_canonical_planning_bridge.handle_canonical_planning = fake_canonical_planning
 
             result = self.client.post("/api/v0/messages", json={"text": "Deplace la seance a vendredi"}).json()
@@ -2988,7 +2743,6 @@ class FitMASCoreFlowsTest(unittest.TestCase):
             api_messages.decide = original_decide
             api_messages.extract_facts = original_extract_facts
             conversation_understanding_bridge.run_canonical_understanding_shadow = original_understanding
-            conversation_pipeline._maybe_handle_plan_adaptation_candidates = original_candidate_flow
             conversation_canonical_planning_bridge.handle_canonical_planning = original_canonical_planning
             if old_flag is None:
                 os.environ.pop("FITMAS_CANONICAL_PLANNING_PROVIDER", None)
@@ -3052,149 +2806,6 @@ class FitMASCoreFlowsTest(unittest.TestCase):
         self.assertEqual(compose_calls, [])
         self.assertNotEqual(turns[0].response_mode, "close_turn_composed")
 
-    def test_plan_mutation_can_use_candidate_pipeline_without_big_decide(self) -> None:
-        _, session = self._create_plan_with_tomorrow_session()
-        now = get_local_now(self.user.timezone)
-        start = now.date()
-        end = start + timedelta(days=14)
-        from fitmas.plan_patch_adaptation_policy import AdaptationPolicyDecision
-        from fitmas.plan_patch_candidate_evaluator import EvaluatedPlanPatchCandidate
-        from fitmas.plan_patch_candidates import PlanPatchCandidate, PlanPatchCandidateValidation
-        from fitmas.week_coherence import WeekCoherenceScore
-
-        candidate_patch = PlanPatch(
-            operations=[
-                PlanPatchOperation(
-                    operation_type="move_session",
-                    target_session_id=session.id,
-                    target_date="2099-05-09",
-                    rationale="Nouveau creneau propose.",
-                )
-            ],
-            coach_message="Candidate only.",
-        )
-        candidate = PlanPatchCandidate(
-            id="cand_move",
-            patches=(candidate_patch,),
-            rationale="Deplacer la seance.",
-            expected_tradeoff="Recuperation a confirmer.",
-            confidence=0.82,
-            assumptions=(),
-            risk_notes=(),
-            created_from_plan_id="plan_current",
-            created_from_plan_version=1,
-        )
-        evaluated = EvaluatedPlanPatchCandidate(
-            candidate=candidate,
-            candidate_validation=PlanPatchCandidateValidation(
-                status="valid",
-                patch_count=1,
-                operation_count=1,
-                operation_results=(),
-                summary="valid",
-            ),
-            patch=candidate_patch,
-            patch_validation=PlanPatchValidation(status="valid", operation_results=(), summary="valid"),
-            week_context=None,
-            facts=None,
-            score=WeekCoherenceScore(
-                total=82,
-                recovery=80,
-                goal_alignment=85,
-                progression=80,
-                adherence=85,
-                readiness_fit=80,
-                constraint_fit=85,
-                risk=75,
-            ),
-            findings=(),
-            score_delta=-4,
-            policy_hint="ask_confirmation",
-            evaluation_summary="Option possible, confirmation recommandee.",
-        )
-        policy_decision = AdaptationPolicyDecision(
-            action="pending_confirmation",
-            selected_candidate_id="cand_move",
-            candidate_options=(),
-            reason="Option possible, confirmation recommandee.",
-            user_facing_reason="Option possible, confirmation recommandee.",
-            requires_confirmation_reason="Option possible, confirmation recommandee.",
-            risk_level="medium",
-        )
-
-        original_plan_turn = api_messages.plan_conversation_turn
-        original_decide = api_messages.decide
-        original_extract_facts = api_messages.extract_facts
-        original_generate = getattr(conversation_pipeline, "generate_plan_patch_candidates", None)
-        original_evaluate = getattr(conversation_pipeline, "evaluate_plan_patch_candidate", None)
-        original_policy = getattr(conversation_pipeline, "decide_adaptation_policy", None)
-        original_compose = conversation_pipeline.final_reply.compose_plan_adaptation_reply
-        try:
-            api_messages.plan_conversation_turn = lambda *args, **kwargs: SimpleNamespace(
-                primary_intent="plan_mutation",
-                secondary_intents=("availability_constraint",),
-                mutation_signal=True,
-                has_plan_mutation=True,
-                availability_constraint={
-                    "availability": "unavailable",
-                    "sport_type": "running",
-                    "starts_on": start.isoformat(),
-                    "ends_on": end.isoformat(),
-                    "scope": "sport",
-                },
-                confidence=0.93,
-            )
-
-            def fail_decide(*args, **kwargs):
-                raise AssertionError("decide() should not run when candidate pipeline handles the turn")
-
-            api_messages.decide = fail_decide
-            api_messages.extract_facts = lambda *args, **kwargs: []
-            conversation_pipeline.generate_plan_patch_candidates = lambda *args, **kwargs: (candidate,)
-            conversation_pipeline.evaluate_plan_patch_candidate = lambda *args, **kwargs: evaluated
-            conversation_pipeline.decide_adaptation_policy = lambda *args, **kwargs: policy_decision
-            conversation_pipeline.final_reply.compose_plan_adaptation_reply = (
-                lambda **kwargs: "Je te propose de bouger la seance a vendredi; tu confirmes ?"
-            )
-
-            result = self.client.post(
-                "/api/v0/messages",
-                json={"text": "Je ne peux pas courir deux semaines, adapte si besoin."},
-            ).json()
-        finally:
-            api_messages.plan_conversation_turn = original_plan_turn
-            api_messages.decide = original_decide
-            api_messages.extract_facts = original_extract_facts
-            if original_generate is None:
-                delattr(conversation_pipeline, "generate_plan_patch_candidates")
-            else:
-                conversation_pipeline.generate_plan_patch_candidates = original_generate
-            if original_evaluate is None:
-                delattr(conversation_pipeline, "evaluate_plan_patch_candidate")
-            else:
-                conversation_pipeline.evaluate_plan_patch_candidate = original_evaluate
-            if original_policy is None:
-                delattr(conversation_pipeline, "decide_adaptation_policy")
-            else:
-                conversation_pipeline.decide_adaptation_policy = original_policy
-            conversation_pipeline.final_reply.compose_plan_adaptation_reply = original_compose
-
-        turns = repo.get_recent_conversation_turns(self.db, self.user.id, limit=1)
-        context = json.loads(turns[0].context_json)
-        pending = repo.get_active_pending_mutation_confirmation(self.db, self.user.id)
-        working = self.db.query(s.WorkingMemoryEntry).order_by(s.WorkingMemoryEntry.id).all()
-
-        self.assertEqual(
-            result["assistant_message"]["text"],
-            "Je te propose de bouger la seance a vendredi; tu confirmes ?",
-        )
-        self.assertEqual(turns[0].response_mode, "plan_adaptation_pending_confirmation")
-        self.assertEqual(context["adaptation_candidate_flow"]["policy_action"], "pending_confirmation")
-        self.assertIn('"category": "availability"', turns[0].memory_writes_json)
-        self.assertEqual(working[0].key, f"unavailable_running_{start.isoformat()}_{end.isoformat()}")
-        self.assertIsNotNone(pending)
-        self.assertEqual(pending.mutation_type, "plan_patch")
-
     def test_sport_unavailable_without_matching_session_records_memory_without_candidate(self) -> None:
         self._create_plan_with_tomorrow_session()
         now = get_local_now(self.user.timezone)
@@ -3204,7 +2815,6 @@ class FitMASCoreFlowsTest(unittest.TestCase):
         original_plan_turn = api_messages.plan_conversation_turn
         original_decide = api_messages.decide
         original_extract_facts = api_messages.extract_facts
-        original_generate = conversation_pipeline.generate_plan_patch_candidates
         try:
             api_messages.plan_conversation_turn = lambda *args, **kwargs: SimpleNamespace(
                 primary_intent="plan_mutation",
@@ -3224,9 +2834,6 @@ class FitMASCoreFlowsTest(unittest.TestCase):
                 AssertionError("decide() should not run when no target sport session exists")
             )
             api_messages.extract_facts = lambda *args, **kwargs: []
-            conversation_pipeline.generate_plan_patch_candidates = lambda *args, **kwargs: (_ for _ in ()).throw(
-                AssertionError("candidate generator should not run without a matching sport session")
-            )
 
             result = self.client.post(
                 "/api/v0/messages",
@@ -3236,733 +2843,19 @@ class FitMASCoreFlowsTest(unittest.TestCase):
             api_messages.plan_conversation_turn = original_plan_turn
             api_messages.decide = original_decide
             api_messages.extract_facts = original_extract_facts
-            conversation_pipeline.generate_plan_patch_candidates = original_generate
 
         turns = repo.get_recent_conversation_turns(self.db, self.user.id, limit=1)
         pending = repo.get_active_pending_mutation_confirmation(self.db, self.user.id)
         working = self.db.query(s.WorkingMemoryEntry).order_by(s.WorkingMemoryEntry.id).all()
         events = self.db.query(s.PlanMutationEventRecord).all()
 
-        self.assertEqual(turns[0].response_mode, "availability_no_affected_session")
+        self.assertEqual(turns[0].response_mode, "planning_runtime_block")
         self.assertFalse(turns[0].pending_confirmation)
         self.assertIsNone(pending)
         self.assertEqual(events, [])
         self.assertEqual(working[0].key, f"unavailable_swimming_{start.isoformat()}_{end.isoformat()}")
         self.assertIn("aucune", result["assistant_message"]["text"].lower())
         self.assertIn("natation", result["assistant_message"]["text"].lower())
-
-    def test_plan_mutation_uses_snapshot_proposal_before_legacy_candidate_generator(self) -> None:
-        _, session = self._create_plan_for_today()
-        now = get_local_now(self.user.timezone)
-        tomorrow = (now + timedelta(days=1)).date()
-
-        from fitmas.plan_patch_adaptation_policy import AdaptationPolicyDecision
-        from fitmas.plan_patch_candidate_evaluator import EvaluatedPlanPatchCandidate
-        from fitmas.plan_patch_candidates import PlanPatchCandidate, PlanPatchCandidateValidation
-        from fitmas.week_coherence import WeekCoherenceScore
-
-        proposal = AdaptationProposal(
-            response_type="adaptation_proposal",
-            summary="running demain, repos preserve",
-            operations=[
-                AdaptationProposalOperation(
-                    op="move",
-                    source_ref=f"session:{session.id}",
-                    target_date=tomorrow.isoformat(),
-                    reason="demain est le meilleur compromis",
-                )
-            ],
-            requires_confirmation=True,
-            confidence=0.86,
-        )
-        evaluated_holder: dict[str, EvaluatedPlanPatchCandidate] = {}
-        policy_decision = AdaptationPolicyDecision(
-            action="pending_confirmation",
-            selected_candidate_id="snapshot_proposal",
-            candidate_options=(),
-            reason="Proposition snapshot a confirmer.",
-            user_facing_reason="Proposition snapshot a confirmer.",
-            requires_confirmation_reason="Proposition snapshot a confirmer.",
-            risk_level="medium",
-        )
-
-        original_plan_turn = api_messages.plan_conversation_turn
-        original_decide = api_messages.decide
-        original_extract_facts = api_messages.extract_facts
-        original_snapshot_generate = getattr(conversation_pipeline, "generate_adaptation_proposal", None)
-        original_generate = conversation_pipeline.generate_plan_patch_candidates
-        original_evaluate = conversation_pipeline.evaluate_plan_patch_candidate
-        original_policy = conversation_pipeline.decide_adaptation_policy
-        original_compose = conversation_pipeline.final_reply.compose_plan_adaptation_reply
-        try:
-            api_messages.plan_conversation_turn = lambda *args, **kwargs: SimpleNamespace(
-                primary_intent="plan_mutation",
-                secondary_intents=(),
-                mutation_signal=True,
-                has_plan_mutation=True,
-                confidence=0.93,
-            )
-            api_messages.decide = lambda *args, **kwargs: (_ for _ in ()).throw(
-                AssertionError("decide() should not run when snapshot proposal handles the turn")
-            )
-            api_messages.extract_facts = lambda *args, **kwargs: []
-            conversation_pipeline.generate_adaptation_proposal = lambda *args, **kwargs: proposal
-            conversation_pipeline.generate_plan_patch_candidates = lambda *args, **kwargs: (_ for _ in ()).throw(
-                AssertionError("legacy candidate generator should not run after snapshot proposal succeeds")
-            )
-
-            def fake_evaluate(*args, candidate, **kwargs):
-                evaluated = EvaluatedPlanPatchCandidate(
-                    candidate=candidate,
-                    candidate_validation=PlanPatchCandidateValidation(
-                        status="valid",
-                        patch_count=1,
-                        operation_count=1,
-                        operation_results=(),
-                    ),
-                    patch=candidate.patches[0],
-                    patch_validation=PlanPatchValidation(
-                        status="requires_confirmation",
-                        operation_results=(
-                            PlanPatchOperationValidation(
-                                operation_type="move_session",
-                                status="requires_confirmation",
-                                target_session_id=session.id,
-                                warning_codes=("same_sport_proximity",),
-                                warning_messages=("A confirmer.",),
-                            ),
-                        ),
-                        summary="Patch a confirmer.",
-                    ),
-                    week_context=None,
-                    facts=None,
-                    score=WeekCoherenceScore(
-                        total=82,
-                        recovery=80,
-                        goal_alignment=85,
-                        progression=80,
-                        adherence=85,
-                        readiness_fit=80,
-                        constraint_fit=85,
-                        risk=75,
-                    ),
-                    findings=(),
-                    score_delta=-2,
-                    policy_hint="ask_confirmation",
-                    evaluation_summary="Snapshot proposal possible.",
-                )
-                evaluated_holder["value"] = evaluated
-                return evaluated
-
-            conversation_pipeline.evaluate_plan_patch_candidate = fake_evaluate
-            conversation_pipeline.decide_adaptation_policy = lambda evaluated, **kwargs: policy_decision
-            conversation_pipeline.final_reply.compose_plan_adaptation_reply = (
-                lambda **kwargs: "Je te propose running demain; tu confirmes ?"
-            )
-
-            result = self.client.post(
-                "/api/v0/messages",
-                json={"text": "Dans ce cas running demain ?"},
-            ).json()
-        finally:
-            api_messages.plan_conversation_turn = original_plan_turn
-            api_messages.decide = original_decide
-            api_messages.extract_facts = original_extract_facts
-            if original_snapshot_generate is None:
-                delattr(conversation_pipeline, "generate_adaptation_proposal")
-            else:
-                conversation_pipeline.generate_adaptation_proposal = original_snapshot_generate
-            conversation_pipeline.generate_plan_patch_candidates = original_generate
-            conversation_pipeline.evaluate_plan_patch_candidate = original_evaluate
-            conversation_pipeline.decide_adaptation_policy = original_policy
-            conversation_pipeline.final_reply.compose_plan_adaptation_reply = original_compose
-
-        turn = repo.get_recent_conversation_turns(self.db, self.user.id, limit=1)[0]
-        context = json.loads(turn.context_json)
-        pending = repo.get_active_pending_mutation_confirmation(self.db, self.user.id)
-
-        self.assertEqual(result["assistant_message"]["text"], "Je te propose running demain; tu confirmes ?")
-        self.assertEqual(turn.response_mode, "plan_adaptation_pending_confirmation")
-        self.assertEqual(context["planning_snapshot_flow"]["policy_action"], "pending_confirmation")
-        self.assertIsNotNone(evaluated_holder.get("value"))
-        self.assertIsNotNone(pending)
-        self.assertEqual(pending.summary, f"Deplacer Footing facile au {tomorrow.isoformat()}")
-
-    def test_plan_mutation_with_health_secondary_uses_snapshot_before_decide(self) -> None:
-        _, session = self._create_plan_for_today()
-        now = get_local_now(self.user.timezone)
-        tomorrow = (now + timedelta(days=1)).date()
-
-        from fitmas.plan_patch_adaptation_policy import AdaptationPolicyDecision
-        from fitmas.plan_patch_candidate_evaluator import EvaluatedPlanPatchCandidate
-        from fitmas.plan_patch_candidates import PlanPatchCandidateValidation
-        from fitmas.week_coherence import WeekCoherenceScore
-
-        proposal = AdaptationProposal(
-            response_type="adaptation_proposal",
-            summary="courbatures aujourd'hui, running demain sans forcer",
-            operations=[
-                AdaptationProposalOperation(
-                    op="move",
-                    source_ref=f"session:{session.id}",
-                    target_date=tomorrow.isoformat(),
-                    reason="laisser passer les courbatures aujourd'hui",
-                )
-            ],
-            requires_confirmation=True,
-            confidence=0.82,
-        )
-        policy_decision = AdaptationPolicyDecision(
-            action="pending_confirmation",
-            selected_candidate_id="snapshot_proposal",
-            candidate_options=(),
-            reason="Proposition snapshot a confirmer.",
-            user_facing_reason="Proposition snapshot a confirmer.",
-            requires_confirmation_reason="Proposition snapshot a confirmer.",
-            risk_level="medium",
-        )
-
-        original_plan_turn = api_messages.plan_conversation_turn
-        original_decide = api_messages.decide
-        original_extract_facts = api_messages.extract_facts
-        original_snapshot_generate = getattr(conversation_pipeline, "generate_adaptation_proposal", None)
-        original_generate = conversation_pipeline.generate_plan_patch_candidates
-        original_evaluate = conversation_pipeline.evaluate_plan_patch_candidate
-        original_policy = conversation_pipeline.decide_adaptation_policy
-        original_compose = conversation_pipeline.final_reply.compose_plan_adaptation_reply
-        try:
-            api_messages.plan_conversation_turn = lambda *args, **kwargs: SimpleNamespace(
-                primary_intent="plan_mutation",
-                secondary_intents=("health_signal",),
-                mutation_signal=True,
-                has_plan_mutation=True,
-                confidence=0.91,
-            )
-            api_messages.decide = lambda *args, **kwargs: (_ for _ in ()).throw(
-                AssertionError("decide() should not run before snapshot handles mixed health+plan")
-            )
-            api_messages.extract_facts = lambda *args, **kwargs: []
-            conversation_pipeline.generate_adaptation_proposal = lambda *args, **kwargs: proposal
-            conversation_pipeline.generate_plan_patch_candidates = lambda *args, **kwargs: (_ for _ in ()).throw(
-                AssertionError("legacy candidate generator should not run after snapshot proposal succeeds")
-            )
-
-            def fake_evaluate(*args, candidate, **kwargs):
-                return EvaluatedPlanPatchCandidate(
-                    candidate=candidate,
-                    candidate_validation=PlanPatchCandidateValidation(
-                        status="valid",
-                        patch_count=1,
-                        operation_count=1,
-                        operation_results=(),
-                    ),
-                    patch=candidate.patches[0],
-                    patch_validation=PlanPatchValidation(
-                        status="requires_confirmation",
-                        operation_results=(
-                            PlanPatchOperationValidation(
-                                operation_type="move_session",
-                                status="requires_confirmation",
-                                target_session_id=session.id,
-                                warning_codes=("same_sport_proximity",),
-                                warning_messages=("A confirmer.",),
-                            ),
-                        ),
-                        summary="Patch a confirmer.",
-                    ),
-                    week_context=None,
-                    facts=None,
-                    score=WeekCoherenceScore(
-                        total=82,
-                        recovery=80,
-                        goal_alignment=85,
-                        progression=80,
-                        adherence=85,
-                        readiness_fit=80,
-                        constraint_fit=85,
-                        risk=75,
-                    ),
-                    findings=(),
-                    score_delta=-2,
-                    policy_hint="ask_confirmation",
-                    evaluation_summary="Snapshot proposal possible.",
-                )
-
-            conversation_pipeline.evaluate_plan_patch_candidate = fake_evaluate
-            conversation_pipeline.decide_adaptation_policy = lambda evaluated, **kwargs: policy_decision
-            conversation_pipeline.final_reply.compose_plan_adaptation_reply = (
-                lambda **kwargs: "On decale le running demain; tu confirmes ?"
-            )
-
-            result = self.client.post(
-                "/api/v0/messages",
-                json={"text": "Je suis courbature, deplace la seance a demain."},
-            ).json()
-        finally:
-            api_messages.plan_conversation_turn = original_plan_turn
-            api_messages.decide = original_decide
-            api_messages.extract_facts = original_extract_facts
-            if original_snapshot_generate is None:
-                delattr(conversation_pipeline, "generate_adaptation_proposal")
-            else:
-                conversation_pipeline.generate_adaptation_proposal = original_snapshot_generate
-            conversation_pipeline.generate_plan_patch_candidates = original_generate
-            conversation_pipeline.evaluate_plan_patch_candidate = original_evaluate
-            conversation_pipeline.decide_adaptation_policy = original_policy
-            conversation_pipeline.final_reply.compose_plan_adaptation_reply = original_compose
-
-        turn = repo.get_recent_conversation_turns(self.db, self.user.id, limit=1)[0]
-        context = json.loads(turn.context_json)
-        pending = repo.get_active_pending_mutation_confirmation(self.db, self.user.id)
-
-        self.assertEqual(result["assistant_message"]["text"], "On decale le running demain; tu confirmes ?")
-        self.assertEqual(turn.response_mode, "plan_adaptation_pending_confirmation")
-        self.assertEqual(context["planning_snapshot_flow"]["proposal"], "compiled")
-        self.assertIsNotNone(pending)
-
-    def test_candidate_reply_summary_includes_patch_operation_dates(self) -> None:
-        from fitmas.plan_patch_candidate_evaluator import EvaluatedPlanPatchCandidate
-        from fitmas.plan_patch_candidates import PlanPatchCandidate, PlanPatchCandidateValidation
-        from fitmas.week_coherence import WeekCoherenceScore
-
-        patch = PlanPatch(
-            operations=[
-                PlanPatchOperation(
-                    operation_type="swap_sessions",
-                    target_session_id=13,
-                    second_session_id=14,
-                    rationale="swap pour recuperer",
-                )
-            ],
-            coach_message="swap running natation",
-        )
-        candidate = PlanPatchCandidate(
-            id="snapshot_proposal",
-            patches=(patch,),
-            candidate_ref=None,
-            rationale="swap running natation",
-            expected_tradeoff="confirmation",
-            confidence=0.8,
-            assumptions=(),
-            risk_notes=(),
-            created_from_plan_id="plan",
-            created_from_plan_version=1,
-        )
-        evaluated = EvaluatedPlanPatchCandidate(
-            candidate=candidate,
-            candidate_validation=PlanPatchCandidateValidation(
-                status="valid",
-                patch_count=1,
-                operation_count=1,
-                operation_results=(),
-            ),
-            patch=patch,
-            patch_validation=PlanPatchValidation(status="requires_confirmation", operation_results=(), summary="confirm"),
-            week_context=None,
-            facts=None,
-            score=WeekCoherenceScore(
-                total=82,
-                recovery=80,
-                goal_alignment=85,
-                progression=80,
-                adherence=85,
-                readiness_fit=80,
-                constraint_fit=85,
-                risk=75,
-            ),
-            findings=(),
-            score_delta=-2,
-            policy_hint="ask_confirmation",
-            evaluation_summary="Snapshot proposal possible.",
-        )
-        scheduled_sessions = [
-            SimpleNamespace(
-                id=13,
-                scheduled_date=datetime(2026, 5, 13, 8, 0),
-                sport_type="running",
-                session_type="easy",
-            ),
-            SimpleNamespace(
-                id=14,
-                scheduled_date=datetime(2026, 5, 15, 8, 0),
-                sport_type="swimming",
-                session_type="endurance",
-            ),
-        ]
-
-        summaries = conversation_pipeline._candidate_summaries_for_reply(
-            (evaluated,),
-            scheduled_sessions=scheduled_sessions,
-        )
-
-        self.assertIn("swap_sessions", summaries[0])
-        self.assertIn("session:13 running/easy 2026-05-13", summaries[0])
-        self.assertIn("session:14 swimming/endurance 2026-05-15", summaries[0])
-
-    def test_sport_unavailable_no_candidate_requires_resolved_window_end(self) -> None:
-        now = get_local_now(self.user.timezone)
-        turn_plan = SimpleNamespace(
-            availability_constraint={
-                "availability": "unavailable",
-                "sport_type": "swimming",
-                "starts_on": now.date().isoformat(),
-                "ends_on": None,
-                "scope": "sport",
-            }
-        )
-        scheduled = [
-            SimpleNamespace(
-                scheduled_date=now + timedelta(days=11),
-                sport_type="swimming",
-                completion_status="planned",
-            )
-        ]
-
-        result = conversation_pipeline._availability_no_affected_sport_session(
-            turn_plan=turn_plan,
-            grounding=None,
-            scheduled_sessions=scheduled,
-        )
-
-        self.assertIsNone(result)
-
-    def test_new_plan_mutation_supersedes_old_pending_and_uses_candidate_flow_after_legacy_no_change(self) -> None:
-        _, session = self._create_plan_with_tomorrow_session()
-        from fitmas.plan_patch_adaptation_policy import AdaptationPolicyDecision
-        from fitmas.plan_patch_candidate_evaluator import EvaluatedPlanPatchCandidate
-        from fitmas.plan_patch_candidates import PlanPatchCandidate, PlanPatchCandidateValidation
-        from fitmas.week_coherence import WeekCoherenceScore
-
-        old_patch = PlanPatch(
-            operations=[
-                PlanPatchOperation(
-                    operation_type="create_session",
-                    target_date="2099-05-10",
-                    new_sport_type="cycling",
-                    new_session_type="easy",
-                    new_duration_min=25,
-                    rationale="Ancien pending sans rapport.",
-                )
-            ],
-            coach_message="Ancien pending.",
-        )
-        old_pending = repo.create_pending_mutation_confirmation(
-            self.db,
-            user_id=self.user.id,
-            impact_level="medium",
-            reason="Ancienne proposition velo.",
-            mutation_type="plan_patch",
-            summary="Ajouter velo mercredi.",
-            source_text="Ancien tour.",
-            decision_json=serialize_plan_patch_confirmation(old_patch),
-            expires_at=default_confirmation_expiry(),
-        )
-
-        candidate_patch = PlanPatch(
-            operations=[
-                PlanPatchOperation(
-                    operation_type="replace_session",
-                    target_session_id=session.id,
-                    new_sport_type="mobility",
-                    new_session_type="recovery",
-                    new_duration_min=20,
-                    new_intensity="easy",
-                    new_title="Recuperation active",
-                    rationale="Indisponibilite temporaire.",
-                )
-            ],
-            coach_message="Candidate only.",
-        )
-        candidate = PlanPatchCandidate(
-            id="cand_recovery",
-            patches=(candidate_patch,),
-            rationale="Adapter la seance visee.",
-            expected_tradeoff="Confirmation recommandee.",
-            confidence=0.82,
-            assumptions=(),
-            risk_notes=(),
-            created_from_plan_id="plan_current",
-            created_from_plan_version=1,
-        )
-        evaluated = EvaluatedPlanPatchCandidate(
-            candidate=candidate,
-            candidate_validation=PlanPatchCandidateValidation(
-                status="valid",
-                patch_count=1,
-                operation_count=1,
-                operation_results=(),
-                summary="valid",
-            ),
-            patch=candidate_patch,
-            patch_validation=PlanPatchValidation(status="requires_confirmation", operation_results=(), summary="confirm"),
-            week_context=None,
-            facts=None,
-            score=WeekCoherenceScore(
-                total=76,
-                recovery=80,
-                goal_alignment=70,
-                progression=70,
-                adherence=85,
-                readiness_fit=80,
-                constraint_fit=85,
-                risk=70,
-            ),
-            findings=(),
-            score_delta=-6,
-            policy_hint="ask_confirmation",
-            evaluation_summary="Candidate possible.",
-        )
-        policy_decision = AdaptationPolicyDecision(
-            action="pending_confirmation",
-            selected_candidate_id="cand_recovery",
-            candidate_options=(),
-            reason="Candidate possible.",
-            user_facing_reason="Candidate possible.",
-            requires_confirmation_reason="Candidate possible.",
-            risk_level="medium",
-        )
-
-        original_plan_turn = api_messages.plan_conversation_turn
-        original_decide = api_messages.decide
-        original_extract_facts = api_messages.extract_facts
-        original_generate = getattr(conversation_pipeline, "generate_plan_patch_candidates", None)
-        original_evaluate = getattr(conversation_pipeline, "evaluate_plan_patch_candidate", None)
-        original_policy = getattr(conversation_pipeline, "decide_adaptation_policy", None)
-        original_compose_adaptation = conversation_pipeline.final_reply.compose_plan_adaptation_reply
-        original_compose_no_change = conversation_pipeline.final_reply.compose_no_change_reply
-        captured: dict[str, int] = {"generate_calls": 0}
-        try:
-            api_messages.plan_conversation_turn = lambda *args, **kwargs: SimpleNamespace(
-                primary_intent="plan_mutation",
-                secondary_intents=("non_completion_claim", "availability_constraint"),
-                mutation_signal=True,
-                has_plan_mutation=True,
-                temporal_references=(
-                    {"kind": "relative_day", "value": "today", "role": "context"},
-                    {"kind": "relative_day", "value": "tomorrow", "role": "context"},
-                ),
-                confidence=0.93,
-                model_dump=lambda mode="json": {
-                    "primary_intent": "plan_mutation",
-                    "secondary_intents": ["non_completion_claim", "availability_constraint"],
-                    "mutation_signal": True,
-                    "has_plan_mutation": True,
-                    "temporal_references": [
-                        {"kind": "relative_day", "value": "today", "role": "context"},
-                        {"kind": "relative_day", "value": "tomorrow", "role": "context"},
-                    ],
-                },
-            )
-            api_messages.decide = lambda *args, **kwargs: MutationDecision(
-                mutation_type="no_change",
-                rationale="Le nouveau message ignore le pending precedent mais demande une adaptation.",
-                fitmas_message="On laisse tomber la seance demain.",
-            )
-            api_messages.extract_facts = lambda *args, **kwargs: []
-
-            def fake_generate(*args, **kwargs):
-                captured["generate_calls"] += 1
-                return (candidate,)
-
-            conversation_pipeline.generate_plan_patch_candidates = fake_generate
-            conversation_pipeline.evaluate_plan_patch_candidate = lambda *args, **kwargs: evaluated
-            conversation_pipeline.decide_adaptation_policy = lambda *args, **kwargs: policy_decision
-            conversation_pipeline.final_reply.compose_plan_adaptation_reply = (
-                lambda **kwargs: "Je te propose de remplacer demain par recuperation active; tu confirmes ?"
-            )
-            conversation_pipeline.final_reply.compose_no_change_reply = lambda **kwargs: "On laisse tomber demain."
-
-            result = self.client.post(
-                "/api/v0/messages",
-                json={"text": "Inondation chez moi, pas de sport aujourd'hui ni demain"},
-            ).json()
-        finally:
-            api_messages.plan_conversation_turn = original_plan_turn
-            api_messages.decide = original_decide
-            api_messages.extract_facts = original_extract_facts
-            if original_generate is None:
-                delattr(conversation_pipeline, "generate_plan_patch_candidates")
-            else:
-                conversation_pipeline.generate_plan_patch_candidates = original_generate
-            if original_evaluate is None:
-                delattr(conversation_pipeline, "evaluate_plan_patch_candidate")
-            else:
-                conversation_pipeline.evaluate_plan_patch_candidate = original_evaluate
-            if original_policy is None:
-                delattr(conversation_pipeline, "decide_adaptation_policy")
-            else:
-                conversation_pipeline.decide_adaptation_policy = original_policy
-            conversation_pipeline.final_reply.compose_plan_adaptation_reply = original_compose_adaptation
-            conversation_pipeline.final_reply.compose_no_change_reply = original_compose_no_change
-
-        turns = repo.get_recent_conversation_turns(self.db, self.user.id, limit=1)
-        context = json.loads(turns[0].context_json)
-        pending = repo.get_active_pending_mutation_confirmation(self.db, self.user.id)
-        self.db.refresh(old_pending)
-
-        self.assertEqual(captured["generate_calls"], 0)
-        self.assertEqual(
-            result["assistant_message"]["text"],
-            "On laisse tomber demain.",
-        )
-        self.assertEqual(turns[0].response_mode, "no_change_composed")
-        self.assertNotIn("adaptation_candidate_flow", context)
-        self.assertEqual(old_pending.status, "superseded")
-        self.assertIsNone(pending)
-
-    def test_candidate_pending_choice_is_persisted_as_structured_options(self) -> None:
-        _, session = self._create_plan_with_tomorrow_session()
-        from fitmas.plan_patch_adaptation_policy import AdaptationPolicyDecision
-        from fitmas.plan_patch_candidate_evaluator import EvaluatedPlanPatchCandidate
-        from fitmas.plan_patch_candidates import PlanPatchCandidate, PlanPatchCandidateValidation
-        from fitmas.week_coherence import WeekCoherenceScore
-
-        first_candidate = PlanPatchCandidate(
-            id="move_friday",
-            patches=(
-                PlanPatch(
-                    operations=[
-                        PlanPatchOperation(
-                            operation_type="move_session",
-                            target_session_id=session.id,
-                            target_date="2099-05-09",
-                            rationale="Option vendredi.",
-                        )
-                    ],
-                    coach_message="Option vendredi.",
-                ),
-            ),
-            rationale="Deplacer la seance a vendredi.",
-            expected_tradeoff="Garde le volume, bouge le placement.",
-            confidence=0.8,
-            assumptions=(),
-            risk_notes=(),
-            created_from_plan_id="plan_current",
-            created_from_plan_version=1,
-        )
-        second_candidate = PlanPatchCandidate(
-            id="reduce_tomorrow",
-            patches=(
-                PlanPatch(
-                    operations=[
-                        PlanPatchOperation(
-                            operation_type="update_session",
-                            target_session_id=session.id,
-                            new_duration_min=30,
-                            new_intensity="easy",
-                            rationale="Option allegee.",
-                        )
-                    ],
-                    coach_message="Option allegee.",
-                ),
-            ),
-            rationale="Garder demain mais alleger.",
-            expected_tradeoff="Moins de charge, pas de deplacement.",
-            confidence=0.78,
-            assumptions=(),
-            risk_notes=(),
-            created_from_plan_id="plan_current",
-            created_from_plan_version=1,
-        )
-
-        def evaluated(candidate, total):
-            return EvaluatedPlanPatchCandidate(
-                candidate=candidate,
-                candidate_validation=PlanPatchCandidateValidation(
-                    status="valid",
-                    patch_count=1,
-                    operation_count=1,
-                    operation_results=(),
-                    summary="valid",
-                ),
-                patch=candidate.patches[0],
-                patch_validation=PlanPatchValidation(status="valid", operation_results=(), summary="valid"),
-                week_context=None,
-                facts=None,
-                score=WeekCoherenceScore(
-                    total=total,
-                    recovery=80,
-                    goal_alignment=85,
-                    progression=80,
-                    adherence=85,
-                    readiness_fit=80,
-                    constraint_fit=85,
-                    risk=75,
-                ),
-                findings=(),
-                score_delta=-3,
-                policy_hint="commit_safe",
-                evaluation_summary="Candidate possible.",
-            )
-
-        policy_decision = AdaptationPolicyDecision(
-            action="pending_choice",
-            selected_candidate_id=None,
-            candidate_options=("move_friday", "reduce_tomorrow"),
-            reason="Deux options proches.",
-            user_facing_reason="Deux options proches.",
-            requires_confirmation_reason="Deux options proches.",
-            risk_level="medium",
-        )
-
-        original_plan_turn = api_messages.plan_conversation_turn
-        original_decide = api_messages.decide
-        original_extract_facts = api_messages.extract_facts
-        original_generate = conversation_pipeline.generate_plan_patch_candidates
-        original_evaluate = conversation_pipeline.evaluate_plan_patch_candidate
-        original_policy = conversation_pipeline.decide_adaptation_policy
-        original_compose = conversation_pipeline.final_reply.compose_plan_adaptation_reply
-        try:
-            api_messages.plan_conversation_turn = lambda *args, **kwargs: SimpleNamespace(
-                primary_intent="plan_mutation",
-                secondary_intents=(),
-                mutation_signal=True,
-                has_plan_mutation=True,
-                confidence=0.93,
-            )
-            api_messages.decide = lambda *args, **kwargs: (_ for _ in ()).throw(
-                AssertionError("decide() should not run")
-            )
-            api_messages.extract_facts = lambda *args, **kwargs: []
-            conversation_pipeline.generate_plan_patch_candidates = lambda *args, **kwargs: (
-                first_candidate,
-                second_candidate,
-            )
-            conversation_pipeline.evaluate_plan_patch_candidate = (
-                lambda *args, candidate, **kwargs: evaluated(
-                    candidate,
-                    84 if candidate.id == "move_friday" else 82,
-                )
-            )
-            conversation_pipeline.decide_adaptation_policy = lambda *args, **kwargs: policy_decision
-            conversation_pipeline.final_reply.compose_plan_adaptation_reply = (
-                lambda **kwargs: "J'ai deux options propres : vendredi ou alleger demain. Tu choisis."
-            )
-
-            result = self.client.post(
-                "/api/v0/messages",
-                json={"text": "On evite deux jours d'affilee ?"},
-            ).json()
-        finally:
-            api_messages.plan_conversation_turn = original_plan_turn
-            api_messages.decide = original_decide
-            api_messages.extract_facts = original_extract_facts
-            conversation_pipeline.generate_plan_patch_candidates = original_generate
-            conversation_pipeline.evaluate_plan_patch_candidate = original_evaluate
-            conversation_pipeline.decide_adaptation_policy = original_policy
-            conversation_pipeline.final_reply.compose_plan_adaptation_reply = original_compose
-
-        pending = repo.get_active_pending_mutation_confirmation(self.db, self.user.id)
-        payload = json.loads(pending.decision_json) if pending is not None else {}
-
-        self.assertEqual(
-            result["assistant_message"]["text"],
-            "J'ai deux options propres : vendredi ou alleger demain. Tu choisis.",
-        )
-        self.assertIsNotNone(pending)
-        self.assertEqual(pending.mutation_type, "plan_patch_choice")
-        self.assertEqual(payload["kind"], "plan_patch_choice")
-        self.assertEqual([item["id"] for item in payload["candidates"]], ["move_friday", "reduce_tomorrow"])
 
     def test_accept_pending_choice_applies_selected_candidate_patch(self) -> None:
         _, session = self._create_plan_with_tomorrow_session()
@@ -4151,152 +3044,12 @@ class FitMASCoreFlowsTest(unittest.TestCase):
         self.assertEqual(turn.pending_confirmation_id, pending.id)
         self.assertNotEqual(refreshed.scheduled_date.date().isoformat(), "2099-05-09")
 
-    def test_mixed_health_and_plan_mutation_keeps_memory_then_uses_candidate_flow(self) -> None:
-        _, session = self._create_plan_with_tomorrow_session()
-        from fitmas.plan_patch_adaptation_policy import AdaptationPolicyDecision
-        from fitmas.plan_patch_candidate_evaluator import EvaluatedPlanPatchCandidate
-        from fitmas.plan_patch_candidates import PlanPatchCandidate, PlanPatchCandidateValidation
-        from fitmas.week_coherence import WeekCoherenceScore
-
-        candidate_patch = PlanPatch(
-            operations=[
-                PlanPatchOperation(
-                    operation_type="update_session",
-                    target_session_id=session.id,
-                    new_duration_min=30,
-                    new_intensity="easy",
-                    rationale="Adapter apres douleur genou.",
-                )
-            ],
-            coach_message="Candidate only.",
-        )
-        candidate = PlanPatchCandidate(
-            id="reduce_tomorrow",
-            patches=(candidate_patch,),
-            rationale="Alleger la seance de demain.",
-            expected_tradeoff="On garde le mouvement sans charger le genou.",
-            confidence=0.83,
-            assumptions=("Le signal genou concerne la seance de demain.",),
-            risk_notes=(),
-            created_from_plan_id="plan_current",
-            created_from_plan_version=1,
-        )
-        evaluated = EvaluatedPlanPatchCandidate(
-            candidate=candidate,
-            candidate_validation=PlanPatchCandidateValidation(
-                status="valid",
-                patch_count=1,
-                operation_count=1,
-                operation_results=(),
-                summary="valid",
-            ),
-            patch=candidate_patch,
-            patch_validation=PlanPatchValidation(status="valid", operation_results=(), summary="valid"),
-            week_context=None,
-            facts=None,
-            score=WeekCoherenceScore(
-                total=78,
-                recovery=82,
-                goal_alignment=75,
-                progression=74,
-                adherence=85,
-                readiness_fit=70,
-                constraint_fit=85,
-                risk=75,
-            ),
-            findings=(),
-            score_delta=-6,
-            policy_hint="ask_confirmation",
-            evaluation_summary="Option possible, confirmation recommandee.",
-        )
-        policy_decision = AdaptationPolicyDecision(
-            action="pending_confirmation",
-            selected_candidate_id="reduce_tomorrow",
-            candidate_options=(),
-            reason="Option possible, confirmation recommandee.",
-            user_facing_reason="Option possible, confirmation recommandee.",
-            requires_confirmation_reason="Option possible, confirmation recommandee.",
-            risk_level="medium",
-        )
-        compose_calls: list[dict] = []
-
-        original_plan_turn = api_messages.plan_conversation_turn
-        original_decide = api_messages.decide
-        original_extract_facts = api_messages.extract_facts
-        original_generate = conversation_pipeline.generate_plan_patch_candidates
-        original_evaluate = conversation_pipeline.evaluate_plan_patch_candidate
-        original_policy = conversation_pipeline.decide_adaptation_policy
-        original_adaptation_compose = conversation_pipeline.final_reply.compose_plan_adaptation_reply
-        original_no_change_compose = conversation_pipeline.final_reply.compose_no_change_reply
-        try:
-            api_messages.plan_conversation_turn = lambda *args, **kwargs: SimpleNamespace(
-                primary_intent="health_signal",
-                secondary_intents=("plan_mutation",),
-                mutation_signal=True,
-                has_plan_mutation=True,
-                confidence=0.93,
-            )
-            api_messages.decide = lambda *args, **kwargs: CoachDecision(
-                response_type="no_change",
-                rationale="signal sante + besoin adaptation",
-                fitmas_message="Je note le genou avant de toucher la seance.",
-                memory_actions=[
-                    llm.HealthSignalAction(
-                        type="record_health_signal",
-                        health_signal="douleur genou",
-                        body_area="genou",
-                        severity="unknown",
-                        status="new",
-                        confidence=0.92,
-                        evidence="genou douloureux",
-                    )
-                ],
-            )
-            api_messages.extract_facts = lambda *args, **kwargs: []
-            conversation_pipeline.generate_plan_patch_candidates = lambda *args, **kwargs: (candidate,)
-            conversation_pipeline.evaluate_plan_patch_candidate = lambda *args, **kwargs: evaluated
-            conversation_pipeline.decide_adaptation_policy = lambda *args, **kwargs: policy_decision
-
-            def fake_adaptation_compose(**kwargs):
-                compose_calls.append(kwargs)
-                return "Genou note. Je te propose d'alleger demain; tu confirmes ?"
-
-            conversation_pipeline.final_reply.compose_plan_adaptation_reply = fake_adaptation_compose
-            conversation_pipeline.final_reply.compose_no_change_reply = lambda *args, **kwargs: "Memoire seule."
-
-            result = self.client.post(
-                "/api/v0/messages",
-                json={"text": "ok mais genou douloureux, adapte demain"},
-            ).json()
-        finally:
-            api_messages.plan_conversation_turn = original_plan_turn
-            api_messages.decide = original_decide
-            api_messages.extract_facts = original_extract_facts
-            conversation_pipeline.generate_plan_patch_candidates = original_generate
-            conversation_pipeline.evaluate_plan_patch_candidate = original_evaluate
-            conversation_pipeline.decide_adaptation_policy = original_policy
-            conversation_pipeline.final_reply.compose_plan_adaptation_reply = original_adaptation_compose
-            conversation_pipeline.final_reply.compose_no_change_reply = original_no_change_compose
-
-        turns = repo.get_recent_conversation_turns(self.db, self.user.id, limit=1)
-        pending = repo.get_active_pending_mutation_confirmation(self.db, self.user.id)
-
-        self.assertEqual(
-            result["assistant_message"]["text"],
-            "Memoire seule.",
-        )
-        self.assertEqual(turns[0].response_mode, "no_change_composed")
-        self.assertIn('"category": "health"', turns[0].memory_writes_json)
-        self.assertIsNone(pending)
-        self.assertEqual(compose_calls, [])
-
     def test_plan_mutation_on_empty_typed_target_date_does_not_call_llm_mutation_paths(self) -> None:
         self._create_plan_for_today()
         tomorrow = get_local_now(self.user.timezone).date() + timedelta(days=1)
         original_plan_turn = api_messages.plan_conversation_turn
         original_decide = api_messages.decide
         original_extract_facts = api_messages.extract_facts
-        original_generate = conversation_pipeline.generate_plan_patch_candidates
         try:
             api_messages.plan_conversation_turn = lambda *args, **kwargs: ConversationTurnPlan(
                 primary_intent="plan_mutation",
@@ -4313,26 +3066,22 @@ class FitMASCoreFlowsTest(unittest.TestCase):
             def fail_decide(*args, **kwargs):
                 raise AssertionError("decide() should not run when typed target date has no session")
 
-            def fail_generate(*args, **kwargs):
-                raise AssertionError("candidate generator should not run without a DB session on target date")
-
             api_messages.decide = fail_decide
             api_messages.extract_facts = lambda *args, **kwargs: []
-            conversation_pipeline.generate_plan_patch_candidates = fail_generate
 
             result = self.client.post("/api/v0/messages", json={"text": "Allege demain sans toucher au reste"}).json()
         finally:
             api_messages.plan_conversation_turn = original_plan_turn
             api_messages.decide = original_decide
             api_messages.extract_facts = original_extract_facts
-            conversation_pipeline.generate_plan_patch_candidates = original_generate
 
         turns = repo.get_recent_conversation_turns(self.db, self.user.id, limit=1)
         pending = repo.get_active_pending_mutation_confirmation(self.db, self.user.id)
         events = self.db.query(s.PlanMutationEventRecord).filter_by(user_id=self.user.id).all()
 
         self.assertIn(tomorrow.isoformat(), result["assistant_message"]["text"])
-        self.assertEqual(turns[0].response_mode, "plan_mutation_empty_target_date")
+        self.assertNotIn("unresolved_source_ref", result["assistant_message"]["text"])
+        self.assertEqual(turns[0].response_mode, "planning_runtime_block")
         self.assertIsNone(pending)
         self.assertEqual(events, [])
 
@@ -4430,48 +3179,6 @@ class FitMASCoreFlowsTest(unittest.TestCase):
 
         self.assertEqual(reply, "Lundi: Recuperation mobilite. 30 min.")
 
-    def test_blocked_mutation_does_not_reply_as_applied(self) -> None:
-        _, session = self._create_plan_for_today()
-        original_decide = api_messages.decide
-        original_extract_facts = api_messages.extract_facts
-        original_apply = conversation_pipeline.apply_patch_for_user
-        try:
-            api_messages.decide = lambda *args, **kwargs: MutationDecision(
-                mutation_type="move_session",
-                target_session_id=session.id,
-                target_date=(session.scheduled_date.date() + timedelta(days=1)).isoformat(),
-                rationale="unsafe move",
-                fitmas_message="OK. Je deplace la seance demain.",
-            )
-            api_messages.extract_facts = lambda *args, **kwargs: []
-            conversation_pipeline.apply_patch_for_user = lambda *args, **kwargs: plan_mutation_service.PlanPatchServiceResult(
-                validation=PlanPatchValidation(
-                    status="blocked",
-                    operation_results=(
-                        PlanPatchOperationValidation(
-                            operation_type="move_session",
-                            status="blocked",
-                            target_session_id=session.id,
-                            block_reason="protected_recovery_target",
-                        ),
-                    ),
-                ),
-                week_policy_status="blocked",
-            )
-            result = self.client.post("/api/v0/messages", json={"text": "Mets ca demain"}).json()
-        finally:
-            api_messages.decide = original_decide
-            api_messages.extract_facts = original_extract_facts
-            conversation_pipeline.apply_patch_for_user = original_apply
-
-        turns = repo.get_recent_conversation_turns(self.db, self.user.id, limit=1)
-
-        self.assertNotIn("OK. Je deplace", result["assistant_message"]["text"])
-        self.assertEqual(len(turns), 1)
-        self.assertEqual(turns[0].mutation_type, "move_session")
-        self.assertEqual(turns[0].response_mode, "legacy_decision_contract_disabled")
-        self.assertFalse(turns[0].mutation_applied)
-
     def test_conversation_turn_records_pending_confirmation(self) -> None:
         _, session = self._create_plan_for_today()
         session.priority = "Seance cle"
@@ -4541,11 +3248,11 @@ class FitMASCoreFlowsTest(unittest.TestCase):
         turns = repo.get_recent_conversation_turns(self.db, self.user.id, limit=1)
 
         self.assertIsNotNone(refreshed)
-        self.assertEqual(refreshed.scheduled_date.date().isoformat(), target_date)
+        self.assertEqual(refreshed.scheduled_date.date(), original_date)
         self.assertIsNone(pending)
-        self.assertEqual(turns[0].response_mode, "planning_runtime_commit")
+        self.assertEqual(turns[0].response_mode, "legacy_decision_contract_disabled")
         self.assertFalse(turns[0].pending_confirmation)
-        self.assertTrue(turns[0].mutation_applied)
+        self.assertFalse(turns[0].mutation_applied)
 
     def test_plan_patch_confirmation_reply_that_clarifies_does_not_create_pending(self) -> None:
         _, session = self._create_plan_for_today()
@@ -4593,7 +3300,7 @@ class FitMASCoreFlowsTest(unittest.TestCase):
         self.assertIsNotNone(refreshed)
         self.assertEqual(refreshed.scheduled_date.date(), original_date)
         self.assertIsNone(pending)
-        self.assertEqual(turns[0].response_mode, "planning_runtime_block")
+        self.assertEqual(turns[0].response_mode, "legacy_decision_contract_disabled")
         self.assertFalse(turns[0].pending_confirmation)
         self.assertFalse(turns[0].mutation_applied)
 

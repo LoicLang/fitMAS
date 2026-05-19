@@ -602,10 +602,10 @@ Tests Phase 8I :
   `move_easy_then_confirm` et `confirm_without_pending` -> RESULT: OK
   (2 checks) ;
 - durcissement post-8I duplicate pending :
-  `./scripts/test-backend -q tests/test_core_flows.py -k "canonical_pending_accept_survives_legacy_decide_none or post_decide_candidate_flow_respects_active_pending_gate"`
+  `./scripts/test-backend -q tests/test_core_flows.py -k "canonical_pending_accept_survives_legacy_decide_none or canonical_pending_accept_preempts_legacy_decide"`
   -> 2 passed ;
 - gate pending/core apres durcissement :
-  `./scripts/test-backend -q tests/test_conversation_pending_bridge.py tests/test_core_flows.py -k "pending or canonical_pending_accept_survives_legacy_decide_none or post_decide_candidate_flow_respects_active_pending_gate"`
+  `./scripts/test-backend -q tests/test_conversation_pending_bridge.py tests/test_core_flows.py -k "pending or canonical_pending_accept_survives_legacy_decide_none or canonical_pending_accept_preempts_legacy_decide"`
   -> 40 passed ;
 - probe planning cutover explicite :
   `FITMAS_UNDERSTANDING_RUNTIME_SHADOW=1 FITMAS_COMMANDS_FROM_UNDERSTANDING=1 FITMAS_PENDING_FROM_UNDERSTANDING=1 FITMAS_UNDERSTANDING_RUNTIME_PLANNING_CUTOVER=1 ./scripts/smoke-a-plus-api --scenario move_easy_then_confirm --timeout 240`
@@ -655,7 +655,7 @@ Tests Phase 8J :
   `./scripts/test-backend -q tests/test_phase8j_canonical_planning_cutover_architecture.py tests/test_smoke_a_plus_api.py -k "canonical_planning"`
   -> 8 passed ;
 - pending/core cutover :
-  `./scripts/test-backend -q tests/test_core_flows.py -k "canonical_pending_accept_survives_legacy_decide_none or post_decide_candidate_flow_respects_active_pending_gate or canonical_planning_cutover_confirmation_keeps_single_pending_row"`
+  `./scripts/test-backend -q tests/test_core_flows.py -k "canonical_pending_accept_survives_legacy_decide_none or canonical_pending_accept_preempts_legacy_decide or canonical_planning_cutover_confirmation_keeps_single_pending_row"`
   -> 3 passed ;
 - architecture pack Phase 8 :
   `./scripts/test-backend -q tests/test_decision_runtime_architecture.py tests/test_phase8a_legacy_audit.py tests/test_phase8b_cutover_architecture.py tests/test_phase8c_legacy_kill_architecture.py tests/test_phase8d_bridge_shrink_architecture.py tests/test_phase8e_understanding_cutover_architecture.py tests/test_phase8f_command_extraction_architecture.py tests/test_phase8g_pending_resolution_architecture.py tests/test_phase8h_pending_reply_architecture.py tests/test_phase8i_canonical_flag_dogfood_architecture.py tests/test_phase8j_canonical_planning_cutover_architecture.py`
@@ -2802,6 +2802,545 @@ Scenarios critiques :
 - move/swap ;
 - pending accept/reject/modify ;
 - heartbeat no_send/send/propose_pending.
+
+## Statut Phase 9A
+
+Suppression physique ciblee livree localement :
+
+- le chemin historique `CoachDecision -> planning runtime cutover` est retire ;
+- `FITMAS_PLANNING_RUNTIME_CUTOVER` et
+  `FITMAS_UNDERSTANDING_RUNTIME_PLANNING_CUTOVER` ne pilotent plus aucun
+  chemin actif ;
+- les refs planning typées sont centralisees dans
+  `domain/planning/reference_tokens.py`, utilise par Understanding, le provider
+  planning canonique et le resolver domaine ;
+- les `CoachDecision plan_patch/requires_confirmation` purs ne peuvent plus
+  parler ou muter via le bridge legacy : ils tombent en
+  `legacy_decision_contract_disabled` sans write ni pending ;
+- les replies legacy restantes restent limitees aux lanes readonly ou aux
+  mises a jour execution/memoire deja appliquees ;
+- verification locale : `./scripts/test-backend -q` passe
+  (`1385 passed, 11 skipped`) et
+  `./scripts/smoke-decision-runtime-canonical-planning-default` passe
+  (`10 check(s)`) ;
+- le fallback census reste la methode de suppression suivante : classifier les
+  fallbacks restants par owner, supprimer seulement les routes vides sur lanes
+  couvertes, ajouter une gate d'architecture, relancer les smokes reels.
+
+## Statut Phase 9B
+
+Couverture planning canonique etendue localement :
+
+- `replace_swim_with_bike` rejoint les lanes planning couvertes par le provider
+  canonique ;
+- le runtime fusionne uniquement des artefacts types :
+  `CoachUnderstanding.requested_change.desired_*` et
+  `TurnPlan.planning_action/temporal_references` ;
+- aucun parsing deterministe de texte utilisateur libre n'a ete ajoute ;
+- les sidecars `preference` scope `sport` restent non bloquants quand ils
+  accompagnent un remplacement planning supporte ;
+- les summaries machine de `replace_session` exposent sport, duree et intensite
+  pour que le ReplyComposer dise `velo facile, 30 min` au lieu de `cycling`.
+- les refs relatives typees comme `day:tomorrow` sont resolues dans le domaine
+  planning, et un block sur jour vide produit une raison user-safe avec la date
+  au lieu d'un code interne.
+
+Verification :
+
+```text
+./scripts/test-backend -q
+1393 passed, 11 skipped, 11 subtests passed
+
+./scripts/smoke-decision-runtime-canonical-planning-default
+RESULT: OK (10 check(s))
+```
+
+## Statut Phase 9C
+
+Les contraintes sport-window passent maintenant par le runtime planning
+canonique :
+
+- `swim_unavailable_two_weeks` produit une intention planning canonique
+  `replace` depuis une ref machine `sport_window:swimming:2026-05-18:2026-06-01` ;
+- le domaine planning resout cette ref, scanne les `ScheduledSession` du contexte
+  et construit des candidates `replace_session` bornees ;
+- aucun parsing deterministe de texte utilisateur libre n'a ete ajoute ;
+- les sidecars `record_availability` sport-window ne bloquent plus le provider
+  planning quand ils servent directement la demande d'adaptation ;
+- la memoire availability reste ecrite meme quand le planning canonique retourne
+  avant le fallback candidate legacy ;
+- `avoid_back_to_back` est consomme comme signal canonique non-planning quand
+  l'Understanding produit un changement non specifique avec une commande memoire.
+
+Verification :
+
+```text
+targeted 9C unit gate: 36 passed
+swim_unavailable_two_weeks smoke: planning_runtime_pending_confirmation
+avoid_back_to_back smoke: no_change_composed, no fallback_census
+replace_swim_with_bike regression smoke: planning_runtime_pending_confirmation
+canonical planning default smoke: RESULT OK (10 check(s))
+./scripts/test-backend -q: 1399 passed, 11 skipped, 11 subtests passed
+```
+
+## Statut Phase 9D
+
+Census et suppression guidee par preuve :
+
+- le smoke API produit maintenant un fichier de census via
+  `--fallback-census-json`, avec classification par scenario, owner, source et
+  traces `canonical_planning_provider` / `planning_snapshot_flow` /
+  `adaptation_candidate_flow` ;
+- la route candidate vide `availability_no_affected_session` a ete retiree du
+  runtime conversation ;
+- le fallback legacy ne peut plus proposer ou creer une pending quand
+  l'Understanding canonique a bien compris une demande planning mais n'a pas les
+  refs typees minimales pour l'appliquer ;
+- la normalisation des refs machine accepte aussi `session_id=3`, `session=3`
+  et `id=3`, sans parser le texte libre ;
+- `planning_snapshot_flow` est classe dans `fallback_census`, y compris pour
+  clarification, compile failed et proposition compilee.
+
+Verification :
+
+```text
+./scripts/test-backend -q: 1405 passed, 11 skipped, 11 subtests passed
+smoke core + fallback census: RESULT OK (15 check(s))
+smoke daily + fallback census: RESULT OK (26 check(s))
+```
+
+Etat restant :
+
+- le planning canonique couvre les lanes principales, mais certains creates,
+  contraintes larges ou demandes incompletes restent a migrer depuis
+  `planning_snapshot_flow` / `adaptation_candidate_flow` ;
+- les replies legacy provider restantes sont maintenant separees du chantier
+  planning ;
+- la prochaine suppression doit partir du census, owner par owner, pas d'un
+  delete global de `legacy/`.
+
+## Statut Phase 9E
+
+Create planning canonique :
+
+- `add_hard_dense` est maintenant une lane canonique requise dans le smoke API ;
+- la demande "ajoute une seance dure mercredi" produit un
+  `planning_runtime_block`, sans event, sans pending et sans fallback census ;
+- `TurnPlan.create_session` avec target date typee peut alimenter
+  `RequestedPlanChange(kind="create")` meme quand l'Understanding LLM choisit
+  une clarification parce que le sport est absent ;
+- le domaine planning decide les creates target-only : jour stable occupe,
+  sport manquant ou hard dense deviennent des blocks canoniques au lieu de
+  tomber dans `planning_snapshot_flow` ;
+- les intensites typees `high` et `hard` sont normalisees avant candidate
+  building / policy.
+
+Verification :
+
+```text
+targeted planning gate: 88 passed
+add_hard_dense smoke: planning_runtime_block, fallback_scenario_count=0
+./scripts/test-backend -q: 1419 passed, 11 skipped, 11 subtests passed
+git diff --check: no output
+```
+
+Etat restant :
+
+- contraintes larges type voyage / fenetre multi-jours restent a modeliser dans
+  un artefact canonique dedie ;
+- certaines demandes planning incompletes non-create doivent encore migrer vers
+  clarification/block canonique ;
+- suppression physique de legacy attend encore un census vide owner par owner.
+
+## Statut Phase 9F
+
+Contraintes larges canoniques :
+
+- les contraintes type voyage / fenetre generale ne tombent plus par defaut
+  dans `planning_snapshot_flow` quand TurnPlan/Understanding fournit un artefact
+  type ;
+- `RequestedPlanChange.kind` accepte maintenant `constraint_window` ;
+- `ReferenceResolver` accepte
+  `availability_window:<scope>:<starts_on>:<ends_on>` avec `scope` borne a
+  `general`, `time` ou `location` ;
+- `domain/planning/decision_service.py` retourne un block canonique avant
+  evaluator/policy : le systeme reconnait la fenetre et les seances touchees,
+  mais ne recompose pas encore automatiquement plusieurs jours ;
+- `trip_constraint` est ajoute aux lanes qui exigent une trace canonique dans
+  le smoke API.
+
+Verification :
+
+```text
+targeted 9F gate: 4 passed
+planning/bridge/smoke unit gate: 85 passed
+trip_constraint smoke: planning_runtime_block, fallback_scenario_count=0
+./scripts/test-backend -q: 1424 passed, 11 skipped, 11 subtests passed
+```
+
+Etat restant :
+
+- le prochain pas planning est de construire de vrais candidats multi-jours
+  pour `constraint_window` au lieu du block conservateur ;
+- les demandes incompletes non-create doivent encore passer en
+  clarification/block canonique owner par owner ;
+- la suppression physique de `planning_snapshot_flow` attend un census vide sur
+  les lanes couvertes.
+
+## Statut Phase 9G
+
+Split disponibilite memoire / planning :
+
+- une disponibilite typee sans demande planning explicite reste memory-first :
+  elle applique `record_availability` et ne prepare pas le provider planning ;
+- une disponibilite typee avec demande d'adaptation explicite continue de passer
+  par `constraint_window` et le planning canonique ;
+- l'arbitrage utilise uniquement les artifacts du TurnPlan :
+  `primary_intent`, `secondary_intents`, `mutation_signal`, `planning_action`
+  et `availability_constraint` ;
+- aucun regex/keyword parser sur texte utilisateur libre n'a ete ajoute ;
+- le prompt TurnPlan clarifie que "Disponibilite seule" ne declenche pas de
+  planning, tandis que "adapter/bouger/remplacer" doit produire
+  `secondary_intents` contenant `plan_mutation`.
+
+Verification :
+
+```text
+trip_memory_only smoke: no_change_composed, memory_applied=1, fallback_scenario_count=0
+trip_constraint smoke: planning_runtime_block, fallback_scenario_count=0
+./scripts/test-backend -q: 1427 passed, 11 skipped, 11 subtests passed
+```
+
+Etat restant :
+
+- construire de vrais candidats multi-jours pour `constraint_window` ;
+- garder les adaptations multi-operations en pending au depart, pas en commit
+  auto ;
+- continuer le census owner par owner avant deletion physique du legacy.
+
+## Statut Phase 9H
+
+Candidates multi-jours pour fenetre indisponible :
+
+- `availability_window` a maintenant une forme canonique v2 avec statut :
+  `availability_window:unavailable:<scope>:<starts_on>:<ends_on>` ;
+- le resolver garde la compat v1, mais expose `PlanChangeReference.availability`
+  pour que le domaine sache si la fenetre est indisponible ;
+- `PlanCandidateBuilder` construit la strategie V1
+  `move_affected_sessions_after_window_preserving_order` :
+  sessions actives dans la fenetre, tri chronologique, cibles libres apres
+  `ends_on` jusqu'a +10 jours, une session par jour ;
+- `decision_service` ne pre-bloque plus les fenetres faisables : elles passent
+  par builder, evaluator, reviewer optionnel et policy ;
+- `SportPolicy` accepte `force_confirmation_reason` et transforme les fenetres
+  larges selectionnees en `pending_confirmation` obligatoire ;
+- `PlanningCommandService` persiste le `PlanPatch` multi-operation comme pending
+  `plan_patch`, sans commit et sans event.
+
+Verification :
+
+```text
+targeted 9H gate: 109 passed
+trip_memory_only smoke: no_change_composed, events=+0, pending=+0
+trip_constraint smoke: planning_runtime_pending_confirmation, events=+0, pending=+1
+```
+
+Etat restant :
+
+- enrichir plus tard les strategies de fenetre large (choix multiples,
+  suppression optionnelle, compression de charge), uniquement via
+  `domain/planning` ;
+- garder le pending obligatoire tant que les strategies multi-jours ne sont pas
+  plus expressives et mieux expliquees ;
+- continuer la suppression owner par owner des routes legacy devenues vides.
+
+## Statut Phase 9I
+
+Surface produit et hygiene prompts :
+
+- les summaries planning visibles viennent maintenant d'un helper pur domaine
+  (`domain/planning/patch_summary.py`) construit depuis `PlanPatch.operations` ;
+- un patch multi-move est expose comme une seule synthese :
+  nombre de seances touchees, ordre conserve, dates ciblees ;
+- `LegacyFinalReplyBackend` accepte une candidate summary deja user-safe et ne
+  repasse pas par un prompt pour reformuler ce cas ;
+- `DecisionExplanation.impact` contient les metadonnees minimales utiles au chat
+  et a l'app : `operation_count`, `move_session_count`, `target_dates`,
+  `requires_confirmation`, `pending_confirmation_id` ;
+- les prompts ne doivent plus embarquer les prompts/scenarios de smoke comme
+  few-shots. Un test d'architecture couvre les leaks connus.
+
+Verification :
+
+```text
+targeted 9I gate: 49 passed
+trip census: RESULT OK (2 check(s)), fallback_scenario_count=0
+planning census: RESULT OK (7 check(s)), fallback_scenario_count=0
+```
+
+Decision de suppression :
+
+- les lanes planning couvertes sont vides de fallback ;
+- aucune suppression globale de `planning_snapshot_flow` n'est faite en 9I :
+  le prochain slice doit supprimer seulement les routes dont le census owner
+  est vide au-dela de ces lanes, avec test d'architecture anti-retour.
+
+## Statut Phase 9J
+
+Suppression de route snapshot active :
+
+- `conversation_pipeline.py` n'appelle plus `planning_snapshot_flow` ;
+- les imports actifs `build_planning_snapshot`, `generate_adaptation_proposal`
+  et `compile_adaptation_proposal` ont ete retires de l'orchestrateur ;
+- le code historique `planning_snapshot` / `adaptation_proposal` reste testable
+  hors runtime conversation, mais il n'est plus une sortie de secours produit ;
+- `tests/test_phase9j_snapshot_route_delete_architecture.py` interdit le retour
+  de cette route dans `conversation_pipeline.py` ;
+- les tests historiques snapshot ont ete recadres : ils prouvent maintenant que
+  le fallback restant est `adaptation_candidate_flow` et qu'aucune trace
+  `planning_snapshot_flow` n'est ecrite.
+
+Verification :
+
+```text
+targeted 9J gate: 36 passed
+planning census: RESULT OK (7 check(s)), fallback_scenario_count=0
+```
+
+Etat restant :
+
+- `adaptation_candidate_flow` reste le dernier fallback planning actif dans
+  `conversation_pipeline.py` ;
+- prochain slice : reduire ou supprimer cette route sur les owners qui ont
+  maintenant une couverture canonique complete.
+
+## Statut Phase 9K
+
+Suppression de route candidate fallback active :
+
+- `conversation_pipeline.py` n'appelle plus `adaptation_candidate_flow` ;
+- les imports actifs `CandidateGenerationInput`, `generate_plan_patch_candidates`,
+  `evaluate_plan_patch_candidate`, `review_plan_patch_candidates` et
+  `decide_adaptation_policy` ont ete retires de l'orchestrateur conversation ;
+- le fallback post-`decide()` `plan_adaptation_candidates` a ete supprime ;
+- les tests qui verrouillaient l'ancien fallback comme comportement produit ont
+  ete retires ou recadres vers les chemins canoniques/pending ;
+- `tests/test_phase9k_adaptation_candidate_flow_delete_architecture.py`
+  interdit le retour de cette route dans `conversation_pipeline.py`.
+
+Verification :
+
+```text
+targeted 9K gate: 111 passed
+planning census: RESULT OK (7 check(s)), fallback_scenario_count=0
+```
+
+Etat restant :
+
+- les modules `plan_patch_candidate_*` restent utilises comme primitives
+  backend/domain, notamment par `domain/planning/*` ;
+- ils ne sont plus une sortie de secours conversationnelle ;
+- prochaine etape : refaire un census global hors 7 lanes dogfood, puis deplacer
+  ou supprimer les modules historiques qui n'ont plus de caller runtime utile.
+
+## Statut Phase 9L
+
+Census global apres suppression snapshot/candidate fallback :
+
+- `scripts/decision-runtime-fallback-census-summary` combine les rapports
+  `--fallback-census-json` et fail-closed si un fallback reste actif ;
+- core smoke complet : 15 scenarios OK ;
+- daily smoke complet : 27 scenarios OK ;
+- synthese core+daily :
+
+```text
+scenario_count=42
+fallback_scenario_count=4
+fallback_turn_count=4
+owner legacy_provider=1
+owner planning=3
+source canonical_planning_provider=3
+source legacy_decide=1
+fallback scenario swap_key_and_recovery turns=1
+fallback scenario lighten_key_after_fatigue turns=1
+fallback scenario ambiguous_move turns=1
+fallback scenario short_slot_preference turns=1
+```
+
+Lecture :
+
+- `swap_key_and_recovery` : requested_change `swap` encore mal normalise
+  (`source_ref`/`target_ref` semantiques), tombe en fallback planning ;
+- `lighten_key_after_fatigue` : demande planning + signal memoire, bloquee par
+  `blocking_command_signals` avant le pipeline planning ;
+- `ambiguous_move` : demande vague sans `source_ref`, doit devenir
+  clarification canonique plutot que fallback CoachDecision ;
+- `short_slot_preference` : fragment court sans contexte prepare, tombe encore
+  sur `legacy_decide`.
+
+Classification module apres 9L :
+
+- `planning_snapshot.py` / `adaptation_proposal.py` : historique/pur, plus de
+  caller runtime conversation ;
+- `plan_patch_candidate_generator.py` : historique/pur, plus de caller runtime
+  conversation ;
+- `plan_patch_candidate_evaluator.py`, `plan_patch_candidate_reviewer.py`,
+  `plan_patch_adaptation_policy.py`, `plan_patch_candidates.py` : encore utiles
+  au domaine planning ;
+- `legacy/conversation_decide_bridge.py` et `llm/decision_legacy.py` : encore
+  actifs tant que les 4 fallbacks ci-dessus existent.
+
+Prochaine etape :
+
+- Phase 9M doit traiter les 3 fallbacks planning restants dans le
+  PlanningDecisionPipeline ou en clarification canonique ;
+- Phase 9N pourra ensuite traiter le fallback `short_slot_preference` et
+  commencer les suppressions physiques des modules historiques sans caller.
+
+## Statut Phase 9M / 9N
+
+9M/9N supprime les derniers fallbacks actifs du census global core + daily.
+
+Changements :
+
+- les refs de sessions issues de `RequestedPlanChange` sont normalisees comme
+  artefacts types (`session id 1` -> `session_id:1`) sans parser le texte user
+  brut ;
+- les swaps avec deux ids dans les champs types sont reconstruits en deux refs
+  machine quand l'artefact LLM est redondant ;
+- les signaux sante/readiness sidecar ne bloquent plus le planning canonique ;
+- les demandes planning incompletes (`ambiguous_move`) produisent un outcome
+  canonique no-write au lieu de tomber vers `CoachDecision` ;
+- les tours `needs_clarification` courts (`samedi`) passent par
+  `canonical_clarification` ;
+- les questions read-only qui restaient aleatoires (`activity_highlight_lookup`,
+  `load_review_lookup`) passent par des surfaces canoniques ou par
+  `canonical_readonly_answer`.
+
+Preuve locale 2026-05-19 :
+
+```text
+core smoke strict:
+scenario_count=15
+fallback_scenario_count=0
+fallback_turn_count=0
+
+daily smoke strict:
+scenario_count=27
+fallback_scenario_count=0
+fallback_turn_count=0
+
+global core+daily strict:
+scenario_count=42
+fallback_scenario_count=0
+fallback_turn_count=0
+```
+
+Lecture :
+
+- le dernier usage `legacy_decide` sur les lanes couvertes par les smokes core
+  et daily est eteint ;
+- `legacy/conversation_decide_bridge.py` et `llm/decision_legacy.py` restent
+  presents, mais ne sont plus utilises par ces 42 lanes ;
+- la prochaine phase peut commencer a supprimer/archiver les modules
+  historiques sans caller runtime, puis ajouter des gates d'import plus
+  agressives.
+
+## Statut Phase 9O
+
+Suppression physique des modules historiques sans caller runtime :
+
+- `planning_snapshot.py` est supprime de `backend/src/fitmas/` ;
+- `adaptation_proposal.py` est supprime de `backend/src/fitmas/` ;
+- `plan_patch_candidate_generator.py` est supprime de `backend/src/fitmas/` ;
+- les tests qui preservaient ces contrats historiques sont supprimes ;
+- `tests/test_phase9o_historical_module_delete_architecture.py` bloque leur
+  retour comme modules racine ou imports backend/tests ;
+- les modules encore utiles au domaine planning restent volontairement gardes :
+  evaluator, reviewer, adaptation policy et contrats de candidates.
+
+Preuve locale 2026-05-19 :
+
+```text
+targeted 9O gate:
+35 passed
+
+full backend:
+1413 passed, 11 skipped, 11 subtests passed
+
+core smoke strict:
+scenario_count=15
+fallback_scenario_count=0
+fallback_turn_count=0
+
+daily smoke strict:
+scenario_count=27
+fallback_scenario_count=0
+fallback_turn_count=0
+
+global core+daily strict:
+scenario_count=42
+fallback_scenario_count=0
+fallback_turn_count=0
+```
+
+Lecture :
+
+- l'ancien chemin `PlanningSnapshot -> AdaptationProposal -> compiler` n'existe
+  plus physiquement dans le package racine ;
+- l'ancien generateur LLM de `PlanPatchCandidate` n'existe plus physiquement ;
+- le repo garde seulement les primitives candidates qui alimentent encore le
+  `PlanningDecisionPipeline` canonique ;
+- la prochaine coupe doit viser le provider legacy restant uniquement apres
+  census etendu, pas par suppression massive.
+
+## Statut Phase 9P
+
+Census etendu du provider legacy :
+
+- ajout de `EXTENDED_SCENARIOS` dans `scripts/smoke_a_plus_api.py` ;
+- ajout du flag `--extended` ;
+- ajout du wrapper `scripts/smoke-decision-runtime-extended-census` ;
+- ajout de gates architecture / smoke selection pour eviter que cette surface
+  disparaisse ou duplique core/daily ;
+- correction d'un fallback core+daily observe pendant 9P : un
+  `TurnPlan.primary_intent="trivial_ack"` peut maintenant utiliser le terminal
+  close path, au meme titre que `close_turn`, tant qu'il n'y a pas de pending,
+  secondaire, calibration ouverte ou mutation.
+
+Preuve locale 2026-05-19 :
+
+```text
+targeted 9P gate:
+38 passed
+
+full backend:
+1421 passed, 11 skipped, 11 subtests passed
+
+core+daily strict:
+scenario_count=42
+fallback_scenario_count=0
+fallback_turn_count=0
+
+core+daily+extended discovery:
+scenario_count=62
+fallback_scenario_count=1
+fallback_turn_count=1
+owner pending=1
+source canonical_pending_provider=1
+fallback scenario pending_reject_move turns=1
+```
+
+Lecture :
+
+- sur le corpus core+daily+extended, `legacy_decide` n'est plus un fallback
+  generaliste visible ;
+- le seul usage mesure est le rejet d'une pending existante :
+  `canonical_pending_provider -> fallback_legacy -> CoachDecision` ;
+- le prochain slice doit migrer le rejet/cancel pending en outcome canonique,
+  puis relancer le census strict ;
+- `conversation_decide_bridge.py` et `llm/decision_legacy.py` restent encore
+  presents jusqu'a ce que ce dernier owner pending soit coupe.
 
 ## Matrice de pouvoirs
 

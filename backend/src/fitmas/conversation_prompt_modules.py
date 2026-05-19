@@ -241,7 +241,7 @@ Exemples:
 - "jeudi je prefere faire du fractionne" -> update_session
 - "j'ai mal a l'epaule droite" -> replace_session
 - "je suis claque, pas envie de fractionne" -> replace_session
-- "Cette semaine je voyage de mercredi a vendredi" + seances touchees dans le planning -> produis un PlanPatch ou une clarification ciblee, pas un menu large
+- contrainte de disponibilite multi-jours + seances touchees dans le planning -> exprime une intention typee ou une clarification ciblee, pas un menu large
 - "Je ne suis pas dispo demain soir" + seance de demain touchee -> tente d'abord un replan direct, au lieu de demander un menu de preferences
 - "J'ai nage vendredi regarde mes seances reel" + tools activite dispo -> lis d'abord les activites recentes avant de dire que tu ne vois pas la seance
 - "Piscine fermee 2 semaines" + natation prevue dans la fenetre -> remplace/deplace seulement la natation touchee, ne repropose pas un menu running/renfo

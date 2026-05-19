@@ -4,6 +4,7 @@ from typing import Any
 
 from fitmas.decision import CommandResult, DecisionExplanation, DecisionOutcome, ReplyContract
 from fitmas.domain.planning.models import PlanningDecisionResult
+from fitmas.domain.planning.patch_summary import summarize_plan_patch_for_user
 
 
 def planning_decision_to_outcome(decision: PlanningDecisionResult) -> DecisionOutcome:
@@ -64,12 +65,42 @@ def _command_results(decision: PlanningDecisionResult) -> tuple[CommandResult, .
 
 def _candidate_summaries(decision: PlanningDecisionResult) -> tuple[str, ...]:
     summaries: list[str] = []
+    summaries.extend(_selected_patch_operation_summaries(decision))
     for evaluated in decision.evaluated_candidates:
         candidate = getattr(evaluated, "candidate", None)
         rationale = str(getattr(candidate, "rationale", "") or "").strip()
         if rationale:
             summaries.append(rationale)
     return tuple(summaries or decision.candidate_options)
+
+
+def _selected_patch_operation_summaries(decision: PlanningDecisionResult) -> tuple[str, ...]:
+    patch = getattr(decision, "selected_patch", None)
+    if patch is None:
+        return ()
+    user_summary = summarize_plan_patch_for_user(patch)
+    if user_summary:
+        return (user_summary,)
+    summaries: list[str] = []
+    for operation in tuple(getattr(patch, "operations", ()) or ()):
+        bits = [str(getattr(operation, "operation_type", "") or "").strip()]
+        target_session_id = getattr(operation, "target_session_id", None)
+        if target_session_id is not None:
+            bits.append(f"target_session_id={target_session_id}")
+        target_date = str(getattr(operation, "target_date", "") or "").strip()
+        if target_date:
+            bits.append(f"target_date={target_date}")
+        new_sport = str(getattr(operation, "new_sport_type", "") or "").strip()
+        if new_sport:
+            bits.append(f"new_sport_type={new_sport}")
+        new_duration = getattr(operation, "new_duration_min", None)
+        if new_duration is not None:
+            bits.append(f"new_duration_min={new_duration}")
+        new_intensity = str(getattr(operation, "new_intensity", "") or "").strip()
+        if new_intensity:
+            bits.append(f"new_intensity={new_intensity}")
+        summaries.append(" | ".join(bit for bit in bits if bit))
+    return tuple(summary for summary in summaries if summary)
 
 
 def _decision_label(kind: str) -> str:
@@ -98,7 +129,32 @@ def _impact(decision: PlanningDecisionResult) -> dict[str, Any]:
     payload = dict(getattr(decision.command_result, "payload", {}) or {})
     if decision.pending_confirmation_id is not None:
         payload["pending_confirmation_id"] = decision.pending_confirmation_id
+        payload["requires_confirmation"] = True
+    payload.update(_selected_patch_impact(decision))
     return payload
+
+
+def _selected_patch_impact(decision: PlanningDecisionResult) -> dict[str, Any]:
+    patch = getattr(decision, "selected_patch", None)
+    operations = tuple(getattr(patch, "operations", ()) or ()) if patch is not None else ()
+    if not operations:
+        return {}
+    target_dates = tuple(
+        str(getattr(operation, "target_date", "") or "").strip()
+        for operation in operations
+        if str(getattr(operation, "target_date", "") or "").strip()
+    )
+    move_count = sum(
+        1 for operation in operations if str(getattr(operation, "operation_type", "") or "") == "move_session"
+    )
+    impact: dict[str, Any] = {
+        "operation_count": len(operations),
+    }
+    if move_count:
+        impact["move_session_count"] = move_count
+    if target_dates:
+        impact["target_dates"] = target_dates
+    return impact
 
 
 def _protected(kind: str) -> tuple[str, ...]:

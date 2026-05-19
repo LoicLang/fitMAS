@@ -21,14 +21,16 @@ _COMMAND_INTENTS = {
     "preference_signal",
     "memory_update",
 }
+_READONLY_INTENTS = {
+    "activity_highlights",
+    "activity_review",
+    "generic_question",
+    "plan_lookup",
+}
 
 
 def understanding_runtime_shadow_enabled() -> bool:
     return _env_flag_enabled("FITMAS_UNDERSTANDING_RUNTIME_SHADOW", default=False)
-
-
-def understanding_runtime_planning_cutover_enabled() -> bool:
-    return _env_flag_enabled("FITMAS_UNDERSTANDING_RUNTIME_PLANNING_CUTOVER", default=False)
 
 
 def canonical_non_planning_cutover_enabled() -> bool:
@@ -46,6 +48,8 @@ def should_run_canonical_understanding(*, turn_plan, pending_confirmation) -> bo
         return True
     if not canonical_non_planning_cutover_enabled():
         return False
+    if _turn_plan_can_produce_readonly_answer(turn_plan):
+        return True
     if _pending_from_understanding_default_enabled() and _has_active_pending(pending_confirmation):
         return True
     if _commands_from_understanding_default_enabled() and _turn_plan_can_produce_non_planning_commands(turn_plan):
@@ -65,8 +69,6 @@ def should_use_canonical_understanding_without_legacy(
         return False
     if understanding is None:
         return False
-    if understanding.intent == "plan_change" or understanding.requested_change is not None:
-        return False
     if (
         _pending_from_understanding_default_enabled()
         and _has_active_pending(pending_confirmation)
@@ -77,7 +79,10 @@ def should_use_canonical_understanding_without_legacy(
         return False
     if not _turn_plan_can_produce_non_planning_commands(turn_plan):
         return False
-    return bool(commands_from_understanding(understanding).commands)
+    commands = commands_from_understanding(understanding).commands
+    if understanding.intent == "plan_change" or understanding.requested_change is not None:
+        return not _turn_plan_can_produce_planning(turn_plan) and bool(commands)
+    return bool(commands)
 
 
 def coach_decision_artifact_from_understanding(
@@ -170,6 +175,20 @@ def _turn_plan_can_produce_non_planning_commands(turn_plan) -> bool:
     if getattr(turn_plan, "execution_update", None) is not None:
         return True
     return False
+
+
+def _turn_plan_can_produce_readonly_answer(turn_plan) -> bool:
+    if turn_plan is None:
+        return False
+    intents = {
+        str(getattr(turn_plan, "primary_intent", "") or ""),
+        *(str(item or "") for item in tuple(getattr(turn_plan, "secondary_intents", ()) or ())),
+    }
+    if intents.intersection(_READONLY_INTENTS):
+        return True
+    if bool(getattr(turn_plan, "requires_truth_read", False)):
+        return True
+    return str(getattr(turn_plan, "truth_scope", "") or "") in {"plan_window", "execution", "memory"}
 
 
 def _response_type_for_canonical_artifact(*, understanding: CoachUnderstanding, turn_plan) -> str:

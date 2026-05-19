@@ -30,11 +30,10 @@ def test_8i_canonical_flags_exist_and_match_current_default_policy() -> None:
     pending = _source("legacy/conversation_pending_bridge.py")
 
     assert "FITMAS_UNDERSTANDING_RUNTIME_SHADOW" in understanding
-    assert "FITMAS_UNDERSTANDING_RUNTIME_PLANNING_CUTOVER" in understanding
+    assert "FITMAS_UNDERSTANDING_RUNTIME_PLANNING_CUTOVER" not in understanding
     assert "FITMAS_COMMANDS_FROM_UNDERSTANDING" in commands
     assert "FITMAS_PENDING_FROM_UNDERSTANDING" in pending
     assert 'FITMAS_UNDERSTANDING_RUNTIME_SHADOW", default=False' in understanding
-    assert 'FITMAS_UNDERSTANDING_RUNTIME_PLANNING_CUTOVER", default=False' in understanding
     assert 'FITMAS_COMMANDS_FROM_UNDERSTANDING", default=True' in commands
     assert 'FITMAS_PENDING_FROM_UNDERSTANDING", default=True' in pending
 

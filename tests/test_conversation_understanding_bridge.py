@@ -34,12 +34,6 @@ def test_understanding_shadow_flag_defaults_off(monkeypatch) -> None:
     assert bridge.understanding_runtime_shadow_enabled() is False
 
 
-def test_planning_cutover_flag_defaults_off(monkeypatch) -> None:
-    monkeypatch.delenv("FITMAS_UNDERSTANDING_RUNTIME_PLANNING_CUTOVER", raising=False)
-
-    assert bridge.understanding_runtime_planning_cutover_enabled() is False
-
-
 def test_understanding_to_turn_context_payload_is_safe() -> None:
     payload = bridge.understanding_to_turn_context_payload(_understanding())
 
@@ -147,11 +141,11 @@ def test_default_non_planning_cutover_runs_for_availability_intent(monkeypatch) 
     )
 
 
-def test_default_non_planning_cutover_skips_read_only_lookup(monkeypatch) -> None:
+def test_default_non_planning_cutover_runs_for_read_only_lookup(monkeypatch) -> None:
     monkeypatch.delenv("FITMAS_UNDERSTANDING_RUNTIME_SHADOW", raising=False)
     monkeypatch.delenv("FITMAS_CANONICAL_NON_PLANNING_CUTOVER", raising=False)
 
-    assert not bridge.should_run_canonical_understanding(
+    assert bridge.should_run_canonical_understanding(
         turn_plan=SimpleNamespace(primary_intent="plan_lookup", secondary_intents=(), has_plan_mutation=False),
         pending_confirmation=None,
     )
@@ -269,6 +263,54 @@ def test_provider_pivot_keeps_legacy_for_planning(monkeypatch) -> None:
     assert not bridge.should_use_canonical_understanding_without_legacy(
         understanding=_understanding(),
         turn_plan=SimpleNamespace(primary_intent="plan_mutation", secondary_intents=()),
+        pending_confirmation=None,
+    )
+
+
+def test_provider_pivot_consumes_command_signal_even_with_unsupported_non_planning_change(monkeypatch) -> None:
+    monkeypatch.delenv("FITMAS_CANONICAL_PROVIDER_NON_PLANNING", raising=False)
+    monkeypatch.delenv("FITMAS_CANONICAL_NON_PLANNING_CUTOVER", raising=False)
+    monkeypatch.delenv("FITMAS_COMMANDS_FROM_UNDERSTANDING", raising=False)
+
+    understanding = CoachUnderstanding(
+        intent="plan_change",
+        confidence=0.91,
+        user_summary="Eviter deux jours d'affilee cette semaine.",
+        extracted_signals=(
+            UserSignal(
+                type="availability",
+                label="avoid_consecutive_days",
+                status="new",
+                severity="medium",
+                confidence=0.9,
+                evidence="Je veux eviter deux jours d'affilee cette semaine",
+                payload={
+                    "action_type": "record_availability",
+                    "availability": "limited",
+                    "scope": "week",
+                    "starts_on": "2026-05-18",
+                    "ends_on": "2026-05-24",
+                    "window_text": "eviter deux jours d'affilee cette semaine",
+                },
+            ),
+        ),
+        requested_change=RequestedPlanChange(
+            kind="unknown",
+            source_ref=None,
+            target_ref=None,
+            desired_sport=None,
+            desired_duration_min=None,
+            desired_intensity=None,
+            reason="preference de repartition non specifique",
+            risk_signals=("availability",),
+        ),
+        pending_resolution=None,
+        clarification_need=None,
+    )
+
+    assert bridge.should_use_canonical_understanding_without_legacy(
+        understanding=understanding,
+        turn_plan=SimpleNamespace(primary_intent="availability_constraint", secondary_intents=()),
         pending_confirmation=None,
     )
 

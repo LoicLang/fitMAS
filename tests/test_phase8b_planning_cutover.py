@@ -1,49 +1,40 @@
 from __future__ import annotations
 
-from datetime import date
 from pathlib import Path
 from types import SimpleNamespace
 
-from fitmas import conversation_pipeline
-from fitmas.decision.reply_request import ReplyResult
+from fitmas.decision import CoachUnderstanding, RequestedPlanChange
 from fitmas.domain.planning.models import PlanningCommandResult, PlanningDecisionResult
 from fitmas.legacy import conversation_planning_bridge
-from fitmas.legacy import conversation_readonly_reply_bridge
-from fitmas.legacy.coach_decision_artifact import legacy_decision_artifact_from_raw
-from fitmas.legacy.planning_runtime_adapter import run_planning_runtime_attempt_from_legacy_decision
-from fitmas.llm import CoachDecision
-from fitmas.plan_patch import PlanPatch, PlanPatchOperation
+from fitmas.legacy.planning_runtime_adapter import run_planning_runtime_attempt_from_understanding
 
 
-def _plan_patch_decision() -> CoachDecision:
-    return CoachDecision(
-        response_type="plan_patch",
-        rationale="move",
-        fitmas_message="Je propose de bouger la seance.",
-        plan_patch=PlanPatch(
-            coach_message="patch",
-            operations=[
-                PlanPatchOperation(
-                    operation_type="move_session",
-                    target_session_id=42,
-                    target_date="2026-05-15",
-                    rationale="move",
-                )
-            ],
-        ),
+ROOT = Path(__file__).resolve().parents[1]
+
+
+def _requested_change() -> RequestedPlanChange:
+    return RequestedPlanChange(
+        kind="move",
+        source_ref="session_id:42",
+        target_ref="date:2026-05-15",
+        desired_sport=None,
+        desired_duration_min=None,
+        desired_intensity=None,
+        reason="move",
+        risk_signals=(),
     )
 
 
-def _conversation_context() -> SimpleNamespace:
-    return SimpleNamespace(temporal_resolution=SimpleNamespace(local_date=date(2026, 5, 14)))
-
-
-def _turn_state() -> SimpleNamespace:
-    return SimpleNamespace(scheduled_sessions=(), activities=(), active_facts=())
-
-
-def _coach_bundle() -> SimpleNamespace:
-    return SimpleNamespace(coach_reading="")
+def _understanding() -> CoachUnderstanding:
+    return CoachUnderstanding(
+        intent="plan_change",
+        confidence=0.9,
+        user_summary="move",
+        extracted_signals=(),
+        requested_change=_requested_change(),
+        pending_resolution=None,
+        clarification_need=None,
+    )
 
 
 def _planning_result(kind: str = "block") -> PlanningDecisionResult:
@@ -66,29 +57,7 @@ def _planning_result(kind: str = "block") -> PlanningDecisionResult:
     )
 
 
-def test_planning_runtime_attempt_marks_non_planning_as_not_applicable() -> None:
-    decision = CoachDecision(
-        response_type="no_change",
-        rationale="lecture",
-        fitmas_message="Rien a changer.",
-    )
-
-    attempt = run_planning_runtime_attempt_from_legacy_decision(
-        decision_artifact=legacy_decision_artifact_from_raw(decision),
-        context=SimpleNamespace(),
-        db=object(),
-        user=SimpleNamespace(id=1),
-        source_text="ok",
-        coach_state_bundle=None,
-        reviewer_request_json_fn=None,
-    )
-
-    assert attempt.applicable is False
-    assert attempt.result is None
-    assert attempt.reason == "no_requested_plan_change"
-
-
-def test_planning_runtime_attempt_marks_plan_patch_as_applicable(monkeypatch) -> None:
+def test_planning_runtime_attempt_marks_requested_change_as_applicable(monkeypatch) -> None:
     def fake_decide_plan_change(requested_change, **kwargs):
         return SimpleNamespace(kind="block", reason="blocked")
 
@@ -97,8 +66,8 @@ def test_planning_runtime_attempt_marks_plan_patch_as_applicable(monkeypatch) ->
         fake_decide_plan_change,
     )
 
-    attempt = run_planning_runtime_attempt_from_legacy_decision(
-        decision_artifact=legacy_decision_artifact_from_raw(_plan_patch_decision()),
+    attempt = run_planning_runtime_attempt_from_understanding(
+        understanding=_understanding(),
         context=SimpleNamespace(execution=SimpleNamespace(activities=()), memory=SimpleNamespace(active_facts=())),
         db=object(),
         user=SimpleNamespace(id=1),
@@ -111,83 +80,28 @@ def test_planning_runtime_attempt_marks_plan_patch_as_applicable(monkeypatch) ->
     assert attempt.result is not None
 
 
-def test_cutover_helper_uses_runtime_attempt_when_flag_on(monkeypatch) -> None:
-    calls = []
-
+def test_runtime_mapper_blocks_applicable_unhandled_change() -> None:
     class FakeComposer:
         def compose(self, outcome, context, *, user_text="", grounding_facts=()):
-            return ReplyResult(text="Runtime block.", verified=True, fallback_used=False, reason=None)
+            assert outcome.kind == "plan_blocked"
+            return SimpleNamespace(text="Je bloque ce changement.", verified=True)
 
-    def fake_attempt(**kwargs):
-        calls.append(kwargs)
-        return SimpleNamespace(applicable=True, result=_planning_result(), reason="handled")
-
-    monkeypatch.setenv("FITMAS_PLANNING_RUNTIME_CUTOVER", "1")
-    monkeypatch.setattr(conversation_planning_bridge, "run_planning_runtime_attempt_from_legacy_decision", fake_attempt)
-
-    outcome = conversation_planning_bridge.maybe_handle_planning_runtime_cutover(
-        decision_artifact=legacy_decision_artifact_from_raw(_plan_patch_decision()),
-        state=_turn_state(),
-        conversation_context=_conversation_context(),
-        coach_bundle=_coach_bundle(),
-        db=object(),
-        user=SimpleNamespace(id=1, timezone="Europe/Paris"),
-        source_text="deplace",
-        reviewer_request_json_fn=None,
+    outcome = conversation_planning_bridge.planning_runtime_unhandled_outcome(
+        reason="adapter_failed",
+        user_text="deplace",
         grounding_facts=(),
-        planning_context_from_turn_state_fn=conversation_pipeline._planning_context_from_turn_state,
         decision_reply_composer_fn=lambda: FakeComposer(),
-        compose_no_change_reply_for_turn_fn=conversation_readonly_reply_bridge.compose_no_change_reply_for_turn,
     )
 
-    assert calls
-    assert outcome is not None
-    assert outcome.response_mode == "planning_runtime_block"
-    assert outcome.reply_text == "Runtime block."
-
-
-def test_cutover_helper_blocks_applicable_unhandled_change(monkeypatch) -> None:
-    class FakeComposer:
-        def compose(self, outcome, context, *, user_text="", grounding_facts=()):
-            return ReplyResult(
-                text="Je bloque ce changement cote runtime.",
-                verified=True,
-                fallback_used=False,
-                reason=None,
-            )
-
-    monkeypatch.setenv("FITMAS_PLANNING_RUNTIME_CUTOVER", "1")
-    monkeypatch.setattr(
-        conversation_planning_bridge,
-        "run_planning_runtime_attempt_from_legacy_decision",
-        lambda **kwargs: SimpleNamespace(applicable=True, result=None, reason="adapter_failed"),
-    )
-
-    outcome = conversation_planning_bridge.maybe_handle_planning_runtime_cutover(
-        decision_artifact=legacy_decision_artifact_from_raw(_plan_patch_decision()),
-        state=_turn_state(),
-        conversation_context=_conversation_context(),
-        coach_bundle=_coach_bundle(),
-        db=object(),
-        user=SimpleNamespace(id=1, timezone="Europe/Paris"),
-        source_text="deplace",
-        reviewer_request_json_fn=None,
-        grounding_facts=(),
-        planning_context_from_turn_state_fn=conversation_pipeline._planning_context_from_turn_state,
-        decision_reply_composer_fn=lambda: FakeComposer(),
-        compose_no_change_reply_for_turn_fn=conversation_readonly_reply_bridge.compose_no_change_reply_for_turn,
-    )
-
-    assert outcome is not None
     assert outcome.response_mode == "planning_runtime_unhandled"
     assert outcome.mutation_applied is False
     assert outcome.pending_confirmation is False
 
 
-def test_runtime_cutover_replaces_mixed_legacy_adaptation_branch() -> None:
-    source = Path(conversation_pipeline.__file__).read_text(encoding="utf-8")
-    runtime_index = source.index("conversation_planning_bridge.maybe_handle_planning_runtime_cutover(")
+def test_old_coachdecision_planning_cutover_route_is_removed() -> None:
+    pipeline = (ROOT / "backend/src/fitmas/conversation_pipeline.py").read_text()
+    bridge = (ROOT / "backend/src/fitmas/legacy/conversation_planning_bridge.py").read_text()
 
-    assert runtime_index > 0
-    assert "_should_try_mixed_plan_adaptation_after_decide" not in source
-    assert "_should_try_legacy_plan_adaptation_after_decide" not in source
+    assert "maybe_handle_planning_runtime_cutover" not in pipeline
+    assert "maybe_handle_planning_runtime_cutover" not in bridge
+    assert "FITMAS_PLANNING_RUNTIME_CUTOVER" not in bridge

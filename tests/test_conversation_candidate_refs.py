@@ -3,14 +3,10 @@ from __future__ import annotations
 from datetime import date, datetime
 from types import SimpleNamespace
 
-from fitmas.conversation_pipeline import _pending_choice_serialization_candidates
-from fitmas.conversation_pipeline import _adaptation_candidate_trace
 from fitmas.grounding_contract import ReplyGroundingPacket, ResolvedTemporalReference
 from fitmas.plan_patch_backend_candidates import build_backend_candidate_refs_for_turn
-from fitmas.plan_patch_adaptation_policy import AdaptationPolicyDecision
 from fitmas.plan_patch import PlanPatch, PlanPatchOperation
 from fitmas.plan_patch_candidate_evaluator import EvaluatedPlanPatchCandidate
-from fitmas.plan_patch_candidate_reviewer import PlanPatchCandidateReviewDecision
 from fitmas.plan_patch_candidates import PlanPatchCandidate, PlanPatchCandidateValidation
 from fitmas.week_coherence import WeekCoherenceScore
 
@@ -196,93 +192,6 @@ def test_backend_sport_unavailable_candidates_only_target_matching_sport() -> No
     assert all(payload["operations"] == ["replace_session"] for payload in payloads)
     assert all(operation.operation_type == "replace_session" for patch in patches.values() for operation in patch.operations)
     assert all(operation.new_sport_type != "swimming" for patch in patches.values() for operation in patch.operations)
-
-
-def test_pending_choice_serialization_materializes_ref_candidates() -> None:
-    patch = PlanPatch(
-        operations=[
-            PlanPatchOperation(
-                operation_type="move_session",
-                target_session_id=42,
-                target_date="2099-05-08",
-                rationale="Backend materialized move.",
-            )
-        ],
-        coach_message="Candidate backend.",
-    )
-    evaluated = EvaluatedPlanPatchCandidate(
-        candidate=PlanPatchCandidate(
-            id="llm_candidate_1",
-            patches=(),
-            candidate_ref="backend:move_session:42:2099-05-08",
-            rationale="Option backend.",
-            expected_tradeoff="A confirmer.",
-            confidence=0.8,
-            assumptions=(),
-            risk_notes=(),
-            created_from_plan_id="plan_current",
-            created_from_plan_version=1,
-        ),
-        candidate_validation=PlanPatchCandidateValidation(
-            status="valid",
-            patch_count=0,
-            operation_count=0,
-            operation_results=(),
-            summary="Candidate ref valide.",
-        ),
-        patch=patch,
-        patch_validation=None,
-        week_context=None,
-        facts=None,
-        score=WeekCoherenceScore(
-            total=80,
-            recovery=80,
-            goal_alignment=80,
-            progression=80,
-            adherence=80,
-            readiness_fit=80,
-            constraint_fit=80,
-            risk=80,
-        ),
-        findings=(),
-        score_delta=None,
-        policy_hint="ask_confirmation",
-        evaluation_summary="A confirmer.",
-    )
-
-    serialized = _pending_choice_serialization_candidates((evaluated,))
-
-    assert serialized[0].patches == (patch,)
-    assert serialized[0].candidate_ref is None
-
-
-def test_adaptation_candidate_trace_includes_bounded_reviewer_decision() -> None:
-    evaluated = _evaluated_ref_candidate()
-
-    trace = _adaptation_candidate_trace(
-        candidates=(evaluated.candidate,),
-        evaluated=(evaluated,),
-        policy_decision=AdaptationPolicyDecision(
-            action="commit",
-            selected_candidate_id="llm_candidate_1",
-            candidate_options=(),
-            reason="Option choisie par reviewer borne.",
-            user_facing_reason="Option choisie par reviewer borne.",
-            requires_confirmation_reason=None,
-            risk_level="low",
-        ),
-        reviewer_decision=PlanPatchCandidateReviewDecision(
-            preferred_candidate_id="llm_candidate_1",
-            confidence=0.78,
-            rationale=("Meilleur compromis humain.",),
-        ),
-    )
-
-    assert trace["reviewer"] == {
-        "preferred_candidate_id": "llm_candidate_1",
-        "confidence": 0.78,
-        "rationale": ["Meilleur compromis humain."],
-    }
 
 
 def _session(

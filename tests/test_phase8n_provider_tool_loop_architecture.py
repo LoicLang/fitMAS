@@ -112,11 +112,11 @@ def test_8n_new_legacy_modules_do_not_import_runtime_or_app_or_heartbeat_layers(
         assert not forbidden.intersection(_imports(relative)), relative
 
 
-def test_8n_planning_cutover_remains_default_off() -> None:
+def test_8n_retired_planning_cutover_flag_is_not_read() -> None:
     source = _source("legacy/conversation_understanding_bridge.py")
 
-    assert 'FITMAS_UNDERSTANDING_RUNTIME_PLANNING_CUTOVER", default=False' in source
+    assert "FITMAS_UNDERSTANDING_RUNTIME_PLANNING_CUTOVER" not in source
 
 
-def test_8n_planning_cutover_env_not_forced_on_by_tests() -> None:
+def test_8n_retired_planning_cutover_env_not_forced_on_by_tests() -> None:
     assert os.getenv("FITMAS_UNDERSTANDING_RUNTIME_PLANNING_CUTOVER") not in {"1", "true", "yes", "on"}

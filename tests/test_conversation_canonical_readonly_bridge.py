@@ -163,3 +163,33 @@ def test_compose_canonical_readonly_outcome_returns_conversation_outcome(monkeyp
     assert outcome.mutation_applied is False
     assert turn_context["legacy_decide"]["legacy_skipped"] is True
     assert turn_context["canonical_readonly_reply"]["source"] == "coach_understanding"
+
+
+def test_compose_canonical_readonly_uses_grounded_plan_fallback_without_legacy() -> None:
+    class EmptyComposer:
+        def compose(self, outcome, context, *, user_text="", grounding_facts=()):
+            return SimpleNamespace(text=None, verified=False, fallback_used=True, reason="empty_reply")
+
+    turn_context: dict[str, object] = {}
+
+    outcome = bridge.compose_canonical_readonly_reply(
+        composer=EmptyComposer(),
+        understanding=_understanding("plan_lookup"),
+        user_text="Redonne-moi le plan actuel, jour par jour.",
+        turn_plan=SimpleNamespace(primary_intent="plan_lookup", secondary_intents=()),
+        turn_context=turn_context,
+        grounding_facts=(
+            "LocalDate: 2026-05-19 (mardi) timezone=Europe/Paris",
+            "PlanWindow:",
+            '- 2026-05-20 (mercredi) id=1 running "Fractionné seuil" 65min intensity=hard [planned] slot=training',
+            '- 2026-05-21 (jeudi) id=2 running "Sortie longue clé" 95min intensity=moderate [planned] slot=training',
+        ),
+    )
+
+    assert outcome is not None
+    assert outcome.response_mode == "canonical_readonly_answer"
+    assert "mercredi 2026-05-20 : Fractionné seuil, 65 min" in outcome.reply_text
+    assert "jeudi 2026-05-21 : Sortie longue clé, 95 min" in outcome.reply_text
+    assert turn_context["legacy_decide"]["legacy_skipped"] is True
+    assert turn_context["canonical_readonly_reply"]["source"] == "grounding_fallback"
+    assert turn_context["canonical_readonly_reply"]["composed"] is True

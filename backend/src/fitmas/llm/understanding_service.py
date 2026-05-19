@@ -10,6 +10,7 @@ from fitmas.decision import (
     RequestedPlanChange,
     UserSignal,
 )
+from fitmas.domain.planning.reference_tokens import normalize_plan_ref
 from fitmas.llm import gateway as gw
 from fitmas.llm.prompts.understanding import UnderstandingPromptInput, build_understanding_prompt
 
@@ -105,8 +106,16 @@ def _signals(value: Any) -> tuple[UserSignal, ...]:
 def _requested_change(value: Any, *, signals: tuple[UserSignal, ...]) -> RequestedPlanChange | None:
     if not isinstance(value, Mapping):
         return None
-    source_ref = _normalize_plan_ref(value.get("source_ref")) or _source_ref_from_signals(signals)
-    target_ref = _normalize_plan_ref(value.get("target_ref")) or _target_ref_from_signals(signals)
+    source_ref = (
+        _normalize_plan_ref_strict(value.get("source_ref"))
+        or _source_ref_from_signals(signals)
+        or _normalize_plan_ref(value.get("source_ref"))
+    )
+    target_ref = (
+        _normalize_plan_ref_strict(value.get("target_ref"))
+        or _target_ref_from_signals(signals)
+        or _normalize_plan_ref(value.get("target_ref"))
+    )
     return RequestedPlanChange(
         kind=str(value.get("kind") or "unknown"),
         source_ref=source_ref,
@@ -160,46 +169,11 @@ def _optional_str(value: Any) -> str | None:
 
 
 def _normalize_plan_ref(value: Any) -> str | None:
-    if isinstance(value, Mapping):
-        session_id = value.get("session_id") or value.get("session")
-        if session_id is not None:
-            raw_id = str(session_id).strip()
-            if raw_id.isdigit():
-                return f"session_id:{raw_id}"
-        raw_date = value.get("date")
-        if raw_date is not None:
-            date_text = str(raw_date).strip()
-            if date_text:
-                return f"date:{date_text[:10]}"
-        raw_day = value.get("day")
-        if raw_day is not None:
-            day_text = str(raw_day).strip()
-            if day_text:
-                return f"day:{day_text}"
-        return None
-    text = _optional_str(value)
-    if text is None:
-        return None
-    for prefix in ("session_id:", "session:", "session_", "id:"):
-        if text.startswith(prefix):
-            raw_id = text.split(prefix, 1)[1].strip()
-            if raw_id.isdigit():
-                return f"session_id:{raw_id}"
-    for prefix in ("date:", "date_"):
-        if text.startswith(prefix):
-            raw_date = text.split(prefix, 1)[1].strip()
-            if _looks_like_iso_date(raw_date):
-                return f"date:{raw_date[:10]}"
-    for prefix in ("day:", "day_"):
-        if text.startswith(prefix):
-            raw_day = text.split(prefix, 1)[1].strip()
-            if _looks_like_iso_date(raw_day):
-                return f"date:{raw_day[:10]}"
-            if raw_day:
-                return f"day:{raw_day}"
-    if _looks_like_iso_date(text):
-        return f"date:{text[:10]}"
-    return text
+    return normalize_plan_ref(value, preserve_unknown=True)
+
+
+def _normalize_plan_ref_strict(value: Any) -> str | None:
+    return normalize_plan_ref(value, preserve_unknown=False)
 
 
 def _source_ref_from_signals(signals: tuple[UserSignal, ...]) -> str | None:
@@ -222,15 +196,6 @@ def _target_ref_from_signals(signals: tuple[UserSignal, ...]) -> str | None:
         if normalized is not None:
             return normalized
     return None
-
-
-def _looks_like_iso_date(text: str) -> bool:
-    if len(text) < 10:
-        return False
-    if len(text) > 10 and text[10] not in {"T", " "}:
-        return False
-    parts = text[:10].split("-")
-    return len(parts) == 3 and all(part.isdigit() for part in parts)
 
 
 def _optional_int(value: Any) -> int | None:

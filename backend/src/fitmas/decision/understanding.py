@@ -22,6 +22,7 @@ RequestedPlanChangeKind = Literal[
     "lighten",
     "replace",
     "create",
+    "constraint_window",
     "remove_optional",
     "unknown",
 ]
