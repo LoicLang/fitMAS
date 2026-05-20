@@ -4,7 +4,7 @@ from fitmas.llm.legacy_action_compile import (
     maybe_compile_execution_actions_for_turn,
     maybe_compile_memory_actions_for_turn,
 )
-from fitmas.llm.legacy_models import CoachDecision
+from fitmas.legacy.decision_contracts import CoachDecision
 
 
 def test_legacy_action_compile_injects_request_function_for_execution_actions() -> None:

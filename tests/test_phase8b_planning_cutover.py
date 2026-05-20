@@ -86,14 +86,14 @@ def test_runtime_mapper_blocks_applicable_unhandled_change() -> None:
             assert outcome.kind == "plan_blocked"
             return SimpleNamespace(text="Je bloque ce changement.", verified=True)
 
-    outcome = conversation_planning_bridge.planning_runtime_unhandled_outcome(
+    outcome = conversation_planning_bridge.canonical_planning_blocked_outcome(
         reason="adapter_failed",
         user_text="deplace",
         grounding_facts=(),
         decision_reply_composer_fn=lambda: FakeComposer(),
     )
 
-    assert outcome.response_mode == "planning_runtime_unhandled"
+    assert outcome.response_mode == "canonical_planning_blocked"
     assert outcome.mutation_applied is False
     assert outcome.pending_confirmation is False
 

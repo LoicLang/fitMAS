@@ -1173,11 +1173,8 @@ Decision de deletion :
 Resultat local 2026-05-20 :
 
 - `fitmas.llm` n'est plus un alias module vers `llm/decision_legacy.py` ;
-- `fitmas.llm` reste une facade compat explicite pour les anciens imports et
-  tests, avec restauration des defaults legacy apres monkeypatch ;
 - `legacy/decision_contracts.py` possede les contrats `CoachDecision`,
   `MutationDecision`, pending et action models ;
-- `llm/legacy_models.py` est seulement un re-export temporaire ;
 - les chemins source runtime ne doivent plus importer largement
   `from fitmas.llm import ...` ;
 - `LegacyCoachDecisionProvider` est default-off hors opt-in explicite
@@ -1200,26 +1197,63 @@ fallback_turn_count=0
 
 Legacy restant volontaire :
 
-- `fitmas.llm` facade compat reste necessaire pour des tests et quelques imports
-  historiques ;
-- `llm/legacy_models.py` doit etre supprime quand les importeurs restants seront
-  migres vers `legacy/decision_contracts.py` ;
-- `legacy_provider_denied`, `planning_runtime_unhandled` et
-  `no_change_safe_fallback` restent des outcomes no-write surs mais trop
-  generiques ;
 - `conversation_pipeline.py` reste un orchestrateur volumineux ;
 - `legacy/conversation_*` contient encore les bridges de migration ;
 - `final_reply.py` reste backend legacy derriere `LegacyFinalReplyBackend`.
 
+## Phase 9V / 9W — LLM import graph et outcomes safe canoniques
+
+Resultat local 2026-05-20 :
+
+- `fitmas.llm` est maintenant un package marker mince ;
+- `CoachDecision`, `MutationDecision`, pending et action models ne sont plus
+  re-exportes depuis `fitmas.llm` ;
+- `llm/legacy_models.py` est supprime ;
+- les tests historiques importent le provider explicitement via
+  `fitmas.llm.decision_legacy` quand ils testent le legacy ;
+- les contrats viennent de `fitmas.legacy.decision_contracts` ;
+- `legacy_provider_denied` est remplace par
+  `canonical_provider_clarification` ;
+- `planning_runtime_unhandled` est remplace par
+  `canonical_planning_blocked` ;
+- `no_change_safe_fallback` est remplace par
+  `canonical_no_action_safe_reply`.
+
+Preuves :
+
+```text
+architecture 9V/9W + compat:
+30 passed
+
+targeted regressions:
+378 passed
+
+full backend:
+1464 passed, 11 skipped
+
+core API smoke rerun:
+RESULT: OK (15 check(s))
+
+core fallback census:
+scenario_count=15
+fallback_scenario_count=0
+fallback_turn_count=0
+```
+
+Observation :
+
+- un run complet `smoke-decision-runtime-extended-census` a observe une
+  variabilite provider sur `add_hard_dense` avant de s'arreter ;
+- le scenario isole, la sequence courte et le core smoke complet ont ensuite
+  repasse ;
+- la kill list ne doit pas traiter ce point comme une regression 9V/9W, mais
+  comme un signal de hardening provider/smoke pour la suite.
+
 Suite logique :
 
-- Phase 9V : migrer les imports tests/source restants de `fitmas.llm` vers les
-  modules explicites ou `legacy/decision_contracts.py`, puis supprimer
-  `llm/legacy_models.py` si l'import graph est vide ;
-- Phase 9W : remplacer les sorties `legacy_provider_denied` /
-  `planning_runtime_unhandled` par des `DecisionOutcome` canoniques nommes ;
-- Phase 9X : shrinker `conversation_pipeline.py` en deplacant ces outcomes dans
-  des bridges plus petits ou dans `decision/` quand la frontiere est pure.
+- Phase 9X : shrinker `conversation_pipeline.py` en deplacant les blocs
+  d'outcome safe maintenant canoniques vers des bridges plus petits ou vers
+  `decision/` quand la frontiere est pure.
 
 ## Callers de `fitmas.final_reply`
 

@@ -4,7 +4,7 @@ import unittest
 from unittest.mock import patch
 from types import SimpleNamespace
 
-import fitmas.llm as llm
+import fitmas.llm.decision_legacy as llm
 from fitmas import llm_gateway as gw
 from fitmas.tool_contract import ToolContext, ToolResult
 

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from fitmas.llm import legacy_provider
+import fitmas.llm.legacy_provider as legacy_provider
 
 
 def test_legacy_provider_deepseek_structured_default_enabled(monkeypatch) -> None:

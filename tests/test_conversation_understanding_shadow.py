@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from fitmas.legacy.coach_decision_artifact import legacy_decision_artifact_from_raw
 from fitmas.legacy.understanding_shadow import shadow_understanding_from_legacy_decision
-from fitmas.llm import CoachDecision
+from fitmas.legacy.decision_contracts import CoachDecision
 
 
 def test_shadow_understanding_returns_none_for_missing_decision() -> None:

@@ -15,7 +15,7 @@ import fitmas.plan_mutation_service as plan_mutation_service
 from fitmas import repository as repo, schema as s
 from fitmas.api import app
 from fitmas.db import Base, SessionLocal, engine, init_db
-from fitmas.llm import CoachDecision, MutationDecision
+from fitmas.legacy.decision_contracts import CoachDecision, MutationDecision
 from fitmas.time_context import DAY_KEYS, day_label_fr, get_local_now
 from fitmas.week_coherence import WeekCoherenceReview
 

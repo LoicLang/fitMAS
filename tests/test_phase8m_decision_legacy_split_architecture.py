@@ -37,7 +37,7 @@ def _imports(relative: str) -> set[str]:
 
 def test_8m_legacy_split_modules_exist() -> None:
     for relative in (
-        "llm/legacy_models.py",
+        "legacy/decision_contracts.py",
         "llm/legacy_parser.py",
         "llm/legacy_prompt.py",
         "llm/legacy_action_compile.py",
@@ -81,7 +81,7 @@ def test_8m_decision_legacy_no_longer_defines_models_parser_or_compilers() -> No
 
 def test_8m_new_legacy_modules_do_not_import_conversation_pipeline() -> None:
     for relative in (
-        "llm/legacy_models.py",
+        "legacy/decision_contracts.py",
         "llm/legacy_parser.py",
         "llm/legacy_prompt.py",
         "llm/legacy_action_compile.py",

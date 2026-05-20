@@ -30,7 +30,7 @@ def test_9s_pipeline_checks_provider_authority_before_legacy_decide() -> None:
     gate_index = source.index("legacy_provider_allowed_for_turn(")
     legacy_index = source.index("run_legacy_coach_decision(")
     assert gate_index < legacy_index
-    assert "legacy_provider_denied_outcome(" in source
+    assert "canonical_provider_clarification_outcome(" in source
 
 
 def test_9s_legacy_decide_call_is_only_in_pipeline_and_bridge() -> None:

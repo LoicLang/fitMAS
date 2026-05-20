@@ -81,8 +81,6 @@ def test_8o_conversation_facing_modules_do_not_import_raw_legacy_models() -> Non
     forbidden = {
         "fitmas.llm.CoachDecision",
         "fitmas.llm.MutationDecision",
-        "fitmas.llm.legacy_models.CoachDecision",
-        "fitmas.llm.legacy_models.MutationDecision",
     }
     for relative in (
         "conversation_pipeline.py",
@@ -99,7 +97,6 @@ def test_8o_conversation_facing_modules_do_not_import_raw_legacy_models() -> Non
 
 def test_8o_raw_legacy_model_imports_stay_in_compat_zone() -> None:
     allowed = {
-        "llm/legacy_models.py",
         "llm/legacy_parser.py",
         "llm/legacy_action_compile.py",
         "llm/decision_legacy.py",
@@ -115,8 +112,6 @@ def test_8o_raw_legacy_model_imports_stay_in_compat_zone() -> None:
         if {
             "fitmas.llm.CoachDecision",
             "fitmas.llm.MutationDecision",
-            "fitmas.llm.legacy_models.CoachDecision",
-            "fitmas.llm.legacy_models.MutationDecision",
         }.intersection(imports):
             offenders.append(relative)
     assert offenders == []

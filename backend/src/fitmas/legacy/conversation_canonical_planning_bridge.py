@@ -15,8 +15,8 @@ from fitmas.domain.planning.reference_tokens import (
 )
 from fitmas.legacy.coach_command_adapter import commands_from_understanding
 from fitmas.legacy.conversation_planning_bridge import (
+    canonical_planning_blocked_outcome,
     conversation_outcome_from_planning_runtime_result,
-    planning_runtime_unhandled_outcome,
 )
 from fitmas.legacy.planning_runtime_adapter import run_planning_runtime_attempt_from_understanding
 
@@ -254,7 +254,7 @@ def handle_canonical_planning(
             }
         )
         _trace_legacy_skipped(turn_context)
-        return planning_runtime_unhandled_outcome(
+        return canonical_planning_blocked_outcome(
             reason=_unsupported_requested_change_reason(understanding.requested_change),
             user_text=source_text,
             grounding_facts=grounding_facts,
@@ -298,7 +298,7 @@ def handle_canonical_planning(
     if attempt.applicable:
         trace["result"] = "blocked"
         trace["attempt_reason"] = attempt.reason
-        return planning_runtime_unhandled_outcome(
+        return canonical_planning_blocked_outcome(
             reason=attempt.reason,
             user_text=source_text,
             grounding_facts=grounding_facts,

@@ -4,7 +4,7 @@ import json
 import logging
 from typing import Any, Callable
 
-from fitmas.llm.legacy_models import (
+from fitmas.legacy.decision_contracts import (
     AvailabilityConstraintAction,
     CoachDecision,
     ExecutionUpdateAction,

@@ -6,7 +6,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from fitmas.llm import MutationDecision
+from fitmas.legacy.decision_contracts import MutationDecision
 from fitmas.plan_patch import PlanPatch, PlanPatchOperation
 from fitmas.plan_mutation_service import (
     apply_decisions_for_user,

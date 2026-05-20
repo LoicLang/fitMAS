@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import unittest
 
-import fitmas.llm as llm
+import fitmas.llm.decision_legacy as llm
 
 
 class CoachDecisionActionsTest(unittest.TestCase):

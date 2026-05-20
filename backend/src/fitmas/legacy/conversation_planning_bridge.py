@@ -8,7 +8,7 @@ from fitmas.legacy.planning_outcome_adapter import planning_decision_to_outcome
 from fitmas.models import Extraction
 
 
-def planning_runtime_unhandled_outcome(
+def canonical_planning_blocked_outcome(
     *,
     reason: str,
     user_text: str = "",
@@ -32,7 +32,7 @@ def planning_runtime_unhandled_outcome(
             next_step=None,
         ),
         reply_contract=ReplyContract(
-            mode="planning_runtime_unhandled",
+            mode="canonical_planning_blocked",
             audience="conversation",
             allowed_claims=("plan_blocked",),
             forbidden_claims=("plan_committed", "plan_committed_without_event", "execution_updated_without_event"),
@@ -47,7 +47,7 @@ def planning_runtime_unhandled_outcome(
     return ConversationTurnOutcome(
         extraction=Extraction(confidence=0.85),
         reply_text=reply_result.text or reason_summary,
-        response_mode="planning_runtime_unhandled",
+        response_mode="canonical_planning_blocked",
         mutation_applied=False,
         pending_confirmation=False,
     )

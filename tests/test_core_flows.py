@@ -17,7 +17,7 @@ from fastapi.testclient import TestClient
 import fitmas.api_messages as api_messages
 import fitmas.calibration_needs as calibration_needs
 import fitmas.conversation_pipeline as conversation_pipeline
-import fitmas.llm as llm
+import fitmas.llm.decision_legacy as llm
 import fitmas.plan_mutation_service as plan_mutation_service
 from fitmas.adaptation import AdaptationResult
 from fitmas.api import app
@@ -30,7 +30,17 @@ from fitmas.conversation_turn_planner import ConversationTurnPlan
 from fitmas.db import Base, SessionLocal, engine, init_db
 from fitmas.legacy import conversation_pending_bridge
 from fitmas.legacy.coach_decision_artifact import legacy_decision_artifact_from_raw
-from fitmas.llm import CoachDecision, MutationDecision
+from fitmas.legacy.decision_contracts import (
+    AcceptPendingResolution,
+    AvailabilityConstraintAction,
+    CoachDecision,
+    ExecutionUpdateAction,
+    HealthSignalAction,
+    IgnorePendingResolution,
+    ModifyPendingResolution,
+    MutationDecision,
+    RejectPendingResolution,
+)
 from fitmas.models import Extraction
 from fitmas.mutation_permissions import default_confirmation_expiry, serialize_plan_patch_confirmation
 from fitmas.plan_patch import PlanPatch, PlanPatchOperation, PlanPatchOperationValidation, PlanPatchValidation
@@ -1123,7 +1133,7 @@ class FitMASCoreFlowsTest(unittest.TestCase):
                         response_type="no_change",
                         rationale="acceptation pending comprise par le LLM",
                         fitmas_message="C'est confirme. Je l'applique.",
-                        pending_resolution=llm.AcceptPendingResolution(type="accept_pending"),
+                        pending_resolution=AcceptPendingResolution(type="accept_pending"),
                     )
                 return CoachDecision(
                     response_type="plan_patch",
@@ -1419,7 +1429,7 @@ class FitMASCoreFlowsTest(unittest.TestCase):
                     response_type="no_change",
                     rationale="refus pending compris par le LLM",
                     fitmas_message="OK. Je ne touche pas au planning.",
-                    pending_resolution=llm.RejectPendingResolution(type="reject_pending"),
+                    pending_resolution=RejectPendingResolution(type="reject_pending"),
                 )
 
             api_messages.decide = fake_decide
@@ -1500,7 +1510,7 @@ class FitMASCoreFlowsTest(unittest.TestCase):
                 response_type="no_change",
                 rationale="le user veut modifier la proposition en attente",
                 fitmas_message="OK, precise la version voulue et je reprends.",
-                pending_resolution=llm.ModifyPendingResolution(
+                pending_resolution=ModifyPendingResolution(
                     type="modify_pending",
                     requested_changes="plus court encore",
                 ),
@@ -1556,7 +1566,7 @@ class FitMASCoreFlowsTest(unittest.TestCase):
                 response_type="reply",
                 rationale="le user demande une precision sans accepter ni refuser",
                 fitmas_message="Non, on ne force pas. La proposition reste ouverte si tu veux valider.",
-                pending_resolution=llm.IgnorePendingResolution(type="ignore"),
+                pending_resolution=IgnorePendingResolution(type="ignore"),
             )
             api_messages.extract_facts = lambda *args, **kwargs: []
             self.client.post("/api/v0/messages", json={"text": "Donc je force aujourd'hui ?"})
@@ -1605,7 +1615,7 @@ class FitMASCoreFlowsTest(unittest.TestCase):
             response_type="reply",
             rationale="le modele principal a sur-interprete le tour",
             fitmas_message="Je garde la proposition ouverte.",
-            pending_resolution=llm.AcceptPendingResolution(type="accept_pending"),
+            pending_resolution=AcceptPendingResolution(type="accept_pending"),
         )
 
         original_verify = conversation_pending_bridge.verify_pending_accept_resolution
@@ -1663,7 +1673,7 @@ class FitMASCoreFlowsTest(unittest.TestCase):
             response_type="reply",
             rationale="acceptation pending comprise",
             fitmas_message="C'est confirme. Je l'applique.",
-            pending_resolution=llm.AcceptPendingResolution(type="accept_pending"),
+            pending_resolution=AcceptPendingResolution(type="accept_pending"),
         )
 
         original_verify = conversation_pending_bridge.verify_pending_accept_resolution
@@ -1718,7 +1728,7 @@ class FitMASCoreFlowsTest(unittest.TestCase):
             response_type="reply",
             rationale="le modele principal a sur-interprete le non",
             fitmas_message="Je ne l'applique pas.",
-            pending_resolution=llm.RejectPendingResolution(type="reject_pending"),
+            pending_resolution=RejectPendingResolution(type="reject_pending"),
         )
 
         original_verify = conversation_pending_bridge.verify_pending_accept_resolution
@@ -1773,7 +1783,7 @@ class FitMASCoreFlowsTest(unittest.TestCase):
             response_type="reply",
             rationale="acceptation surestimee",
             fitmas_message="Je le fais.",
-            pending_resolution=llm.AcceptPendingResolution(type="accept_pending"),
+            pending_resolution=AcceptPendingResolution(type="accept_pending"),
         )
         turn_plan = SimpleNamespace(
             primary_intent="plan_mutation",
@@ -1841,7 +1851,7 @@ class FitMASCoreFlowsTest(unittest.TestCase):
                     )
                 ],
             ),
-            pending_resolution=llm.IgnorePendingResolution(type="ignore"),
+            pending_resolution=IgnorePendingResolution(type="ignore"),
         )
 
         outcome = conversation_pending_bridge.apply_pending_resolution(
@@ -1886,7 +1896,7 @@ class FitMASCoreFlowsTest(unittest.TestCase):
             response_type="reply",
             rationale="la pending doit laisser passer la nouvelle demande planning",
             fitmas_message="Je garde la proposition en attente.",
-            pending_resolution=llm.ModifyPendingResolution(
+            pending_resolution=ModifyPendingResolution(
                 type="modify_pending",
                 requested_changes="readapter la semaine",
             ),
@@ -2018,7 +2028,7 @@ class FitMASCoreFlowsTest(unittest.TestCase):
                 ],
             ),
             memory_actions=(
-                llm.AvailabilityConstraintAction(
+                AvailabilityConstraintAction(
                     type="record_availability",
                     window_text="demain disponible",
                     availability="available",
@@ -2029,7 +2039,7 @@ class FitMASCoreFlowsTest(unittest.TestCase):
                 ),
             ),
             execution_actions=(
-                llm.ExecutionUpdateAction(
+                ExecutionUpdateAction(
                     type="record_execution_update",
                     target_ref="seance a reprogrammer",
                     target_session_id=session.id,
@@ -2087,7 +2097,7 @@ class FitMASCoreFlowsTest(unittest.TestCase):
                 ],
             ),
             execution_actions=(
-                llm.ExecutionUpdateAction(
+                ExecutionUpdateAction(
                     type="record_execution_update",
                     target_ref="seance a reprogrammer",
                     target_session_id=session.id,
@@ -2150,7 +2160,7 @@ class FitMASCoreFlowsTest(unittest.TestCase):
             rationale="correction disponibilite",
             fitmas_message="OK, demain est dispo.",
             memory_actions=(
-                llm.AvailabilityConstraintAction(
+                AvailabilityConstraintAction(
                     type="record_availability",
                     window_text="indispo aujourd'hui mais dispo demain",
                     availability="limited",
@@ -2222,7 +2232,7 @@ class FitMASCoreFlowsTest(unittest.TestCase):
             response_type="no_change",
             rationale="acceptation pending comprise",
             fitmas_message="C'est confirme. Je l'applique.",
-            pending_resolution=llm.AcceptPendingResolution(type="accept_pending"),
+            pending_resolution=AcceptPendingResolution(type="accept_pending"),
         )
 
         outcome = conversation_pending_bridge.accept_pending_confirmation(
@@ -2400,7 +2410,7 @@ class FitMASCoreFlowsTest(unittest.TestCase):
                 rationale="execution manquee comprise par le LLM",
                 fitmas_message="Note pour hier. On garde ce matin simple.",
                 execution_actions=[
-                    llm.ExecutionUpdateAction(
+                    ExecutionUpdateAction(
                         type="record_execution_update",
                         target_ref="renfo d'hier",
                         target_session_id=session.id,
@@ -2834,7 +2844,7 @@ class FitMASCoreFlowsTest(unittest.TestCase):
         context = json.loads(turns[0].context_json)
 
         self.assertIn("assistant_message", result)
-        self.assertEqual(turns[0].response_mode, "legacy_provider_denied")
+        self.assertEqual(turns[0].response_mode, "canonical_provider_clarification")
         self.assertEqual(context["legacy_decide"]["legacy_skipped"], True)
         self.assertEqual(context["legacy_decide"]["source"], "legacy_provider_gate")
         self.assertEqual(context["legacy_decide"]["reason"], "canonical_planning_provider:missing_requested_change")
@@ -3022,7 +3032,7 @@ class FitMASCoreFlowsTest(unittest.TestCase):
                 response_type="no_change",
                 rationale="le user choisit une option",
                 fitmas_message="Je prends l'option vendredi.",
-                pending_resolution=llm.AcceptPendingResolution(
+                pending_resolution=AcceptPendingResolution(
                     type="accept_pending",
                     selected_candidate_id="move_friday",
                 ),
@@ -3101,7 +3111,7 @@ class FitMASCoreFlowsTest(unittest.TestCase):
                 response_type="no_change",
                 rationale="le user choisit une option inconnue",
                 fitmas_message="Je ne retrouve pas cette option.",
-                pending_resolution=llm.AcceptPendingResolution(
+                pending_resolution=AcceptPendingResolution(
                     type="accept_pending",
                     selected_candidate_id="unknown_choice",
                 ),
@@ -3611,7 +3621,7 @@ class FitMASCoreFlowsTest(unittest.TestCase):
                         rationale="Maladie signalee, le coach arbitre sans fallback deterministe.",
                         fitmas_message="Tu es malade, donc on ne force rien aujourd'hui.",
                         memory_actions=[
-                            llm.HealthSignalAction(
+                            HealthSignalAction(
                                 type="record_health_signal",
                                 health_signal="maladie",
                                 body_area="general",
@@ -3734,7 +3744,7 @@ class FitMASCoreFlowsTest(unittest.TestCase):
                     rationale="Signal sante arbitre par le coach.",
                     fitmas_message="Je prends l'epaule au serieux avant de toucher au plan.",
                     memory_actions=[
-                        llm.HealthSignalAction(
+                        HealthSignalAction(
                             type="record_health_signal",
                             health_signal="douleur epaule quand il nage",
                             body_area="epaule",
@@ -3841,7 +3851,7 @@ class FitMASCoreFlowsTest(unittest.TestCase):
                     rationale="Signal sante + demande de mutation a arbitrer ensemble.",
                     fitmas_message="Je tiens compte de l'epaule avant de bouger la piscine.",
                     memory_actions=[
-                        llm.HealthSignalAction(
+                        HealthSignalAction(
                             type="record_health_signal",
                             health_signal="douleur epaule en nageant",
                             body_area="epaule",
@@ -4764,7 +4774,7 @@ class FitMASCoreFlowsTest(unittest.TestCase):
                 rationale="execution manquee comprise par le LLM",
                 fitmas_message="Note pour hier. On garde ce matin simple et on avance.",
                 execution_actions=[
-                    llm.ExecutionUpdateAction(
+                    ExecutionUpdateAction(
                         type="record_execution_update",
                         target_ref="renfo d'hier",
                         target_session_id=session.id,
@@ -4831,7 +4841,7 @@ class FitMASCoreFlowsTest(unittest.TestCase):
                 rationale="execution manquee et patch planning non essentiel",
                 fitmas_message="Renfo d'hier note non fait. On garde ce matin simple.",
                 execution_actions=[
-                    llm.ExecutionUpdateAction(
+                    ExecutionUpdateAction(
                         type="record_execution_update",
                         target_ref="renfo d'hier",
                         target_session_id=session.id,
@@ -5287,7 +5297,7 @@ class FitMASCoreFlowsTest(unittest.TestCase):
                 rationale="note prise",
                 fitmas_message="Bien note.",
                 memory_actions=[
-                    llm.AvailabilityConstraintAction(
+                    AvailabilityConstraintAction(
                         type="record_availability",
                         window_text="piscine indisponible pendant 2 semaines",
                         availability="unavailable",

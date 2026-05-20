@@ -1173,7 +1173,7 @@ def test_applicable_canonical_planning_failure_blocks_without_legacy_fallthrough
     )
 
     assert outcome is not None
-    assert outcome.response_mode == "planning_runtime_unhandled"
+    assert outcome.response_mode == "canonical_planning_blocked"
     assert outcome.mutation_applied is False
     assert turn_context["legacy_decide"]["legacy_skipped"] is True
     assert turn_context["canonical_planning_provider"]["result"] == "blocked"
@@ -1225,7 +1225,7 @@ def test_unsupported_canonical_planning_change_blocks_without_legacy_fallthrough
     )
 
     assert outcome is not None
-    assert outcome.response_mode == "planning_runtime_unhandled"
+    assert outcome.response_mode == "canonical_planning_blocked"
     assert outcome.mutation_applied is False
     assert turn_context["legacy_decide"]["legacy_skipped"] is True
     assert turn_context["canonical_planning_provider"]["result"] == "blocked"

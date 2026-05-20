@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
-from fitmas.llm import legacy_tool_loop
+import fitmas.llm.legacy_tool_loop as legacy_tool_loop
 from fitmas.tools.contract import ToolContext, ToolResult
 
 

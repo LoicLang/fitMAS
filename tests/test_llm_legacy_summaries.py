@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
-from fitmas.llm import legacy_summaries
+import fitmas.llm.legacy_summaries as legacy_summaries
 
 
 def test_make_plan_summary_keeps_core_training_fields() -> None:

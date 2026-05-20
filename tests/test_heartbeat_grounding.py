@@ -16,7 +16,7 @@ from fitmas.adaptation import AdaptationResult
 from fitmas.coach_messages import persist_draft
 from fitmas.db import Base, SessionLocal, engine, init_db
 from fitmas.final_reply import HeartbeatReplyContext, HeartbeatReplyFact
-from fitmas.llm import MutationDecision
+from fitmas.legacy.decision_contracts import MutationDecision
 from fitmas.time_context import DAY_KEYS, day_label_fr, get_local_now
 
 

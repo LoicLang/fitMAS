@@ -5,7 +5,7 @@ from fitmas.prompt_observability import (
     build_prompt_trace,
     normalize_decide_failure_reason,
 )
-from fitmas import llm
+import fitmas.llm.decision_legacy as llm
 from fitmas.context_pack import build_conversation_context_pack
 from fitmas.conversation_prompting import select_conversation_prompt_policy
 from fitmas.llm_prompt_builder import build_layered_conversation_prompt

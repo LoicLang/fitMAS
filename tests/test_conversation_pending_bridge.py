@@ -8,13 +8,18 @@ from types import SimpleNamespace
 
 os.environ.setdefault("FITMAS_DB_PATH", tempfile.mktemp(prefix="fitmas-pending-bridge-", suffix=".db"))
 
-from fitmas import llm, repository as repo, schema as s
+from fitmas import repository as repo, schema as s
 from fitmas.db import Base, SessionLocal, engine, init_db
 from fitmas.decision import CoachUnderstanding, PendingResolution
 from fitmas.decision.reply_request import ReplyResult
 from fitmas.legacy import conversation_pending_bridge
 from fitmas.legacy.coach_decision_artifact import legacy_decision_artifact_from_raw
-from fitmas.llm import CoachDecision
+from fitmas.legacy.decision_contracts import (
+    AcceptPendingResolution,
+    CoachDecision,
+    IgnorePendingResolution,
+    RejectPendingResolution,
+)
 from fitmas.mutation_permissions import (
     default_confirmation_expiry,
     serialize_plan_patch_choice_confirmation,
@@ -73,7 +78,7 @@ class ConversationPendingBridgeTest(unittest.TestCase):
             response_type="no_change",
             rationale="acceptation pending comprise",
             fitmas_message="C'est confirme. Je l'applique.",
-            pending_resolution=llm.AcceptPendingResolution(type="accept_pending"),
+            pending_resolution=AcceptPendingResolution(type="accept_pending"),
         )
 
         outcome = conversation_pending_bridge.apply_pending_resolution(
@@ -115,7 +120,7 @@ class ConversationPendingBridgeTest(unittest.TestCase):
             response_type="reply",
             rationale="acceptation surestimee par le modele principal",
             fitmas_message="Je le fais.",
-            pending_resolution=llm.AcceptPendingResolution(type="accept_pending"),
+            pending_resolution=AcceptPendingResolution(type="accept_pending"),
         )
 
         outcome = conversation_pending_bridge.apply_pending_resolution(
@@ -254,7 +259,7 @@ class ConversationPendingBridgeTest(unittest.TestCase):
             response_type="no_change",
             rationale="legacy thinks accept",
             fitmas_message="legacy must not decide",
-            pending_resolution=llm.AcceptPendingResolution(type="accept_pending"),
+            pending_resolution=AcceptPendingResolution(type="accept_pending"),
         )
         understanding = CoachUnderstanding(
             intent="pending_response",
@@ -319,7 +324,7 @@ class ConversationPendingBridgeTest(unittest.TestCase):
             response_type="no_change",
             rationale="legacy accept",
             fitmas_message="legacy accept",
-            pending_resolution=llm.AcceptPendingResolution(type="accept_pending"),
+            pending_resolution=AcceptPendingResolution(type="accept_pending"),
         )
         understanding = CoachUnderstanding(
             intent="general_answer",
@@ -398,7 +403,7 @@ class ConversationPendingBridgeTest(unittest.TestCase):
             response_type="reply",
             rationale="legacy pending",
             fitmas_message="ok",
-            pending_resolution=llm.IgnorePendingResolution(type="ignore"),
+            pending_resolution=IgnorePendingResolution(type="ignore"),
         )
         understanding = CoachUnderstanding(
             intent="pending_response",
@@ -474,7 +479,7 @@ class ConversationPendingBridgeTest(unittest.TestCase):
             response_type="no_change",
             rationale="choix compris",
             fitmas_message="Je prends vendredi.",
-            pending_resolution=llm.AcceptPendingResolution(
+            pending_resolution=AcceptPendingResolution(
                 type="accept_pending",
                 selected_candidate_id="move_friday",
             ),
@@ -515,7 +520,7 @@ class ConversationPendingBridgeTest(unittest.TestCase):
             response_type="reply",
             rationale="ignore pending",
             fitmas_message="LEGACY MESSAGE MUST NOT LEAK",
-            pending_resolution=llm.IgnorePendingResolution(type="ignore"),
+            pending_resolution=IgnorePendingResolution(type="ignore"),
         )
         composer = _SpyPendingComposer("Composer garde la proposition ouverte.")
 
@@ -553,7 +558,7 @@ class ConversationPendingBridgeTest(unittest.TestCase):
             response_type="reply",
             rationale="reject pending",
             fitmas_message="LEGACY MESSAGE MUST NOT LEAK",
-            pending_resolution=llm.RejectPendingResolution(type="reject_pending"),
+            pending_resolution=RejectPendingResolution(type="reject_pending"),
         )
         composer = _SpyPendingComposer("Composer refuse sans mutation.")
 

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from fitmas.llm import legacy_fact_memory
+import fitmas.llm.legacy_fact_memory as legacy_fact_memory
 
 
 def test_extract_facts_returns_empty_for_invalid_payload() -> None:

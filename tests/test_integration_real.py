@@ -226,7 +226,7 @@ class TestPromptLayersWithLLM(unittest.TestCase):
 class TestMutationHooksIntegration(unittest.TestCase):
     def test_pre_hooks_block_hard_training_collision(self):
         """Pre-hooks should block moves that would overwrite a real training day."""
-        from fitmas.llm import MutationDecision
+        from fitmas.legacy.decision_contracts import MutationDecision
 
         decision = MutationDecision(
             mutation_type="move_session",
@@ -258,7 +258,7 @@ class TestMutationHooksIntegration(unittest.TestCase):
 
     def test_post_hooks_calculate_lighten_impact(self):
         """Post-hooks should correctly calculate impact of lightening a key session."""
-        from fitmas.llm import MutationDecision
+        from fitmas.legacy.decision_contracts import MutationDecision
 
         decision = MutationDecision(
             mutation_type="lighten_day",

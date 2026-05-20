@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from fitmas.llm.legacy_models import CoachDecision, MutationDecision
+from fitmas.legacy.decision_contracts import CoachDecision, MutationDecision
 from fitmas.llm.legacy_parser import (
     downgrade_free_confirmation_payload,
     get_last_invalid_decision_payload,

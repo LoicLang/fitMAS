@@ -669,7 +669,7 @@ def _run_conversation_turn_impl(
             legacy_skip_reason = conversation_decide_bridge.legacy_provider_skip_reason(turn_context)
             if legacy_skip_reason is not None:
                 conversation_decide_bridge.trace_legacy_provider_skipped(turn_context, reason=legacy_skip_reason)
-                outcome = conversation_decide_bridge.legacy_provider_denied_outcome(
+                outcome = conversation_decide_bridge.canonical_provider_clarification_outcome(
                     reason=legacy_skip_reason,
                     user_text=payload.text,
                     grounding_facts=tuple(render_grounding_packet_for_prompt(grounding_packet)),

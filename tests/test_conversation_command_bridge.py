@@ -13,7 +13,7 @@ from fitmas.db import Base, SessionLocal, engine, init_db
 from fitmas.decision import CoachUnderstanding, UserSignal
 from fitmas.legacy.coach_decision_artifact import legacy_decision_artifact_from_raw
 from fitmas.legacy.conversation_command_bridge import apply_coach_decision_commands, apply_turn_plan_memory_commands
-from fitmas.llm import AvailabilityConstraintAction, CoachDecision
+from fitmas.legacy.decision_contracts import AvailabilityConstraintAction, CoachDecision
 
 
 class ConversationCommandBridgeTest(unittest.TestCase):

@@ -101,10 +101,10 @@ def compose_no_change_reply_for_turn(
                 "capability": capability,
                 "draft": original_reply,
                 "output": fallback,
-                "source": "safe_fallback",
+                "source": "canonical_safe_reply",
                 "composed": False,
             }
-            return fallback, "no_change_safe_fallback"
+            return fallback, "canonical_no_action_safe_reply"
         turn_context["final_reply"] = {
             "capability": capability,
             "draft": original_reply,

@@ -3477,12 +3477,8 @@ Shrink physique de l'autorite legacy :
 
 - `fitmas.llm` n'est plus un alias `sys.modules` vers
   `llm/decision_legacy.py` ;
-- `fitmas.llm` est une facade compat explicite, avec sync de monkeypatch limitee
-  aux tests historiques et restauration des defaults legacy apres patch ;
 - les contrats Pydantic legacy `CoachDecision`, `MutationDecision` et actions
   associees vivent maintenant dans `legacy/decision_contracts.py` ;
-- `llm/legacy_models.py` est un re-export temporaire depuis
-  `legacy/decision_contracts.py` ;
 - les imports runtime larges `from fitmas.llm import ...` ont ete retires des
   chemins source controles ; les modules app/onboarding/adaptation importent
   des helpers legacy explicites ;
@@ -3529,15 +3525,67 @@ Lecture :
 - le runtime est plus petit en autorite : le provider legacy n'est plus un
   fallback implicite ni un import global silencieux ;
 - le repo n'est pas encore assez petit physiquement : `conversation_pipeline.py`
-  reste un hotspot, `legacy/` augmente parce que les contrats y ont ete
-  deplaces, et `fitmas.llm` garde une facade compat non triviale ;
-- les smokes montrent encore des modes no-write surs comme
-  `legacy_provider_denied`, `planning_runtime_unhandled` ou
-  `no_change_safe_fallback` ; ils ne sont pas des fallbacks actifs, mais ils
-  sont la prochaine surface a transformer en outcomes canoniques plus courts ;
-- prochain chantier logique : couper les derniers imports compat tests/source
-  de `fitmas.llm`, puis shrinker `conversation_pipeline.py` autour des outcomes
-  deny/unhandled.
+  reste un hotspot et `legacy/` augmente parce que les contrats y ont ete
+  deplaces ;
+- suite apres 9U : couper les derniers imports compat tests/source de
+  `fitmas.llm`, puis renommer les outcomes no-write legacy en modes
+  canoniques.
+
+## Statut Phase 9V / 9W
+
+Objectif : rendre le runtime plus petit, pas seulement mieux range.
+
+Livres en 9V :
+
+- `fitmas.llm` devient un package marker mince, sans re-export de
+  `CoachDecision`, `MutationDecision`, `decide()` ou parser legacy ;
+- `llm/legacy_models.py` est supprime ;
+- les contrats legacy sont importes directement depuis
+  `legacy/decision_contracts.py` ;
+- les tests et helpers qui exercent encore l'ancien provider importent
+  explicitement `fitmas.llm.decision_legacy`, jamais la facade package ;
+- `LegacyCoachDecisionProvider` charge `fitmas.llm.decision_legacy`
+  explicitement et ne depend plus du package `fitmas.llm`.
+
+Livres en 9W :
+
+- `legacy_provider_denied` devient `canonical_provider_clarification` ;
+- `planning_runtime_unhandled` devient `canonical_planning_blocked` ;
+- `no_change_safe_fallback` devient `canonical_no_action_safe_reply` ;
+- les anciens tokens ne sont plus presents dans le code source runtime ;
+- le no-write reste conserve : aucune de ces sorties ne commit, ne cree un
+  pending non plan_patch, ou ne claim une mutation.
+
+Preuves locales 2026-05-20 :
+
+```text
+architecture 9V/9W + compat:
+30 passed
+
+targeted regressions:
+378 passed
+
+full backend:
+1464 passed, 11 skipped
+
+core API smoke rerun:
+RESULT: OK (15 check(s))
+
+core fallback census:
+scenario_count=15
+fallback_scenario_count=0
+fallback_turn_count=0
+```
+
+Note de verification :
+
+- un premier run `smoke-decision-runtime-extended-census` a echoue une fois sur
+  `add_hard_dense` parce que DeepSeek a produit une clarification au lieu d'une
+  trace planning handled ;
+- le scenario isole et la sequence courte ont repasse, puis le core smoke
+  complet a repasse avec fallback census 0 ;
+- ce n'est pas une regression deterministe de 9V/9W, mais cela confirme qu'il
+  reste une variabilite provider a traiter si on veut un verdict froid jeudi.
 
 ## Matrice de pouvoirs
 

@@ -1130,17 +1130,36 @@ Etat local 15 mai :
       strict core+daily+extended ->
       `scenario_count=62`, `fallback_scenario_count=0`,
       `fallback_turn_count=0`.
-- Suite logique apres 9U :
-  - Phase 9V : migrer les imports tests/source restants de `fitmas.llm` vers
-    `legacy/decision_contracts.py` ou modules explicites, puis supprimer
-    `llm/legacy_models.py` si l'import graph est vide ;
-  - Phase 9W : transformer `legacy_provider_denied`,
-    `planning_runtime_unhandled` et `no_change_safe_fallback` en outcomes
-    canoniques plus nommes, pour reduire les replies safe generiques ;
+- Phase 9V / 9W livrees localement :
+  - `fitmas.llm` est un package marker mince, sans re-export de contrats ni de
+    `decide()` ;
+  - `llm/legacy_models.py` est supprime ;
+  - les contrats legacy viennent de `legacy/decision_contracts.py` ;
+  - les tests/provider legacy importent explicitement
+    `fitmas.llm.decision_legacy` ;
+  - `legacy_provider_denied` devient `canonical_provider_clarification` ;
+  - `planning_runtime_unhandled` devient `canonical_planning_blocked` ;
+  - `no_change_safe_fallback` devient `canonical_no_action_safe_reply` ;
+  - verification locale :
+    architecture + compat -> 30 passed ;
+    regressions ciblees -> 378 passed ;
+    full backend -> 1464 passed, 11 skipped ;
+    core smoke rerun -> `RESULT: OK (15 check(s))` ;
+    core fallback census -> `scenario_count=15`,
+    `fallback_scenario_count=0`, `fallback_turn_count=0`.
+- Observation 9V/9W :
+  - un premier `smoke-decision-runtime-extended-census` a stoppe sur une
+    variabilite DeepSeek `add_hard_dense` ;
+  - le scenario isole, la sequence courte et le core smoke complet ont ensuite
+    repasse ;
   - garder le verdict froid : le comportement est plus fiable et l'autorite
     legacy est plus petite, mais le repo n'est pas encore assez petit tant que
     `conversation_pipeline.py` et les bridges `legacy/conversation_*` restent
-    volumineux ;
+    volumineux.
+- Suite logique apres 9V/9W :
+  - Phase 9X : shrinker `conversation_pipeline.py` autour des outcomes safe
+    maintenant canoniques et enlever la plomberie qui ne porte plus d'autorite
+    produit.
 - Les anciens plans PlanningSnapshot / prompt-context / candidate-flow restent
   lisibles comme historique mais ne tranchent plus la cible.
 

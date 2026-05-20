@@ -4,7 +4,7 @@ import logging
 from typing import Any
 
 from fitmas import coach_voice
-from fitmas.llm.legacy_models import (
+from fitmas.legacy.decision_contracts import (
     AvailabilityConstraintAction,
     CoachDecision,
     ExecutionUpdateAction,

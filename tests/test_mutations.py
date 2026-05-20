@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
-from fitmas.llm import MutationDecision
+from fitmas.legacy.decision_contracts import MutationDecision
 from fitmas import mutations
 
 

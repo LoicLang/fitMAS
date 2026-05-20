@@ -5,16 +5,16 @@ def test_fitmas_llm_is_normal_package_not_decision_legacy_alias() -> None:
     import fitmas.llm as llm
 
     assert llm.__name__ == "fitmas.llm"
-    assert hasattr(llm, "CoachDecision")
-    assert hasattr(llm, "decide")
+    assert not hasattr(llm, "CoachDecision")
+    assert not hasattr(llm, "MutationDecision")
+    assert not hasattr(llm, "decide")
 
 
-def test_fitmas_llm_package_reexports_legacy_decision_contracts() -> None:
-    from fitmas.llm import CoachDecision, decide, parse_coach_decision_payload
-    from fitmas.llm.decision_legacy import CoachDecision as LegacyCoachDecision
+def test_legacy_contracts_live_in_explicit_legacy_module() -> None:
+    from fitmas.legacy.decision_contracts import CoachDecision
+    from fitmas.llm.decision_legacy import parse_coach_decision_payload
 
-    assert CoachDecision is LegacyCoachDecision
-    assert callable(decide)
+    assert CoachDecision.__name__ == "CoachDecision"
     assert callable(parse_coach_decision_payload)
 
 

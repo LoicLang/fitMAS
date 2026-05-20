@@ -156,11 +156,11 @@ def trace_legacy_provider_skipped(turn_context: dict[str, object], *, reason: st
     turn_context["legacy_decide"] = {
         "legacy_skipped": True,
         "source": "legacy_provider_gate",
-        "reason": str(reason or "legacy_provider_denied"),
+        "reason": str(reason or "canonical_provider_clarification"),
     }
 
 
-def legacy_provider_denied_outcome(
+def canonical_provider_clarification_outcome(
     *,
     reason: str,
     user_text: str,
@@ -176,14 +176,14 @@ def legacy_provider_denied_outcome(
         explanation=DecisionExplanation(
             decision_label="Tour repris proprement",
             reason_summary="Je n'ai pas assez d'elements fiables pour agir proprement.",
-            evidence=("legacy_provider_denied", reason),
+            evidence=("canonical_provider_clarification", reason),
             tradeoff=None,
             impact={},
             protected=("no_legacy_decide", "no_uncommitted_plan_claim"),
             next_step="Redis-moi le changement voulu en une phrase et je le reprends proprement.",
         ),
         reply_contract=ReplyContract(
-            mode="legacy_provider_denied",
+            mode="canonical_provider_clarification",
             audience="conversation",
             allowed_claims=("clarification",),
             forbidden_claims=("plan_committed", "plan_pending", "execution_updated_without_event"),
@@ -198,7 +198,7 @@ def legacy_provider_denied_outcome(
     return ConversationTurnOutcome(
         extraction=Extraction(confidence=0.65),
         reply_text=reply_result.text or decision_outcome.explanation.next_step or decision_outcome.explanation.reason_summary,
-        response_mode="legacy_provider_denied",
+        response_mode="canonical_provider_clarification",
         mutation_applied=False,
         pending_confirmation=False,
     )

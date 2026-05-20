@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
-from fitmas.llm import legacy_schema_repair
+import fitmas.llm.legacy_schema_repair as legacy_schema_repair
 from fitmas.tools.contract import ToolResult
 
 

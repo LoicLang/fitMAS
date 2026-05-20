@@ -95,15 +95,15 @@ class LegacyCoachDecisionProvider:
 
 
 def default_legacy_decide(*args, **kwargs):
-    llm_package = importlib.import_module("fitmas.llm")
-    return llm_package.decide(*args, **kwargs)
+    decision_runtime = importlib.import_module("fitmas.llm.decision_legacy")
+    return decision_runtime.decide(*args, **kwargs)
 
 
 def _default_clear_last_decide_none() -> None:
-    llm_package = importlib.import_module("fitmas.llm")
-    llm_package.clear_last_decide_none()
+    decision_runtime = importlib.import_module("fitmas.llm.decision_legacy")
+    decision_runtime.clear_last_decide_none()
 
 
 def _default_get_last_decide_none() -> dict[str, Any] | None:
-    llm_package = importlib.import_module("fitmas.llm")
-    return llm_package.get_last_decide_none()
+    decision_runtime = importlib.import_module("fitmas.llm.decision_legacy")
+    return decision_runtime.get_last_decide_none()

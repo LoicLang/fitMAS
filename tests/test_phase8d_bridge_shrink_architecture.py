@@ -91,7 +91,7 @@ def test_8d_planning_reply_helpers_live_in_legacy_bridge_without_old_cutover() -
 
     assert "def maybe_handle_planning_runtime_cutover" not in pipeline
     assert "def maybe_handle_planning_runtime_cutover" not in bridge
-    assert "planning_runtime_unhandled" in bridge
+    assert "canonical_planning_blocked" in bridge
     assert "legacy_decision_contract_disabled" in bridge
 
 

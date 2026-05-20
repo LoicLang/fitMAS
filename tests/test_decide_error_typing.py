@@ -8,7 +8,7 @@ from unittest.mock import patch
 import anthropic
 import httpx
 
-from fitmas import llm
+import fitmas.llm.decision_legacy as llm
 
 
 def _fake_response(status_code: int = 400) -> httpx.Response:

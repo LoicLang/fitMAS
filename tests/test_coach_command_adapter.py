@@ -9,7 +9,7 @@ from fitmas.legacy.coach_command_adapter import (
     execution_action_from_command,
     memory_action_from_command,
 )
-from fitmas.llm import AvailabilityConstraintAction, CoachDecision, ExecutionUpdateAction, HealthSignalAction
+from fitmas.legacy.decision_contracts import AvailabilityConstraintAction, CoachDecision, ExecutionUpdateAction, HealthSignalAction
 
 
 def test_legacy_decision_memory_and_execution_actions_become_commands() -> None:

@@ -10,7 +10,7 @@ os.environ.setdefault("FITMAS_DB_PATH", tempfile.mktemp(prefix="fitmas-memory-se
 from fitmas import repository as repo, schema as s
 from fitmas.db import Base, SessionLocal, engine, init_db
 from fitmas.execution_mutation_service import apply_execution_actions_for_user
-from fitmas.llm import (
+from fitmas.legacy.decision_contracts import (
     AvailabilityConstraintAction,
     ExecutionUpdateAction,
     HealthSignalAction,

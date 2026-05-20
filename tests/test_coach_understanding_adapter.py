@@ -5,7 +5,7 @@ from fitmas.legacy.coach_understanding_adapter import (
     coach_decision_artifact_to_understanding,
     coach_decision_to_understanding,
 )
-from fitmas.llm import (
+from fitmas.legacy.decision_contracts import (
     AcceptPendingResolution,
     AvailabilityConstraintAction,
     CoachDecision,
