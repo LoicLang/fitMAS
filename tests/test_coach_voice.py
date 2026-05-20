@@ -108,6 +108,11 @@ class CoachVoiceHardGuardTest(unittest.TestCase):
         self.assertTrue(message_violates_coach_voice("Le coach te dit que..."))
         self.assertTrue(message_violates_coach_voice("Le coach vous propose..."))
 
+    def test_detects_analysis_summary_leak(self) -> None:
+        self.assertTrue(message_violates_coach_voice("User reports lifting 100 kg and asks what to do next."))
+        self.assertTrue(message_violates_coach_voice("User expresses a preference for running in the morning."))
+        self.assertTrue(message_violates_coach_voice("L'utilisateur indique qu'il prefere courir le matin."))
+
     def test_does_not_flag_correct_voice(self) -> None:
         ok = [
             "Vendredi pour le footing, jeudi tu coupes.",

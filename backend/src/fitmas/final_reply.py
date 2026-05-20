@@ -109,6 +109,21 @@ _UNCOMMITTED_ACTION_CLAIM_FRAGMENTS = (
     "c est ajoute",
     "c'est ajoute",
 )
+_MEMORY_CLAIM_FRAGMENTS = (
+    "je retiens",
+    "je note",
+    "je garde en tete",
+    "je garde ca en tete",
+    "je garde ça en tete",
+    "bien note",
+    "bien noté",
+)
+_EXECUTION_REGISTRATION_FRAGMENTS = (
+    "seance enregistree",
+    "séance enregistrée",
+    "nouvelle seance enregistree",
+    "nouvelle séance enregistrée",
+)
 
 
 def build_final_reply_prompt(context: FinalReplyContext) -> tuple[str, str]:
@@ -161,6 +176,10 @@ def is_valid_final_reply(reply: str | None, context: FinalReplyContext) -> bool:
             return False
         if any(fragment in normalized for fragment in _UNCOMMITTED_ACTION_CLAIM_FRAGMENTS):
             return False
+    if not context.memory_actions_applied and any(fragment in normalized for fragment in _MEMORY_CLAIM_FRAGMENTS):
+        return False
+    if not context.execution_actions_applied and any(fragment in normalized for fragment in _EXECUTION_REGISTRATION_FRAGMENTS):
+        return False
     return True
 
 
@@ -272,6 +291,8 @@ def compose_no_change_reply(
             "Response type: no_change",
             "Aucun changement planning n'a ete commit.",
             "Tu peux reformuler le brouillon, mais pas changer ses faits ni ajouter d'action.",
+            "Ne dis pas que tu notes, retiens ou gardes en memoire sauf si `Memoire appliquee` est listee.",
+            "Ne parle pas de seance enregistree sauf si `Execution appliquee` est listee.",
         ),
     )
     reply = compose_final_reply(context, request_text_fn=request_text_fn)

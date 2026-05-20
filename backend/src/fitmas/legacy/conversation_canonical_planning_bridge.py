@@ -94,17 +94,17 @@ def should_handle_unsupported_canonical_planning_without_legacy(
         return False
     if understanding is None:
         return False
-    if understanding.intent != "plan_change":
-        return False
-    if understanding.requested_change is None:
-        return False
     if understanding.pending_resolution is not None or _has_active_pending(pending_confirmation):
-        return False
-    if _has_blocking_command_signals(understanding):
         return False
     if not _turn_plan_allows_planning(turn_plan):
         return False
-    return not _requested_change_is_supported(understanding.requested_change)
+    if understanding.intent != "plan_change":
+        return True
+    if understanding.requested_change is None:
+        return True
+    if not _requested_change_is_supported(understanding.requested_change):
+        return True
+    return False
 
 
 def planning_understanding_for_provider(

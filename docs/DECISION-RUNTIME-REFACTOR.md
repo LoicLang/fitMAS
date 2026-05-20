@@ -3342,6 +3342,135 @@ Lecture :
 - `conversation_decide_bridge.py` et `llm/decision_legacy.py` restent encore
   presents jusqu'a ce que ce dernier owner pending soit coupe.
 
+## Statut Phase 9Q / 9R
+
+Reduction stricte du runtime avant bilan jeudi :
+
+- le rejet d'une pending active ne retombe plus vers `CoachDecision` ;
+- `Understanding` garde un contrat court : si l'event machine porte
+  `pending_active=True`, une reponse a cette proposition doit sortir
+  `intent=pending_response` avec `pending_resolution` ;
+- le parser canonique promeut un `pending_resolution` structure en
+  `pending_response` uniquement depuis cette metadata machine, sans parser le
+  texte utilisateur libre ;
+- les demandes planning reconnues mais non consommables par le pipeline
+  canonique deviennent un block / clarification canonique au lieu d'appeler le
+  provider legacy ;
+- le wrapper `scripts/smoke-decision-runtime-extended-census` est maintenant
+  strict : il ne passe plus `--allow-fallbacks`.
+
+Preuve locale 2026-05-20 :
+
+```text
+targeted 9Q/9R gate:
+73 passed
+
+strict core + daily + extended:
+scenario_count=62
+fallback_scenario_count=0
+fallback_turn_count=0
+```
+
+Lecture :
+
+- sur les 62 lanes core + daily + extended, il n'y a plus d'usage mesure de
+  `CoachDecision` comme fallback runtime ;
+- cela ne prouve pas que tout le legacy est supprimable : cela prouve que les
+  lanes dogfood couvertes n'en dependent plus ;
+- les dettes restantes sont surtout de qualite produit/reply :
+  summaries planning generiques, read-only parfois brut, et propositions
+  verbales sans artifact ;
+- prochaine decision : shrinker le provider legacy restant seulement la ou
+  l'import graph et le census prouvent une absence d'autorite user-facing.
+
+## Statut Phase 9S
+
+Shrink / audit du provider legacy :
+
+- ajout d'une gate explicite avant `run_legacy_coach_decision` ;
+- la gate ne lit aucun texte utilisateur libre ;
+- les lanes canoniques deja handled/blocked, ou celles qui posent
+  `deny_legacy_provider=True`, ne peuvent plus appeler `CoachDecision` ;
+- les traces `fallback_legacy` restent autorisees par defaut comme compat
+  mesuree : elles doivent passer par le census, pas etre silencieusement
+  confondues avec une interdiction ;
+- si la gate refuse, le runtime produit un outcome no-write canonique via
+  `DecisionOutcome -> ReplyComposer`, puis trace
+  `legacy_decide.legacy_skipped=True` ;
+- `llm/decision_legacy.py` est maintenant explicitement marque compat provider,
+  pas runtime produit actif.
+
+Preuve locale 2026-05-20 :
+
+```text
+targeted 9S gate:
+123 passed
+
+full backend:
+1441 passed, 11 skipped, 11 subtests passed
+
+strict core + daily + extended:
+scenario_count=62
+fallback_scenario_count=0
+fallback_turn_count=0
+```
+
+Lecture :
+
+- le runtime est plus petit en autorite : le provider legacy n'est plus le
+  receptacle implicite des misses canoniques marques hard-deny ;
+- le code n'est pas encore physiquement nettoye autant qu'il devra l'etre :
+  `conversation_pipeline.py` reste gros et `decision_legacy.py` garde des shims
+  publics ;
+- la prochaine dette visible n'est plus le fallback legacy mesure, mais la
+  qualite de reply (`User reports...`, `sport=course`, `Option possible`,
+  suggestions verbales sans artifact).
+
+## Statut Phase 9T
+
+Reply quality sans rouvrir l'architecture :
+
+- les leaks analytiques visibles sont hard-blocked par la voix coach :
+  `User reports...`, `User expresses...`, `L'utilisateur indique...` ;
+- le bridge no-change ne recopie plus un brouillon invalide si le composer
+  echoue ;
+- les replies no-change ne peuvent plus claim `je retiens`, `je note` ou
+  `je garde en tete` sans action memoire appliquee ;
+- elles ne peuvent plus parler de `seance enregistree` sans action execution
+  appliquee ;
+- les summaries machine `create_session` deviennent user-facing :
+  `ajouter une course facile, 30 min le 2026-05-25 (lundi)` au lieu de
+  `sport=course` ;
+- le fallback pending generique ne sort plus `Option possible, confirmation
+  recommandee` tel quel.
+
+Preuves locales 2026-05-20 :
+
+```text
+targeted reply:
+83 passed
+
+full backend:
+1447 passed, 11 skipped, 11 subtests passed
+
+real smoke cible:
+body_metric_reassurance_thread OK
+memory_preference OK
+create_easy_free_day OK
+fallback census 0
+```
+
+Verdict provisoire :
+
+- fiabilisation : oui, nette sur les lanes couvertes par les smokes. Les claims
+  sans event et les fallbacks legacy visibles sont beaucoup mieux contenus ;
+- simplification : partielle. L'autorite est reduite, mais le code reste gros :
+  `conversation_pipeline.py`, `legacy/` et `llm/decision_legacy.py` doivent
+  encore etre shrinkes physiquement ;
+- prochain vrai test jeudi : le refactor a-t-il rendu le runtime plus petit, ou
+  seulement mieux range ? La reponse actuelle est : plus fiable, pas encore
+  assez petit.
+
 ## Matrice de pouvoirs
 
 | Couche | Comprend ? | Decide ? | Write ? | Parle ? |

@@ -50,10 +50,10 @@ def test_extended_census_wrapper_exists_and_uses_all_census_inputs() -> None:
         "--fallback-census-json /tmp/fitmas-9p-daily-census.json",
         "--extended",
         "--fallback-census-json /tmp/fitmas-9p-extended-census.json",
-        "--allow-fallbacks",
         "--json-out /tmp/fitmas-9p-global-summary.json",
     ):
         assert marker in source
+    assert "--allow-fallbacks" not in source
 
 
 def test_extended_scenario_names_do_not_duplicate_core_or_daily() -> None:

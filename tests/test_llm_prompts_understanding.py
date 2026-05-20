@@ -67,3 +67,18 @@ def test_understanding_prompt_documents_command_payload_fields_without_commands(
     assert "commande DB" in text
     assert "Command" not in text
     assert "PlanPatch" not in text
+
+
+def test_understanding_prompt_requires_pending_resolution_when_pending_active() -> None:
+    rendered = build_understanding_prompt(
+        UnderstandingPromptInput(
+            event_summary="source=telegram type=user_message pending_active=True text=non finalement on laisse",
+            context_blocks=("Pending confirmation: plan_patch id=12",),
+        )
+    )
+
+    text = f"{rendered.system}\n{rendered.prompt}"
+
+    assert "pending_active=True" in text
+    assert "intent=pending_response" in text
+    assert "pending_resolution" in text

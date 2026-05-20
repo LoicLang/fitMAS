@@ -154,7 +154,7 @@ def test_composer_plan_pending_created_requires_confirmation_step() -> None:
 
     assert result.verified is True
     assert result.fallback_used is True
-    assert result.text == "Option possible, confirmation recommandee. Tu confirmes ?"
+    assert result.text == "J'ai une option a te proposer. Tu confirmes ?"
 
 
 def test_composer_plan_pending_fallback_uses_next_step() -> None:

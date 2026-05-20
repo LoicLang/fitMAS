@@ -694,6 +694,116 @@ def test_availability_primary_with_typed_planning_request_can_use_canonical_plan
     )
 
 
+def test_planning_turn_with_unconsumed_understanding_blocks_without_legacy(monkeypatch) -> None:
+    monkeypatch.delenv("FITMAS_CANONICAL_PLANNING_PROVIDER", raising=False)
+    understanding = CoachUnderstanding(
+        intent="general_answer",
+        confidence=0.95,
+        user_summary="Disponibilite datee comprise sans requested_change.",
+        extracted_signals=(),
+        requested_change=None,
+        pending_resolution=None,
+        clarification_need=None,
+    )
+    turn_plan = SimpleNamespace(
+        primary_intent="plan_mutation",
+        secondary_intents=("availability_constraint",),
+        mutation_signal=True,
+        planning_action="update_session",
+        user_goal="indisponible mercredi, adapter si besoin",
+        confidence=0.95,
+        temporal_references=({"kind": "weekday", "value": "wednesday", "role": "context"},),
+        availability_constraint=None,
+    )
+
+    assert bridge.should_handle_unsupported_canonical_planning_without_legacy(
+        understanding=understanding,
+        turn_plan=turn_plan,
+        pending_confirmation=None,
+    )
+
+
+def test_health_sidecar_signal_does_not_force_legacy_for_planning(monkeypatch) -> None:
+    monkeypatch.delenv("FITMAS_CANONICAL_PLANNING_PROVIDER", raising=False)
+    health_signal = UserSignal(
+        type="other",
+        label="illness",
+        status="new",
+        severity="medium",
+        confidence=0.9,
+        evidence="Je suis malade",
+        payload={"action_type": "record_health_signal", "health_signal": "illness"},
+    )
+    understanding = _understanding(
+        requested_change=_requested_change(
+            kind="lighten",
+            source_ref="date:2026-05-21",
+            target_ref=None,
+        ),
+        signals=(health_signal,),
+    )
+
+    assert bridge.should_use_canonical_planning_without_legacy(
+        understanding=understanding,
+        turn_plan=_turn_plan(),
+        pending_confirmation=None,
+    )
+
+
+def test_unsupported_planning_with_health_sidecar_blocks_without_legacy(monkeypatch) -> None:
+    monkeypatch.delenv("FITMAS_CANONICAL_PLANNING_PROVIDER", raising=False)
+    health_signal = UserSignal(
+        type="health",
+        label="illness",
+        status="new",
+        severity="medium",
+        confidence=0.9,
+        evidence="Je suis malade",
+        payload={"action_type": "record_health_signal", "health_signal": "illness"},
+    )
+    understanding = _understanding(
+        requested_change=_requested_change(
+            kind="lighten",
+            source_ref=None,
+            target_ref="date:2026-05-21",
+        ),
+        signals=(health_signal,),
+    )
+
+    assert bridge.should_handle_unsupported_canonical_planning_without_legacy(
+        understanding=understanding,
+        turn_plan=_turn_plan(),
+        pending_confirmation=None,
+    )
+
+
+def test_unsupported_planning_with_command_sidecar_blocks_without_legacy(monkeypatch) -> None:
+    monkeypatch.delenv("FITMAS_CANONICAL_PLANNING_PROVIDER", raising=False)
+    preference_signal = UserSignal(
+        type="preference",
+        label="morning",
+        status="new",
+        severity="low",
+        confidence=0.9,
+        evidence="Je prefere le matin",
+        payload={"action_type": "record_preference", "scope": "unknown", "preference": "matin"},
+    )
+    understanding = _understanding(
+        requested_change=_requested_change(
+            kind="lighten",
+            source_ref=None,
+            target_ref="date:2026-05-21",
+        ),
+        signals=(preference_signal,),
+    )
+
+    assert bridge.should_handle_unsupported_canonical_planning_without_legacy(
+        understanding=understanding,
+        turn_plan=_turn_plan(),
+        pending_confirmation=None,
+    )
+
+
 def test_turn_plan_general_unavailability_emits_availability_window_with_status(monkeypatch) -> None:
     monkeypatch.delenv("FITMAS_CANONICAL_PLANNING_PROVIDER", raising=False)
     understanding = CoachUnderstanding(

@@ -18,6 +18,8 @@ def build_understanding_prompt(data: UnderstandingPromptInput) -> PromptRender:
         "Tu ne parles pas au user.",
         "Tu ne composes aucun message visible.",
         "Tu ne produis pas de patch planning, ancienne mutation, commande DB ou write.",
+        "Si InputEvent contient pending_active=True et que le message repond a la proposition active, "
+        "retourne intent=pending_response avec pending_resolution renseigne.",
         "Tu retournes uniquement un JSON CoachUnderstanding valide.",
     )
     schema = {

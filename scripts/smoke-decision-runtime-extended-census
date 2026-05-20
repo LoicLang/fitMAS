@@ -27,5 +27,4 @@ echo "  global: $global_report"
   /tmp/fitmas-9p-core-census.json \
   /tmp/fitmas-9p-daily-census.json \
   /tmp/fitmas-9p-extended-census.json \
-  --allow-fallbacks \
   --json-out /tmp/fitmas-9p-global-summary.json

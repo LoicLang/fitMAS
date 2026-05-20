@@ -169,6 +169,16 @@ def _humanize_internal_candidate_summary(text: str) -> str | None:
     bits: list[str] = []
     if "move_session" in text and target_date:
         bits.append(f"deplacer la seance ciblee au {_date_label(target_date)}")
+    elif "create_session" in text:
+        session = _sport_label(sport)
+        intensity_label = _intensity_label(intensity)
+        if intensity_label:
+            session = f"{session} {intensity_label}"
+        if duration:
+            session = f"{session}, {duration} min"
+        if target_date:
+            session = f"{session} le {_date_label(target_date)}"
+        bits.append(f"ajouter une {session}")
     elif "replace_session" in text and sport:
         replacement = _sport_label(sport)
         intensity_label = _intensity_label(intensity)
@@ -179,7 +189,7 @@ def _humanize_internal_candidate_summary(text: str) -> str | None:
         bits.append(f"remplacer la seance ciblee par {replacement}")
     elif "lighten" in text:
         bits.append("alleger la seance ciblee")
-    if sport and "replace_session" not in text:
+    if sport and "replace_session" not in text and "create_session" not in text:
         bits.append(f"sport={_sport_label(sport)}")
     return ", ".join(bits) if bits else None
 

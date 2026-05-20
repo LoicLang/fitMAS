@@ -73,6 +73,8 @@ class DecisionReplyComposer:
 
     def _fallback_reply(self, request: ReplyRequest) -> str:
         if request.kind == "plan_pending":
+            if _is_generic_pending_summary(request.explanation.reason_summary):
+                return _with_question("J'ai une option a te proposer.", request.explanation.next_step)
             if request.explanation.next_step:
                 return f"{request.explanation.reason_summary} {request.explanation.next_step}".strip()
             return f"{request.explanation.reason_summary} Tu confirmes ?"
@@ -145,3 +147,18 @@ def _mentions_confirmation(text: str) -> bool:
     value = str(text or "")
     normalized = value.lower()
     return "?" in value or "confirmes" in normalized or "feu vert" in normalized or "ton accord" in normalized
+
+
+def _is_generic_pending_summary(text: str) -> bool:
+    normalized = str(text or "").strip().lower()
+    return normalized in {
+        "option possible, confirmation recommandee.",
+        "option possible, confirmation recommandee",
+    }
+
+
+def _with_question(prefix: str, next_step: str | None) -> str:
+    step = str(next_step or "").strip()
+    if step:
+        return f"{prefix} {step}".strip()
+    return f"{prefix} Tu confirmes ?"

@@ -175,6 +175,10 @@ def message_violates_coach_voice(message: str) -> bool:
         or padded.startswith(" le coach ")
         or " le coach te " in padded
         or " le coach vous " in padded
+        or normalized.startswith("user ")
+        or normalized.startswith("the user ")
+        or normalized.startswith("l utilisateur ")
+        or normalized.startswith("lutilisateur ")
     )
 
 

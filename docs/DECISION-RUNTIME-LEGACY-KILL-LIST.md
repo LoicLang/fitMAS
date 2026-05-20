@@ -1052,6 +1052,122 @@ Decision de deletion :
   quelques replies execution en troisieme personne, availability qui suggere
   verbalement sans artifact.
 
+## Phase 9Q / 9R — Pending reject canonique et census strict
+
+Resultat local 2026-05-20 :
+
+- `pending_reject_move` est maintenant traite par le provider pending
+  canonique, sans `CoachDecision` ;
+- `LLMUnderstandingService` promeut un `pending_resolution` structure en
+  `intent=pending_response` quand l'event machine porte `pending_active=True` ;
+- cette promotion ne lit pas le texte utilisateur libre : elle valide un
+  artefact LLM sur metadata runtime typee ;
+- une demande planning reconnue par `TurnPlan` mais non consommable par le
+  `PlanningDecisionPipeline` retourne maintenant un block / clarification
+  canonique au lieu de fallback legacy ;
+- `scripts/smoke-decision-runtime-extended-census` est strict par defaut :
+  `--allow-fallbacks` est retire du wrapper.
+
+Preuves :
+
+```text
+targeted 9Q/9R gate:
+73 passed
+
+./scripts/smoke-decision-runtime-extended-census
+scenario_count=62
+fallback_scenario_count=0
+fallback_turn_count=0
+```
+
+Decision de deletion :
+
+- les lanes core + daily + extended ne justifient plus de garder
+  `CoachDecision` comme fallback runtime generaliste ;
+- ne pas supprimer encore tout `llm/decision_legacy.py` sans audit d'import et
+  callers hors corpus ;
+- prochaine coupe : reduire `conversation_decide_bridge.py` et le provider
+  legacy aux chemins non couverts ou explicitement compat, puis ajouter une
+  gate d'architecture anti-retour ;
+- les dettes de reply quality ne doivent pas servir d'excuse pour rouvrir un
+  fallback legacy.
+
+## Phase 9S — Gate explicite du provider legacy
+
+Resultat local 2026-05-20 :
+
+- `conversation_pipeline.py` verifie maintenant une gate avant
+  `run_legacy_coach_decision` ;
+- la gate lit seulement des artefacts runtime (`canonical_*`, `legacy_decide`),
+  jamais le texte utilisateur libre ;
+- une lane canonique peut interdire explicitement le provider via
+  `deny_legacy_provider=True` ;
+- `fallback_legacy` reste un resultat compat mesure et classe : il n'est pas
+  automatiquement bloque, sinon les tests historiques non migres cassent alors
+  qu'ils ne representent pas les lanes dogfood couvertes ;
+- si la gate bloque, le tour rend un `DecisionOutcome` no-write via
+  `ReplyComposer`, avec `legacy_decide.legacy_skipped=True` ;
+- `llm/decision_legacy.py` porte maintenant un docstring indiquant qu'il est
+  compat provider uniquement.
+
+Preuves :
+
+```text
+targeted 9S:
+123 passed
+
+full backend:
+1441 passed, 11 skipped, 11 subtests passed
+
+./scripts/smoke-decision-runtime-extended-census
+scenario_count=62
+fallback_scenario_count=0
+fallback_turn_count=0
+```
+
+Decision de deletion :
+
+- `CoachDecision` n'est plus un fallback generaliste sur les lanes core + daily
+  + extended ;
+- `conversation_decide_bridge.py` reste necessaire comme adapter provider
+  compat, mais son appel est maintenant garde ;
+- `llm/decision_legacy.py` ne doit pas encore etre supprime : il exporte encore
+  des shims publics onboarding, fact memory, parser/model compat et summaries ;
+- prochaine coupe logique : reply quality via `ReplyComposer`, puis audit des
+  shims `fitmas.llm` non-conversation pour les sortir de la compat legacy.
+
+## Phase 9T — Reply quality avant grand nettoyage legacy
+
+Resultat local 2026-05-20 :
+
+- les leaks analytiques visibles sont bloques par `coach_voice` ;
+- les fallbacks no-change ne recopient plus les brouillons invalides ;
+- les claims memoire / execution sans event sont refuses en sortie finale ;
+- `create_session` ne sort plus `sport=course` ;
+- `Option possible, confirmation recommandee` n'est plus un fallback visible
+  pending.
+
+Preuves :
+
+```text
+targeted reply:
+83 passed
+
+full backend:
+1447 passed, 11 skipped, 11 subtests passed
+
+real smoke cible:
+3 scenarios OK
+fallback census 0
+```
+
+Decision de deletion :
+
+- 9T ne supprime pas de legacy physique ;
+- le prochain chantier doit etre un vrai cleanup import graph, pas un nouveau
+  patch reply : sortir les shims `fitmas.llm` non-conversation et prouver quels
+  modules `legacy/` peuvent etre supprimes sans toucher les lanes dogfood.
+
 ## Callers de `fitmas.final_reply`
 
 Les callers directs restants du module legacy sont :

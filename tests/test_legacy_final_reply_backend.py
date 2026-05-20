@@ -79,3 +79,26 @@ def test_backend_humanizes_machine_replace_summary_for_user() -> None:
     reply = LegacyFinalReplyBackend(request_text_fn=lambda **_kwargs: "draft").compose(request)
 
     assert reply == "Je te propose: remplacer la seance ciblee par velo facile, 30 min. Tu confirmes ?"
+
+
+def test_backend_humanizes_machine_create_summary_for_user() -> None:
+    request = _request("plan_pending")
+    request = ReplyRequest(
+        kind=request.kind,
+        user_text=request.user_text,
+        committed_events=request.committed_events,
+        blocked_reasons=request.blocked_reasons,
+        pending_summary=request.pending_summary,
+        memory_updates=request.memory_updates,
+        execution_updates=request.execution_updates,
+        candidate_summaries=(
+            "create_session | target_date=2026-05-25 | new_sport_type=running | "
+            "new_duration_min=30 | new_intensity=easy",
+        ),
+        explanation=request.explanation,
+        contract=request.contract,
+    )
+
+    reply = LegacyFinalReplyBackend(request_text_fn=lambda **_kwargs: "draft").compose(request)
+
+    assert reply == "Je te propose: ajouter une course facile, 30 min le 2026-05-25 (lundi). Tu confirmes ?"

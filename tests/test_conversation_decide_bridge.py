@@ -6,7 +6,10 @@ from fitmas.legacy.coach_decision_artifact import legacy_decision_artifact_from_
 from fitmas.legacy.coach_decision_provider import CoachDecisionResult
 from fitmas.legacy.conversation_decide_bridge import (
     build_legacy_coach_decision_request,
+    legacy_provider_allowed_for_turn,
+    legacy_provider_skip_reason,
     run_legacy_coach_decision,
+    trace_legacy_provider_skipped,
 )
 
 
@@ -177,3 +180,72 @@ def test_run_legacy_coach_decision_records_planning_fallback_owner() -> None:
     assert turn_context["fallback_census"][0]["owner"] == "planning"
     assert turn_context["fallback_census"][0]["source"] == "canonical_planning_provider"
     assert turn_context["fallback_census"][0]["reason"] == "unsupported_requested_change"
+
+
+def test_legacy_provider_gate_allows_unknown_unprepared_lane() -> None:
+    turn_context: dict[str, object] = {}
+
+    assert legacy_provider_allowed_for_turn(turn_context) is True
+    assert legacy_provider_skip_reason(turn_context) is None
+
+
+def test_legacy_provider_gate_denies_canonical_planning_lane() -> None:
+    turn_context: dict[str, object] = {
+        "canonical_planning_provider": {
+            "result": "fallback_legacy",
+            "fallback_reason": "unsupported_requested_change",
+            "deny_legacy_provider": True,
+        }
+    }
+
+    assert legacy_provider_allowed_for_turn(turn_context) is False
+    assert legacy_provider_skip_reason(turn_context) == "canonical_planning_provider:unsupported_requested_change"
+
+
+def test_legacy_provider_gate_denies_pending_lane() -> None:
+    turn_context: dict[str, object] = {
+        "canonical_pending_provider": {
+            "result": "no_pending_resolution",
+            "deny_legacy_provider": True,
+        }
+    }
+
+    assert legacy_provider_allowed_for_turn(turn_context) is False
+    assert legacy_provider_skip_reason(turn_context) == "canonical_pending_provider:no_pending_resolution"
+
+
+def test_legacy_provider_gate_denies_readonly_reply_lane() -> None:
+    turn_context: dict[str, object] = {
+        "canonical_readonly_reply": {
+            "composed": False,
+            "reason": "reply_contract",
+            "deny_legacy_provider": True,
+        }
+    }
+
+    assert legacy_provider_allowed_for_turn(turn_context) is False
+    assert legacy_provider_skip_reason(turn_context) == "canonical_readonly_reply:reply_contract"
+
+
+def test_trace_legacy_provider_skipped_records_non_active_legacy_trace() -> None:
+    turn_context: dict[str, object] = {}
+
+    trace_legacy_provider_skipped(turn_context, reason="canonical_planning_provider:unsupported_requested_change")
+
+    assert turn_context["legacy_decide"] == {
+        "legacy_skipped": True,
+        "source": "legacy_provider_gate",
+        "reason": "canonical_planning_provider:unsupported_requested_change",
+    }
+
+
+def test_legacy_provider_gate_allows_classified_fallback_without_hard_deny() -> None:
+    turn_context: dict[str, object] = {
+        "canonical_planning_provider": {
+            "result": "fallback_legacy",
+            "fallback_reason": "compat_lane_not_migrated",
+        }
+    }
+
+    assert legacy_provider_allowed_for_turn(turn_context) is True
+    assert legacy_provider_skip_reason(turn_context) is None

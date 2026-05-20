@@ -87,6 +87,41 @@ def test_validation_rejects_user_facing_internal_jargon() -> None:
     assert is_valid_final_reply("Je te propose de confirmer ce changement.", ctx) is True
 
 
+def test_validation_rejects_analysis_summary_leak() -> None:
+    ctx = _blocked_context()
+
+    assert is_valid_final_reply("User reports lifting 100 kg and asks what to do next.", ctx) is False
+    assert is_valid_final_reply("L'utilisateur indique qu'il prefere courir le matin.", ctx) is False
+
+
+def test_validation_rejects_memory_claim_without_memory_event() -> None:
+    ctx = FinalReplyContext(
+        user_text="je prefere courir le matin",
+        original_llm_reply="Je retiens que tu preferes courir le matin.",
+        memory_actions_applied=(),
+        allowed_to_claim_mutation=False,
+        pipeline="conversation",
+        pipeline_capability="no_change",
+    )
+
+    assert is_valid_final_reply("Je retiens que tu preferes courir le matin.", ctx) is False
+    assert is_valid_final_reply("Courir le matin, ca colle bien quand le planning le permet.", ctx) is True
+
+
+def test_validation_rejects_execution_registration_talk_without_execution_event() -> None:
+    ctx = FinalReplyContext(
+        user_text="putain je fais 100kg",
+        original_llm_reply="Je ne vois pas de nouvelle seance enregistree.",
+        execution_actions_applied=(),
+        allowed_to_claim_mutation=False,
+        pipeline="conversation",
+        pipeline_capability="no_change",
+    )
+
+    assert is_valid_final_reply("Je ne vois pas de nouvelle seance enregistree.", ctx) is False
+    assert is_valid_final_reply("On traite ca comme un point de repere, pas comme une alerte.", ctx) is True
+
+
 def test_compose_final_reply_uses_request_text_and_validates_output() -> None:
     ctx = _blocked_context()
 

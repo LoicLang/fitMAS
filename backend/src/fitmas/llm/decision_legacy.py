@@ -1,3 +1,12 @@
+"""Legacy CoachDecision provider compatibility only.
+
+Do not add new conversation runtime authority here.
+
+The active Decision Runtime should route user-facing conversation lanes through
+canonical Understanding, planning, command, and reply bridges before this module.
+This file stays temporarily for package compatibility and old provider helpers.
+"""
+
 from __future__ import annotations
 
 import logging

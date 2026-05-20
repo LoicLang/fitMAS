@@ -664,15 +664,25 @@ def _run_conversation_turn_impl(
                         turn_context=turn_context,
                     )
         if outcome is None:
-            legacy_decision_artifact = conversation_decide_bridge.run_legacy_coach_decision(
-                provider=LegacyCoachDecisionProvider(decide_fn=dependencies.decide),
-                request=decision_request,
-                turn_context=turn_context,
-            )
-            shadow_understanding_from_legacy_decision(
-                user_id=user.id,
-                decision_artifact=legacy_decision_artifact,
-            )
+            legacy_skip_reason = conversation_decide_bridge.legacy_provider_skip_reason(turn_context)
+            if legacy_skip_reason is not None:
+                conversation_decide_bridge.trace_legacy_provider_skipped(turn_context, reason=legacy_skip_reason)
+                outcome = conversation_decide_bridge.legacy_provider_denied_outcome(
+                    reason=legacy_skip_reason,
+                    user_text=payload.text,
+                    grounding_facts=tuple(render_grounding_packet_for_prompt(grounding_packet)),
+                    decision_reply_composer_fn=_decision_reply_composer,
+                )
+            elif conversation_decide_bridge.legacy_provider_allowed_for_turn(turn_context):
+                legacy_decision_artifact = conversation_decide_bridge.run_legacy_coach_decision(
+                    provider=LegacyCoachDecisionProvider(decide_fn=dependencies.decide),
+                    request=decision_request,
+                    turn_context=turn_context,
+                )
+                shadow_understanding_from_legacy_decision(
+                    user_id=user.id,
+                    decision_artifact=legacy_decision_artifact,
+                )
     is_coach_decision = conversation_decision_bridge.is_coach_decision(legacy_decision_artifact)
     if is_coach_decision:
         turn_context["coach_decision"] = conversation_decision_bridge.coach_decision_payload(legacy_decision_artifact)

@@ -51,16 +51,26 @@ class LLMUnderstandingService:
             max_tokens=rendered.max_tokens,
             schema_hint="CoachUnderstanding",
         )
-        return parse_coach_understanding_payload(payload)
+        return parse_coach_understanding_payload(
+            payload,
+            pending_active=_event_has_active_pending(request.event_summary),
+        )
 
 
-def parse_coach_understanding_payload(payload: Mapping[str, Any] | None) -> CoachUnderstanding | None:
+def parse_coach_understanding_payload(
+    payload: Mapping[str, Any] | None,
+    *,
+    pending_active: bool = False,
+) -> CoachUnderstanding | None:
     if not isinstance(payload, Mapping):
         return None
     if FORBIDDEN_UNDERSTANDING_KEYS.intersection(payload.keys()):
         return None
     intent = str(payload.get("intent") or "general_answer")
     signals = _signals(payload.get("extracted_signals"))
+    pending_resolution = _pending_resolution(payload.get("pending_resolution"))
+    if pending_active and pending_resolution is not None:
+        intent = "pending_response"
     try:
         return CoachUnderstanding(
             intent=intent,
@@ -70,9 +80,7 @@ def parse_coach_understanding_payload(payload: Mapping[str, Any] | None) -> Coac
             requested_change=_requested_change(payload.get("requested_change"), signals=signals)
             if intent == "plan_change"
             else None,
-            pending_resolution=_pending_resolution(payload.get("pending_resolution"))
-            if intent == "pending_response"
-            else None,
+            pending_resolution=pending_resolution if intent == "pending_response" else None,
             clarification_need=_clarification_need(payload.get("clarification_need")) if intent == "clarification" else None,
         )
     except (TypeError, ValueError):
@@ -211,3 +219,7 @@ def _confidence(value: Any, *, default: float) -> float:
     if isinstance(value, (int, float)):
         return max(0.0, min(1.0, float(value)))
     return default
+
+
+def _event_has_active_pending(event_summary: str) -> bool:
+    return "pending_active=True" in str(event_summary or "")

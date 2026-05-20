@@ -2756,6 +2756,89 @@ class FitMASCoreFlowsTest(unittest.TestCase):
         self.assertEqual(turns[0].response_mode, "planning_runtime_block")
         self.assertEqual(context["canonical_planning_provider"]["result"], "handled")
 
+    def test_legacy_provider_gate_blocks_canonical_planning_fallback_trace(self) -> None:
+        from fitmas.decision import CoachUnderstanding
+        from fitmas.legacy import conversation_canonical_planning_bridge, conversation_understanding_bridge
+
+        self._create_plan_for_today()
+        original_plan_turn = api_messages.plan_conversation_turn
+        original_decide = api_messages.decide
+        original_extract_facts = api_messages.extract_facts
+        original_understanding = conversation_understanding_bridge.run_canonical_understanding_shadow
+        original_should_use = conversation_canonical_planning_bridge.should_use_canonical_planning_without_legacy
+        original_should_handle_unsupported = (
+            conversation_canonical_planning_bridge.should_handle_unsupported_canonical_planning_without_legacy
+        )
+        original_trace_not_used = conversation_canonical_planning_bridge.trace_canonical_planning_not_used
+        old_flag = os.environ.get("FITMAS_CANONICAL_PLANNING_PROVIDER")
+        try:
+            os.environ["FITMAS_CANONICAL_PLANNING_PROVIDER"] = "1"
+            api_messages.plan_conversation_turn = lambda *args, **kwargs: SimpleNamespace(
+                primary_intent="plan_mutation",
+                secondary_intents=(),
+                has_plan_mutation=True,
+                mutation_signal=True,
+                requires_truth_read=True,
+                truth_scope="plan_window",
+                temporal_references=[],
+                confidence=0.94,
+            )
+            api_messages.decide = lambda *args, **kwargs: (_ for _ in ()).throw(
+                AssertionError("legacy decide must be blocked by provider gate")
+            )
+            api_messages.extract_facts = lambda *args, **kwargs: []
+            conversation_understanding_bridge.run_canonical_understanding_shadow = (
+                lambda **kwargs: CoachUnderstanding(
+                    intent="plan_change",
+                    confidence=0.91,
+                    user_summary="Demande planning non consommee.",
+                    extracted_signals=(),
+                    requested_change=None,
+                    pending_resolution=None,
+                    clarification_need=None,
+                )
+            )
+            conversation_canonical_planning_bridge.should_use_canonical_planning_without_legacy = (
+                lambda **kwargs: False
+            )
+            conversation_canonical_planning_bridge.should_handle_unsupported_canonical_planning_without_legacy = (
+                lambda **kwargs: False
+            )
+
+            def fake_trace_not_used(turn_context, **kwargs):
+                turn_context["canonical_planning_provider"] = {
+                    "result": "fallback_legacy",
+                    "fallback_reason": "missing_requested_change",
+                    "deny_legacy_provider": True,
+                }
+
+            conversation_canonical_planning_bridge.trace_canonical_planning_not_used = fake_trace_not_used
+
+            result = self.client.post("/api/v0/messages", json={"text": "Change la seance"}).json()
+        finally:
+            api_messages.plan_conversation_turn = original_plan_turn
+            api_messages.decide = original_decide
+            api_messages.extract_facts = original_extract_facts
+            conversation_understanding_bridge.run_canonical_understanding_shadow = original_understanding
+            conversation_canonical_planning_bridge.should_use_canonical_planning_without_legacy = original_should_use
+            conversation_canonical_planning_bridge.should_handle_unsupported_canonical_planning_without_legacy = (
+                original_should_handle_unsupported
+            )
+            conversation_canonical_planning_bridge.trace_canonical_planning_not_used = original_trace_not_used
+            if old_flag is None:
+                os.environ.pop("FITMAS_CANONICAL_PLANNING_PROVIDER", None)
+            else:
+                os.environ["FITMAS_CANONICAL_PLANNING_PROVIDER"] = old_flag
+
+        turns = repo.get_recent_conversation_turns(self.db, self.user.id, limit=1)
+        context = json.loads(turns[0].context_json)
+
+        self.assertIn("assistant_message", result)
+        self.assertEqual(turns[0].response_mode, "legacy_provider_denied")
+        self.assertEqual(context["legacy_decide"]["legacy_skipped"], True)
+        self.assertEqual(context["legacy_decide"]["source"], "legacy_provider_gate")
+        self.assertEqual(context["legacy_decide"]["reason"], "canonical_planning_provider:missing_requested_change")
+
     def test_pending_confirmation_blocks_terminal_close_path(self) -> None:
         repo.create_pending_mutation_confirmation(
             self.db,

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from sqlalchemy.orm import Session
 
+from fitmas import coach_voice
 from fitmas import repository as repo
 from fitmas.grounding_contract import ReplyGroundingPacket
 from fitmas.legacy import conversation_reply_adapter as final_reply
@@ -94,6 +95,16 @@ def compose_no_change_reply_for_turn(
             execution_actions_applied=execution_actions_applied,
         )
     if not composed_reply:
+        if not _is_safe_original_reply(original_reply):
+            fallback = _safe_no_change_fallback()
+            turn_context["final_reply"] = {
+                "capability": capability,
+                "draft": original_reply,
+                "output": fallback,
+                "source": "safe_fallback",
+                "composed": False,
+            }
+            return fallback, "no_change_safe_fallback"
         turn_context["final_reply"] = {
             "capability": capability,
             "draft": original_reply,
@@ -112,6 +123,23 @@ def compose_no_change_reply_for_turn(
     turn_context["final_reply_composed"] = True
     turn_context["final_reply_capability"] = capability
     return composed_reply, f"{capability}_composed"
+
+
+def _is_safe_original_reply(text: str) -> bool:
+    value = str(text or "").strip()
+    if not value:
+        return False
+    if coach_voice.message_violates_coach_voice(value):
+        return False
+    if coach_voice.message_has_user_facing_internal_jargon(value):
+        return False
+    if coach_voice.message_looks_receipt_style(value):
+        return False
+    return True
+
+
+def _safe_no_change_fallback() -> str:
+    return "Bien recu. Rien ne bouge dans le plan sur ce tour."
 
 
 def turn_context_primary_intent(turn_context: dict[str, object]) -> str:

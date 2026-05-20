@@ -314,6 +314,36 @@ def test_parse_coach_understanding_payload_drops_cross_intent_planning_noise() -
     assert understanding.clarification_need is None
 
 
+def test_llm_understanding_service_promotes_pending_resolution_when_pending_active() -> None:
+    service = LLMUnderstandingService(
+        request_json_fn=lambda **kwargs: {
+            "intent": "close",
+            "confidence": 0.88,
+            "user_summary": "Le user refuse la proposition.",
+            "extracted_signals": [],
+            "requested_change": None,
+            "pending_resolution": {
+                "type": "reject_pending",
+                "reason": "refus explicite de la pending active",
+            },
+            "clarification_need": None,
+        }
+    )
+
+    understanding = service.understand(
+        UnderstandingRequest(
+            event_summary="source=telegram type=user_message pending_active=True text=non finalement on laisse",
+            context_blocks=("Pending confirmation active",),
+        )
+    )
+
+    assert understanding is not None
+    assert understanding.intent == "pending_response"
+    assert understanding.pending_resolution is not None
+    assert understanding.pending_resolution.type == "reject_pending"
+    assert understanding.requested_change is None
+
+
 def test_llm_understanding_service_calls_prompt_and_request_json() -> None:
     calls: list[dict] = []
 

@@ -1061,12 +1061,64 @@ Etat local 15 mai :
     `pending_reject_move` passe encore par
     `canonical_pending_provider -> fallback_legacy -> CoachDecision`.
 - Suite logique apres 9P :
-  - Phase 9Q : migrer le rejet/cancel pending vers un outcome canonique sans
-    `CoachDecision` ;
-  - relancer core+daily+extended en strict ;
-  - seulement ensuite commencer la reduction de
-    `legacy/conversation_decide_bridge.py` / `llm/decision_legacy.py` ;
-  - garder les dettes de reply quality dans un slice separe.
+  - Phase 9Q/9R livree localement :
+    - `pending_reject_move` ne passe plus par `CoachDecision` ;
+    - `LLMUnderstandingService` promeut un `pending_resolution` structure en
+      `intent=pending_response` quand l'event machine dit
+      `pending_active=True` ;
+    - les demandes planning reconnues mais non consommables bloquent /
+      clarifient en canonique au lieu de retomber vers `CoachDecision` ;
+    - `scripts/smoke-decision-runtime-extended-census` est strict par defaut
+      et ne passe plus `--allow-fallbacks` ;
+    - verification locale stricte :
+      `scenario_count=62`, `fallback_scenario_count=0`,
+      `fallback_turn_count=0`.
+- Suite logique apres 9Q/9R :
+  - Phase 9S livree localement :
+    - ajout de `legacy_provider_allowed_for_turn`,
+      `legacy_provider_skip_reason` et `trace_legacy_provider_skipped` ;
+    - le provider `CoachDecision` n'est plus un sink implicite quand une lane
+      canonique a explicitement marque `deny_legacy_provider=True` ou a deja
+      handled/blocked le tour ;
+    - `fallback_legacy` reste un resultat compat mesure, pas un hard block
+      automatique, pour ne pas casser les tests historiques non migres ;
+    - `conversation_pipeline.py` verifie la gate avant
+      `run_legacy_coach_decision` et rend un outcome no-write canonique si la
+      gate refuse ;
+    - `llm/decision_legacy.py` est marque compat provider uniquement ;
+    - verification locale :
+      targeted 9S -> 123 passed ;
+      full backend -> 1441 passed, 11 skipped, 11 subtests passed ;
+      strict core+daily+extended ->
+      `scenario_count=62`, `fallback_scenario_count=0`,
+      `fallback_turn_count=0`.
+- Suite logique apres 9S :
+  - Phase 9T reply quality livree localement :
+    - hard guard voix contre les leaks analytiques visibles
+      (`User reports...`, `User expresses...`, `L'utilisateur indique...`) ;
+    - fallback no-change ne recopie plus un brouillon analytique invalide ;
+    - no-change refuse les claims memoire (`je retiens`, `je note`) sans
+      `Memoire appliquee` ;
+    - no-change refuse les phrases de type `seance enregistree` sans
+      `Execution appliquee` ;
+    - humanisation planning pour `create_session` : plus de reply
+      `sport=course` ;
+    - fallback pending generique remplace `Option possible, confirmation
+      recommandee` par une phrase user-facing ;
+    - verification locale :
+      targeted reply -> 83 passed ;
+      full backend -> 1447 passed, 11 skipped, 11 subtests passed ;
+      real smoke cible -> `body_metric_reassurance_thread`,
+      `memory_preference`, `create_easy_free_day` OK, fallback census 0.
+- Suite logique apres 9T :
+  - grand nettoyage legacy par import graph : sortir les shims non-conversation
+    de `fitmas.llm` compat, puis reduire physiquement
+    `legacy/conversation_decide_bridge.py` et `llm/decision_legacy.py` ;
+  - garder le verdict froid : le comportement est plus fiable, mais le repo
+    n'est pas encore assez petit tant que `conversation_pipeline.py` et les
+    modules legacy compat restent volumineux ;
+  - ensuite seulement re-auditer les derniers helpers `decision_legacy.py`
+    hors conversation pour voir ce qui peut sortir de `fitmas.llm` compat ;
 - Les anciens plans PlanningSnapshot / prompt-context / candidate-flow restent
   lisibles comme historique mais ne tranchent plus la cible.
 
