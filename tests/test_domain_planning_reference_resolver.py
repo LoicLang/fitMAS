@@ -200,6 +200,28 @@ def test_resolver_accepts_typed_availability_window_ref_with_status() -> None:
     assert resolved.warnings == ()
 
 
+def test_resolver_normalizes_typed_travel_availability_window_scope() -> None:
+    requested = RequestedPlanChange(
+        kind="constraint_window",
+        source_ref="availability_window:limited:travel:2026-05-20:2026-05-22",
+        target_ref=None,
+        desired_sport=None,
+        desired_duration_min=None,
+        desired_intensity=None,
+        reason="travel limited",
+        risk_signals=("availability",),
+    )
+
+    resolved = ReferenceResolver(_context(_session(42, "2026-05-21"))).resolve(requested)
+
+    assert resolved.source.kind == "availability_window"
+    assert resolved.source.availability == "limited"
+    assert resolved.source.scope == "location"
+    assert resolved.source.starts_on == date(2026, 5, 20)
+    assert resolved.source.ends_on == date(2026, 5, 22)
+    assert resolved.warnings == ()
+
+
 def test_resolver_accepts_iso_date_refs_from_typed_understanding() -> None:
     requested = RequestedPlanChange(
         kind="move",

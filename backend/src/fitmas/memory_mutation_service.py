@@ -9,7 +9,12 @@ from typing import Iterable
 from sqlalchemy.orm import Session
 
 from fitmas import repository as repo, schema as s
-from fitmas.llm import AvailabilityConstraintAction, HealthSignalAction, MemoryAction, PreferenceSignalAction
+from fitmas.legacy.decision_contracts import (
+    AvailabilityConstraintAction,
+    HealthSignalAction,
+    MemoryAction,
+    PreferenceSignalAction,
+)
 from fitmas.memory_routing import split_memory_payloads
 
 

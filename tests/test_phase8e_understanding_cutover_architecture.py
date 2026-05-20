@@ -33,7 +33,7 @@ def test_8e_llm_understanding_service_exists_without_legacy_contracts() -> None:
     assert "parse_coach_understanding_payload" in source
     assert "fitmas.decision" in imports
     assert "fitmas.llm.prompts.understanding" in imports
-    assert "fitmas.llm.gateway" in imports
+    assert "from . import gateway as gw" in source
     assert "fitmas.llm.decision_legacy" not in imports
     assert "fitmas.legacy" not in imports
     assert "fitmas.conversation_pipeline" not in imports

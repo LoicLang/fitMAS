@@ -11,7 +11,7 @@ from fitmas.decision import (
     UserSignal,
 )
 from fitmas.domain.planning.reference_tokens import normalize_plan_ref
-from fitmas.llm import gateway as gw
+from . import gateway as gw
 from fitmas.llm.prompts.understanding import UnderstandingPromptInput, build_understanding_prompt
 
 

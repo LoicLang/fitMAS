@@ -4,7 +4,7 @@ import logging
 import os
 from typing import Any, Callable
 
-from fitmas.llm import gateway as gw
+from . import gateway as gw
 
 
 logger = logging.getLogger("fitmas.llm")

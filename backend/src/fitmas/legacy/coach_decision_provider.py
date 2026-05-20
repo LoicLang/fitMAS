@@ -1,10 +1,10 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+import importlib
 import logging
 from typing import Any, Callable
 
-from fitmas import llm as llm_runtime
 from fitmas.legacy.coach_decision_artifact import (
     LegacyCoachDecisionArtifact,
     legacy_decision_artifact_from_raw,
@@ -57,9 +57,9 @@ class LegacyCoachDecisionProvider:
         clear_fn: Callable[[], None] | None = None,
         get_decide_none_fn: Callable[[], dict[str, Any] | None] | None = None,
     ) -> None:
-        self._decide_fn = decide_fn or llm_runtime.decide
-        self._clear_fn = clear_fn or llm_runtime.clear_last_decide_none
-        self._get_decide_none_fn = get_decide_none_fn or llm_runtime.get_last_decide_none
+        self._decide_fn = decide_fn or default_legacy_decide
+        self._clear_fn = clear_fn or _default_clear_last_decide_none
+        self._get_decide_none_fn = get_decide_none_fn or _default_get_last_decide_none
 
     def decide(self, request: CoachDecisionRequest) -> CoachDecisionResult:
         try:
@@ -92,3 +92,18 @@ class LegacyCoachDecisionProvider:
                 error_message=str(exc),
                 decide_none_context=self._get_decide_none_fn(),
             )
+
+
+def default_legacy_decide(*args, **kwargs):
+    llm_package = importlib.import_module("fitmas.llm")
+    return llm_package.decide(*args, **kwargs)
+
+
+def _default_clear_last_decide_none() -> None:
+    llm_package = importlib.import_module("fitmas.llm")
+    llm_package.clear_last_decide_none()
+
+
+def _default_get_last_decide_none() -> dict[str, Any] | None:
+    llm_package = importlib.import_module("fitmas.llm")
+    return llm_package.get_last_decide_none()

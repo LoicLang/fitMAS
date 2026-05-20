@@ -182,8 +182,23 @@ def test_run_legacy_coach_decision_records_planning_fallback_owner() -> None:
     assert turn_context["fallback_census"][0]["reason"] == "unsupported_requested_change"
 
 
-def test_legacy_provider_gate_allows_unknown_unprepared_lane() -> None:
+def test_legacy_provider_gate_denies_unknown_unprepared_lane_by_default() -> None:
     turn_context: dict[str, object] = {}
+
+    assert legacy_provider_allowed_for_turn(turn_context) is False
+    assert legacy_provider_skip_reason(turn_context) == "legacy_provider_disabled"
+
+
+def test_legacy_provider_gate_allows_unknown_unprepared_lane_when_enabled(monkeypatch) -> None:
+    monkeypatch.setenv("FITMAS_ENABLE_LEGACY_COACH_DECISION_PROVIDER", "1")
+    turn_context: dict[str, object] = {}
+
+    assert legacy_provider_allowed_for_turn(turn_context) is True
+    assert legacy_provider_skip_reason(turn_context) is None
+
+
+def test_legacy_provider_gate_allows_explicit_dependency_override() -> None:
+    turn_context: dict[str, object] = {"legacy_provider_explicit_override": True}
 
     assert legacy_provider_allowed_for_turn(turn_context) is True
     assert legacy_provider_skip_reason(turn_context) is None
@@ -239,7 +254,20 @@ def test_trace_legacy_provider_skipped_records_non_active_legacy_trace() -> None
     }
 
 
-def test_legacy_provider_gate_allows_classified_fallback_without_hard_deny() -> None:
+def test_legacy_provider_gate_denies_classified_fallback_by_default() -> None:
+    turn_context: dict[str, object] = {
+        "canonical_planning_provider": {
+            "result": "fallback_legacy",
+            "fallback_reason": "compat_lane_not_migrated",
+        }
+    }
+
+    assert legacy_provider_allowed_for_turn(turn_context) is False
+    assert legacy_provider_skip_reason(turn_context) == "legacy_provider_disabled"
+
+
+def test_legacy_provider_gate_allows_classified_fallback_when_enabled(monkeypatch) -> None:
+    monkeypatch.setenv("FITMAS_ENABLE_LEGACY_COACH_DECISION_PROVIDER", "1")
     turn_context: dict[str, object] = {
         "canonical_planning_provider": {
             "result": "fallback_legacy",

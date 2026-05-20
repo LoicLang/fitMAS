@@ -1,6 +1,14 @@
 from __future__ import annotations
 
 
+def test_fitmas_llm_is_normal_package_not_decision_legacy_alias() -> None:
+    import fitmas.llm as llm
+
+    assert llm.__name__ == "fitmas.llm"
+    assert hasattr(llm, "CoachDecision")
+    assert hasattr(llm, "decide")
+
+
 def test_fitmas_llm_package_reexports_legacy_decision_contracts() -> None:
     from fitmas.llm import CoachDecision, decide, parse_coach_decision_payload
     from fitmas.llm.decision_legacy import CoachDecision as LegacyCoachDecision

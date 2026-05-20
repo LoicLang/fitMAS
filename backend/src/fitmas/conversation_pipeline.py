@@ -36,7 +36,7 @@ from fitmas.coach_reading_digest import build_coach_reading_digest, render_diges
 from fitmas.coach_state_bundle import build_coach_state_bundle
 from fitmas.execution_clarification import render_unresolved_execution_followup
 from fitmas.legacy.final_reply_backend import LegacyFinalReplyBackend
-from fitmas.legacy.coach_decision_provider import LegacyCoachDecisionProvider
+from fitmas.legacy.coach_decision_provider import LegacyCoachDecisionProvider, default_legacy_decide
 from fitmas.legacy import conversation_canonical_readonly_bridge
 from fitmas.legacy import conversation_canonical_clarification_bridge
 from fitmas.legacy import conversation_canonical_planning_bridge
@@ -664,6 +664,8 @@ def _run_conversation_turn_impl(
                         turn_context=turn_context,
                     )
         if outcome is None:
+            if dependencies.decide is not default_legacy_decide:
+                turn_context["legacy_provider_explicit_override"] = True
             legacy_skip_reason = conversation_decide_bridge.legacy_provider_skip_reason(turn_context)
             if legacy_skip_reason is not None:
                 conversation_decide_bridge.trace_legacy_provider_skipped(turn_context, reason=legacy_skip_reason)

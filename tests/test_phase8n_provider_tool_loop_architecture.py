@@ -54,11 +54,11 @@ def test_8n_modules_exist() -> None:
 
 
 def test_8n_decision_legacy_imports_provider_repair_and_tool_loop_modules() -> None:
-    imports = _imports("llm/decision_legacy.py")
+    source = _source("llm/decision_legacy.py")
 
-    assert "fitmas.llm.legacy_provider" in imports
-    assert "fitmas.llm.legacy_schema_repair" in imports
-    assert "fitmas.llm.legacy_tool_loop" in imports
+    assert "legacy_provider" in source
+    assert "legacy_schema_repair" in source
+    assert "legacy_tool_loop" in source
 
 
 def test_8n_decision_legacy_no_longer_owns_tool_loop_helper_bodies() -> None:

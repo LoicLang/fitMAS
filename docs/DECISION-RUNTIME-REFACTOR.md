@@ -3471,6 +3471,74 @@ Verdict provisoire :
   seulement mieux range ? La reponse actuelle est : plus fiable, pas encore
   assez petit.
 
+## Statut Phase 9U
+
+Shrink physique de l'autorite legacy :
+
+- `fitmas.llm` n'est plus un alias `sys.modules` vers
+  `llm/decision_legacy.py` ;
+- `fitmas.llm` est une facade compat explicite, avec sync de monkeypatch limitee
+  aux tests historiques et restauration des defaults legacy apres patch ;
+- les contrats Pydantic legacy `CoachDecision`, `MutationDecision` et actions
+  associees vivent maintenant dans `legacy/decision_contracts.py` ;
+- `llm/legacy_models.py` est un re-export temporaire depuis
+  `legacy/decision_contracts.py` ;
+- les imports runtime larges `from fitmas.llm import ...` ont ete retires des
+  chemins source controles ; les modules app/onboarding/adaptation importent
+  des helpers legacy explicites ;
+- `LegacyCoachDecisionProvider` n'importe plus `fitmas.llm` au chargement ;
+- le provider legacy est default-off en runtime, sauf opt-in explicite
+  `FITMAS_ENABLE_LEGACY_COACH_DECISION_PROVIDER=1` ou injection de dependance
+  de test/debug ;
+- `decision_legacy.py` reste compat provider/parser, pas source d'autorite
+  produit ;
+- les scopes availability typees `travel` / `trip` / `journey` sont normalises
+  en fenetre `location` dans le planning canonique, sans parser le texte
+  utilisateur libre.
+
+Preuves locales 2026-05-20 :
+
+```text
+targeted regressions:
+79 passed
+
+planning travel typed scope:
+75 passed
+
+full backend:
+1457 passed, 11 skipped
+
+strict core + daily + extended:
+scenario_count=62
+fallback_scenario_count=0
+fallback_turn_count=0
+```
+
+Mesure de taille apres 9U :
+
+```text
+conversation_pipeline.py: 1930 lignes
+llm/decision_legacy.py: 495 lignes
+llm/__init__.py: 140 lignes
+legacy/*.py: 6177 lignes
+llm legacy surface: 3371 lignes
+```
+
+Lecture :
+
+- le runtime est plus petit en autorite : le provider legacy n'est plus un
+  fallback implicite ni un import global silencieux ;
+- le repo n'est pas encore assez petit physiquement : `conversation_pipeline.py`
+  reste un hotspot, `legacy/` augmente parce que les contrats y ont ete
+  deplaces, et `fitmas.llm` garde une facade compat non triviale ;
+- les smokes montrent encore des modes no-write surs comme
+  `legacy_provider_denied`, `planning_runtime_unhandled` ou
+  `no_change_safe_fallback` ; ils ne sont pas des fallbacks actifs, mais ils
+  sont la prochaine surface a transformer en outcomes canoniques plus courts ;
+- prochain chantier logique : couper les derniers imports compat tests/source
+  de `fitmas.llm`, puis shrinker `conversation_pipeline.py` autour des outcomes
+  deny/unhandled.
+
 ## Matrice de pouvoirs
 
 | Couche | Comprend ? | Decide ? | Write ? | Parle ? |

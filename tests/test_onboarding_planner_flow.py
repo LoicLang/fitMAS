@@ -52,7 +52,7 @@ class OnboardingPlannerFlowTest(unittest.TestCase):
 
         with (
             patch.object(api_onboarding, "formulate_onboarding_recap", return_value="recap"),
-            patch.object(api_onboarding, "formulate_week_plan", side_effect=lambda planner_output, user_profile, coach_profile, time_context=None: {
+            patch.object(api_onboarding, "formulate_week_plan", side_effect=lambda planner_output, user_profile, coach_profile, time_context=None, **_kwargs: {
                 "intention": planner_output["intention_seed"],
                 "summary": "summary",
                 "days": planner_output["days"],

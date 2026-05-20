@@ -7,7 +7,7 @@ from fitmas.legacy.coach_decision_artifact import (
     LegacyCoachDecisionArtifact,
     legacy_decision_artifact_from_raw,
 )
-from fitmas.llm import CoachDecision, MutationDecision
+from fitmas.legacy.decision_contracts import CoachDecision, MutationDecision
 
 
 def coach_decision_to_understanding(decision: CoachDecision | MutationDecision) -> CoachUnderstanding:

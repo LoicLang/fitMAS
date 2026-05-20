@@ -9,7 +9,7 @@ from typing import Iterable
 from sqlalchemy.orm import Session
 
 from fitmas import repository as repo, schema as s
-from fitmas.llm import ExecutionUpdateAction
+from fitmas.legacy.decision_contracts import ExecutionUpdateAction
 from fitmas.time_context import get_local_now
 
 

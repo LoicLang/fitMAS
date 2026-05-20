@@ -19,7 +19,10 @@ from fitmas.execution_clarification import (
     build_execution_clarification,
     looks_like_execution_clarification_prompt,
 )
-from fitmas.llm import decide, extract_facts, make_timeline_summary, select_prompt_facts
+from fitmas.legacy.coach_decision_provider import default_legacy_decide as decide
+from fitmas.llm.decision_legacy import _request_json
+import fitmas.llm.legacy_fact_memory as legacy_fact_memory
+from fitmas.llm.legacy_summaries import make_timeline_summary
 from fitmas.memory_profile import upsert_profile_memory
 from fitmas.memory_routing import split_memory_payloads
 from fitmas.models import DayId, MessageReply
@@ -30,6 +33,19 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 _DAY_VALUES = {d.value for d in DayId}
+
+
+def extract_facts(user_text: str, assistant_text: str, existing_facts: list[dict]) -> list[dict]:
+    return legacy_fact_memory.extract_facts(
+        user_text,
+        assistant_text,
+        existing_facts,
+        request_json_fn=_request_json,
+    )
+
+
+def select_prompt_facts(facts: list[dict]) -> list[str]:
+    return legacy_fact_memory.select_prompt_facts(facts)
 
 
 def _resolve_day_updated(decision) -> DayId | None:

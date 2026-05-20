@@ -1111,14 +1111,36 @@ Etat local 15 mai :
       real smoke cible -> `body_metric_reassurance_thread`,
       `memory_preference`, `create_easy_free_day` OK, fallback census 0.
 - Suite logique apres 9T :
-  - grand nettoyage legacy par import graph : sortir les shims non-conversation
-    de `fitmas.llm` compat, puis reduire physiquement
-    `legacy/conversation_decide_bridge.py` et `llm/decision_legacy.py` ;
-  - garder le verdict froid : le comportement est plus fiable, mais le repo
-    n'est pas encore assez petit tant que `conversation_pipeline.py` et les
-    modules legacy compat restent volumineux ;
-  - ensuite seulement re-auditer les derniers helpers `decision_legacy.py`
-    hors conversation pour voir ce qui peut sortir de `fitmas.llm` compat ;
+  - Phase 9U legacy runtime shrink livree localement :
+    - `fitmas.llm` n'est plus un alias `sys.modules` vers
+      `llm/decision_legacy.py` ;
+    - `legacy/decision_contracts.py` porte les contrats legacy ;
+    - `llm/legacy_models.py` devient un re-export temporaire ;
+    - les imports source larges vers `fitmas.llm` sont retires des chemins
+      runtime controles ;
+    - `LegacyCoachDecisionProvider` est default-off sauf opt-in explicite
+      `FITMAS_ENABLE_LEGACY_COACH_DECISION_PROVIDER=1` ou injection de
+      test/debug ;
+    - `decision_legacy.py` descend a 495 lignes ;
+    - correction canonique : les scopes machine `travel` / `trip` /
+      `journey` deviennent une availability window `location`, sans parser le
+      texte utilisateur libre ;
+    - verification locale :
+      full backend -> 1457 passed, 11 skipped ;
+      strict core+daily+extended ->
+      `scenario_count=62`, `fallback_scenario_count=0`,
+      `fallback_turn_count=0`.
+- Suite logique apres 9U :
+  - Phase 9V : migrer les imports tests/source restants de `fitmas.llm` vers
+    `legacy/decision_contracts.py` ou modules explicites, puis supprimer
+    `llm/legacy_models.py` si l'import graph est vide ;
+  - Phase 9W : transformer `legacy_provider_denied`,
+    `planning_runtime_unhandled` et `no_change_safe_fallback` en outcomes
+    canoniques plus nommes, pour reduire les replies safe generiques ;
+  - garder le verdict froid : le comportement est plus fiable et l'autorite
+    legacy est plus petite, mais le repo n'est pas encore assez petit tant que
+    `conversation_pipeline.py` et les bridges `legacy/conversation_*` restent
+    volumineux ;
 - Les anciens plans PlanningSnapshot / prompt-context / candidate-flow restent
   lisibles comme historique mais ne tranchent plus la cible.
 

@@ -43,7 +43,7 @@ def test_8p_decision_legacy_no_longer_imports_support_domains_directly() -> None
     assert not forbidden.intersection(imports)
 
 
-def test_8p_public_compat_wrappers_remain_in_decision_legacy() -> None:
+def test_8p_public_support_wrappers_have_left_decision_legacy() -> None:
     source = _source("llm/decision_legacy.py")
     for name in (
         "def make_plan_summary(",
@@ -54,7 +54,7 @@ def test_8p_public_compat_wrappers_remain_in_decision_legacy() -> None:
         "def extract_facts(",
         "def select_prompt_facts(",
     ):
-        assert name in source
+        assert name not in source
 
 
 def test_8p_decision_legacy_keeps_decide_but_not_large_support_prompts() -> None:

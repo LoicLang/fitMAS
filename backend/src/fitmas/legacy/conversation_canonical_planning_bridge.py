@@ -578,6 +578,8 @@ def _availability_window_scope(value: object) -> str | None:
     scope = str(value or "").strip().lower()
     if scope in {"general", "time", "location"}:
         return scope
+    if scope in {"travel", "trip", "journey", "deplacement", "déplacement"}:
+        return "location"
     if scope in {"day", "week", "planning", "plan"}:
         return "general"
     return None

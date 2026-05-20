@@ -47,11 +47,12 @@ def test_8m_legacy_split_modules_exist() -> None:
 
 def test_8m_decision_legacy_imports_split_modules() -> None:
     imports = _imports("llm/decision_legacy.py")
+    source = _source("llm/decision_legacy.py")
 
-    assert "fitmas.llm.legacy_models" in imports
-    assert "fitmas.llm.legacy_parser" in imports
-    assert "fitmas.llm.legacy_prompt" in imports
-    assert "fitmas.llm.legacy_action_compile" in imports
+    assert "fitmas.legacy.decision_contracts" in imports
+    assert "legacy_parser" in source
+    assert "legacy_prompt" in source
+    assert "legacy_action_compile" in source
 
 
 def test_8m_decision_legacy_no_longer_defines_models_parser_or_compilers() -> None:

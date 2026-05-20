@@ -12,33 +12,17 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from fitmas.llm import gateway as gw
-from fitmas.llm import (
+from . import (
+    gateway as gw,
     legacy_action_compile,
     legacy_fact_memory,
-    legacy_onboarding,
     legacy_parser,
     legacy_prompt,
     legacy_provider,
     legacy_schema_repair,
-    legacy_summaries,
     legacy_tool_loop,
 )
-from fitmas.llm.legacy_models import (
-    AcceptPendingResolution,
-    AvailabilityConstraintAction,
-    CoachDecision,
-    ExecutionUpdateAction,
-    HealthSignalAction,
-    IgnorePendingResolution,
-    MemoryAction,
-    ModifyPendingResolution,
-    MutationDecision,
-    NeedsClarificationPendingResolution,
-    PendingResolution,
-    PreferenceSignalAction,
-    RejectPendingResolution,
-)
+from fitmas.legacy.decision_contracts import CoachDecision, MutationDecision
 from fitmas.prompt_observability import DecideFailureReason, PromptTrace
 from fitmas.tools.contract import ToolContext
 from fitmas.tools.metrics import log_tool_trace
@@ -277,7 +261,7 @@ def decide(
         remembered_facts=remembered_facts,
         time_context=time_context,
         tool_context=tool_context,
-        select_prompt_facts_fn=select_prompt_facts,
+        select_prompt_facts_fn=legacy_fact_memory.select_prompt_facts,
     )
     prompt = prompt_bundle.prompt
     history_messages_used = prompt_bundle.history_messages_used
@@ -509,57 +493,3 @@ def _repair_tool_result_summary(
 
 def _looks_like_provider_tool_markup(raw_text: str) -> bool:
     return legacy_schema_repair.looks_like_provider_tool_markup(raw_text)
-
-
-def make_plan_summary(days: list) -> str:
-    return legacy_summaries.make_plan_summary(days)
-
-
-
-def make_timeline_summary(sessions: list) -> str:
-    return legacy_summaries.make_timeline_summary(sessions)
-
-
-def preview_coach_voice(context: dict, *, time_context: dict | None = None) -> list[str]:
-    return legacy_onboarding.preview_coach_voice(
-        context,
-        time_context=time_context,
-        request_json_fn=_request_json,
-    )
-
-
-def formulate_onboarding_recap(context: dict, *, time_context: dict | None = None) -> str:
-    return legacy_onboarding.formulate_onboarding_recap(
-        context,
-        time_context=time_context,
-        request_text_fn=_request_text,
-    )
-
-
-def formulate_week_plan(
-    planner_output: dict,
-    user_profile: dict,
-    coach_profile: dict,
-    *,
-    time_context: dict | None = None,
-) -> dict:
-    return legacy_onboarding.formulate_week_plan(
-        planner_output,
-        user_profile,
-        coach_profile,
-        time_context=time_context,
-        request_json_fn=_request_json,
-    )
-
-
-def extract_facts(user_text: str, assistant_text: str, existing_facts: list[dict]) -> list[dict]:
-    return legacy_fact_memory.extract_facts(
-        user_text,
-        assistant_text,
-        existing_facts,
-        request_json_fn=_request_json,
-    )
-
-
-def select_prompt_facts(facts: list[dict]) -> list[str]:
-    return legacy_fact_memory.select_prompt_facts(facts)

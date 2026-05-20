@@ -74,12 +74,8 @@ def test_phase8a_legacy_kill_list_doc_exists_with_front_matter() -> None:
 def test_phase8a_doc_lists_all_legacy_llm_contract_importers() -> None:
     doc = _doc_text()
     importers = [_relative(path) for path in _legacy_llm_contract_importers()]
-    allowed_importers = {
-        "legacy/coach_understanding_adapter.py",
-        "legacy/decision_contracts.py",
-    }
+    allowed_importers: set[str] = set()
 
-    assert importers
     assert sorted(set(importers) - allowed_importers) == []
     assert [path for path in importers if path not in doc] == []
 

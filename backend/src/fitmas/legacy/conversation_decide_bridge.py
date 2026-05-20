@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from typing import Any
 
 from fitmas.conversation_contract import ConversationTurnOutcome
@@ -110,6 +111,10 @@ def legacy_provider_allowed_for_turn(turn_context: dict[str, object]) -> bool:
     return legacy_provider_skip_reason(turn_context) is None
 
 
+def legacy_provider_enabled() -> bool:
+    return os.getenv("FITMAS_ENABLE_LEGACY_COACH_DECISION_PROVIDER") == "1"
+
+
 def legacy_provider_skip_reason(turn_context: dict[str, object]) -> str | None:
     legacy_trace = turn_context.get("legacy_decide")
     if isinstance(legacy_trace, dict) and legacy_trace.get("legacy_skipped") is True:
@@ -140,6 +145,9 @@ def legacy_provider_skip_reason(turn_context: dict[str, object]) -> str | None:
             return _trace_reason("canonical_clarification", clarification, default="compose_failed")
         if clarification.get("composed") is True:
             return _trace_reason("canonical_clarification", clarification, default="composed")
+
+    if not legacy_provider_enabled() and turn_context.get("legacy_provider_explicit_override") is not True:
+        return "legacy_provider_disabled"
 
     return None
 

@@ -6,8 +6,8 @@ import logging
 from time import perf_counter
 from typing import Any, Callable
 
-from fitmas.llm import gateway as gw
-from fitmas.llm import legacy_parser, legacy_schema_repair
+from . import gateway as gw
+from . import legacy_parser, legacy_schema_repair
 from fitmas.tools.contract import ToolCall, ToolContext
 from fitmas.tools.metrics import build_tool_trace
 from fitmas.tools.registry import list_tools_for_pipeline

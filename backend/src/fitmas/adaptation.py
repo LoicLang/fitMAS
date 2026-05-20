@@ -611,7 +611,7 @@ def run_adaptation(
     trigger: AdaptationTrigger,
 ) -> AdaptationResult | None:
     """Run the full adaptation pipeline: prompt -> LLM -> parse -> proposal."""
-    from fitmas.llm import _request_json  # noqa: access internal for consistency
+    from fitmas.llm.decision_legacy import _request_json  # noqa: access internal for consistency
 
     prompt = _build_prompt(trigger)
     model = _model_for_trigger(trigger.trigger_type)

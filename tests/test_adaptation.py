@@ -195,7 +195,7 @@ class TestRunAdaptationFreeze:
         user = SimpleNamespace(id=1, timezone="Europe/Paris")
 
         monkeypatch.setattr(
-            "fitmas.llm._request_json",
+            "fitmas.llm.decision_legacy._request_json",
             lambda **kwargs: {
                 "adaptations": [
                     {"session_id": 7, "action": "lighten", "rationale": "charge haute"}
@@ -234,7 +234,7 @@ class TestRunAdaptationFreeze:
         user = SimpleNamespace(id=1, timezone="Europe/Paris")
 
         monkeypatch.setattr(
-            "fitmas.llm._request_json",
+            "fitmas.llm.decision_legacy._request_json",
             lambda **kwargs: {
                 "adaptations": [
                     {"session_id": 7, "action": "lighten", "rationale": "charge haute"}

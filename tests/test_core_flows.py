@@ -5198,6 +5198,7 @@ class FitMASCoreFlowsTest(unittest.TestCase):
         original_request_message = llm._request_message
         original_extract_facts = api_messages.extract_facts
         original_plan_turn = api_messages.plan_conversation_turn
+        original_legacy_provider_flag = os.environ.get("FITMAS_ENABLE_LEGACY_COACH_DECISION_PROVIDER")
         calls = {"count": 0}
         try:
             def fake_request_message(*, system, messages, model="claude-haiku-4-5-20251001", max_tokens=512, tools=None, tool_choice=None):
@@ -5221,6 +5222,7 @@ class FitMASCoreFlowsTest(unittest.TestCase):
 
             llm._client = lambda: object()
             llm._request_message = fake_request_message
+            os.environ["FITMAS_ENABLE_LEGACY_COACH_DECISION_PROVIDER"] = "1"
             api_messages.extract_facts = lambda *args, **kwargs: []
             api_messages.plan_conversation_turn = lambda *args, **kwargs: SimpleNamespace(
                 primary_intent="plan_lookup",
@@ -5238,6 +5240,10 @@ class FitMASCoreFlowsTest(unittest.TestCase):
             llm._request_message = original_request_message
             api_messages.extract_facts = original_extract_facts
             api_messages.plan_conversation_turn = original_plan_turn
+            if original_legacy_provider_flag is None:
+                os.environ.pop("FITMAS_ENABLE_LEGACY_COACH_DECISION_PROVIDER", None)
+            else:
+                os.environ["FITMAS_ENABLE_LEGACY_COACH_DECISION_PROVIDER"] = original_legacy_provider_flag
 
         self.assertIn("Velo long 90 min", result["assistant_message"]["text"])
         self.assertGreaterEqual(calls["count"], 2)

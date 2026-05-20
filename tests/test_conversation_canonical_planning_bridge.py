@@ -613,6 +613,60 @@ def test_turn_plan_general_unavailability_can_supply_constraint_window(monkeypat
     )
 
 
+def test_typed_travel_scope_can_supply_constraint_window(monkeypatch) -> None:
+    monkeypatch.delenv("FITMAS_CANONICAL_PLANNING_PROVIDER", raising=False)
+    availability_signal = UserSignal(
+        type="availability",
+        label="travel_window",
+        status="new",
+        severity="medium",
+        confidence=1.0,
+        evidence="typed availability signal",
+        payload={
+            "action_type": "record_availability",
+            "availability": "limited",
+            "scope": "travel",
+            "starts_on": "2026-05-20",
+            "ends_on": "2026-05-22",
+        },
+    )
+    unsupported = _understanding(
+        requested_change=_requested_change(
+            kind="unknown",
+            source_ref=None,
+            target_ref=None,
+        ),
+        signals=(availability_signal,),
+    )
+    turn_plan = SimpleNamespace(
+        primary_intent="availability_constraint",
+        secondary_intents=("plan_mutation",),
+        mutation_signal=True,
+        planning_action="update_session",
+        user_goal="adapter car disponibilite limitee par voyage",
+        confidence=0.95,
+        temporal_references=(),
+        availability_constraint={
+            "availability": "limited",
+            "scope": "travel",
+            "starts_on": "2026-05-20",
+            "ends_on": "2026-05-22",
+        },
+    )
+
+    planned = bridge.planning_understanding_for_provider(understanding=unsupported, turn_plan=turn_plan)
+
+    assert planned is not None
+    assert planned.requested_change is not None
+    assert planned.requested_change.kind == "constraint_window"
+    assert planned.requested_change.source_ref == "availability_window:limited:location:2026-05-20:2026-05-22"
+    assert bridge.should_use_canonical_planning_without_legacy(
+        understanding=planned,
+        turn_plan=turn_plan,
+        pending_confirmation=None,
+    )
+
+
 def test_availability_primary_without_planning_request_stays_memory_only(monkeypatch) -> None:
     monkeypatch.delenv("FITMAS_CANONICAL_PLANNING_PROVIDER", raising=False)
     understanding = CoachUnderstanding(

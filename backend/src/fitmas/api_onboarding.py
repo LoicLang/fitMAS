@@ -12,7 +12,12 @@ from fitmas.api_support import apply_onboarding_to_user, build_onboarding_facts,
 from fitmas.calibration_status import build_calibration_status, build_initial_calibration_status
 from fitmas.db import get_db
 from fitmas.generated_week_coherence import GeneratedWeekCoherenceBlocked, guard_generated_week_coherence
-from fitmas.llm import formulate_onboarding_recap, formulate_week_plan, preview_coach_voice
+from fitmas.llm.decision_legacy import _request_json, _request_text
+from fitmas.llm.legacy_onboarding import (
+    formulate_onboarding_recap,
+    formulate_week_plan,
+    preview_coach_voice,
+)
 from fitmas.memory_profile import replace_profile_memory
 from fitmas.models import OnboardPreview, OnboardResult, WeeklyPlan
 from fitmas.onboarding_contract import build_goal_summary, build_onboarding_setup_preview, build_protected_focus
@@ -62,6 +67,7 @@ def _generate_enriched_week(profile: dict) -> dict:
         user_profile=profile,
         coach_profile=profile,
         time_context=build_time_context(profile.get("timezone")),
+        request_json_fn=_request_json,
     )
     return _normalize_generated_week_text_durations(enriched)
 
@@ -163,6 +169,7 @@ def _generate_enriched_week_for_user(db: Session, user: s.User) -> dict:
         user_profile=profile,
         coach_profile=profile,
         time_context=build_time_context(profile.get("timezone")),
+        request_json_fn=_request_json,
     )
     enriched = _normalize_generated_week_text_durations(enriched)
     enriched["_mesocycle_week"] = mesocycle.week_in_cycle
@@ -187,8 +194,8 @@ def _generate_enriched_week_for_user(db: Session, user: s.User) -> dict:
 def preview_onboarding(payload: OnboardPreviewPayload) -> OnboardPreview:
     normalized_payload = normalized_onboarding_payload(payload)
     time_context = build_time_context(normalized_payload.get("timezone"))
-    recap = formulate_onboarding_recap(normalized_payload, time_context=time_context)
-    preview = preview_coach_voice(normalized_payload, time_context=time_context)
+    recap = formulate_onboarding_recap(normalized_payload, time_context=time_context, request_text_fn=_request_text)
+    preview = preview_coach_voice(normalized_payload, time_context=time_context, request_json_fn=_request_json)
     calibration_status = build_initial_calibration_status(normalized_payload)
     return OnboardPreview(
         normalized_sports=normalized_payload["sports"],
@@ -203,7 +210,7 @@ def preview_onboarding(payload: OnboardPreviewPayload) -> OnboardPreview:
 def onboard(payload: OnboardPayload, db: Session = Depends(get_db)) -> OnboardResult:
     normalized_payload = normalized_onboarding_payload(payload)
     time_context = build_time_context(normalized_payload.get("timezone"))
-    recap = formulate_onboarding_recap(normalized_payload, time_context=time_context)
+    recap = formulate_onboarding_recap(normalized_payload, time_context=time_context, request_text_fn=_request_text)
 
     user = repo.get_user_optional(db)
     if user is None:
