@@ -735,7 +735,7 @@ def _week_coherence_review_payload(review: WeekCoherenceReview) -> dict[str, Any
 
 
 def _request_week_coherence_json(**kwargs) -> dict[str, Any] | None:
-    from fitmas.plan_mutation_service import _request_week_coherence_json as request_json
+    from fitmas.domain.planning.patch_mutation_service import _request_week_coherence_json as request_json
 
     return request_json(**kwargs)
 

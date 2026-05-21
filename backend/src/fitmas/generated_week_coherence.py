@@ -199,6 +199,6 @@ def _int(value: Any, *, default: int) -> int:
 
 
 def _request_week_coherence_json(**kwargs) -> dict[str, Any] | None:
-    from fitmas.plan_mutation_service import _request_week_coherence_json as request_json
+    from fitmas.domain.planning.patch_mutation_service import _request_week_coherence_json as request_json
 
     return request_json(**kwargs)

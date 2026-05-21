@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 
 from fitmas import repository as repo, schema as s
 from fitmas.activities import infer_activity_title, match_activity_to_day, normalize_activity_sport
-from fitmas.plan_mutation_service import complete_session_from_activity_for_user, mark_session_completed_for_user
+from fitmas.domain.planning.patch_mutation_service import complete_session_from_activity_for_user, mark_session_completed_for_user
 from fitmas.training_load import estimate_tss
 
 AUTH_URL = "https://www.strava.com/oauth/authorize"

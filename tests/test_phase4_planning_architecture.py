@@ -36,7 +36,7 @@ def test_candidate_builder_never_writes() -> None:
 def test_new_planning_writes_are_confined_to_planning_command_service() -> None:
     offenders: list[str] = []
     for path in sorted(PLANNING.glob("*.py")):
-        if path.name == "mutation_service.py":
+        if path.name in {"mutation_service.py", "patch_mutation_service.py"}:
             continue
         source = path.read_text(encoding="utf-8")
         if "apply_patch_for_user" in source or "create_pending_mutation_confirmation" in source:

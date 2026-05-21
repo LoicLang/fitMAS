@@ -102,7 +102,6 @@ is allowed only for hotspots that need a separate shrink slice.
 | `performance_overview.py` | domain/athlete | move | performance overview is athlete analytics | athlete package split |
 | `performance_stats.py` | domain/athlete | move | performance stats are athlete analytics | athlete package split |
 | `periodization.py` | domain/planning | move | periodization belongs to planning | planning package split |
-| `plan_mutation_service.py` | domain/planning | keep_root_temporarily | active writer hotspot needs separate migration | planning writer migration |
 | `plan_patch.py` | domain/planning | move | PlanPatch is planning domain language | planning package split |
 | `plan_patch_adaptation_policy.py` | domain/planning | move | adaptation policy belongs to planning | planning package split |
 | `plan_patch_backend_candidates.py` | domain/planning | merge | backend candidate helper should merge into candidate_builder | planning simplification |
@@ -156,8 +155,7 @@ is allowed only for hotspots that need a separate shrink slice.
    preserving wrapper boundaries.
 2. Move API routes to `app/api` and delete root wrappers.
 3. Split monoliths only after deletion:
-   `conversation_pipeline.py`, `repository.py`, `plan_mutation_service.py`,
-   `week_coherence.py`.
+   `conversation_pipeline.py`, `repository.py`, `week_coherence.py`.
 
 ## Non Goals
 

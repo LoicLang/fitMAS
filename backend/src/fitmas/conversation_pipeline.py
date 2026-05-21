@@ -68,7 +68,7 @@ from fitmas.conversation_contract import (
     ConversationUserNotFoundError,
 )
 from fitmas.models import DayId, Extraction, Message, MessageReply, MessageRole
-from fitmas.plan_mutation_service import PlanPatchServiceResult
+from fitmas.domain.planning.patch_mutation_service import PlanPatchServiceResult
 from fitmas.plan_patch import PlanPatch
 from fitmas.profile_summary import build_profile_summary
 from fitmas.signals import collect_signals

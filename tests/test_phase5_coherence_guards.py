@@ -9,7 +9,7 @@ os.environ.setdefault("FITMAS_DB_PATH", tempfile.mktemp(prefix="fitmas-phase5-",
 from fitmas import repository as repo, schema as s
 from fitmas.db import Base, SessionLocal, engine, init_db
 from fitmas.domain.planning.mutation_decision import MutationDecision
-from fitmas.plan_mutation_service import apply_decisions_for_user
+from fitmas.domain.planning.patch_mutation_service import apply_decisions_for_user
 
 
 def setup_function() -> None:

@@ -32,12 +32,14 @@ Encore a reduire :
 
 - `conversation_pipeline.py` reste le mega-orchestrateur.
 - `legacy/` n'a plus de module source actif.
-- Le prochain gros morceau est reduire le vieux writer planning racine qui
-  consomme encore `domain/planning/mutation_decision.py`.
+- Le writer PlanPatch n'est plus racine :
+  `domain/planning/patch_mutation_service.py` l'own.
+- Le prochain gros morceau est reduire les executors planning racine
+  `mutations.py`, `mutation_hooks.py`, `mutation_permissions.py`.
 
 Dernieres preuves locales :
 
-- backend complet : `1253 passed, 11 skipped, 11 subtests passed`.
+- backend complet : `1255 passed, 11 skipped, 11 subtests passed`.
 - smoke core API : OK.
 - fallback census core : `0`.
 
@@ -47,8 +49,8 @@ Apres 10M : `CoachDecision` compat est supprime.
 
 Objectif :
 
-- reduire `plan_mutation_service.py`, `mutations.py`, `mutation_hooks.py` et
-  `mutation_permissions.py` autour du pipeline planning canonique ;
+- reduire `mutations.py`, `mutation_hooks.py` et `mutation_permissions.py`
+  autour du pipeline planning canonique ;
 - reduire `conversation_pipeline.py`.
 
 ## Ordre De Lecture

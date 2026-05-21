@@ -132,8 +132,8 @@ Le point chaud reste `conversation_pipeline.py`.
 
 Les prochains cuts doivent attaquer :
 
-- le vieux writer planning qui consomme encore
-  `domain/planning/mutation_decision.py` ;
+- les executors planning racine `mutations.py`, `mutation_hooks.py`,
+  `mutation_permissions.py` ;
 - `conversation_pipeline.py`, encore trop gros ;
 - fichiers racine encore non classes.
 

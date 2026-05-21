@@ -764,7 +764,7 @@ def _decision_reply_composer() -> DecisionReplyComposer:
 
 
 def _apply_patch_for_user():
-    return getattr(import_module("fitmas.plan_mutation_service"), "apply_patch_for_user")
+    return getattr(import_module("fitmas.domain.planning.patch_mutation_service"), "apply_patch_for_user")
 
 
 def _default_request_json_fn():

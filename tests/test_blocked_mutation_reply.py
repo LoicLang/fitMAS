@@ -11,7 +11,7 @@ from fitmas.conversation_pipeline import (
     _plan_patch_service_result_requires_clarification,
 )
 from fitmas.mutation_permissions import MutationImpactAssessment, build_confirmation_prompt
-from fitmas.plan_mutation_service import (
+from fitmas.domain.planning.patch_mutation_service import (
     PlanAppliedMutationEvent,
     PlanBlockedMutationEvent,
     PlanMutationServiceResult,

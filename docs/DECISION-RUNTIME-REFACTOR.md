@@ -81,6 +81,8 @@ Encore actif :
 - `legacy/` ne contient plus de module source actif.
 - `MutationDecision` vit temporairement dans `domain/planning/mutation_decision.py`
   cote planning historique.
+- Le writer PlanPatch vit dans `domain/planning/patch_mutation_service.py` ;
+  `plan_mutation_service.py` racine est supprime.
 
 ## Frontieres
 
@@ -235,8 +237,8 @@ deleted_count=10
 
 Objectif suivant :
 
-1. reduire le vieux writer planning racine qui consomme encore
-   `MutationDecision` ;
+1. reduire les executors planning racine
+   `mutations.py`, `mutation_hooks.py`, `mutation_permissions.py` ;
 2. ramener `conversation_pipeline.py` vers un adapter plus mince ;
 3. continuer le menage des prompts conversationnels anciens encore centres
    sur `CoachDecision`.

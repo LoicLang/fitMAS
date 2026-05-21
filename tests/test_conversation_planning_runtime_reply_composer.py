@@ -8,7 +8,7 @@ from fitmas.decision import planning_outcomes as conversation_planning_bridge
 from fitmas.decision.reply_request import ReplyRequest, ReplyResult
 from fitmas.domain.planning.models import PlanningCommandResult, PlanningDecisionResult
 from fitmas.llm.reply_decision_backend import LLMReplyBackend
-from fitmas.plan_mutation_service import PlanPatchServiceResult
+from fitmas.domain.planning.patch_mutation_service import PlanPatchServiceResult
 from fitmas.plan_patch import PlanPatch, PlanPatchOperation, PlanPatchValidation
 
 

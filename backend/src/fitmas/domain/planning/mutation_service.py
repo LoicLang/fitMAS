@@ -11,7 +11,7 @@ from fitmas.mutation_permissions import (
     serialize_plan_patch_choice_confirmation,
     serialize_plan_patch_confirmation,
 )
-from fitmas.plan_mutation_service import apply_patch_for_user
+from fitmas.domain.planning.patch_mutation_service import apply_patch_for_user
 from fitmas.plan_patch_candidates import PlanPatchCandidate
 
 

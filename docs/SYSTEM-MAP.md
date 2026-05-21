@@ -149,6 +149,8 @@ Etat actuel :
 - gros residu de compat sorti de `legacy/` :
   `domain/planning/mutation_decision.py`, encore utilise par le writer
   planning historique.
+- writer PlanPatch :
+  `domain/planning/patch_mutation_service.py`.
 
 Regle :
 

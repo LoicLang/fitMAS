@@ -12,7 +12,7 @@ from fastapi.testclient import TestClient
 
 from fitmas.app.api import routes_messages as api_messages
 import fitmas.conversation_pipeline as conversation_pipeline
-import fitmas.plan_mutation_service as plan_mutation_service
+import fitmas.domain.planning.patch_mutation_service as plan_mutation_service
 from fitmas.api import app
 from fitmas.conversation_contract import (
     ConversationTurnOutcome,

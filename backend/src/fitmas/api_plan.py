@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 from fitmas import repository as repo
 from fitmas.db import get_db
 from fitmas.models import MoveSessionPayload, ScheduledSession
-from fitmas.plan_mutation_service import complete_session_for_user, move_session_for_user, skip_session_for_user
+from fitmas.domain.planning.patch_mutation_service import complete_session_for_user, move_session_for_user, skip_session_for_user
 
 router = APIRouter()
 
