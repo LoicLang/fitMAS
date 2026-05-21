@@ -1202,8 +1202,8 @@ def test_day_completion_helper_is_noop_compat(monkeypatch) -> None:
 def test_orchestrators_do_not_call_low_level_plan_writers_directly() -> None:
     root = Path(__file__).resolve().parents[1]
     orchestrators = [
-        root / "backend/src/fitmas/api_plan.py",
-        root / "backend/src/fitmas/api_activities.py",
+        root / "backend/src/fitmas/app/api/routes_plan.py",
+        root / "backend/src/fitmas/app/api/routes_activities.py",
         root / "backend/src/fitmas/app/api/routes_messages.py",
         root / "backend/src/fitmas/strava.py",
     ]

@@ -61,8 +61,8 @@ def test_8d_no_active_heartbeat_skill_imports_outside_legacy() -> None:
     allowed_files = {
         "app/telegram/scheduler.py",
         "telegram_commands.py",
-        "api_debug.py",
-        "api_ops.py",
+        "app/api/routes_debug.py",
+        "app/api/routes_ops.py",
     }
     for path in sorted(SRC.rglob("*.py")):
         relative = str(path.relative_to(SRC))
@@ -119,15 +119,15 @@ def test_8d_active_heartbeat_entrypoints_import_runtime_adapter_not_skill_loop()
     checked = {
         "app/telegram/scheduler.py",
         "telegram_commands.py",
-        "api_debug.py",
-        "api_ops.py",
+        "app/api/routes_debug.py",
+        "app/api/routes_ops.py",
     }
     offenders: list[str] = []
     for relative in checked:
         source = _source(relative)
         if "from fitmas import heartbeat" in source or "fitmas.heartbeat" in source:
             offenders.append(relative)
-        if "run_heartbeat_trigger" not in source and relative != "api_debug.py":
+        if "run_heartbeat_trigger" not in source and relative != "app/api/routes_debug.py":
             offenders.append(f"{relative}:missing_runtime_adapter")
 
     assert offenders == []

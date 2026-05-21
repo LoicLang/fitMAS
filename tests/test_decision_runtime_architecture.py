@@ -166,7 +166,7 @@ def test_phase2_does_not_wire_existing_runtime_to_context_builder() -> None:
     files = [
         root / "conversation_pipeline.py",
         root / "skills" / "heartbeat" / "heartbeat.py",
-        root / "api_app.py",
+        root / "app" / "api" / "routes_app.py",
         root / "app" / "api" / "routes_messages.py",
     ]
     offenders: list[str] = []

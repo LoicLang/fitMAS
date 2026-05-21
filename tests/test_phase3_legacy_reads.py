@@ -6,8 +6,8 @@ from pathlib import Path
 def test_app_read_models_do_not_load_legacy_week_plan_runtime_truth() -> None:
     root = Path(__file__).resolve().parents[1]
     files = [
-        root / "backend/src/fitmas/api_app.py",
-        root / "backend/src/fitmas/api_stats.py",
+        root / "backend/src/fitmas/app/api/routes_app.py",
+        root / "backend/src/fitmas/app/api/routes_stats.py",
         root / "backend/src/fitmas/performance_overview.py",
     ]
     forbidden = (
@@ -73,7 +73,7 @@ def test_heartbeat_runtime_does_not_load_legacy_week_plan_truth() -> None:
 
 def test_week_endpoint_uses_scheduled_runtime_truth_before_template_fallback() -> None:
     root = Path(__file__).resolve().parents[1]
-    api_read = (root / "backend/src/fitmas/api_read.py").read_text()
+    api_read = (root / "backend/src/fitmas/app/api/routes_read.py").read_text()
     assert "repo.get_scheduled_sessions_between_dates" in api_read
     assert "_build_runtime_week_plan" in api_read
     assert 'runtime_role="scheduled_runtime"' in api_read
@@ -89,7 +89,7 @@ def test_telegram_plan_command_uses_dated_timeline_not_legacy_week() -> None:
 def test_activity_import_runtime_does_not_load_legacy_week_plan_truth() -> None:
     root = Path(__file__).resolve().parents[1]
     files = [
-        root / "backend/src/fitmas/api_activities.py",
+        root / "backend/src/fitmas/app/api/routes_activities.py",
         root / "backend/src/fitmas/strava.py",
     ]
     forbidden = (

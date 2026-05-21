@@ -57,8 +57,8 @@ def test_heartbeat_runtime_bridge_imports_are_explicitly_bounded() -> None:
     allowed = {
         SRC / "app" / "telegram" / "scheduler.py",
         SRC / "telegram_commands.py",
-        SRC / "api_debug.py",
-        SRC / "api_ops.py",
+        SRC / "app" / "api" / "routes_debug.py",
+        SRC / "app" / "api" / "routes_ops.py",
     }
     offenders: list[str] = []
 
