@@ -611,7 +611,7 @@ def run_adaptation(
     trigger: AdaptationTrigger,
 ) -> AdaptationResult | None:
     """Run the full adaptation pipeline: prompt -> LLM -> parse -> proposal."""
-    from fitmas.llm.decision_legacy import _request_json  # noqa: access internal for consistency
+    import fitmas.llm.gateway as gw
 
     prompt = _build_prompt(trigger)
     model = _model_for_trigger(trigger.trigger_type)
@@ -622,7 +622,7 @@ def run_adaptation(
         trigger.affected_session_ids, model,
     )
 
-    data = _request_json(system=_ADAPTATION_SOUL, prompt=prompt, model=model, max_tokens=1024)
+    data = gw.request_json(system=_ADAPTATION_SOUL, prompt=prompt, model=model, max_tokens=1024)
     decisions, message = _parse_adaptation_response(data)
     if decisions and _should_force_conservative_health_fallback(trigger):
         decisions, message = _build_conservative_health_fallback(trigger)

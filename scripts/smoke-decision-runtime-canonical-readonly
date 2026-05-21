@@ -5,7 +5,7 @@ set -euo pipefail
   tests/test_phase8r_canonical_readonly_architecture.py \
   tests/test_conversation_canonical_readonly_bridge.py \
   tests/test_conversation_understanding_bridge.py \
-  tests/test_conversation_coach_decision_reply_bridge.py
+  tests/test_phase10f_conversation_bridge_census_architecture.py
 
 ./scripts/smoke-decision-runtime-canonical-provider-pivot
 

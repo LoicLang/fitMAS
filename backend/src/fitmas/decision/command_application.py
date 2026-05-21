@@ -129,6 +129,30 @@ def commands_from_understanding_enabled() -> bool:
     return _env_flag_enabled("FITMAS_COMMANDS_FROM_UNDERSTANDING", default=True)
 
 
+def apply_understanding_commands(
+    *,
+    db: Session,
+    user: s.User,
+    understanding: CoachUnderstanding,
+    turn_memory_writes: list[dict],
+    unresolved_execution_followup: str | None = None,
+    conversation_turn_id: int | None = None,
+) -> dict[str, Any]:
+    bundle = commands_from_understanding(understanding)
+    return _apply_command_bundle(
+        db=db,
+        user=user,
+        bundle=bundle,
+        turn_memory_writes=turn_memory_writes,
+        unresolved_execution_followup=unresolved_execution_followup,
+        pending_resolution_artifact=pending_resolution.pending_resolution_from_sources(
+            decision_artifact=None,
+            canonical_understanding=understanding,
+        ),
+        conversation_turn_id=conversation_turn_id,
+    )
+
+
 def apply_coach_decision_commands(
     *,
     db: Session,
@@ -145,6 +169,31 @@ def apply_coach_decision_commands(
         turn_plan=turn_plan,
         canonical_understanding=canonical_understanding,
     )
+    pending_resolution_artifact = pending_resolution.pending_resolution_from_sources(
+        decision_artifact=decision_artifact,
+        canonical_understanding=canonical_understanding,
+    )
+    return _apply_command_bundle(
+        db=db,
+        user=user,
+        bundle=bundle,
+        turn_memory_writes=turn_memory_writes,
+        unresolved_execution_followup=unresolved_execution_followup,
+        pending_resolution_artifact=pending_resolution_artifact,
+        conversation_turn_id=conversation_turn_id,
+    )
+
+
+def _apply_command_bundle(
+    *,
+    db: Session,
+    user: s.User,
+    bundle: CoachCommandBundle,
+    turn_memory_writes: list[dict],
+    unresolved_execution_followup: str | None,
+    pending_resolution_artifact: Any,
+    conversation_turn_id: int | None,
+) -> dict[str, Any]:
     bus = RuntimeCommandBus(
         db=db,
         user=user,
@@ -165,10 +214,6 @@ def apply_coach_decision_commands(
         )
     metrics = _metric_payload(results, deferred_execution_count=bundle.deferred_execution_count)
     metrics["command_source"] = bundle.source
-    pending_resolution_artifact = pending_resolution.pending_resolution_from_sources(
-        decision_artifact=decision_artifact,
-        canonical_understanding=canonical_understanding,
-    )
     _log_metrics(
         user=user,
         bundle=bundle,

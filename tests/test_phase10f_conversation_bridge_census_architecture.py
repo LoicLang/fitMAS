@@ -66,14 +66,13 @@ def test_10f_activity_and_clarification_live_in_decision_not_legacy() -> None:
     assert not (SRC / "legacy/conversation_canonical_clarification_bridge.py").exists()
 
 
-def test_10f_decision_artifact_helpers_live_in_artifact_owner_not_bridge() -> None:
+def test_10f_decision_artifact_helpers_are_deleted_with_artifact_owner() -> None:
     pipeline = _source("conversation_pipeline.py")
-    artifact = _source("legacy/coach_decision_artifact.py")
 
     assert "conversation_decision_bridge" not in pipeline
     assert not (SRC / "legacy/conversation_decision_bridge.py").exists()
-    assert "def decision_json_for_turn(" in artifact
-    assert "def legacy_decision_reply_text(" in artifact
+    assert not (SRC / "legacy/coach_decision_artifact.py").exists()
+    assert "legacy_decision_artifact" not in pipeline
 
 
 def test_10f_coach_decision_reply_helpers_live_in_readonly_reply_owner() -> None:
@@ -82,8 +81,9 @@ def test_10f_coach_decision_reply_helpers_live_in_readonly_reply_owner() -> None
 
     assert "conversation_coach_decision_reply_bridge" not in pipeline
     assert not (SRC / "legacy/conversation_coach_decision_reply_bridge.py").exists()
-    assert "def can_route_coach_decision_reply(" in readonly
-    assert "def compose_coach_decision_reply(" in readonly
+    assert "def can_route_coach_decision_reply(" not in readonly
+    assert "def compose_coach_decision_reply(" not in readonly
+    assert "def compose_understanding_command_reply(" in readonly
 
 
 def test_10h_readonly_reply_lives_in_decision_not_legacy() -> None:
@@ -98,7 +98,7 @@ def test_10h_readonly_reply_lives_in_decision_not_legacy() -> None:
     assert "def should_use_canonical_readonly_without_legacy(" in readonly
     assert "def compose_canonical_readonly_reply(" in readonly
     assert "def compose_no_change_reply_for_turn(" in readonly
-    assert "def compose_coach_decision_reply(" in readonly
+    assert "def compose_coach_decision_reply(" not in readonly
 
 
 def test_10i_understanding_runtime_lives_in_decision_not_legacy() -> None:
@@ -110,7 +110,8 @@ def test_10i_understanding_runtime_lives_in_decision_not_legacy() -> None:
     assert not (SRC / "legacy/conversation_understanding_bridge.py").exists()
     assert "def run_canonical_understanding_shadow(" in runtime
     assert "def should_use_canonical_understanding_without_legacy(" in runtime
-    assert "def coach_decision_artifact_from_understanding(" in runtime
+    assert "def trace_canonical_understanding_pivot(" in runtime
+    assert "coach_decision_artifact_from_understanding" not in runtime
 
 
 def test_10i_conversation_bridge_census_only_tracks_legacy_decide_active() -> None:

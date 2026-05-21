@@ -273,74 +273,66 @@ def turn_context_should_ground_plan_lookup(turn_context: dict[str, object]) -> b
     return isinstance(refs, list) and bool(refs)
 
 
-def can_route_coach_decision_reply(
-    *,
-    decision_artifact: Any,
-    turn_context: dict[str, object],
-    action_result: dict | None = None,
-) -> bool:
-    response_mode = str(getattr(decision_artifact, "response_type", "reply") or "reply")
+def should_compose_understanding_command_reply(action_result: dict | None) -> bool:
     action_result = action_result or {}
-    if int(action_result.get("execution_applied") or 0) > 0:
-        return True
-    return response_mode in {"no_change", "reply"}
-
-
-def should_compose_coach_decision_reply(
-    *,
-    decision_artifact: Any,
-    turn_context: dict[str, object],
-    action_result: dict | None = None,
-) -> bool:
-    response_mode = str(getattr(decision_artifact, "response_type", "reply") or "reply")
-    primary_intent = turn_context_primary_intent(turn_context)
-    action_result = action_result or {}
-    if int(action_result.get("execution_applied") or 0) > 0:
-        return True
-    return response_mode == "no_change" or (
-        response_mode == "reply" and primary_intent == "execution_report"
+    if str(action_result.get("command_source") or "") != "coach_understanding":
+        return False
+    return any(
+        int(action_result.get(key) or 0) > 0
+        for key in (
+            "memory_applied",
+            "memory_blocked",
+            "execution_applied",
+            "execution_blocked",
+            "execution_deferred",
+        )
     )
 
 
-def compose_coach_decision_reply(
+def compose_understanding_command_reply(
     *,
     db,
     user,
     user_text: str,
-    decision_artifact: Any,
+    understanding: CoachUnderstanding,
     turn_context: dict[str, object],
     grounding,
     action_result: dict,
     compose_no_change_reply_for_turn_fn: Callable[..., tuple[str, str | None]] | None,
 ) -> ConversationTurnOutcome:
-    reply_text = str(getattr(decision_artifact, "confirmation_reason", None) or getattr(decision_artifact, "reply_hint", ""))
-    response_mode = str(getattr(decision_artifact, "response_type", "reply") or "reply")
-    if (
-        should_compose_coach_decision_reply(
-            decision_artifact=decision_artifact,
-            turn_context=turn_context,
-            action_result=action_result,
-        )
-        and compose_no_change_reply_for_turn_fn is not None
-    ):
+    original_reply = _reply_hint_from_understanding(understanding)
+    response_mode = "canonical_command_reply"
+    if compose_no_change_reply_for_turn_fn is not None:
         reply_text, composed_mode = compose_no_change_reply_for_turn_fn(
             db=db,
             user=user,
             user_text=user_text,
-            original_reply=reply_text,
+            original_reply=original_reply,
             turn_context=turn_context,
             grounding=grounding,
             action_result=action_result,
         )
         if composed_mode:
             response_mode = composed_mode
+    else:
+        reply_text = original_reply
     return ConversationTurnOutcome(
-        extraction=Extraction(confidence=0.85),
+        extraction=Extraction(confidence=understanding.confidence),
         reply_text=reply_text,
         response_mode=response_mode,
         decision=None,
         mutation_applied=False,
     )
+
+
+def _reply_hint_from_understanding(understanding: CoachUnderstanding) -> str:
+    if understanding.user_summary:
+        return understanding.user_summary
+    if understanding.intent == "execution_report":
+        return "Signal d'execution compris."
+    if understanding.intent == "pending_response":
+        return "Confirmation comprise."
+    return "Signal compris."
 
 
 def _answer_outcome_from_understanding(

@@ -31,26 +31,24 @@ Deja en place :
 Encore a reduire :
 
 - `conversation_pipeline.py` reste le mega-orchestrateur.
-- `legacy/` contient encore `6` modules, dont `__init__.py`.
-- Le prochain gros morceau est supprimer la compat `CoachDecision` restante :
-  contrats, artifact, adapters et `llm/decision_legacy.py`.
+- `legacy/` contient encore `2` modules, dont `__init__.py`.
+- Le prochain gros morceau est sortir `MutationDecision` de `legacy/` ou le
+  supprimer avec le vieux writer planning associe.
 
 Dernieres preuves locales :
 
-- backend complet : `1423 passed, 11 skipped`.
+- backend complet : `1253 passed, 11 skipped, 11 subtests passed`.
 - smoke core API : OK.
 - fallback census core : `0`.
 
 ## Prochaine Tranche
 
-Apres 10K : reste `CoachDecision` compat.
+Apres 10M : `CoachDecision` compat est supprime.
 
 Objectif :
 
-- convertir les derniers artifacts compat en outcomes directs ;
-- supprimer `legacy/decision_contracts.py`, `legacy/coach_decision_artifact.py`
-  et les adapters associes quand leurs callers sont vides ;
-- isoler ou supprimer `llm/decision_legacy.py` ;
+- migrer ou supprimer `legacy/decision_contracts.py`, qui ne porte plus que
+  `MutationDecision` ;
 - reduire `conversation_pipeline.py`.
 
 ## Ordre De Lecture

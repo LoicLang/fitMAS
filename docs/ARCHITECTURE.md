@@ -132,9 +132,9 @@ Le point chaud reste `conversation_pipeline.py`.
 
 Les prochains cuts doivent attaquer :
 
-- planning/pending legacy ;
-- bridges `legacy/conversation_*` ;
-- pouvoir runtime restant dans `CoachDecision` legacy ;
+- `MutationDecision` dans `legacy/decision_contracts.py` ;
+- le vieux writer planning qui garde ce contrat en vie ;
+- `conversation_pipeline.py`, encore trop gros ;
 - fichiers racine encore non classes.
 
 Critere de succes jeudi :

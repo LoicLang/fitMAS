@@ -46,16 +46,11 @@ from fitmas.decision import coach_decision_runtime
 import fitmas.llm.reply_backend as final_reply
 from fitmas.decision import understanding_runtime
 from fitmas.decision.planning_outcomes import (
-    legacy_decision_contract_disabled_outcome,
     plan_patch_service_result_to_outcome,
 )
-from fitmas.legacy.coach_decision_artifact import (
-    coach_decision_payload,
+from fitmas.decision.turn_recording import (
     decision_json_for_turn,
-    is_coach_decision_artifact,
-    is_legacy_readonly_artifact,
-    legacy_decision_reply_text,
-    legacy_readonly_decision_payload,
+    decision_reply_text_for_turn,
 )
 from fitmas.conversation_context import (
     activity_claim_summary_for_prompt,
@@ -568,19 +563,27 @@ def _run_conversation_turn_impl(
             turn_context=turn_context,
         )
     outcome: ConversationTurnOutcome | None = None
-    legacy_decision_artifact = None
+    understanding_action_result: dict[str, Any] | None = None
     if understanding_runtime.should_use_canonical_understanding_without_legacy(
         understanding=canonical_understanding,
         turn_plan=turn_plan,
         pending_confirmation=pending_confirmation,
     ):
-        legacy_decision_artifact = understanding_runtime.coach_decision_artifact_from_understanding(
+        turn_context["legacy_decide"] = understanding_runtime.trace_canonical_understanding_pivot(
             canonical_understanding,
             turn_plan=turn_plan,
         )
-        turn_context["legacy_decide"] = understanding_runtime.trace_canonical_provider_artifact(
-            legacy_decision_artifact
-        )
+        if _turn_is_obsolete(db=db, user=user, turn_context=turn_context):
+            outcome = _obsolete_turn_outcome(turn_context=turn_context)
+        else:
+            understanding_action_result = _apply_understanding_commands(
+                db=db,
+                user=user,
+                understanding=canonical_understanding,
+                turn_memory_writes=turn_memory_writes,
+                unresolved_execution_followup=unresolved_execution_followup_text,
+            )
+            turn_context["understanding_command_result"] = understanding_action_result
     else:
         if readonly_reply.should_use_canonical_readonly_without_legacy(
             understanding=canonical_understanding,
@@ -640,29 +643,12 @@ def _run_conversation_turn_impl(
                 grounding_facts=tuple(render_grounding_packet_for_prompt(grounding_packet)),
                 decision_reply_composer_fn=_decision_reply_composer,
             )
-    is_coach_decision = is_coach_decision_artifact(legacy_decision_artifact)
-    if is_coach_decision:
-        turn_context["coach_decision"] = coach_decision_payload(legacy_decision_artifact)
-        if _turn_is_obsolete(db=db, user=user, turn_context=turn_context):
-            outcome = _obsolete_turn_outcome(turn_context=turn_context)
-            legacy_decision_artifact = None
-        else:
-            action_result = _apply_coach_decision_actions(
-                db=db,
-                user=user,
-                decision_artifact=legacy_decision_artifact,
-                turn_memory_writes=turn_memory_writes,
-                unresolved_execution_followup=unresolved_execution_followup_text,
-                turn_plan=turn_plan,
-                turn_context=turn_context,
-            )
-            turn_context["coach_decision_action_result"] = action_result
 
     if outcome is None:
         pending_outcome = pending_resolution.apply_pending_resolution(
             db=db,
             user=user,
-            decision_artifact=legacy_decision_artifact,
+            decision_artifact=None,
             canonical_understanding=canonical_understanding,
             pending_confirmation=pending_confirmation,
             user_text=payload.text,
@@ -670,73 +656,25 @@ def _run_conversation_turn_impl(
         )
         if pending_outcome is not None:
             outcome = pending_outcome
-            legacy_decision_artifact = None
 
     if (
         outcome is None
-        and is_coach_decision
-        and legacy_decision_artifact is not None
-        and readonly_reply.can_route_coach_decision_reply(
-            decision_artifact=legacy_decision_artifact,
-            turn_context=turn_context,
-            action_result=turn_context.get("coach_decision_action_result") or {},
+        and canonical_understanding is not None
+        and readonly_reply.should_compose_understanding_command_reply(
+            understanding_action_result,
         )
     ):
-        outcome = readonly_reply.compose_coach_decision_reply(
+        outcome = readonly_reply.compose_understanding_command_reply(
             db=db,
             user=user,
             user_text=payload.text,
-            decision_artifact=legacy_decision_artifact,
+            understanding=canonical_understanding,
             turn_context=turn_context,
             grounding=grounding_packet,
-            action_result=turn_context.get("coach_decision_action_result") or {},
+            action_result=understanding_action_result or {},
             compose_no_change_reply_for_turn_fn=readonly_reply.compose_no_change_reply_for_turn,
         )
-        legacy_decision_artifact = None
-
-    if outcome is None and legacy_decision_artifact is not None and _turn_is_obsolete(db=db, user=user, turn_context=turn_context):
-        outcome = _obsolete_turn_outcome(turn_context=turn_context)
-        legacy_decision_artifact = None
-
-    if (
-        outcome is None
-        and legacy_decision_artifact is not None
-        and is_legacy_readonly_artifact(legacy_decision_artifact)
-    ):
-        turn_context["legacy_readonly_decision"] = legacy_readonly_decision_payload(
-            legacy_decision_artifact
-        )
-        reply_text, composed_mode = readonly_reply.compose_no_change_reply_for_turn(
-            db=db,
-            user=user,
-            user_text=payload.text,
-            original_reply=legacy_decision_reply_text(legacy_decision_artifact),
-            turn_context=turn_context,
-            grounding=grounding_packet,
-            action_result={},
-        )
-        outcome = ConversationTurnOutcome(
-            extraction=Extraction(confidence=0.85),
-            reply_text=reply_text,
-            response_mode=composed_mode or "legacy_readonly_no_change",
-            decision=legacy_decision_artifact,
-            mutation_applied=False,
-        )
-        legacy_decision_artifact = None
-
-    if (
-        outcome is None
-        and legacy_decision_artifact is not None
-        and (legacy_decision_artifact.has_value or legacy_decision_artifact.kind == "unsupported")
-    ):
-        outcome = legacy_decision_contract_disabled_outcome(
-            decision_artifact=legacy_decision_artifact,
-            user_text=payload.text,
-            grounding_facts=render_grounding_packet_for_prompt(grounding_packet),
-            decision_reply_composer_fn=_decision_reply_composer,
-        )
-        legacy_decision_artifact = None
-    elif outcome is None:
+    if outcome is None:
         decide_none_context = coach_decision_runtime.decide_none_context(turn_context)
         turn_context["decide_none"] = decide_none_context
 
@@ -1003,24 +941,20 @@ def _apply_turn_plan_memory_commands_once(
     )
 
 
-def _apply_coach_decision_actions(
+def _apply_understanding_commands(
     *,
     db: Session,
     user,
-    decision_artifact: Any,
+    understanding,
     turn_memory_writes: list[dict],
     unresolved_execution_followup: str | None = None,
-    turn_plan=None,
-    turn_context: dict[str, object] | None = None,
 ) -> dict[str, Any]:
-    return command_application.apply_coach_decision_commands(
+    return command_application.apply_understanding_commands(
         db=db,
         user=user,
-        decision_artifact=decision_artifact,
+        understanding=understanding,
         turn_memory_writes=turn_memory_writes,
         unresolved_execution_followup=unresolved_execution_followup,
-        turn_plan=turn_plan,
-        canonical_understanding=turn_context.get("canonical_understanding") if isinstance(turn_context, dict) else None,
     )
 
 
@@ -1532,7 +1466,7 @@ def _blocked_mutation_reply(decision, service_result=None) -> str:
             warning_hint = warnings[0] if warnings else None
 
     context = final_reply.FinalReplyContext(
-        original_llm_reply=legacy_decision_reply_text(decision),
+        original_llm_reply=decision_reply_text_for_turn(decision),
         blocked_events=(
             final_reply.BlockedEvent(
                 command=str(getattr(decision, "mutation_type", "") or "mutation"),

@@ -77,9 +77,9 @@ Encore actif :
 
 - `conversation_pipeline.py` reste le mega-orchestrateur principal.
 - aucun bridge `legacy/conversation_*` mesure ne reste runtime-active.
-- `llm/decision_legacy.py` et `legacy/decision_contracts.py` portent encore le contrat `CoachDecision`.
-- `legacy/coach_decision_provider.py` est supprime : le runtime conversationnel
-  ne peut plus appeler le provider `CoachDecision`.
+- le provider, les artifacts et les adapters `CoachDecision` sont supprimes.
+- `legacy/decision_contracts.py` ne porte plus que `MutationDecision`, dernier
+  contrat legacy actif cote planning historique.
 
 ## Frontieres
 
@@ -222,12 +222,22 @@ legacy_internal_count=0
 deleted_count=10
 ```
 
+10L / 10M ont supprime :
+
+- la creation d'artifact compat depuis `CoachUnderstanding` ;
+- `legacy/coach_command_adapter.py` ;
+- `legacy/coach_decision_artifact.py` ;
+- `legacy/coach_understanding_adapter.py` ;
+- `legacy/understanding_shadow.py` ;
+- `llm/decision_legacy.py` ;
+- `llm/legacy_{parser,prompt,action_compile,provider,schema_repair,tool_loop}.py`.
+
 Objectif suivant :
 
-1. convertir les derniers artifacts compat en `DecisionOutcome` directs ;
-2. reduire puis supprimer `legacy/decision_contracts.py`,
-   `legacy/coach_decision_artifact.py` et `llm/decision_legacy.py` ;
-3. ramener `conversation_pipeline.py` vers un adapter plus mince.
+1. migrer ou supprimer `legacy/decision_contracts.py` / `MutationDecision` ;
+2. ramener `conversation_pipeline.py` vers un adapter plus mince ;
+3. continuer le menage des prompts conversationnels anciens encore centres
+   sur `CoachDecision`.
 
 ## Critere De Verdict
 

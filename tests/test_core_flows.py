@@ -18,17 +18,13 @@ from fitmas.conversation_contract import (
     ConversationTurnOutcome,
 )
 from fitmas.db import Base, SessionLocal, engine, init_db
-from fitmas.decision import pending_resolution as conversation_pending_bridge
-from fitmas.legacy.coach_decision_artifact import legacy_decision_artifact_from_raw
-from fitmas.legacy.decision_contracts import (
-    AcceptPendingResolution,
+from fitmas.decision import PendingResolution
+from fitmas.decision.command_actions import (
     AvailabilityConstraintAction,
-    CoachDecision,
     ExecutionUpdateAction,
-    IgnorePendingResolution,
-    ModifyPendingResolution,
-    RejectPendingResolution,
 )
+from fitmas.decision import command_application
+from fitmas.decision import pending_resolution as conversation_pending_bridge
 from fitmas.models import Extraction
 from fitmas.mutation_permissions import serialize_plan_patch_confirmation
 from fitmas.plan_patch import PlanPatch, PlanPatchOperation, PlanPatchValidation
@@ -37,6 +33,23 @@ from fitmas.training_load import compute_ctl_atl_tsb, estimate_tss
 from fitmas import repository as repo, schema as s
 from fitmas.time_context import DAY_KEYS, day_label_fr, get_local_now
 from fitmas.week_coherence import WeekCoherenceFinding, WeekCoherenceReview
+
+
+def _pending(
+    resolution_type: str,
+    *,
+    reason: str | None = None,
+    selected_candidate_id: str | None = None,
+    requested_changes: str | None = None,
+    question: str | None = None,
+) -> PendingResolution:
+    return PendingResolution(
+        type=resolution_type,
+        reason=reason,
+        selected_candidate_id=selected_candidate_id,
+        requested_changes=requested_changes,
+        question=question,
+    )
 
 
 def _valid_week_review(*args, **kwargs) -> WeekCoherenceReview:
@@ -454,11 +467,11 @@ class FitMASCoreFlowsTest(unittest.TestCase):
             decision_json=serialize_plan_patch_confirmation(patch),
             expires_at=datetime.now() + timedelta(minutes=10),
         )
-        decision = CoachDecision(
+        decision = SimpleNamespace(
             response_type="reply",
             rationale="le modele principal a sur-interprete le tour",
             fitmas_message="Je garde la proposition ouverte.",
-            pending_resolution=AcceptPendingResolution(type="accept_pending"),
+            pending_resolution=_pending("accept_pending"),
         )
 
         original_verify = conversation_pending_bridge.verify_pending_accept_resolution
@@ -467,7 +480,7 @@ class FitMASCoreFlowsTest(unittest.TestCase):
             outcome = conversation_pending_bridge.apply_pending_resolution(
                 db=self.db,
                 user=self.user,
-                decision_artifact=legacy_decision_artifact_from_raw(decision),
+                decision_artifact=decision,
                 canonical_understanding=None,
                 pending_confirmation=pending,
                 user_text="j'attends",
@@ -512,11 +525,11 @@ class FitMASCoreFlowsTest(unittest.TestCase):
             decision_json=serialize_plan_patch_confirmation(patch),
             expires_at=datetime.now() + timedelta(minutes=10),
         )
-        decision = CoachDecision(
+        decision = SimpleNamespace(
             response_type="reply",
             rationale="acceptation pending comprise",
             fitmas_message="C'est confirme. Je l'applique.",
-            pending_resolution=AcceptPendingResolution(type="accept_pending"),
+            pending_resolution=_pending("accept_pending"),
         )
 
         original_verify = conversation_pending_bridge.verify_pending_accept_resolution
@@ -525,7 +538,7 @@ class FitMASCoreFlowsTest(unittest.TestCase):
             outcome = conversation_pending_bridge.apply_pending_resolution(
                 db=self.db,
                 user=self.user,
-                decision_artifact=legacy_decision_artifact_from_raw(decision),
+                decision_artifact=decision,
                 canonical_understanding=None,
                 pending_confirmation=pending,
                 user_text="oui confirme",
@@ -567,11 +580,11 @@ class FitMASCoreFlowsTest(unittest.TestCase):
             decision_json=serialize_plan_patch_confirmation(patch),
             expires_at=datetime.now() + timedelta(minutes=10),
         )
-        decision = CoachDecision(
+        decision = SimpleNamespace(
             response_type="reply",
             rationale="le modele principal a sur-interprete le non",
             fitmas_message="Je ne l'applique pas.",
-            pending_resolution=RejectPendingResolution(type="reject_pending"),
+            pending_resolution=_pending("reject_pending"),
         )
 
         original_verify = conversation_pending_bridge.verify_pending_accept_resolution
@@ -580,7 +593,7 @@ class FitMASCoreFlowsTest(unittest.TestCase):
             outcome = conversation_pending_bridge.apply_pending_resolution(
                 db=self.db,
                 user=self.user,
-                decision_artifact=legacy_decision_artifact_from_raw(decision),
+                decision_artifact=decision,
                 canonical_understanding=None,
                 pending_confirmation=pending,
                 user_text="non j'etais indispo aujourd'hui mais demain je suis dispo",
@@ -622,11 +635,11 @@ class FitMASCoreFlowsTest(unittest.TestCase):
             ),
             expires_at=datetime.now() + timedelta(minutes=10),
         )
-        decision = CoachDecision(
+        decision = SimpleNamespace(
             response_type="reply",
             rationale="acceptation surestimee",
             fitmas_message="Je le fais.",
-            pending_resolution=AcceptPendingResolution(type="accept_pending"),
+            pending_resolution=_pending("accept_pending"),
         )
         turn_plan = SimpleNamespace(
             primary_intent="plan_mutation",
@@ -640,7 +653,7 @@ class FitMASCoreFlowsTest(unittest.TestCase):
             outcome = conversation_pending_bridge.apply_pending_resolution(
                 db=self.db,
                 user=self.user,
-                decision_artifact=legacy_decision_artifact_from_raw(decision),
+                decision_artifact=decision,
                 canonical_understanding=None,
                 pending_confirmation=pending,
                 user_text="non j'etais indispo aujourd'hui mais demain je suis dispo",
@@ -678,7 +691,7 @@ class FitMASCoreFlowsTest(unittest.TestCase):
             ),
             expires_at=datetime.now() + timedelta(minutes=10),
         )
-        decision = CoachDecision(
+        decision = SimpleNamespace(
             response_type="requires_confirmation",
             rationale="nouvelle proposition structuree",
             fitmas_message="Je te propose une nouvelle option.",
@@ -694,13 +707,13 @@ class FitMASCoreFlowsTest(unittest.TestCase):
                     )
                 ],
             ),
-            pending_resolution=IgnorePendingResolution(type="ignore"),
+            pending_resolution=_pending("ignore"),
         )
 
         outcome = conversation_pending_bridge.apply_pending_resolution(
             db=self.db,
             user=self.user,
-            decision_artifact=legacy_decision_artifact_from_raw(decision),
+            decision_artifact=decision,
             canonical_understanding=None,
             pending_confirmation=pending,
             user_text="readapte plutot la semaine",
@@ -735,12 +748,12 @@ class FitMASCoreFlowsTest(unittest.TestCase):
             ),
             expires_at=datetime.now() + timedelta(minutes=10),
         )
-        decision = CoachDecision(
+        decision = SimpleNamespace(
             response_type="reply",
             rationale="la pending doit laisser passer la nouvelle demande planning",
             fitmas_message="Je garde la proposition en attente.",
-            pending_resolution=ModifyPendingResolution(
-                type="modify_pending",
+            pending_resolution=_pending(
+                "modify_pending",
                 requested_changes="readapter la semaine",
             ),
         )
@@ -753,7 +766,7 @@ class FitMASCoreFlowsTest(unittest.TestCase):
         outcome = conversation_pending_bridge.apply_pending_resolution(
             db=self.db,
             user=self.user,
-            decision_artifact=legacy_decision_artifact_from_raw(decision),
+            decision_artifact=decision,
             canonical_understanding=None,
             pending_confirmation=pending,
             user_text="ok readapte la semaine alors",
@@ -854,7 +867,7 @@ class FitMASCoreFlowsTest(unittest.TestCase):
 
     def test_plan_patch_turn_defers_conflicting_not_completed_execution_action(self) -> None:
         _, session = self._create_plan_for_today()
-        decision = CoachDecision(
+        decision = SimpleNamespace(
             response_type="requires_confirmation",
             rationale="Dispo corrigee et adaptation planning a confirmer.",
             fitmas_message="Je note demain dispo et je te propose de deplacer la seance.",
@@ -895,10 +908,10 @@ class FitMASCoreFlowsTest(unittest.TestCase):
         )
         memory_writes: list[dict] = []
 
-        result = conversation_pipeline._apply_coach_decision_actions(
+        result = command_application.apply_coach_decision_commands(
             db=self.db,
             user=self.user,
-            decision_artifact=legacy_decision_artifact_from_raw(decision),
+            decision_artifact=decision,
             turn_memory_writes=memory_writes,
         )
 
@@ -923,7 +936,7 @@ class FitMASCoreFlowsTest(unittest.TestCase):
     def test_plan_patch_turn_defers_conflicting_execution_action_from_turn_plan_availability(self) -> None:
         _, session = self._create_plan_for_today()
         tomorrow = session.scheduled_date.date() + timedelta(days=1)
-        decision = CoachDecision(
+        decision = SimpleNamespace(
             response_type="requires_confirmation",
             rationale="Dispo typée dans le turn planner et adaptation planning a confirmer.",
             fitmas_message="Je note demain dispo et je te propose de deplacer la seance.",
@@ -963,10 +976,10 @@ class FitMASCoreFlowsTest(unittest.TestCase):
         )
         memory_writes: list[dict] = []
 
-        result = conversation_pipeline._apply_coach_decision_actions(
+        result = command_application.apply_coach_decision_commands(
             db=self.db,
             user=self.user,
-            decision_artifact=legacy_decision_artifact_from_raw(decision),
+            decision_artifact=decision,
             turn_memory_writes=memory_writes,
             turn_plan=turn_plan,
         )
@@ -998,7 +1011,7 @@ class FitMASCoreFlowsTest(unittest.TestCase):
             )
         )
         self.db.commit()
-        decision = CoachDecision(
+        decision = SimpleNamespace(
             response_type="reply",
             rationale="correction disponibilite",
             fitmas_message="OK, demain est dispo.",
@@ -1026,10 +1039,10 @@ class FitMASCoreFlowsTest(unittest.TestCase):
         )
         memory_writes: list[dict] = []
 
-        result = conversation_pipeline._apply_coach_decision_actions(
+        result = command_application.apply_coach_decision_commands(
             db=self.db,
             user=self.user,
-            decision_artifact=legacy_decision_artifact_from_raw(decision),
+            decision_artifact=decision,
             turn_memory_writes=memory_writes,
             turn_plan=turn_plan,
         )
@@ -1071,17 +1084,17 @@ class FitMASCoreFlowsTest(unittest.TestCase):
             decision_json=serialize_plan_patch_confirmation(patch),
             expires_at=datetime.now(UTC).replace(tzinfo=None) - timedelta(minutes=1),
         )
-        decision = CoachDecision(
+        decision = SimpleNamespace(
             response_type="no_change",
             rationale="acceptation pending comprise",
             fitmas_message="C'est confirme. Je l'applique.",
-            pending_resolution=AcceptPendingResolution(type="accept_pending"),
+            pending_resolution=_pending("accept_pending"),
         )
 
         outcome = conversation_pending_bridge.accept_pending_confirmation(
             db=self.db,
             user=self.user,
-            decision_artifact=legacy_decision_artifact_from_raw(decision),
+            decision_artifact=decision,
             pending_confirmation=pending,
         )
 

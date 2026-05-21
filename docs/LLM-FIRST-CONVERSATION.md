@@ -96,10 +96,10 @@ En place :
 
 Encore en transition :
 
-- `CoachDecision` legacy reste present dans le provider path ;
+- `CoachDecision` legacy est supprime du provider path ;
 - `conversation_pipeline.py` orchestre encore trop ;
-- des bridges `legacy/conversation_*` portent encore planning/pending/reply ;
-- certains tests protègent le legacy pendant qu'on le supprime.
+- `MutationDecision` reste dans `legacy/decision_contracts.py` pour le vieux
+  writer planning.
 
 ## Pending
 

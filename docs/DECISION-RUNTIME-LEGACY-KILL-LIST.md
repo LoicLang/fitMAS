@@ -10,8 +10,9 @@ read_when:
 
 ## Etat Court
 
-Le dossier `legacy/` contient encore des modules de compat, mais le bloc P0
-planning/pending n'y vit plus.
+Le dossier `legacy/` contient encore un seul contrat actif de compat :
+`MutationDecision`. Le bloc P0 planning/pending et la compat `CoachDecision`
+n'y vivent plus.
 
 Les wrappers deja supprimes :
 
@@ -32,10 +33,20 @@ Les wrappers deja supprimes :
 - `legacy/conversation_understanding_bridge.py`
 - `legacy/conversation_decide_bridge.py`
 - `legacy/coach_decision_provider.py`
+- `legacy/coach_command_adapter.py`
+- `legacy/coach_decision_artifact.py`
+- `legacy/coach_understanding_adapter.py`
+- `legacy/understanding_shadow.py`
+- `llm/decision_legacy.py`
+- `llm/legacy_parser.py`
+- `llm/legacy_prompt.py`
+- `llm/legacy_action_compile.py`
+- `llm/legacy_provider.py`
+- `llm/legacy_schema_repair.py`
+- `llm/legacy_tool_loop.py`
 
-Le gros residu actif n'est plus planning/pending ni le provider
-`CoachDecision`. Le prochain risque est la compat `CoachDecision` restante :
-contrats, artifact et provider LLM historique.
+Le gros residu actif n'est plus planning/pending ni `CoachDecision`.
+Le prochain risque est `MutationDecision` dans `legacy/decision_contracts.py`.
 
 ## Priorite De Suppression
 
@@ -73,7 +84,7 @@ Etat :
 - les wrappers vides sont supprimes ;
 - le reste du travail est dans `conversation_pipeline.py`, pas dans ces fichiers.
 
-### P1 — CoachDecision / Understanding Legacy
+### P1 — CoachDecision / Understanding Legacy — clos en 10M
 
 Fichiers :
 
@@ -85,18 +96,16 @@ Fichiers :
 
 Probleme :
 
-- `CoachDecision` reste l'ancien contrat de compat ;
-- l'understanding canonique vit maintenant dans `decision/understanding_runtime.py`,
-  mais il produit encore un artifact `CoachDecision` compat pour certaines lanes.
-- le provider callable `legacy/coach_decision_provider.py` est supprime ;
-  `conversation_pipeline.py` ne construit plus de request legacy et ne peut plus
-  appeler `run_legacy_coach_decision`.
+- `CoachDecision` ne reste plus comme contrat runtime ou provider.
+- `decision/understanding_runtime.py` trace directement l'understanding
+  canonique sans fabriquer d'artifact compat.
 
 Sortie attendue :
 
-- artifact compat transforme en outcome direct ;
-- `legacy/decision_contracts.py`, `legacy/coach_decision_artifact.py` et
-  `llm/decision_legacy.py` supprimes ou confines hors runtime conversation.
+- `legacy/coach_decision_artifact.py`, `legacy/coach_understanding_adapter.py`,
+  `legacy/understanding_shadow.py` et `llm/decision_legacy.py` supprimes.
+- `legacy/decision_contracts.py` conserve seulement `MutationDecision` jusqu'au
+  slice planning writer suivant.
 
 ### P2 — Commands / Memory / Execution Bridges — clos en 10G
 
@@ -113,7 +122,7 @@ Nouveaux owners :
 
 Etat :
 
-- `legacy/coach_command_adapter.py` reste seulement un re-export compat ;
+- `legacy/coach_command_adapter.py` est supprime ;
 - les writes memoire/execution conversationnels passent par
   `decision/command_application.py` ;
 - les action contracts ne sont plus definis dans `legacy/decision_contracts.py`.
@@ -134,17 +143,15 @@ Nouveaux owners :
 - `decision/activity_highlight.py`
 - `decision/clarification_reply.py`
 - `decision/readonly_reply.py`
-- `legacy/coach_decision_artifact.py`
 
 Etat :
 
 - read-only, activity highlight et clarification ne vivent plus dans des
   wrappers `legacy/conversation_*`;
-- les helpers de reply CoachDecision restants sont absorbes par
-  `decision/readonly_reply.py`;
-- le dernier risque actif est provider/understanding.
+- les helpers de reply `CoachDecision` ont ete retires apres 10M ;
+- le dernier risque actif est `MutationDecision`.
 
-### P4 — Conversation Bridge Census — clos en 10J / 10K
+### P4 — Conversation Bridge Census — clos en 10J / 10K / 10M
 
 Commande :
 
@@ -166,6 +173,7 @@ Encore runtime-active :
 
 - aucun bridge `legacy/conversation_*` mesure.
 - aucun provider `legacy/coach_decision_provider.py`.
+- aucun artifact ou LLM path `CoachDecision`.
 
 ## Gates A Garder
 
@@ -178,8 +186,7 @@ Encore runtime-active :
 
 ## Prochain Slice
 
-Apres 10K : attaquer l'artifact et les contrats `CoachDecision` restants sans
-recreer de fallback local.
+Apres 10M : attaquer `MutationDecision` restant sans recreer de fallback local.
 
 Commande :
 
@@ -192,7 +199,7 @@ Resultat 10J :
 
 - census conversationnel ajoute ;
 - activity highlight et clarification vivent dans `decision/`;
-- helpers de forme `CoachDecision` vivent dans `legacy/coach_decision_artifact.py`;
+- helpers de forme `CoachDecision` supprimes ;
 - readonly/reply vit dans `decision/readonly_reply.py`;
 - understanding runtime vit dans `decision/understanding_runtime.py`;
 - le provider CoachDecision callable est supprime ;

@@ -1,15 +1,11 @@
-import logging
-
 from fitmas.prompt_observability import (
     DecideFailureReason,
     build_prompt_trace,
     normalize_decide_failure_reason,
 )
-import fitmas.llm.decision_legacy as llm
 from fitmas.context_pack import build_conversation_context_pack
 from fitmas.conversation_prompting import select_conversation_prompt_policy
 from fitmas.llm_prompt_builder import build_layered_conversation_prompt
-from fitmas.tools.contract import ToolContext
 from fitmas.tools.routing import IntentCategory
 
 
@@ -163,93 +159,3 @@ def test_layered_prompt_keeps_rendered_truth_out_of_user_prompt() -> None:
     assert "Source de vérité planning conversationnelle" not in bundle.prompt
     assert "Calendrier daté utile:" not in bundle.prompt
     assert bundle.prompt == "Nouveau message de l'utilisateur:\nJ'ai quoi demain ?"
-
-
-def test_decide_none_trace_records_schema_repair_and_fallback_events(monkeypatch) -> None:
-    invalid_payload = {
-        "response_type": "no_change",
-        "rationale": "ok",
-        "fitmas_message": "Je deplace la seance.",
-    }
-
-    monkeypatch.setattr(llm, "_client", lambda: object())
-    monkeypatch.setattr(llm, "_request_structured_json", lambda **_kwargs: dict(invalid_payload))
-
-    decision = llm.decide("deplace ca", "plan")
-    trace = llm.get_last_decide_none()
-
-    assert decision is None
-    assert trace is not None
-    assert trace["reason"] == "fallback_failed"
-    assert [event["reason"] for event in trace["events"]] == [
-        "schema_invalid",
-        "repair_failed",
-        "fallback_failed",
-    ]
-
-
-def test_decide_none_trace_records_tool_loop_then_empty_output(monkeypatch) -> None:
-    monkeypatch.setattr(llm, "_client", lambda: object())
-    monkeypatch.setattr(llm, "_request_json_with_tools", lambda **_kwargs: None)
-    monkeypatch.setattr(llm, "_request_structured_json", lambda **_kwargs: None)
-
-    decision = llm.decide(
-        "redonne le plan actuel",
-        "plan",
-        tool_context=ToolContext(
-            pipeline="conversation",
-            user_id=1,
-            timezone_name="Europe/Paris",
-        ),
-    )
-    trace = llm.get_last_decide_none()
-
-    assert decision is None
-    assert trace is not None
-    assert trace["reason"] == "empty_output"
-    assert [event["reason"] for event in trace["events"]] == [
-        "tool_loop_failed",
-        "empty_output",
-    ]
-
-
-def test_decide_logs_prompt_trace_for_successful_tool_turn(monkeypatch, caplog) -> None:
-    monkeypatch.setattr(llm, "_client", lambda: object())
-    monkeypatch.setattr(
-        llm,
-        "_request_json_with_tools",
-        lambda **_kwargs: {
-            "response_type": "no_change",
-            "rationale": "Lecture planning simple.",
-            "fitmas_message": "Demain tu as ton footing Z2.",
-        },
-    )
-
-    with caplog.at_level(logging.INFO, logger="fitmas.llm"):
-        decision = llm.decide(
-            "J'ai quoi demain ?",
-            "plan",
-            coach_context={"turn_primary_intent": "plan_lookup"},
-            tool_context=ToolContext(
-                pipeline="conversation",
-                user_id=1,
-                timezone_name="Europe/Paris",
-            ),
-        )
-
-    assert decision is not None
-    trace_messages = [
-        record.getMessage()
-        for record in caplog.records
-        if "llm.decide_prompt_trace" in record.getMessage()
-    ]
-    assert trace_messages
-    trace_message = trace_messages[0]
-    assert "route=conversation_decide" in trace_message
-    assert "intent=plan_lookup" in trace_message
-    assert "prompt_policy=plan_lookup_compact" in trace_message
-    assert "prompt_contract=conversation_plan_lookup" in trace_message
-    assert "tools=" in trace_message
-    assert "get_plan_window" in trace_message
-    assert "validate_plan_patch" not in trace_message
-    assert "total_chars=" in trace_message

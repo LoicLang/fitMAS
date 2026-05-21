@@ -21,6 +21,7 @@ PURE_DECISION_MODULES = {
     "reply_composer.py",
     "reply_request.py",
     "runtime.py",
+    "turn_recording.py",
     "understanding.py",
 }
 
@@ -66,6 +67,7 @@ def test_decision_runtime_phase1_modules_exist() -> None:
         "reply_request.py",
         "output_verifier.py",
         "context_builder.py",
+        "turn_recording.py",
         "understanding_runtime.py",
         "pending_reply.py",
         "pending_resolution.py",

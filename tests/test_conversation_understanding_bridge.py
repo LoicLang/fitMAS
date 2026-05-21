@@ -315,7 +315,7 @@ def test_provider_pivot_consumes_command_signal_even_with_unsupported_non_planni
     )
 
 
-def test_artifact_from_understanding_is_user_safe_and_non_mutating() -> None:
+def test_canonical_understanding_trace_is_user_safe_and_non_mutating() -> None:
     understanding = CoachUnderstanding(
         intent="execution_report",
         confidence=0.9,
@@ -326,17 +326,16 @@ def test_artifact_from_understanding_is_user_safe_and_non_mutating() -> None:
         clarification_need=None,
     )
 
-    artifact = bridge.coach_decision_artifact_from_understanding(
+    trace = bridge.trace_canonical_understanding_pivot(
         understanding,
         turn_plan=SimpleNamespace(primary_intent="execution_report"),
     )
 
-    assert artifact.kind == "coach_decision"
-    assert artifact.source == "coach_understanding"
-    assert artifact.response_type == "reply"
-    assert artifact.plan_patch is None
-    assert artifact.mutation_decision is None
-    assert artifact.memory_actions == ()
-    assert artifact.execution_actions == ()
-    assert "fitmas_message" not in repr(artifact.payload)
-    assert "plan_patch" not in repr(artifact.payload)
+    assert trace["artifact_kind"] == "none"
+    assert trace["source"] == "coach_understanding"
+    assert trace["response_type"] == "reply"
+    assert trace["decision_present"] is False
+    assert trace["has_plan_patch"] is False
+    assert trace["memory_action_count"] == 0
+    assert trace["execution_action_count"] == 0
+    assert "fitmas_message" not in repr(trace)

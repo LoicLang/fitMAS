@@ -115,8 +115,8 @@ Contenu :
 - gateway provider ;
 - prompts ;
 - Understanding service ;
-- compat legacy `CoachDecision` encore presente dans les contrats/adapters ;
-- provider callable `CoachDecision` supprime du runtime conversation ;
+- support legacy restant limite a onboarding/fact memory/summaries et reply ;
+- provider, parser, tool-loop et artifacts `CoachDecision` supprimes ;
 - reply backends LLM.
 
 Regle :
@@ -145,8 +145,9 @@ Owner temporaire :
 
 Etat actuel :
 
-- `24` modules restants.
-- gros residus : planning/pending conversation.
+- `2` modules restants : `__init__.py` et `decision_contracts.py`.
+- gros residu : `MutationDecision`, encore utilise par le writer planning
+  historique.
 
 Regle :
 

@@ -65,16 +65,9 @@ def test_10g_action_contracts_are_not_owned_by_legacy_decision_contracts() -> No
 
     assert "class AvailabilityConstraintAction" in actions
     assert "class ExecutionUpdateAction" in actions
-    assert "from fitmas.decision.command_actions import" in legacy_contracts
     assert "class AvailabilityConstraintAction" not in legacy_contracts
     assert "class ExecutionUpdateAction" not in legacy_contracts
 
 
-def test_10g_legacy_coach_command_adapter_is_only_compat_reexport() -> None:
-    adapter = _source("legacy/coach_command_adapter.py")
-
-    assert "from fitmas.decision.command_mapping import" in adapter
-    assert "def commands_from_understanding(" not in adapter
-    assert "def commands_from_legacy_decision(" not in adapter
-    assert "memory_mutation_service" not in adapter
-    assert "execution_mutation_service" not in adapter
+def test_10g_legacy_coach_command_adapter_is_deleted() -> None:
+    assert not (SRC / "legacy/coach_command_adapter.py").exists()

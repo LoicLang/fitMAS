@@ -17,8 +17,8 @@ echo "  FITMAS_PENDING_FROM_UNDERSTANDING=$FITMAS_PENDING_FROM_UNDERSTANDING"
 
 ./scripts/test-backend -q \
   tests/test_conversation_understanding_bridge.py \
-  tests/test_conversation_command_bridge.py \
-  tests/test_conversation_pending_bridge.py
+  tests/test_core_flows.py \
+  tests/test_phase10l_coachdecision_runtime_delete_architecture.py
 
 ./scripts/smoke-real-conversations \
   --scenario execution_update \

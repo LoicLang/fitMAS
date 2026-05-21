@@ -37,7 +37,7 @@ def apply_memory_actions_for_user(
 ) -> MemoryActionApplicationResult:
     """Apply LLM-produced memory actions through bounded storage.
 
-    The input is already a typed CoachDecision artifact. This service never
+    The input is already a typed command artifact. This service never
     inspects raw user text.
     """
     payloads: list[dict] = []

@@ -8,12 +8,10 @@ cd "$repo_root"
 
 ./scripts/test-backend -q \
   tests/test_phase8l_decide_authority_architecture.py \
-  tests/test_coach_decision_provider.py \
   tests/test_conversation_decide_bridge.py \
-  tests/test_conversation_coach_decision_reply_bridge.py \
   tests/test_conversation_understanding_bridge.py \
-  tests/test_conversation_command_bridge.py \
-  tests/test_conversation_pending_bridge.py
+  tests/test_phase10l_coachdecision_runtime_delete_architecture.py \
+  tests/test_phase10m_coachdecision_llm_path_delete_architecture.py
 
 ./scripts/smoke-decision-runtime-canonical-defaults
 ./scripts/smoke-decision-runtime-canonical-planning

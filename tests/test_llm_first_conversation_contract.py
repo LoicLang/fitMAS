@@ -73,16 +73,8 @@ def test_conversation_context_does_not_parse_free_user_text() -> None:
         assert symbol not in source
 
 
-def test_llm_decide_does_not_route_tools_from_raw_user_text() -> None:
-    source = _source("llm/decision_legacy.py")
-
-    forbidden = (
-        "route_tools_for_query(user_text",
-        "_fallback_extract_facts(user_text",
-    )
-
-    for symbol in forbidden:
-        assert symbol not in source
+def test_legacy_llm_decide_path_is_deleted() -> None:
+    assert not (SRC / "llm/decision_legacy.py").exists()
 
 
 def test_tools_routing_has_no_user_text_classifier() -> None:

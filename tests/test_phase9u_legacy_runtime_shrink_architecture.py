@@ -78,7 +78,5 @@ def test_9u_legacy_provider_env_flag_is_removed() -> None:
     assert "coach_decision_provider_removed" in source
 
 
-def test_9u_decision_legacy_stays_under_provider_compat_budget() -> None:
-    line_count = len(_source("llm/decision_legacy.py").splitlines())
-
-    assert line_count <= 500
+def test_9u_decision_legacy_provider_module_is_deleted() -> None:
+    assert not (SRC / "llm/decision_legacy.py").exists()

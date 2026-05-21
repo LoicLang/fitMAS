@@ -61,6 +61,7 @@ Etat actuel :
 - planning, pending, command writes, activity highlight, clarification,
   readonly/reply et understanding ne vivent plus dans ces petits wrappers
   legacy.
+- `CoachDecision` n'existe plus comme provider, artifact ou adapter runtime.
 
 ## Regles Dures
 
@@ -76,9 +77,9 @@ Etat actuel :
 
 Transition actuelle :
 
-- `CoachDecision` legacy existe encore comme compat artifact/contrat, mais plus
-  comme provider appele par la conversation.
-- `CoachUnderstanding` est la cible pour separer comprehension et decision.
+- `CoachUnderstanding` separe comprehension et decision.
+- Les commandes memoire/execution viennent directement de l'understanding ou du
+  turn plan structure, pas d'un artifact `CoachDecision`.
 - `DecisionOutcome` est la cible pour parler au user.
 
 Actions structurees encore acceptees :
@@ -91,13 +92,15 @@ Actions structurees encore acceptees :
 Le backend ne lit pas ces actions comme du texte humain.
 Il les resout contre DB, schemas, IDs, dates, permissions et policies.
 
-Interdit depuis 10K :
+Interdit depuis 10M :
 
 ```text
 api_messages.decide
 ConversationPipelineDependencies.decide
 legacy/coach_decision_provider.py
 run_legacy_coach_decision
+llm/decision_legacy.py
+legacy/coach_decision_artifact.py
 ```
 
 ## Pending

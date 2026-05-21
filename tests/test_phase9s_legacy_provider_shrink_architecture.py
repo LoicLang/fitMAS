@@ -79,8 +79,5 @@ def test_9s_canonical_routes_still_precede_removed_provider_clarification() -> N
     assert source.index("should_use_canonical_planning_without_legacy(") < clarification_index
 
 
-def test_9s_decision_legacy_is_marked_provider_compat_only() -> None:
-    source = _source("llm/decision_legacy.py")
-
-    assert "Legacy CoachDecision provider compatibility only." in source
-    assert "Do not add new conversation runtime authority here." in source
+def test_9s_decision_legacy_provider_module_is_deleted() -> None:
+    assert not (SRC / "llm/decision_legacy.py").exists()

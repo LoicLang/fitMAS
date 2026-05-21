@@ -10,12 +10,11 @@ def test_fitmas_llm_is_normal_package_not_decision_legacy_alias() -> None:
     assert not hasattr(llm, "decide")
 
 
-def test_legacy_contracts_live_in_explicit_legacy_module() -> None:
-    from fitmas.legacy.decision_contracts import CoachDecision
-    from fitmas.llm.decision_legacy import parse_coach_decision_payload
+def test_legacy_contracts_no_longer_expose_coachdecision_or_parser() -> None:
+    import fitmas.legacy.decision_contracts as contracts
 
-    assert CoachDecision.__name__ == "CoachDecision"
-    assert callable(parse_coach_decision_payload)
+    assert not hasattr(contracts, "CoachDecision")
+    assert not hasattr(contracts, "PendingResolution")
 
 
 def test_llm_gateway_root_wrapper_is_deleted() -> None:

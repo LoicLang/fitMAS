@@ -19,7 +19,7 @@ from fitmas.execution_clarification import (
     build_execution_clarification,
     looks_like_execution_clarification_prompt,
 )
-from fitmas.llm.decision_legacy import _request_json
+import fitmas.llm.gateway as gw
 import fitmas.llm.legacy_fact_memory as legacy_fact_memory
 from fitmas.llm.legacy_summaries import make_timeline_summary
 from fitmas.memory_profile import upsert_profile_memory
@@ -39,7 +39,7 @@ def extract_facts(user_text: str, assistant_text: str, existing_facts: list[dict
         user_text,
         assistant_text,
         existing_facts,
-        request_json_fn=_request_json,
+        request_json_fn=gw.request_json,
     )
 
 

@@ -9,13 +9,13 @@ os.environ.setdefault("FITMAS_DB_PATH", tempfile.mktemp(prefix="fitmas-memory-se
 
 from fitmas import repository as repo, schema as s
 from fitmas.db import Base, SessionLocal, engine, init_db
-from fitmas.execution_mutation_service import apply_execution_actions_for_user
-from fitmas.legacy.decision_contracts import (
+from fitmas.decision.command_actions import (
     AvailabilityConstraintAction,
     ExecutionUpdateAction,
     HealthSignalAction,
     PreferenceSignalAction,
 )
+from fitmas.execution_mutation_service import apply_execution_actions_for_user
 from fitmas.memory_mutation_service import apply_memory_actions_for_user
 from fitmas.time_context import DAY_KEYS, day_label_fr
 

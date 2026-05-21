@@ -53,21 +53,27 @@ Les cuts physiques recents :
 - `legacy/conversation_decide_bridge.py` supprime.
 - `legacy/coach_decision_provider.py` supprime : plus de provider
   `CoachDecision` callable depuis la conversation.
-- `legacy/coach_command_adapter.py` reduit a un re-export compat.
+- `legacy/coach_command_adapter.py` supprime.
+- `legacy/coach_decision_artifact.py` supprime.
+- `legacy/coach_understanding_adapter.py` supprime.
+- `legacy/understanding_shadow.py` supprime.
+- `llm/decision_legacy.py` supprime.
+- `llm/legacy_{parser,prompt,action_compile,provider,schema_repair,tool_loop}.py`
+  supprimes.
+- `legacy/decision_contracts.py` ne porte plus que `MutationDecision`.
 - `docs/superpowers/plans/` supprime : l'historique d'execution reste dans git, pas dans la memoire active.
 
 Etat chiffre au dernier check local :
 
 - root modules : `113`.
-- legacy modules : en baisse continue, avec bridges conversationnels mesures par
-  census dedie.
-- backend complet : `1423 passed, 11 skipped`.
+- legacy modules : `2` fichiers (`__init__.py`, `decision_contracts.py`).
+- backend complet : `1253 passed, 11 skipped, 11 subtests passed`.
 - smoke core API : OK.
 - fallback census core : `0`.
 
 ## Prochain Chantier
 
-10K CoachDecision provider delete est maintenant applique.
+10M CoachDecision compat / old LLM path delete est maintenant applique.
 
 Commande :
 
@@ -135,10 +141,9 @@ legacy_provider_skip_reason -> canonical_provider_clarification_outcome
 Prochain chantier logique :
 
 - il n'y a plus de bridge `legacy/conversation_*` runtime-active ;
-- attaquer maintenant le reste de la dette `CoachDecision` :
-  `legacy/decision_contracts.py`, `legacy/coach_decision_artifact.py`,
-  `legacy/coach_understanding_adapter.py`, `legacy/understanding_shadow.py`
-  et `llm/decision_legacy.py` ;
+- il n'y a plus de provider ou artifact `CoachDecision` ;
+- attaquer maintenant le dernier residu `legacy/decision_contracts.py`
+  (`MutationDecision`) et le vieux writer planning qui en depend ;
 - shrinker `conversation_pipeline.py` autour de moins d'entrypoints ;
 - garder la priorite runtime plus petit, pas refactor plus complet.
 

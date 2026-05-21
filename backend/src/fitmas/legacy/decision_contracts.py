@@ -1,17 +1,13 @@
 from __future__ import annotations
 
-from typing import Annotated, Any, Literal
+from pydantic import BaseModel
 
-from pydantic import BaseModel, ConfigDict, Field
 
-from fitmas.decision.command_actions import (
-    AvailabilityConstraintAction,
-    ExecutionUpdateAction,
-    HealthSignalAction,
-    MemoryAction,
-    PreferenceSignalAction,
-)
+"""Temporary planning mutation compatibility contract.
 
+Only `MutationDecision` remains here. Move it into the planning domain before
+deleting `legacy/` completely.
+"""
 
 class MutationDecision(BaseModel):
     mutation_type: str
@@ -31,80 +27,6 @@ class MutationDecision(BaseModel):
     fitmas_message: str
 
 
-class AcceptPendingResolution(BaseModel):
-    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
-
-    type: Literal["accept_pending"]
-    reason: str | None = None
-    selected_candidate_id: str | None = None
-
-
-class RejectPendingResolution(BaseModel):
-    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
-
-    type: Literal["reject_pending"]
-    reason: str | None = None
-
-
-class ModifyPendingResolution(BaseModel):
-    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
-
-    type: Literal["modify_pending"]
-    requested_changes: str
-    reason: str | None = None
-
-
-class IgnorePendingResolution(BaseModel):
-    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
-
-    type: Literal["ignore"]
-    reason: str | None = None
-
-
-class NeedsClarificationPendingResolution(BaseModel):
-    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
-
-    type: Literal["needs_clarification"]
-    reason: str
-    question: str
-
-
-PendingResolution = Annotated[
-    AcceptPendingResolution
-    | RejectPendingResolution
-    | ModifyPendingResolution
-    | IgnorePendingResolution
-    | NeedsClarificationPendingResolution,
-    Field(discriminator="type"),
-]
-
-
-class CoachDecision(BaseModel):
-    model_config = ConfigDict(extra="forbid", arbitrary_types_allowed=True)
-
-    response_type: Literal["reply", "no_change", "mutation_decision", "plan_patch", "requires_confirmation"]
-    rationale: str
-    fitmas_message: str
-    mutation_decision: MutationDecision | None = None
-    plan_patch: Any | None = None
-    confirmation_reason: str | None = None
-    memory_actions: tuple[MemoryAction, ...] = ()
-    execution_actions: tuple[ExecutionUpdateAction, ...] = ()
-    pending_resolution: PendingResolution | None = None
-
-
 __all__ = [
-    "AcceptPendingResolution",
-    "AvailabilityConstraintAction",
-    "CoachDecision",
-    "ExecutionUpdateAction",
-    "HealthSignalAction",
-    "IgnorePendingResolution",
-    "MemoryAction",
-    "ModifyPendingResolution",
     "MutationDecision",
-    "NeedsClarificationPendingResolution",
-    "PendingResolution",
-    "PreferenceSignalAction",
-    "RejectPendingResolution",
 ]

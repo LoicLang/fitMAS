@@ -6,10 +6,6 @@ import os
 from fitmas.decision import CoachUnderstanding
 from fitmas.decision.command_mapping import commands_from_understanding
 from fitmas.llm.understanding_service import LLMUnderstandingService, UnderstandingRequest
-from fitmas.legacy.coach_decision_artifact import (
-    LegacyCoachDecisionArtifact,
-    legacy_decision_artifact_payload,
-)
 
 logger = logging.getLogger(__name__)
 
@@ -85,44 +81,23 @@ def should_use_canonical_understanding_without_legacy(
     return bool(commands)
 
 
-def coach_decision_artifact_from_understanding(
+def trace_canonical_understanding_pivot(
     understanding: CoachUnderstanding,
     *,
     turn_plan,
-) -> LegacyCoachDecisionArtifact:
-    response_type = _response_type_for_canonical_artifact(understanding=understanding, turn_plan=turn_plan)
-    return LegacyCoachDecisionArtifact(
-        kind="coach_decision",
-        response_type=response_type,
-        rationale=understanding.user_summary,
-        reply_hint=_reply_hint_for_canonical_artifact(understanding),
-        payload={
-            "intent": understanding.intent,
-            "confidence": understanding.confidence,
-            "signal_count": len(understanding.extracted_signals),
-            "has_pending_resolution": understanding.pending_resolution is not None,
-            "has_requested_change": understanding.requested_change is not None,
-            "canonical_provider_pivot": True,
-        },
-        source="coach_understanding",
-    )
-
-
-def trace_canonical_provider_artifact(
-    artifact: LegacyCoachDecisionArtifact,
 ) -> dict[str, object]:
-    payload = legacy_decision_artifact_payload(artifact)
+    commands = commands_from_understanding(understanding).commands
     return {
-        "source": artifact.source,
+        "source": "coach_understanding",
         "ok": True,
         "error_type": None,
-        "artifact_kind": artifact.kind,
-        "response_type": artifact.response_type,
-        "decision_present": artifact.has_value,
-        "has_plan_patch": payload["has_plan_patch"],
-        "has_pending_resolution": payload["has_pending_resolution"],
-        "memory_action_count": payload["memory_action_count"],
-        "execution_action_count": payload["execution_action_count"],
+        "artifact_kind": "none",
+        "response_type": _response_type_for_canonical_trace(understanding=understanding, turn_plan=turn_plan),
+        "decision_present": False,
+        "has_plan_patch": False,
+        "has_pending_resolution": understanding.pending_resolution is not None,
+        "memory_action_count": sum(1 for command in commands if command.domain == "memory"),
+        "execution_action_count": sum(1 for command in commands if command.domain == "execution"),
         "decide_none_present": False,
         "legacy_skipped": True,
     }
@@ -191,22 +166,12 @@ def _turn_plan_can_produce_readonly_answer(turn_plan) -> bool:
     return str(getattr(turn_plan, "truth_scope", "") or "") in {"plan_window", "execution", "memory"}
 
 
-def _response_type_for_canonical_artifact(*, understanding: CoachUnderstanding, turn_plan) -> str:
+def _response_type_for_canonical_trace(*, understanding: CoachUnderstanding, turn_plan) -> str:
     intent = str(understanding.intent or "")
     primary_intent = str(getattr(turn_plan, "primary_intent", "") or "")
     if intent == "execution_report" or primary_intent == "execution_report":
         return "reply"
     return "no_change"
-
-
-def _reply_hint_for_canonical_artifact(understanding: CoachUnderstanding) -> str:
-    if understanding.user_summary:
-        return understanding.user_summary
-    if understanding.intent == "execution_report":
-        return "Signal d'execution compris."
-    if understanding.intent == "pending_response":
-        return "Confirmation comprise."
-    return "Signal compris."
 
 
 def run_canonical_understanding_shadow(

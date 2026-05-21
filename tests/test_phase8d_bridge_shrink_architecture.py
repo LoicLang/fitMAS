@@ -75,11 +75,11 @@ def test_8d_no_active_heartbeat_skill_imports_outside_legacy() -> None:
     assert offenders == []
 
 
-def test_8d_conversation_pipeline_uses_explicit_legacy_bridges() -> None:
+def test_8d_conversation_pipeline_uses_decision_owners_not_legacy_bridges() -> None:
     source = _source("conversation_pipeline.py")
 
     assert "readonly_reply" in source
-    assert "legacy_decision_contract_disabled" in source
+    assert "legacy_decision_contract_disabled" not in source
     assert 'response_type == "plan_patch"' not in source
     assert 'response_type == "requires_confirmation"' not in source
     assert 'response_type == "mutation_decision"' not in source
@@ -106,14 +106,11 @@ def test_8d_readonly_reply_helpers_live_in_decision_owner() -> None:
     assert "compose_execution_report_reply" in bridge
 
 
-def test_8d_legacy_decision_helpers_live_in_artifact_owner() -> None:
+def test_8d_legacy_decision_helpers_are_deleted_with_artifact_owner() -> None:
     pipeline = _source("conversation_pipeline.py")
-    artifact = _source("legacy/coach_decision_artifact.py")
 
     assert not (SRC / "legacy/conversation_decision_bridge.py").exists()
-    assert "def is_coach_decision_artifact" in artifact
-    assert "def is_legacy_readonly_artifact" in artifact
-    assert "def coach_decision_payload" in artifact
+    assert not (SRC / "legacy/coach_decision_artifact.py").exists()
     assert "def _is_coach_decision" not in pipeline
     assert "def _is_legacy_readonly_decision" not in pipeline
 

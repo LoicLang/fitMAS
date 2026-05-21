@@ -4,9 +4,7 @@ set -euo pipefail
 ./scripts/test-backend -q \
   tests/test_phase8q_canonical_provider_pivot_architecture.py \
   tests/test_conversation_understanding_bridge.py \
-  tests/test_conversation_command_bridge.py \
-  tests/test_conversation_pending_bridge.py
-
-./scripts/smoke-decision-runtime-decision-legacy-support-split
+  tests/test_phase10l_coachdecision_runtime_delete_architecture.py \
+  tests/test_phase10m_coachdecision_llm_path_delete_architecture.py
 
 echo "RESULT: OK"
