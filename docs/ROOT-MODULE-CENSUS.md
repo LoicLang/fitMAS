@@ -23,7 +23,7 @@ is allowed only for hotspots that need a separate shrink slice.
 
 ## Summary
 
-- Root files counted: 109
+- Root files counted: 108
 - Permanent root entrypoints allowed: 3
 - First wrapper cuts completed: `heartbeat*.py`, `llm_gateway.py`,
   `telegram_scheduler.py`, `tool_*.py`, `api_messages.py`,
@@ -101,7 +101,6 @@ is allowed only for hotspots that need a separate shrink slice.
 | `periodization.py` | domain/planning | move | periodization belongs to planning | planning package split |
 | `plan_patch.py` | domain/planning | move | PlanPatch is planning domain language | planning package split |
 | `plan_patch_adaptation_policy.py` | domain/planning | move | adaptation policy belongs to planning | planning package split |
-| `plan_patch_backend_candidates.py` | domain/planning | merge | backend candidate helper should merge into candidate_builder | planning simplification |
 | `plan_patch_candidate_evaluator.py` | domain/planning | merge | evaluator duplicates domain planning evaluator boundary | planning simplification |
 | `plan_patch_candidate_reviewer.py` | domain/planning | merge | reviewer should live behind planning reviewer prompt | planning simplification |
 | `plan_patch_candidates.py` | domain/planning | merge | candidate contracts should collapse into domain planning models | planning simplification |
