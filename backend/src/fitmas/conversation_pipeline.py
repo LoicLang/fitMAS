@@ -1,10 +1,6 @@
 from __future__ import annotations
 
-import json
 import logging
-from contextlib import contextmanager
-from datetime import UTC, datetime, timedelta
-from threading import Lock
 from types import SimpleNamespace
 from typing import Any
 
@@ -43,11 +39,11 @@ from fitmas.decision import plan_patch_reply
 from fitmas.decision import activity_highlight
 from fitmas.decision import readonly_reply
 from fitmas.decision import coach_decision_runtime
+from fitmas.decision import turn_idempotency
+from fitmas.decision import turn_persistence
+from fitmas.decision import turn_state
 import fitmas.llm.reply_backend as final_reply
 from fitmas.decision import understanding_runtime
-from fitmas.decision.turn_recording import (
-    decision_json_for_turn,
-)
 from fitmas.conversation_context import (
     activity_claim_summary_for_prompt,
     build_conversation_context,
@@ -60,38 +56,13 @@ from fitmas.conversation_contract import (
     ConversationPipelineDependencies,
     ConversationTurnInput,
     ConversationTurnOutcome,
-    ConversationTurnState,
     ConversationUserNotFoundError,
 )
-from fitmas.models import DayId, Extraction, Message, MessageReply, MessageRole
+from fitmas.models import Extraction, MessageReply
 from fitmas.profile_summary import build_profile_summary
 from fitmas.signals import collect_signals
-from fitmas.time_context import get_local_now
 
 logger = logging.getLogger(__name__)
-metrics_logger = logging.getLogger("fitmas.conversation_metrics")
-
-_CLIENT_MESSAGE_KEY_LOCKS_GUARD = Lock()
-_CLIENT_MESSAGE_KEY_LOCKS: dict[str, Lock] = {}
-
-
-@contextmanager
-def _client_message_key_lock(user_id: int, client_message_key: str | None):
-    key = str(client_message_key or "").strip()
-    if not key:
-        yield
-        return
-    lock_key = f"{user_id}:{key}"
-    with _CLIENT_MESSAGE_KEY_LOCKS_GUARD:
-        lock = _CLIENT_MESSAGE_KEY_LOCKS.get(lock_key)
-        if lock is None:
-            lock = Lock()
-            _CLIENT_MESSAGE_KEY_LOCKS[lock_key] = lock
-    lock.acquire()
-    try:
-        yield
-    finally:
-        lock.release()
 
 
 def run_conversation_turn(
@@ -104,7 +75,7 @@ def run_conversation_turn(
     if user is None:
         raise ConversationUserNotFoundError("No onboarded user yet")
 
-    with _client_message_key_lock(user.id, payload.client_message_key):
+    with turn_idempotency.client_message_key_lock(user.id, payload.client_message_key):
         return _run_conversation_turn_impl(payload, db=db, dependencies=dependencies)
 
 
@@ -120,11 +91,11 @@ def _run_conversation_turn_impl(
     if user is None:
         raise ConversationUserNotFoundError("No onboarded user yet")
 
-    duplicate_reply = _reply_for_duplicate_client_message(db=db, user_id=user.id, payload=payload)
+    duplicate_reply = turn_idempotency.reply_for_duplicate_client_message(db=db, user_id=user.id, payload=payload)
     if duplicate_reply is not None:
         return duplicate_reply
 
-    state = _load_turn_state(db=db, user=user, user_text=payload.text)
+    state = turn_state.load_turn_state(db=db, user=user, user_text=payload.text)
     turn_memory_writes: list[dict] = []
     external_turn_context: dict[str, object] = {}
     if payload.client_message_key:
@@ -151,13 +122,13 @@ def _run_conversation_turn_impl(
             },
         )
         if should_apply_calibration_resolution(calibration_resolution):
-            _persist_turn_memory_updates(
+            turn_persistence.persist_turn_memory_updates(
                 db,
                 user.id,
                 build_resolution_memory_updates(open_calibration_need, calibration_resolution),
                 turn_memory_writes=turn_memory_writes,
             )
-            state.active_memory_rows, state.active_facts = api_messages._active_memory_payloads(db, user.id)
+            state.active_memory_rows, state.active_facts = turn_state.active_memory_payloads(db, user.id)
 
     try:
         signals = collect_signals(db, user)
@@ -333,7 +304,7 @@ def _run_conversation_turn_impl(
                 "close_turn_reply_source": close_reply_source,
             }
         )
-        return _reply_and_record_turn(
+        return turn_persistence.reply_and_record_turn(
             db=db,
             user_id=user.id,
             user_text=payload.text,
@@ -374,7 +345,7 @@ def _run_conversation_turn_impl(
         )
         if pending_outcome is not None:
             turn_context["canonical_pending_provider"]["result"] = "handled"
-            return _reply_and_record_turn(
+            return turn_persistence.reply_and_record_turn(
                 db=db,
                 user_id=user.id,
                 user_text=payload.text,
@@ -399,7 +370,7 @@ def _run_conversation_turn_impl(
         grounding_facts=tuple(render_grounding_packet_for_prompt(grounding_packet)),
     )
     if canonical_clarification_outcome is not None:
-        return _reply_and_record_turn(
+        return turn_persistence.reply_and_record_turn(
             db=db,
             user_id=user.id,
             user_text=payload.text,
@@ -466,7 +437,7 @@ def _run_conversation_turn_impl(
                     turn_memory_writes=turn_memory_writes,
                     turn_context=turn_context,
                 )
-                return _reply_and_record_turn(
+                return turn_persistence.reply_and_record_turn(
                     db=db,
                     user_id=user.id,
                     user_text=payload.text,
@@ -502,7 +473,7 @@ def _run_conversation_turn_impl(
                     turn_context=turn_context,
                 )
                 if canonical_planning_outcome is not None:
-                    return _reply_and_record_turn(
+                    return turn_persistence.reply_and_record_turn(
                         db=db,
                         user_id=user.id,
                         user_text=payload.text,
@@ -532,7 +503,7 @@ def _run_conversation_turn_impl(
         grounding_facts=tuple(render_grounding_packet_for_prompt(grounding_packet)),
     )
     if activity_highlight_outcome is not None:
-        return _reply_and_record_turn(
+        return turn_persistence.reply_and_record_turn(
             db=db,
             user_id=user.id,
             user_text=payload.text,
@@ -567,8 +538,8 @@ def _run_conversation_turn_impl(
             canonical_understanding,
             turn_plan=turn_plan,
         )
-        if _turn_is_obsolete(db=db, user=user, turn_context=turn_context):
-            outcome = _obsolete_turn_outcome(turn_context=turn_context)
+        if turn_idempotency.turn_is_obsolete(db=db, user=user, turn_context=turn_context):
+            outcome = turn_idempotency.obsolete_turn_outcome(turn_context=turn_context)
         else:
             understanding_action_result = _apply_understanding_commands(
                 db=db,
@@ -718,9 +689,9 @@ def _run_conversation_turn_impl(
         if outcome.response_mode == "obsolete_turn_no_write"
         else dependencies.extract_facts(payload.text, outcome.reply_text, state.active_facts)
     )
-    extracted_facts = _filter_legacy_extracted_facts(extracted_facts)
+    extracted_facts = turn_persistence.filter_legacy_extracted_facts(extracted_facts)
     if extracted_facts:
-        _persist_turn_memory_updates(
+        turn_persistence.persist_turn_memory_updates(
             db,
             user.id,
             extracted_facts,
@@ -733,7 +704,7 @@ def _run_conversation_turn_impl(
         pending_confirmation=pending_confirmation,
     )
 
-    return _reply_and_record_turn(
+    return turn_persistence.reply_and_record_turn(
         db=db,
         user_id=user.id,
         user_text=payload.text,
@@ -748,93 +719,6 @@ def _run_conversation_turn_impl(
         turn_context=turn_context,
         memory_writes=turn_memory_writes,
     )
-
-
-def _reply_for_duplicate_client_message(
-    *,
-    db: Session,
-    user_id: int,
-    payload: ConversationTurnInput,
-) -> MessageReply | None:
-    key = str(payload.client_message_key or "").strip()
-    if not key:
-        return None
-    row = repo.get_conversation_turn_by_client_message_key(db, user_id, key)
-    if row is None:
-        return None
-    logger.info("conversation_pipeline.idempotent_replay user=%s key=%s turn=%s", user_id, key, row.id)
-    day_updated = _day_id_from_row(row.day_updated)
-    return MessageReply(
-        user_message=Message(role=MessageRole.USER, text=row.user_message),
-        extraction=Extraction(confidence=float(row.extraction_confidence or 0.0)),
-        assistant_message=Message(role=MessageRole.AGENT, text=row.assistant_message),
-        day_updated=day_updated,
-    )
-
-
-def _day_id_from_row(raw: str | None) -> DayId | None:
-    if not raw:
-        return None
-    try:
-        return DayId(str(raw))
-    except ValueError:
-        return None
-
-
-def _turn_is_obsolete(*, db: Session, user, turn_context: dict[str, object]) -> bool:
-    raw_message_id = turn_context.get("current_user_message_id")
-    try:
-        message_id = int(raw_message_id) if raw_message_id is not None else None
-    except (TypeError, ValueError):
-        message_id = None
-    if message_id is None:
-        return False
-    return repo.has_newer_user_message(db, user.id, message_id)
-
-
-def _obsolete_turn_outcome(*, turn_context: dict[str, object]) -> ConversationTurnOutcome:
-    turn_context["obsolete_turn_no_write"] = True
-    return ConversationTurnOutcome(
-        extraction=Extraction(confidence=0.85),
-        reply_text=(
-            "Je vois un message plus recent. "
-            "Je ne touche pas au plan sur cet ancien tour."
-        ),
-        response_mode="obsolete_turn_no_write",
-        mutation_applied=False,
-    )
-
-
-def _load_turn_state(*, db: Session, user, user_text: str) -> ConversationTurnState:
-    current_message = repo.add_message(db, user.id, "user", user_text)
-    logger.info("User message: %s", user_text[:120])
-
-    msgs = repo.get_messages(db, user.id)
-    conversation_history = [{"role": msg.role, "text": msg.text} for msg in msgs]
-    previous_agent_text = _latest_agent_text(conversation_history[:-1])
-    scheduled_sessions = repo.get_scheduled_sessions(db, user.id, limit=21)
-    timeline = [repo.to_pydantic_scheduled_session(session) for session in scheduled_sessions]
-    activities = repo.get_activities(db, user.id, limit=120)
-    today_session = repo.get_today_scheduled_session(db, user.id, timezone_name=user.timezone)
-    active_memory_rows, active_facts = _active_memory_payloads(db, user.id)
-    return ConversationTurnState(
-        user=user,
-        current_user_message_id=current_message.id,
-        conversation_history=conversation_history,
-        previous_agent_text=previous_agent_text,
-        scheduled_sessions=scheduled_sessions,
-        timeline=timeline,
-        activities=activities,
-        today_session=today_session,
-        active_memory_rows=active_memory_rows,
-        active_facts=active_facts,
-    )
-
-
-def _active_memory_payloads(db: Session, user_id: int) -> tuple[list[object], list[dict]]:
-    from fitmas.app.api import routes_messages as api_messages
-
-    return api_messages._active_memory_payloads(db, user_id)
 
 
 def _pending_confirmation_context_for_prompt(pending_confirmation) -> str | None:
@@ -915,85 +799,6 @@ def _apply_understanding_commands(
         understanding=understanding,
         turn_memory_writes=turn_memory_writes,
         unresolved_execution_followup=unresolved_execution_followup,
-    )
-
-
-def _latest_agent_text(conversation_history: list[dict]) -> str | None:
-    from fitmas.app.api import routes_messages as api_messages
-
-    return api_messages._latest_agent_text(conversation_history)
-
-
-def _persist_turn_memory_updates(
-    db: Session,
-    user_id: int,
-    payloads: list[dict],
-    *,
-    turn_memory_writes: list[dict],
-) -> None:
-    from fitmas.app.api import routes_messages as api_messages
-
-    if not payloads:
-        return
-    api_messages._persist_memory_updates(db, user_id, payloads)
-    turn_memory_writes.extend(dict(payload) for payload in payloads)
-
-
-def _filter_legacy_extracted_facts(payloads: list[dict]) -> list[dict]:
-    """Keep the legacy extractor away from availability writes.
-
-    Availability now comes from typed LLM `memory_actions` or the typed
-    `turn_plan.availability_constraint`. This function filters only legacy
-    extracted fact payloads after the assistant output exists; it never reads
-    or classifies user text.
-    """
-    return [
-        payload
-        for payload in payloads
-        if str(payload.get("category") or "").strip().lower() != "availability"
-    ]
-
-
-def _reply_and_record_turn(
-    *,
-    db: Session,
-    user_id: int,
-    user_text: str,
-    reply_text: str,
-    extraction: Extraction,
-    response_mode: str,
-    day_updated=None,
-    decision=None,
-    mutation_applied: bool = False,
-    pending_confirmation: bool = False,
-    pending_confirmation_id: int | None = None,
-    turn_context: dict[str, object] | None = None,
-    memory_writes: list[dict] | None = None,
-) -> MessageReply:
-    repo.add_message(db, user_id, "agent", reply_text)
-    repo.add_conversation_turn(
-        db,
-        user_id=user_id,
-        user_message=user_text,
-        assistant_message=reply_text,
-        response_mode=response_mode,
-        extraction_confidence=float(extraction.confidence or 0.0),
-        day_updated=getattr(day_updated, "value", day_updated),
-        mutation_type=str(getattr(decision, "mutation_type", "") or ""),
-        mutation_applied=mutation_applied,
-        pending_confirmation=pending_confirmation,
-        pending_confirmation_id=pending_confirmation_id,
-        decision_json=decision_json_for_turn(decision),
-        context=turn_context,
-        memory_writes=memory_writes,
-        client_message_key=str((turn_context or {}).get("client_message_key") or "").strip() or None,
-        source=str((turn_context or {}).get("source") or "").strip() or None,
-    )
-    return MessageReply(
-        user_message=Message(role=MessageRole.USER, text=user_text),
-        extraction=extraction,
-        assistant_message=Message(role=MessageRole.AGENT, text=reply_text),
-        day_updated=day_updated,
     )
 
 
@@ -1129,10 +934,6 @@ def _should_route_availability_context_to_llm(
     week_scope_reply: str | None,
     no_candidate_reply: str | None,
 ) -> bool:
-    # Chantier 1 (autonomy refactor): any availability grounding must reach
-    # decide() so the coach can arbitrate the response itself instead of
-    # closing the conversation with a templated "rien a bouger". The
-    # turn_plan signal is no longer used as a gate.
     return week_scope_reply is not None or no_candidate_reply is not None
 
 
@@ -1142,10 +943,6 @@ def _should_route_adaptation_context_to_llm(
     *,
     plan_mutation_request: bool = False,
 ) -> bool:
-    # Chantier 1 (autonomy refactor): any deterministic adaptation candidate
-    # is passed to decide() as context. The LLM arbitrates whether to apply
-    # it, modify it, or override it. Direct application without LLM
-    # arbitration is no longer allowed in conversation turns.
     return adaptation is not None
 
 
