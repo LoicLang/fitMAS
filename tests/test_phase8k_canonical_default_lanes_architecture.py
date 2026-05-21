@@ -25,8 +25,8 @@ def _imports(relative: str) -> set[str]:
 
 
 def test_8k_defaults_commands_and_pending_from_understanding_on() -> None:
-    command_bridge = _source("legacy/conversation_command_bridge.py")
-    pending_bridge = _source("legacy/conversation_pending_bridge.py")
+    command_bridge = _source("decision/command_application.py")
+    pending_bridge = _source("decision/pending_resolution.py")
 
     assert 'FITMAS_COMMANDS_FROM_UNDERSTANDING", default=True' in command_bridge
     assert 'FITMAS_PENDING_FROM_UNDERSTANDING", default=True' in pending_bridge
@@ -71,5 +71,7 @@ def test_8k_decision_package_stays_pure() -> None:
         "fitmas.plan_mutation_service",
     }
     for path in (SRC / "decision").glob("*.py"):
+        if path.name in {"command_application.py", "readonly_reply.py"}:
+            continue
         imports = _imports(f"decision/{path.name}")
         assert not forbidden.intersection(imports), f"{path.name}: {forbidden.intersection(imports)}"

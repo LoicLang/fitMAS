@@ -5,7 +5,7 @@ from pathlib import Path
 
 from fitmas.coach_messages import CoachDraft, DraftPendingConfirmation
 from fitmas.decision import VerificationResult
-from fitmas.legacy.heartbeat_runtime_adapter import (
+from fitmas.skills.heartbeat.runtime_adapter import (
     HeartbeatRuntimeResult,
     build_heartbeat_input_event,
     heartbeat_draft_to_outcome,
@@ -122,7 +122,7 @@ def test_run_heartbeat_trigger_returns_event_outcome_and_draft_without_side_effe
     assert result.draft is draft
     assert result.reply_text == "Petit rappel utile."
 
-    source = Path("backend/src/fitmas/legacy/heartbeat_runtime_adapter.py").read_text(encoding="utf-8")
+    source = Path("backend/src/fitmas/skills/heartbeat/runtime_adapter.py").read_text(encoding="utf-8")
     forbidden = ("send_message", "persist_draft", "persist_draft_for_owner", "SessionLocal", ".commit(", ".flush(")
     assert [token for token in forbidden if token in source] == []
 
@@ -183,7 +183,7 @@ def test_allowed_verifier_keeps_draft() -> None:
 
 
 def test_runtime_flag_helpers_read_environment(monkeypatch) -> None:
-    from fitmas.legacy import heartbeat_runtime_adapter as adapter
+    import fitmas.skills.heartbeat.runtime_adapter as adapter
 
     monkeypatch.delenv("FITMAS_HEARTBEAT_RUNTIME_CUTOVER", raising=False)
     monkeypatch.delenv("FITMAS_HEARTBEAT_RUNTIME_VERIFY_ENFORCE", raising=False)

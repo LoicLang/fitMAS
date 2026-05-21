@@ -81,34 +81,40 @@ def test_phase8a_doc_lists_all_legacy_llm_contract_importers() -> None:
 
 
 def test_phase8a_doc_lists_all_legacy_final_reply_callers() -> None:
-    doc = _doc_text()
     callers = [_relative(path) for path in _legacy_final_reply_callers()]
 
-    assert callers
-    assert [path for path in callers if path not in doc] == []
+    assert callers == []
 
 
-def test_phase8a_doc_tracks_cutover_flags_and_legacy_tools() -> None:
+def test_phase8a_doc_tracks_current_legacy_surfaces_and_next_cut() -> None:
     doc = _doc_text()
     required_tokens = {
+        "legacy/conversation_canonical_planning_bridge.py",
+        "legacy/conversation_pending_bridge.py",
+        "decision/planning_runtime.py",
+        "decision/pending_resolution.py",
+        "deleted_count=7",
+        "conversation_pipeline.py",
+        "CoachDecision",
+        "10H",
+    }
+
+    assert sorted(token for token in required_tokens if token not in doc) == []
+
+
+def test_phase8a_doc_no_longer_tracks_old_cutover_flags_or_legacy_tool_aliases() -> None:
+    doc = _doc_text()
+    obsolete_tokens = {
         "FITMAS_PLANNING_RUNTIME_CUTOVER",
         "FITMAS_HEARTBEAT_RUNTIME_CUTOVER",
         "FITMAS_HEARTBEAT_RUNTIME_VERIFY_ENFORCE",
-        "suggest_replan_candidates",
         "propose_replan",
         "draft_move_session",
         "draft_swap_sessions",
         "draft_replace_session",
         "draft_lighten_day",
         "draft_create_session",
+        "Phase 8A ne supprime pas",
     }
 
-    assert sorted(token for token in required_tokens if token not in doc) == []
-
-
-def test_phase8a_doc_keeps_audit_separate_from_deletion() -> None:
-    doc = _doc_text()
-
-    assert "Phase 8A ne supprime pas" in doc
-    assert "Phase 8B" in doc
-    assert "Phase 8C" in doc
+    assert sorted(token for token in obsolete_tokens if token in doc) == []

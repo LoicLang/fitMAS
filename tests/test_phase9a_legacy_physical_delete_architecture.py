@@ -18,12 +18,8 @@ def test_conversation_pipeline_no_longer_calls_legacy_planning_runtime_cutover()
     assert "_planning_runtime_cutover_enabled" not in source
 
 
-def test_conversation_planning_bridge_no_longer_defines_legacy_decision_cutover() -> None:
-    source = _read("backend/src/fitmas/legacy/conversation_planning_bridge.py")
-
-    assert "def maybe_handle_planning_runtime_cutover" not in source
-    assert "def planning_runtime_cutover_enabled" not in source
-    assert "run_planning_runtime_attempt_from_legacy_decision" not in source
+def test_conversation_planning_bridge_is_physically_removed() -> None:
+    assert not (ROOT / "backend/src/fitmas/legacy/conversation_planning_bridge.py").exists()
 
 
 def test_understanding_bridge_no_longer_reads_retired_planning_cutover_flag() -> None:

@@ -1,6 +1,6 @@
 """Tests for replace_session mutation."""
 
-from fitmas.plan_actions import _estimate_load_score, _apply_replacement_fields
+from fitmas.domain.planning.session_actions import _estimate_load_score, _apply_replacement_fields
 
 
 class FakeSession:

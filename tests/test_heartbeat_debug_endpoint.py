@@ -11,7 +11,7 @@ os.environ["FITMAS_ENABLE_DEBUG_ENDPOINTS"] = "1"
 
 from fastapi.testclient import TestClient
 
-import fitmas.heartbeat as heartbeat
+import fitmas.skills.heartbeat.heartbeat as heartbeat
 from fitmas import repository as repo, schema as s
 from fitmas.api import app
 from fitmas.coach_messages import CoachDraft
@@ -168,7 +168,7 @@ class HeartbeatDebugEndpointTest(unittest.TestCase):
         self.assertIsNone(debug["final"]["message"])
 
     def test_debug_heartbeat_routes_normal_cutover_through_runtime(self) -> None:
-        from fitmas.legacy import heartbeat_runtime_adapter as adapter
+        import fitmas.skills.heartbeat.runtime_adapter as adapter
 
         draft = CoachDraft(text="Runtime debug heartbeat", proactive=True)
         calls: list[dict[str, object]] = []
@@ -213,7 +213,7 @@ class HeartbeatDebugEndpointTest(unittest.TestCase):
         self.assertTrue(calls[0]["manual"])
 
     def test_ops_heartbeat_routes_normal_cutover_through_runtime(self) -> None:
-        from fitmas.legacy import heartbeat_runtime_adapter as adapter
+        import fitmas.skills.heartbeat.runtime_adapter as adapter
 
         draft = CoachDraft(text="Runtime ops heartbeat", proactive=True)
         calls: list[dict[str, object]] = []

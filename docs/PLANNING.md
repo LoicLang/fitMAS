@@ -5,7 +5,7 @@ read_when:
   - rendre la planification plus lisible dans l'app
   - ajouter des adaptations suite a un imprevu utilisateur
   - definir ce qui est ferme, adaptable ou projete
-  - modifier planner.py ou llm.py
+  - modifier planner.py ou les prompts planning LLM
   - ajouter readiness, decision engine ou periodization
 ---
 
@@ -150,7 +150,7 @@ FitMAS repond toujours a 4 questions :
 3. calcule readiness (`readiness.py`)
 4. produit la planning decision (`planning_decision.py`)
 5. construit le squelette hebdo deterministe (`planner.py`)
-6. demande au LLM le detail borne des seances (`llm.py`)
+6. demande au LLM le detail borne des seances via le gateway/prompts LLM
 7. valide (`plan_validator.py`)
 8. relit la qualite sportive de la semaine generee (`generated_week_coherence.py`)
 9. persiste

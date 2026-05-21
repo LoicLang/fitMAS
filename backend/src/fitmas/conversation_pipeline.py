@@ -20,7 +20,7 @@ from fitmas.grounding_contract import (
 )
 from fitmas.calibration_llm import extract_calibration_resolution
 from fitmas import coach_voice
-from fitmas import llm_gateway as gw
+import fitmas.llm.gateway as gw
 from fitmas.claim_guard import (
     build_claim_repair_prompt,
     looks_like_action_claim,
@@ -35,22 +35,29 @@ from fitmas.calibration_needs import (
 from fitmas.coach_reading_digest import build_coach_reading_digest, render_digest_for_prompt
 from fitmas.coach_state_bundle import build_coach_state_bundle
 from fitmas.execution_clarification import render_unresolved_execution_followup
-from fitmas.legacy.final_reply_backend import LegacyFinalReplyBackend
+from fitmas.llm.reply_decision_backend import LLMReplyBackend
 from fitmas.legacy.coach_decision_provider import LegacyCoachDecisionProvider, default_legacy_decide
-from fitmas.legacy import conversation_canonical_readonly_bridge
-from fitmas.legacy import conversation_canonical_clarification_bridge
-from fitmas.legacy import conversation_canonical_planning_bridge
-from fitmas.legacy import conversation_activity_highlight_bridge
-from fitmas.legacy import conversation_coach_decision_reply_bridge
-from fitmas.legacy import conversation_command_bridge
+from fitmas.decision import clarification_reply
+from fitmas.decision import command_application
+from fitmas.decision import pending_resolution
+from fitmas.decision import planning_runtime
+from fitmas.decision import activity_highlight
+from fitmas.decision import readonly_reply
 from fitmas.legacy import conversation_decide_bridge
-from fitmas.legacy import conversation_decision_bridge
-from fitmas.legacy import conversation_pending_bridge
-from fitmas.legacy import conversation_planning_bridge
-from fitmas.legacy import conversation_readonly_reply_bridge
-from fitmas.legacy import conversation_reply_adapter as final_reply
+import fitmas.llm.reply_backend as final_reply
 from fitmas.legacy import conversation_understanding_bridge
-from fitmas.legacy.plan_patch_reply_adapter import plan_patch_service_result_to_outcome
+from fitmas.decision.planning_outcomes import (
+    legacy_decision_contract_disabled_outcome,
+    plan_patch_service_result_to_outcome,
+)
+from fitmas.legacy.coach_decision_artifact import (
+    coach_decision_payload,
+    decision_json_for_turn,
+    is_coach_decision_artifact,
+    is_legacy_readonly_artifact,
+    legacy_decision_reply_text,
+    legacy_readonly_decision_payload,
+)
 from fitmas.legacy.understanding_shadow import shadow_understanding_from_legacy_decision
 from fitmas.conversation_context import (
     activity_claim_summary_for_prompt,
@@ -121,7 +128,7 @@ def _run_conversation_turn_impl(
     db: Session,
     dependencies: ConversationPipelineDependencies,
 ) -> MessageReply:
-    import fitmas.api_messages as api_messages
+    from fitmas.app.api import routes_messages as api_messages
 
     user = repo.get_user_optional(db)
     if user is None:
@@ -352,7 +359,7 @@ def _run_conversation_turn_impl(
         )
 
     canonical_understanding = None
-    if conversation_pending_bridge.should_prepare_canonical_pending_understanding(
+    if pending_resolution.should_prepare_canonical_pending_understanding(
         pending_confirmation=pending_confirmation,
     ):
         turn_context["canonical_pending_provider"] = {
@@ -370,7 +377,7 @@ def _run_conversation_turn_impl(
             pending_confirmation=pending_confirmation,
             turn_context=turn_context,
         )
-        pending_outcome = conversation_pending_bridge.apply_pending_resolution(
+        pending_outcome = pending_resolution.apply_pending_resolution(
             db=db,
             user=user,
             decision_artifact=None,
@@ -398,7 +405,7 @@ def _run_conversation_turn_impl(
             "no_pending_resolution" if canonical_understanding is None else "fallback_legacy"
         )
 
-    canonical_clarification_outcome = conversation_canonical_clarification_bridge.compose_canonical_clarification_reply(
+    canonical_clarification_outcome = clarification_reply.compose_canonical_clarification_reply(
         composer=_decision_reply_composer(),
         user_text=payload.text,
         turn_plan=turn_plan,
@@ -419,11 +426,11 @@ def _run_conversation_turn_impl(
             memory_writes=turn_memory_writes,
         )
 
-    if conversation_canonical_planning_bridge.should_prepare_canonical_planning_understanding(
+    if planning_runtime.should_prepare_canonical_planning_understanding(
         turn_plan=turn_plan,
         pending_confirmation=pending_confirmation,
     ):
-        conversation_canonical_planning_bridge.trace_canonical_planning_prepared(
+        planning_runtime.trace_canonical_planning_prepared(
             turn_context,
             turn_plan=turn_plan,
             pending_confirmation=pending_confirmation,
@@ -438,18 +445,18 @@ def _run_conversation_turn_impl(
             pending_confirmation=pending_confirmation,
             turn_context=turn_context,
         )
-        planning_understanding = conversation_canonical_planning_bridge.planning_understanding_for_provider(
+        planning_understanding = planning_runtime.planning_understanding_for_provider(
             understanding=canonical_understanding,
             turn_plan=turn_plan,
         )
         if planning_understanding is not canonical_understanding:
             turn_context["canonical_planning_provider"]["understanding_source"] = "turn_plan"
-        if conversation_canonical_planning_bridge.should_use_canonical_planning_without_legacy(
+        if planning_runtime.should_use_canonical_planning_without_legacy(
             understanding=planning_understanding,
             turn_plan=turn_plan,
             pending_confirmation=pending_confirmation,
         ):
-            canonical_planning_outcome = conversation_canonical_planning_bridge.handle_canonical_planning(
+            canonical_planning_outcome = planning_runtime.handle_canonical_planning(
                 understanding=planning_understanding,
                 context=_planning_context_from_turn_state(
                     state=state,
@@ -487,12 +494,12 @@ def _run_conversation_turn_impl(
                     memory_writes=turn_memory_writes,
                 )
         else:
-            if conversation_canonical_planning_bridge.should_handle_unsupported_canonical_planning_without_legacy(
+            if planning_runtime.should_handle_unsupported_canonical_planning_without_legacy(
                 understanding=planning_understanding,
                 turn_plan=turn_plan,
                 pending_confirmation=pending_confirmation,
             ):
-                canonical_planning_outcome = conversation_canonical_planning_bridge.handle_canonical_planning(
+                canonical_planning_outcome = planning_runtime.handle_canonical_planning(
                     understanding=planning_understanding,
                     context=_planning_context_from_turn_state(
                         state=state,
@@ -523,14 +530,14 @@ def _run_conversation_turn_impl(
                         memory_writes=turn_memory_writes,
                     )
             else:
-                conversation_canonical_planning_bridge.trace_canonical_planning_not_used(
+                planning_runtime.trace_canonical_planning_not_used(
                     turn_context,
                     understanding=planning_understanding,
                     turn_plan=turn_plan,
                     pending_confirmation=pending_confirmation,
                 )
 
-    activity_highlight_outcome = conversation_activity_highlight_bridge.compose_activity_highlight_reply(
+    activity_highlight_outcome = activity_highlight.compose_activity_highlight_reply(
         composer=_decision_reply_composer(),
         activities=tuple(state.activities),
         user_text=payload.text,
@@ -614,13 +621,13 @@ def _run_conversation_turn_impl(
             legacy_decision_artifact
         )
     else:
-        if conversation_canonical_readonly_bridge.should_use_canonical_readonly_without_legacy(
+        if readonly_reply.should_use_canonical_readonly_without_legacy(
             understanding=canonical_understanding,
             turn_plan=turn_plan,
             pending_confirmation=pending_confirmation,
         ):
-            outcome = conversation_canonical_readonly_bridge.compose_canonical_readonly_reply(
-                composer=DecisionReplyComposer(reply_backend=LegacyFinalReplyBackend()),
+            outcome = readonly_reply.compose_canonical_readonly_reply(
+                composer=DecisionReplyComposer(reply_backend=LLMReplyBackend()),
                 understanding=canonical_understanding,
                 user_text=payload.text,
                 turn_plan=turn_plan,
@@ -628,18 +635,18 @@ def _run_conversation_turn_impl(
                 grounding_facts=tuple(render_grounding_packet_for_prompt(grounding_packet)),
             )
         if outcome is None:
-            planning_understanding = conversation_canonical_planning_bridge.planning_understanding_for_provider(
+            planning_understanding = planning_runtime.planning_understanding_for_provider(
                 understanding=canonical_understanding,
                 turn_plan=turn_plan,
             )
             if planning_understanding is not canonical_understanding:
                 turn_context.setdefault("canonical_planning_provider", {})["understanding_source"] = "turn_plan"
-            if conversation_canonical_planning_bridge.should_use_canonical_planning_without_legacy(
+            if planning_runtime.should_use_canonical_planning_without_legacy(
                 understanding=planning_understanding,
                 turn_plan=turn_plan,
                 pending_confirmation=pending_confirmation,
             ):
-                outcome = conversation_canonical_planning_bridge.handle_canonical_planning(
+                outcome = planning_runtime.handle_canonical_planning(
                     understanding=planning_understanding,
                     context=_planning_context_from_turn_state(
                         state=state,
@@ -685,9 +692,9 @@ def _run_conversation_turn_impl(
                     user_id=user.id,
                     decision_artifact=legacy_decision_artifact,
                 )
-    is_coach_decision = conversation_decision_bridge.is_coach_decision(legacy_decision_artifact)
+    is_coach_decision = is_coach_decision_artifact(legacy_decision_artifact)
     if is_coach_decision:
-        turn_context["coach_decision"] = conversation_decision_bridge.coach_decision_payload(legacy_decision_artifact)
+        turn_context["coach_decision"] = coach_decision_payload(legacy_decision_artifact)
         if _turn_is_obsolete(db=db, user=user, turn_context=turn_context):
             outcome = _obsolete_turn_outcome(turn_context=turn_context)
             legacy_decision_artifact = None
@@ -704,7 +711,7 @@ def _run_conversation_turn_impl(
             turn_context["coach_decision_action_result"] = action_result
 
     if outcome is None:
-        pending_outcome = conversation_pending_bridge.apply_pending_resolution(
+        pending_outcome = pending_resolution.apply_pending_resolution(
             db=db,
             user=user,
             decision_artifact=legacy_decision_artifact,
@@ -721,13 +728,13 @@ def _run_conversation_turn_impl(
         outcome is None
         and is_coach_decision
         and legacy_decision_artifact is not None
-        and conversation_coach_decision_reply_bridge.can_route_coach_decision_reply(
+        and readonly_reply.can_route_coach_decision_reply(
             decision_artifact=legacy_decision_artifact,
             turn_context=turn_context,
             action_result=turn_context.get("coach_decision_action_result") or {},
         )
     ):
-        outcome = conversation_coach_decision_reply_bridge.compose_coach_decision_reply(
+        outcome = readonly_reply.compose_coach_decision_reply(
             db=db,
             user=user,
             user_text=payload.text,
@@ -735,7 +742,7 @@ def _run_conversation_turn_impl(
             turn_context=turn_context,
             grounding=grounding_packet,
             action_result=turn_context.get("coach_decision_action_result") or {},
-            compose_no_change_reply_for_turn_fn=conversation_readonly_reply_bridge.compose_no_change_reply_for_turn,
+            compose_no_change_reply_for_turn_fn=readonly_reply.compose_no_change_reply_for_turn,
         )
         legacy_decision_artifact = None
 
@@ -746,16 +753,16 @@ def _run_conversation_turn_impl(
     if (
         outcome is None
         and legacy_decision_artifact is not None
-        and conversation_decision_bridge.is_legacy_readonly_decision(legacy_decision_artifact)
+        and is_legacy_readonly_artifact(legacy_decision_artifact)
     ):
-        turn_context["legacy_readonly_decision"] = conversation_decision_bridge.legacy_readonly_decision_payload(
+        turn_context["legacy_readonly_decision"] = legacy_readonly_decision_payload(
             legacy_decision_artifact
         )
-        reply_text, composed_mode = conversation_readonly_reply_bridge.compose_no_change_reply_for_turn(
+        reply_text, composed_mode = readonly_reply.compose_no_change_reply_for_turn(
             db=db,
             user=user,
             user_text=payload.text,
-            original_reply=conversation_decision_bridge.legacy_decision_reply_text(legacy_decision_artifact),
+            original_reply=legacy_decision_reply_text(legacy_decision_artifact),
             turn_context=turn_context,
             grounding=grounding_packet,
             action_result={},
@@ -774,7 +781,7 @@ def _run_conversation_turn_impl(
         and legacy_decision_artifact is not None
         and (legacy_decision_artifact.has_value or legacy_decision_artifact.kind == "unsupported")
     ):
-        outcome = conversation_planning_bridge.legacy_decision_contract_disabled_outcome(
+        outcome = legacy_decision_contract_disabled_outcome(
             decision_artifact=legacy_decision_artifact,
             user_text=payload.text,
             grounding_facts=render_grounding_packet_for_prompt(grounding_packet),
@@ -799,7 +806,7 @@ def _run_conversation_turn_impl(
             response_mode="llm_unavailable",
         )
 
-    conversation_pending_bridge.keep_pending_for_non_mutating_turn(
+    pending_resolution.keep_pending_for_non_mutating_turn(
         outcome=outcome,
         turn_plan=turn_plan,
         pending_confirmation=pending_confirmation,
@@ -840,7 +847,7 @@ def _run_conversation_turn_impl(
             turn_memory_writes=turn_memory_writes,
         )
 
-    conversation_pending_bridge.supersede_pending_if_replaced(
+    pending_resolution.supersede_pending_if_replaced(
         db=db,
         outcome=outcome,
         pending_confirmation=pending_confirmation,
@@ -945,7 +952,7 @@ def _load_turn_state(*, db: Session, user, user_text: str) -> ConversationTurnSt
 
 
 def _active_memory_payloads(db: Session, user_id: int) -> tuple[list[object], list[dict]]:
-    import fitmas.api_messages as api_messages
+    from fitmas.app.api import routes_messages as api_messages
 
     return api_messages._active_memory_payloads(db, user_id)
 
@@ -1026,7 +1033,7 @@ def _planning_context_from_turn_state(*, state, conversation_context, coach_bund
 
 
 def _decision_reply_composer() -> DecisionReplyComposer:
-    return DecisionReplyComposer(reply_backend=LegacyFinalReplyBackend())
+    return DecisionReplyComposer(reply_backend=LLMReplyBackend())
 
 
 def _apply_turn_plan_memory_commands_once(
@@ -1039,7 +1046,7 @@ def _apply_turn_plan_memory_commands_once(
 ) -> None:
     if "turn_plan_memory_action_result" in turn_context:
         return
-    conversation_command_bridge.apply_turn_plan_memory_commands(
+    command_application.apply_turn_plan_memory_commands(
         db=db,
         user=user,
         turn_plan=turn_plan,
@@ -1058,7 +1065,7 @@ def _apply_coach_decision_actions(
     turn_plan=None,
     turn_context: dict[str, object] | None = None,
 ) -> dict[str, Any]:
-    return conversation_command_bridge.apply_coach_decision_commands(
+    return command_application.apply_coach_decision_commands(
         db=db,
         user=user,
         decision_artifact=decision_artifact,
@@ -1577,7 +1584,7 @@ def _blocked_mutation_reply(decision, service_result=None) -> str:
             warning_hint = warnings[0] if warnings else None
 
     context = final_reply.FinalReplyContext(
-        original_llm_reply=conversation_decision_bridge.legacy_decision_reply_text(decision),
+        original_llm_reply=legacy_decision_reply_text(decision),
         blocked_events=(
             final_reply.BlockedEvent(
                 command=str(getattr(decision, "mutation_type", "") or "mutation"),
@@ -1601,7 +1608,7 @@ def _blocked_mutation_reply(decision, service_result=None) -> str:
 
 
 def _latest_agent_text(conversation_history: list[dict]) -> str | None:
-    import fitmas.api_messages as api_messages
+    from fitmas.app.api import routes_messages as api_messages
 
     return api_messages._latest_agent_text(conversation_history)
 
@@ -1613,7 +1620,7 @@ def _persist_turn_memory_updates(
     *,
     turn_memory_writes: list[dict],
 ) -> None:
-    import fitmas.api_messages as api_messages
+    from fitmas.app.api import routes_messages as api_messages
 
     if not payloads:
         return
@@ -1665,7 +1672,7 @@ def _reply_and_record_turn(
         mutation_applied=mutation_applied,
         pending_confirmation=pending_confirmation,
         pending_confirmation_id=pending_confirmation_id,
-        decision_json=conversation_decision_bridge.decision_json_for_turn(decision),
+        decision_json=decision_json_for_turn(decision),
         context=turn_context,
         memory_writes=memory_writes,
         client_message_key=str((turn_context or {}).get("client_message_key") or "").strip() or None,
@@ -1777,7 +1784,7 @@ def _pending_confirmation_payload_for_adaptation(pending_confirmation) -> dict[s
         "summary": str(getattr(pending_confirmation, "summary", "") or ""),
         "reason": str(getattr(pending_confirmation, "reason", "") or ""),
         "source_text": str(getattr(pending_confirmation, "source_text", "") or ""),
-        "decision_json": conversation_pending_bridge.truncate_for_recheck(
+        "decision_json": pending_resolution.truncate_for_recheck(
             str(getattr(pending_confirmation, "decision_json", "") or ""),
             limit=2500,
         ),
@@ -1884,7 +1891,7 @@ def _append_prompt_section(base: str, section: str | None) -> str:
 
 
 def _selected_facts_for_prompt(conversation_context, active_facts: list[dict]) -> list[str]:
-    import fitmas.api_messages as api_messages
+    from fitmas.app.api import routes_messages as api_messages
 
     selected = list(getattr(conversation_context, "selected_facts", ()) or ())
     for fact in api_messages.select_prompt_facts(active_facts):

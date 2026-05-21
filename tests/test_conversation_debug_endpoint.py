@@ -9,8 +9,8 @@ os.environ["FITMAS_ENABLE_DEBUG_ENDPOINTS"] = "1"
 
 from fastapi.testclient import TestClient
 
-import fitmas.api_messages as api_messages
-import fitmas.final_reply as final_reply
+from fitmas.app.api import routes_messages as api_messages
+import fitmas.llm.reply_backend as final_reply
 import fitmas.plan_mutation_service as plan_mutation_service
 from fitmas import repository as repo, schema as s
 from fitmas.api import app

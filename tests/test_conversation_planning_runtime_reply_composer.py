@@ -4,10 +4,10 @@ from types import SimpleNamespace
 
 from fitmas import conversation_pipeline
 from fitmas.decision import DecisionExplanation, DecisionReplyComposer, ReplyContract
+from fitmas.decision import planning_outcomes as conversation_planning_bridge
 from fitmas.decision.reply_request import ReplyRequest, ReplyResult
 from fitmas.domain.planning.models import PlanningCommandResult, PlanningDecisionResult
-from fitmas.legacy import conversation_planning_bridge
-from fitmas.legacy.final_reply_backend import LegacyFinalReplyBackend
+from fitmas.llm.reply_decision_backend import LLMReplyBackend
 from fitmas.plan_mutation_service import PlanPatchServiceResult
 from fitmas.plan_patch import PlanPatch, PlanPatchOperation, PlanPatchValidation
 
@@ -55,7 +55,7 @@ def test_planning_runtime_mapper_uses_reply_composer(monkeypatch) -> None:
 
 
 def test_planning_runtime_pending_reply_uses_machine_candidate_over_grounding_drift() -> None:
-    backend = LegacyFinalReplyBackend(request_text_fn=lambda **_kwargs: "Je propose lundi 18. Tu confirmes ?")
+    backend = LLMReplyBackend(request_text_fn=lambda **_kwargs: "Je propose lundi 18. Tu confirmes ?")
     composer = DecisionReplyComposer(reply_backend=backend)
     result = _planning_result("pending_confirmation")
     result = PlanningDecisionResult(
@@ -96,7 +96,7 @@ def test_planning_runtime_pending_reply_uses_machine_candidate_over_grounding_dr
 
 
 def test_planning_runtime_pending_reply_uses_multi_move_machine_summary() -> None:
-    backend = LegacyFinalReplyBackend(request_text_fn=lambda **_kwargs: "Je propose une seance ciblee. Tu confirmes ?")
+    backend = LLMReplyBackend(request_text_fn=lambda **_kwargs: "Je propose une seance ciblee. Tu confirmes ?")
     composer = DecisionReplyComposer(reply_backend=backend)
     result = _planning_result("pending_confirmation")
     result = PlanningDecisionResult(
@@ -142,7 +142,7 @@ def test_planning_runtime_pending_reply_uses_multi_move_machine_summary() -> Non
 
 
 def test_canonical_plan_committed_reply_uses_committed_event_summary() -> None:
-    backend = LegacyFinalReplyBackend(request_text_fn=lambda **_kwargs: "J'ai remplace la seance.")
+    backend = LLMReplyBackend(request_text_fn=lambda **_kwargs: "J'ai remplace la seance.")
     request = ReplyRequest(
         kind="plan_committed",
         user_text="deplace lundi prochain",

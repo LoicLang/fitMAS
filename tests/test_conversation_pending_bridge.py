@@ -12,7 +12,7 @@ from fitmas import repository as repo, schema as s
 from fitmas.db import Base, SessionLocal, engine, init_db
 from fitmas.decision import CoachUnderstanding, PendingResolution
 from fitmas.decision.reply_request import ReplyResult
-from fitmas.legacy import conversation_pending_bridge
+from fitmas.decision import pending_resolution as conversation_pending_bridge
 from fitmas.legacy.coach_decision_artifact import legacy_decision_artifact_from_raw
 from fitmas.legacy.decision_contracts import (
     AcceptPendingResolution,

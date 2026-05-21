@@ -4,9 +4,9 @@ from pathlib import Path
 from types import SimpleNamespace
 
 from fitmas.decision import CoachUnderstanding, RequestedPlanChange
+from fitmas.decision import planning_outcomes as conversation_planning_bridge
+from fitmas.decision.planning_runtime import run_planning_runtime_attempt_from_understanding
 from fitmas.domain.planning.models import PlanningCommandResult, PlanningDecisionResult
-from fitmas.legacy import conversation_planning_bridge
-from fitmas.legacy.planning_runtime_adapter import run_planning_runtime_attempt_from_understanding
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -62,7 +62,7 @@ def test_planning_runtime_attempt_marks_requested_change_as_applicable(monkeypat
         return SimpleNamespace(kind="block", reason="blocked")
 
     monkeypatch.setattr(
-        "fitmas.legacy.planning_runtime_adapter.decide_plan_change",
+        "fitmas.decision.planning_runtime.decide_plan_change",
         fake_decide_plan_change,
     )
 
@@ -100,8 +100,6 @@ def test_runtime_mapper_blocks_applicable_unhandled_change() -> None:
 
 def test_old_coachdecision_planning_cutover_route_is_removed() -> None:
     pipeline = (ROOT / "backend/src/fitmas/conversation_pipeline.py").read_text()
-    bridge = (ROOT / "backend/src/fitmas/legacy/conversation_planning_bridge.py").read_text()
 
     assert "maybe_handle_planning_runtime_cutover" not in pipeline
-    assert "maybe_handle_planning_runtime_cutover" not in bridge
-    assert "FITMAS_PLANNING_RUNTIME_CUTOVER" not in bridge
+    assert not (ROOT / "backend/src/fitmas/legacy/conversation_planning_bridge.py").exists()

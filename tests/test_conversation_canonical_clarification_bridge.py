@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
-from fitmas.legacy import conversation_canonical_clarification_bridge as bridge
+from fitmas.decision import clarification_reply as bridge
 
 
 def test_short_needs_clarification_turn_composes_without_legacy_decide() -> None:

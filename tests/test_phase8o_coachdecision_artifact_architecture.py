@@ -64,13 +64,13 @@ def test_8o_provider_and_decide_bridge_use_artifact_boundary() -> None:
 def test_8o_conversation_facing_modules_do_not_access_fitmas_message_directly() -> None:
     for relative in (
         "conversation_pipeline.py",
-        "legacy/conversation_decision_bridge.py",
-        "legacy/conversation_command_bridge.py",
+        "decision/command_application.py",
+        "decision/command_mapping.py",
         "legacy/coach_command_adapter.py",
-        "legacy/conversation_pending_bridge.py",
-        "legacy/conversation_planning_bridge.py",
-        "legacy/conversation_coach_decision_reply_bridge.py",
-        "legacy/planning_runtime_adapter.py",
+        "decision/pending_resolution.py",
+        "decision/planning_outcomes.py",
+        "decision/readonly_reply.py",
+        "decision/planning_runtime.py",
         "legacy/understanding_shadow.py",
     ):
         assert "fitmas_message" not in _attribute_names(relative), relative
@@ -85,11 +85,12 @@ def test_8o_conversation_facing_modules_do_not_import_raw_legacy_models() -> Non
     for relative in (
         "conversation_pipeline.py",
         "legacy/conversation_decide_bridge.py",
-        "legacy/conversation_command_bridge.py",
-        "legacy/conversation_pending_bridge.py",
-        "legacy/conversation_planning_bridge.py",
-        "legacy/conversation_coach_decision_reply_bridge.py",
-        "legacy/planning_runtime_adapter.py",
+        "decision/command_application.py",
+        "decision/command_mapping.py",
+        "decision/pending_resolution.py",
+        "decision/planning_outcomes.py",
+        "decision/readonly_reply.py",
+        "decision/planning_runtime.py",
         "legacy/understanding_shadow.py",
     ):
         assert not forbidden.intersection(_imports(relative)), relative
@@ -139,10 +140,11 @@ def test_8o_coach_decision_result_decision_property_is_not_runtime_consumed() ->
     for relative in (
         "conversation_pipeline.py",
         "legacy/conversation_decide_bridge.py",
-        "legacy/conversation_command_bridge.py",
-        "legacy/conversation_pending_bridge.py",
-        "legacy/conversation_planning_bridge.py",
-        "legacy/conversation_coach_decision_reply_bridge.py",
+        "decision/command_application.py",
+        "decision/command_mapping.py",
+        "decision/pending_resolution.py",
+        "decision/planning_outcomes.py",
+        "decision/readonly_reply.py",
     ):
         source = _source(relative)
         if "result.decision" in source or "CoachDecisionResult(decision=" in source:

@@ -17,7 +17,7 @@ from dotenv import load_dotenv
 if os.getenv("FITMAS_RUN_REAL_LLM_TESTS") == "1":
     load_dotenv(Path(__file__).resolve().parents[1] / ".env")
 
-from fitmas.llm_gateway import client, request_text, request_json, request_message, message_text, message_json
+from fitmas.llm.gateway import client, request_text, request_json, request_message, message_text, message_json
 from fitmas.tools.routing import IntentCategory
 from fitmas.conversation_prompting import select_conversation_prompt_policy
 from fitmas.prompt_layers import assemble_layered_prompt, build_identity_layer
@@ -31,15 +31,15 @@ from fitmas.mutation_hooks import (
     run_pre_mutation_hooks,
     run_post_mutation_hooks,
 )
-from fitmas.heartbeat_roles import (
+from fitmas.skills.heartbeat.roles import (
     BRIEFING_ROLE,
     REMINDER_ROLE,
     REVIEW_ROLE,
     SIGNAL_ROLE,
     build_signal_prompt,
 )
-from fitmas.tool_contract import ToolCall, ToolContext, ToolResult
-from fitmas.tool_runtime import execute_tool_call
+from fitmas.tools.contract import ToolCall, ToolContext, ToolResult
+from fitmas.tools.runtime import execute_tool_call
 from fitmas.time_context import build_time_context
 
 

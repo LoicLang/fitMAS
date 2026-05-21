@@ -9,13 +9,13 @@ from types import SimpleNamespace
 
 os.environ.setdefault("FITMAS_DB_PATH", tempfile.mktemp(prefix="fitmas-heartbeat-", suffix=".db"))
 
-import fitmas.heartbeat as heartbeat
+import fitmas.skills.heartbeat.heartbeat as heartbeat
 import fitmas.adaptation as adaptation
 from fitmas import repository as repo, schema as s
 from fitmas.adaptation import AdaptationResult
 from fitmas.coach_messages import persist_draft
 from fitmas.db import Base, SessionLocal, engine, init_db
-from fitmas.final_reply import HeartbeatReplyContext, HeartbeatReplyFact
+from fitmas.skills.heartbeat.reply_composer import HeartbeatReplyContext, HeartbeatReplyFact
 from fitmas.legacy.decision_contracts import MutationDecision
 from fitmas.time_context import DAY_KEYS, day_label_fr, get_local_now
 

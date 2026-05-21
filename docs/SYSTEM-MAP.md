@@ -1,396 +1,178 @@
 ---
-summary: carte simple du systeme FitMAS, flux, frontieres LLM/tools/skills/orchestrateurs et points d'extension
+summary: carte actuelle du systeme FitMAS et des frontieres runtime
 read_when:
   - comprendre comment fonctionne FitMAS
   - ajouter une capacite metier
-  - brancher un tool ou une skill
   - modifier une mutation planning
   - expliquer l'architecture a un nouvel agent
 ---
 
-# FitMAS System Map
+# System Map
 
-## Vision courte
-
-FitMAS n'est pas "un LLM qui fait un plan".
-
-FitMAS est un systeme de coaching LLM-first, encadre par du determinisme :
-
-- le LLM comprend le texte utilisateur libre, l'ambiguite, la negation et l'intention
-- les tools lisent des slices bornees
-- le backend porte la verite, les garde-fous, les validations, les permissions, les effets de bord et l'audit
-- les skills orchestrent des workflows limites sans devenir des cerveaux conversationnels caches
-- `PlanMutationService` est le point de commit des changements planning visibles
-
-Regle canonique : aucun regex, keyword, parser maison, classifieur deterministe ou short-circuit ne lit le texte utilisateur libre pour decider l'intention. Voir `docs/LLM-FIRST-CONVERSATION.md`.
-
-## Flux principal
+## Boucle Produit
 
 ```text
-Telegram / App / Cron
-        |
-        v
-Orchestrateurs
-api_messages.py / api_plan.py / api_activities.py / heartbeat
-        |
-        v
-Coach LLM unique
-comprend le tour, garde le fil, choisit les read-tools utiles selon PromptContract
-sort CoachDecision / candidate refs / actions structurees
-        |
-        v
-Validation backend
-schema, permissions, simulation, reviewer sportif, policy, confirmations
-        |
-        v
-Writers bornes
-PlanMutationService / MemoryMutationService cible
-        |
-        v
-DB + events d'audit
-        |
-        v
-Final composer derive du resultat reel valide
+Telegram / App / Scheduler / Ops
+-> InputEvent
+-> contexte coach
+-> understanding LLM
+-> decision/domain services
+-> command services / mutation service
+-> DecisionOutcome
+-> reply composer/backend
+-> output verifier
+-> delivery
 ```
 
 ## Frontieres
 
-### LLM
+### Interfaces
 
-Le LLM peut :
+Owners :
 
-- comprendre un message flou
-- aider a classer une intention
-- proposer une adaptation sous forme de `PlanPatchCandidate` ou choisir une
-  `candidate_ref` backend
-- formuler une reponse coach
-- utiliser des tools read-only bornes
+- `app/api/`
+- `app/telegram/`
+- root `api.py` et `main.py` tant que l'assemblage app reste root.
 
-Le LLM ne peut pas :
+Role :
 
-- ecrire en DB directement
-- choisir seul une seance future sans grounding
-- modifier le planning sans `PlanMutationService`
-- arbitrer entre deux verites planning concurrentes
-- recevoir un write tool libre
-- produire un patch final dans le reviewer borne : le reviewer choisit seulement
-  un `candidate_id`
-
-### Tools
-
-Un tool runtime est une lecture bornee exposee au LLM.
-
-Exemples actuels / cibles :
-
-- `resolve_planning_window`
-- `get_recent_reality_window`
-- `get_load_context`
-- `get_relevant_facts`
-- `get_user_constraints`
-- `suggest_replan_candidates`
-- `validate_plan_patch` (validation-only cible)
-- `get_coach_state` (macro read-only optionnelle, plus tard)
-
-Regles :
-
-- read-only, candidate ou validation-only
-- whitelist par pipeline
-- peu nombreux
-- semantiques
-- audites via metrics
-- jamais de write DB libre expose au modele
-
-### Skills
-
-Une skill produit est un workflow borne qui combine plusieurs capacites.
-
-Exemple actuel :
-
-- `skills/heartbeat/` pour briefing, reminder, review et signal check
-- `replan_after_constraint` formalise comme workflow de prompt : tools atomiques -> candidate optionnelle -> `PlanPatch | no_change | requires_confirmation`
-
-Exemples futurs :
-
-- review de semaine
-- analyse d'activite
-- adaptation apres indispo
-- briefing retour de blessure
-- construction d'une seance compatible fatigue / kine / nutrition
-
-Une skill ne doit pas contourner les orchestrateurs et le writer.
-
-### Orchestrateurs
-
-Les orchestrateurs possedent les effets de bord :
-
-- `api_messages.py` / `conversation_pipeline.py` : conversation coach
-- `api_plan.py` : actions app explicites
-- `api_activities.py` / `strava.py` : activites et matching
-- `skills/heartbeat/heartbeat.py` : messages proactifs
-- `telegram_scheduler.py` : jobs planifies
-
-Ils peuvent demander une mutation.
-Ils ne doivent pas appliquer directement en bricolant la DB.
-
-### Writer
-
-`PlanMutationService` est la porte officielle pour les mutations planning visibles.
-
-Responsabilites :
-
-- appliquer les decisions autorisees
-- appeler les hooks de coherence
-- produire `plan_mutation_events`
-- exposer le resume visible issu de l'evenement applique
-- eviter les writes silencieux
-
-## Verites du systeme
-
-### Planning runtime
-
-Verite live :
-
-- `ScheduledSession`
-
-Compat / template :
-
-- `WeeklyPlan`
-- `DayPlan`
-- fallback `/api/v0/week` sans sessions datees
-
-Regle :
-
-- app, coach et heartbeat ne lisent pas `WeeklyPlan` / `DayPlan` comme verite runtime
-- `/api/v0/week` projette `ScheduledSession` pour la semaine courante avant tout fallback template
-
-### Execution
-
-Sources :
-
-- `Activity`
-- claims utilisateur bornes
-- `ExecutionEvidence`
-- `RecentRealityWindow`
-
-Regle :
-
-- une seance n'est `done` que si la preuve est forte
-- mauvais sport = off-plan, pas validation de la seance prevue
-- passe sans preuve = `missing`
-
-### Memoire
-
-Couches :
-
-- profil durable : `UserFact` utile au profil
-- court terme : `working_memory_entries`
-- patterns : `user_patterns`
-- audit : transcript + events
-
-Regle :
-
-- les events ne sont pas une memoire brute a dumper dans le prompt
-- ils deviennent des inputs pour digest / audit / explication
-
-## Modules par domaine
-
-### Runtime app / coach
-
-- `coach_state_bundle.py` : bundle de lecture partage
-- `app_views.py` : payloads app
-- `calendar_resolution.py` : statut calendrier `planned / done / missing / offplan`
-- `performance_overview.py` : charge, completion, distribution
-- `week_context.py` : lecture narrative de semaine
+- recevoir une requete ;
+- appeler le runtime/orchestrateur ;
+- livrer une reponse ;
+- ne pas decider la logique metier.
 
 ### Conversation
 
-- `conversation_pipeline.py` : tour de conversation, orchestrateur principal
-- `conversation_context.py` : contexte machine seulement ; ne parse plus claims / non-completion depuis `user_text`
-- `conversation_turn_planner.py` : LLM turn planner leger, peut produire des
-  refs temporelles structurees ; pas de parsing deterministe du texte libre
-- `conversation_prompting.py` : politique de prompt
-- `prompt_contracts.py` : droits, tools, truth blocks et output schema par route
-- `llm_prompt_builder.py` / `prompt_layers.py` : prompt structure
-- `llm_gateway.py` : client LLM + parseur JSON robuste partage (eea74e7)
-- `user_indications.py` / `user_indication_llm.py` : types + pre-step LLM transitoire. Plus de fallback deterministe ; cible = actions structurees dans `CoachDecision`
-- `mutation_hooks.py` : pre-hooks de coherence avec `block_reason` typed
-- `coach_reading_digest.py` : contexte pre-digere (faits + lens Haiku JSON) injecte dans briefing matin et `decide()` sur intents lookup/report/availability (12b4bf8)
+Etat actuel :
 
-Regle conversation :
+- `conversation_pipeline.py` reste le gros orchestrateur.
+- Il est en train d'etre reduit vers `DecisionRuntime`.
+- Les bridges restants vivent encore sous `legacy/conversation_*`.
 
-- le texte utilisateur libre va d'abord au coach LLM
-- le LLM choisit les read-tools utiles dans le budget autorise
-- le LLM sort une decision structuree unique : reply, actions memoire/execution, `PlanPatch | no_change | requires_confirmation`, resolution pending eventuelle
-- le backend valide et applique seulement des artefacts machine-generes par le LLM
-- pour les adaptations, le LLM peut explorer ; le moteur simule, score, policy
-  tranche, puis le composer parle
-- aucun side-effect planning ou memoire ne doit arriver depuis un regex/keyword/parser sur le texte user
-- `plan_mutation_request = heuristic OR llm`, `low_signal`, `rich_signal`, pending `oui/non` deterministe et `_sanitize_no_change_reply` sont retires du runtime conversation. Ne pas les recreer.
+Interdit :
 
-### Adaptation candidates
+- ajouter une nouvelle branche opportuniste ;
+- parser le texte user libre deterministiquement ;
+- faire une reply finale depuis un helper local.
 
-- `plan_patch_backend_candidates.py` : produit des options backend a partir
-  d'artefacts structures (`temporal_references`, sessions planifiees), jamais
-  depuis du texte libre.
-- `plan_patch_candidate_generator.py` : transforme une demande en 0-3 options
-  bornees ou en `candidate_ref`.
-- `plan_patch_candidate_evaluator.py` : resout les refs, simule, valide,
-  extrait facts/findings/score.
-- `plan_patch_candidate_reviewer.py` : reviewer LLM optionnel qui choisit
-  uniquement un `candidate_id`.
-- `plan_patch_adaptation_policy.py` : decide `commit`, `pending_confirmation`,
-  `pending_choice` ou `block`.
+### Decision
 
-Regle : le LLM explore les compromis, le moteur mesure les consequences, la
-policy prend la responsabilite, le composer raconte la verite.
+Owner :
 
-### Feedback bloquant mutations
+- `decision/`
 
-Quand un pre-hook bloque une mutation, `PlanMutationService` expose un `PlanBlockedMutationEvent` avec un `block_reason` typed (`same_sport_proximity`, `occupied_training_target`). Les repos/recuperations ne sont plus des hard-blocks runtime ; la review semaine juge leur deplacement ou consommation.
+Contenu :
+
+- `InputEvent`
+- `CoachContext`
+- `CoachUnderstanding`
+- `DecisionOutcome`
+- `CommandBus`
+- `DecisionReplyComposer`
+- `OutputVerifier`
 
 Regle :
-- le blocage est une verite machine post-validation
-- la cible Phase A est une reponse coach issue du LLM ou d'un rendu d'event reel strictement auditable
-- les dictionnaires de replies canned (`_BLOCK_REASON_REPLIES`) sont acceptables comme filet provisoire, mais ne doivent pas devenir le cerveau conversationnel
-- chaque blocage emit `logger.info("mutation_blocked ...")` pour audit
-- ajouter une nouvelle raison implique d'ajouter un rendu auditable ou une explication LLM fondee sur le `block_reason`
 
-### Failles conversation documentees
-
-Historique 15-17 avril : ces closures expliquent le code existant, pas la cible 30 avril.
-
-| Faille | Closure | Ref |
-|--------|---------|-----|
-| A divergence heuristique/LLM | OR des deux + WARNING structure | b78db28 |
-| B LLM ignore mutation heuristique | Force routage LLM pour availability/adaptation/health si heuristic=True | af54eda |
-| C pas de classifieur intent | conversation_turn_planner dedie | e79d734 |
-| D erreurs LLM opaques | `_classify_llm_exception` → labels stables | e81c3da |
+- pas d'import DB lourd ;
+- pas d'import `legacy/` ;
+- pas de provider LLM direct ;
+- pas de write.
 
 ### Planning
 
-- `planner.py` : planner hebdo deterministe
-- `planning_state.py` : construction des snapshots planning
-- `planning_decision.py` : decision de charge / mode
-- `planning_contract.py` : mission, roles, confidence, budget
-- `session_templates.py` : templates de seances
-- `plan_validator.py` : garde-fous generation
+Owner :
 
-### Mutations
+- `domain/planning/`
 
-- `plan_mutation_service.py` : writer unique
-- `mutations.py` : executeur interne historique
-- `plan_actions.py` : operations concretes sur `ScheduledSession`
-- `mutation_permissions.py` : confirmation high-impact
-- `mutation_hooks.py` : coherence guards pre/post
-- `session_similarity.py` : similarite initiale pour bloquer quasi-doublons
-
-### Reality / performance
-
-- `activities.py` : normalisation et matching activites
-- `strava.py` : OAuth, import, sync Strava
-- `execution_evidence.py` : preuve d'execution
-- `recent_reality.py` : fenetre prevu vs fait
-- `training_load.py` : TSS, CTL, ATL, TSB
-- `fitness_snapshot.py` : snapshot performance
-- `readiness.py` : lecture physique / mentale / logistique
-- `calibration_status.py` : maturite de la connaissance utilisateur
-
-### Memoire
-
-- `fact_memory.py`
-- `memory_profile.py`
-- `memory_routing.py`
-- `memory_patterns.py`
-- `memory_maintenance.py`
-- `profile_summary.py`
-
-### Telegram / heartbeat
-
-- `telegram_*.py` : bot, commandes, onboarding, scheduler, channel
-- `skills/heartbeat/heartbeat.py` : facade heartbeat
-- `skills/heartbeat/evaluation.py` : gating cooldowns
-- `skills/heartbeat/roles.py` : prompts par role
-
-### Tools runtime
-
-- `tools/contract.py`
-- `tools/registry.py`
-- `tools/routing.py`
-- `tools/runtime.py`
-- `tools/metrics.py`
-
-Wrappers de compat encore presents :
-
-- `tool_contract.py`
-- `tool_registry.py`
-- `tool_routing.py`
-- `tool_runtime.py`
-- `tool_metrics.py`
-- `heartbeat.py`
-- `heartbeat_evaluation.py`
-- `heartbeat_roles.py`
-
-## Ajouter une capacite
-
-Question a poser avant de coder :
-
-1. Est-ce une lecture deterministe reutilisable ?
-   - creer une capacite metier dans un module domaine
-
-2. Est-ce une lecture utile au LLM ?
-   - exposer un wrapper read-only dans `tools/`
-
-3. Est-ce un workflow multi-etapes ?
-   - creer une skill / orchestration bornee
-
-4. Est-ce une mutation visible ?
-   - passer par `PlanMutationService`
-
-5. Est-ce flou cote utilisateur ?
-   - grounder, clarifier ou demander confirmation
-
-## Direction long terme
-
-La cible est un coach ultra adaptatif avec equipe perf.
-
-Architecture cible :
+Pipeline :
 
 ```text
-Health / Perf data
-        |
-        v
-Reality + Readiness layer
-        |
-        v
-Expert advisors
-nutrition / physio / endurance / recovery
-        |
-        v
-Planning decision engine
-        |
-        v
-PlanMutationService
-        |
-        v
-Coach conversation + App cockpit
+RequestedPlanChange
+-> ReferenceResolver
+-> PlanCandidateBuilder
+-> PlanCandidateEvaluator
+-> SportPolicy
+-> PlanningCommandService / mutation service
 ```
 
-Les experts peuvent produire observations, contraintes, recommandations et flags.
-Ils ne doivent pas ecrire directement dans le plan.
+Verite runtime :
 
-## Ce qu'on ne doit pas faire
+- `ScheduledSession`
 
-- donner un write tool libre au LLM
-- exposer tout le catalogue sport au modele
-- ajouter une mutation cachee dans un module de scoring
-- faire du prompt une source de verite
-- recreer un dump geant de memoire dans le prompt
-- refactorer en dossiers cosmetiques sans frontiere de responsabilite claire
+Compat seulement :
 
-## Prochaine lecture utile
+- `WeeklyPlan`
+- `DayPlan`
 
-- etat reel / priorites : `BUILD-ORDER.md`
-- architecture detaillee : `ARCHITECTURE.md`
-- refactor coherence : `COACH-COHERENCE-REFACTOR.md`
-- tools LLM : `RUNTIME-TOOLS.md`
-- indications utilisateur : `USER-INDICATIONS.md`
+### LLM
+
+Owner :
+
+- `llm/`
+
+Contenu :
+
+- gateway provider ;
+- prompts ;
+- Understanding service ;
+- provider legacy `CoachDecision` encore present ;
+- reply backends LLM.
+
+Regle :
+
+- le LLM comprend et formule ;
+- il ne commit pas ;
+- il ne porte pas la verite DB.
+
+### Heartbeat
+
+Owner :
+
+- `skills/heartbeat/`
+
+Etat actuel :
+
+- `runtime_adapter.py` convertit heartbeat draft en event/outcome.
+- `reply_composer.py` porte la reply proactive.
+- le code historique heartbeat reste a simplifier plus tard.
+
+### Legacy
+
+Owner temporaire :
+
+- `legacy/`
+
+Etat actuel :
+
+- `24` modules restants.
+- gros residus : planning/pending conversation.
+
+Regle :
+
+- aucun nouveau module legacy ;
+- tout fichier legacy doit avoir une sortie ;
+- si une route legacy n'est plus appelee par runtime reel, elle doit etre supprimee.
+
+## Verifications
+
+Backend complet :
+
+```bash
+./scripts/test-backend
+```
+
+Smoke core :
+
+```bash
+./scripts/smoke-a-plus-api --skip-generated-week \
+  --scenario lookup_current_plan \
+  --scenario create_easy_free_day \
+  --fallback-census-json /tmp/fitmas-core-census.json \
+  --timeout 420
+```
+
+Docs actives :
+
+```bash
+./scripts/docs:list
+```

@@ -186,7 +186,7 @@ class BlockedMutationReplyTest(unittest.TestCase):
         )
         self.assertTrue(compose.called)
 
-    def test_plan_patch_applied_prefers_final_reply_composer(self) -> None:
+    def test_plan_patch_applied_uses_committed_event_summary(self) -> None:
         from fitmas.conversation_pipeline import _applied_plan_patch_reply
 
         result = PlanPatchServiceResult(
@@ -216,13 +216,11 @@ class BlockedMutationReplyTest(unittest.TestCase):
         ) as verify:
             reply = _applied_plan_patch_reply(result, fallback="Patch applique.")
 
-        self.assertEqual(reply, "C'est cale : le footing passe au 24 mars, sans toucher au reste.")
-        context = compose.call_args.args[0]
-        self.assertTrue(context.allowed_to_claim_mutation)
-        self.assertIn("Footing deplace", context.committed_events[0])
-        self.assertTrue(verify.called)
+        self.assertEqual(reply, "Footing deplace au 2099-03-24.")
+        self.assertFalse(compose.called)
+        self.assertFalse(verify.called)
 
-    def test_plan_patch_applied_repairs_composer_contradiction(self) -> None:
+    def test_plan_patch_applied_ignores_composer_contradiction(self) -> None:
         from fitmas.conversation_pipeline import _applied_plan_patch_reply
 
         result = PlanPatchServiceResult(
@@ -270,24 +268,13 @@ class BlockedMutationReplyTest(unittest.TestCase):
         ) as verify:
             reply = _applied_plan_patch_reply(result, fallback="Patch applique.")
 
-        self.assertEqual(reply, "J'ai libere mercredi et jeudi en journees flexibles.")
-        verifier_context = verify.call_args.args[1]
         self.assertEqual(
-            verifier_context.committed_events,
-            (
-                "Mercredi remplace par Journee flexible.",
-                "Jeudi remplace par Journee flexible.",
-            ),
+            reply,
+            "Mercredi remplace par Journee flexible. Jeudi remplace par Journee flexible.",
         )
-        self.assertTrue(
-            any(
-                "before=Fractionne | 2099-03-23 (lundi)" in fact
-                and "after=Journee flexible | 2099-03-23 (lundi)" in fact
-                for fact in verifier_context.extra_facts
-            )
-        )
+        self.assertFalse(verify.called)
 
-    def test_plan_patch_applied_verifier_context_includes_calendar_day_label(self) -> None:
+    def test_plan_patch_applied_keeps_event_summary_when_composer_has_wrong_day(self) -> None:
         from fitmas.conversation_pipeline import _applied_plan_patch_reply
 
         result = PlanPatchServiceResult(
@@ -329,10 +316,8 @@ class BlockedMutationReplyTest(unittest.TestCase):
         ) as verify:
             reply = _applied_plan_patch_reply(result, fallback="Patch applique.")
 
-        self.assertEqual(reply, "Mardi 5 mai passe en footing easy.")
-        context = verify.call_args.args[1]
-        joined = "\n".join(context.extra_facts)
-        self.assertIn("2026-05-05 (mardi)", joined)
+        self.assertEqual(reply, "Mardi remplace par Footing easy.")
+        self.assertFalse(verify.called)
 
     def test_plan_patch_applied_falls_back_to_event_summary_when_verifier_fails(self) -> None:
         from fitmas.conversation_pipeline import _applied_plan_patch_reply

@@ -24,7 +24,7 @@ _SEND_LOCK: asyncio.Lock | None = None
 
 
 def _heartbeat_runtime_verifier_enforced() -> bool:
-    from fitmas.legacy import heartbeat_runtime_adapter as adapter
+    import fitmas.skills.heartbeat.runtime_adapter as adapter
 
     return adapter.heartbeat_runtime_verifier_enforced()
 
@@ -161,7 +161,7 @@ async def _send_serialized_draft(
 def _reserve_heartbeat_guard_after_send() -> None:
     from fitmas import repository as repo
     from fitmas.db import SessionLocal
-    from fitmas.heartbeat import _reserve_module_guard
+    from fitmas.skills.heartbeat.heartbeat import _reserve_module_guard
 
     db = SessionLocal()
     try:
@@ -183,7 +183,7 @@ def _heartbeat_draft_factory(
     manual: bool = False,
 ) -> Callable[[], CoachDraft | None]:
     def _factory() -> CoachDraft | None:
-        from fitmas.legacy import heartbeat_runtime_adapter as adapter
+        import fitmas.skills.heartbeat.runtime_adapter as adapter
 
         result = adapter.run_heartbeat_trigger(
             trigger=trigger,
@@ -247,7 +247,7 @@ async def weekly_review_cron(context: ContextTypes.DEFAULT_TYPE) -> None:
         return
 
     try:
-        from fitmas.heartbeat import weekly_review
+        from fitmas.skills.heartbeat.heartbeat import weekly_review
 
         await _send_serialized_draft(
             context,
@@ -294,7 +294,7 @@ async def send_morning_briefing(context: ContextTypes.DEFAULT_TYPE) -> None:
         logger.warning("Morning briefing catch-up window active; target window was missed")
 
     try:
-        from fitmas.heartbeat import morning_briefing
+        from fitmas.skills.heartbeat.heartbeat import morning_briefing
 
         await _send_serialized_draft(
             context,
@@ -317,7 +317,7 @@ async def send_pre_session_reminder(context: ContextTypes.DEFAULT_TYPE) -> None:
         return
 
     try:
-        from fitmas.heartbeat import pre_session_reminder
+        from fitmas.skills.heartbeat.heartbeat import pre_session_reminder
 
         await _send_serialized_draft(
             context,

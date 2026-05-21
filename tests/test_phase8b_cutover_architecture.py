@@ -10,7 +10,7 @@ SRC = ROOT / "backend" / "src" / "fitmas"
 def test_phase8b_does_not_enable_cutover_flags_by_default() -> None:
     sources = [
         SRC / "conversation_pipeline.py",
-        SRC / "legacy" / "heartbeat_runtime_adapter.py",
+        SRC / "skills" / "heartbeat" / "runtime_adapter.py",
         SRC / "app" / "telegram" / "scheduler.py",
     ]
     forbidden = (

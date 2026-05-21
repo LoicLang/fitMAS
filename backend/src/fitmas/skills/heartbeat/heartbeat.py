@@ -24,7 +24,7 @@ from typing import Any, Iterator
 
 from sqlalchemy.orm import Session
 
-from fitmas import coach_voice, final_reply, repository as repo, schema as s
+from fitmas import coach_voice, repository as repo, schema as s
 from fitmas.activity_helpers import (
     activities_last_days as _activities_last_days,
     activities_on_local_date as _activities_on_local_date,
@@ -36,9 +36,11 @@ from fitmas.coach_reading_digest import CoachReadingDigest, build_coach_reading_
 from fitmas.coach_state_bundle import build_coach_state_bundle
 from fitmas.coach_messages import CoachDraft, DraftPendingConfirmation
 from fitmas.db import SessionLocal
+import fitmas.llm.reply_backend as reply_backend
 from fitmas.execution_clarification import build_execution_clarification
 from fitmas.grounding_contract import ReplyGroundingPacket, plan_window_facts_from_sessions
 from fitmas.skills.heartbeat import evaluation as heartbeat_evaluation
+from fitmas.skills.heartbeat import reply_composer as heartbeat_reply
 from fitmas.skills.heartbeat.context import build_heartbeat_context_bundle
 from fitmas.skills.heartbeat.reply_context import (
     build_briefing_reply_context,
@@ -59,7 +61,7 @@ from fitmas.skills.heartbeat.roles import (
     select_calibration_need,
 )
 from fitmas.knowledge import load_sport_knowledge
-from fitmas.llm_gateway import generate_heartbeat_text, generate_heartbeat_text_with_debug, request_text
+from fitmas.llm.gateway import generate_heartbeat_text, generate_heartbeat_text_with_debug, request_text
 from fitmas.llm_prompt_builder import detect_open_question
 from fitmas.mutation_permissions import default_confirmation_expiry, serialize_plan_patch_confirmation
 from fitmas.plan_patch import PlanPatch, PlanPatchValidation, plan_patch_from_mutation_decisions, validate_plan_patch
@@ -267,7 +269,7 @@ def _llm_generate(
     pipeline: str = "heartbeat",
     tool_context: ToolContext | None = None,
     factual_grounding: ReplyGroundingPacket | None = None,
-    heartbeat_reply_context: final_reply.HeartbeatReplyContext | None = None,
+    heartbeat_reply_context: heartbeat_reply.HeartbeatReplyContext | None = None,
 ) -> str | None:
     _PENDING_CONFIRMATION.set(None)
     trace = _trace()
@@ -337,7 +339,7 @@ def _llm_generate(
         composer_context = replace(heartbeat_reply_context, draft=text)
         trace = _trace()
         if trace is not None:
-            composer_system, composer_prompt = final_reply.build_heartbeat_reply_prompt(composer_context)
+            composer_system, composer_prompt = heartbeat_reply.build_heartbeat_reply_prompt(composer_context)
             trace.final["composer"] = {
                 "draft": text,
                 "input": {
@@ -345,7 +347,7 @@ def _llm_generate(
                     "user": composer_prompt,
                 },
             }
-        composed = final_reply.compose_heartbeat_reply(
+        composed = heartbeat_reply.compose_heartbeat_reply(
             composer_context,
             request_text_fn=request_text,
         )
@@ -378,7 +380,7 @@ def _llm_generate(
         _PENDING_CONFIRMATION.set(None)
         return None
     if text and factual_grounding is not None:
-        verified = final_reply.verify_factual_reply(
+        verified = reply_backend.verify_factual_reply(
             text,
             grounding=factual_grounding,
             pipeline_capability=pipeline,

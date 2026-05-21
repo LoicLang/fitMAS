@@ -274,7 +274,7 @@ async def cmd_help(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
 async def cmd_heartbeat(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     try:
-        from fitmas.heartbeat import morning_briefing
+        from fitmas.skills.heartbeat.heartbeat import morning_briefing
 
         draft = _manual_heartbeat_draft(morning_briefing)
         if draft:
@@ -288,7 +288,7 @@ async def cmd_heartbeat(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 
 
 def _manual_heartbeat_draft(legacy_factory):
-    from fitmas.legacy import heartbeat_runtime_adapter as adapter
+    import fitmas.skills.heartbeat.runtime_adapter as adapter
 
     result = adapter.run_heartbeat_trigger(
         trigger="morning_briefing",

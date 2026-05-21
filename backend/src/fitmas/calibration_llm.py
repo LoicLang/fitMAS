@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from typing import Any
 
-from fitmas import llm_gateway as gw
+import fitmas.llm.gateway as gw
 from fitmas.calibration_needs import (
     CalibrationNeed,
     CalibrationNeedType,

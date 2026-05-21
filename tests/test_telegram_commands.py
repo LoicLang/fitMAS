@@ -143,7 +143,7 @@ class TelegramCommandsTest(unittest.IsolatedAsyncioTestCase):
     async def test_cmd_heartbeat_routes_manual_cutover_through_runtime(self) -> None:
         import os
 
-        from fitmas.legacy import heartbeat_runtime_adapter as adapter
+        import fitmas.skills.heartbeat.runtime_adapter as adapter
 
         draft = CoachDraft(text="Runtime heartbeat", proactive=True)
         calls: list[dict[str, object]] = []

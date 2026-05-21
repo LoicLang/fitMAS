@@ -24,7 +24,7 @@ from fitmas.conversation_contract import (
     ConversationUserNotFoundError,
 )
 from fitmas.db import get_db
-from fitmas.legacy.heartbeat_runtime_adapter import heartbeat_runtime_payload, run_heartbeat_endpoint, run_heartbeat_trigger
+from fitmas.skills.heartbeat.runtime_adapter import heartbeat_runtime_payload, run_heartbeat_endpoint, run_heartbeat_trigger
 from fitmas.telegram_channel import resolve_chat_id, send_text_message
 
 logger = logging.getLogger(__name__)
@@ -44,7 +44,7 @@ def trigger_conversation_debug(payload: IncomingMessage, db: Session = Depends(g
     if user is None:
         raise HTTPException(status_code=404, detail="No onboarded user yet")
 
-    import fitmas.api_messages as api_messages
+    from fitmas.app.api import routes_messages as api_messages
     from fitmas.conversation_pipeline import run_conversation_turn
 
     client_message_key = str(payload.client_message_key or "").strip() or f"ops-debug:{uuid4()}"
@@ -318,7 +318,7 @@ def trigger_heartbeat(
     if user is None:
         raise HTTPException(status_code=404, detail="No onboarded user yet")
 
-    import fitmas.heartbeat as heartbeat
+    import fitmas.skills.heartbeat.heartbeat as heartbeat
 
     handlers = {
         "morning": heartbeat.morning_briefing,

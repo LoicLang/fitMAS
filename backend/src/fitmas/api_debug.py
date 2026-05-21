@@ -40,7 +40,7 @@ def trigger_debug_heartbeat(
     if user is None:
         raise HTTPException(status_code=404, detail="No onboarded user yet")
 
-    import fitmas.heartbeat as heartbeat
+    import fitmas.skills.heartbeat.heartbeat as heartbeat
 
     handlers = {
         "morning": heartbeat.morning_briefing,
@@ -59,7 +59,7 @@ def trigger_debug_heartbeat(
             draft = handler()
             trace = captured
     else:
-        from fitmas.legacy import heartbeat_runtime_adapter as adapter
+        import fitmas.skills.heartbeat.runtime_adapter as adapter
 
         runtime_result = adapter.run_heartbeat_endpoint(
             kind,

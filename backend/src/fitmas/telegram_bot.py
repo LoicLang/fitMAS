@@ -13,7 +13,7 @@ load_dotenv(Path(__file__).resolve().parents[3] / ".env")
 
 from fitmas.telegram_commands import register_command_handlers
 from fitmas.telegram_onboarding import build_onboarding_handler
-from fitmas.telegram_scheduler import register_jobs
+from fitmas.app.telegram.scheduler import register_jobs
 
 logger = logging.getLogger(__name__)
 

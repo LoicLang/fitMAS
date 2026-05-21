@@ -3,7 +3,7 @@ from __future__ import annotations
 from types import SimpleNamespace
 
 from fitmas.legacy.coach_decision_artifact import legacy_decision_artifact_from_raw
-from fitmas.legacy.conversation_coach_decision_reply_bridge import compose_coach_decision_reply
+from fitmas.decision.readonly_reply import compose_coach_decision_reply
 
 
 def test_reply_bridge_uses_confirmation_reason_before_message() -> None:

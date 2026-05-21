@@ -19,7 +19,7 @@ sys.path.insert(0, str(ROOT / "backend" / "src"))
 
 from fastapi.testclient import TestClient
 
-import fitmas.heartbeat as heartbeat
+import fitmas.skills.heartbeat.heartbeat as heartbeat
 from fitmas import repository as repo, schema as s
 from fitmas.api import app
 from fitmas.coach_messages import CoachDraft, persist_draft
@@ -620,7 +620,7 @@ def scenario_golden_case_autonomy(db: SessionLocal, client: TestClient, user: s.
     Le refactor (Chantiers 1 a 5) doit faire disparaitre chacun de ces bugs.
     """
     # Tour 1 : briefing Sunday evening (heartbeat weekly_review)
-    import fitmas.heartbeat as heartbeat
+    import fitmas.skills.heartbeat.heartbeat as heartbeat
     from fitmas.coach_messages import persist_draft
 
     sunday_review = "2026-04-19T20:00:00+02:00"

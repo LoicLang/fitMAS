@@ -13,7 +13,7 @@ def _source(relative: str) -> str:
 
 
 def test_8r_canonical_readonly_bridge_exists() -> None:
-    source = _source("legacy/conversation_canonical_readonly_bridge.py")
+    source = _source("decision/readonly_reply.py")
 
     assert "def canonical_readonly_provider_enabled(" in source
     assert "FITMAS_CANONICAL_READONLY_PROVIDER" in source
@@ -33,7 +33,7 @@ def test_8r_pipeline_routes_readonly_before_legacy_decide() -> None:
 
 
 def test_8s_readonly_provider_default_on_but_opt_out_supported() -> None:
-    source = _source("legacy/conversation_canonical_readonly_bridge.py")
+    source = _source("decision/readonly_reply.py")
 
     assert 'return _env_flag_enabled("FITMAS_CANONICAL_READONLY_PROVIDER", default=True)' in source
     assert 'raw.strip().lower() in {"1", "true", "yes", "on"}' in source

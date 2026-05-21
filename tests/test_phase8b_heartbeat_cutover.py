@@ -1,12 +1,12 @@
 from __future__ import annotations
 
 from fitmas.coach_messages import CoachDraft
-from fitmas.legacy.heartbeat_runtime_adapter import HeartbeatRuntimeResult, run_heartbeat_trigger
+from fitmas.skills.heartbeat.runtime_adapter import HeartbeatRuntimeResult, run_heartbeat_trigger
 
 
 def test_scheduler_cutover_passes_verify_enforcement_and_window_metadata(monkeypatch) -> None:
     from fitmas.app.telegram import scheduler
-    import fitmas.legacy.heartbeat_runtime_adapter as adapter
+    import fitmas.skills.heartbeat.runtime_adapter as adapter
 
     draft = CoachDraft(text="Briefing propre.", proactive=True)
     calls = []
@@ -32,7 +32,7 @@ def test_scheduler_cutover_passes_verify_enforcement_and_window_metadata(monkeyp
 
 def test_scheduler_cutover_suppresses_blocked_draft(monkeypatch) -> None:
     from fitmas.app.telegram import scheduler
-    import fitmas.legacy.heartbeat_runtime_adapter as adapter
+    import fitmas.skills.heartbeat.runtime_adapter as adapter
 
     draft = CoachDraft(text="Je deplace ta seance.", proactive=True)
 

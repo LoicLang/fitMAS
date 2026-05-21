@@ -10,11 +10,11 @@ os.environ.setdefault("FITMAS_DB_PATH", tempfile.mktemp(prefix="fitmas-command-b
 from fitmas import repository as repo, schema as s
 from fitmas.db import Base, SessionLocal, engine, init_db
 from fitmas.decision import Command
-from fitmas.legacy.conversation_command_bus import ConversationCommandBus
+from fitmas.decision.command_application import RuntimeCommandBus
 from fitmas.time_context import DAY_KEYS, day_label_fr
 
 
-class ConversationCommandBusTest(unittest.TestCase):
+class RuntimeCommandBusTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
         init_db()
@@ -33,7 +33,7 @@ class ConversationCommandBusTest(unittest.TestCase):
         self.db.close()
 
     def test_applies_memory_command_and_returns_event_backed_result(self) -> None:
-        bus = ConversationCommandBus(db=self.db, user=self.user, source="coach_decision")
+        bus = RuntimeCommandBus(db=self.db, user=self.user, source="coach_decision")
         command = Command(
             id="memory:0:record_availability",
             domain="memory",
@@ -60,7 +60,7 @@ class ConversationCommandBusTest(unittest.TestCase):
 
     def test_applies_execution_command_and_returns_updated_session(self) -> None:
         session = self._scheduled_session(days_offset=-1, sport_type="strength", title="Renfo")
-        bus = ConversationCommandBus(db=self.db, user=self.user, source="coach_decision")
+        bus = RuntimeCommandBus(db=self.db, user=self.user, source="coach_decision")
         command = Command(
             id="execution:0:record_execution_update",
             domain="execution",

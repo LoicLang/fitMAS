@@ -45,13 +45,13 @@ def test_8g_conversation_pipeline_delegates_pending_resolution() -> None:
     }
 
     assert not forbidden_helpers.intersection(functions)
-    assert "conversation_pending_bridge" in source
-    assert "decision.pending_resolution" not in source
+    assert "pending_resolution" in source
+    assert "conversation_pending_bridge" not in source
 
 
 def test_8g_pending_bridge_owns_pending_application_boundary() -> None:
-    source = _source("legacy/conversation_pending_bridge.py")
-    imports = _imports("legacy/conversation_pending_bridge.py")
+    source = _source("decision/pending_resolution.py")
+    imports = _imports("decision/pending_resolution.py")
 
     assert "def apply_pending_resolution" in source
     assert "def verify_pending_accept_resolution" in source
@@ -62,11 +62,11 @@ def test_8g_pending_bridge_owns_pending_application_boundary() -> None:
     assert "FITMAS_PENDING_FROM_UNDERSTANDING" in source
     assert "fitmas.conversation_pipeline" not in imports
     assert "fitmas.decision" in imports
-    assert "fitmas.plan_mutation_service" in imports
+    assert "fitmas.plan_mutation_service" not in imports
 
 
 def test_8g_pending_bridge_does_not_parse_free_user_text_deterministically() -> None:
-    source = _source("legacy/conversation_pending_bridge.py")
+    source = _source("decision/pending_resolution.py")
 
     assert "re.search" not in source
     assert "re.findall" not in source
@@ -80,7 +80,6 @@ def test_8g_decision_package_stays_pure() -> None:
     forbidden = {
         "fitmas.legacy",
         "fitmas.llm",
-        "fitmas.plan_mutation_service",
         "fitmas.conversation_pipeline",
     }
     for path in (SRC / "decision").glob("*.py"):

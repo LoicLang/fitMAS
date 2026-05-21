@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from types import SimpleNamespace
 
-from fitmas.legacy import conversation_activity_highlight_bridge as bridge
+from fitmas.decision import activity_highlight as bridge
 
 
 def test_activity_highlight_bridge_composes_duration_highlight_without_legacy() -> None:

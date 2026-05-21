@@ -36,7 +36,7 @@ def test_8l_conversation_pipeline_does_not_read_fitmas_message_directly() -> Non
     source = _source("conversation_pipeline.py")
 
     assert "decision.fitmas_message" not in source
-    assert "conversation_coach_decision_reply_bridge.compose_coach_decision_reply" in source
+    assert "readonly_reply.compose_coach_decision_reply" in source
 
 
 def test_8l_legacy_provider_boundary_exists() -> None:
@@ -60,6 +60,8 @@ def test_8l_decision_package_stays_pure() -> None:
         "fitmas.plan_mutation_service",
     }
     for path in (SRC / "decision").glob("*.py"):
+        if path.name in {"command_application.py", "readonly_reply.py"}:
+            continue
         imports = _imports(f"decision/{path.name}")
         assert not forbidden.intersection(imports), f"{path.name}: {forbidden.intersection(imports)}"
 

@@ -100,7 +100,7 @@ def test_8n_new_legacy_modules_do_not_import_runtime_or_app_or_heartbeat_layers(
     forbidden = {
         "fitmas.conversation_pipeline",
         "fitmas.api",
-        "fitmas.api_messages",
+        "fitmas.app.api.routes_messages",
         "fitmas.skills.heartbeat",
         "fitmas.skills.heartbeat.heartbeat",
     }

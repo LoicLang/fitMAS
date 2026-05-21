@@ -99,8 +99,8 @@ def test_tools_routing_has_no_user_text_classifier() -> None:
         assert symbol not in source
 
 
-def test_api_messages_runtime_dependencies_do_not_include_user_indication_prestep() -> None:
-    source = _source("api_messages.py")
+def test_message_route_runtime_dependencies_do_not_include_user_indication_prestep() -> None:
+    source = _source("app/api/routes_messages.py")
 
     forbidden = (
         "from fitmas.user_indications",

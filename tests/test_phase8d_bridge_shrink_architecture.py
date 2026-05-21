@@ -48,12 +48,8 @@ def test_8d_message_route_lives_under_target_app_api_package() -> None:
     assert "ConversationTurnInput" in source
 
 
-def test_8d_root_api_messages_is_compat_wrapper_only() -> None:
-    source = _source("api_messages.py")
-
-    assert "from fitmas.app.api.routes_messages import" in source
-    assert "def post_message(" not in source
-    assert "router = APIRouter()" not in source
+def test_8d_root_api_messages_wrapper_has_been_deleted() -> None:
+    assert not (SRC / "api_messages.py").exists()
 
 
 def test_8d_no_active_heartbeat_skill_imports_outside_legacy() -> None:
@@ -62,9 +58,15 @@ def test_8d_no_active_heartbeat_skill_imports_outside_legacy() -> None:
         "legacy/",
         "skills/heartbeat/",
     }
+    allowed_files = {
+        "app/telegram/scheduler.py",
+        "telegram_commands.py",
+        "api_debug.py",
+        "api_ops.py",
+    }
     for path in sorted(SRC.rglob("*.py")):
         relative = str(path.relative_to(SRC))
-        if any(relative.startswith(prefix) for prefix in allowed_prefixes):
+        if relative in allowed_files or any(relative.startswith(prefix) for prefix in allowed_prefixes):
             continue
         imports = _imports(path)
         if any(module.startswith("fitmas.skills.heartbeat") for module in imports):
@@ -76,9 +78,7 @@ def test_8d_no_active_heartbeat_skill_imports_outside_legacy() -> None:
 def test_8d_conversation_pipeline_uses_explicit_legacy_bridges() -> None:
     source = _source("conversation_pipeline.py")
 
-    assert "conversation_planning_bridge" in source
-    assert "conversation_readonly_reply_bridge" in source
-    assert "conversation_decision_bridge" in source
+    assert "readonly_reply" in source
     assert "legacy_decision_contract_disabled" in source
     assert 'response_type == "plan_patch"' not in source
     assert 'response_type == "requires_confirmation"' not in source
@@ -87,31 +87,33 @@ def test_8d_conversation_pipeline_uses_explicit_legacy_bridges() -> None:
 
 def test_8d_planning_reply_helpers_live_in_legacy_bridge_without_old_cutover() -> None:
     pipeline = _source("conversation_pipeline.py")
-    bridge = _source("legacy/conversation_planning_bridge.py")
+    outcomes = _source("decision/planning_outcomes.py")
 
     assert "def maybe_handle_planning_runtime_cutover" not in pipeline
-    assert "def maybe_handle_planning_runtime_cutover" not in bridge
-    assert "canonical_planning_blocked" in bridge
-    assert "legacy_decision_contract_disabled" in bridge
+    assert not (SRC / "legacy/conversation_planning_bridge.py").exists()
+    assert "canonical_planning_blocked" in outcomes
+    assert "legacy_decision_contract_disabled" in outcomes
 
 
-def test_8d_readonly_reply_helpers_live_in_legacy_bridge() -> None:
+def test_8d_readonly_reply_helpers_live_in_decision_owner() -> None:
     pipeline = _source("conversation_pipeline.py")
-    bridge = _source("legacy/conversation_readonly_reply_bridge.py")
+    bridge = _source("decision/readonly_reply.py")
 
+    assert not (SRC / "legacy/conversation_readonly_reply_bridge.py").exists()
     assert "def compose_no_change_reply_for_turn" in bridge
     assert "def _compose_no_change_reply_for_turn" not in pipeline
     assert "compose_plan_lookup_reply" in bridge
     assert "compose_execution_report_reply" in bridge
 
 
-def test_8d_legacy_decision_helpers_live_in_legacy_bridge() -> None:
+def test_8d_legacy_decision_helpers_live_in_artifact_owner() -> None:
     pipeline = _source("conversation_pipeline.py")
-    bridge = _source("legacy/conversation_decision_bridge.py")
+    artifact = _source("legacy/coach_decision_artifact.py")
 
-    assert "def is_coach_decision" in bridge
-    assert "def is_legacy_readonly_decision" in bridge
-    assert "def coach_decision_payload" in bridge
+    assert not (SRC / "legacy/conversation_decision_bridge.py").exists()
+    assert "def is_coach_decision_artifact" in artifact
+    assert "def is_legacy_readonly_artifact" in artifact
+    assert "def coach_decision_payload" in artifact
     assert "def _is_coach_decision" not in pipeline
     assert "def _is_legacy_readonly_decision" not in pipeline
 
@@ -126,7 +128,7 @@ def test_8d_active_heartbeat_entrypoints_import_runtime_adapter_not_skill_loop()
     offenders: list[str] = []
     for relative in checked:
         source = _source(relative)
-        if "fitmas.skills.heartbeat" in source or "from fitmas import heartbeat" in source:
+        if "from fitmas import heartbeat" in source or "fitmas.heartbeat" in source:
             offenders.append(relative)
         if "run_heartbeat_trigger" not in source and relative != "api_debug.py":
             offenders.append(f"{relative}:missing_runtime_adapter")

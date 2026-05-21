@@ -6,8 +6,8 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from fitmas import repository as repo, schema as s, strava
+from fitmas.app.api.read_models import RuntimeDay, RuntimeWeek
 from fitmas.db import get_db
-from fitmas.legacy.weekly_plan_compat import RuntimeDay, RuntimeWeek
 from fitmas.models import (
     Activity,
     ChangeNote,

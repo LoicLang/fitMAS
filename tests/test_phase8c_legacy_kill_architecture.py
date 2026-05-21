@@ -40,19 +40,10 @@ def test_8c1_conversation_has_no_active_mutationdecision_planning_routes() -> No
     assert sorted(token for token in forbidden if token in source) == []
 
 
-def test_8c2_only_legacy_modules_import_final_reply() -> None:
+def test_8c2_no_source_imports_deleted_root_final_reply() -> None:
     offenders: list[str] = []
-    allowed = {
-        SRC / "final_reply.py",
-        SRC / "legacy" / "final_reply_backend.py",
-        SRC / "legacy" / "conversation_reply_adapter.py",
-        SRC / "skills" / "heartbeat" / "reply_context.py",
-        SRC / "skills" / "heartbeat" / "heartbeat.py",
-    }
 
     for path in sorted(SRC.rglob("*.py")):
-        if path in allowed:
-            continue
         imports = _imports(path)
         imports_final_reply = "fitmas.final_reply" in imports
         if imports_final_reply:

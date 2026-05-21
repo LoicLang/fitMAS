@@ -5,7 +5,8 @@ import tempfile
 
 os.environ.setdefault("FITMAS_DB_PATH", tempfile.mktemp(prefix="fitmas-plan-actions-", suffix=".db"))
 
-from fitmas import plan_actions, repository as repo, schema as s
+from fitmas import repository as repo, schema as s
+from fitmas.domain.planning import session_actions as plan_actions
 from fitmas.db import Base, SessionLocal, engine, init_db
 from fitmas.time_context import DAY_KEYS, day_label_fr, get_local_now
 

@@ -1,15 +1,11 @@
 from __future__ import annotations
 
-from fitmas.final_reply import (
+from fitmas.llm.reply_backend import (
     BlockedEvent,
     FinalReplyContext,
-    HeartbeatReplyContext,
-    HeartbeatReplyFact,
     build_post_event_reply_verifier_prompt,
-    build_heartbeat_reply_prompt,
     build_final_reply_prompt,
     close_turn_outage_fallback_reply,
-    compose_heartbeat_reply,
     compose_final_reply,
     compose_close_turn_reply,
     compose_execution_report_reply,
@@ -24,6 +20,12 @@ from fitmas.final_reply import (
     verify_post_event_reply,
 )
 from fitmas.plan_patch_adaptation_policy import AdaptationPolicyDecision
+from fitmas.skills.heartbeat.reply_composer import (
+    HeartbeatReplyContext,
+    HeartbeatReplyFact,
+    build_heartbeat_reply_prompt,
+    compose_heartbeat_reply,
+)
 
 
 def _blocked_context() -> FinalReplyContext:

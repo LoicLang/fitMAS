@@ -5,8 +5,8 @@ import json
 import os
 from typing import Any
 
-from fitmas import llm_gateway as gw
-from fitmas.llm_gateway import generate_heartbeat_text_with_debug
+import fitmas.llm.gateway as gw
+from fitmas.llm.gateway import generate_heartbeat_text_with_debug
 from fitmas.tools.contract import ToolCall, ToolContext
 from fitmas.tools.registry import list_tools_for_pipeline
 from fitmas.tools.runtime import ToolExecution, count_budgeted_tool_executions, execute_tool_calls

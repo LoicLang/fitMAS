@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 
-def test_api_messages_exports_target_router() -> None:
-    import fitmas.api_messages as legacy_module
-    from fitmas.app.api import routes_messages
+from pathlib import Path
 
-    assert legacy_module.router is routes_messages.router
-    assert legacy_module.post_message is routes_messages.post_message
+
+ROOT = Path(__file__).resolve().parents[1]
+
+
+def test_root_api_messages_wrapper_is_deleted() -> None:
+    assert not (ROOT / "backend/src/fitmas/api_messages.py").exists()
 
 
 def test_routes_messages_keeps_post_endpoint_registered() -> None:

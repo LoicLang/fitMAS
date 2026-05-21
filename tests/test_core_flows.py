@@ -14,7 +14,7 @@ os.environ.setdefault("FITMAS_DB_PATH", tempfile.mktemp(prefix="fitmas-tests-", 
 
 from fastapi.testclient import TestClient
 
-import fitmas.api_messages as api_messages
+from fitmas.app.api import routes_messages as api_messages
 import fitmas.calibration_needs as calibration_needs
 import fitmas.conversation_pipeline as conversation_pipeline
 import fitmas.llm.decision_legacy as llm
@@ -28,7 +28,7 @@ from fitmas.conversation_contract import (
 )
 from fitmas.conversation_turn_planner import ConversationTurnPlan
 from fitmas.db import Base, SessionLocal, engine, init_db
-from fitmas.legacy import conversation_pending_bridge
+from fitmas.decision import pending_resolution as conversation_pending_bridge
 from fitmas.legacy.coach_decision_artifact import legacy_decision_artifact_from_raw
 from fitmas.legacy.decision_contracts import (
     AcceptPendingResolution,
@@ -44,7 +44,7 @@ from fitmas.legacy.decision_contracts import (
 from fitmas.models import Extraction
 from fitmas.mutation_permissions import default_confirmation_expiry, serialize_plan_patch_confirmation
 from fitmas.plan_patch import PlanPatch, PlanPatchOperation, PlanPatchOperationValidation, PlanPatchValidation
-from fitmas.plan_actions import move_session
+from fitmas.domain.planning.session_actions import move_session
 from fitmas.training_load import compute_ctl_atl_tsb, estimate_tss
 from fitmas import repository as repo, schema as s
 from fitmas.time_context import DAY_KEYS, day_label_fr, get_local_now
@@ -2685,7 +2685,8 @@ class FitMASCoreFlowsTest(unittest.TestCase):
 
     def test_canonical_planning_provider_preempts_legacy_decide(self) -> None:
         from fitmas.decision import CoachUnderstanding, RequestedPlanChange
-        from fitmas.legacy import conversation_canonical_planning_bridge, conversation_understanding_bridge
+        from fitmas.decision import planning_runtime
+        from fitmas.legacy import conversation_understanding_bridge
 
         _, session = self._create_plan_for_today()
         target_date = (session.scheduled_date.date() + timedelta(days=2)).isoformat()
@@ -2693,7 +2694,7 @@ class FitMASCoreFlowsTest(unittest.TestCase):
         original_decide = api_messages.decide
         original_extract_facts = api_messages.extract_facts
         original_understanding = conversation_understanding_bridge.run_canonical_understanding_shadow
-        original_canonical_planning = conversation_canonical_planning_bridge.handle_canonical_planning
+        original_canonical_planning = planning_runtime.handle_canonical_planning
         old_flag = os.environ.get("FITMAS_CANONICAL_PLANNING_PROVIDER")
         try:
             os.environ["FITMAS_CANONICAL_PLANNING_PROVIDER"] = "1"
@@ -2745,7 +2746,7 @@ class FitMASCoreFlowsTest(unittest.TestCase):
                     pending_confirmation=False,
                 )
 
-            conversation_canonical_planning_bridge.handle_canonical_planning = fake_canonical_planning
+            planning_runtime.handle_canonical_planning = fake_canonical_planning
 
             result = self.client.post("/api/v0/messages", json={"text": "Deplace la seance a vendredi"}).json()
         finally:
@@ -2753,7 +2754,7 @@ class FitMASCoreFlowsTest(unittest.TestCase):
             api_messages.decide = original_decide
             api_messages.extract_facts = original_extract_facts
             conversation_understanding_bridge.run_canonical_understanding_shadow = original_understanding
-            conversation_canonical_planning_bridge.handle_canonical_planning = original_canonical_planning
+            planning_runtime.handle_canonical_planning = original_canonical_planning
             if old_flag is None:
                 os.environ.pop("FITMAS_CANONICAL_PLANNING_PROVIDER", None)
             else:
@@ -2768,18 +2769,19 @@ class FitMASCoreFlowsTest(unittest.TestCase):
 
     def test_legacy_provider_gate_blocks_canonical_planning_fallback_trace(self) -> None:
         from fitmas.decision import CoachUnderstanding
-        from fitmas.legacy import conversation_canonical_planning_bridge, conversation_understanding_bridge
+        from fitmas.decision import planning_runtime
+        from fitmas.legacy import conversation_understanding_bridge
 
         self._create_plan_for_today()
         original_plan_turn = api_messages.plan_conversation_turn
         original_decide = api_messages.decide
         original_extract_facts = api_messages.extract_facts
         original_understanding = conversation_understanding_bridge.run_canonical_understanding_shadow
-        original_should_use = conversation_canonical_planning_bridge.should_use_canonical_planning_without_legacy
+        original_should_use = planning_runtime.should_use_canonical_planning_without_legacy
         original_should_handle_unsupported = (
-            conversation_canonical_planning_bridge.should_handle_unsupported_canonical_planning_without_legacy
+            planning_runtime.should_handle_unsupported_canonical_planning_without_legacy
         )
-        original_trace_not_used = conversation_canonical_planning_bridge.trace_canonical_planning_not_used
+        original_trace_not_used = planning_runtime.trace_canonical_planning_not_used
         old_flag = os.environ.get("FITMAS_CANONICAL_PLANNING_PROVIDER")
         try:
             os.environ["FITMAS_CANONICAL_PLANNING_PROVIDER"] = "1"
@@ -2808,10 +2810,10 @@ class FitMASCoreFlowsTest(unittest.TestCase):
                     clarification_need=None,
                 )
             )
-            conversation_canonical_planning_bridge.should_use_canonical_planning_without_legacy = (
+            planning_runtime.should_use_canonical_planning_without_legacy = (
                 lambda **kwargs: False
             )
-            conversation_canonical_planning_bridge.should_handle_unsupported_canonical_planning_without_legacy = (
+            planning_runtime.should_handle_unsupported_canonical_planning_without_legacy = (
                 lambda **kwargs: False
             )
 
@@ -2822,7 +2824,7 @@ class FitMASCoreFlowsTest(unittest.TestCase):
                     "deny_legacy_provider": True,
                 }
 
-            conversation_canonical_planning_bridge.trace_canonical_planning_not_used = fake_trace_not_used
+            planning_runtime.trace_canonical_planning_not_used = fake_trace_not_used
 
             result = self.client.post("/api/v0/messages", json={"text": "Change la seance"}).json()
         finally:
@@ -2830,11 +2832,11 @@ class FitMASCoreFlowsTest(unittest.TestCase):
             api_messages.decide = original_decide
             api_messages.extract_facts = original_extract_facts
             conversation_understanding_bridge.run_canonical_understanding_shadow = original_understanding
-            conversation_canonical_planning_bridge.should_use_canonical_planning_without_legacy = original_should_use
-            conversation_canonical_planning_bridge.should_handle_unsupported_canonical_planning_without_legacy = (
+            planning_runtime.should_use_canonical_planning_without_legacy = original_should_use
+            planning_runtime.should_handle_unsupported_canonical_planning_without_legacy = (
                 original_should_handle_unsupported
             )
-            conversation_canonical_planning_bridge.trace_canonical_planning_not_used = original_trace_not_used
+            planning_runtime.trace_canonical_planning_not_used = original_trace_not_used
             if old_flag is None:
                 os.environ.pop("FITMAS_CANONICAL_PLANNING_PROVIDER", None)
             else:
@@ -3057,7 +3059,10 @@ class FitMASCoreFlowsTest(unittest.TestCase):
         refreshed = repo.get_scheduled_session(self.db, self.user.id, session.id)
         active_pending = repo.get_active_pending_mutation_confirmation(self.db, self.user.id)
 
-        self.assertEqual(result["assistant_message"]["text"], "C'est cale vendredi.")
+        self.assertEqual(
+            result["assistant_message"]["text"],
+            "J'ai deplace Tempo demain du 2026-05-22 (vendredi) au 2099-05-09 (samedi).",
+        )
         self.assertEqual(refreshed.scheduled_date.date().isoformat(), "2099-05-09")
         self.assertEqual(refreshed.duration_min, 50)
         self.assertIsNone(active_pending)
@@ -3270,7 +3275,10 @@ class FitMASCoreFlowsTest(unittest.TestCase):
             conversation_pipeline.final_reply.compose_final_reply = original_compose
             conversation_pipeline.final_reply.verify_post_event_reply = original_verify
 
-        self.assertEqual(reply, "Lundi: Recuperation mobilite. 30 min.")
+        self.assertEqual(
+            reply,
+            "J'ai deplace Recuperation mobilite du 2026-05-22 (vendredi) au 2026-05-18 (lundi).",
+        )
 
     def test_conversation_turn_records_pending_confirmation(self) -> None:
         _, session = self._create_plan_for_today()

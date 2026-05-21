@@ -3,12 +3,12 @@ from __future__ import annotations
 import asyncio
 
 from fitmas.coach_messages import CoachDraft
-from fitmas.legacy.heartbeat_runtime_adapter import HeartbeatRuntimeResult, run_heartbeat_trigger
+from fitmas.skills.heartbeat.runtime_adapter import HeartbeatRuntimeResult, run_heartbeat_trigger
 
 
 def test_heartbeat_draft_factory_routes_through_runtime_by_default(monkeypatch) -> None:
     from fitmas.app.telegram import scheduler
-    import fitmas.legacy.heartbeat_runtime_adapter as adapter
+    import fitmas.skills.heartbeat.runtime_adapter as adapter
 
     draft = CoachDraft(text="Legacy draft", proactive=True)
     calls: list[dict[str, object]] = []
@@ -28,7 +28,7 @@ def test_heartbeat_draft_factory_routes_through_runtime_by_default(monkeypatch) 
 
 def test_heartbeat_draft_factory_routes_through_runtime_when_cutover_on(monkeypatch) -> None:
     from fitmas.app.telegram import scheduler
-    import fitmas.legacy.heartbeat_runtime_adapter as adapter
+    import fitmas.skills.heartbeat.runtime_adapter as adapter
 
     draft = CoachDraft(text="Runtime draft", proactive=True)
     calls: list[dict[str, object]] = []
@@ -56,7 +56,7 @@ def test_heartbeat_draft_factory_routes_through_runtime_when_cutover_on(monkeypa
 
 def test_heartbeat_draft_factory_enforced_verifier_can_suppress_draft(monkeypatch) -> None:
     from fitmas.app.telegram import scheduler
-    import fitmas.legacy.heartbeat_runtime_adapter as adapter
+    import fitmas.skills.heartbeat.runtime_adapter as adapter
 
     draft = CoachDraft(text="Runtime draft", proactive=True)
 

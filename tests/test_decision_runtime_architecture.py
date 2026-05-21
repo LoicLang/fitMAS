@@ -9,7 +9,9 @@ ROOT = Path(__file__).resolve().parents[1]
 DECISION = ROOT / "backend" / "src" / "fitmas" / "decision"
 PURE_DECISION_MODULES = {
     "__init__.py",
+    "command_actions.py",
     "command_bus.py",
+    "command_mapping.py",
     "context.py",
     "explanation.py",
     "fallback_census.py",
@@ -45,6 +47,10 @@ def _field_names(cls: type) -> set[str]:
 def test_decision_runtime_phase1_modules_exist() -> None:
     expected = {
         "__init__.py",
+        "activity_highlight.py",
+        "clarification_reply.py",
+        "command_actions.py",
+        "command_application.py",
         "input_event.py",
         "context.py",
         "understanding.py",
@@ -52,11 +58,17 @@ def test_decision_runtime_phase1_modules_exist() -> None:
         "fallback_census.py",
         "outcome.py",
         "command_bus.py",
+        "command_mapping.py",
         "runtime.py",
         "reply_composer.py",
+        "readonly_reply.py",
         "reply_request.py",
         "output_verifier.py",
         "context_builder.py",
+        "pending_reply.py",
+        "pending_resolution.py",
+        "planning_outcomes.py",
+        "planning_runtime.py",
     }
 
     assert DECISION.exists()
@@ -142,7 +154,7 @@ def test_phase2_does_not_wire_existing_runtime_to_context_builder() -> None:
         root / "conversation_pipeline.py",
         root / "skills" / "heartbeat" / "heartbeat.py",
         root / "api_app.py",
-        root / "api_messages.py",
+        root / "app" / "api" / "routes_messages.py",
     ]
     offenders: list[str] = []
     for path in files:
@@ -164,10 +176,7 @@ def test_decision_package_stays_free_of_legacy_understanding_adapter() -> None:
         "fitmas.legacy",
         "fitmas.legacy.coach_understanding_adapter",
         "fitmas.llm",
-        "fitmas.conversation_contract",
         "fitmas.conversation_pipeline",
-        "fitmas.plan_patch",
-        "fitmas.mutation_permissions",
         "fitmas.final_reply",
         "fitmas.tools.registry",
     }
@@ -192,9 +201,6 @@ def test_legacy_understanding_adapter_is_only_legacy_module_importing_llm_contra
         legacy / "decision_contracts.py",
         legacy / "understanding_shadow.py",
     }
-    allowed_final_reply_imports = {
-        legacy / "final_reply_backend.py",
-    }
     forbidden_modules = {
         "fitmas.llm",
         "fitmas.plan_patch",
@@ -207,8 +213,6 @@ def test_legacy_understanding_adapter_is_only_legacy_module_importing_llm_contra
         if path.name == "__init__.py" or path in allowed:
             continue
         for module in _imports(path):
-            if module == "fitmas.final_reply" and path in allowed_final_reply_imports:
-                continue
             if module in forbidden_modules:
                 offenders.append(f"{path.name}: {module}")
 

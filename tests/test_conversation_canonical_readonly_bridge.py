@@ -3,7 +3,7 @@ from __future__ import annotations
 from types import SimpleNamespace
 
 from fitmas.decision import CoachUnderstanding, PendingResolution, RequestedPlanChange, UserSignal
-from fitmas.legacy import conversation_canonical_readonly_bridge as bridge
+from fitmas.decision import readonly_reply as bridge
 
 
 def _understanding(

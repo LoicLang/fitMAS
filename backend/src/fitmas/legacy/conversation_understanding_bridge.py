@@ -4,8 +4,8 @@ import logging
 import os
 
 from fitmas.decision import CoachUnderstanding
+from fitmas.decision.command_mapping import commands_from_understanding
 from fitmas.llm.understanding_service import LLMUnderstandingService, UnderstandingRequest
-from fitmas.legacy.coach_command_adapter import commands_from_understanding
 from fitmas.legacy.coach_decision_artifact import (
     LegacyCoachDecisionArtifact,
     legacy_decision_artifact_payload,

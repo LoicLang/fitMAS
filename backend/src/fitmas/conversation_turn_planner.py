@@ -6,7 +6,7 @@ from typing import Any, Sequence
 
 from pydantic import BaseModel, Field, ValidationError
 
-from fitmas import llm_gateway as gw
+import fitmas.llm.gateway as gw
 
 logger = logging.getLogger(__name__)
 

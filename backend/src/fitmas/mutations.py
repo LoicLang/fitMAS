@@ -6,7 +6,7 @@ from typing import Any, Sequence
 
 from sqlalchemy.orm import Session
 
-from fitmas import plan_actions
+from fitmas.domain.planning import session_actions as plan_actions
 from fitmas.legacy.decision_contracts import MutationDecision
 from fitmas.mutation_hooks import (
     PostMutationResult,

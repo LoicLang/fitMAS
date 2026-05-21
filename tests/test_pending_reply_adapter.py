@@ -3,7 +3,7 @@ from __future__ import annotations
 from types import SimpleNamespace
 
 from fitmas.decision.reply_request import ReplyResult
-from fitmas.legacy.pending_reply_adapter import compose_pending_reply, pending_reply_outcome
+from fitmas.decision.pending_reply import compose_pending_reply, pending_reply_outcome
 
 
 class SpyComposer:

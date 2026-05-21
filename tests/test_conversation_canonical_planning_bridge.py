@@ -3,9 +3,9 @@ from __future__ import annotations
 from types import SimpleNamespace
 
 from fitmas.decision import CoachUnderstanding, PendingResolution, RequestedPlanChange, UserSignal
+from fitmas.decision import planning_runtime as bridge
+from fitmas.decision.planning_runtime import PlanningRuntimeAdapterAttempt
 from fitmas.domain.planning.models import PlanningDecisionResult
-from fitmas.legacy import conversation_canonical_planning_bridge as bridge
-from fitmas.legacy.planning_runtime_adapter import PlanningRuntimeAdapterAttempt
 
 
 def _requested_change(

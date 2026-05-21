@@ -20,15 +20,12 @@ def _imports(path: Path) -> set[str]:
     return modules
 
 
-def test_app_telegram_scheduler_exists_with_root_compat_wrapper() -> None:
+def test_app_telegram_scheduler_exists_without_root_compat_wrapper() -> None:
     target = SRC / "app" / "telegram" / "scheduler.py"
     wrapper = SRC / "telegram_scheduler.py"
 
     assert target.exists()
-    source = wrapper.read_text(encoding="utf-8")
-    assert "from fitmas.app.telegram.scheduler import *" in source
-    assert "sys.modules[__name__] = _impl" in source
-    assert len([line for line in source.splitlines() if line.strip() and not line.startswith("#")]) <= 5
+    assert not wrapper.exists()
 
 
 def test_decision_package_imports_no_heartbeat_or_telegram_runtime() -> None:
@@ -50,7 +47,7 @@ def test_decision_package_imports_no_heartbeat_or_telegram_runtime() -> None:
 
 
 def test_heartbeat_runtime_adapter_has_no_delivery_or_persistence_side_effects() -> None:
-    source = (SRC / "legacy" / "heartbeat_runtime_adapter.py").read_text(encoding="utf-8")
+    source = (SRC / "skills" / "heartbeat" / "runtime_adapter.py").read_text(encoding="utf-8")
     forbidden = ("send_message", "persist_draft", "persist_draft_for_owner", "SessionLocal", ".commit(", ".flush(")
 
     assert [token for token in forbidden if token in source] == []
@@ -58,11 +55,6 @@ def test_heartbeat_runtime_adapter_has_no_delivery_or_persistence_side_effects()
 
 def test_heartbeat_runtime_bridge_imports_are_explicitly_bounded() -> None:
     allowed = {
-        SRC / "heartbeat.py",
-        SRC / "heartbeat_evaluation.py",
-        SRC / "heartbeat_roles.py",
-        SRC / "legacy" / "heartbeat_skill_bridge.py",
-        SRC / "legacy" / "heartbeat_runtime_adapter.py",
         SRC / "app" / "telegram" / "scheduler.py",
         SRC / "telegram_commands.py",
         SRC / "api_debug.py",
@@ -74,7 +66,7 @@ def test_heartbeat_runtime_bridge_imports_are_explicitly_bounded() -> None:
         if "/skills/heartbeat/" in str(path):
             continue
         modules = _imports(path)
-        if "fitmas.heartbeat" not in modules and "fitmas.skills.heartbeat" not in modules:
+        if not any(module == "fitmas.skills.heartbeat" or module.startswith("fitmas.skills.heartbeat.") for module in modules):
             continue
         if path not in allowed:
             offenders.append(str(path.relative_to(SRC)))

@@ -1,0 +1,6 @@
+#!/usr/bin/env python3
+from decision_runtime_conversation_bridge_census import main
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

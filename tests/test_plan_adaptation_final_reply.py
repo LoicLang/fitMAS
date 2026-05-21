@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from fitmas.final_reply import compose_plan_adaptation_reply
+from fitmas.llm.reply_backend import compose_plan_adaptation_reply
 from fitmas.plan_patch_adaptation_policy import AdaptationPolicyDecision
 
 

@@ -5,12 +5,12 @@ from datetime import datetime, timedelta
 
 import pytz
 
-from fitmas.telegram_scheduler import _daily_target_time, _morning_briefing_window_status, _within_daily_send_window
+from fitmas.app.telegram.scheduler import _daily_target_time, _morning_briefing_window_status, _within_daily_send_window
 
 
 class TelegramSchedulerTest(unittest.TestCase):
     def test_root_telegram_scheduler_reexports_target_scheduler_module(self) -> None:
-        from fitmas import telegram_scheduler
+        from fitmas.app.telegram import scheduler as telegram_scheduler
         from fitmas.app.telegram import scheduler
 
         self.assertIs(telegram_scheduler.register_jobs, scheduler.register_jobs)

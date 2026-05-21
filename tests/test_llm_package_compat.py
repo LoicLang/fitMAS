@@ -18,9 +18,8 @@ def test_legacy_contracts_live_in_explicit_legacy_module() -> None:
     assert callable(parse_coach_decision_payload)
 
 
-def test_llm_gateway_wrapper_reexports_new_gateway_module() -> None:
-    from fitmas import llm_gateway
-    from fitmas.llm import gateway
+def test_llm_gateway_root_wrapper_is_deleted() -> None:
+    from fitmas.llm.gateway import request_json, request_text
 
-    assert llm_gateway.request_json is gateway.request_json
-    assert llm_gateway.request_text is gateway.request_text
+    assert callable(request_json)
+    assert callable(request_text)

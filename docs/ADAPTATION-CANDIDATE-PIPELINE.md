@@ -1,11 +1,10 @@
 ---
-summary: plan du pipeline d adaptation sportive par candidats PlanPatch bornes LLM puis validation moteur
+summary: contrat court du pipeline planning par candidats
 read_when:
-  - permettre au LLM de proposer une adaptation de seance
-  - modifier PlanPatch ou PlanMutationService
-  - refactorer week_coherence vers facts, findings et score
-  - brancher un candidate generator LLM
-  - ajouter commit / pending / pending_choice / block pour une adaptation
+  - modifier domain/planning/*
+  - ajouter une adaptation planning
+  - supprimer un fallback planning legacy
+  - toucher a PlanPatch, candidates, evaluator ou policy
 ---
 
 # Adaptation Candidate Pipeline
@@ -13,406 +12,91 @@ read_when:
 ## Doctrine
 
 ```text
-Le LLM explore les compromis.
+Le LLM comprend la demande.
+Le backend construit les options.
 Le moteur mesure les consequences.
 La policy prend la responsabilite.
 Le composer raconte la verite.
 ```
 
 FitMAS ne commit jamais une adaptation parce qu'un LLM l'a formulee.
-Le LLM transforme une demande floue en options structurees. Le moteur simule
-ces options, mesure leurs consequences, bloque l'invalide, score le compromis,
-puis une policy decide `commit`, `pending_confirmation`, `pending_choice` ou
-`block`. Le coach explique uniquement la decision réellement prise.
 
-## Flux Cible
+## Pipeline Cible
 
 ```text
-User message
--> Intent parser
--> Current plan + constraints + WeekFacts
--> LLMPlanPatchCandidateGenerator
--> PlanPatchCandidate[]
--> Patch contract validation
--> Simulation
--> Plan validation
--> WeekFacts after
--> Score after + score delta
--> Findings
--> DecisionPolicy
--> commit / pending / pending_choice / block
--> PlanAdaptationTrace
--> FinalComposer
--> User reply
+RequestedPlanChange
+-> ReferenceResolver
+-> PlanCandidateBuilder
+-> PlanCandidateEvaluator
+-> SportPolicy
+-> PlanningCommandService / PlanMutationService
+-> PlanMutationEvent ou pending/block
+-> DecisionOutcome
+-> ReplyComposer
 ```
 
-## Etat — 10-11 mai 2026
-
-Livre sur `main` :
-
-- `week_coherence`: `WeekFacts`, `CoherenceFinding`, `WeekCoherenceScore` ;
-- `plan_patch_candidates`: `PlanPatchCandidate` + validation de contrat patch-set ;
-- `plan_patch_candidate_generator`: generator LLM borné, mocké en tests ;
-- `plan_patch_candidate_evaluator`: contrat -> flatten -> validation runtime -> facts/score/findings -> `policy_hint`.
-- `plan_patch_adaptation_policy`: selection pure `commit` / `pending_confirmation` / `pending_choice` / `block`
-  sur candidats deja evalues, sans write.
-- `final_reply.compose_plan_adaptation_reply`: composer post-policy qui claim seulement des events commits,
-  traite `pending` comme proposition et `block` comme blocage.
-- `conversation_pipeline`: branche candidate conservative pour `primary_intent=plan_mutation` pur,
-  sans pending actif ni calibration ouverte.
-- `conversation_pipeline`: extension post-`decide()` pour les tours mixtes sante/execution + adaptation :
-  `decide()` produit d'abord les `memory_actions` / `execution_actions`, puis la voie candidate simule
-  et decide l'adaptation a partir des artefacts structures.
-- `pending_choice`: persiste les options comme `plan_patch_choice`; le tour suivant le LLM resout
-  via `pending_resolution.accept_pending.selected_candidate_id`, puis le runtime applique seulement ce candidat.
-- `candidate_ref`: le generator peut maintenant choisir une option backend par reference structuree
-  (`candidate_ref`) au lieu de recopier un `PlanPatch`. L'evaluator resout cette ref vers le patch
-  canonique backend avant validation/simulation.
-- backend reviewer minimal : si le LLM recopie quand meme un patch equivalent a une option backend,
-  l'evaluator remplace le patch copie par le patch canonique backend avant validation.
-- refs backend etendues : `move_session`, `swap_sessions`, `lighten_day`,
-  `replace_session` sont maintenant produits depuis des artefacts structures
-  (`temporal_references` + sessions planifiees).
-- reviewer LLM borne : apres evaluation, un reviewer optionnel peut choisir un `candidate_id`
-  parmi les options deja validees/scorées. Il ne peut pas produire de patch.
-- extension 11 mai : un pending ancien ne bloque plus une nouvelle adaptation
-  apres que le LLM decisionnaire a rendu un legacy `no_change` alors que le
-  turn planner a deja classe le tour en `plan_mutation`. La candidate flow
-  repasse alors en post-`decide()`, supersede l'ancien pending et cree
-  `commit`/`pending`/`block` sur le nouveau sujet.
-
-Frontiere actuelle :
-- le pipeline est en Phase A dogfood, pas encore un moteur de progression
-  Phase B ;
-- les options backend resolvent uniquement des references deja structurees par
-  le LLM ou la DB, jamais le texte libre directement ;
-- le reviewer LLM ameliore l'arbitrage entre options acceptables, mais la
-  policy peut ignorer son choix si le score/risque sort des bornes.
-
-## Frontieres
-
-- Le LLM ne parle pas au user dans la phase candidate.
-- Le LLM ne commit rien.
-- Le LLM ne produit que des candidats dans un DSL borne.
-- Le moteur ne comprend pas le texte libre utilisateur.
-- Le moteur valide, simule, mesure, score et applique.
-- Le composer parle apres decision reelle, jamais avant.
-
-## Phase 0 — Week Coherence Facts
-
-Objectif : sortir les decisions sportives implicites de `week_coherence`.
-
-Avant :
+## Modules Actuels
 
 ```text
-flag -> severity implicite -> friction policy cachee
+backend/src/fitmas/domain/planning/
+  models.py
+  reference_resolver.py
+  reference_tokens.py
+  candidate_builder.py
+  evaluator.py
+  policy.py
+  decision_service.py
+  mutation_service.py
+  patch_summary.py
+  session_actions.py
 ```
 
-Apres :
+Compat encore surveillee :
+
+- `legacy/conversation_canonical_planning_bridge.py`
+- `legacy/conversation_planning_bridge.py`
+- `legacy/planning_runtime_adapter.py`
+- `legacy/planning_outcome_adapter.py`
+- `legacy/plan_patch_reply_adapter.py`
+
+## Verites
+
+- `ScheduledSession` est la verite planning runtime.
+- `Activity` et execution events sont la verite du reel.
+- `PlanPatch` est un langage de changement backend, pas une verite finale.
+- `WeekCoherenceScore` / findings aident la policy, mais ne parlent pas au user.
+
+## Decisions Possibles
+
+| Decision | Sens |
+| --- | --- |
+| commit | mutation appliquee et event committe |
+| pending_confirmation | proposition unique a confirmer |
+| pending_choice | choix entre options bornees |
+| block | rien applique, raison explicite |
+| no_change | aucun changement necessaire |
+
+La reply ne peut claim qu'un commit prouve par event.
+
+## Interdits
+
+- Construire une candidate depuis regex/keyword sur texte utilisateur libre.
+- Laisser le LLM produire le patch final applicable sans validation.
+- Bypasser evaluator/policy pour une lane deja couverte.
+- Creer une pending duplicate pour la meme intention.
+- Faire parler un adapter planning directement au user.
+
+## Prochain Chantier
+
+10E doit reduire planning/pending legacy :
+
+1. mesurer les callers reels ;
+2. extraire l'actif vers `domain/planning/` ou `decision/` ;
+3. supprimer les bridges vides ;
+4. shrinker `conversation_pipeline.py`.
+
+Critere :
 
 ```text
-facts -> findings -> score -> policy explicite
-```
-
-Livrables :
-
-```python
-WeekFacts
-CoherenceFinding
-WeekCoherenceScore
-```
-
-`RECOVERY_AFTER_HARD_LOST` devient un finding + penalty de score. Ce n'est pas
-un hard block et ne force pas seul une confirmation.
-
-Hard blocks reserves aux bornes explicites :
-
-- session deja faite touchee ;
-- cible inexistante ;
-- operation/schema invalide ;
-- disponibilite hard violee ;
-- duree impossible ;
-- douleur/blessure explicitement incompatible ;
-- readiness critique + haute intensite.
-
-## Phase 1 — PlanPatchCandidate
-
-Un candidat est une option proposable, pas applicable.
-
-```python
-@dataclass(frozen=True, slots=True)
-class PlanPatchCandidate:
-    id: str
-    patches: tuple[PlanPatch, ...]
-    rationale: str
-    expected_tradeoff: str
-    confidence: float
-    assumptions: tuple[str, ...]
-    risk_notes: tuple[str, ...]
-    created_from_plan_id: str
-    created_from_plan_version: int
-```
-
-Un candidat peut contenir plusieurs patches lies : move + reduce + mark
-optional. Il ne contient jamais de final reply, event committe ou plan final.
-
-## Phase 2 — Candidate Generator LLM
-
-Le generator est separe du coach conversationnel, meme si le provider est le
-meme.
-
-### Candidate refs backend
-
-Quand le backend peut produire des options candidates depuis des artefacts
-deja structures, il les passe au generator sous forme de `backend_candidates`.
-Le LLM ne recopie pas le `PlanPatch`; il selectionne l'option avec :
-
-```json
-{
-  "candidate_ref": "backend:move_session:42:2026-05-15",
-  "patches": [],
-  "rationale": "Option backend qui correspond a la demande.",
-  "expected_tradeoff": "La simulation backend mesure la recuperation.",
-  "confidence": 0.84,
-  "assumptions": [],
-  "risk_notes": []
-}
-```
-
-Frontiere importante :
-
-- `candidate_ref` est une reference vers un patch backend deja materialise ;
-- le LLM choisit une option, il ne reconstruit pas son JSON ;
-- une candidate ne peut pas melanger `candidate_ref` et `patches` copies ;
-- l'evaluator bloque toute ref inconnue ;
-- si une option ref part en `pending_choice`, le runtime persiste le patch
-  materialise, pas seulement la ref.
-- si le LLM recopie un patch dont les operations correspondent a une option
-  backend, l'evaluator prefere le patch backend canonique. La comparaison se
-  fait sur les operations structurees, jamais sur le texte utilisateur libre.
-
-Sources backend livrees :
-
-- `move_session` depuis `temporal_references` typees `source` + `target` ;
-- `swap_sessions` quand les dates `source` et `target` portent deux vraies seances ;
-- `lighten_day` sur les seances ciblees par une reference temporelle typee ;
-- `replace_session` vers une recuperation active bornee sur les seances ciblees.
-
-Aucune source ne lit deterministiquement le texte utilisateur libre.
-
-### Reviewer LLM borne
-
-Le reviewer intervient apres evaluation moteur :
-
-```text
-EvaluatedPlanPatchCandidate[]
--> reviewer LLM optionnel
--> { preferred_candidate_id, confidence, rationale[] }
--> policy
-```
-
-Contrat :
-
-- il recoit seulement des candidates deja validees/scorées ;
-- il choisit uniquement un `candidate_id` fourni ;
-- il ne produit jamais `PlanPatch`, operations, ni texte utilisateur final ;
-- la policy ignore son choix si la confiance est faible ou si le score degrade
-  trop l'option par rapport au top candidat ;
-- la policy garde la responsabilite finale `commit | pending | choice | block`.
-
-Input :
-
-```text
-user_message
-parsed_user_intent
-current_plan_summary
-current_plan_id/version
-constraints
-WeekFacts
-CoherenceFinding[]
-allowed_operations
-forbidden_operations
-pending_context
-```
-
-Output strict :
-
-```json
-{
-  "candidates": [
-    {
-      "patches": [],
-      "rationale": "...",
-      "expected_tradeoff": "...",
-      "confidence": 0.82,
-      "assumptions": [],
-      "risk_notes": []
-    }
-  ]
-}
-```
-
-Regles :
-
-- produire 0 a 3 candidats ;
-- utiliser uniquement les operations autorisees ;
-- signaler les hypotheses ;
-- produire 0 candidat si l'intention est insuffisante ou dangereuse ;
-- ne jamais claim qu'un changement est fait.
-
-## Phase 3 — Evaluation
-
-Pour chaque candidat :
-
-```text
-validate_patch_contract
--> simulate_patch_set
--> validate_resulting_plan
--> extract_week_facts
--> score_week_coherence
--> generate_findings
--> infer_policy_hint
-```
-
-Contrat :
-
-```python
-@dataclass(frozen=True, slots=True)
-class EvaluatedPlanPatchCandidate:
-    candidate: PlanPatchCandidate
-    patch_validation: ValidationResult
-    simulated_plan: TrainingPlan | None
-    plan_validation: ValidationResult | None
-    facts: WeekFacts | None
-    score: WeekCoherenceScore | None
-    findings: tuple[CoherenceFinding, ...]
-    score_delta: float | None
-    policy_hint: str
-    evaluation_summary: str
-```
-
-`score_delta` est obligatoire : il explique si l'adaptation ameliore ou degrade
-la coherence du plan courant.
-
-## Phase 4 — Decision Policy
-
-Etats produits :
-
-```text
-commit
-pending_confirmation
-pending_choice
-block
-```
-
-Regles de depart :
-
-- tous les candidats bloques -> `block` ;
-- un seul candidat valide, risque bas, score correct -> `commit` ;
-- un seul candidat valide, risque moyen -> `pending_confirmation` ;
-- plusieurs candidats proches -> `pending_choice` ;
-- score fortement degrade mais demande user plausible -> `pending_confirmation` ;
-- douleur/blessure touchee -> `pending_confirmation` ou `block` selon gravite.
-
-`pending` est un etat produit normal, pas un echec.
-
-## Phase 5 — Final Composer
-
-Mapping strict :
-
-```text
-commit -> "j'ai modifie..."
-pending_confirmation -> "je te propose..."
-pending_choice -> "j'ai deux options propres..."
-block -> "je ne le fais pas..."
-```
-
-Tests anti-surclaim obligatoires :
-
-- policy `pending` ne peut pas produire "j'ai deplace" ;
-- policy `block` ne peut pas produire "c'est fait" ;
-- aucun commit event -> aucune phrase de plan modifie ;
-- pas de selected candidate -> pas de rationale inventee.
-
-## Phase 6 — Observabilite
-
-Chaque adaptation garde une trace :
-
-```python
-PlanAdaptationTrace:
-    user_message
-    parsed_user_intent
-    plan_id_before
-    plan_version_before
-    week_facts_before
-    score_before
-    candidates_generated
-    candidates_evaluated
-    candidates_rejected
-    selected_candidate_id
-    final_policy
-    plan_id_after
-    plan_version_after
-    composer_input
-    final_reply_summary
-```
-
-Raisons normalisees :
-
-```text
-rejected_by_patch_contract
-rejected_by_plan_validation
-rejected_by_score
-rejected_by_policy
-requires_user_confirmation
-committed
-```
-
-## Operations Autorisees V1
-
-```text
-move_session
-swap_sessions
-reduce_duration
-reduce_intensity
-reduce_volume
-replace_session_type
-mark_optional
-remove_optional_session
-add_recovery_session
-```
-
-Operations exclues en Phase A :
-
-```text
-add_hard_session
-increase_intensity
-increase_volume
-change_goal
-change_phase
-```
-
-## Tranches Livrees
-
-1. Week coherence splitte en facts, findings et score.
-2. `PlanPatchCandidate` + validation de patch-set.
-3. Generator LLM borne.
-4. Evaluator : contrat -> simulation -> validation -> facts/score/findings.
-5. Policy : `commit`, `pending_confirmation`, `pending_choice`, `block`.
-6. Composer final post-policy.
-7. `candidate_ref` backend pour eviter les JSON PlanPatch fragiles.
-8. Reviewer LLM borne qui choisit seulement un `candidate_id`.
-
-## Dogfood A Rejouer
-
-Scenarios a tester :
-
-```text
-je suis rincé demain
-déplace la séance à vendredi
-j'ai mal au genou
-j'ai raté hier, je peux jeudi
-raccourcis demain à 25 min
-remplace la piscine
-je veux éviter deux jours d'affilée
+Une adaptation planning suit une seule route observable.
 ```

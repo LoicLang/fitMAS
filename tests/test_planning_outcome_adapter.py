@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
+from fitmas.decision.planning_outcomes import planning_decision_to_outcome
 from fitmas.domain.planning.models import PlanningCommandResult, PlanningDecisionResult
-from fitmas.legacy.planning_outcome_adapter import planning_decision_to_outcome
 from fitmas.plan_patch import PlanPatch, PlanPatchOperation
 
 

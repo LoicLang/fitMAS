@@ -13,7 +13,7 @@ def _source(relative: str) -> str:
 
 
 def test_8t_canonical_planning_bridge_exists_and_is_default_on_with_opt_out() -> None:
-    source = _source("legacy/conversation_canonical_planning_bridge.py")
+    source = _source("decision/planning_runtime.py")
 
     assert "def canonical_planning_provider_enabled(" in source
     assert "FITMAS_CANONICAL_PLANNING_PROVIDER" in source
@@ -34,7 +34,7 @@ def test_8t_pipeline_routes_canonical_planning_before_legacy_decide() -> None:
 
 
 def test_8t_planning_adapter_has_direct_understanding_entrypoint() -> None:
-    source = _source("legacy/planning_runtime_adapter.py")
+    source = _source("decision/planning_runtime.py")
 
     assert "def run_planning_runtime_attempt_from_understanding(" in source
     assert "coach_decision_artifact_to_understanding" not in source
@@ -48,7 +48,7 @@ def test_8t_planning_command_service_reuses_matching_active_pending() -> None:
 
 
 def test_8t_planning_outcome_adapter_requires_command_evidence() -> None:
-    source = _source("legacy/planning_outcome_adapter.py")
+    source = _source("decision/planning_outcomes.py")
 
     assert "missing_commit_event" in source
     assert "missing_pending_confirmation" in source

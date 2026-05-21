@@ -189,7 +189,6 @@ def _latest_agent_text(conversation_history: list[dict]) -> str | None:
 
 @router.post("/api/v0/messages", response_model=MessageReply)
 def post_message(payload: IncomingMessage, db: Session = Depends(get_db)) -> MessageReply:
-    import fitmas.api_messages as api_messages
     from fitmas.conversation_pipeline import run_conversation_turn
 
     try:
@@ -201,10 +200,10 @@ def post_message(payload: IncomingMessage, db: Session = Depends(get_db)) -> Mes
             ),
             db=db,
             dependencies=ConversationPipelineDependencies(
-                decide=api_messages.decide,
-                extract_facts=api_messages.extract_facts,
-                check_and_adapt_health_facts=api_messages.check_and_adapt_health_facts,
-                plan_turn=api_messages.plan_conversation_turn,
+                decide=decide,
+                extract_facts=extract_facts,
+                check_and_adapt_health_facts=check_and_adapt_health_facts,
+                plan_turn=plan_conversation_turn,
             ),
         )
     except ConversationUserNotFoundError as exc:

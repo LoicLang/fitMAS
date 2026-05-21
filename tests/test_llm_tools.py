@@ -5,8 +5,8 @@ from unittest.mock import patch
 from types import SimpleNamespace
 
 import fitmas.llm.decision_legacy as llm
-from fitmas import llm_gateway as gw
-from fitmas.tool_contract import ToolContext, ToolResult
+import fitmas.llm.gateway as gw
+from fitmas.tools.contract import ToolContext, ToolResult
 
 
 CANONICAL_CONVERSATION_TOOLS = [

@@ -1204,7 +1204,7 @@ def test_orchestrators_do_not_call_low_level_plan_writers_directly() -> None:
     orchestrators = [
         root / "backend/src/fitmas/api_plan.py",
         root / "backend/src/fitmas/api_activities.py",
-        root / "backend/src/fitmas/api_messages.py",
+        root / "backend/src/fitmas/app/api/routes_messages.py",
         root / "backend/src/fitmas/strava.py",
     ]
     forbidden = (

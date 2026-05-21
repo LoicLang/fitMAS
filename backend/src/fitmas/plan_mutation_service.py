@@ -7,7 +7,8 @@ from typing import Any, Sequence
 
 from sqlalchemy.orm import Session
 
-from fitmas import mutations, plan_actions, repository as repo, schema as s
+from fitmas import mutations, repository as repo, schema as s
+from fitmas.domain.planning import session_actions as plan_actions
 from fitmas.legacy.decision_contracts import MutationDecision
 from fitmas.mutation_hooks import run_pre_mutation_hooks
 from fitmas.plan_patch import (
@@ -400,7 +401,7 @@ def _review_patch_week_coherence(context: WeekCoherenceContext) -> WeekCoherence
 
 
 def _request_week_coherence_json(**kwargs) -> dict[str, Any] | None:
-    from fitmas import llm_gateway as gw
+    import fitmas.llm.gateway as gw
 
     context = kwargs.get("context") or {}
     context_json = json.dumps(context, ensure_ascii=False, default=str)

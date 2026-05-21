@@ -5,9 +5,9 @@ from datetime import datetime
 from types import SimpleNamespace
 from unittest.mock import patch
 
-import fitmas.heartbeat as heartbeat
+import fitmas.skills.heartbeat.heartbeat as heartbeat
 from fitmas.skills.heartbeat import tool_loop
-from fitmas.tool_contract import ToolContext
+from fitmas.tools.contract import ToolContext
 from fitmas.week_coherence import WeekCoherenceFinding, WeekCoherenceReview
 
 

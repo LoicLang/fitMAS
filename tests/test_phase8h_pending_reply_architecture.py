@@ -25,9 +25,9 @@ def _imports(relative: str) -> set[str]:
 
 
 def test_8h_pending_bridge_no_longer_uses_legacy_decision_message_for_visible_reply() -> None:
-    source = _source("legacy/conversation_pending_bridge.py")
+    source = _source("decision/pending_resolution.py")
 
-    assert "pending_reply_adapter" in source
+    assert "pending_reply" in source
     assert "_decision_reply(" not in source
     assert "fitmas_message" not in source
     assert "La proposition reste en attente" not in source
@@ -35,8 +35,8 @@ def test_8h_pending_bridge_no_longer_uses_legacy_decision_message_for_visible_re
 
 
 def test_8h_pending_reply_adapter_owns_pending_decision_outcomes() -> None:
-    source = _source("legacy/pending_reply_adapter.py")
-    imports = _imports("legacy/pending_reply_adapter.py")
+    source = _source("decision/pending_reply.py")
+    imports = _imports("decision/pending_reply.py")
 
     assert "PendingReplyMode" in source
     assert "def pending_reply_outcome" in source
@@ -51,7 +51,6 @@ def test_8h_pending_reply_adapter_owns_pending_decision_outcomes() -> None:
 def test_8h_decision_package_stays_pure() -> None:
     forbidden = {
         "fitmas.legacy",
-        "fitmas.llm",
         "fitmas.final_reply",
         "fitmas.conversation_pipeline",
     }

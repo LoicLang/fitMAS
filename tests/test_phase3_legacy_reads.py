@@ -112,7 +112,7 @@ def test_activity_import_runtime_does_not_load_legacy_week_plan_truth() -> None:
 def test_runtime_truth_modules_do_not_read_or_write_legacy_week_plan() -> None:
     root = Path(__file__).resolve().parents[1]
     files = [
-        root / "backend/src/fitmas/plan_actions.py",
+        root / "backend/src/fitmas/domain/planning/session_actions.py",
         root / "backend/src/fitmas/mutations.py",
         root / "backend/src/fitmas/signals.py",
         root / "backend/src/fitmas/activities.py",
