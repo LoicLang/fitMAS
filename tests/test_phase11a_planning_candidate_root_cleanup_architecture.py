@@ -6,6 +6,13 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 SRC_ROOT = ROOT / "backend" / "src" / "fitmas"
+DELETED_ROOT_MODULES = (
+    "fitmas.plan_patch_adaptation_policy",
+    "fitmas.plan_patch_candidate_evaluator",
+    "fitmas.plan_patch_candidate_reviewer",
+    "fitmas.plan_patch_candidates",
+    "fitmas.plan_patch_backend_candidates",
+)
 
 
 def _python_sources() -> tuple[Path, ...]:
@@ -28,16 +35,22 @@ def _imports_module(path: Path, module_name: str) -> bool:
     return False
 
 
-def test_11a_backend_candidate_refs_root_module_is_deleted() -> None:
-    assert not (SRC_ROOT / "plan_patch_backend_candidates.py").exists()
-
-
-def test_11a_no_imports_of_deleted_backend_candidate_refs_module() -> None:
+def test_11a_old_planning_candidate_root_modules_are_deleted() -> None:
     offenders = [
-        path.relative_to(ROOT).as_posix()
+        module.removeprefix("fitmas.") + ".py"
+        for module in DELETED_ROOT_MODULES
+        if (SRC_ROOT / f"{module.removeprefix('fitmas.')}.py").exists()
+    ]
+
+    assert offenders == []
+
+
+def test_11a_no_imports_of_deleted_planning_candidate_root_modules() -> None:
+    offenders = [
+        f"{path.relative_to(ROOT).as_posix()}: {module}"
         for path in _python_sources()
-        if path.name != Path(__file__).name
-        and _imports_module(path, "fitmas.plan_patch_backend_candidates")
+        for module in DELETED_ROOT_MODULES
+        if path.name != Path(__file__).name and _imports_module(path, module)
     ]
 
     assert offenders == []

@@ -12,7 +12,7 @@ from fitmas.domain.planning.mutation_permissions import (
     serialize_plan_patch_confirmation,
 )
 from fitmas.domain.planning.patch_mutation_service import apply_patch_for_user
-from fitmas.plan_patch_candidates import PlanPatchCandidate
+from fitmas.domain.planning.candidates import PlanPatchCandidate
 
 
 class PlanningCommandService:

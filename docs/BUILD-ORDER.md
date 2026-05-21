@@ -82,7 +82,7 @@ Les cuts physiques recents :
 
 Etat chiffre au dernier check local :
 
-- root modules : `109`.
+- root modules : `104`.
 - legacy modules : `0` fichier source actif.
 - backend complet : `1303 passed, 11 skipped, 14 subtests passed`.
 - smoke core API : OK.

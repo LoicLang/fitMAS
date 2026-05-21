@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from typing import Any, Callable, Sequence
 
 from fitmas.llm.prompts.reviewer import ReviewerPromptCandidate, build_reviewer_prompt
-from fitmas.plan_patch_candidate_evaluator import EvaluatedPlanPatchCandidate
+from fitmas.domain.planning.evaluator import EvaluatedPlanPatchCandidate
 
 RequestJsonFn = Callable[..., dict[str, Any] | None]
 

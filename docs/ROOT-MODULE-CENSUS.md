@@ -23,7 +23,7 @@ is allowed only for hotspots that need a separate shrink slice.
 
 ## Summary
 
-- Root files counted: 108
+- Root files counted: 104
 - Permanent root entrypoints allowed: 3
 - First wrapper cuts completed: `heartbeat*.py`, `llm_gateway.py`,
   `telegram_scheduler.py`, `tool_*.py`, `api_messages.py`,
@@ -100,10 +100,6 @@ is allowed only for hotspots that need a separate shrink slice.
 | `performance_stats.py` | domain/athlete | move | performance stats are athlete analytics | athlete package split |
 | `periodization.py` | domain/planning | move | periodization belongs to planning | planning package split |
 | `plan_patch.py` | domain/planning | move | PlanPatch is planning domain language | planning package split |
-| `plan_patch_adaptation_policy.py` | domain/planning | move | adaptation policy belongs to planning | planning package split |
-| `plan_patch_candidate_evaluator.py` | domain/planning | merge | evaluator duplicates domain planning evaluator boundary | planning simplification |
-| `plan_patch_candidate_reviewer.py` | domain/planning | merge | reviewer should live behind planning reviewer prompt | planning simplification |
-| `plan_patch_candidates.py` | domain/planning | merge | candidate contracts should collapse into domain planning models | planning simplification |
 | `plan_validator.py` | domain/planning | merge | validation should live with planning policy and mutation service | planning simplification |
 | `planner.py` | domain/planning | move | planner belongs to planning domain | planning package split |
 | `planning_config.py` | domain/planning | move | planning configuration belongs to planning | planning package split |

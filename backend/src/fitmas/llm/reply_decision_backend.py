@@ -6,7 +6,7 @@ from datetime import date
 from fitmas import coach_voice
 from fitmas.decision.reply_request import ReplyRequest
 import fitmas.llm.reply_backend as final_reply
-from fitmas.plan_patch_adaptation_policy import AdaptationPolicyDecision
+from fitmas.domain.planning.policy import AdaptationPolicyDecision
 
 
 class LLMReplyBackend:

@@ -24,7 +24,7 @@ from fitmas.domain.planning.mutation_permissions import (
     deserialize_plan_patch_choice_confirmation,
     deserialize_plan_patch_confirmation,
 )
-from fitmas.plan_patch_candidates import PlanPatchCandidate
+from fitmas.domain.planning.candidates import PlanPatchCandidate
 
 
 logger = logging.getLogger(__name__)

@@ -42,8 +42,10 @@ backend/src/fitmas/domain/planning/
   models.py
   reference_resolver.py
   reference_tokens.py
+  candidates.py
   candidate_builder.py
   evaluator.py
+  reviewer.py
   policy.py
   decision_service.py
   mutation_service.py

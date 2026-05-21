@@ -5,7 +5,7 @@ import os
 from fitmas.grounding_contract import ReplyGroundingPacket, render_grounding_packet_for_prompt
 from fitmas.llm.gateway import request_text
 from fitmas.llm.prompts.reply import ReplyPromptBlockedEvent, ReplyPromptInput, build_reply_prompt
-from fitmas.plan_patch_adaptation_policy import AdaptationPolicyDecision
+from fitmas.domain.planning.policy import AdaptationPolicyDecision
 
 from .reply_types import BlockedEvent, FinalReplyContext, RequestTextFn
 from .reply_event_verifier import close_turn_outage_fallback_reply, outage_fallback_reply

@@ -1,10 +1,10 @@
 from __future__ import annotations
 
 from fitmas.plan_patch import PlanPatch, PlanPatchOperation, PlanPatchValidation
-from fitmas.plan_patch_adaptation_policy import decide_adaptation_policy
-from fitmas.plan_patch_candidate_evaluator import EvaluatedPlanPatchCandidate
-from fitmas.plan_patch_candidate_reviewer import PlanPatchCandidateReviewDecision
-from fitmas.plan_patch_candidates import PlanPatchCandidate, PlanPatchCandidateValidation
+from fitmas.domain.planning.policy import decide_adaptation_policy
+from fitmas.domain.planning.evaluator import EvaluatedPlanPatchCandidate
+from fitmas.domain.planning.reviewer import PlanPatchCandidateReviewDecision
+from fitmas.domain.planning.candidates import PlanPatchCandidate, PlanPatchCandidateValidation
 from fitmas.week_coherence import CoherenceFinding, WeekCoherenceScore
 
 

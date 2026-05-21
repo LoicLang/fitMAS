@@ -11,7 +11,7 @@ from fitmas.domain.planning.evaluator import PlanCandidateEvaluator
 from fitmas.domain.planning.models import PlanningDecisionResult
 from fitmas.domain.planning.policy import SportPolicy
 from fitmas.domain.planning.reference_resolver import ReferenceResolver
-from fitmas.plan_patch_candidate_reviewer import review_plan_patch_candidates
+from fitmas.domain.planning.reviewer import review_plan_patch_candidates
 
 
 def decide_plan_change(

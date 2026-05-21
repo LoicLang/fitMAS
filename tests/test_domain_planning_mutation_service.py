@@ -10,9 +10,9 @@ from fitmas.domain.planning.mutation_permissions import (
     serialize_plan_patch_confirmation,
 )
 from fitmas.plan_patch import PlanPatch, PlanPatchOperation, PlanPatchValidation
-from fitmas.plan_patch_adaptation_policy import AdaptationPolicyDecision
-from fitmas.plan_patch_candidate_evaluator import EvaluatedPlanPatchCandidate
-from fitmas.plan_patch_candidates import PlanPatchCandidate, PlanPatchCandidateValidation
+from fitmas.domain.planning.policy import AdaptationPolicyDecision
+from fitmas.domain.planning.evaluator import EvaluatedPlanPatchCandidate
+from fitmas.domain.planning.candidates import PlanPatchCandidate, PlanPatchCandidateValidation
 
 
 def _patch() -> PlanPatch:

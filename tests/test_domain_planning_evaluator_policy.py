@@ -6,8 +6,8 @@ from fitmas.domain.planning.evaluator import PlanCandidateEvaluator
 from fitmas.domain.planning.models import PlanningCandidateSet
 from fitmas.domain.planning.policy import SportPolicy
 from fitmas.plan_patch import PlanPatch, PlanPatchOperation, PlanPatchValidation
-from fitmas.plan_patch_candidate_evaluator import EvaluatedPlanPatchCandidate
-from fitmas.plan_patch_candidates import PlanPatchCandidate, PlanPatchCandidateValidation
+from fitmas.domain.planning.evaluator import EvaluatedPlanPatchCandidate
+from fitmas.domain.planning.candidates import PlanPatchCandidate, PlanPatchCandidateValidation
 from fitmas.week_coherence import WeekCoherenceScore
 
 

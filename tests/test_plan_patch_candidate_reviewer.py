@@ -1,9 +1,9 @@
 from __future__ import annotations
 
 from fitmas.plan_patch import PlanPatch, PlanPatchOperation, PlanPatchValidation
-from fitmas.plan_patch_candidate_evaluator import EvaluatedPlanPatchCandidate
-from fitmas.plan_patch_candidate_reviewer import review_plan_patch_candidates
-from fitmas.plan_patch_candidates import PlanPatchCandidate, PlanPatchCandidateValidation
+from fitmas.domain.planning.evaluator import EvaluatedPlanPatchCandidate
+from fitmas.domain.planning.reviewer import review_plan_patch_candidates
+from fitmas.domain.planning.candidates import PlanPatchCandidate, PlanPatchCandidateValidation
 from fitmas.week_coherence import WeekCoherenceScore
 
 

@@ -5,7 +5,7 @@ from typing import Any
 
 from fitmas.domain.planning.models import PlanningCandidateSet, ResolvedPlanChange
 from fitmas.plan_patch import PlanPatch, PlanPatchOperation
-from fitmas.plan_patch_candidates import PlanPatchCandidate
+from fitmas.domain.planning.candidates import PlanPatchCandidate
 
 _PLAN_ID = "plan_current"
 _PLAN_VERSION = 1

@@ -4,8 +4,8 @@ from datetime import datetime
 from types import SimpleNamespace
 
 from fitmas.plan_patch import PlanPatch, PlanPatchOperation
-from fitmas.plan_patch_candidate_evaluator import evaluate_plan_patch_candidate
-from fitmas.plan_patch_candidates import PlanPatchCandidate
+from fitmas.domain.planning.evaluator import evaluate_plan_patch_candidate
+from fitmas.domain.planning.candidates import PlanPatchCandidate
 from fitmas.week_coherence import WeekCoherenceScore
 
 

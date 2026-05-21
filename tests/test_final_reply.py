@@ -19,7 +19,7 @@ from fitmas.llm.reply_backend import (
     verify_uncommitted_reply,
     verify_post_event_reply,
 )
-from fitmas.plan_patch_adaptation_policy import AdaptationPolicyDecision
+from fitmas.domain.planning.policy import AdaptationPolicyDecision
 from fitmas.skills.heartbeat.reply_composer import (
     HeartbeatReplyContext,
     HeartbeatReplyFact,

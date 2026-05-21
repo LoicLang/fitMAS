@@ -5,8 +5,8 @@ from types import SimpleNamespace
 from fitmas.decision import RequestedPlanChange
 from fitmas.domain.planning.decision_service import decide_plan_change
 from fitmas.plan_patch import PlanPatchValidation
-from fitmas.plan_patch_candidate_evaluator import EvaluatedPlanPatchCandidate
-from fitmas.plan_patch_candidates import PlanPatchCandidateValidation
+from fitmas.domain.planning.evaluator import EvaluatedPlanPatchCandidate
+from fitmas.domain.planning.candidates import PlanPatchCandidateValidation
 from fitmas.week_coherence import WeekCoherenceScore
 
 
