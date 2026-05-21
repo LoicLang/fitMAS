@@ -76,9 +76,10 @@ En place :
 Encore actif :
 
 - `conversation_pipeline.py` reste le mega-orchestrateur principal.
-- `legacy/conversation_*` contient encore des bridges conversationnels, mais
-  planning/pending, commands et readonly/reply sont deja sortis.
+- aucun bridge `legacy/conversation_*` mesure ne reste runtime-active.
 - `llm/decision_legacy.py` et `legacy/decision_contracts.py` portent encore le contrat `CoachDecision`.
+- `legacy/coach_decision_provider.py` est supprime : le runtime conversationnel
+  ne peut plus appeler le provider `CoachDecision`.
 
 ## Frontieres
 
@@ -203,6 +204,16 @@ Et supprime :
 
 - `legacy/conversation_decide_bridge.py`
 
+10K a supprime le provider CoachDecision callable :
+
+- plus de `ConversationPipelineDependencies.decide`;
+- plus de `legacy/coach_decision_provider.py`;
+- plus de `build_legacy_coach_decision_request`;
+- plus de `run_legacy_coach_decision`;
+- les tests core flow qui simulaient le LLM via `api_messages.decide` ont ete
+  retires, parce qu'ils protegeaient l'ancien provider au lieu du runtime
+  canonique.
+
 Le census courant annonce :
 
 ```text
@@ -213,11 +224,10 @@ deleted_count=10
 
 Objectif suivant :
 
-1. attaquer `CoachDecision` lui-meme, pas un wrapper conversationnel ;
-2. reduire `legacy/coach_decision_provider.py`, `legacy/decision_contracts.py`
-   et `llm/decision_legacy.py` ;
-3. convertir les derniers artifacts compat en `DecisionOutcome` directs ;
-4. ramener `conversation_pipeline.py` vers un adapter plus mince.
+1. convertir les derniers artifacts compat en `DecisionOutcome` directs ;
+2. reduire puis supprimer `legacy/decision_contracts.py`,
+   `legacy/coach_decision_artifact.py` et `llm/decision_legacy.py` ;
+3. ramener `conversation_pipeline.py` vers un adapter plus mince.
 
 ## Critere De Verdict
 

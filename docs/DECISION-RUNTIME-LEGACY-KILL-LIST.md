@@ -31,9 +31,11 @@ Les wrappers deja supprimes :
 - `legacy/conversation_readonly_reply_bridge.py`
 - `legacy/conversation_understanding_bridge.py`
 - `legacy/conversation_decide_bridge.py`
+- `legacy/coach_decision_provider.py`
 
-Le gros residu actif n'est plus planning/pending. Le prochain risque est le
-reste des bridges conversationnels encore relies a `conversation_pipeline.py`.
+Le gros residu actif n'est plus planning/pending ni le provider
+`CoachDecision`. Le prochain risque est la compat `CoachDecision` restante :
+contrats, artifact et provider LLM historique.
 
 ## Priorite De Suppression
 
@@ -77,22 +79,24 @@ Fichiers :
 
 - `legacy/decision_contracts.py`
 - `legacy/coach_decision_artifact.py`
-- `legacy/coach_decision_provider.py`
 - `legacy/coach_understanding_adapter.py`
 - `legacy/understanding_shadow.py`
+- `llm/decision_legacy.py`
 
 Probleme :
 
-- `CoachDecision` reste l'ancien contrat provider/runtime ;
+- `CoachDecision` reste l'ancien contrat de compat ;
 - l'understanding canonique vit maintenant dans `decision/understanding_runtime.py`,
   mais il produit encore un artifact `CoachDecision` compat pour certaines lanes.
-- le runtime provider compat vit maintenant dans `decision/coach_decision_runtime.py`,
-  mais il appelle encore le provider legacy explicite.
+- le provider callable `legacy/coach_decision_provider.py` est supprime ;
+  `conversation_pipeline.py` ne construit plus de request legacy et ne peut plus
+  appeler `run_legacy_coach_decision`.
 
 Sortie attendue :
 
-- provider canonique `CoachUnderstanding`;
-- `CoachDecision` limite aux tests historiques puis supprime.
+- artifact compat transforme en outcome direct ;
+- `legacy/decision_contracts.py`, `legacy/coach_decision_artifact.py` et
+  `llm/decision_legacy.py` supprimes ou confines hors runtime conversation.
 
 ### P2 — Commands / Memory / Execution Bridges — clos en 10G
 
@@ -140,7 +144,7 @@ Etat :
   `decision/readonly_reply.py`;
 - le dernier risque actif est provider/understanding.
 
-### P4 — Conversation Bridge Census — clos en 10J
+### P4 — Conversation Bridge Census — clos en 10J / 10K
 
 Commande :
 
@@ -161,6 +165,7 @@ deleted_count=10
 Encore runtime-active :
 
 - aucun bridge `legacy/conversation_*` mesure.
+- aucun provider `legacy/coach_decision_provider.py`.
 
 ## Gates A Garder
 
@@ -173,8 +178,8 @@ Encore runtime-active :
 
 ## Prochain Slice
 
-Apres 10J : attaquer le provider `CoachDecision` lui-meme sans recréer de
-fallback local.
+Apres 10K : attaquer l'artifact et les contrats `CoachDecision` restants sans
+recreer de fallback local.
 
 Commande :
 
@@ -190,7 +195,9 @@ Resultat 10J :
 - helpers de forme `CoachDecision` vivent dans `legacy/coach_decision_artifact.py`;
 - readonly/reply vit dans `decision/readonly_reply.py`;
 - understanding runtime vit dans `decision/understanding_runtime.py`;
-- CoachDecision provider runtime vit dans `decision/coach_decision_runtime.py`;
+- le provider CoachDecision callable est supprime ;
+- `decision/coach_decision_runtime.py` ne garde que la trace
+  `coach_decision_provider_removed` et la clarification canonique ;
 - command mapping/application vit dans `decision/`;
 - dix bridges conversationnels sont supprimes ;
 - aucun bridge `legacy/conversation_*` ne reste actif.

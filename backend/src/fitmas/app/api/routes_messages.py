@@ -19,7 +19,6 @@ from fitmas.execution_clarification import (
     build_execution_clarification,
     looks_like_execution_clarification_prompt,
 )
-from fitmas.legacy.coach_decision_provider import default_legacy_decide as decide
 from fitmas.llm.decision_legacy import _request_json
 import fitmas.llm.legacy_fact_memory as legacy_fact_memory
 from fitmas.llm.legacy_summaries import make_timeline_summary
@@ -200,7 +199,6 @@ def post_message(payload: IncomingMessage, db: Session = Depends(get_db)) -> Mes
             ),
             db=db,
             dependencies=ConversationPipelineDependencies(
-                decide=decide,
                 extract_facts=extract_facts,
                 check_and_adapt_health_facts=check_and_adapt_health_facts,
                 plan_turn=plan_conversation_turn,

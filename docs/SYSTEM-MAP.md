@@ -115,7 +115,8 @@ Contenu :
 - gateway provider ;
 - prompts ;
 - Understanding service ;
-- provider legacy `CoachDecision` encore present ;
+- compat legacy `CoachDecision` encore presente dans les contrats/adapters ;
+- provider callable `CoachDecision` supprime du runtime conversation ;
 - reply backends LLM.
 
 Regle :

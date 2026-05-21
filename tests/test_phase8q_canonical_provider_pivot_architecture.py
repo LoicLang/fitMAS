@@ -22,12 +22,13 @@ def test_8q_understanding_bridge_exposes_provider_pivot_boundary() -> None:
     assert "commands_from_understanding(" in source
 
 
-def test_8q_conversation_pipeline_runs_canonical_before_legacy_decide() -> None:
+def test_8q_conversation_pipeline_runs_canonical_before_removed_provider_clarification() -> None:
     source = _source("conversation_pipeline.py")
 
     canonical_index = source.index("run_canonical_understanding_shadow(")
-    legacy_index = source.index("run_legacy_coach_decision(")
-    assert canonical_index < legacy_index
+    clarification_index = source.index("canonical_provider_clarification_outcome(")
+    assert canonical_index < clarification_index
+    assert "run_legacy_coach_decision(" not in source
     assert "should_use_canonical_understanding_without_legacy(" in source
     assert "coach_decision_artifact_from_understanding(" in source
 

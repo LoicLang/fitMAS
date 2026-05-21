@@ -36,7 +36,6 @@ from fitmas.coach_reading_digest import build_coach_reading_digest, render_diges
 from fitmas.coach_state_bundle import build_coach_state_bundle
 from fitmas.execution_clarification import render_unresolved_execution_followup
 from fitmas.llm.reply_decision_backend import LLMReplyBackend
-from fitmas.legacy.coach_decision_provider import LegacyCoachDecisionProvider, default_legacy_decide
 from fitmas.decision import clarification_reply
 from fitmas.decision import command_application
 from fitmas.decision import pending_resolution
@@ -58,7 +57,6 @@ from fitmas.legacy.coach_decision_artifact import (
     legacy_decision_reply_text,
     legacy_readonly_decision_payload,
 )
-from fitmas.legacy.understanding_shadow import shadow_understanding_from_legacy_decision
 from fitmas.conversation_context import (
     activity_claim_summary_for_prompt,
     build_conversation_context,
@@ -80,7 +78,6 @@ from fitmas.plan_patch import PlanPatch
 from fitmas.profile_summary import build_profile_summary
 from fitmas.signals import collect_signals
 from fitmas.time_context import get_local_now
-from fitmas.tools.contract import ToolContext
 
 logger = logging.getLogger(__name__)
 metrics_logger = logging.getLogger("fitmas.conversation_metrics")
@@ -559,42 +556,6 @@ def _run_conversation_turn_impl(
             memory_writes=turn_memory_writes,
         )
 
-    # CoachDecision remains provider compatibility only. The pipeline receives
-    # it through a legacy bridge so runtime authority stays outside `decide()`.
-    decision_request = coach_decision_runtime.build_legacy_coach_decision_request(
-        user_text=payload.text,
-        user=user,
-        state=state,
-        turn_plan=turn_plan,
-        coach_bundle=coach_bundle,
-        conversation_context=conversation_context,
-        timeline_summary=api_messages.make_timeline_summary(state.timeline),
-        execution_summary=execution_summary_for_prompt(conversation_context),
-        temporal_summary=decision_temporal_summary,
-        activity_claim_summary=claim_summary,
-        signal_summary=decision_signal_summary,
-        selected_facts=_selected_facts_for_prompt(conversation_context, state.active_facts),
-        profile_summary=build_profile_summary(state.active_memory_rows),
-        coach_reading_digest_text=_maybe_build_coach_reading_digest_text(
-            db,
-            user=user,
-            today=conversation_context.temporal_resolution.local_date,
-            recent_reality_window=coach_bundle.recent_reality,
-            turn_plan=turn_plan,
-        ),
-        unresolved_execution_followup_text=unresolved_execution_followup_text,
-        unresolved_execution_followup_session_id=unresolved_execution_followup_session_id,
-        unresolved_execution_followup_target_date=unresolved_execution_followup_target_date,
-        tool_context=ToolContext(
-            pipeline="conversation",
-            user_id=user.id,
-            timezone_name=user.timezone,
-            db=db,
-            scheduled_sessions=state.scheduled_sessions,
-            activities=state.activities,
-            active_facts=state.active_facts,
-        ),
-    )
     if canonical_understanding is None:
         canonical_understanding = understanding_runtime.run_canonical_understanding_shadow(
             user=user,
@@ -671,27 +632,14 @@ def _run_conversation_turn_impl(
                         turn_context=turn_context,
                     )
         if outcome is None:
-            if dependencies.decide is not default_legacy_decide:
-                turn_context["legacy_provider_explicit_override"] = True
             legacy_skip_reason = coach_decision_runtime.legacy_provider_skip_reason(turn_context)
-            if legacy_skip_reason is not None:
-                coach_decision_runtime.trace_legacy_provider_skipped(turn_context, reason=legacy_skip_reason)
-                outcome = coach_decision_runtime.canonical_provider_clarification_outcome(
-                    reason=legacy_skip_reason,
-                    user_text=payload.text,
-                    grounding_facts=tuple(render_grounding_packet_for_prompt(grounding_packet)),
-                    decision_reply_composer_fn=_decision_reply_composer,
-                )
-            elif coach_decision_runtime.legacy_provider_allowed_for_turn(turn_context):
-                legacy_decision_artifact = coach_decision_runtime.run_legacy_coach_decision(
-                    provider=LegacyCoachDecisionProvider(decide_fn=dependencies.decide),
-                    request=decision_request,
-                    turn_context=turn_context,
-                )
-                shadow_understanding_from_legacy_decision(
-                    user_id=user.id,
-                    decision_artifact=legacy_decision_artifact,
-                )
+            coach_decision_runtime.trace_legacy_provider_skipped(turn_context, reason=legacy_skip_reason)
+            outcome = coach_decision_runtime.canonical_provider_clarification_outcome(
+                reason=legacy_skip_reason,
+                user_text=payload.text,
+                grounding_facts=tuple(render_grounding_packet_for_prompt(grounding_packet)),
+                decision_reply_composer_fn=_decision_reply_composer,
+            )
     is_coach_decision = is_coach_decision_artifact(legacy_decision_artifact)
     if is_coach_decision:
         turn_context["coach_decision"] = coach_decision_payload(legacy_decision_artifact)

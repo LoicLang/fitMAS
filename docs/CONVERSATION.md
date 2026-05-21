@@ -54,11 +54,13 @@ Etat actuel :
 - `decision/` porte deja les types et l'outcome canonique.
 - `llm/understanding_service.py` porte l'understanding cible.
 - `decision/understanding_runtime.py` porte l'appel understanding canonique.
-- `decision/coach_decision_runtime.py` porte le provider compat `CoachDecision`.
+- `decision/coach_decision_runtime.py` ne porte plus le provider compat :
+  il trace `coach_decision_provider_removed` et compose une clarification
+  canonique si aucune lane canonique ne sait traiter.
 - aucun bridge `legacy/conversation_*` ne reste runtime-active.
 - planning, pending, command writes, activity highlight, clarification,
-  readonly/reply, understanding, provider compat et helpers artifact ne vivent
-  plus dans ces petits wrappers legacy.
+  readonly/reply et understanding ne vivent plus dans ces petits wrappers
+  legacy.
 
 ## Regles Dures
 
@@ -74,7 +76,8 @@ Etat actuel :
 
 Transition actuelle :
 
-- `CoachDecision` legacy existe encore pour compat provider.
+- `CoachDecision` legacy existe encore comme compat artifact/contrat, mais plus
+  comme provider appele par la conversation.
 - `CoachUnderstanding` est la cible pour separer comprehension et decision.
 - `DecisionOutcome` est la cible pour parler au user.
 
@@ -87,6 +90,15 @@ Actions structurees encore acceptees :
 
 Le backend ne lit pas ces actions comme du texte humain.
 Il les resout contre DB, schemas, IDs, dates, permissions et policies.
+
+Interdit depuis 10K :
+
+```text
+api_messages.decide
+ConversationPipelineDependencies.decide
+legacy/coach_decision_provider.py
+run_legacy_coach_decision
+```
 
 ## Pending
 

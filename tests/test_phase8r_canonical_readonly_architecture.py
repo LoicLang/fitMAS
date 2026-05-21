@@ -23,12 +23,13 @@ def test_8r_canonical_readonly_bridge_exists() -> None:
     assert "DecisionReplyComposer" not in source
 
 
-def test_8r_pipeline_routes_readonly_before_legacy_decide() -> None:
+def test_8r_pipeline_routes_readonly_before_removed_provider_clarification() -> None:
     source = _source("conversation_pipeline.py")
 
     readonly_index = source.index("should_use_canonical_readonly_without_legacy(")
-    legacy_index = source.index("run_legacy_coach_decision(")
-    assert readonly_index < legacy_index
+    clarification_index = source.index("canonical_provider_clarification_outcome(")
+    assert readonly_index < clarification_index
+    assert "run_legacy_coach_decision(" not in source
     assert "compose_canonical_readonly_reply(" in source
 
 

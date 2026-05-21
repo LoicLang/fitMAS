@@ -16,31 +16,33 @@ def _backend_python_files() -> list[Path]:
     return sorted((SRC).rglob("*.py"))
 
 
-def test_9s_conversation_decide_bridge_exposes_provider_authority_gate() -> None:
+def test_9s_coachdecision_runtime_exposes_removed_provider_trace() -> None:
     source = _source("decision/coach_decision_runtime.py")
 
-    assert "def legacy_provider_allowed_for_turn(" in source
     assert "def legacy_provider_skip_reason(" in source
     assert "def trace_legacy_provider_skipped(" in source
+    assert "coach_decision_provider_removed" in source
+    assert "def legacy_provider_allowed_for_turn(" not in source
 
 
-def test_9s_pipeline_checks_provider_authority_before_legacy_decide() -> None:
+def test_9s_pipeline_never_calls_legacy_decide_after_canonical_routes() -> None:
     source = _source("conversation_pipeline.py")
 
-    gate_index = source.index("legacy_provider_allowed_for_turn(")
-    legacy_index = source.index("run_legacy_coach_decision(")
-    assert gate_index < legacy_index
+    clarification_index = source.index("canonical_provider_clarification_outcome(")
+    assert source.index("compose_canonical_clarification_reply(") < clarification_index
+    assert source.index("should_use_canonical_understanding_without_legacy(") < clarification_index
+    assert source.index("should_use_canonical_readonly_without_legacy(") < clarification_index
+    assert source.index("should_use_canonical_planning_without_legacy(") < clarification_index
+    assert "run_legacy_coach_decision(" not in source
     assert "canonical_provider_clarification_outcome(" in source
 
 
-def test_9s_legacy_decide_call_is_only_in_pipeline_and_bridge() -> None:
+def test_9s_legacy_decide_call_is_removed_from_backend_runtime() -> None:
     offenders: list[str] = []
     for path in _backend_python_files():
         relative = path.relative_to(SRC).as_posix()
         source = path.read_text(encoding="utf-8")
         if "run_legacy_coach_decision(" not in source:
-            continue
-        if relative in {"conversation_pipeline.py", "decision/coach_decision_runtime.py"}:
             continue
         offenders.append(relative)
 
@@ -67,14 +69,14 @@ def test_9s_no_direct_decision_legacy_decide_import_outside_llm_package() -> Non
     assert offenders == []
 
 
-def test_9s_canonical_routes_still_precede_provider_gate() -> None:
+def test_9s_canonical_routes_still_precede_removed_provider_clarification() -> None:
     source = _source("conversation_pipeline.py")
 
-    gate_index = source.index("legacy_provider_allowed_for_turn(")
-    assert source.index("compose_canonical_clarification_reply(") < gate_index
-    assert source.index("should_use_canonical_understanding_without_legacy(") < gate_index
-    assert source.index("should_use_canonical_readonly_without_legacy(") < gate_index
-    assert source.index("should_use_canonical_planning_without_legacy(") < gate_index
+    clarification_index = source.index("canonical_provider_clarification_outcome(")
+    assert source.index("compose_canonical_clarification_reply(") < clarification_index
+    assert source.index("should_use_canonical_understanding_without_legacy(") < clarification_index
+    assert source.index("should_use_canonical_readonly_without_legacy(") < clarification_index
+    assert source.index("should_use_canonical_planning_without_legacy(") < clarification_index
 
 
 def test_9s_decision_legacy_is_marked_provider_compat_only() -> None:

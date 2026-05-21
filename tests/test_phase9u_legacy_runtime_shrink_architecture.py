@@ -67,18 +67,15 @@ def test_9u_legacy_decision_contracts_do_not_import_fitmas_llm() -> None:
     assert "import fitmas.llm" not in source
 
 
-def test_9u_legacy_provider_has_no_default_broad_llm_runtime_import() -> None:
-    source = _source("legacy/coach_decision_provider.py")
-
-    assert "from fitmas import llm" not in source
-    assert "llm_runtime" not in source
+def test_9u_legacy_provider_module_is_removed() -> None:
+    assert not (SRC / "legacy/coach_decision_provider.py").exists()
 
 
-def test_9u_legacy_provider_env_flag_is_default_off() -> None:
+def test_9u_legacy_provider_env_flag_is_removed() -> None:
     source = _source("decision/coach_decision_runtime.py")
 
-    assert "FITMAS_ENABLE_LEGACY_COACH_DECISION_PROVIDER" in source
-    assert 'os.getenv("FITMAS_ENABLE_LEGACY_COACH_DECISION_PROVIDER") == "1"' in source
+    assert "FITMAS_ENABLE_LEGACY_COACH_DECISION_PROVIDER" not in source
+    assert "coach_decision_provider_removed" in source
 
 
 def test_9u_decision_legacy_stays_under_provider_compat_budget() -> None:

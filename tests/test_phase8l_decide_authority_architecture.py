@@ -28,8 +28,9 @@ def test_8l_conversation_pipeline_does_not_call_decide_directly() -> None:
     source = _source("conversation_pipeline.py")
 
     assert "dependencies.decide(" not in source
+    assert "dependencies.decide" not in source
     assert "llm_runtime" not in source
-    assert "coach_decision_runtime.run_legacy_coach_decision" in source
+    assert "coach_decision_runtime.run_legacy_coach_decision" not in source
 
 
 def test_8l_conversation_pipeline_does_not_read_fitmas_message_directly() -> None:
@@ -39,15 +40,13 @@ def test_8l_conversation_pipeline_does_not_read_fitmas_message_directly() -> Non
     assert "readonly_reply.compose_coach_decision_reply" in source
 
 
-def test_8l_legacy_provider_boundary_exists() -> None:
-    provider = _source("legacy/coach_decision_provider.py")
-    bridge = _source("decision/coach_decision_runtime.py")
+def test_8l_legacy_provider_boundary_is_removed() -> None:
+    runtime = _source("decision/coach_decision_runtime.py")
 
-    assert "class CoachDecisionRequest" in provider
-    assert "class CoachDecisionResult" in provider
-    assert "class LegacyCoachDecisionProvider" in provider
-    assert "def run_legacy_coach_decision(" in bridge
-    assert "clear_last_decide_none" in provider
+    assert not (SRC / "legacy/coach_decision_provider.py").exists()
+    assert "def run_legacy_coach_decision(" not in runtime
+    assert "def build_legacy_coach_decision_request(" not in runtime
+    assert "canonical_provider_clarification_outcome" in runtime
 
 
 def test_8l_decision_package_stays_pure() -> None:

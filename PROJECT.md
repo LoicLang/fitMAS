@@ -24,31 +24,33 @@ Deja en place :
 
 - `decision/` : types centraux, outcomes, composer, verifier, command bus.
 - `domain/planning/` : candidates, evaluator, policy, mutation service.
-- `llm/` : gateway, prompts, provider legacy, reply backends.
+- `llm/` : gateway, prompts, compat legacy isolee, reply backends.
 - `skills/heartbeat/` : heartbeat runtime, reply composer, tool loop.
 - `app/api/` et `app/telegram/` : entrypoints en migration.
 
 Encore a reduire :
 
 - `conversation_pipeline.py` reste le mega-orchestrateur.
-- `legacy/` contient encore `24` modules.
-- Le prochain gros morceau est planning/pending legacy.
+- `legacy/` contient encore `6` modules, dont `__init__.py`.
+- Le prochain gros morceau est supprimer la compat `CoachDecision` restante :
+  contrats, artifact, adapters et `llm/decision_legacy.py`.
 
 Dernieres preuves locales :
 
-- backend complet : `1486 passed, 11 skipped`.
+- backend complet : `1423 passed, 11 skipped`.
 - smoke core API : OK.
 - fallback census core : `0`.
 
 ## Prochaine Tranche
 
-`10E` : planning/pending legacy.
+Apres 10K : reste `CoachDecision` compat.
 
 Objectif :
 
-- mesurer les callers reels ;
-- extraire l'actif vers `decision/` ou `domain/planning/` ;
-- supprimer les bridges vides ;
+- convertir les derniers artifacts compat en outcomes directs ;
+- supprimer `legacy/decision_contracts.py`, `legacy/coach_decision_artifact.py`
+  et les adapters associes quand leurs callers sont vides ;
+- isoler ou supprimer `llm/decision_legacy.py` ;
 - reduire `conversation_pipeline.py`.
 
 ## Ordre De Lecture

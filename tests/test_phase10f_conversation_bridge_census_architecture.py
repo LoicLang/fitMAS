@@ -132,9 +132,10 @@ def test_10j_coach_decision_runtime_lives_in_decision_not_legacy_bridge() -> Non
     assert "from fitmas.decision import coach_decision_runtime" in pipeline
     assert "conversation_decide_bridge" not in pipeline
     assert not (SRC / "legacy/conversation_decide_bridge.py").exists()
-    assert "def build_legacy_coach_decision_request(" in runtime
-    assert "def run_legacy_coach_decision(" in runtime
-    assert "def legacy_provider_allowed_for_turn(" in runtime
+    assert "def build_legacy_coach_decision_request(" not in runtime
+    assert "def run_legacy_coach_decision(" not in runtime
+    assert "def legacy_provider_allowed_for_turn(" not in runtime
+    assert not (SRC / "legacy/coach_decision_provider.py").exists()
     assert "def canonical_provider_clarification_outcome(" in runtime
 
 

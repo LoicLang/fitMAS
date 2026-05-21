@@ -57,7 +57,6 @@ def trigger_conversation_debug(payload: IncomingMessage, db: Session = Depends(g
             ),
             db=db,
             dependencies=ConversationPipelineDependencies(
-                decide=api_messages.decide,
                 extract_facts=api_messages.extract_facts,
                 check_and_adapt_health_facts=api_messages.check_and_adapt_health_facts,
                 plan_turn=api_messages.plan_conversation_turn,
