@@ -6,7 +6,6 @@ from typing import Any
 from sqlalchemy.orm import Session
 
 from fitmas import repository as repo
-from fitmas.calibration_llm import extract_calibration_resolution
 from fitmas import coach_voice
 import fitmas.llm.gateway as gw
 from fitmas.claim_guard import (
@@ -15,11 +14,6 @@ from fitmas.claim_guard import (
     outage_fallback_reply,
 )
 from fitmas.decision import DecisionReplyComposer
-from fitmas.calibration_needs import (
-    build_resolution_memory_updates,
-    find_open_calibration_need,
-    should_apply_calibration_resolution,
-)
 from fitmas.llm.reply_decision_backend import LLMReplyBackend
 from fitmas.decision import clarification_reply
 from fitmas.decision import command_application
@@ -28,6 +22,7 @@ from fitmas.decision import planning_runtime
 from fitmas.decision import activity_highlight
 from fitmas.decision import readonly_reply
 from fitmas.decision import coach_decision_runtime
+from fitmas.decision import turn_calibration
 from fitmas.decision import turn_context as turn_context_builder
 from fitmas.decision import turn_idempotency
 from fitmas.decision import turn_persistence
@@ -77,30 +72,14 @@ def _run_conversation_turn_impl(
     turn_memory_writes: list[dict] = []
     pending_confirmation = repo.get_active_pending_mutation_confirmation(db, user.id)
 
-    open_calibration_need = find_open_calibration_need(state.active_memory_rows)
-    calibration_resolution = None
-    if open_calibration_need is not None:
-        calibration_resolution = extract_calibration_resolution(
-            user_text=payload.text,
-            need=open_calibration_need,
-            timezone_name=user.timezone,
-            coach_context={
-                "coach_name": user.coach_name,
-                "coach_style": user.coach_style,
-                "coach_relationship": user.coach_relationship,
-                "coach_do": user.coach_do,
-                "coach_dont": user.coach_dont,
-                "coach_soul": user.coach_soul,
-            },
-        )
-        if should_apply_calibration_resolution(calibration_resolution):
-            turn_persistence.persist_turn_memory_updates(
-                db,
-                user.id,
-                build_resolution_memory_updates(open_calibration_need, calibration_resolution),
-                turn_memory_writes=turn_memory_writes,
-            )
-            state.active_memory_rows, state.active_facts = turn_state.active_memory_payloads(db, user.id)
+    calibration_result = turn_calibration.apply_turn_calibration(
+        db=db,
+        user=user,
+        payload=payload,
+        state=state,
+        turn_memory_writes=turn_memory_writes,
+    )
+    open_calibration_need = calibration_result.open_calibration_need
 
     context_artifacts = turn_context_builder.build_turn_context_artifacts(
         db=db,
@@ -118,7 +97,7 @@ def _run_conversation_turn_impl(
     grounding_facts = context_artifacts.grounding_facts
     turn_context = context_artifacts.turn_context
 
-    if _should_use_terminal_close_path(
+    if turn_context_builder.should_use_terminal_close_path(
         turn_plan=turn_plan,
         pending_confirmation=pending_confirmation,
         open_calibration_need=open_calibration_need,
@@ -621,24 +600,3 @@ def _llm_repair_claim_reply(*, original_reply: str, user_text: str) -> str | Non
         # Log only — pas un blocker, mais signale la regression.
         logger.warning("conversation_pipeline.claim_repair_receipt_style reply=%r", repaired[:160])
     return repaired
-
-
-def _should_use_terminal_close_path(
-    *,
-    turn_plan,
-    pending_confirmation,
-    open_calibration_need,
-) -> bool:
-    if turn_plan is None:
-        return False
-    if str(getattr(turn_plan, "primary_intent", "") or "") not in {"close_turn", "trivial_ack"}:
-        return False
-    if bool(getattr(turn_plan, "has_plan_mutation", False)):
-        return False
-    if tuple(getattr(turn_plan, "secondary_intents", ()) or ()):
-        return False
-    if pending_confirmation is not None and str(getattr(pending_confirmation, "status", "") or "") == "pending":
-        return False
-    if open_calibration_need is not None:
-        return False
-    return True

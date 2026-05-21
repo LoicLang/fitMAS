@@ -369,3 +369,24 @@ def append_prompt_section(base: str, section: str | None) -> str:
     if not section:
         return base
     return "\n".join(part for part in (base, section) if part)
+
+
+def should_use_terminal_close_path(
+    *,
+    turn_plan,
+    pending_confirmation,
+    open_calibration_need,
+) -> bool:
+    if turn_plan is None:
+        return False
+    if str(getattr(turn_plan, "primary_intent", "") or "") not in {"close_turn", "trivial_ack"}:
+        return False
+    if bool(getattr(turn_plan, "has_plan_mutation", False)):
+        return False
+    if tuple(getattr(turn_plan, "secondary_intents", ()) or ()):
+        return False
+    if pending_confirmation is not None and str(getattr(pending_confirmation, "status", "") or "") == "pending":
+        return False
+    if open_calibration_need is not None:
+        return False
+    return True
