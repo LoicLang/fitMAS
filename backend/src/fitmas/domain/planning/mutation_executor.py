@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 
 from fitmas.domain.planning import session_actions as plan_actions
 from fitmas.domain.planning.mutation_decision import MutationDecision
-from fitmas.mutation_hooks import (
+from fitmas.domain.planning.mutation_hooks import (
     PostMutationResult,
     PreMutationResult,
     run_post_mutation_hooks,

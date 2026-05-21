@@ -20,7 +20,7 @@ from fitmas.decision.planning_outcomes import (
     plan_patch_service_result_to_outcome,
 )
 from fitmas.models import Extraction
-from fitmas.mutation_permissions import (
+from fitmas.domain.planning.mutation_permissions import (
     deserialize_plan_patch_choice_confirmation,
     deserialize_plan_patch_confirmation,
 )

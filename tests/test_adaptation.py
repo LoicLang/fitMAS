@@ -209,7 +209,7 @@ class TestRunAdaptationFreeze:
             called["apply"] = True
             raise AssertionError("mutations.apply should stay off by default")
 
-        monkeypatch.setattr("fitmas.mutations.apply", _fail_apply)
+        monkeypatch.setattr("fitmas.domain.planning.mutation_executor.apply", _fail_apply)
 
         result = adaptation.run_adaptation(object(), user=user, trigger=trigger)
 
@@ -248,7 +248,7 @@ class TestRunAdaptationFreeze:
             calls["apply"] += 1
             raise AssertionError("adaptation.py must not apply mutations directly")
 
-        monkeypatch.setattr("fitmas.mutations.apply", _record_apply)
+        monkeypatch.setattr("fitmas.domain.planning.mutation_executor.apply", _record_apply)
 
         result = adaptation.run_adaptation(object(), user=user, trigger=trigger)
 

@@ -7,10 +7,11 @@ from typing import Any, Sequence
 
 from sqlalchemy.orm import Session
 
-from fitmas import mutations, repository as repo, schema as s
+from fitmas import repository as repo, schema as s
+from fitmas.domain.planning import mutation_executor
 from fitmas.domain.planning import session_actions as plan_actions
 from fitmas.domain.planning.mutation_decision import MutationDecision
-from fitmas.mutation_hooks import run_pre_mutation_hooks
+from fitmas.domain.planning.mutation_hooks import run_pre_mutation_hooks
 from fitmas.plan_patch import (
     PlanPatch,
     PlanPatchOperation,
@@ -124,7 +125,7 @@ def apply_decisions_for_user(
             if decision.target_session_id is not None
             else {}
         )
-        pre_result, post_result = mutations.apply(
+        pre_result, post_result = mutation_executor.apply(
             db,
             plan_id,
             decision,

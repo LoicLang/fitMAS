@@ -26,7 +26,7 @@ from fitmas.llm_prompt_builder import (
     build_layered_conversation_prompt,
     _CONVERSATION_SYSTEM_TEXT,
 )
-from fitmas.mutation_hooks import (
+from fitmas.domain.planning.mutation_hooks import (
     PreMutationResult,
     run_pre_mutation_hooks,
     run_post_mutation_hooks,

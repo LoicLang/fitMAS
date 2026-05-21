@@ -153,9 +153,11 @@ def _check_fragile_day(
         if _session_date(s, timezone_name) == target_date
         and _value(s, "id") != decision.target_session_id
     ]
+    hard_labels = {"hard", "key"}
+    key_priority_labels = {"cle", "forte", "key"}
     has_hard = any(
-        str(_value(s, "intensity") or "").lower() in ("hard", "key")
-        or str(_value(s, "priority") or "").lower() in ("cle", "forte", "key")
+        _normalized_value(s, "intensity") in hard_labels
+        or _normalized_value(s, "priority") in key_priority_labels
         for s in sessions_on_target
     )
     if has_hard:
@@ -178,9 +180,10 @@ def _check_load_coherence(
     if new_intensity not in ("hard", "key"):
         return
 
+    hard_labels = {"hard", "key"}
     week_hard_count = sum(
         1 for s in scheduled_sessions
-        if str(_value(s, "intensity") or "").lower() in ("hard", "key")
+        if _normalized_value(s, "intensity") in hard_labels
         and str(_value(s, "completion_status") or "") == "planned"
     )
     limit = GLOBAL_PLANNING_CONFIG.max_hard_sessions_per_week
@@ -263,7 +266,7 @@ def _check_occupied_training_target(
             continue
         if _session_date(session, timezone_name) != target_date:
             continue
-        if str(_value(session, "completion_status") or "").strip().lower() in {"done", "skipped", "canceled"}:
+        if _normalized_value(session, "completion_status") in {"done", "skipped", "canceled"}:
             continue
         sport = str(_value(session, "sport_type") or "").strip().lower()
         session_type = str(_value(session, "session_type") or "").strip().lower()
@@ -463,3 +466,7 @@ def _value(obj: Any, key: str) -> Any:
     if isinstance(obj, dict):
         return obj.get(key)
     return getattr(obj, key, None)
+
+
+def _normalized_value(obj: Any, key: str) -> str:
+    return str(_value(obj, key) or "").strip().lower()

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from fitmas.domain.planning.mutation_decision import MutationDecision
-from fitmas.mutation_hooks import run_pre_mutation_hooks
+from fitmas.domain.planning.mutation_hooks import run_pre_mutation_hooks
 
 
 def test_move_session_blocks_same_sport_proximity_under_48h() -> None:

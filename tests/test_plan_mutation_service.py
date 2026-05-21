@@ -62,7 +62,7 @@ def test_apply_patch_for_user_commits_only_valid_patch(monkeypatch) -> None:
     monkeypatch.setattr("fitmas.domain.planning.patch_mutation_service.repo.get_scheduled_session", lambda *args, **kwargs: None)
     monkeypatch.setattr("fitmas.domain.planning.patch_mutation_service.repo.add_plan_mutation_event", lambda *args, **kwargs: None)
     monkeypatch.setattr(
-        "fitmas.domain.planning.patch_mutation_service.mutations.apply",
+        "fitmas.domain.planning.patch_mutation_service.mutation_executor.apply",
         lambda db, plan_id, decision, **kwargs: (SimpleNamespace(allowed=True, warnings=[]), SimpleNamespace()),
     )
 
@@ -100,7 +100,7 @@ def test_apply_patch_for_user_week_review_requires_confirmation_prevents_commit(
     def _apply(*args, **kwargs):
         raise AssertionError("week review requires_confirmation must not commit")
 
-    monkeypatch.setattr("fitmas.domain.planning.patch_mutation_service.mutations.apply", _apply)
+    monkeypatch.setattr("fitmas.domain.planning.patch_mutation_service.mutation_executor.apply", _apply)
 
     result = apply_patch_for_user(object(), user=user, patch=patch)
 
@@ -138,7 +138,7 @@ def test_apply_patch_for_user_week_review_blocked_prevents_commit(monkeypatch) -
     def _apply(*args, **kwargs):
         raise AssertionError("week review blocked must not commit")
 
-    monkeypatch.setattr("fitmas.domain.planning.patch_mutation_service.mutations.apply", _apply)
+    monkeypatch.setattr("fitmas.domain.planning.patch_mutation_service.mutation_executor.apply", _apply)
 
     result = apply_patch_for_user(object(), user=user, patch=patch)
 
@@ -180,7 +180,7 @@ def test_apply_patch_for_user_confirmed_week_review_can_commit(monkeypatch) -> N
         calls.append(decision.mutation_type)
         return SimpleNamespace(allowed=True, warnings=[]), SimpleNamespace()
 
-    monkeypatch.setattr("fitmas.domain.planning.patch_mutation_service.mutations.apply", _apply)
+    monkeypatch.setattr("fitmas.domain.planning.patch_mutation_service.mutation_executor.apply", _apply)
 
     result = apply_patch_for_user(object(), user=user, patch=patch, allow_requires_confirmation=True)
 
@@ -302,7 +302,7 @@ def test_apply_patch_for_user_does_not_commit_patch_requiring_confirmation(monke
     def _apply(*args, **kwargs):
         raise AssertionError("patch requiring confirmation must not be committed")
 
-    monkeypatch.setattr("fitmas.domain.planning.patch_mutation_service.mutations.apply", _apply)
+    monkeypatch.setattr("fitmas.domain.planning.patch_mutation_service.mutation_executor.apply", _apply)
 
     result = apply_patch_for_user(object(), user=user, patch=patch)
 
@@ -342,7 +342,7 @@ def test_apply_patch_for_user_uses_runtime_sessions_without_active_plan(monkeypa
         captured.append(plan_id)
         return SimpleNamespace(allowed=True, warnings=[]), SimpleNamespace()
 
-    monkeypatch.setattr("fitmas.domain.planning.patch_mutation_service.mutations.apply", _apply)
+    monkeypatch.setattr("fitmas.domain.planning.patch_mutation_service.mutation_executor.apply", _apply)
 
     result = apply_patch_for_user(object(), user=user, patch=patch)
 
@@ -425,7 +425,7 @@ def test_apply_patch_for_user_can_commit_confirmed_patch_requiring_confirmation(
     monkeypatch.setattr("fitmas.domain.planning.patch_mutation_service.repo.get_scheduled_session", lambda *args, **kwargs: None)
     monkeypatch.setattr("fitmas.domain.planning.patch_mutation_service.repo.add_plan_mutation_event", lambda *args, **kwargs: None)
     monkeypatch.setattr(
-        "fitmas.domain.planning.patch_mutation_service.mutations.apply",
+        "fitmas.domain.planning.patch_mutation_service.mutation_executor.apply",
         lambda db, plan_id, decision, **kwargs: (
             SimpleNamespace(allowed=True, warnings=[SimpleNamespace(message="Charge dense.")]),
             SimpleNamespace(),
@@ -503,7 +503,7 @@ def test_apply_decisions_for_user_routes_all_decisions_through_mutations(monkeyp
         calls.append((plan_id, decision.mutation_type))
         return SimpleNamespace(allowed=True), SimpleNamespace()
 
-    monkeypatch.setattr("fitmas.domain.planning.patch_mutation_service.mutations.apply", _fake_apply)
+    monkeypatch.setattr("fitmas.domain.planning.patch_mutation_service.mutation_executor.apply", _fake_apply)
     monkeypatch.setattr("fitmas.domain.planning.patch_mutation_service.repo.add_plan_mutation_event", lambda *args, **kwargs: None)
     monkeypatch.setattr("fitmas.domain.planning.patch_mutation_service.repo.get_scheduled_sessions", lambda *args, **kwargs: [])
     monkeypatch.setattr("fitmas.domain.planning.patch_mutation_service.repo.get_scheduled_session", lambda *args, **kwargs: None)
@@ -598,7 +598,7 @@ def test_apply_decisions_for_user_uses_runtime_sessions_without_active_plan(monk
         captured.append(plan_id)
         return SimpleNamespace(allowed=True), SimpleNamespace()
 
-    monkeypatch.setattr("fitmas.domain.planning.patch_mutation_service.mutations.apply", _fake_apply)
+    monkeypatch.setattr("fitmas.domain.planning.patch_mutation_service.mutation_executor.apply", _fake_apply)
 
     result = apply_decisions_for_user(
         object(),
@@ -628,7 +628,7 @@ def test_apply_decisions_for_user_counts_only_successful_applies(monkeypatch) ->
             return SimpleNamespace(allowed=True), SimpleNamespace()
         return SimpleNamespace(allowed=True), None
 
-    monkeypatch.setattr("fitmas.domain.planning.patch_mutation_service.mutations.apply", _fake_apply)
+    monkeypatch.setattr("fitmas.domain.planning.patch_mutation_service.mutation_executor.apply", _fake_apply)
     monkeypatch.setattr("fitmas.domain.planning.patch_mutation_service.repo.add_plan_mutation_event", lambda *args, **kwargs: None)
     monkeypatch.setattr("fitmas.domain.planning.patch_mutation_service.repo.get_scheduled_sessions", lambda *args, **kwargs: [])
     monkeypatch.setattr("fitmas.domain.planning.patch_mutation_service.repo.get_scheduled_session", lambda *args, **kwargs: None)
@@ -663,7 +663,7 @@ def test_apply_decisions_for_user_exposes_blocked_events_with_reason(monkeypatch
         lambda db, user_id: SimpleNamespace(id=42),
     )
     monkeypatch.setattr(
-        "fitmas.domain.planning.patch_mutation_service.mutations.apply",
+        "fitmas.domain.planning.patch_mutation_service.mutation_executor.apply",
         lambda db, plan_id, decision, **kwargs: (
             SimpleNamespace(allowed=False, block_reason="protected_recovery_target", warnings=[]),
             None,
@@ -703,7 +703,7 @@ def test_apply_decisions_for_user_does_not_event_noop_move(monkeypatch) -> None:
         lambda db, user_id: SimpleNamespace(id=42),
     )
     monkeypatch.setattr(
-        "fitmas.domain.planning.patch_mutation_service.mutations.apply",
+        "fitmas.domain.planning.patch_mutation_service.mutation_executor.apply",
         lambda db, plan_id, decision, **kwargs: (SimpleNamespace(allowed=True), None),
     )
     monkeypatch.setattr("fitmas.domain.planning.patch_mutation_service.repo.get_scheduled_sessions", lambda *args, **kwargs: [])
@@ -749,7 +749,7 @@ def test_apply_decisions_for_user_passes_runtime_sessions_to_mutation_hooks(monk
         captured.update(kwargs)
         return SimpleNamespace(allowed=True), SimpleNamespace()
 
-    monkeypatch.setattr("fitmas.domain.planning.patch_mutation_service.mutations.apply", _fake_apply)
+    monkeypatch.setattr("fitmas.domain.planning.patch_mutation_service.mutation_executor.apply", _fake_apply)
 
     result = apply_decisions_for_user(object(), user=user, decisions=[decision])
 
@@ -772,7 +772,7 @@ def test_apply_decisions_for_user_records_event_for_successful_apply(monkeypatch
         lambda db, user_id: SimpleNamespace(id=42),
     )
     monkeypatch.setattr(
-        "fitmas.domain.planning.patch_mutation_service.mutations.apply",
+        "fitmas.domain.planning.patch_mutation_service.mutation_executor.apply",
         lambda db, plan_id, decision, **kwargs: (SimpleNamespace(allowed=True), SimpleNamespace(delta_weekly_load=-2)),
     )
 
@@ -830,7 +830,7 @@ def test_multi_session_decision_records_one_event_with_both_targets(monkeypatch)
         lambda db, user_id: SimpleNamespace(id=42),
     )
     monkeypatch.setattr(
-        "fitmas.domain.planning.patch_mutation_service.mutations.apply",
+        "fitmas.domain.planning.patch_mutation_service.mutation_executor.apply",
         lambda db, plan_id, decision, **kwargs: (SimpleNamespace(allowed=True), SimpleNamespace()),
     )
     monkeypatch.setattr("fitmas.domain.planning.patch_mutation_service.repo.get_scheduled_session", lambda *args, **kwargs: None)
@@ -890,7 +890,7 @@ def test_swap_session_event_summary_uses_committed_session_not_llm_text(monkeypa
         lambda db, user_id: SimpleNamespace(id=42),
     )
     monkeypatch.setattr(
-        "fitmas.domain.planning.patch_mutation_service.mutations.apply",
+        "fitmas.domain.planning.patch_mutation_service.mutation_executor.apply",
         lambda db, plan_id, decision, **kwargs: (SimpleNamespace(allowed=True), SimpleNamespace()),
     )
     monkeypatch.setattr(
@@ -947,7 +947,7 @@ def test_apply_decisions_for_user_returns_event_summary_for_replace(monkeypatch)
         lambda db, user_id: SimpleNamespace(id=42),
     )
     monkeypatch.setattr(
-        "fitmas.domain.planning.patch_mutation_service.mutations.apply",
+        "fitmas.domain.planning.patch_mutation_service.mutation_executor.apply",
         lambda db, plan_id, decision, **kwargs: (SimpleNamespace(allowed=True), SimpleNamespace()),
     )
     monkeypatch.setattr(
@@ -1228,9 +1228,9 @@ def test_only_patch_mutation_service_imports_low_level_mutation_executor() -> No
     root = Path(__file__).resolve().parents[1] / "backend/src/fitmas"
     offenders: list[str] = []
     forbidden = (
-        "from fitmas import mutations",
-        "import fitmas.mutations",
-        "from fitmas.mutations",
+        "from fitmas.domain.planning import mutation_executor",
+        "import fitmas.domain.planning.mutation_executor",
+        "from fitmas.domain.planning.mutation_executor",
     )
     for path in root.rglob("*.py"):
         if path.name == "patch_mutation_service.py":

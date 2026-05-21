@@ -65,13 +65,16 @@ Les cuts physiques recents :
   tant que le vieux writer planning racine existe.
 - `plan_mutation_service.py` racine supprime.
 - Le writer PlanPatch vit dans `domain/planning/patch_mutation_service.py`.
+- `mutations.py`, `mutation_hooks.py`, `mutation_permissions.py` racine
+  supprimes.
+- Les executors planning vivent dans `domain/planning/`.
 - `docs/superpowers/plans/` supprime : l'historique d'execution reste dans git, pas dans la memoire active.
 
 Etat chiffre au dernier check local :
 
-- root modules : `112`.
+- root modules : `109`.
 - legacy modules : `0` fichier source actif.
-- backend complet : `1255 passed, 11 skipped, 11 subtests passed`.
+- backend complet : `1263 passed, 11 skipped, 11 subtests passed`.
 - smoke core API : OK.
 - fallback census core : `0`.
 
@@ -146,8 +149,6 @@ Prochain chantier logique :
 
 - il n'y a plus de bridge `legacy/conversation_*` runtime-active ;
 - il n'y a plus de provider ou artifact `CoachDecision` ;
-- attaquer maintenant les executors planning racine
-  `mutations.py`, `mutation_hooks.py`, `mutation_permissions.py` ;
 - shrinker `conversation_pipeline.py` autour de moins d'entrypoints ;
 - garder la priorite runtime plus petit, pas refactor plus complet.
 

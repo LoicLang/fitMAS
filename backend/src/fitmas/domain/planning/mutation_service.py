@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 
 from fitmas import repository as repo
 from fitmas.domain.planning.models import PlanningCommandResult, PlanningDecisionResult
-from fitmas.mutation_permissions import (
+from fitmas.domain.planning.mutation_permissions import (
     default_confirmation_expiry,
     serialize_plan_patch_choice_confirmation,
     serialize_plan_patch_confirmation,

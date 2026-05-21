@@ -23,7 +23,7 @@ is allowed only for hotspots that need a separate shrink slice.
 
 ## Summary
 
-- Root files counted: 113
+- Root files counted: 109
 - Permanent root entrypoints allowed: 3
 - First wrapper cuts completed: `heartbeat*.py`, `llm_gateway.py`,
   `telegram_scheduler.py`, `tool_*.py`, `api_messages.py`,
@@ -95,9 +95,6 @@ is allowed only for hotspots that need a separate shrink slice.
 | `memory_profile.py` | domain/memory | merge | thin repository wrapper should vanish | memory package split |
 | `memory_routing.py` | domain/memory | move | memory routing belongs to memory domain | memory package split |
 | `models.py` | core | keep_root_temporarily | central SQLAlchemy models need a dedicated schema split | model schema split |
-| `mutation_hooks.py` | domain/planning | move | mutation side effects belong with planning commands | planning package split |
-| `mutation_permissions.py` | domain/planning | move | mutation permissions are planning policy | planning package split |
-| `mutations.py` | domain/planning | merge | old mutation helpers overlap PlanningCommandService | planning simplification |
 | `onboarding_contract.py` | app/api | move | onboarding API contract belongs with app/onboarding | api package split |
 | `performance_overview.py` | domain/athlete | move | performance overview is athlete analytics | athlete package split |
 | `performance_stats.py` | domain/athlete | move | performance stats are athlete analytics | athlete package split |

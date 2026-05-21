@@ -7,7 +7,7 @@ from typing import Any, Literal, Sequence
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
-from fitmas.mutation_hooks import run_pre_mutation_hooks
+from fitmas.domain.planning.mutation_hooks import run_pre_mutation_hooks
 from fitmas.time_context import get_local_now
 
 PlanPatchOperationType = Literal[

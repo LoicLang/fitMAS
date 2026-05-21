@@ -34,12 +34,14 @@ Encore a reduire :
 - `legacy/` n'a plus de module source actif.
 - Le writer PlanPatch n'est plus racine :
   `domain/planning/patch_mutation_service.py` l'own.
-- Le prochain gros morceau est reduire les executors planning racine
-  `mutations.py`, `mutation_hooks.py`, `mutation_permissions.py`.
+- Les executors planning bas niveau ne sont plus racine :
+  `domain/planning/mutation_executor.py`, `mutation_hooks.py`,
+  `mutation_permissions.py`.
+- Le prochain gros morceau est reduire `conversation_pipeline.py`.
 
 Dernieres preuves locales :
 
-- backend complet : `1255 passed, 11 skipped, 11 subtests passed`.
+- backend complet : `1263 passed, 11 skipped, 11 subtests passed`.
 - smoke core API : OK.
 - fallback census core : `0`.
 
@@ -49,8 +51,6 @@ Apres 10M : `CoachDecision` compat est supprime.
 
 Objectif :
 
-- reduire `mutations.py`, `mutation_hooks.py` et `mutation_permissions.py`
-  autour du pipeline planning canonique ;
 - reduire `conversation_pipeline.py`.
 
 ## Ordre De Lecture

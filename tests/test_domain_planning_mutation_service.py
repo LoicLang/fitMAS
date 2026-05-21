@@ -4,7 +4,7 @@ from types import SimpleNamespace
 
 from fitmas.domain.planning.models import PlanningDecisionResult
 from fitmas.domain.planning.mutation_service import PlanningCommandService
-from fitmas.mutation_permissions import (
+from fitmas.domain.planning.mutation_permissions import (
     deserialize_plan_patch_choice_confirmation,
     serialize_plan_patch_choice_confirmation,
     serialize_plan_patch_confirmation,

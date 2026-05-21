@@ -83,6 +83,9 @@ Encore actif :
   cote planning historique.
 - Le writer PlanPatch vit dans `domain/planning/patch_mutation_service.py` ;
   `plan_mutation_service.py` racine est supprime.
+- Les executors planning bas niveau vivent dans
+  `domain/planning/mutation_executor.py`, `mutation_hooks.py` et
+  `mutation_permissions.py`.
 
 ## Frontieres
 
@@ -237,10 +240,8 @@ deleted_count=10
 
 Objectif suivant :
 
-1. reduire les executors planning racine
-   `mutations.py`, `mutation_hooks.py`, `mutation_permissions.py` ;
-2. ramener `conversation_pipeline.py` vers un adapter plus mince ;
-3. continuer le menage des prompts conversationnels anciens encore centres
+1. ramener `conversation_pipeline.py` vers un adapter plus mince ;
+2. continuer le menage des prompts conversationnels anciens encore centres
    sur `CoachDecision`.
 
 ## Critere De Verdict

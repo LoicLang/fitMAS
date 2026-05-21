@@ -10,7 +10,7 @@ from fitmas.conversation_pipeline import (
     _execution_applied_patch_blocked_reply,
     _plan_patch_service_result_requires_clarification,
 )
-from fitmas.mutation_permissions import MutationImpactAssessment, build_confirmation_prompt
+from fitmas.domain.planning.mutation_permissions import MutationImpactAssessment, build_confirmation_prompt
 from fitmas.domain.planning.patch_mutation_service import (
     PlanAppliedMutationEvent,
     PlanBlockedMutationEvent,

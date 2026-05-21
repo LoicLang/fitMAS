@@ -151,6 +151,9 @@ Etat actuel :
   planning historique.
 - writer PlanPatch :
   `domain/planning/patch_mutation_service.py`.
+- executors planning bas niveau :
+  `domain/planning/mutation_executor.py`, `mutation_hooks.py`,
+  `mutation_permissions.py`.
 
 Regle :
 

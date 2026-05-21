@@ -48,8 +48,8 @@ Les wrappers deja supprimes :
 
 Le gros residu actif n'est plus le dossier `legacy/`.
 Le writer PlanPatch vit dans `domain/planning/patch_mutation_service.py`.
-Le prochain risque est le trio racine `mutations.py`, `mutation_hooks.py`,
-`mutation_permissions.py`.
+Les executors planning bas niveau vivent dans `domain/planning/`.
+Le prochain risque est `conversation_pipeline.py`.
 
 ## Priorite De Suppression
 
@@ -112,6 +112,8 @@ Sortie attendue :
   `domain/planning/mutation_decision.py` jusqu'au shrink du writer planning.
 - `plan_mutation_service.py` racine est supprime.
 - Le writer PlanPatch vit dans `domain/planning/patch_mutation_service.py`.
+- `mutations.py`, `mutation_hooks.py`, `mutation_permissions.py` racine
+  supprimes.
 
 ### P2 — Commands / Memory / Execution Bridges — clos en 10G
 
@@ -155,7 +157,7 @@ Etat :
 - read-only, activity highlight et clarification ne vivent plus dans des
   wrappers `legacy/conversation_*`;
 - les helpers de reply `CoachDecision` ont ete retires apres 10M ;
-- le dernier risque actif est le trio racine mutation executor.
+- le dernier risque actif est `conversation_pipeline.py`.
 
 ### P4 — Conversation Bridge Census — clos en 10J / 10K / 10M
 
@@ -192,8 +194,7 @@ Encore runtime-active :
 
 ## Prochain Slice
 
-Apres 10O : attaquer `mutations.py`, `mutation_hooks.py`,
-`mutation_permissions.py` sans recréer de fallback local.
+Apres 10P : shrinker `conversation_pipeline.py` sans recréer de fallback local.
 
 Commande :
 
