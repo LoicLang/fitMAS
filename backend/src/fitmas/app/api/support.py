@@ -8,11 +8,11 @@ from pathlib import Path
 from fastapi import HTTPException, Request
 
 from fitmas import schema as s
-from fitmas.api_payloads import OnboardPayload, OnboardPreviewPayload
-from fitmas.onboarding_contract import build_coach_profile, build_goal_summary
+from fitmas.app.api.payloads import OnboardPayload, OnboardPreviewPayload
+from fitmas.app.api.onboarding_contract import build_coach_profile, build_goal_summary
 from fitmas.planner import normalize_sports
 
-ROOT_DIR = Path(__file__).resolve().parents[3]
+ROOT_DIR = Path(__file__).resolve().parents[5]
 FRONTEND_DIR = ROOT_DIR / "frontend"
 FRONTEND_PUBLIC_DIR = FRONTEND_DIR / "public"
 FRONTEND_BUILD_DIR = FRONTEND_DIR / "dist"

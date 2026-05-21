@@ -23,7 +23,7 @@ is allowed only for hotspots that need a separate shrink slice.
 
 ## Summary
 
-- Root files counted: 104
+- Root files counted: 91
 - Permanent root entrypoints allowed: 3
 - First wrapper cuts completed: `heartbeat*.py`, `llm_gateway.py`,
   `telegram_scheduler.py`, `tool_*.py`, `api_messages.py`,
@@ -31,6 +31,10 @@ is allowed only for hotspots that need a separate shrink slice.
 - Planning candidate root cut completed: `plan_patch_backend_candidates.py`,
   `plan_patch_candidates.py`, `plan_patch_candidate_evaluator.py`,
   `plan_patch_candidate_reviewer.py`, `plan_patch_adaptation_policy.py`
+- API root cut completed: `api_activities.py`, `api_app.py`,
+  `api_debug.py`, `api_onboarding.py`, `api_ops.py`, `api_payloads.py`,
+  `api_plan.py`, `api_read.py`, `api_static.py`, `api_stats.py`,
+  `api_support.py`, `app_views.py`, `onboarding_contract.py`
 - Primary risk: moving files faster than deleting obsolete boundaries
 - Thursday criterion: root is explainable, delete candidates are explicit, and
   new root files fail architecture tests unless classified here
@@ -47,18 +51,6 @@ is allowed only for hotspots that need a separate shrink slice.
 | `adaptation_decision.py` | domain/planning | merge | decision value object should live with planning decisions | planning simplification |
 | `adaptation_log.py` | domain/coaching | move | user-visible adaptation history is coaching evidence | coaching package split |
 | `api.py` | root-entrypoint | entrypoint | FastAPI app assembly entrypoint | keep until app package owns all routes |
-| `api_activities.py` | app/api | move | API route module | api package split |
-| `api_app.py` | app/api | move | app cockpit route module | api package split |
-| `api_debug.py` | app/api | move | debug route module | api package split |
-| `api_onboarding.py` | app/api | move | onboarding route module | api package split |
-| `api_ops.py` | app/api | move | ops route module | api package split |
-| `api_payloads.py` | app/api | merge | payload helpers should live beside routes | api package split |
-| `api_plan.py` | app/api | move | plan route module | api package split |
-| `api_read.py` | app/api | move | app read route module | api package split |
-| `api_static.py` | app/api | move | static route module | api package split |
-| `api_stats.py` | app/api | move | stats route module | api package split |
-| `api_support.py` | app/api | merge | shared API helpers should not stay root | api package split |
-| `app_views.py` | app/api | move | read models for cockpit views | api package split |
 | `athlete_profile.py` | domain/athlete | move | athlete profile domain model | athlete package split |
 | `athlete_zones.py` | domain/athlete | move | zones are athlete physiology | athlete package split |
 | `availability_constraints.py` | domain/memory | move | durable availability facts belong with memory | memory package split |
@@ -98,7 +90,6 @@ is allowed only for hotspots that need a separate shrink slice.
 | `memory_profile.py` | domain/memory | merge | thin repository wrapper should vanish | memory package split |
 | `memory_routing.py` | domain/memory | move | memory routing belongs to memory domain | memory package split |
 | `models.py` | core | keep_root_temporarily | central SQLAlchemy models need a dedicated schema split | model schema split |
-| `onboarding_contract.py` | app/api | move | onboarding API contract belongs with app/onboarding | api package split |
 | `performance_overview.py` | domain/athlete | move | performance overview is athlete analytics | athlete package split |
 | `performance_stats.py` | domain/athlete | move | performance stats are athlete analytics | athlete package split |
 | `periodization.py` | domain/planning | move | periodization belongs to planning | planning package split |
@@ -146,10 +137,9 @@ is allowed only for hotspots that need a separate shrink slice.
 
 ## Immediate Cut Order
 
-1. Move API routes to `app/api` and delete root wrappers.
-2. Move Telegram delivery modules to `app/telegram` and delete root wrappers.
-3. Move execution and memory services to `domain/*` before touching monoliths.
-4. Split monoliths only after deletion:
+1. Move Telegram delivery modules to `app/telegram` and delete root wrappers.
+2. Move execution and memory services to `domain/*` before touching monoliths.
+3. Split monoliths only after deletion:
    `conversation_pipeline.py`, `repository.py`, `week_coherence.py`.
 
 ## Non Goals

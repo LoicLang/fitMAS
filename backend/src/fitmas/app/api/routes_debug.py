@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from fitmas import repository as repo, schema as s
-from fitmas.api_support import ensure_debug_enabled
+from fitmas.app.api.support import ensure_debug_enabled
 from fitmas.coach_messages import persist_draft
 from fitmas.db import get_db
 from fitmas.telegram_channel import resolve_chat_id, send_text_message

@@ -5,7 +5,7 @@ from pathlib import Path
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import FileResponse, HTMLResponse
 
-from fitmas.api_support import FRONTEND_BUILD_DIR, FRONTEND_INDEX
+from fitmas.app.api.support import FRONTEND_BUILD_DIR, FRONTEND_INDEX
 
 router = APIRouter()
 

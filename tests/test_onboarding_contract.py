@@ -10,8 +10,8 @@ os.environ.setdefault("FITMAS_DB_PATH", tempfile.mktemp(prefix="fitmas-onboardin
 from fastapi.testclient import TestClient
 
 from fitmas.api import app
-from fitmas.api_payloads import OnboardPreviewPayload
-from fitmas.api_support import build_onboarding_facts, normalized_onboarding_payload
+from fitmas.app.api.payloads import OnboardPreviewPayload
+from fitmas.app.api.support import build_onboarding_facts, normalized_onboarding_payload
 
 
 class OnboardingContractTest(unittest.TestCase):
@@ -86,8 +86,8 @@ class OnboardingContractTest(unittest.TestCase):
         }
 
         with (
-            patch("fitmas.api_onboarding.formulate_onboarding_recap", return_value="recap"),
-            patch("fitmas.api_onboarding.preview_coach_voice", return_value=["a", "b", "c"]),
+            patch("fitmas.app.api.routes_onboarding.formulate_onboarding_recap", return_value="recap"),
+            patch("fitmas.app.api.routes_onboarding.preview_coach_voice", return_value=["a", "b", "c"]),
         ):
             response = self.client.post("/api/v0/onboard/preview", json=payload)
 

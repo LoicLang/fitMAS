@@ -6,8 +6,8 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from fitmas import repository as repo, schema as s, strava
-from fitmas.api_read import _build_recent_activity, _build_today_fitness, _build_today_view
-from fitmas.app_views import build_app_calendar, build_app_evolution, build_app_overview, build_session_detail
+from fitmas.app.api.routes_read import _build_recent_activity, _build_today_fitness, _build_today_view
+from fitmas.app.api.app_views import build_app_calendar, build_app_evolution, build_app_overview, build_session_detail
 from fitmas.coach_state_bundle import build_coach_state_bundle
 from fitmas.db import get_db
 from fitmas.performance_overview import build_performance_overview

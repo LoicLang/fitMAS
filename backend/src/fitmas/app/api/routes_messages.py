@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 from fitmas import repository as repo
 from fitmas.adaptation import check_and_adapt_health_facts
 from fitmas.activity_helpers import claimed_activities_last_days
-from fitmas.api_payloads import IncomingMessage
+from fitmas.app.api.payloads import IncomingMessage
 from fitmas.availability_constraints import parse_availability_fact_key
 from fitmas.conversation_contract import ConversationPipelineDependencies, ConversationTurnInput, ConversationUserNotFoundError
 from fitmas.conversation_turn_planner import plan_conversation_turn

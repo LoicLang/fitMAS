@@ -80,6 +80,11 @@ Les cuts physiques recents :
   Le code actif vit sous `domain/planning/`.
 - Le generateur root mort `plan_patch_backend_candidates.py` et ses tests
   dedies ont ete supprimes.
+- Les routes et helpers API root ont ete deplaces sous `app/api/` :
+  `routes_activities.py`, `routes_app.py`, `routes_debug.py`,
+  `routes_onboarding.py`, `routes_ops.py`, `routes_plan.py`,
+  `routes_read.py`, `routes_static.py`, `routes_stats.py`, `payloads.py`,
+  `support.py`, `app_views.py`, `onboarding_contract.py`.
 - Le readonly plan lookup remplace maintenant une reply LLM non grounded par
   le fallback construit depuis les facts `PlanWindow`.
 - Le fallback execution parle depuis l'event machine applique quand le
@@ -88,7 +93,7 @@ Les cuts physiques recents :
 
 Etat chiffre au dernier check local :
 
-- root modules : `104`.
+- root modules : `91`.
 - legacy modules : `0` fichier source actif.
 - backend complet : `1308 passed, 11 skipped, 14 subtests passed`.
 - smoke core API : OK.

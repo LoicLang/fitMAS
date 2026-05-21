@@ -15,8 +15,8 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from fitmas import repository as repo, schema as s
-from fitmas.api_payloads import IncomingMessage
-from fitmas.api_support import ensure_debug_enabled
+from fitmas.app.api.payloads import IncomingMessage
+from fitmas.app.api.support import ensure_debug_enabled
 from fitmas.coach_messages import persist_draft
 from fitmas.conversation_contract import (
     ConversationPipelineDependencies,

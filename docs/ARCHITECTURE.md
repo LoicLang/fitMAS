@@ -60,6 +60,7 @@ Root encore accepte :
 Ce qui n'est plus l'architecture active :
 
 - root `api_messages.py`
+- root `api_*.py`
 - root `final_reply.py`
 - root `heartbeat.py`
 - root `telegram_scheduler.py`

@@ -7,8 +7,8 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from fitmas import repository as repo, schema as s
-from fitmas.api_payloads import OnboardPayload, OnboardPreviewPayload
-from fitmas.api_support import apply_onboarding_to_user, build_onboarding_facts, normalized_onboarding_payload
+from fitmas.app.api.payloads import OnboardPayload, OnboardPreviewPayload
+from fitmas.app.api.support import apply_onboarding_to_user, build_onboarding_facts, normalized_onboarding_payload
 from fitmas.calibration_status import build_calibration_status, build_initial_calibration_status
 from fitmas.db import get_db
 from fitmas.generated_week_coherence import GeneratedWeekCoherenceBlocked, guard_generated_week_coherence
@@ -20,7 +20,7 @@ from fitmas.llm.legacy_onboarding import (
 )
 from fitmas.memory_profile import replace_profile_memory
 from fitmas.models import OnboardPreview, OnboardResult, WeeklyPlan
-from fitmas.onboarding_contract import build_goal_summary, build_onboarding_setup_preview, build_protected_focus
+from fitmas.app.api.onboarding_contract import build_goal_summary, build_onboarding_setup_preview, build_protected_focus
 from fitmas.periodization import compute_mesocycle_state, derive_total_weeks
 from fitmas.planner import build_week_plan
 from fitmas.planning_state import refresh_planning_state

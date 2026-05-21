@@ -8,8 +8,8 @@ from sqlalchemy.orm import Session
 
 from fitmas import repository as repo, strava
 from fitmas.activities import infer_activity_title, match_activity_to_day, normalize_activity_sport
-from fitmas.api_payloads import ManualActivityPayload
-from fitmas.api_support import parse_optional_datetime, public_base_url
+from fitmas.app.api.payloads import ManualActivityPayload
+from fitmas.app.api.support import parse_optional_datetime, public_base_url
 from fitmas.db import get_db
 from fitmas.models import Activity
 from fitmas.domain.planning.patch_mutation_service import complete_session_from_activity_for_user
