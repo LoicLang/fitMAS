@@ -50,15 +50,20 @@ message Telegram / app
 
 Etat actuel :
 
-- `conversation_pipeline.py` reste le gros orchestrateur, reduit de `1819` a
-  `1248` lignes apres extraction des replies PlanPatch.
+- `conversation_pipeline.py` est devenu un adapter mince de 78 lignes : user,
+  idempotence, calibration, contexte, puis delegation au router.
 - `decision/` porte deja les types et l'outcome canonique.
 - `llm/understanding_service.py` porte l'understanding cible.
 - `decision/understanding_runtime.py` porte l'appel understanding canonique.
+- `decision/turn_state.py`, `decision/turn_context.py`,
+  `decision/turn_calibration.py`, `decision/turn_router.py`,
+  `decision/turn_finalization.py`, `decision/turn_persistence.py` et
+  `decision/turn_idempotency.py` portent les anciens blocs du pipeline.
 - `decision/plan_patch_reply.py` porte les helpers de reply PlanPatch qui
   vivaient auparavant dans le pipeline.
 - `decision/readonly_reply.py` refuse une reply plan lookup non grounded quand
-  des facts `PlanWindow` permettent un fallback factuel.
+  des facts `PlanWindow` permettent un fallback factuel ; pour une execution
+  appliquee, le fallback visible parle depuis l'event machine.
 - `decision/coach_decision_runtime.py` ne porte plus le provider compat :
   il trace `coach_decision_provider_removed` et compose une clarification
   canonique si aucune lane canonique ne sait traiter.
@@ -128,8 +133,8 @@ pending_resolution
 ```
 
 Le pending runtime vit maintenant dans `decision/pending_resolution.py`.
-Le gap restant est de reduire `conversation_pipeline.py`, qui orchestre encore
-trop de branches autour de ces services.
+Le pipeline conversation ne porte plus lui-meme les branches pending ; elles
+vivent dans le router et les services de decision.
 
 ## Planning
 

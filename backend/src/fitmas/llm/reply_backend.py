@@ -195,7 +195,9 @@ def compose_execution_report_reply(
         extra_facts=(
             "Response type: execution_report",
             "Aucun changement planning n'a ete commit.",
+            "La source autoritaire pour la seance, le statut et la date est `Execution appliquee`, pas le brouillon initial.",
             "Ne dis pas qu'une execution est notee, enregistree, ajoutee ou marquee sauf si `Execution appliquee` est listee.",
+            "Si `Execution appliquee` contient une date, conserve cette date ou reste neutre; ne la remplace pas par aujourd'hui, demain ou hier.",
             "Si aucune execution n'est appliquee, reconnais le signal sans pretendre l'avoir enregistre.",
         ),
     )

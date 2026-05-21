@@ -71,6 +71,12 @@ def build_reply_prompt(context: ReplyPromptInput) -> PromptRender:
     if context.execution_actions_applied:
         lines.append("Execution appliquee:")
         lines.extend(f"- {item}" for item in context.execution_actions_applied)
+        lines.append(
+            "Contrainte: ces lignes sont la source de verite pour la seance, le statut et la date d'execution."
+        )
+        lines.append(
+            "Si une ligne contient une date, ne la transforme pas en aujourd'hui, demain ou hier et ne mentionne pas une autre date."
+        )
     if context.memory_actions_applied:
         lines.append("Memoire appliquee:")
         lines.extend(f"- {item}" for item in context.memory_actions_applied)

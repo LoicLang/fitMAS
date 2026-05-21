@@ -415,6 +415,27 @@ def test_execution_report_composer_repairs_receipt_without_applied_action() -> N
     assert len(calls) == 2
 
 
+def test_execution_report_composer_prioritizes_applied_execution_date() -> None:
+    def fake_request_text(**kwargs):
+        if "Reponse sortante a verifier:" in kwargs["prompt"]:
+            assert "Renfo support du 2026-04-29 notee comme non faite." in kwargs["prompt"]
+            assert "REPAIR si une execution appliquee contient une date" in kwargs["prompt"]
+            return '{"verdict":"allow","reason":"date respectee"}'
+        assert "La source autoritaire pour la seance, le statut et la date est `Execution appliquee`" in kwargs["prompt"]
+        assert "ne la remplace pas par aujourd'hui, demain ou hier" in kwargs["prompt"]
+        return "Renfo support du 2026-04-29 notee comme non faite. On ne cherche pas a rattraper."
+
+    reply = compose_execution_report_reply(
+        user_text="J'ai rate hier",
+        original_llm_reply="On reste sur la seance de renfo prevue aujourd'hui.",
+        execution_actions_applied=("Renfo support du 2026-04-29 notee comme non faite.",),
+        request_text_fn=fake_request_text,
+        verifier_text_fn=fake_request_text,
+    )
+
+    assert reply == "Renfo support du 2026-04-29 notee comme non faite. On ne cherche pas a rattraper."
+
+
 def test_plan_lookup_composer_uses_fact_preservation_context() -> None:
     def fake_request_text(**kwargs):
         assert "plan_lookup" in kwargs["prompt"]

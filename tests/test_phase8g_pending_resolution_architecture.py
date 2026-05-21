@@ -30,8 +30,8 @@ def _function_defs(relative: str) -> set[str]:
 
 
 def test_8g_conversation_pipeline_delegates_pending_resolution() -> None:
-    source = _source("conversation_pipeline.py")
-    functions = _function_defs("conversation_pipeline.py")
+    source = _source("decision/turn_router.py")
+    functions = _function_defs("decision/turn_router.py")
 
     forbidden_helpers = {
         "_apply_pending_resolution",

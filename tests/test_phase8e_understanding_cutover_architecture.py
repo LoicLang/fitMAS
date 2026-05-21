@@ -44,7 +44,7 @@ def test_8e_llm_understanding_service_exists_without_legacy_contracts() -> None:
 
 
 def test_8e_conversation_uses_understanding_runtime_not_direct_llm_service() -> None:
-    source = _source("conversation_pipeline.py")
+    source = _source("decision/turn_router.py")
 
     assert "understanding_runtime" in source
     assert "conversation_understanding_bridge" not in source
@@ -78,6 +78,8 @@ def test_8e_decision_package_still_has_no_llm_or_legacy_imports() -> None:
         if path.name in {
             "command_application.py",
             "readonly_reply.py",
+            "turn_finalization.py",
+            "turn_router.py",
             "understanding_runtime.py",
             "coach_decision_runtime.py",
             "plan_patch_reply.py",

@@ -24,7 +24,7 @@ def test_8q_understanding_bridge_exposes_provider_pivot_boundary() -> None:
 
 
 def test_8q_conversation_pipeline_runs_canonical_before_removed_provider_clarification() -> None:
-    source = _source("conversation_pipeline.py")
+    source = _source("decision/turn_router.py")
 
     canonical_index = source.index("run_canonical_understanding_shadow(")
     clarification_index = source.index("canonical_provider_clarification_outcome(")

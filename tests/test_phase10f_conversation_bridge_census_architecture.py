@@ -56,12 +56,12 @@ def test_10f_census_cli_writes_json(tmp_path: Path) -> None:
 
 
 def test_10f_activity_and_clarification_live_in_decision_not_legacy() -> None:
-    pipeline = _source("conversation_pipeline.py")
+    router = _source("decision/turn_router.py")
 
-    assert "from fitmas.decision import activity_highlight" in pipeline
-    assert "from fitmas.decision import clarification_reply" in pipeline
-    assert "conversation_activity_highlight_bridge" not in pipeline
-    assert "conversation_canonical_clarification_bridge" not in pipeline
+    assert "from fitmas.decision import activity_highlight" in router
+    assert "from fitmas.decision import clarification_reply" in router
+    assert "conversation_activity_highlight_bridge" not in router
+    assert "conversation_canonical_clarification_bridge" not in router
     assert not (SRC / "legacy/conversation_activity_highlight_bridge.py").exists()
     assert not (SRC / "legacy/conversation_canonical_clarification_bridge.py").exists()
 
@@ -87,12 +87,12 @@ def test_10f_coach_decision_reply_helpers_live_in_readonly_reply_owner() -> None
 
 
 def test_10h_readonly_reply_lives_in_decision_not_legacy() -> None:
-    pipeline = _source("conversation_pipeline.py")
+    router = _source("decision/turn_router.py")
     readonly = _source("decision/readonly_reply.py")
 
-    assert "from fitmas.decision import readonly_reply" in pipeline
-    assert "conversation_canonical_readonly_bridge" not in pipeline
-    assert "conversation_readonly_reply_bridge" not in pipeline
+    assert "from fitmas.decision import readonly_reply" in router
+    assert "conversation_canonical_readonly_bridge" not in router
+    assert "conversation_readonly_reply_bridge" not in router
     assert not (SRC / "legacy/conversation_canonical_readonly_bridge.py").exists()
     assert not (SRC / "legacy/conversation_readonly_reply_bridge.py").exists()
     assert "def should_use_canonical_readonly_without_legacy(" in readonly
@@ -102,11 +102,11 @@ def test_10h_readonly_reply_lives_in_decision_not_legacy() -> None:
 
 
 def test_10i_understanding_runtime_lives_in_decision_not_legacy() -> None:
-    pipeline = _source("conversation_pipeline.py")
+    router = _source("decision/turn_router.py")
     runtime = _source("decision/understanding_runtime.py")
 
-    assert "from fitmas.decision import understanding_runtime" in pipeline
-    assert "conversation_understanding_bridge" not in pipeline
+    assert "from fitmas.decision import understanding_runtime" in router
+    assert "conversation_understanding_bridge" not in router
     assert not (SRC / "legacy/conversation_understanding_bridge.py").exists()
     assert "def run_canonical_understanding_shadow(" in runtime
     assert "def should_use_canonical_understanding_without_legacy(" in runtime
@@ -127,11 +127,11 @@ def test_10i_conversation_bridge_census_only_tracks_legacy_decide_active() -> No
 
 
 def test_10j_coach_decision_runtime_lives_in_decision_not_legacy_bridge() -> None:
-    pipeline = _source("conversation_pipeline.py")
+    router = _source("decision/turn_router.py")
     runtime = _source("decision/coach_decision_runtime.py")
 
-    assert "from fitmas.decision import coach_decision_runtime" in pipeline
-    assert "conversation_decide_bridge" not in pipeline
+    assert "from fitmas.decision import coach_decision_runtime" in router
+    assert "conversation_decide_bridge" not in router
     assert not (SRC / "legacy/conversation_decide_bridge.py").exists()
     assert "def build_legacy_coach_decision_request(" not in runtime
     assert "def run_legacy_coach_decision(" not in runtime

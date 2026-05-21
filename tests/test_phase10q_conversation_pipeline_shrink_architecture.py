@@ -62,8 +62,10 @@ def test_10q_plan_patch_reply_helpers_live_in_decision_owner() -> None:
 
 def test_10q_conversation_pipeline_does_not_import_plan_patch_reply_internals() -> None:
     imports = _imports("conversation_pipeline.py")
+    context_imports = _imports("decision/turn_context.py")
 
-    assert "fitmas.decision.plan_patch_reply" in imports
+    assert "fitmas.decision.plan_patch_reply" in context_imports
+    assert "fitmas.decision.plan_patch_reply" not in imports
     assert "fitmas.domain.planning.patch_mutation_service.PlanPatchServiceResult" not in imports
     assert "fitmas.plan_patch.PlanPatch" not in imports
     assert "re" not in imports

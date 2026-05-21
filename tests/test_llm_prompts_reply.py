@@ -46,3 +46,25 @@ def test_reply_prompt_marks_no_commit_as_uncommitted() -> None:
     assert "Aucun changement planning n'a ete commit." in rendered.prompt
     assert "Confirmation en attente: Allègement à confirmer." in rendered.prompt
     assert "ne claim pas une action appliquee" in rendered.prompt
+
+
+def test_reply_prompt_treats_dated_execution_actions_as_authoritative() -> None:
+    rendered = build_reply_prompt(
+        ReplyPromptInput(
+            pipeline="conversation",
+            capability="execution_report",
+            user_text="je n'ai pas pu la faire hier",
+            original_llm_reply="On reste sur la séance d'aujourd'hui.",
+            committed_events=(),
+            blocked_events=(),
+            pending_summary=None,
+            memory_actions_applied=(),
+            execution_actions_applied=("Renfo support du 2026-04-29 notee comme non faite.",),
+            allowed_to_claim_mutation=False,
+            extra_facts=(),
+        )
+    )
+
+    assert "Renfo support du 2026-04-29 notee comme non faite." in rendered.prompt
+    assert "source de verite pour la seance, le statut et la date" in rendered.prompt
+    assert "ne la transforme pas en aujourd'hui, demain ou hier" in rendered.prompt

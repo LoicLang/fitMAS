@@ -75,8 +75,11 @@ En place :
 
 Encore actif :
 
-- `conversation_pipeline.py` reste l'orchestrateur principal, mais il a ete
-  reduit de `1819` a `1248` lignes.
+- `conversation_pipeline.py` est maintenant un adapter de 78 lignes. Il garde
+  l'entree API historique, puis delegue aux owners `decision/turn_*`.
+- La responsabilite conversationnelle restante est concentree dans
+  `decision/turn_router.py` et `decision/turn_context.py`, pas dans le root
+  pipeline.
 - aucun bridge `legacy/conversation_*` mesure ne reste runtime-active.
 - le provider, les artifacts et les adapters `CoachDecision` sont supprimes.
 - `legacy/` ne contient plus de module source actif.
@@ -138,7 +141,8 @@ Etat actuel :
 - `decision/plan_patch_reply.py` porte les replies conversationnelles liees aux
   anciens artefacts PlanPatch.
 - `decision/readonly_reply.py` fallback sur les facts `PlanWindow` si une reply
-  plan lookup composee ne cite aucune verite planning.
+  plan lookup composee ne cite aucune verite planning, et fallback sur
+  l'event execution applique si une reply execution composee est invalide.
 - `llm/reply_backend.py` porte les primitives de composition/verif LLM.
 - `llm/reply_decision_backend.py` implemente le backend concret du `DecisionReplyComposer`.
 - `skills/heartbeat/reply_composer.py` porte la reply heartbeat.
@@ -146,8 +150,8 @@ Etat actuel :
 Prochaine simplification :
 
 - reduire `llm/reply_backend.py` et pousser plus de verification dans `OutputVerifier`.
-- continuer a reduire `conversation_pipeline.py` autour de turn state,
-  idempotence et recording.
+- shrinker `decision/turn_router.py` et `decision/turn_context.py` maintenant
+  que `conversation_pipeline.py` est mince.
 
 ## Heartbeat Cible
 
@@ -168,9 +172,10 @@ Planning/pending P0 a ete extrait en 10E :
 - `decision/pending_resolution.py`
 - `decision/pending_reply.py`
 
-Les sept wrappers legacy P0 ont ete supprimes. Le prochain gros risque est
-desormais la responsabilite restante de `conversation_pipeline.py` : chargement
-de turn state, idempotence, orchestration et recording.
+Les sept wrappers legacy P0 ont ete supprimes. Le gros risque suivant etait
+`conversation_pipeline.py`; il est desormais un adapter mince. Le nouveau
+hotspot a traiter est le couple `decision/turn_router.py` /
+`decision/turn_context.py`.
 
 10F a ajoute le census conversationnel et supprime quatre bridges :
 
@@ -243,11 +248,27 @@ deleted_count=10
 - `llm/decision_legacy.py` ;
 - `llm/legacy_{parser,prompt,action_compile,provider,schema_repair,tool_loop}.py`.
 
+10N a sorti le reste du pipeline conversationnel dans des owners explicites :
+
+- `decision/turn_idempotency.py`
+- `decision/turn_state.py`
+- `decision/turn_calibration.py`
+- `decision/turn_context.py`
+- `decision/turn_router.py`
+- `decision/turn_finalization.py`
+- `decision/turn_persistence.py`
+- `decision/turn_recording.py`
+
+`conversation_pipeline.py` n'est plus le hotspot principal. Il ne doit pas
+regrossir.
+
 Objectif suivant :
 
-1. ramener `conversation_pipeline.py` vers un adapter plus mince ;
+1. shrinker `decision/turn_router.py` et `decision/turn_context.py` ;
 2. continuer le menage des prompts conversationnels anciens encore centres
-   sur `CoachDecision`.
+   sur les artefacts PlanPatch historiques ;
+3. garder les smokes reels comme arbitre de fiabilite, meme quand le provider
+   rend les tours lents.
 
 ## Critere De Verdict
 

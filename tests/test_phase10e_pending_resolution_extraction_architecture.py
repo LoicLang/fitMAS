@@ -39,7 +39,7 @@ def test_10e_pending_resolution_lives_in_decision_without_legacy_or_llm_imports(
 
 def test_10e_runtime_uses_decision_pending_resolution_not_legacy_bridge() -> None:
     runtime_sources = {
-        "conversation_pipeline.py": _source("conversation_pipeline.py"),
+        "decision/turn_router.py": _source("decision/turn_router.py"),
         "decision/command_application.py": _source("decision/command_application.py"),
     }
 

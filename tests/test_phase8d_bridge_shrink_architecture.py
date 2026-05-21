@@ -76,7 +76,7 @@ def test_8d_no_active_heartbeat_skill_imports_outside_legacy() -> None:
 
 
 def test_8d_conversation_pipeline_uses_decision_owners_not_legacy_bridges() -> None:
-    source = _source("conversation_pipeline.py")
+    source = _source("decision/turn_router.py")
 
     assert "readonly_reply" in source
     assert "legacy_decision_contract_disabled" not in source

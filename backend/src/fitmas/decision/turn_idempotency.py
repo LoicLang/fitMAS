@@ -48,7 +48,7 @@ def reply_for_duplicate_client_message(
     row = repo.get_conversation_turn_by_client_message_key(db, user_id, key)
     if row is None:
         return None
-    logger.info("conversation_pipeline.idempotent_replay user=%s key=%s turn=%s", user_id, key, row.id)
+    logger.info("conversation_turn.idempotent_replay user=%s key=%s turn=%s", user_id, key, row.id)
     day_updated = _day_id_from_row(row.day_updated)
     return MessageReply(
         user_message=Message(role=MessageRole.USER, text=row.user_message),

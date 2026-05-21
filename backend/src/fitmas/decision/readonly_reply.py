@@ -177,13 +177,17 @@ def execution_action_phrases_for_final_reply(
         if session is None:
             continue
         title = str(session.session_title or "La seance").strip()
+        scheduled_date = getattr(session, "scheduled_date", None)
+        if scheduled_date is not None and hasattr(scheduled_date, "date"):
+            scheduled_date = scheduled_date.date()
+        date_hint = f" du {scheduled_date.isoformat()}" if scheduled_date is not None and hasattr(scheduled_date, "isoformat") else ""
         status = str(session.completion_status or "").strip()
         if status == "done":
-            phrases.append(f"{title} notee comme faite.")
+            phrases.append(f"{title}{date_hint} notee comme faite.")
         elif status == "skipped":
-            phrases.append(f"{title} notee comme non faite.")
+            phrases.append(f"{title}{date_hint} notee comme non faite.")
         else:
-            phrases.append(f"{title} mise a jour.")
+            phrases.append(f"{title}{date_hint} mise a jour.")
     if not phrases and int(action_result.get("execution_applied") or 0) > 0:
         phrases.append("Execution notee.")
     return tuple(phrases)
@@ -243,7 +247,10 @@ def compose_no_change_reply_for_turn(
         )
     if not composed_reply:
         if not _is_safe_original_reply(original_reply):
-            fallback = _safe_no_change_fallback()
+            fallback = _safe_no_change_fallback(
+                capability=capability,
+                execution_actions_applied=execution_actions_applied,
+            )
             turn_context["final_reply"] = {
                 "capability": capability,
                 "draft": original_reply,
@@ -535,8 +542,14 @@ def _is_safe_original_reply(text: str) -> bool:
     return True
 
 
-def _safe_no_change_fallback() -> str:
-    return "Bien recu. Rien ne bouge dans le plan sur ce tour."
+def _safe_no_change_fallback(
+    *,
+    capability: str = "no_change",
+    execution_actions_applied: tuple[str, ...] = (),
+) -> str:
+    if capability == "execution_report" and execution_actions_applied:
+        return f"{execution_actions_applied[0]} Le reste du planning ne bouge pas."
+    return "Je le prends en compte. Le planning ne bouge pas pour l'instant."
 
 
 def _env_flag_enabled(name: str, *, default: bool) -> bool:

@@ -25,7 +25,7 @@ def test_8t_canonical_planning_bridge_exists_and_is_default_on_with_opt_out() ->
 
 
 def test_8t_pipeline_routes_canonical_planning_before_removed_provider_clarification() -> None:
-    source = _source("conversation_pipeline.py")
+    source = _source("decision/turn_router.py")
 
     planning_index = source.index("should_use_canonical_planning_without_legacy(")
     clarification_index = source.index("canonical_provider_clarification_outcome(")

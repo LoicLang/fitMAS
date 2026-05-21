@@ -26,7 +26,7 @@ def test_9s_coachdecision_runtime_exposes_removed_provider_trace() -> None:
 
 
 def test_9s_pipeline_never_calls_legacy_decide_after_canonical_routes() -> None:
-    source = _source("conversation_pipeline.py")
+    source = _source("decision/turn_router.py")
 
     clarification_index = source.index("canonical_provider_clarification_outcome(")
     assert source.index("compose_canonical_clarification_reply(") < clarification_index
@@ -70,7 +70,7 @@ def test_9s_no_direct_decision_legacy_decide_import_outside_llm_package() -> Non
 
 
 def test_9s_canonical_routes_still_precede_removed_provider_clarification() -> None:
-    source = _source("conversation_pipeline.py")
+    source = _source("decision/turn_router.py")
 
     clarification_index = source.index("canonical_provider_clarification_outcome(")
     assert source.index("compose_canonical_clarification_reply(") < clarification_index

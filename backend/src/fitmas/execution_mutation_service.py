@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 import unicodedata
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
@@ -126,6 +127,12 @@ def _target_date_from_ref(target_ref: str, *, user: s.User, now: datetime | None
         return date.fromisoformat(iso_candidate)
     except ValueError:
         pass
+    embedded_iso = re.search(r"(?<!\d)\d{4}-\d{2}-\d{2}(?!\d)", normalized)
+    if embedded_iso is not None:
+        try:
+            return date.fromisoformat(embedded_iso.group(0))
+        except ValueError:
+            pass
     if "hier" in normalized or "yesterday" in normalized:
         return local_now.date() - timedelta(days=1)
     if "aujourd" in normalized or "today" in normalized:

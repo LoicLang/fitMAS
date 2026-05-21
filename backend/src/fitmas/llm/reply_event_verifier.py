@@ -168,6 +168,7 @@ def build_post_event_reply_verifier_prompt(
             "",
             "ALLOW seulement si chaque action, date, session, sport et duree mentionnes par la reponse est supporte par les events.",
             "REPAIR si la reponse ajoute un deplacement, swap, creation, suppression, remplacement, date ou cible absent des events.",
+            "REPAIR si une execution appliquee contient une date et que la reponse la transforme en aujourd'hui, demain ou hier.",
             "REPAIR si la reponse transforme un remplacement/liberation en deplacement, ou inverse un commit et un blocage.",
             "REPAIR si elle demande confirmation pour une action deja committee.",
             "En repair, garde 1-2 phrases courtes, sans nom technique, sans inventer de nouvelle action.",
@@ -227,6 +228,7 @@ def build_uncommitted_reply_verifier_prompt(
             "REPAIR si elle parle d'un changement planning comme deja effectif, deja cale, deja remplace, deja deplace ou deja transforme.",
             "REPAIR si elle dit qu'une seance devient autre chose alors qu'il n'y a qu'une confirmation en attente.",
             "REPAIR si elle invente un commit, une date, une seance, un sport ou une duree absent des faits machine.",
+            "REPAIR si une execution appliquee contient une date et que la reponse la transforme en aujourd'hui, demain ou hier.",
             "En repair, garde 1-2 phrases courtes, sans nom technique, sans inventer de nouvelle action.",
         ]
     )

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import datetime
 from types import SimpleNamespace
 
 from fitmas.decision import CoachUnderstanding, PendingResolution, RequestedPlanChange, UserSignal
@@ -81,6 +82,24 @@ def test_readonly_gate_rejects_plan_mutation_even_if_understanding_says_general_
         turn_plan=SimpleNamespace(primary_intent="plan_mutation", secondary_intents=()),
         pending_confirmation=None,
     )
+
+
+def test_execution_action_phrase_preserves_committed_session_date(monkeypatch) -> None:
+    session = SimpleNamespace(
+        id=42,
+        session_title="Renfo support",
+        completion_status="skipped",
+        scheduled_date=datetime.fromisoformat("2026-04-29T07:00:00+02:00"),
+    )
+    monkeypatch.setattr(bridge.repo, "get_scheduled_session", lambda *args, **kwargs: session)
+
+    phrases = bridge.execution_action_phrases_for_final_reply(
+        SimpleNamespace(),
+        user=SimpleNamespace(id=1),
+        action_result={"execution_updated_session_ids": [42], "execution_applied": 1},
+    )
+
+    assert phrases == ("Renfo support du 2026-04-29 notee comme non faite.",)
 
 
 def test_readonly_gate_rejects_active_pending(monkeypatch) -> None:

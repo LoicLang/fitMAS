@@ -356,6 +356,39 @@ class MutationActionServicesTest(unittest.TestCase):
         self.assertEqual(result.blocked_count, 0)
         self.assertEqual(updated.completion_status, "skipped")
 
+    def test_execution_service_resolves_embedded_iso_date_target_ref_from_typed_llm_action(self) -> None:
+        session = self._scheduled_session(days_offset=-1, sport_type="strength", title="Renfo 34min")
+
+        for target_ref in (
+            f"{session.scheduled_date.date().isoformat()} session: Renfo 34min",
+            f"{session.scheduled_date.date().isoformat()}_Renfo_34min",
+            f"Renfo 34min ({session.scheduled_date.date().isoformat()})",
+        ):
+            with self.subTest(target_ref=target_ref):
+                repo.set_scheduled_session_status(self.db, session.id, "planned")
+                result = apply_execution_actions_for_user(
+                    self.db,
+                    user=self.user,
+                    actions=[
+                        ExecutionUpdateAction(
+                            type="record_execution_update",
+                            target_ref=target_ref,
+                            status="not_completed",
+                            completed=False,
+                            sport_type="strength",
+                            confidence=0.95,
+                            evidence="pas eu le temps hier",
+                        )
+                    ],
+                )
+
+                self.db.expire_all()
+                updated = repo.get_scheduled_session(self.db, self.user.id, session.id)
+
+                self.assertEqual(result.applied_count, 1)
+                self.assertEqual(result.blocked_count, 0)
+                self.assertEqual(updated.completion_status, "skipped")
+
     def test_execution_service_prefers_structured_session_id(self) -> None:
         session = self._scheduled_session(days_offset=0, sport_type="running", title="Footing")
 
