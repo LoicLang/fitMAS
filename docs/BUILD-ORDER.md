@@ -89,13 +89,17 @@ Les cuts physiques recents :
   le fallback construit depuis les facts `PlanWindow`.
 - Le fallback execution parle depuis l'event machine applique quand le
   composer LLM sort une reply invalide.
+- Le planning canonique prend maintenant l'autorite sur un
+  `CoachUnderstanding` actionable meme si l'ancien `turn_plan` a rate
+  `plan_mutation`; les refs insuffisantes finissent en `planning_runtime_block`,
+  pas en clarification provider.
 - `docs/superpowers/plans/` supprime : l'historique d'execution reste dans git, pas dans la memoire active.
 
 Etat chiffre au dernier check local :
 
 - root modules : `91`.
 - legacy modules : `0` fichier source actif.
-- backend complet : `1308 passed, 11 skipped, 14 subtests passed`.
+- backend complet : `1313 passed, 11 skipped, 14 subtests passed`.
 - smoke core API : OK.
 - fallback census core : `0`.
 
