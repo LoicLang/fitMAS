@@ -10,9 +10,9 @@ read_when:
 
 ## Etat Court
 
-Le dossier `legacy/` contient encore un seul contrat actif de compat :
-`MutationDecision`. Le bloc P0 planning/pending et la compat `CoachDecision`
-n'y vivent plus.
+Le dossier `legacy/` n'a plus de module source actif. Le bloc P0
+planning/pending, la compat `CoachDecision` et `MutationDecision` n'y vivent
+plus.
 
 Les wrappers deja supprimes :
 
@@ -44,9 +44,11 @@ Les wrappers deja supprimes :
 - `llm/legacy_provider.py`
 - `llm/legacy_schema_repair.py`
 - `llm/legacy_tool_loop.py`
+- `legacy/decision_contracts.py`
 
-Le gros residu actif n'est plus planning/pending ni `CoachDecision`.
-Le prochain risque est `MutationDecision` dans `legacy/decision_contracts.py`.
+Le gros residu actif n'est plus le dossier `legacy/`.
+Le prochain risque est le vieux writer planning racine qui consomme encore
+`domain/planning/mutation_decision.py`.
 
 ## Priorite De Suppression
 
@@ -84,9 +86,9 @@ Etat :
 - les wrappers vides sont supprimes ;
 - le reste du travail est dans `conversation_pipeline.py`, pas dans ces fichiers.
 
-### P1 — CoachDecision / Understanding Legacy — clos en 10M
+### P1 — CoachDecision / Understanding Legacy — clos en 10M / 10N
 
-Fichiers :
+Fichiers supprimes :
 
 - `legacy/decision_contracts.py`
 - `legacy/coach_decision_artifact.py`
@@ -104,8 +106,9 @@ Sortie attendue :
 
 - `legacy/coach_decision_artifact.py`, `legacy/coach_understanding_adapter.py`,
   `legacy/understanding_shadow.py` et `llm/decision_legacy.py` supprimes.
-- `legacy/decision_contracts.py` conserve seulement `MutationDecision` jusqu'au
-  slice planning writer suivant.
+- `legacy/decision_contracts.py` supprime.
+- `MutationDecision` vit temporairement dans
+  `domain/planning/mutation_decision.py` jusqu'au shrink du writer planning.
 
 ### P2 — Commands / Memory / Execution Bridges — clos en 10G
 
@@ -125,7 +128,7 @@ Etat :
 - `legacy/coach_command_adapter.py` est supprime ;
 - les writes memoire/execution conversationnels passent par
   `decision/command_application.py` ;
-- les action contracts ne sont plus definis dans `legacy/decision_contracts.py`.
+- les action contracts ne sont plus definis dans un contrat legacy.
 
 ### P3 — Readonly / Activity / Clarification Bridges — clos en 10H
 
@@ -149,7 +152,7 @@ Etat :
 - read-only, activity highlight et clarification ne vivent plus dans des
   wrappers `legacy/conversation_*`;
 - les helpers de reply `CoachDecision` ont ete retires apres 10M ;
-- le dernier risque actif est `MutationDecision`.
+- le dernier risque actif est le vieux writer planning racine.
 
 ### P4 — Conversation Bridge Census — clos en 10J / 10K / 10M
 
@@ -186,7 +189,8 @@ Encore runtime-active :
 
 ## Prochain Slice
 
-Apres 10M : attaquer `MutationDecision` restant sans recreer de fallback local.
+Apres 10N : attaquer le writer planning historique sans recréer de fallback
+local.
 
 Commande :
 

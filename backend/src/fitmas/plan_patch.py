@@ -294,7 +294,7 @@ def _is_ambiguous_existing_session_reference(
 
 
 def _operation_to_mutation_decision(operation: PlanPatchOperation, *, fitmas_message: str) -> MutationDecision:
-    from fitmas.legacy.decision_contracts import MutationDecision
+    from fitmas.domain.planning.mutation_decision import MutationDecision
 
     return MutationDecision(
         mutation_type=operation.operation_type,

@@ -200,29 +200,9 @@ def test_decision_package_stays_free_of_legacy_understanding_adapter() -> None:
     assert offenders == []
 
 
-def test_legacy_understanding_adapter_is_only_legacy_module_importing_llm_contracts() -> None:
+def test_legacy_package_has_no_runtime_source_modules() -> None:
     legacy = ROOT / "backend" / "src" / "fitmas" / "legacy"
-    allowed = {
-        legacy / "coach_understanding_adapter.py",
-        legacy / "decision_contracts.py",
-        legacy / "understanding_shadow.py",
-    }
-    forbidden_modules = {
-        "fitmas.llm",
-        "fitmas.plan_patch",
-        "fitmas.conversation_pipeline",
-        "fitmas.final_reply",
-    }
-    offenders: list[str] = []
-
-    for path in sorted(legacy.glob("*.py")):
-        if path.name == "__init__.py" or path in allowed:
-            continue
-        for module in _imports(path):
-            if module in forbidden_modules:
-                offenders.append(f"{path.name}: {module}")
-
-    assert offenders == []
+    assert list(legacy.glob("*.py")) == []
 
 
 def test_decision_understanding_has_no_legacy_contract_fields() -> None:

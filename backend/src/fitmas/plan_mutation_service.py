@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 
 from fitmas import mutations, repository as repo, schema as s
 from fitmas.domain.planning import session_actions as plan_actions
-from fitmas.legacy.decision_contracts import MutationDecision
+from fitmas.domain.planning.mutation_decision import MutationDecision
 from fitmas.mutation_hooks import run_pre_mutation_hooks
 from fitmas.plan_patch import (
     PlanPatch,

@@ -62,9 +62,10 @@ def test_10m_no_backend_imports_deleted_coachdecision_modules() -> None:
     assert offenders == []
 
 
-def test_10m_legacy_decision_contracts_no_longer_define_coachdecision() -> None:
-    source = _source("legacy/decision_contracts.py")
+def test_10m_legacy_decision_contracts_are_deleted() -> None:
+    assert not (SRC / "legacy" / "decision_contracts.py").exists()
 
+    source = _source("domain/planning/mutation_decision.py")
     assert "class CoachDecision" not in source
     assert "PendingResolution" not in source
     assert "MemoryAction" not in source

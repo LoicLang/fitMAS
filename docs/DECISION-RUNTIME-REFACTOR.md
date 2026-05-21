@@ -78,8 +78,9 @@ Encore actif :
 - `conversation_pipeline.py` reste le mega-orchestrateur principal.
 - aucun bridge `legacy/conversation_*` mesure ne reste runtime-active.
 - le provider, les artifacts et les adapters `CoachDecision` sont supprimes.
-- `legacy/decision_contracts.py` ne porte plus que `MutationDecision`, dernier
-  contrat legacy actif cote planning historique.
+- `legacy/` ne contient plus de module source actif.
+- `MutationDecision` vit temporairement dans `domain/planning/mutation_decision.py`
+  cote planning historique.
 
 ## Frontieres
 
@@ -234,7 +235,8 @@ deleted_count=10
 
 Objectif suivant :
 
-1. migrer ou supprimer `legacy/decision_contracts.py` / `MutationDecision` ;
+1. reduire le vieux writer planning racine qui consomme encore
+   `MutationDecision` ;
 2. ramener `conversation_pipeline.py` vers un adapter plus mince ;
 3. continuer le menage des prompts conversationnels anciens encore centres
    sur `CoachDecision`.

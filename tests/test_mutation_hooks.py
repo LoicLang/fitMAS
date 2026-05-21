@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from fitmas.legacy.decision_contracts import MutationDecision
+from fitmas.domain.planning.mutation_decision import MutationDecision
 from fitmas.mutation_hooks import run_pre_mutation_hooks
 
 

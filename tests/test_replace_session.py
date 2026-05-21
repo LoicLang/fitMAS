@@ -127,7 +127,7 @@ class TestApplyReplacementFields:
 
 class TestMutationDecisionFields:
     def test_replace_session_fields_exist(self):
-        from fitmas.legacy.decision_contracts import MutationDecision
+        from fitmas.domain.planning.mutation_decision import MutationDecision
         d = MutationDecision(
             mutation_type="replace_session",
             target_session_id=42,
@@ -144,7 +144,7 @@ class TestMutationDecisionFields:
         assert d.new_duration_min == 25
 
     def test_replace_session_defaults_to_none(self):
-        from fitmas.legacy.decision_contracts import MutationDecision
+        from fitmas.domain.planning.mutation_decision import MutationDecision
         d = MutationDecision(
             mutation_type="no_change",
             rationale="ok",

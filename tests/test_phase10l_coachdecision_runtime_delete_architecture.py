@@ -57,7 +57,6 @@ def test_10l_runtime_no_longer_imports_legacy_decision_provider_module() -> None
         "llm/legacy_parser.py",
         "llm/legacy_tool_loop.py",
         "legacy/coach_understanding_adapter.py",
-        "legacy/decision_contracts.py",
     }
     for path in _backend_files():
         relative = path.relative_to(SRC).as_posix()

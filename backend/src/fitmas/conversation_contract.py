@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Callable
 
-from fitmas.legacy.decision_contracts import MutationDecision
+from fitmas.domain.planning.mutation_decision import MutationDecision
 from fitmas.models import DayId, Extraction
 
 

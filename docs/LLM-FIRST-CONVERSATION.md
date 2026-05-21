@@ -98,8 +98,8 @@ Encore en transition :
 
 - `CoachDecision` legacy est supprime du provider path ;
 - `conversation_pipeline.py` orchestre encore trop ;
-- `MutationDecision` reste dans `legacy/decision_contracts.py` pour le vieux
-  writer planning.
+- `MutationDecision` vit dans `domain/planning/mutation_decision.py` pour le
+  vieux writer planning.
 
 ## Pending
 

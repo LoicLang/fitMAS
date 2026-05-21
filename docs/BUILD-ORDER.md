@@ -35,7 +35,7 @@ Le repo contient maintenant :
 - `llm/` : gateway, prompts, compat legacy LLM isolee, reply backend LLM.
 - `skills/heartbeat/` : heartbeat runtime, reply composer, tool loop et generation proactive.
 - `app/api/` et `app/telegram/` : deplacement progressif des entrypoints.
-- `legacy/` : bridges de migration encore actifs, a supprimer progressivement.
+- `legacy/` : plus aucun module source actif.
 
 Les cuts physiques recents :
 
@@ -60,13 +60,15 @@ Les cuts physiques recents :
 - `llm/decision_legacy.py` supprime.
 - `llm/legacy_{parser,prompt,action_compile,provider,schema_repair,tool_loop}.py`
   supprimes.
-- `legacy/decision_contracts.py` ne porte plus que `MutationDecision`.
+- `legacy/decision_contracts.py` supprime.
+- `MutationDecision` vit temporairement dans `domain/planning/mutation_decision.py`
+  tant que le vieux writer planning racine existe.
 - `docs/superpowers/plans/` supprime : l'historique d'execution reste dans git, pas dans la memoire active.
 
 Etat chiffre au dernier check local :
 
 - root modules : `113`.
-- legacy modules : `2` fichiers (`__init__.py`, `decision_contracts.py`).
+- legacy modules : `0` fichier source actif.
 - backend complet : `1253 passed, 11 skipped, 11 subtests passed`.
 - smoke core API : OK.
 - fallback census core : `0`.
@@ -142,8 +144,8 @@ Prochain chantier logique :
 
 - il n'y a plus de bridge `legacy/conversation_*` runtime-active ;
 - il n'y a plus de provider ou artifact `CoachDecision` ;
-- attaquer maintenant le dernier residu `legacy/decision_contracts.py`
-  (`MutationDecision`) et le vieux writer planning qui en depend ;
+- attaquer maintenant le vieux writer planning racine qui depend encore de
+  `MutationDecision` ;
 - shrinker `conversation_pipeline.py` autour de moins d'entrypoints ;
 - garder la priorite runtime plus petit, pas refactor plus complet.
 

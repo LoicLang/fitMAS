@@ -60,11 +60,8 @@ def test_9u_runtime_modules_do_not_import_broad_fitmas_llm() -> None:
     assert offenders == []
 
 
-def test_9u_legacy_decision_contracts_do_not_import_fitmas_llm() -> None:
-    source = _source("legacy/decision_contracts.py")
-
-    assert "from fitmas.llm import" not in source
-    assert "import fitmas.llm" not in source
+def test_9u_legacy_decision_contracts_are_removed() -> None:
+    assert not (SRC / "legacy" / "decision_contracts.py").exists()
 
 
 def test_9u_legacy_provider_module_is_removed() -> None:

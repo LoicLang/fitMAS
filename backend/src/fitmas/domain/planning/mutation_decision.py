@@ -3,13 +3,13 @@ from __future__ import annotations
 from pydantic import BaseModel
 
 
-"""Temporary planning mutation compatibility contract.
-
-Only `MutationDecision` remains here. Move it into the planning domain before
-deleting `legacy/` completely.
-"""
-
 class MutationDecision(BaseModel):
+    """Historical planning mutation command shape.
+
+    Kept in the planning domain while the old mutation writer is being shrunk.
+    New runtime paths should prefer PlanPatch/candidates/policy.
+    """
+
     mutation_type: str
     target_session_id: int | None = None
     second_session_id: int | None = None
@@ -27,6 +27,4 @@ class MutationDecision(BaseModel):
     fitmas_message: str
 
 
-__all__ = [
-    "MutationDecision",
-]
+__all__ = ["MutationDecision"]

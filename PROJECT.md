@@ -31,9 +31,9 @@ Deja en place :
 Encore a reduire :
 
 - `conversation_pipeline.py` reste le mega-orchestrateur.
-- `legacy/` contient encore `2` modules, dont `__init__.py`.
-- Le prochain gros morceau est sortir `MutationDecision` de `legacy/` ou le
-  supprimer avec le vieux writer planning associe.
+- `legacy/` n'a plus de module source actif.
+- Le prochain gros morceau est reduire le vieux writer planning racine qui
+  consomme encore `domain/planning/mutation_decision.py`.
 
 Dernieres preuves locales :
 
@@ -47,8 +47,8 @@ Apres 10M : `CoachDecision` compat est supprime.
 
 Objectif :
 
-- migrer ou supprimer `legacy/decision_contracts.py`, qui ne porte plus que
-  `MutationDecision` ;
+- reduire `plan_mutation_service.py`, `mutations.py`, `mutation_hooks.py` et
+  `mutation_permissions.py` autour du pipeline planning canonique ;
 - reduire `conversation_pipeline.py`.
 
 ## Ordre De Lecture

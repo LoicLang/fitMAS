@@ -132,8 +132,8 @@ Le point chaud reste `conversation_pipeline.py`.
 
 Les prochains cuts doivent attaquer :
 
-- `MutationDecision` dans `legacy/decision_contracts.py` ;
-- le vieux writer planning qui garde ce contrat en vie ;
+- le vieux writer planning qui consomme encore
+  `domain/planning/mutation_decision.py` ;
 - `conversation_pipeline.py`, encore trop gros ;
 - fichiers racine encore non classes.
 

@@ -6,8 +6,10 @@ from .models import (
     PlanningDecisionResult,
     ResolvedPlanChange,
 )
+from .mutation_decision import MutationDecision
 
 __all__ = [
+    "MutationDecision",
     "PlanChangeReference",
     "PlanningCandidateSet",
     "PlanningCommandResult",

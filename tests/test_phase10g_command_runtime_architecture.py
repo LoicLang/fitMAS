@@ -61,12 +61,10 @@ def test_10g_command_mapping_is_canonical_and_legacy_free() -> None:
 
 def test_10g_action_contracts_are_not_owned_by_legacy_decision_contracts() -> None:
     actions = _source("decision/command_actions.py")
-    legacy_contracts = _source("legacy/decision_contracts.py")
 
     assert "class AvailabilityConstraintAction" in actions
     assert "class ExecutionUpdateAction" in actions
-    assert "class AvailabilityConstraintAction" not in legacy_contracts
-    assert "class ExecutionUpdateAction" not in legacy_contracts
+    assert not (SRC / "legacy" / "decision_contracts.py").exists()
 
 
 def test_10g_legacy_coach_command_adapter_is_deleted() -> None:

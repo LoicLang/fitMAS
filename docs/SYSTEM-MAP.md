@@ -145,9 +145,10 @@ Owner temporaire :
 
 Etat actuel :
 
-- `2` modules restants : `__init__.py` et `decision_contracts.py`.
-- gros residu : `MutationDecision`, encore utilise par le writer planning
-  historique.
+- aucun module source actif.
+- gros residu de compat sorti de `legacy/` :
+  `domain/planning/mutation_decision.py`, encore utilise par le writer
+  planning historique.
 
 Regle :
 
