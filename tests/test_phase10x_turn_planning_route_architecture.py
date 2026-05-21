@@ -77,3 +77,31 @@ def test_10x_planning_route_preserves_existing_understanding_when_not_applicable
     assert result.outcome is None
     assert result.canonical_understanding is None
     assert result.understanding_refreshed is False
+
+
+def test_10x_existing_understanding_route_handles_unsupported_planning(monkeypatch) -> None:
+    captured: dict[str, object] = {}
+
+    def fake_handle(**kwargs):
+        captured["handle_unsupported"] = kwargs["handle_unsupported"]
+        return None, False
+
+    monkeypatch.setattr(turn_planning_route, "_handle_planning_if_applicable", fake_handle)
+
+    result = turn_planning_route.route_with_existing_understanding(
+        db=SimpleNamespace(),
+        user=SimpleNamespace(),
+        user_text="Echange mercredi et jeudi",
+        understanding=SimpleNamespace(),
+        turn_plan=SimpleNamespace(),
+        pending_confirmation=None,
+        context_artifacts=SimpleNamespace(),
+        coach_bundle=SimpleNamespace(),
+        grounding_facts=(),
+        turn_context={},
+        decision_reply_composer_fn=lambda: SimpleNamespace(),
+        reviewer_request_json_fn=lambda **_kwargs: {},
+    )
+
+    assert result.outcome is None
+    assert captured == {"handle_unsupported": True}

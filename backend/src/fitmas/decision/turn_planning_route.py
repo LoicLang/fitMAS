@@ -107,7 +107,7 @@ def route_with_existing_understanding(
         turn_context=turn_context,
         decision_reply_composer_fn=decision_reply_composer_fn,
         reviewer_request_json_fn=reviewer_request_json_fn,
-        handle_unsupported=False,
+        handle_unsupported=True,
         trace_not_used=False,
     )
     return PlanningRouteResult(
