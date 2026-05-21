@@ -87,9 +87,9 @@ def test_extended_scenarios_cover_required_probe_groups() -> None:
 
 
 def test_trivial_ack_turn_plan_uses_terminal_close_path() -> None:
-    from fitmas import conversation_pipeline
+    from fitmas.decision import turn_context
 
-    assert conversation_pipeline._should_use_terminal_close_path(
+    assert turn_context.should_use_terminal_close_path(
         turn_plan=SimpleNamespace(
             primary_intent="trivial_ack",
             secondary_intents=(),

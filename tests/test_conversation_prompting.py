@@ -1,9 +1,7 @@
 from __future__ import annotations
 
 import unittest
-from types import SimpleNamespace
 
-from fitmas import conversation_pipeline
 from fitmas.conversation_prompting import select_conversation_prompt_policy
 from fitmas.tools.routing import IntentCategory
 
@@ -124,28 +122,9 @@ class ConversationPromptingTest(unittest.TestCase):
                 self.assertFalse(policy.include_open_question_marker)
 
     def test_plan_lookup_does_not_build_coach_reading_digest(self) -> None:
-        called = False
+        policy = select_conversation_prompt_policy(intent=IntentCategory.PLAN_LOOKUP)
 
-        def fake_build_digest(*args, **kwargs):
-            nonlocal called
-            called = True
-            raise AssertionError("plan_lookup should not build coach reading digest")
-
-        original = conversation_pipeline.build_coach_reading_digest
-        try:
-            conversation_pipeline.build_coach_reading_digest = fake_build_digest
-            digest = conversation_pipeline._maybe_build_coach_reading_digest_text(
-                None,
-                user=None,
-                today=None,
-                recent_reality_window=None,
-                turn_plan=SimpleNamespace(primary_intent="plan_lookup"),
-            )
-        finally:
-            conversation_pipeline.build_coach_reading_digest = original
-
-        self.assertIsNone(digest)
-        self.assertFalse(called)
+        self.assertFalse(policy.include_coach_context)
 
 
 if __name__ == "__main__":

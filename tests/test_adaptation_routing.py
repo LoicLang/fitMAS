@@ -3,7 +3,7 @@ from __future__ import annotations
 import unittest
 from types import SimpleNamespace
 
-from fitmas.conversation_pipeline import _should_route_adaptation_context_to_llm
+from fitmas.decision.turn_context import should_route_adaptation_context_to_llm
 
 
 def _turn_plan(primary: str, *, has_plan_mutation: bool = False) -> SimpleNamespace:
@@ -22,14 +22,14 @@ class AdaptationRoutingGateTest(unittest.TestCase):
 
     def test_routing_off_when_no_adaptation(self) -> None:
         self.assertFalse(
-            _should_route_adaptation_context_to_llm(
+            should_route_adaptation_context_to_llm(
                 _turn_plan("plan_mutation", has_plan_mutation=True),
                 None,
                 plan_mutation_request=True,
             )
         )
         self.assertFalse(
-            _should_route_adaptation_context_to_llm(
+            should_route_adaptation_context_to_llm(
                 None,
                 None,
                 plan_mutation_request=False,
@@ -49,7 +49,7 @@ class AdaptationRoutingGateTest(unittest.TestCase):
         for turn_plan, plan_mutation_request in cases:
             with self.subTest(turn_plan=turn_plan, plan_mutation_request=plan_mutation_request):
                 self.assertTrue(
-                    _should_route_adaptation_context_to_llm(
+                    should_route_adaptation_context_to_llm(
                         turn_plan,
                         adaptation,
                         plan_mutation_request=plan_mutation_request,
