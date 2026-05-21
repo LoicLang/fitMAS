@@ -51,16 +51,16 @@ class ConversationDebugEndpointTest(unittest.TestCase):
         self._original_extract_facts = api_messages.extract_facts
         self._original_plan_turn = api_messages.plan_conversation_turn
 
-        from fitmas import conversation_pipeline
+        from fitmas.decision import turn_router
 
-        self._conversation_pipeline = conversation_pipeline
-        self._original_reply_composer = conversation_pipeline._decision_reply_composer
-        conversation_pipeline._decision_reply_composer = lambda: FakeReplyComposer()
+        self._turn_router = turn_router
+        self._original_reply_composer = turn_router._decision_reply_composer
+        turn_router._decision_reply_composer = lambda: FakeReplyComposer()
 
     def tearDown(self) -> None:
         api_messages.extract_facts = self._original_extract_facts
         api_messages.plan_conversation_turn = self._original_plan_turn
-        self._conversation_pipeline._decision_reply_composer = self._original_reply_composer
+        self._turn_router._decision_reply_composer = self._original_reply_composer
         os.environ.pop("FITMAS_UNDERSTANDING_RUNTIME_SHADOW", None)
         self.db.close()
 

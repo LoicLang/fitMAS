@@ -31,7 +31,7 @@ def test_10u_turn_finalization_owner_exists_under_decision() -> None:
 
 
 def test_10u_conversation_pipeline_imports_turn_finalization_owner() -> None:
-    assert "fitmas.decision.turn_finalization" in _imports(PIPELINE)
+    assert "fitmas.decision.turn_finalization" in _imports(DECISION / "turn_router.py")
 
 
 def test_10u_conversation_pipeline_no_longer_records_turns_directly() -> None:

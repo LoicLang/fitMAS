@@ -74,6 +74,7 @@ def test_decision_runtime_phase1_modules_exist() -> None:
         "turn_idempotency.py",
         "turn_persistence.py",
         "turn_state.py",
+        "turn_router.py",
         "understanding_runtime.py",
         "pending_reply.py",
         "pending_resolution.py",
