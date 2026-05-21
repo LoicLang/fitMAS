@@ -75,7 +75,7 @@ def test_9u_legacy_provider_has_no_default_broad_llm_runtime_import() -> None:
 
 
 def test_9u_legacy_provider_env_flag_is_default_off() -> None:
-    source = _source("legacy/conversation_decide_bridge.py")
+    source = _source("decision/coach_decision_runtime.py")
 
     assert "FITMAS_ENABLE_LEGACY_COACH_DECISION_PROVIDER" in source
     assert 'os.getenv("FITMAS_ENABLE_LEGACY_COACH_DECISION_PROVIDER") == "1"' in source

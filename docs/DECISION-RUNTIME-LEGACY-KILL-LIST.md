@@ -30,6 +30,7 @@ Les wrappers deja supprimes :
 - `legacy/conversation_canonical_readonly_bridge.py`
 - `legacy/conversation_readonly_reply_bridge.py`
 - `legacy/conversation_understanding_bridge.py`
+- `legacy/conversation_decide_bridge.py`
 
 Le gros residu actif n'est plus planning/pending. Le prochain risque est le
 reste des bridges conversationnels encore relies a `conversation_pipeline.py`.
@@ -78,7 +79,6 @@ Fichiers :
 - `legacy/coach_decision_artifact.py`
 - `legacy/coach_decision_provider.py`
 - `legacy/coach_understanding_adapter.py`
-- `legacy/conversation_decide_bridge.py`
 - `legacy/understanding_shadow.py`
 
 Probleme :
@@ -86,6 +86,8 @@ Probleme :
 - `CoachDecision` reste l'ancien contrat provider/runtime ;
 - l'understanding canonique vit maintenant dans `decision/understanding_runtime.py`,
   mais il produit encore un artifact `CoachDecision` compat pour certaines lanes.
+- le runtime provider compat vit maintenant dans `decision/coach_decision_runtime.py`,
+  mais il appelle encore le provider legacy explicite.
 
 Sortie attendue :
 
@@ -138,27 +140,27 @@ Etat :
   `decision/readonly_reply.py`;
 - le dernier risque actif est provider/understanding.
 
-### P4 — Conversation Bridge Census — 10I
+### P4 — Conversation Bridge Census — clos en 10J
 
 Commande :
 
 ```bash
 ./scripts/decision-runtime-conversation-bridge-census \
-  --json-out /tmp/fitmas-10i-conversation-bridge-census.json
+  --json-out /tmp/fitmas-10j-conversation-bridge-census.json
 ```
 
-Resultat courant apres 10I :
+Resultat courant apres 10J :
 
 ```text
-runtime_active_count=1
+runtime_active_count=0
 legacy_internal_count=0
 test_only_count=0
-deleted_count=9
+deleted_count=10
 ```
 
 Encore runtime-active :
 
-- `legacy/conversation_decide_bridge.py`
+- aucun bridge `legacy/conversation_*` mesure.
 
 ## Gates A Garder
 
@@ -171,23 +173,24 @@ Encore runtime-active :
 
 ## Prochain Slice
 
-Apres 10I : attaquer le dernier bloc provider `CoachDecision` sans recréer de
+Apres 10J : attaquer le provider `CoachDecision` lui-meme sans recréer de
 fallback local.
 
 Commande :
 
 ```bash
 ./scripts/decision-runtime-conversation-bridge-census \
-  --json-out /tmp/fitmas-10i-conversation-bridge-census.json
+  --json-out /tmp/fitmas-10j-conversation-bridge-census.json
 ```
 
-Resultat 10I :
+Resultat 10J :
 
 - census conversationnel ajoute ;
 - activity highlight et clarification vivent dans `decision/`;
 - helpers de forme `CoachDecision` vivent dans `legacy/coach_decision_artifact.py`;
 - readonly/reply vit dans `decision/readonly_reply.py`;
 - understanding runtime vit dans `decision/understanding_runtime.py`;
+- CoachDecision provider runtime vit dans `decision/coach_decision_runtime.py`;
 - command mapping/application vit dans `decision/`;
-- neuf bridges conversationnels sont supprimes ;
-- un bridge reste actif : `conversation_decide_bridge.py`.
+- dix bridges conversationnels sont supprimes ;
+- aucun bridge `legacy/conversation_*` ne reste actif.

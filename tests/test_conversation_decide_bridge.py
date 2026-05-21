@@ -4,7 +4,7 @@ from types import SimpleNamespace
 
 from fitmas.legacy.coach_decision_artifact import legacy_decision_artifact_from_raw
 from fitmas.legacy.coach_decision_provider import CoachDecisionResult
-from fitmas.legacy.conversation_decide_bridge import (
+from fitmas.decision.coach_decision_runtime import (
     build_legacy_coach_decision_request,
     legacy_provider_allowed_for_turn,
     legacy_provider_skip_reason,

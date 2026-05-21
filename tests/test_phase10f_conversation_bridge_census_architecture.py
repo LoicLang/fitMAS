@@ -33,9 +33,8 @@ def test_10f_conversation_bridge_census_tracks_remaining_runtime_bridges() -> No
     by_path = {entry["path"]: entry for entry in census["modules"]}
 
     assert census["module_count"] >= 8
-    assert by_path["legacy/conversation_decide_bridge.py"]["status"] == "runtime_active"
-    assert "conversation_pipeline.py" in by_path["legacy/conversation_decide_bridge.py"]["runtime_importers"]
-    assert "run_legacy_coach_decision" in by_path["legacy/conversation_decide_bridge.py"]["runtime_symbols"]
+    assert by_path["legacy/conversation_decide_bridge.py"]["status"] == "deleted"
+    assert by_path["legacy/conversation_understanding_bridge.py"]["status"] == "deleted"
 
 
 def test_10f_census_cli_writes_json(tmp_path: Path) -> None:
@@ -53,7 +52,7 @@ def test_10f_census_cli_writes_json(tmp_path: Path) -> None:
     assert "runtime_active_count=" in result.stdout
     payload = json.loads(output.read_text())
     assert payload["module_count"] >= 8
-    assert payload["runtime_active_count"] >= 1
+    assert payload["runtime_active_count"] == 0
 
 
 def test_10f_activity_and_clarification_live_in_decision_not_legacy() -> None:
@@ -120,7 +119,31 @@ def test_10i_conversation_bridge_census_only_tracks_legacy_decide_active() -> No
     census = census_module.build_census(ROOT)
     by_path = {entry["path"]: entry for entry in census["modules"]}
 
-    assert census["runtime_active_count"] == 1
+    assert census["runtime_active_count"] == 0
     assert census["deleted_count"] >= 9
     assert by_path["legacy/conversation_understanding_bridge.py"]["status"] == "deleted"
-    assert by_path["legacy/conversation_decide_bridge.py"]["status"] == "runtime_active"
+    assert by_path["legacy/conversation_decide_bridge.py"]["status"] == "deleted"
+
+
+def test_10j_coach_decision_runtime_lives_in_decision_not_legacy_bridge() -> None:
+    pipeline = _source("conversation_pipeline.py")
+    runtime = _source("decision/coach_decision_runtime.py")
+
+    assert "from fitmas.decision import coach_decision_runtime" in pipeline
+    assert "conversation_decide_bridge" not in pipeline
+    assert not (SRC / "legacy/conversation_decide_bridge.py").exists()
+    assert "def build_legacy_coach_decision_request(" in runtime
+    assert "def run_legacy_coach_decision(" in runtime
+    assert "def legacy_provider_allowed_for_turn(" in runtime
+    assert "def canonical_provider_clarification_outcome(" in runtime
+
+
+def test_10j_conversation_bridge_census_has_no_runtime_active_bridge() -> None:
+    census_module = _load_module()
+
+    census = census_module.build_census(ROOT)
+    by_path = {entry["path"]: entry for entry in census["modules"]}
+
+    assert census["runtime_active_count"] == 0
+    assert census["deleted_count"] == census["module_count"]
+    assert by_path["legacy/conversation_decide_bridge.py"]["status"] == "deleted"

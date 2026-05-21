@@ -43,7 +43,7 @@ from fitmas.decision import pending_resolution
 from fitmas.decision import planning_runtime
 from fitmas.decision import activity_highlight
 from fitmas.decision import readonly_reply
-from fitmas.legacy import conversation_decide_bridge
+from fitmas.decision import coach_decision_runtime
 import fitmas.llm.reply_backend as final_reply
 from fitmas.decision import understanding_runtime
 from fitmas.decision.planning_outcomes import (
@@ -561,7 +561,7 @@ def _run_conversation_turn_impl(
 
     # CoachDecision remains provider compatibility only. The pipeline receives
     # it through a legacy bridge so runtime authority stays outside `decide()`.
-    decision_request = conversation_decide_bridge.build_legacy_coach_decision_request(
+    decision_request = coach_decision_runtime.build_legacy_coach_decision_request(
         user_text=payload.text,
         user=user,
         state=state,
@@ -673,17 +673,17 @@ def _run_conversation_turn_impl(
         if outcome is None:
             if dependencies.decide is not default_legacy_decide:
                 turn_context["legacy_provider_explicit_override"] = True
-            legacy_skip_reason = conversation_decide_bridge.legacy_provider_skip_reason(turn_context)
+            legacy_skip_reason = coach_decision_runtime.legacy_provider_skip_reason(turn_context)
             if legacy_skip_reason is not None:
-                conversation_decide_bridge.trace_legacy_provider_skipped(turn_context, reason=legacy_skip_reason)
-                outcome = conversation_decide_bridge.canonical_provider_clarification_outcome(
+                coach_decision_runtime.trace_legacy_provider_skipped(turn_context, reason=legacy_skip_reason)
+                outcome = coach_decision_runtime.canonical_provider_clarification_outcome(
                     reason=legacy_skip_reason,
                     user_text=payload.text,
                     grounding_facts=tuple(render_grounding_packet_for_prompt(grounding_packet)),
                     decision_reply_composer_fn=_decision_reply_composer,
                 )
-            elif conversation_decide_bridge.legacy_provider_allowed_for_turn(turn_context):
-                legacy_decision_artifact = conversation_decide_bridge.run_legacy_coach_decision(
+            elif coach_decision_runtime.legacy_provider_allowed_for_turn(turn_context):
+                legacy_decision_artifact = coach_decision_runtime.run_legacy_coach_decision(
                     provider=LegacyCoachDecisionProvider(decide_fn=dependencies.decide),
                     request=decision_request,
                     turn_context=turn_context,
@@ -789,7 +789,7 @@ def _run_conversation_turn_impl(
         )
         legacy_decision_artifact = None
     elif outcome is None:
-        decide_none_context = conversation_decide_bridge.decide_none_context(turn_context)
+        decide_none_context = coach_decision_runtime.decide_none_context(turn_context)
         turn_context["decide_none"] = decide_none_context
 
     if outcome is None:
@@ -799,7 +799,7 @@ def _run_conversation_turn_impl(
         # Reply soberly: do not assert any plan state, do not regurgitate
         # rule-based phrases that could lie about the situation.
         logger.warning("conversation_pipeline: decide() returned None with no fallback decision")
-        turn_context.setdefault("decide_none", conversation_decide_bridge.decide_none_context(turn_context))
+        turn_context.setdefault("decide_none", coach_decision_runtime.decide_none_context(turn_context))
         outcome = ConversationTurnOutcome(
             extraction=Extraction(confidence=0.5),
             reply_text="Je ne peux pas te repondre tout de suite. Reessaie dans un instant.",

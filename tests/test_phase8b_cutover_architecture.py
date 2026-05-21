@@ -32,7 +32,7 @@ def test_phase8b_decision_package_stays_free_of_legacy_adapters() -> None:
     offenders: list[str] = []
 
     for path in sorted(decision_dir.glob("*.py")):
-        if path.name in {"command_application.py", "readonly_reply.py", "understanding_runtime.py"}:
+        if path.name in {"command_application.py", "readonly_reply.py", "understanding_runtime.py", "coach_decision_runtime.py"}:
             continue
         source = path.read_text(encoding="utf-8")
         if "fitmas.legacy" in source or "conversation_pipeline" in source:

@@ -195,19 +195,28 @@ Et supprime :
 
 - `legacy/conversation_understanding_bridge.py`
 
+10J a sorti le runtime provider CoachDecision de `legacy/conversation_*` :
+
+- `decision/coach_decision_runtime.py`
+
+Et supprime :
+
+- `legacy/conversation_decide_bridge.py`
+
 Le census courant annonce :
 
 ```text
-runtime_active_count=1
+runtime_active_count=0
 legacy_internal_count=0
-deleted_count=9
+deleted_count=10
 ```
 
 Objectif suivant :
 
-1. mesurer les callers reels des bridges restants ;
-2. extraire seulement l'actif ;
-3. supprimer physiquement les wrappers vides ;
+1. attaquer `CoachDecision` lui-meme, pas un wrapper conversationnel ;
+2. reduire `legacy/coach_decision_provider.py`, `legacy/decision_contracts.py`
+   et `llm/decision_legacy.py` ;
+3. convertir les derniers artifacts compat en `DecisionOutcome` directs ;
 4. ramener `conversation_pipeline.py` vers un adapter plus mince.
 
 ## Critere De Verdict

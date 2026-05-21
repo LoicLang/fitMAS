@@ -17,7 +17,7 @@ def _backend_python_files() -> list[Path]:
 
 
 def test_9s_conversation_decide_bridge_exposes_provider_authority_gate() -> None:
-    source = _source("legacy/conversation_decide_bridge.py")
+    source = _source("decision/coach_decision_runtime.py")
 
     assert "def legacy_provider_allowed_for_turn(" in source
     assert "def legacy_provider_skip_reason(" in source
@@ -40,7 +40,7 @@ def test_9s_legacy_decide_call_is_only_in_pipeline_and_bridge() -> None:
         source = path.read_text(encoding="utf-8")
         if "run_legacy_coach_decision(" not in source:
             continue
-        if relative in {"conversation_pipeline.py", "legacy/conversation_decide_bridge.py"}:
+        if relative in {"conversation_pipeline.py", "decision/coach_decision_runtime.py"}:
             continue
         offenders.append(relative)
 

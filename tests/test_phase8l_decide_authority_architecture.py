@@ -29,7 +29,7 @@ def test_8l_conversation_pipeline_does_not_call_decide_directly() -> None:
 
     assert "dependencies.decide(" not in source
     assert "llm_runtime" not in source
-    assert "conversation_decide_bridge.run_legacy_coach_decision" in source
+    assert "coach_decision_runtime.run_legacy_coach_decision" in source
 
 
 def test_8l_conversation_pipeline_does_not_read_fitmas_message_directly() -> None:
@@ -41,7 +41,7 @@ def test_8l_conversation_pipeline_does_not_read_fitmas_message_directly() -> Non
 
 def test_8l_legacy_provider_boundary_exists() -> None:
     provider = _source("legacy/coach_decision_provider.py")
-    bridge = _source("legacy/conversation_decide_bridge.py")
+    bridge = _source("decision/coach_decision_runtime.py")
 
     assert "class CoachDecisionRequest" in provider
     assert "class CoachDecisionResult" in provider
@@ -60,7 +60,7 @@ def test_8l_decision_package_stays_pure() -> None:
         "fitmas.plan_mutation_service",
     }
     for path in (SRC / "decision").glob("*.py"):
-        if path.name in {"command_application.py", "readonly_reply.py", "understanding_runtime.py"}:
+        if path.name in {"command_application.py", "readonly_reply.py", "understanding_runtime.py", "coach_decision_runtime.py"}:
             continue
         imports = _imports(f"decision/{path.name}")
         assert not forbidden.intersection(imports), f"{path.name}: {forbidden.intersection(imports)}"

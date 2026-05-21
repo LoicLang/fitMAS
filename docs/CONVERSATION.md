@@ -54,10 +54,11 @@ Etat actuel :
 - `decision/` porte deja les types et l'outcome canonique.
 - `llm/understanding_service.py` porte l'understanding cible.
 - `decision/understanding_runtime.py` porte l'appel understanding canonique.
-- un bridge `legacy/conversation_*` reste temporaire : provider `CoachDecision`.
+- `decision/coach_decision_runtime.py` porte le provider compat `CoachDecision`.
+- aucun bridge `legacy/conversation_*` ne reste runtime-active.
 - planning, pending, command writes, activity highlight, clarification,
-  readonly/reply, understanding et helpers artifact ne vivent plus dans ces
-  petits wrappers legacy.
+  readonly/reply, understanding, provider compat et helpers artifact ne vivent
+  plus dans ces petits wrappers legacy.
 
 ## Regles Dures
 

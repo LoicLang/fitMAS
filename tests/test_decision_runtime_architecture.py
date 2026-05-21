@@ -51,6 +51,7 @@ def test_decision_runtime_phase1_modules_exist() -> None:
         "clarification_reply.py",
         "command_actions.py",
         "command_application.py",
+        "coach_decision_runtime.py",
         "input_event.py",
         "context.py",
         "understanding.py",
@@ -188,7 +189,7 @@ def test_decision_package_stays_free_of_legacy_understanding_adapter() -> None:
 
     offenders: list[str] = []
     for path in _python_files():
-        if path.name in {"command_application.py", "readonly_reply.py", "understanding_runtime.py"}:
+        if path.name in {"command_application.py", "readonly_reply.py", "understanding_runtime.py", "coach_decision_runtime.py"}:
             continue
         for module in _imports(path):
             if module in forbidden_exact or module.startswith(forbidden_prefixes):

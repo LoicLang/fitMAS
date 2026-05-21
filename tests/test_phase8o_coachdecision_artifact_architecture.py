@@ -54,7 +54,7 @@ def test_8o_artifact_module_exists() -> None:
 
 def test_8o_provider_and_decide_bridge_use_artifact_boundary() -> None:
     provider_imports = _imports("legacy/coach_decision_provider.py")
-    decide_source = _source("legacy/conversation_decide_bridge.py")
+    decide_source = _source("decision/coach_decision_runtime.py")
 
     assert "fitmas.legacy.coach_decision_artifact.LegacyCoachDecisionArtifact" in provider_imports
     assert "artifact=result.artifact" in decide_source or "return result.artifact" in decide_source
@@ -84,7 +84,7 @@ def test_8o_conversation_facing_modules_do_not_import_raw_legacy_models() -> Non
     }
     for relative in (
         "conversation_pipeline.py",
-        "legacy/conversation_decide_bridge.py",
+        "decision/coach_decision_runtime.py",
         "decision/command_application.py",
         "decision/command_mapping.py",
         "decision/pending_resolution.py",
@@ -121,9 +121,9 @@ def test_8o_raw_legacy_model_imports_stay_in_compat_zone() -> None:
 def test_8o_conversation_pipeline_names_artifact_boundary() -> None:
     source = _source("conversation_pipeline.py")
 
-    assert "legacy_decision_artifact = conversation_decide_bridge.run_legacy_coach_decision" in source
+    assert "legacy_decision_artifact = coach_decision_runtime.run_legacy_coach_decision" in source
     assert "shadow_understanding_from_legacy_decision(user_id=user.id, decision=decision)" not in source
-    assert "decision = conversation_decide_bridge.run_legacy_coach_decision" not in source
+    assert "decision = coach_decision_runtime.run_legacy_coach_decision" not in source
 
 
 def test_8o_conversation_pipeline_does_not_pass_raw_decision_to_bridges() -> None:
@@ -139,7 +139,7 @@ def test_8o_coach_decision_result_decision_property_is_not_runtime_consumed() ->
     offenders: list[str] = []
     for relative in (
         "conversation_pipeline.py",
-        "legacy/conversation_decide_bridge.py",
+        "decision/coach_decision_runtime.py",
         "decision/command_application.py",
         "decision/command_mapping.py",
         "decision/pending_resolution.py",
