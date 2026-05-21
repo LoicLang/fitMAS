@@ -78,8 +78,8 @@ Encore actif :
 - `conversation_pipeline.py` est maintenant un adapter de 78 lignes. Il garde
   l'entree API historique, puis delegue aux owners `decision/turn_*`.
 - La responsabilite conversationnelle restante est concentree dans
-  `decision/turn_router.py` et `decision/turn_context.py`, pas dans le root
-  pipeline.
+  `decision/turn_router.py`, `decision/turn_planning_route.py` et
+  `decision/turn_context.py`, pas dans le root pipeline.
 - aucun bridge `legacy/conversation_*` mesure ne reste runtime-active.
 - le provider, les artifacts et les adapters `CoachDecision` sont supprimes.
 - `legacy/` ne contient plus de module source actif.
@@ -150,8 +150,8 @@ Etat actuel :
 Prochaine simplification :
 
 - reduire `llm/reply_backend.py` et pousser plus de verification dans `OutputVerifier`.
-- shrinker `decision/turn_router.py` et `decision/turn_context.py` maintenant
-  que `conversation_pipeline.py` est mince.
+- shrinker `decision/turn_context.py`, puis extraire les petites routes
+  restantes de `decision/turn_router.py`.
 
 ## Heartbeat Cible
 
@@ -173,9 +173,9 @@ Planning/pending P0 a ete extrait en 10E :
 - `decision/pending_reply.py`
 
 Les sept wrappers legacy P0 ont ete supprimes. Le gros risque suivant etait
-`conversation_pipeline.py`; il est desormais un adapter mince. Le nouveau
-hotspot a traiter est le couple `decision/turn_router.py` /
-`decision/turn_context.py`.
+`conversation_pipeline.py`; il est desormais un adapter mince. La route planning
+canonique a ete sortie vers `decision/turn_planning_route.py`. Le nouveau
+hotspot principal est `decision/turn_context.py`.
 
 10F a ajoute le census conversationnel et supprime quatre bridges :
 
@@ -254,17 +254,19 @@ deleted_count=10
 - `decision/turn_state.py`
 - `decision/turn_calibration.py`
 - `decision/turn_context.py`
+- `decision/turn_planning_route.py`
 - `decision/turn_router.py`
 - `decision/turn_finalization.py`
 - `decision/turn_persistence.py`
 - `decision/turn_recording.py`
 
 `conversation_pipeline.py` n'est plus le hotspot principal. Il ne doit pas
-regrossir.
+regrossir. `decision/turn_router.py` a ete reduit de `444` a `361` lignes par
+extraction de la route planning canonique.
 
 Objectif suivant :
 
-1. shrinker `decision/turn_router.py` et `decision/turn_context.py` ;
+1. shrinker `decision/turn_context.py` ;
 2. continuer le menage des prompts conversationnels anciens encore centres
    sur les artefacts PlanPatch historiques ;
 3. garder les smokes reels comme arbitre de fiabilite, meme quand le provider

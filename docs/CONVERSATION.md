@@ -57,8 +57,9 @@ Etat actuel :
 - `decision/understanding_runtime.py` porte l'appel understanding canonique.
 - `decision/turn_state.py`, `decision/turn_context.py`,
   `decision/turn_calibration.py`, `decision/turn_router.py`,
-  `decision/turn_finalization.py`, `decision/turn_persistence.py` et
-  `decision/turn_idempotency.py` portent les anciens blocs du pipeline.
+  `decision/turn_planning_route.py`, `decision/turn_finalization.py`,
+  `decision/turn_persistence.py` et `decision/turn_idempotency.py` portent
+  les anciens blocs du pipeline.
 - `decision/plan_patch_reply.py` porte les helpers de reply PlanPatch qui
   vivaient auparavant dans le pipeline.
 - `decision/readonly_reply.py` refuse une reply plan lookup non grounded quand

@@ -27,12 +27,14 @@ def test_9s_coachdecision_runtime_exposes_removed_provider_trace() -> None:
 
 def test_9s_pipeline_never_calls_legacy_decide_after_canonical_routes() -> None:
     source = _source("decision/turn_router.py")
+    planning_route = _source("decision/turn_planning_route.py")
 
     clarification_index = source.index("canonical_provider_clarification_outcome(")
     assert source.index("compose_canonical_clarification_reply(") < clarification_index
     assert source.index("should_use_canonical_understanding_without_legacy(") < clarification_index
     assert source.index("should_use_canonical_readonly_without_legacy(") < clarification_index
-    assert source.index("should_use_canonical_planning_without_legacy(") < clarification_index
+    assert source.index("route_with_existing_understanding(") < clarification_index
+    assert "should_use_canonical_planning_without_legacy(" in planning_route
     assert "run_legacy_coach_decision(" not in source
     assert "canonical_provider_clarification_outcome(" in source
 
@@ -71,12 +73,14 @@ def test_9s_no_direct_decision_legacy_decide_import_outside_llm_package() -> Non
 
 def test_9s_canonical_routes_still_precede_removed_provider_clarification() -> None:
     source = _source("decision/turn_router.py")
+    planning_route = _source("decision/turn_planning_route.py")
 
     clarification_index = source.index("canonical_provider_clarification_outcome(")
     assert source.index("compose_canonical_clarification_reply(") < clarification_index
     assert source.index("should_use_canonical_understanding_without_legacy(") < clarification_index
     assert source.index("should_use_canonical_readonly_without_legacy(") < clarification_index
-    assert source.index("should_use_canonical_planning_without_legacy(") < clarification_index
+    assert source.index("route_with_existing_understanding(") < clarification_index
+    assert "should_use_canonical_planning_without_legacy(" in planning_route
 
 
 def test_9s_decision_legacy_provider_module_is_deleted() -> None:

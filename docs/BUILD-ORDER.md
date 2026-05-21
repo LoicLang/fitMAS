@@ -72,6 +72,8 @@ Les cuts physiques recents :
   `conversation_pipeline.py` vers `decision/plan_patch_reply.py`.
 - `conversation_pipeline.py` est passe de `1819` a `78` lignes et delegue
   aux owners `decision/turn_*`.
+- `decision/turn_router.py` est passe de `444` a `361` lignes : la route
+  planning canonique vit maintenant dans `decision/turn_planning_route.py`.
 - Le readonly plan lookup remplace maintenant une reply LLM non grounded par
   le fallback construit depuis les facts `PlanWindow`.
 - Le fallback execution parle depuis l'event machine applique quand le
@@ -158,7 +160,8 @@ Prochain chantier logique :
 - il n'y a plus de bridge `legacy/conversation_*` runtime-active ;
 - il n'y a plus de provider ou artifact `CoachDecision` ;
 - `conversation_pipeline.py` est mince, donc le nouveau hotspot est
-  `decision/turn_router.py` / `decision/turn_context.py` ;
+  `decision/turn_context.py`, puis le reste des petites routes dans
+  `decision/turn_router.py` ;
 - garder la priorite runtime plus petit, pas refactor plus complet.
 
 ## Ordre De Lecture Pour Un Agent

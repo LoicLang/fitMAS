@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 
 import fitmas.llm.gateway as gw
 import fitmas.llm.reply_backend as final_reply
+import fitmas.decision.turn_planning_route as turn_planning_route
 from fitmas.conversation_contract import (
     ConversationPipelineDependencies,
     ConversationTurnInput,
@@ -19,7 +20,6 @@ from fitmas.decision import clarification_reply
 from fitmas.decision import coach_decision_runtime
 from fitmas.decision import command_application
 from fitmas.decision import pending_resolution
-from fitmas.decision import planning_runtime
 from fitmas.decision import readonly_reply
 from fitmas.decision import turn_context as turn_context_builder
 from fitmas.decision import turn_finalization
@@ -142,98 +142,40 @@ def route_conversation_turn(
             turn_memory_writes=turn_memory_writes,
         )
 
-    if planning_runtime.should_prepare_canonical_planning_understanding(
+    planning_route = turn_planning_route.route_pre_understanding_planning(
+        db=db,
+        user=user,
+        user_text=payload.text,
         turn_plan=turn_plan,
+        conversation_context=conversation_context,
+        coach_bundle=coach_bundle,
+        state=state,
         pending_confirmation=pending_confirmation,
-    ):
-        planning_runtime.trace_canonical_planning_prepared(
-            turn_context,
-            turn_plan=turn_plan,
-            pending_confirmation=pending_confirmation,
-        )
-        canonical_understanding = understanding_runtime.run_canonical_understanding_shadow(
-            user=user,
-            user_text=payload.text,
-            turn_plan=turn_plan,
-            conversation_context=conversation_context,
-            coach_bundle=coach_bundle,
-            state=state,
-            pending_confirmation=pending_confirmation,
-            turn_context=turn_context,
-        )
-        planning_understanding = planning_runtime.planning_understanding_for_provider(
-            understanding=canonical_understanding,
-            turn_plan=turn_plan,
-        )
-        if planning_understanding is not canonical_understanding:
-            turn_context["canonical_planning_provider"]["understanding_source"] = "turn_plan"
-        if planning_runtime.should_use_canonical_planning_without_legacy(
-            understanding=planning_understanding,
-            turn_plan=turn_plan,
-            pending_confirmation=pending_confirmation,
-        ):
-            canonical_planning_outcome = planning_runtime.handle_canonical_planning(
-                understanding=planning_understanding,
-                context=turn_context_builder.planning_context_from_artifacts(context_artifacts),
+        context_artifacts=context_artifacts,
+        grounding_facts=grounding_facts,
+        turn_context=turn_context,
+        decision_reply_composer_fn=_decision_reply_composer,
+        reviewer_request_json_fn=gw.request_json,
+    )
+    if planning_route.understanding_refreshed:
+        canonical_understanding = planning_route.canonical_understanding
+    if planning_route.outcome is not None:
+        if planning_route.apply_turn_plan_memory_commands:
+            _apply_turn_plan_memory_commands_once(
                 db=db,
                 user=user,
-                source_text=payload.text,
-                coach_state_bundle=coach_bundle,
-                reviewer_request_json_fn=gw.request_json,
-                grounding_facts=grounding_facts,
-                decision_reply_composer_fn=_decision_reply_composer,
+                turn_plan=turn_plan,
+                turn_memory_writes=turn_memory_writes,
                 turn_context=turn_context,
             )
-            if canonical_planning_outcome is not None:
-                _apply_turn_plan_memory_commands_once(
-                    db=db,
-                    user=user,
-                    turn_plan=turn_plan,
-                    turn_memory_writes=turn_memory_writes,
-                    turn_context=turn_context,
-                )
-                return turn_finalization.record_turn_outcome(
-                    db=db,
-                    user=user,
-                    payload=payload,
-                    outcome=canonical_planning_outcome,
-                    turn_context=turn_context,
-                    turn_memory_writes=turn_memory_writes,
-                )
-        else:
-            if planning_runtime.should_handle_unsupported_canonical_planning_without_legacy(
-                understanding=planning_understanding,
-                turn_plan=turn_plan,
-                pending_confirmation=pending_confirmation,
-            ):
-                canonical_planning_outcome = planning_runtime.handle_canonical_planning(
-                    understanding=planning_understanding,
-                    context=turn_context_builder.planning_context_from_artifacts(context_artifacts),
-                    db=db,
-                    user=user,
-                    source_text=payload.text,
-                    coach_state_bundle=coach_bundle,
-                    reviewer_request_json_fn=gw.request_json,
-                    grounding_facts=grounding_facts,
-                    decision_reply_composer_fn=_decision_reply_composer,
-                    turn_context=turn_context,
-                )
-                if canonical_planning_outcome is not None:
-                    return turn_finalization.record_turn_outcome(
-                        db=db,
-                        user=user,
-                        payload=payload,
-                        outcome=canonical_planning_outcome,
-                        turn_context=turn_context,
-                        turn_memory_writes=turn_memory_writes,
-                    )
-            else:
-                planning_runtime.trace_canonical_planning_not_used(
-                    turn_context,
-                    understanding=planning_understanding,
-                    turn_plan=turn_plan,
-                    pending_confirmation=pending_confirmation,
-                )
+        return turn_finalization.record_turn_outcome(
+            db=db,
+            user=user,
+            payload=payload,
+            outcome=planning_route.outcome,
+            turn_context=turn_context,
+            turn_memory_writes=turn_memory_writes,
+        )
 
     activity_highlight_outcome = activity_highlight.compose_activity_highlight_reply(
         composer=_decision_reply_composer(),
@@ -278,7 +220,7 @@ def route_conversation_turn(
         if turn_idempotency.turn_is_obsolete(db=db, user=user, turn_context=turn_context):
             outcome = turn_idempotency.obsolete_turn_outcome(turn_context=turn_context)
         else:
-            understanding_action_result = _apply_understanding_commands(
+            understanding_action_result = command_application.apply_understanding_commands(
                 db=db,
                 user=user,
                 understanding=canonical_understanding,
@@ -301,37 +243,29 @@ def route_conversation_turn(
                 grounding_facts=grounding_facts,
             )
         if outcome is None:
-            planning_understanding = planning_runtime.planning_understanding_for_provider(
+            planning_route = turn_planning_route.route_with_existing_understanding(
+                db=db,
+                user=user,
+                user_text=payload.text,
                 understanding=canonical_understanding,
                 turn_plan=turn_plan,
-            )
-            if planning_understanding is not canonical_understanding:
-                turn_context.setdefault("canonical_planning_provider", {})["understanding_source"] = "turn_plan"
-            if planning_runtime.should_use_canonical_planning_without_legacy(
-                understanding=planning_understanding,
-                turn_plan=turn_plan,
                 pending_confirmation=pending_confirmation,
-            ):
-                outcome = planning_runtime.handle_canonical_planning(
-                    understanding=planning_understanding,
-                    context=turn_context_builder.planning_context_from_artifacts(context_artifacts),
+                context_artifacts=context_artifacts,
+                coach_bundle=coach_bundle,
+                grounding_facts=grounding_facts,
+                turn_context=turn_context,
+                decision_reply_composer_fn=_decision_reply_composer,
+                reviewer_request_json_fn=gw.request_json,
+            )
+            outcome = planning_route.outcome
+            if outcome is not None and planning_route.apply_turn_plan_memory_commands:
+                _apply_turn_plan_memory_commands_once(
                     db=db,
                     user=user,
-                    source_text=payload.text,
-                    coach_state_bundle=coach_bundle,
-                    reviewer_request_json_fn=gw.request_json,
-                    grounding_facts=grounding_facts,
-                    decision_reply_composer_fn=_decision_reply_composer,
+                    turn_plan=turn_plan,
+                    turn_memory_writes=turn_memory_writes,
                     turn_context=turn_context,
                 )
-                if outcome is not None:
-                    _apply_turn_plan_memory_commands_once(
-                        db=db,
-                        user=user,
-                        turn_plan=turn_plan,
-                        turn_memory_writes=turn_memory_writes,
-                        turn_context=turn_context,
-                    )
         if outcome is None:
             legacy_skip_reason = coach_decision_runtime.legacy_provider_skip_reason(turn_context)
             coach_decision_runtime.trace_legacy_provider_skipped(turn_context, reason=legacy_skip_reason)
@@ -424,21 +358,4 @@ def _apply_turn_plan_memory_commands_once(
         turn_plan=turn_plan,
         turn_memory_writes=turn_memory_writes,
         turn_context=turn_context,
-    )
-
-
-def _apply_understanding_commands(
-    *,
-    db: Session,
-    user,
-    understanding,
-    turn_memory_writes: list[dict],
-    unresolved_execution_followup: str | None = None,
-) -> dict[str, Any]:
-    return command_application.apply_understanding_commands(
-        db=db,
-        user=user,
-        understanding=understanding,
-        turn_memory_writes=turn_memory_writes,
-        unresolved_execution_followup=unresolved_execution_followup,
     )
