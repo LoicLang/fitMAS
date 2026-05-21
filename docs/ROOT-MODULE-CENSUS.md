@@ -28,6 +28,9 @@ is allowed only for hotspots that need a separate shrink slice.
 - First wrapper cuts completed: `heartbeat*.py`, `llm_gateway.py`,
   `telegram_scheduler.py`, `tool_*.py`, `api_messages.py`,
   `plan_patch_tools.py`, `state.py`, `final_reply.py`
+- Planning candidate root cut completed: `plan_patch_backend_candidates.py`,
+  `plan_patch_candidates.py`, `plan_patch_candidate_evaluator.py`,
+  `plan_patch_candidate_reviewer.py`, `plan_patch_adaptation_policy.py`
 - Primary risk: moving files faster than deleting obsolete boundaries
 - Thursday criterion: root is explainable, delete candidates are explicit, and
   new root files fail architecture tests unless classified here
@@ -143,10 +146,10 @@ is allowed only for hotspots that need a separate shrink slice.
 
 ## Immediate Cut Order
 
-1. Merge old planning candidate modules into `domain/planning` instead of
-   preserving wrapper boundaries.
-2. Move API routes to `app/api` and delete root wrappers.
-3. Split monoliths only after deletion:
+1. Move API routes to `app/api` and delete root wrappers.
+2. Move Telegram delivery modules to `app/telegram` and delete root wrappers.
+3. Move execution and memory services to `domain/*` before touching monoliths.
+4. Split monoliths only after deletion:
    `conversation_pipeline.py`, `repository.py`, `week_coherence.py`.
 
 ## Non Goals

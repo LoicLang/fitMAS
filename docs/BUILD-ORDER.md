@@ -74,6 +74,12 @@ Les cuts physiques recents :
   aux owners `decision/turn_*`.
 - `decision/turn_router.py` est passe de `444` a `361` lignes : la route
   planning canonique vit maintenant dans `decision/turn_planning_route.py`.
+- Les anciens modules root du pipeline candidat planning ont disparu :
+  `plan_patch_candidates.py`, `plan_patch_candidate_evaluator.py`,
+  `plan_patch_candidate_reviewer.py`, `plan_patch_adaptation_policy.py`.
+  Le code actif vit sous `domain/planning/`.
+- Le generateur root mort `plan_patch_backend_candidates.py` et ses tests
+  dedies ont ete supprimes.
 - Le readonly plan lookup remplace maintenant une reply LLM non grounded par
   le fallback construit depuis les facts `PlanWindow`.
 - Le fallback execution parle depuis l'event machine applique quand le
@@ -84,7 +90,7 @@ Etat chiffre au dernier check local :
 
 - root modules : `104`.
 - legacy modules : `0` fichier source actif.
-- backend complet : `1303 passed, 11 skipped, 14 subtests passed`.
+- backend complet : `1308 passed, 11 skipped, 14 subtests passed`.
 - smoke core API : OK.
 - fallback census core : `0`.
 
