@@ -68,13 +68,18 @@ Les cuts physiques recents :
 - `mutations.py`, `mutation_hooks.py`, `mutation_permissions.py` racine
   supprimes.
 - Les executors planning vivent dans `domain/planning/`.
+- Les helpers de reply PlanPatch conversationnels sont sortis de
+  `conversation_pipeline.py` vers `decision/plan_patch_reply.py`.
+- `conversation_pipeline.py` est passe de `1819` a `1248` lignes.
+- Le readonly plan lookup remplace maintenant une reply LLM non grounded par
+  le fallback construit depuis les facts `PlanWindow`.
 - `docs/superpowers/plans/` supprime : l'historique d'execution reste dans git, pas dans la memoire active.
 
 Etat chiffre au dernier check local :
 
 - root modules : `109`.
 - legacy modules : `0` fichier source actif.
-- backend complet : `1263 passed, 11 skipped, 11 subtests passed`.
+- backend complet : `1268 passed, 11 skipped, 11 subtests passed`.
 - smoke core API : OK.
 - fallback census core : `0`.
 
@@ -149,7 +154,8 @@ Prochain chantier logique :
 
 - il n'y a plus de bridge `legacy/conversation_*` runtime-active ;
 - il n'y a plus de provider ou artifact `CoachDecision` ;
-- shrinker `conversation_pipeline.py` autour de moins d'entrypoints ;
+- continuer le shrink de `conversation_pipeline.py`, surtout turn state,
+  idempotence et recording ;
 - garder la priorite runtime plus petit, pas refactor plus complet.
 
 ## Ordre De Lecture Pour Un Agent

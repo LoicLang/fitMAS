@@ -75,7 +75,13 @@ def test_8e_planning_runtime_accepts_canonical_understanding_input() -> None:
 def test_8e_decision_package_still_has_no_llm_or_legacy_imports() -> None:
     offenders: list[str] = []
     for path in sorted((SRC / "decision").glob("*.py")):
-        if path.name in {"command_application.py", "readonly_reply.py", "understanding_runtime.py", "coach_decision_runtime.py"}:
+        if path.name in {
+            "command_application.py",
+            "readonly_reply.py",
+            "understanding_runtime.py",
+            "coach_decision_runtime.py",
+            "plan_patch_reply.py",
+        }:
             continue
         tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
         for node in ast.walk(tree):

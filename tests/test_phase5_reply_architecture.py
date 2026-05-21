@@ -43,8 +43,8 @@ def test_legacy_modules_do_not_import_deleted_root_final_reply() -> None:
 
 def test_conversation_planning_runtime_mapper_uses_reply_composer() -> None:
     source = (DECISION / "planning_outcomes.py").read_text(encoding="utf-8")
-    conversation_source = CONVERSATION.read_text(encoding="utf-8")
+    plan_patch_reply = (DECISION / "plan_patch_reply.py").read_text(encoding="utf-8")
 
-    assert "_decision_reply_composer().compose" in conversation_source
+    assert "_decision_reply_composer().compose" in plan_patch_reply
     assert "decision_reply_composer_fn().compose" in source
     assert "planning_runtime_block" in source

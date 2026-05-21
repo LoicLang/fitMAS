@@ -49,7 +49,9 @@ Les wrappers deja supprimes :
 Le gros residu actif n'est plus le dossier `legacy/`.
 Le writer PlanPatch vit dans `domain/planning/patch_mutation_service.py`.
 Les executors planning bas niveau vivent dans `domain/planning/`.
-Le prochain risque est `conversation_pipeline.py`.
+Les helpers de reply PlanPatch conversationnels vivent dans
+`decision/plan_patch_reply.py`.
+Le prochain risque est le reste de `conversation_pipeline.py`.
 
 ## Priorite De Suppression
 
@@ -192,9 +194,22 @@ Encore runtime-active :
 - Aucun `MutationDecision` dans le chemin runtime canonique.
 - Aucun texte visible hors reply layer.
 
+## Dernier Cut Conversation
+
+Apres 10P : les helpers de reply PlanPatch sont sortis vers
+`decision/plan_patch_reply.py`.
+
+Resultat :
+
+- `conversation_pipeline.py` : `1819` -> `1248` lignes.
+- Nouveau gate : le pipeline ne peut plus redefinir les helpers de reply
+  PlanPatch.
+- Le dossier `legacy/` reste vide de module source actif.
+
 ## Prochain Slice
 
-Apres 10P : shrinker `conversation_pipeline.py` sans recréer de fallback local.
+Continuer le shrink de `conversation_pipeline.py` sans recréer de fallback
+local : turn state, idempotence, recording.
 
 Commande :
 

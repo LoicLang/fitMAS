@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
-from fitmas import conversation_pipeline
+from fitmas.decision import plan_patch_reply
 from fitmas.decision import DecisionExplanation, DecisionReplyComposer, ReplyContract
 from fitmas.decision import planning_outcomes as conversation_planning_bridge
 from fitmas.decision.reply_request import ReplyRequest, ReplyResult
@@ -187,7 +187,7 @@ def test_plan_patch_pending_helper_uses_decision_reply_composer(monkeypatch) -> 
                 reason=None,
             )
 
-    monkeypatch.setattr(conversation_pipeline, "_decision_reply_composer", lambda: FakeComposer())
+    monkeypatch.setattr(plan_patch_reply, "_decision_reply_composer", lambda: FakeComposer())
 
     service_result = PlanPatchServiceResult(
         validation=PlanPatchValidation(status="valid", operation_results=(), summary="valid"),
@@ -204,7 +204,7 @@ def test_plan_patch_pending_helper_uses_decision_reply_composer(monkeypatch) -> 
         ),
     )
 
-    reply = conversation_pipeline._build_plan_patch_confirmation_prompt(service_result)
+    reply = plan_patch_reply._build_plan_patch_confirmation_prompt(service_result)
 
     assert calls
     assert calls[0].kind == "plan_pending"

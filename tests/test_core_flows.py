@@ -24,6 +24,7 @@ from fitmas.decision.command_actions import (
     ExecutionUpdateAction,
 )
 from fitmas.decision import command_application
+from fitmas.decision import plan_patch_reply
 from fitmas.decision import pending_resolution as conversation_pending_bridge
 from fitmas.models import Extraction
 from fitmas.domain.planning.mutation_permissions import serialize_plan_patch_confirmation
@@ -1136,21 +1137,21 @@ class FitMASCoreFlowsTest(unittest.TestCase):
                 ),
             ),
         )
-        original_compose = conversation_pipeline.final_reply.compose_final_reply
-        original_verify = conversation_pipeline.final_reply.verify_post_event_reply
+        original_compose = plan_patch_reply.final_reply.compose_final_reply
+        original_verify = plan_patch_reply.final_reply.verify_post_event_reply
         try:
-            conversation_pipeline.final_reply.compose_final_reply = (
+            plan_patch_reply.final_reply.compose_final_reply = (
                 lambda *args, **kwargs: "Ta seance passe finalement au vendredi. Lundi sera plus leger."
             )
-            conversation_pipeline.final_reply.verify_post_event_reply = lambda reply, context, **kwargs: reply
+            plan_patch_reply.final_reply.verify_post_event_reply = lambda reply, context, **kwargs: reply
 
-            reply = conversation_pipeline._applied_plan_patch_reply(
+            reply = plan_patch_reply._applied_plan_patch_reply(
                 service_result,
                 fallback="fallback",
             )
         finally:
-            conversation_pipeline.final_reply.compose_final_reply = original_compose
-            conversation_pipeline.final_reply.verify_post_event_reply = original_verify
+            plan_patch_reply.final_reply.compose_final_reply = original_compose
+            plan_patch_reply.final_reply.verify_post_event_reply = original_verify
 
         self.assertEqual(
             reply,

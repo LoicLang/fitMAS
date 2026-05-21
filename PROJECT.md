@@ -30,18 +30,22 @@ Deja en place :
 
 Encore a reduire :
 
-- `conversation_pipeline.py` reste le mega-orchestrateur.
+- `conversation_pipeline.py` reste l'orchestrateur principal, mais il a deja
+  ete reduit de `1819` a `1248` lignes.
 - `legacy/` n'a plus de module source actif.
 - Le writer PlanPatch n'est plus racine :
   `domain/planning/patch_mutation_service.py` l'own.
+- Les helpers conversationnels de reply PlanPatch vivent maintenant dans
+  `decision/plan_patch_reply.py`.
 - Les executors planning bas niveau ne sont plus racine :
   `domain/planning/mutation_executor.py`, `mutation_hooks.py`,
   `mutation_permissions.py`.
-- Le prochain gros morceau est reduire `conversation_pipeline.py`.
+- Le prochain gros morceau est de continuer a sortir les concerns restants de
+  `conversation_pipeline.py` sans creer de fallback local.
 
 Dernieres preuves locales :
 
-- backend complet : `1263 passed, 11 skipped, 11 subtests passed`.
+- backend complet : `1268 passed, 11 skipped, 11 subtests passed`.
 - smoke core API : OK.
 - fallback census core : `0`.
 
@@ -51,7 +55,8 @@ Apres 10M : `CoachDecision` compat est supprime.
 
 Objectif :
 
-- reduire `conversation_pipeline.py`.
+- reduire encore `conversation_pipeline.py`, en priorite autour du chargement
+  de turn state / idempotence / recording.
 
 ## Ordre De Lecture
 

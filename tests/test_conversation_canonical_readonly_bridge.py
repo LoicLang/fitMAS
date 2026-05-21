@@ -193,3 +193,37 @@ def test_compose_canonical_readonly_uses_grounded_plan_fallback_without_legacy()
     assert turn_context["legacy_decide"]["legacy_skipped"] is True
     assert turn_context["canonical_readonly_reply"]["source"] == "grounding_fallback"
     assert turn_context["canonical_readonly_reply"]["composed"] is True
+
+
+def test_compose_canonical_readonly_replaces_ungrounded_plan_lookup_reply() -> None:
+    class UngroundedComposer:
+        def compose(self, outcome, context, *, user_text="", grounding_facts=()):
+            return SimpleNamespace(
+                text="Demande le plan actuel jour par jour.",
+                verified=True,
+                fallback_used=False,
+                reason=None,
+            )
+
+    turn_context: dict[str, object] = {}
+
+    outcome = bridge.compose_canonical_readonly_reply(
+        composer=UngroundedComposer(),
+        understanding=_understanding("plan_lookup"),
+        user_text="Redonne-moi le plan actuel, jour par jour.",
+        turn_plan=SimpleNamespace(primary_intent="plan_lookup", secondary_intents=()),
+        turn_context=turn_context,
+        grounding_facts=(
+            "LocalDate: 2026-05-19 (mardi) timezone=Europe/Paris",
+            "PlanWindow:",
+            '- 2026-05-20 (mercredi) id=1 running "Fractionné seuil" 65min intensity=hard [planned] slot=training',
+            '- 2026-05-21 (jeudi) id=2 running "Sortie longue clé" 95min intensity=moderate [planned] slot=training',
+        ),
+    )
+
+    assert outcome is not None
+    assert "Fractionné seuil" in outcome.reply_text
+    assert "Sortie longue clé" in outcome.reply_text
+    assert "Demande le plan actuel" not in outcome.reply_text
+    assert turn_context["canonical_readonly_reply"]["source"] == "grounding_fallback"
+    assert turn_context["canonical_readonly_reply"]["reason"] == "ungrounded_plan_lookup_reply"

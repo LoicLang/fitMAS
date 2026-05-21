@@ -115,6 +115,29 @@ def compose_canonical_readonly_reply(
         }
         return None
 
+    fallback_text = _grounded_readonly_fallback(
+        understanding=understanding,
+        turn_plan=turn_plan,
+        grounding_facts=grounding_facts,
+    )
+    if fallback_text and not _plan_lookup_reply_mentions_plan_truth(text, grounding_facts):
+        turn_context["canonical_readonly_reply"] = {
+            "intent": understanding.intent,
+            "source": "grounding_fallback",
+            "composed": True,
+            "verified": True,
+            "fallback_used": True,
+            "reason": "ungrounded_plan_lookup_reply",
+        }
+        _trace_legacy_skipped(turn_context)
+        return ConversationTurnOutcome(
+            extraction=Extraction(confidence=understanding.confidence),
+            reply_text=fallback_text,
+            response_mode="canonical_readonly_answer",
+            decision=None,
+            mutation_applied=False,
+        )
+
     turn_context["canonical_readonly_reply"] = {
         "intent": understanding.intent,
         "source": "coach_understanding",
@@ -398,6 +421,28 @@ def _humanize_plan_window_line(line: str) -> str | None:
     if duration:
         pieces.append(duration)
     return f"{pieces[0]} : {', '.join(pieces[1:])}."
+
+
+def _plan_lookup_reply_mentions_plan_truth(text: str, grounding_facts: tuple[str, ...]) -> bool:
+    plan_lines = tuple(line for line in grounding_facts if _humanize_plan_window_line(line))
+    if not plan_lines:
+        return True
+    normalized_reply = coach_voice.normalize_for_voice_guard(text)
+    for line in plan_lines:
+        if _plan_line_has_truth_marker_in_reply(line, normalized_reply):
+            return True
+    return False
+
+
+def _plan_line_has_truth_marker_in_reply(line: str, normalized_reply: str) -> bool:
+    date_text = str(line or "").removeprefix("- ").partition(" id=")[0].strip()
+    iso_date = date_text.split(" ", 1)[0].strip()
+    title = _quoted_title(line)
+    for marker in (title, iso_date):
+        normalized_marker = coach_voice.normalize_for_voice_guard(str(marker or ""))
+        if normalized_marker and normalized_marker in normalized_reply:
+            return True
+    return False
 
 
 def _date_label(value: str) -> str:

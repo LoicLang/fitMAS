@@ -50,10 +50,15 @@ message Telegram / app
 
 Etat actuel :
 
-- `conversation_pipeline.py` reste le gros orchestrateur.
+- `conversation_pipeline.py` reste le gros orchestrateur, reduit de `1819` a
+  `1248` lignes apres extraction des replies PlanPatch.
 - `decision/` porte deja les types et l'outcome canonique.
 - `llm/understanding_service.py` porte l'understanding cible.
 - `decision/understanding_runtime.py` porte l'appel understanding canonique.
+- `decision/plan_patch_reply.py` porte les helpers de reply PlanPatch qui
+  vivaient auparavant dans le pipeline.
+- `decision/readonly_reply.py` refuse une reply plan lookup non grounded quand
+  des facts `PlanWindow` permettent un fallback factuel.
 - `decision/coach_decision_runtime.py` ne porte plus le provider compat :
   il trace `coach_decision_provider_removed` et compose une clarification
   canonique si aucune lane canonique ne sait traiter.
@@ -149,6 +154,7 @@ Reply actuelle :
 
 - `decision/reply_composer.py`
 - `decision/readonly_reply.py`
+- `decision/plan_patch_reply.py`
 - `llm/reply_backend.py`
 - `llm/reply_decision_backend.py`
 - `decision/output_verifier.py`

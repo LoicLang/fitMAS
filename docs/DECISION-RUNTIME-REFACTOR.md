@@ -75,7 +75,8 @@ En place :
 
 Encore actif :
 
-- `conversation_pipeline.py` reste le mega-orchestrateur principal.
+- `conversation_pipeline.py` reste l'orchestrateur principal, mais il a ete
+  reduit de `1819` a `1248` lignes.
 - aucun bridge `legacy/conversation_*` mesure ne reste runtime-active.
 - le provider, les artifacts et les adapters `CoachDecision` sont supprimes.
 - `legacy/` ne contient plus de module source actif.
@@ -134,6 +135,10 @@ DecisionOutcome
 Etat actuel :
 
 - root `final_reply.py` est supprime.
+- `decision/plan_patch_reply.py` porte les replies conversationnelles liees aux
+  anciens artefacts PlanPatch.
+- `decision/readonly_reply.py` fallback sur les facts `PlanWindow` si une reply
+  plan lookup composee ne cite aucune verite planning.
 - `llm/reply_backend.py` porte les primitives de composition/verif LLM.
 - `llm/reply_decision_backend.py` implemente le backend concret du `DecisionReplyComposer`.
 - `skills/heartbeat/reply_composer.py` porte la reply heartbeat.
@@ -141,8 +146,8 @@ Etat actuel :
 Prochaine simplification :
 
 - reduire `llm/reply_backend.py` et pousser plus de verification dans `OutputVerifier`.
-- reduire `conversation_pipeline.py` maintenant que planning/pending n'est plus
-  porte par des bridges legacy.
+- continuer a reduire `conversation_pipeline.py` autour de turn state,
+  idempotence et recording.
 
 ## Heartbeat Cible
 
@@ -164,8 +169,8 @@ Planning/pending P0 a ete extrait en 10E :
 - `decision/pending_reply.py`
 
 Les sept wrappers legacy P0 ont ete supprimes. Le prochain gros risque est
-desormais la taille de `conversation_pipeline.py` et les bridges conversationnels
-restants.
+desormais la responsabilite restante de `conversation_pipeline.py` : chargement
+de turn state, idempotence, orchestration et recording.
 
 10F a ajoute le census conversationnel et supprime quatre bridges :
 

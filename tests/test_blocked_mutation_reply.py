@@ -4,7 +4,7 @@ import unittest
 from types import SimpleNamespace
 from unittest.mock import patch
 
-from fitmas.conversation_pipeline import (
+from fitmas.decision.plan_patch_reply import (
     _blocked_mutation_reply,
     _blocked_plan_patch_reply,
     _execution_applied_patch_blocked_reply,
@@ -175,7 +175,7 @@ class BlockedMutationReplyTest(unittest.TestCase):
         )
 
         with patch(
-            "fitmas.conversation_pipeline.final_reply.compose_final_reply",
+            "fitmas.decision.plan_patch_reply.final_reply.compose_final_reply",
             return_value="Je ne l'ecrase pas : ce creneau protege ta recup. On peut echanger avec vendredi.",
         ) as compose:
             reply = _blocked_plan_patch_reply(result)
@@ -187,7 +187,7 @@ class BlockedMutationReplyTest(unittest.TestCase):
         self.assertTrue(compose.called)
 
     def test_plan_patch_applied_uses_committed_event_summary(self) -> None:
-        from fitmas.conversation_pipeline import _applied_plan_patch_reply
+        from fitmas.decision.plan_patch_reply import _applied_plan_patch_reply
 
         result = PlanPatchServiceResult(
             validation=PlanPatchValidation(status="valid", operation_results=()),
@@ -208,10 +208,10 @@ class BlockedMutationReplyTest(unittest.TestCase):
         )
 
         with patch(
-            "fitmas.conversation_pipeline.final_reply.compose_final_reply",
+            "fitmas.decision.plan_patch_reply.final_reply.compose_final_reply",
             return_value="C'est cale : le footing passe au 24 mars, sans toucher au reste.",
         ) as compose, patch(
-            "fitmas.conversation_pipeline.final_reply.verify_post_event_reply",
+            "fitmas.decision.plan_patch_reply.final_reply.verify_post_event_reply",
             return_value="C'est cale : le footing passe au 24 mars, sans toucher au reste.",
         ) as verify:
             reply = _applied_plan_patch_reply(result, fallback="Patch applique.")
@@ -221,7 +221,7 @@ class BlockedMutationReplyTest(unittest.TestCase):
         self.assertFalse(verify.called)
 
     def test_plan_patch_applied_ignores_composer_contradiction(self) -> None:
-        from fitmas.conversation_pipeline import _applied_plan_patch_reply
+        from fitmas.decision.plan_patch_reply import _applied_plan_patch_reply
 
         result = PlanPatchServiceResult(
             validation=PlanPatchValidation(status="valid", operation_results=()),
@@ -260,10 +260,10 @@ class BlockedMutationReplyTest(unittest.TestCase):
         )
 
         with patch(
-            "fitmas.conversation_pipeline.final_reply.compose_final_reply",
+            "fitmas.decision.plan_patch_reply.final_reply.compose_final_reply",
             return_value="J'ai decale le fractionne a jeudi.",
         ), patch(
-            "fitmas.conversation_pipeline.final_reply.verify_post_event_reply",
+            "fitmas.decision.plan_patch_reply.final_reply.verify_post_event_reply",
             return_value="J'ai libere mercredi et jeudi en journees flexibles.",
         ) as verify:
             reply = _applied_plan_patch_reply(result, fallback="Patch applique.")
@@ -275,7 +275,7 @@ class BlockedMutationReplyTest(unittest.TestCase):
         self.assertFalse(verify.called)
 
     def test_plan_patch_applied_keeps_event_summary_when_composer_has_wrong_day(self) -> None:
-        from fitmas.conversation_pipeline import _applied_plan_patch_reply
+        from fitmas.decision.plan_patch_reply import _applied_plan_patch_reply
 
         result = PlanPatchServiceResult(
             validation=PlanPatchValidation(status="valid", operation_results=()),
@@ -308,10 +308,10 @@ class BlockedMutationReplyTest(unittest.TestCase):
         )
 
         with patch(
-            "fitmas.conversation_pipeline.final_reply.compose_final_reply",
+            "fitmas.decision.plan_patch_reply.final_reply.compose_final_reply",
             return_value="J'ai remplace lundi matin par un footing.",
         ), patch(
-            "fitmas.conversation_pipeline.final_reply.verify_post_event_reply",
+            "fitmas.decision.plan_patch_reply.final_reply.verify_post_event_reply",
             return_value="Mardi 5 mai passe en footing easy.",
         ) as verify:
             reply = _applied_plan_patch_reply(result, fallback="Patch applique.")
@@ -320,7 +320,7 @@ class BlockedMutationReplyTest(unittest.TestCase):
         self.assertFalse(verify.called)
 
     def test_plan_patch_applied_falls_back_to_event_summary_when_verifier_fails(self) -> None:
-        from fitmas.conversation_pipeline import _applied_plan_patch_reply
+        from fitmas.decision.plan_patch_reply import _applied_plan_patch_reply
 
         result = PlanPatchServiceResult(
             validation=PlanPatchValidation(status="valid", operation_results=()),
@@ -341,10 +341,10 @@ class BlockedMutationReplyTest(unittest.TestCase):
         )
 
         with patch(
-            "fitmas.conversation_pipeline.final_reply.compose_final_reply",
+            "fitmas.decision.plan_patch_reply.final_reply.compose_final_reply",
             return_value="J'ai decale le fractionne a jeudi.",
         ), patch(
-            "fitmas.conversation_pipeline.final_reply.verify_post_event_reply",
+            "fitmas.decision.plan_patch_reply.final_reply.verify_post_event_reply",
             return_value=None,
         ):
             reply = _applied_plan_patch_reply(result, fallback="Patch applique.")
@@ -370,9 +370,9 @@ class BlockedMutationReplyTest(unittest.TestCase):
         session = SimpleNamespace(session_title="Footing facile", completion_status="skipped")
 
         with (
-            patch("fitmas.conversation_pipeline.repo.get_scheduled_session", return_value=session),
+            patch("fitmas.decision.plan_patch_reply.repo.get_scheduled_session", return_value=session),
             patch(
-                "fitmas.conversation_pipeline.final_reply.compose_final_reply",
+                "fitmas.decision.plan_patch_reply.final_reply.compose_final_reply",
                 return_value="Footing marque non fait. Je ne deplace rien derriere: il faut une seance encore planifiee.",
             ) as compose,
         ):
@@ -404,7 +404,7 @@ class BlockedMutationReplyTest(unittest.TestCase):
         )
 
         with patch(
-            "fitmas.conversation_pipeline.final_reply.compose_final_reply",
+            "fitmas.decision.plan_patch_reply.final_reply.compose_final_reply",
             return_value="Je garde ce creneau en recup. Le bon move, c'est un swap avec vendredi.",
         ) as compose:
             reply = _blocked_mutation_reply(decision, result)
@@ -413,7 +413,7 @@ class BlockedMutationReplyTest(unittest.TestCase):
         self.assertTrue(compose.called)
 
     def test_plan_patch_confirmation_prompt_drops_yes_no_protocol(self) -> None:
-        from fitmas.conversation_pipeline import _build_plan_patch_confirmation_prompt
+        from fitmas.decision.plan_patch_reply import _build_plan_patch_confirmation_prompt
 
         result = PlanPatchServiceResult(
             validation=PlanPatchValidation(
@@ -435,7 +435,7 @@ class BlockedMutationReplyTest(unittest.TestCase):
         self.assertIn("confirm", prompt.lower())
 
     def test_plan_patch_confirmation_prompt_passes_patch_details_to_composer(self) -> None:
-        from fitmas.conversation_pipeline import _build_plan_patch_confirmation_prompt
+        from fitmas.decision.plan_patch_reply import _build_plan_patch_confirmation_prompt
 
         result = PlanPatchServiceResult(
             patch=PlanPatch(
@@ -478,9 +478,9 @@ class BlockedMutationReplyTest(unittest.TestCase):
             return "Je peux la passer au lundi 11, mais je veux ton feu vert avant de bouger cette recuperation."
 
         with (
-            patch("fitmas.conversation_pipeline.final_reply.compose_final_reply", side_effect=fake_compose),
+            patch("fitmas.decision.plan_patch_reply.final_reply.compose_final_reply", side_effect=fake_compose),
             patch(
-                "fitmas.conversation_pipeline.final_reply.verify_uncommitted_reply",
+                "fitmas.decision.plan_patch_reply.final_reply.verify_uncommitted_reply",
                 side_effect=lambda reply, context, **_kwargs: reply,
             ),
         ):
@@ -496,7 +496,7 @@ class BlockedMutationReplyTest(unittest.TestCase):
     def test_plan_patch_confirmation_verifier_receives_patch_rationale_as_grounding(self) -> None:
         from datetime import date
 
-        from fitmas.conversation_pipeline import _build_plan_patch_confirmation_prompt
+        from fitmas.decision.plan_patch_reply import _build_plan_patch_confirmation_prompt
         from fitmas.grounding_contract import ReplyGroundingPacket
 
         result = PlanPatchServiceResult(
@@ -535,14 +535,14 @@ class BlockedMutationReplyTest(unittest.TestCase):
 
         with (
             patch(
-                "fitmas.conversation_pipeline.final_reply.compose_final_reply",
+                "fitmas.decision.plan_patch_reply.final_reply.compose_final_reply",
                 return_value="Je peux remplacer la natation par du vélo facile pour éviter l'épaule. Tu confirmes ?",
             ),
             patch(
-                "fitmas.conversation_pipeline.final_reply.verify_uncommitted_reply",
+                "fitmas.decision.plan_patch_reply.final_reply.verify_uncommitted_reply",
                 side_effect=lambda reply, context, **_kwargs: reply,
             ),
-            patch("fitmas.conversation_pipeline.final_reply.verify_factual_reply", side_effect=fake_verify),
+            patch("fitmas.decision.plan_patch_reply.final_reply.verify_factual_reply", side_effect=fake_verify),
         ):
             reply = _build_plan_patch_confirmation_prompt(result, grounding=grounding)
 
@@ -555,7 +555,7 @@ class BlockedMutationReplyTest(unittest.TestCase):
     def test_plan_patch_confirmation_rechecks_uncommitted_shape_after_factual_repair(self) -> None:
         from datetime import date
 
-        from fitmas.conversation_pipeline import _build_plan_patch_confirmation_prompt
+        from fitmas.decision.plan_patch_reply import _build_plan_patch_confirmation_prompt
         from fitmas.grounding_contract import ReplyGroundingPacket
 
         result = PlanPatchServiceResult(
@@ -593,12 +593,12 @@ class BlockedMutationReplyTest(unittest.TestCase):
 
         with (
             patch(
-                "fitmas.conversation_pipeline.final_reply.compose_final_reply",
+                "fitmas.decision.plan_patch_reply.final_reply.compose_final_reply",
                 return_value="Mobilité calée lundi, c'est bon pour moi.",
             ),
-            patch("fitmas.conversation_pipeline.final_reply.verify_uncommitted_reply", side_effect=fake_uncommitted),
+            patch("fitmas.decision.plan_patch_reply.final_reply.verify_uncommitted_reply", side_effect=fake_uncommitted),
             patch(
-                "fitmas.conversation_pipeline.final_reply.verify_factual_reply",
+                "fitmas.decision.plan_patch_reply.final_reply.verify_factual_reply",
                 return_value="Mobilité calée lundi, c'est bon pour moi.",
             ),
         ):
@@ -608,7 +608,7 @@ class BlockedMutationReplyTest(unittest.TestCase):
         self.assertEqual(len(uncommitted_calls), 2)
 
     def test_plan_patch_confirmation_repairs_effective_wording_before_user(self) -> None:
-        from fitmas.conversation_pipeline import _build_plan_patch_confirmation_prompt
+        from fitmas.decision.plan_patch_reply import _build_plan_patch_confirmation_prompt
 
         result = PlanPatchServiceResult(
             patch=PlanPatch(
@@ -643,10 +643,10 @@ class BlockedMutationReplyTest(unittest.TestCase):
 
         with (
             patch(
-                "fitmas.conversation_pipeline.final_reply.compose_final_reply",
+                "fitmas.decision.plan_patch_reply.final_reply.compose_final_reply",
                 return_value="Ta séance natation de demain devient un vélo facile de 35 minutes.",
             ),
-            patch("fitmas.conversation_pipeline.final_reply.verify_uncommitted_reply", side_effect=fake_verify),
+            patch("fitmas.decision.plan_patch_reply.final_reply.verify_uncommitted_reply", side_effect=fake_verify),
         ):
             reply = _build_plan_patch_confirmation_prompt(result)
 
@@ -654,7 +654,7 @@ class BlockedMutationReplyTest(unittest.TestCase):
         self.assertNotIn("devient", reply)
 
     def test_week_review_requires_confirmation_counts_as_pending(self) -> None:
-        from fitmas.conversation_pipeline import _plan_patch_confirmation_summary, _plan_patch_needs_confirmation
+        from fitmas.decision.plan_patch_reply import _plan_patch_confirmation_summary, _plan_patch_needs_confirmation
 
         result = PlanPatchServiceResult(
             validation=PlanPatchValidation(status="valid", operation_results=()),
@@ -674,7 +674,7 @@ class BlockedMutationReplyTest(unittest.TestCase):
         self.assertEqual(_plan_patch_confirmation_summary(result), "La fin de semaine devient trop dense.")
 
     def test_plan_patch_pending_summary_and_reason_hide_internal_terms(self) -> None:
-        from fitmas.conversation_pipeline import _plan_patch_confirmation_summary, _plan_patch_pending_reason
+        from fitmas.decision.plan_patch_reply import _plan_patch_confirmation_summary, _plan_patch_pending_reason
 
         result = PlanPatchServiceResult(
             validation=PlanPatchValidation(status="valid", operation_results=()),
@@ -702,7 +702,7 @@ class BlockedMutationReplyTest(unittest.TestCase):
             self.assertNotIn("user", normalized)
 
     def test_confirmation_reply_clarification_detector_handles_preciser_which_sessions(self) -> None:
-        from fitmas.conversation_pipeline import _plan_patch_confirmation_reply_requests_clarification
+        from fitmas.decision.plan_patch_reply import _plan_patch_confirmation_reply_requests_clarification
 
         replies = [
             "Tu peux me preciser lesquelles exactement tu veux intervertir ?",
@@ -738,7 +738,7 @@ class BlockedMutationReplyTest(unittest.TestCase):
             ),
         )
 
-        with patch("fitmas.conversation_pipeline.final_reply.compose_final_reply", return_value=None):
+        with patch("fitmas.decision.plan_patch_reply.final_reply.compose_final_reply", return_value=None):
             reply = _blocked_plan_patch_reply(result)
 
         self.assertIn("seance cle disparait", reply.lower())

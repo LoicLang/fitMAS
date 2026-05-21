@@ -71,6 +71,7 @@ def test_decision_runtime_phase1_modules_exist() -> None:
         "understanding_runtime.py",
         "pending_reply.py",
         "pending_resolution.py",
+        "plan_patch_reply.py",
         "planning_outcomes.py",
         "planning_runtime.py",
     }

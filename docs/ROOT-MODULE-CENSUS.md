@@ -71,7 +71,7 @@ is allowed only for hotspots that need a separate shrink slice.
 | `context_pack.py` | decision | merge | prompt context pack overlaps Decision ContextBuilder | context builder shrink |
 | `conversation_context.py` | decision | merge | conversation context should be one DecisionRuntime context | decision package split |
 | `conversation_contract.py` | decision | merge | conversation contracts should be canonical outcome contracts | decision package split |
-| `conversation_pipeline.py` | decision | keep_root_temporarily | hotspot orchestrator must shrink before moving | conversation adapter shrink |
+| `conversation_pipeline.py` | decision | keep_root_temporarily | hotspot orchestrator is shrinking; PlanPatch replies already moved to `decision/plan_patch_reply.py` | turn state / idempotence / recording shrink |
 | `conversation_prompt_modules.py` | llm | merge | prompt fragments should collapse into three prompt families | prompt shrink |
 | `conversation_prompting.py` | llm | merge | prompt assembly should move into llm prompts | prompt shrink |
 | `conversation_turn_planner.py` | decision | move | typed turn planning belongs to decision | decision package split |

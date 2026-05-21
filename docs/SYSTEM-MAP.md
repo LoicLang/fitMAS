@@ -45,9 +45,12 @@ Role :
 
 Etat actuel :
 
-- `conversation_pipeline.py` reste le gros orchestrateur.
+- `conversation_pipeline.py` reste le gros orchestrateur, mais il est descendu
+  a `1248` lignes apres extraction des replies PlanPatch.
 - Il est en train d'etre reduit vers `DecisionRuntime`.
-- Les bridges restants vivent encore sous `legacy/conversation_*`.
+- Il n'y a plus de bridge `legacy/conversation_*` runtime-active.
+- Les replies PlanPatch conversationnelles vivent dans
+  `decision/plan_patch_reply.py`.
 
 Interdit :
 
