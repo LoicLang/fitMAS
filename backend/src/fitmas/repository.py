@@ -1282,6 +1282,7 @@ def replace_plan(
     summary: str,
     days: list[dict],
     timezone_name: str | None = None,
+    now: datetime | None = None,
     mesocycle_week: int = 1,
     mesocycle_number: int = 1,
     total_weeks: int = 1,
@@ -1328,7 +1329,7 @@ def replace_plan(
 
     db.commit()
     db.refresh(plan)
-    sync_scheduled_sessions_for_plan(db, user_id=user_id, plan=plan, timezone_name=timezone_name)
+    sync_scheduled_sessions_for_plan(db, user_id=user_id, plan=plan, timezone_name=timezone_name, now=now)
     return plan
 
 
@@ -1338,8 +1339,9 @@ def sync_scheduled_sessions_for_plan(
     user_id: int,
     plan: s.WeeklyPlan,
     timezone_name: str | None,
+    now: datetime | None = None,
 ) -> None:
-    local_now = get_local_now(timezone_name)
+    local_now = get_local_now(timezone_name, now=now)
     current_date = local_now.date()
     current_day_index = local_now.weekday()
 

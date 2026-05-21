@@ -41,7 +41,7 @@ Il cherche un runtime plus petit.
 backend/src/fitmas/
   app/
     api/          routes et read models HTTP
-    telegram/     scheduler et delivery Telegram
+    telegram/     bot, commands, onboarding, delivery et scheduler Telegram
   decision/       InputEvent, context, outcome, command bus, reply, verifier
   domain/
     planning/     candidates, evaluator, policy, mutation service
@@ -61,6 +61,7 @@ Ce qui n'est plus l'architecture active :
 
 - root `api_messages.py`
 - root `api_*.py`
+- root `telegram_*.py`
 - root `final_reply.py`
 - root `heartbeat.py`
 - root `telegram_scheduler.py`

@@ -56,7 +56,7 @@ def test_heartbeat_runtime_adapter_has_no_delivery_or_persistence_side_effects()
 def test_heartbeat_runtime_bridge_imports_are_explicitly_bounded() -> None:
     allowed = {
         SRC / "app" / "telegram" / "scheduler.py",
-        SRC / "telegram_commands.py",
+        SRC / "app" / "telegram" / "commands.py",
         SRC / "app" / "api" / "routes_debug.py",
         SRC / "app" / "api" / "routes_ops.py",
     }

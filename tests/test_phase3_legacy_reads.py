@@ -81,7 +81,7 @@ def test_week_endpoint_uses_scheduled_runtime_truth_before_template_fallback() -
 
 def test_telegram_plan_command_uses_dated_timeline_not_legacy_week() -> None:
     root = Path(__file__).resolve().parents[1]
-    commands = (root / "backend/src/fitmas/telegram_commands.py").read_text()
+    commands = (root / "backend/src/fitmas/app/telegram/commands.py").read_text()
     assert 'api_get("/api/v0/week")' not in commands
     assert 'api_get("/api/v0/timeline' in commands
 

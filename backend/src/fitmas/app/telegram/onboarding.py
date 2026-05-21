@@ -11,8 +11,8 @@ from telegram.ext import (
     filters,
 )
 
-from fitmas.telegram_api import api_post
-from fitmas.telegram_shared import SPORT_EMOJIS
+from fitmas.app.telegram.api import api_post
+from fitmas.app.telegram.shared import SPORT_EMOJIS
 
 logger = logging.getLogger(__name__)
 

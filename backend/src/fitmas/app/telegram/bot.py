@@ -9,10 +9,10 @@ from dotenv import load_dotenv
 from telegram import Update
 from telegram.ext import Application, PicklePersistence
 
-load_dotenv(Path(__file__).resolve().parents[3] / ".env")
+load_dotenv(Path(__file__).resolve().parents[5] / ".env")
 
-from fitmas.telegram_commands import register_command_handlers
-from fitmas.telegram_onboarding import build_onboarding_handler
+from fitmas.app.telegram.commands import register_command_handlers
+from fitmas.app.telegram.onboarding import build_onboarding_handler
 from fitmas.app.telegram.scheduler import register_jobs
 
 logger = logging.getLogger(__name__)

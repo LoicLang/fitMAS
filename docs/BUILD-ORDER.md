@@ -85,6 +85,12 @@ Les cuts physiques recents :
   `routes_onboarding.py`, `routes_ops.py`, `routes_plan.py`,
   `routes_read.py`, `routes_static.py`, `routes_stats.py`, `payloads.py`,
   `support.py`, `app_views.py`, `onboarding_contract.py`.
+- Les modules Telegram root ont ete deplaces sous `app/telegram/` :
+  `api.py`, `bot.py`, `channel.py`, `commands.py`, `debounce.py`,
+  `onboarding.py`, `shared.py`, plus `scheduler.py`.
+- La route planning canonique tolere maintenant les signaux preference
+  sidecar sans scope : une demande planning supportee ne retombe plus en
+  clarification provider parce que le LLM a varie la forme metadata.
 - Le readonly plan lookup remplace maintenant une reply LLM non grounded par
   le fallback construit depuis les facts `PlanWindow`.
 - Le fallback execution parle depuis l'event machine applique quand le
@@ -97,10 +103,10 @@ Les cuts physiques recents :
 
 Etat chiffre au dernier check local :
 
-- root modules : `91`.
+- root modules : `84`.
 - legacy modules : `0` fichier source actif.
-- backend complet : `1313 passed, 11 skipped, 14 subtests passed`.
-- smoke core API : OK.
+- backend complet : `1317 passed, 11 skipped, 14 subtests passed`.
+- smoke canonical planning default : OK `10/10`.
 - fallback census core : `0`.
 
 ## Prochain Chantier

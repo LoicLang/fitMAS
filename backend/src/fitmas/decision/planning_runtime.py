@@ -809,19 +809,9 @@ def _is_nonblocking_planning_sidecar_signal(signal: Any) -> bool:
 
 
 def _is_planning_preference_metadata_signal(signal: Any) -> bool:
-    payload = dict(getattr(signal, "payload", {}) or {})
     action_type = _signal_action_type(signal)
-    scope = str(payload.get("scope") or "").strip()
     signal_type = str(getattr(signal, "type", "") or "").strip()
-    return signal_type == "preference" and action_type == "record_preference" and scope in {
-        "day",
-        "general",
-        "session",
-        "sport",
-        "week",
-        "planning",
-        "plan",
-    }
+    return signal_type == "preference" and action_type == "record_preference"
 
 
 def _is_planning_availability_metadata_signal(signal: Any) -> bool:

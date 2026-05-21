@@ -88,6 +88,7 @@ def test_context_builder_builds_canonical_context_from_scheduled_runtime_truth()
             intention="reprendre propre",
             summary="test",
             timezone_name=user.timezone,
+            now=now,
             days=[plan_day],
         )
         session = repo.get_scheduled_sessions(db, user.id)[0]

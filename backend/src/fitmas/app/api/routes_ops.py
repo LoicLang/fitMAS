@@ -25,7 +25,7 @@ from fitmas.conversation_contract import (
 )
 from fitmas.db import get_db
 from fitmas.skills.heartbeat.runtime_adapter import heartbeat_runtime_payload, run_heartbeat_endpoint, run_heartbeat_trigger
-from fitmas.telegram_channel import resolve_chat_id, send_text_message
+from fitmas.app.telegram.channel import resolve_chat_id, send_text_message
 
 logger = logging.getLogger(__name__)
 

@@ -7,8 +7,8 @@ import httpx
 from telegram import Update
 from telegram.ext import Application, CommandHandler, ContextTypes, MessageHandler, filters
 
-from fitmas.telegram_api import api_get, api_post
-from fitmas.telegram_debounce import (
+from fitmas.app.telegram.api import api_get, api_post
+from fitmas.app.telegram.debounce import (
     build_batched_text,
     consume_messages_with_ids,
     enqueue_message,
@@ -16,7 +16,7 @@ from fitmas.telegram_debounce import (
     is_in_flight,
     mark_in_flight,
 )
-from fitmas.telegram_shared import DAY_LABELS, SPORT_EMOJIS, persist_draft_for_owner
+from fitmas.app.telegram.shared import DAY_LABELS, SPORT_EMOJIS, persist_draft_for_owner
 
 logger = logging.getLogger(__name__)
 

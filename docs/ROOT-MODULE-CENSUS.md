@@ -23,7 +23,7 @@ is allowed only for hotspots that need a separate shrink slice.
 
 ## Summary
 
-- Root files counted: 91
+- Root files counted: 84
 - Permanent root entrypoints allowed: 3
 - First wrapper cuts completed: `heartbeat*.py`, `llm_gateway.py`,
   `telegram_scheduler.py`, `tool_*.py`, `api_messages.py`,
@@ -35,6 +35,9 @@ is allowed only for hotspots that need a separate shrink slice.
   `api_debug.py`, `api_onboarding.py`, `api_ops.py`, `api_payloads.py`,
   `api_plan.py`, `api_read.py`, `api_static.py`, `api_stats.py`,
   `api_support.py`, `app_views.py`, `onboarding_contract.py`
+- Telegram root cut completed: `telegram_api.py`, `telegram_bot.py`,
+  `telegram_channel.py`, `telegram_commands.py`, `telegram_debounce.py`,
+  `telegram_onboarding.py`, `telegram_shared.py`
 - Primary risk: moving files faster than deleting obsolete boundaries
 - Thursday criterion: root is explainable, delete candidates are explicit, and
   new root files fail architecture tests unless classified here
@@ -119,13 +122,6 @@ is allowed only for hotspots that need a separate shrink slice.
 | `strength_engine.py` | domain/athlete | move | strength engine is athlete capability | athlete package split |
 | `strength_exercise_bank.py` | domain/athlete | move | strength exercise bank is athlete capability data | athlete package split |
 | `strength_signals.py` | domain/athlete | move | strength signals are athlete state | athlete package split |
-| `telegram_api.py` | app/telegram | move | Telegram API client belongs to telegram app | telegram package split |
-| `telegram_bot.py` | app/telegram | move | Telegram bot entry belongs to telegram app | telegram package split |
-| `telegram_channel.py` | app/telegram | move | Telegram delivery channel belongs to telegram app | telegram package split |
-| `telegram_commands.py` | app/telegram | move | Telegram commands belong to telegram app | telegram package split |
-| `telegram_debounce.py` | app/telegram | move | Telegram debounce belongs to telegram app | telegram package split |
-| `telegram_onboarding.py` | app/telegram | move | Telegram onboarding belongs to telegram app | telegram package split |
-| `telegram_shared.py` | app/telegram | move | Telegram shared helpers belong to telegram app | telegram package split |
 | `temporal_resolver.py` | core | move | temporal resolution is shared core | core package split |
 | `threshold_estimation.py` | domain/athlete | move | threshold estimation is athlete physiology | athlete package split |
 | `time_context.py` | core | move | time helpers are shared core | core package split |
@@ -137,9 +133,8 @@ is allowed only for hotspots that need a separate shrink slice.
 
 ## Immediate Cut Order
 
-1. Move Telegram delivery modules to `app/telegram` and delete root wrappers.
-2. Move execution and memory services to `domain/*` before touching monoliths.
-3. Split monoliths only after deletion:
+1. Move execution and memory services to `domain/*` before touching monoliths.
+2. Split monoliths only after deletion:
    `conversation_pipeline.py`, `repository.py`, `week_coherence.py`.
 
 ## Non Goals

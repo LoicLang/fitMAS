@@ -6,7 +6,7 @@ set -e
 # Start bot in background if token is set
 if [ -n "$TELEGRAM_BOT_TOKEN" ]; then
   echo "→ Starting Telegram bot..."
-  python -m fitmas.telegram_bot &
+  python -m fitmas.app.telegram.bot &
 fi
 
 # Start API (foreground)

@@ -1110,6 +1110,37 @@ def test_canonical_planning_provider_allows_sport_preference_sidecar_for_replace
     )
 
 
+def test_canonical_planning_provider_allows_preference_sidecar_without_scope(monkeypatch) -> None:
+    monkeypatch.setenv("FITMAS_CANONICAL_PLANNING_PROVIDER", "1")
+    signal = UserSignal(
+        type="preference",
+        label="replace_swimming_with_cycling",
+        status="new",
+        severity="unknown",
+        confidence=0.95,
+        evidence="Remplace la natation dimanche par un velo facile",
+        payload={
+            "action_type": "record_preference",
+            "preference": "velo facile instead of natation",
+            "polarity": "prefer",
+        },
+    )
+
+    assert bridge.should_use_canonical_planning_without_legacy(
+        understanding=_understanding(
+            requested_change=_requested_change(
+                kind="replace",
+                source_ref="date:2026-05-24",
+                target_ref="date:2026-05-24",
+                desired_sport="velo",
+            ),
+            signals=(signal,),
+        ),
+        turn_plan=_turn_plan(),
+        pending_confirmation=None,
+    )
+
+
 def test_canonical_planning_calls_runtime_from_understanding_without_legacy(monkeypatch) -> None:
     monkeypatch.setenv("FITMAS_CANONICAL_PLANNING_PROVIDER", "1")
     calls: list[dict] = []

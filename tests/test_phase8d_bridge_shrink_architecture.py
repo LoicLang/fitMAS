@@ -60,7 +60,7 @@ def test_8d_no_active_heartbeat_skill_imports_outside_legacy() -> None:
     }
     allowed_files = {
         "app/telegram/scheduler.py",
-        "telegram_commands.py",
+        "app/telegram/commands.py",
         "app/api/routes_debug.py",
         "app/api/routes_ops.py",
     }
@@ -118,7 +118,7 @@ def test_8d_legacy_decision_helpers_are_deleted_with_artifact_owner() -> None:
 def test_8d_active_heartbeat_entrypoints_import_runtime_adapter_not_skill_loop() -> None:
     checked = {
         "app/telegram/scheduler.py",
-        "telegram_commands.py",
+        "app/telegram/commands.py",
         "app/api/routes_debug.py",
         "app/api/routes_ops.py",
     }
