@@ -267,6 +267,49 @@ def test_provider_pivot_keeps_legacy_for_planning(monkeypatch) -> None:
     )
 
 
+def test_provider_pivot_does_not_steal_actionable_planning_change_when_turn_plan_missed_planning(
+    monkeypatch,
+) -> None:
+    monkeypatch.delenv("FITMAS_CANONICAL_PROVIDER_NON_PLANNING", raising=False)
+    monkeypatch.delenv("FITMAS_CANONICAL_NON_PLANNING_CUTOVER", raising=False)
+    monkeypatch.delenv("FITMAS_COMMANDS_FROM_UNDERSTANDING", raising=False)
+
+    understanding = CoachUnderstanding(
+        intent="plan_change",
+        confidence=0.91,
+        user_summary="Remplacer la natation de dimanche par du velo facile.",
+        extracted_signals=(
+            UserSignal(
+                type="preference",
+                label="bike replacement",
+                status="new",
+                severity="low",
+                confidence=0.8,
+                evidence="velo facile",
+                payload={"action_type": "record_preference", "scope": "sport", "preference": "velo facile"},
+            ),
+        ),
+        requested_change=RequestedPlanChange(
+            kind="replace",
+            source_ref="day:sunday",
+            target_ref=None,
+            desired_sport="cycling",
+            desired_duration_min=None,
+            desired_intensity="easy",
+            reason="remplacer la natation dimanche",
+            risk_signals=(),
+        ),
+        pending_resolution=None,
+        clarification_need=None,
+    )
+
+    assert not bridge.should_use_canonical_understanding_without_legacy(
+        understanding=understanding,
+        turn_plan=SimpleNamespace(primary_intent="preference_signal", secondary_intents=()),
+        pending_confirmation=None,
+    )
+
+
 def test_provider_pivot_consumes_command_signal_even_with_unsupported_non_planning_change(monkeypatch) -> None:
     monkeypatch.delenv("FITMAS_CANONICAL_PROVIDER_NON_PLANNING", raising=False)
     monkeypatch.delenv("FITMAS_CANONICAL_NON_PLANNING_CUTOVER", raising=False)

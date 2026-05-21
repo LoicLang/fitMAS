@@ -71,6 +71,25 @@ def test_canonical_planning_provider_accepts_typed_move_when_enabled(monkeypatch
     )
 
 
+def test_canonical_planning_provider_accepts_actionable_understanding_when_turn_plan_missed_planning(
+    monkeypatch,
+) -> None:
+    monkeypatch.delenv("FITMAS_CANONICAL_PLANNING_PROVIDER", raising=False)
+
+    assert bridge.should_use_canonical_planning_without_legacy(
+        understanding=_understanding(
+            requested_change=_requested_change(
+                kind="replace",
+                source_ref="day:sunday",
+                target_ref=None,
+                desired_sport="cycling",
+            )
+        ),
+        turn_plan=_turn_plan(primary_intent="availability_signal"),
+        pending_confirmation=None,
+    )
+
+
 def test_canonical_planning_provider_accepts_iso_date_target_ref(monkeypatch) -> None:
     monkeypatch.delenv("FITMAS_CANONICAL_PLANNING_PROVIDER", raising=False)
 

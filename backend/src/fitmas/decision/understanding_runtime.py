@@ -77,7 +77,11 @@ def should_use_canonical_understanding_without_legacy(
         return False
     commands = commands_from_understanding(understanding).commands
     if understanding.intent == "plan_change" or understanding.requested_change is not None:
-        return not _turn_plan_can_produce_planning(turn_plan) and bool(commands)
+        return (
+            not _turn_plan_can_produce_planning(turn_plan)
+            and not _requested_change_looks_actionable(understanding.requested_change)
+            and bool(commands)
+        )
     return bool(commands)
 
 
@@ -164,6 +168,21 @@ def _turn_plan_can_produce_readonly_answer(turn_plan) -> bool:
     if bool(getattr(turn_plan, "requires_truth_read", False)):
         return True
     return str(getattr(turn_plan, "truth_scope", "") or "") in {"plan_window", "execution", "memory"}
+
+
+def _requested_change_looks_actionable(requested_change) -> bool:
+    if requested_change is None:
+        return False
+    kind = str(getattr(requested_change, "kind", "") or "").strip()
+    if kind not in {"move", "swap", "lighten", "replace", "create", "constraint_window"}:
+        return False
+    source_ref = str(getattr(requested_change, "source_ref", "") or "").strip()
+    target_ref = str(getattr(requested_change, "target_ref", "") or "").strip()
+    if kind in {"lighten", "replace", "constraint_window"}:
+        return bool(source_ref)
+    if kind == "create":
+        return bool(target_ref)
+    return bool(source_ref and target_ref)
 
 
 def _response_type_for_canonical_trace(*, understanding: CoachUnderstanding, turn_plan) -> str:

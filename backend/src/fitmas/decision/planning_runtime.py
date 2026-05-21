@@ -145,7 +145,7 @@ def should_use_canonical_planning_without_legacy(
         return False
     if _has_blocking_command_signals(understanding):
         return False
-    if not _turn_plan_allows_planning(turn_plan):
+    if not _understanding_or_turn_plan_allows_planning(understanding=understanding, turn_plan=turn_plan):
         return False
     return _requested_change_is_supported(understanding.requested_change)
 
@@ -162,7 +162,7 @@ def should_handle_unsupported_canonical_planning_without_legacy(
         return False
     if understanding.pending_resolution is not None or _has_active_pending(pending_confirmation):
         return False
-    if not _turn_plan_allows_planning(turn_plan):
+    if not _understanding_or_turn_plan_allows_planning(understanding=understanding, turn_plan=turn_plan):
         return False
     if understanding.intent != "plan_change":
         return True
@@ -276,7 +276,7 @@ def canonical_planning_fallback_reason(
         return "active_pending"
     if _has_blocking_command_signals(understanding):
         return "blocking_command_signals"
-    if not _turn_plan_allows_planning(turn_plan):
+    if not _understanding_or_turn_plan_allows_planning(understanding=understanding, turn_plan=turn_plan):
         return "turn_plan_not_planning"
     if not _requested_change_is_supported(understanding.requested_change):
         return "unsupported_requested_change"
@@ -885,6 +885,20 @@ def _turn_plan_allows_planning(turn_plan: Any) -> bool:
     if primary_intent == "plan_mutation":
         return True
     return "plan_mutation" in secondary
+
+
+def _understanding_or_turn_plan_allows_planning(
+    *,
+    understanding: CoachUnderstanding | None,
+    turn_plan: Any,
+) -> bool:
+    if _turn_plan_allows_planning(turn_plan):
+        return True
+    return (
+        understanding is not None
+        and understanding.intent == "plan_change"
+        and understanding.requested_change is not None
+    )
 
 
 def _turn_plan_has_explicit_planning_request(turn_plan: Any) -> bool:
