@@ -69,6 +69,7 @@ def test_decision_runtime_phase1_modules_exist() -> None:
         "context_builder.py",
         "turn_calibration.py",
         "turn_context.py",
+        "turn_finalization.py",
         "turn_recording.py",
         "turn_idempotency.py",
         "turn_persistence.py",

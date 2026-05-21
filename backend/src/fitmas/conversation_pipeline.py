@@ -6,13 +6,7 @@ from typing import Any
 from sqlalchemy.orm import Session
 
 from fitmas import repository as repo
-from fitmas import coach_voice
 import fitmas.llm.gateway as gw
-from fitmas.claim_guard import (
-    build_claim_repair_prompt,
-    looks_like_action_claim,
-    outage_fallback_reply,
-)
 from fitmas.decision import DecisionReplyComposer
 from fitmas.llm.reply_decision_backend import LLMReplyBackend
 from fitmas.decision import clarification_reply
@@ -24,8 +18,8 @@ from fitmas.decision import readonly_reply
 from fitmas.decision import coach_decision_runtime
 from fitmas.decision import turn_calibration
 from fitmas.decision import turn_context as turn_context_builder
+from fitmas.decision import turn_finalization
 from fitmas.decision import turn_idempotency
-from fitmas.decision import turn_persistence
 from fitmas.decision import turn_state
 import fitmas.llm.reply_backend as final_reply
 from fitmas.decision import understanding_runtime
@@ -117,10 +111,10 @@ def _run_conversation_turn_impl(
                 "close_turn_reply_source": close_reply_source,
             }
         )
-        return turn_persistence.reply_and_record_turn(
+        return turn_finalization.record_turn_reply(
             db=db,
-            user_id=user.id,
-            user_text=payload.text,
+            user=user,
+            payload=payload,
             reply_text=reply_text,
             extraction=Extraction(confidence=float(getattr(turn_plan, "confidence", 0.95) or 0.95)),
             response_mode="close_turn_composed",
@@ -158,18 +152,13 @@ def _run_conversation_turn_impl(
         )
         if pending_outcome is not None:
             turn_context["canonical_pending_provider"]["result"] = "handled"
-            return turn_persistence.reply_and_record_turn(
+            return turn_finalization.record_turn_outcome(
                 db=db,
-                user_id=user.id,
-                user_text=payload.text,
-                reply_text=pending_outcome.reply_text,
-                extraction=pending_outcome.extraction,
-                response_mode=pending_outcome.response_mode,
-                mutation_applied=pending_outcome.mutation_applied,
-                pending_confirmation=pending_outcome.pending_confirmation,
-                pending_confirmation_id=pending_outcome.pending_confirmation_id,
+                user=user,
+                payload=payload,
+                outcome=pending_outcome,
                 turn_context=turn_context,
-                memory_writes=turn_memory_writes,
+                turn_memory_writes=turn_memory_writes,
             )
         turn_context["canonical_pending_provider"]["result"] = (
             "no_pending_resolution" if canonical_understanding is None else "fallback_legacy"
@@ -183,17 +172,13 @@ def _run_conversation_turn_impl(
         grounding_facts=grounding_facts,
     )
     if canonical_clarification_outcome is not None:
-        return turn_persistence.reply_and_record_turn(
+        return turn_finalization.record_turn_outcome(
             db=db,
-            user_id=user.id,
-            user_text=payload.text,
-            reply_text=canonical_clarification_outcome.reply_text,
-            extraction=canonical_clarification_outcome.extraction,
-            response_mode=canonical_clarification_outcome.response_mode,
-            mutation_applied=canonical_clarification_outcome.mutation_applied,
-            pending_confirmation=canonical_clarification_outcome.pending_confirmation,
+            user=user,
+            payload=payload,
+            outcome=canonical_clarification_outcome,
             turn_context=turn_context,
-            memory_writes=turn_memory_writes,
+            turn_memory_writes=turn_memory_writes,
         )
 
     if planning_runtime.should_prepare_canonical_planning_understanding(
@@ -246,18 +231,13 @@ def _run_conversation_turn_impl(
                     turn_memory_writes=turn_memory_writes,
                     turn_context=turn_context,
                 )
-                return turn_persistence.reply_and_record_turn(
+                return turn_finalization.record_turn_outcome(
                     db=db,
-                    user_id=user.id,
-                    user_text=payload.text,
-                    reply_text=canonical_planning_outcome.reply_text,
-                    extraction=canonical_planning_outcome.extraction,
-                    response_mode=canonical_planning_outcome.response_mode,
-                    mutation_applied=canonical_planning_outcome.mutation_applied,
-                    pending_confirmation=canonical_planning_outcome.pending_confirmation,
-                    pending_confirmation_id=canonical_planning_outcome.pending_confirmation_id,
+                    user=user,
+                    payload=payload,
+                    outcome=canonical_planning_outcome,
                     turn_context=turn_context,
-                    memory_writes=turn_memory_writes,
+                    turn_memory_writes=turn_memory_writes,
                 )
         else:
             if planning_runtime.should_handle_unsupported_canonical_planning_without_legacy(
@@ -278,18 +258,13 @@ def _run_conversation_turn_impl(
                     turn_context=turn_context,
                 )
                 if canonical_planning_outcome is not None:
-                    return turn_persistence.reply_and_record_turn(
+                    return turn_finalization.record_turn_outcome(
                         db=db,
-                        user_id=user.id,
-                        user_text=payload.text,
-                        reply_text=canonical_planning_outcome.reply_text,
-                        extraction=canonical_planning_outcome.extraction,
-                        response_mode=canonical_planning_outcome.response_mode,
-                        mutation_applied=canonical_planning_outcome.mutation_applied,
-                        pending_confirmation=canonical_planning_outcome.pending_confirmation,
-                        pending_confirmation_id=canonical_planning_outcome.pending_confirmation_id,
+                        user=user,
+                        payload=payload,
+                        outcome=canonical_planning_outcome,
                         turn_context=turn_context,
-                        memory_writes=turn_memory_writes,
+                        turn_memory_writes=turn_memory_writes,
                     )
             else:
                 planning_runtime.trace_canonical_planning_not_used(
@@ -308,17 +283,13 @@ def _run_conversation_turn_impl(
         grounding_facts=grounding_facts,
     )
     if activity_highlight_outcome is not None:
-        return turn_persistence.reply_and_record_turn(
+        return turn_finalization.record_turn_outcome(
             db=db,
-            user_id=user.id,
-            user_text=payload.text,
-            reply_text=activity_highlight_outcome.reply_text,
-            extraction=activity_highlight_outcome.extraction,
-            response_mode=activity_highlight_outcome.response_mode,
-            mutation_applied=activity_highlight_outcome.mutation_applied,
-            pending_confirmation=activity_highlight_outcome.pending_confirmation,
+            user=user,
+            payload=payload,
+            outcome=activity_highlight_outcome,
             turn_context=turn_context,
-            memory_writes=turn_memory_writes,
+            turn_memory_writes=turn_memory_writes,
         )
 
     if canonical_understanding is None:
@@ -464,61 +435,16 @@ def _run_conversation_turn_impl(
         pending_confirmation=pending_confirmation,
     )
 
-    mutation_actually_committed = bool(outcome.mutation_applied or outcome.pending_confirmation)
-    if not mutation_actually_committed and looks_like_action_claim(outcome.reply_text):
-        original_reply = outcome.reply_text
-        logger.warning(
-            "conversation_pipeline.claim_without_mutation user=%s reply=%r",
-            user.id,
-            original_reply[:200],
-        )
-        # Doctrine-correct path (Chantier 1bis - 3 mai 2026) : LLM repair plutot
-        # qu'une template canned. La canned "Je n'ai applique aucun changement..."
-        # produisait du receipt-style en aval de Chantier 1 voix unifiee.
-        repaired = _llm_repair_claim_reply(original_reply=original_reply, user_text=payload.text)
-        if repaired:
-            outcome.reply_text = repaired
-            outcome.response_mode = "claim_without_mutation_repaired"
-        else:
-            # Outage minimal (LLM down ou repair invalide) : ligne coach-voice
-            # courte, jamais la vieille template administrative.
-            outcome.reply_text = outage_fallback_reply()
-            outcome.response_mode = "claim_without_mutation_outage_fallback"
-
-    extracted_facts = (
-        []
-        if outcome.response_mode == "obsolete_turn_no_write"
-        else dependencies.extract_facts(payload.text, outcome.reply_text, state.active_facts)
-    )
-    extracted_facts = turn_persistence.filter_legacy_extracted_facts(extracted_facts)
-    if extracted_facts:
-        turn_persistence.persist_turn_memory_updates(
-            db,
-            user.id,
-            extracted_facts,
-            turn_memory_writes=turn_memory_writes,
-        )
-
-    pending_resolution.supersede_pending_if_replaced(
+    return turn_finalization.finalize_and_record_outcome(
         db=db,
+        user=user,
+        payload=payload,
         outcome=outcome,
+        state=state,
+        dependencies=dependencies,
         pending_confirmation=pending_confirmation,
-    )
-
-    return turn_persistence.reply_and_record_turn(
-        db=db,
-        user_id=user.id,
-        user_text=payload.text,
-        reply_text=outcome.reply_text,
-        extraction=outcome.extraction,
-        day_updated=outcome.day_updated,
-        response_mode=outcome.response_mode,
-        decision=outcome.decision,
-        mutation_applied=outcome.mutation_applied,
-        pending_confirmation=outcome.pending_confirmation,
-        pending_confirmation_id=outcome.pending_confirmation_id,
         turn_context=turn_context,
-        memory_writes=turn_memory_writes,
+        turn_memory_writes=turn_memory_writes,
     )
 
 
@@ -561,42 +487,3 @@ def _apply_understanding_commands(
         unresolved_execution_followup=unresolved_execution_followup,
     )
 
-
-def _llm_repair_claim_reply(*, original_reply: str, user_text: str) -> str | None:
-    """LLM repair pour un reply qui claim une action sans mutation committee.
-
-    Retourne le texte reecrit (voix coach, sans claim) si valide, sinon None.
-    Critères de validation:
-      - non vide / non whitespace
-      - ne claim plus une action (`looks_like_action_claim`)
-      - ne viole pas la voix coach (`coach_voice.message_violates_coach_voice`)
-      - longueur raisonnable (< 500 chars, anti runaway)
-
-    En cas d'echec (LLM down, output invalide), le caller doit retomber sur
-    `outage_fallback_reply()` (voir `claim_guard`).
-    """
-    if not original_reply or not original_reply.strip():
-        return None
-    system, prompt = build_claim_repair_prompt(original_reply=original_reply, user_text=user_text)
-    try:
-        repaired = gw.request_text(system=system, prompt=prompt, max_tokens=200)
-    except Exception:
-        logger.exception("conversation_pipeline.claim_repair_llm_error user_text=%r", user_text[:80])
-        return None
-    if not repaired:
-        logger.warning("conversation_pipeline.claim_repair_empty user_text=%r", user_text[:80])
-        return None
-    repaired = repaired.strip()
-    if len(repaired) < 5 or len(repaired) > 500:
-        logger.warning("conversation_pipeline.claim_repair_bad_length len=%d", len(repaired))
-        return None
-    if looks_like_action_claim(repaired):
-        logger.warning("conversation_pipeline.claim_repair_still_claims reply=%r", repaired[:160])
-        return None
-    if coach_voice.message_violates_coach_voice(repaired):
-        logger.warning("conversation_pipeline.claim_repair_voice_violation reply=%r", repaired[:160])
-        return None
-    if coach_voice.message_looks_receipt_style(repaired):
-        # Log only — pas un blocker, mais signale la regression.
-        logger.warning("conversation_pipeline.claim_repair_receipt_style reply=%r", repaired[:160])
-    return repaired

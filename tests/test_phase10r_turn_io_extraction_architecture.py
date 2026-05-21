@@ -67,7 +67,7 @@ def test_10r_conversation_pipeline_imports_turn_io_owners() -> None:
 
     assert "fitmas.decision.turn_idempotency" in imports
     assert "fitmas.decision.turn_state" in imports
-    assert "fitmas.decision.turn_persistence" in imports
+    assert (DECISION / "turn_persistence.py").exists()
 
 
 def test_10r_turn_io_owners_do_not_import_conversation_pipeline() -> None:
