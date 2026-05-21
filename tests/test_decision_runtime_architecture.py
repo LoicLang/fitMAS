@@ -67,6 +67,7 @@ def test_decision_runtime_phase1_modules_exist() -> None:
         "reply_request.py",
         "output_verifier.py",
         "context_builder.py",
+        "turn_context.py",
         "turn_recording.py",
         "turn_idempotency.py",
         "turn_persistence.py",

@@ -1,18 +1,11 @@
 from __future__ import annotations
 
 import logging
-from types import SimpleNamespace
 from typing import Any
 
 from sqlalchemy.orm import Session
 
 from fitmas import repository as repo
-from fitmas.grounding_contract import (
-    ReplyGroundingPacket,
-    plan_window_facts_from_sessions,
-    render_grounding_packet_for_prompt,
-    resolve_temporal_intents,
-)
 from fitmas.calibration_llm import extract_calibration_resolution
 from fitmas import coach_voice
 import fitmas.llm.gateway as gw
@@ -27,31 +20,20 @@ from fitmas.calibration_needs import (
     find_open_calibration_need,
     should_apply_calibration_resolution,
 )
-from fitmas.coach_reading_digest import build_coach_reading_digest, render_digest_for_prompt
-from fitmas.coach_state_bundle import build_coach_state_bundle
-from fitmas.execution_clarification import render_unresolved_execution_followup
 from fitmas.llm.reply_decision_backend import LLMReplyBackend
 from fitmas.decision import clarification_reply
 from fitmas.decision import command_application
 from fitmas.decision import pending_resolution
 from fitmas.decision import planning_runtime
-from fitmas.decision import plan_patch_reply
 from fitmas.decision import activity_highlight
 from fitmas.decision import readonly_reply
 from fitmas.decision import coach_decision_runtime
+from fitmas.decision import turn_context as turn_context_builder
 from fitmas.decision import turn_idempotency
 from fitmas.decision import turn_persistence
 from fitmas.decision import turn_state
 import fitmas.llm.reply_backend as final_reply
 from fitmas.decision import understanding_runtime
-from fitmas.conversation_context import (
-    activity_claim_summary_for_prompt,
-    build_conversation_context,
-    execution_summary_for_prompt,
-    non_completion_summary_for_prompt,
-    signal_summary_for_prompt,
-    temporal_summary_for_prompt,
-)
 from fitmas.conversation_contract import (
     ConversationPipelineDependencies,
     ConversationTurnInput,
@@ -59,8 +41,6 @@ from fitmas.conversation_contract import (
     ConversationUserNotFoundError,
 )
 from fitmas.models import Extraction, MessageReply
-from fitmas.profile_summary import build_profile_summary
-from fitmas.signals import collect_signals
 
 logger = logging.getLogger(__name__)
 
@@ -85,8 +65,6 @@ def _run_conversation_turn_impl(
     db: Session,
     dependencies: ConversationPipelineDependencies,
 ) -> MessageReply:
-    from fitmas.app.api import routes_messages as api_messages
-
     user = repo.get_user_optional(db)
     if user is None:
         raise ConversationUserNotFoundError("No onboarded user yet")
@@ -97,13 +75,7 @@ def _run_conversation_turn_impl(
 
     state = turn_state.load_turn_state(db=db, user=user, user_text=payload.text)
     turn_memory_writes: list[dict] = []
-    external_turn_context: dict[str, object] = {}
-    if payload.client_message_key:
-        external_turn_context["client_message_key"] = payload.client_message_key
-    if payload.source:
-        external_turn_context["source"] = payload.source
     pending_confirmation = repo.get_active_pending_mutation_confirmation(db, user.id)
-    pending_confirmation_context = _pending_confirmation_context_for_prompt(pending_confirmation)
 
     open_calibration_need = find_open_calibration_need(state.active_memory_rows)
     calibration_resolution = None
@@ -130,159 +102,21 @@ def _run_conversation_turn_impl(
             )
             state.active_memory_rows, state.active_facts = turn_state.active_memory_payloads(db, user.id)
 
-    try:
-        signals = collect_signals(db, user)
-    except Exception:
-        logger.exception("Failed to collect conversation signals")
-        signals = []
-
-    conversation_context = build_conversation_context(
-        user_text=payload.text,
-        conversation_history=state.conversation_history[:-1],
-        timezone_name=user.timezone,
-        scheduled_sessions=state.scheduled_sessions,
-        activities=state.activities,
-        active_facts=state.active_facts,
-        signals=signals,
-    )
-    claim_summary = activity_claim_summary_for_prompt(conversation_context)
-    non_completion_summary = non_completion_summary_for_prompt(conversation_context)
-    if non_completion_summary:
-        claim_summary = "\n".join(part for part in (claim_summary, non_completion_summary) if part)
-
-    planning_decision = repo.get_latest_planning_decision_record(db, user.id)
-    coach_bundle = build_coach_state_bundle(
-        db,
+    context_artifacts = turn_context_builder.build_turn_context_artifacts(
+        db=db,
         user=user,
-        today_date=conversation_context.temporal_resolution.local_date,
-        scheduled_sessions=state.scheduled_sessions,
-        activities=state.activities,
-        planning_decision=planning_decision,
-        recent_adaptations_limit=4,
-        screen="conversation",
+        payload=payload,
+        state=state,
+        dependencies=dependencies,
+        pending_confirmation=pending_confirmation,
     )
-    turn_plan = dependencies.plan_turn(
-        user_text=payload.text,
-        temporal_summary=temporal_summary_for_prompt(conversation_context),
-        execution_summary=execution_summary_for_prompt(conversation_context),
-        activity_claim_summary=claim_summary,
-        signal_summary=signal_summary_for_prompt(conversation_context),
-        conversation_history=state.conversation_history[:-1],
-    )
-    if turn_plan is None:
-        llm_plan_mutation_request = False
-    else:
-        llm_plan_mutation_request = bool(getattr(turn_plan, "has_plan_mutation", False))
-    plan_mutation_request = bool(llm_plan_mutation_request)
-
-    # Targeted execution clarification: previously short-circuited the pipeline
-    # with a canned "Tu l'as faite ou pas ?" reply, which loops on missed
-    # sessions and bypasses decide(). We now surface it as soft prompt context
-    # — the LLM arbitrates whether to ask, integrate or move on based on the
-    # user's actual message this turn. The anti-spam guard
-    # (looks_like_execution_clarification_prompt on previous_agent_text) is
-    # preserved inside _targeted_execution_clarification, so a follow-up turn
-    # gets no block injected and the loop breaks.
-    clarification = (
-        None
-        if plan_mutation_request
-        else api_messages._targeted_execution_clarification(
-            db=db,
-            user=user,
-            conversation_context=conversation_context,
-            previous_agent_text=state.previous_agent_text,
-        )
-    )
-    unresolved_execution_followup_text: str | None = None
-    unresolved_execution_followup_session_id: int | None = None
-    unresolved_execution_followup_target_date: str | None = None
-    if clarification is not None:
-        yesterday = conversation_context.temporal_resolution.local_date.fromordinal(
-            conversation_context.temporal_resolution.local_date.toordinal() - 1
-        )
-        unresolved_execution_followup_session_id = clarification.session_id
-        unresolved_execution_followup_target_date = yesterday.isoformat()
-        unresolved_execution_followup_text = render_unresolved_execution_followup(
-            clarification,
-            target_date_iso=yesterday.isoformat(),
-        )
-
-    adaptation = None
-    route_adaptation_context_to_llm = _should_route_adaptation_context_to_llm(
-        turn_plan,
-        adaptation,
-        plan_mutation_request=plan_mutation_request,
-    )
-
-    week_scope_reply = None
-    no_candidate_reply = None
-    route_availability_context_to_llm = _should_route_availability_context_to_llm(
-        turn_plan,
-        week_scope_reply=week_scope_reply,
-        no_candidate_reply=no_candidate_reply,
-    )
-    grounding_prompt_context = _append_prompt_section(
-        (
-            _availability_context_for_prompt(
-                week_scope_reply=week_scope_reply,
-                no_candidate_reply=no_candidate_reply,
-            )
-            if route_availability_context_to_llm
-            else None
-        )
-        or "",
-        _adaptation_context_for_prompt(adaptation) if route_adaptation_context_to_llm else None,
-    )
-    grounding_prompt_context = _append_prompt_section(
-        grounding_prompt_context,
-        pending_confirmation_context,
-    )
-    decision_temporal_summary = _append_prompt_section(
-        temporal_summary_for_prompt(conversation_context),
-        grounding_prompt_context,
-    )
-    decision_signal_summary = _append_prompt_section(
-        signal_summary_for_prompt(conversation_context),
-        grounding_prompt_context,
-    )
-
-    grounding_packet = _build_reply_grounding_packet(
-        user=user,
-        local_date=conversation_context.temporal_resolution.local_date,
-        scheduled_sessions=state.scheduled_sessions,
-        turn_plan=turn_plan,
-    )
-
-    turn_context = {
-        **external_turn_context,
-        "profile_summary": build_profile_summary(state.active_memory_rows),
-        "current_user_message_id": state.current_user_message_id,
-        "timeline_summary": api_messages.make_timeline_summary(state.timeline),
-        "execution_summary": execution_summary_for_prompt(conversation_context),
-        "temporal_summary": decision_temporal_summary,
-        "activity_claim_summary": claim_summary,
-        "signal_summary": decision_signal_summary,
-        "history_messages": max(len(state.conversation_history) - 1, 0),
-        "selected_fact_keys": [
-            _fact_identity(fact)
-            for fact in (list(conversation_context.selected_facts) or [])[:6]
-        ],
-        "turn_plan": _turn_plan_payload(turn_plan),
-        "grounding": {
-            "lines": list(render_grounding_packet_for_prompt(grounding_packet)),
-        },
-        "planning_contract": coach_bundle.planning_contract.as_dict(),
-        "availability_state": coach_bundle.availability_state.as_dict(),
-        "week_mission": coach_bundle.week_mission.as_dict(),
-        "recent_reality": coach_bundle.recent_reality.as_dict(),
-        "last_adaptation": coach_bundle.latest_adaptation.as_dict() if coach_bundle.latest_adaptation is not None else None,
-        "week_context": {
-            "summary": coach_bundle.week_summary,
-            "planning": coach_bundle.planning_context,
-            "next_week": coach_bundle.next_week,
-            "coach_reading": coach_bundle.coach_reading,
-        },
-    }
+    conversation_context = context_artifacts.conversation_context
+    coach_bundle = context_artifacts.coach_bundle
+    turn_plan = context_artifacts.turn_plan
+    unresolved_execution_followup_text = context_artifacts.unresolved_execution_followup_text
+    grounding_packet = context_artifacts.grounding_packet
+    grounding_facts = context_artifacts.grounding_facts
+    turn_context = context_artifacts.turn_context
 
     if _should_use_terminal_close_path(
         turn_plan=turn_plan,
@@ -367,7 +201,7 @@ def _run_conversation_turn_impl(
         user_text=payload.text,
         turn_plan=turn_plan,
         turn_context=turn_context,
-        grounding_facts=tuple(render_grounding_packet_for_prompt(grounding_packet)),
+        grounding_facts=grounding_facts,
     )
     if canonical_clarification_outcome is not None:
         return turn_persistence.reply_and_record_turn(
@@ -415,17 +249,13 @@ def _run_conversation_turn_impl(
         ):
             canonical_planning_outcome = planning_runtime.handle_canonical_planning(
                 understanding=planning_understanding,
-                context=_planning_context_from_turn_state(
-                    state=state,
-                    conversation_context=conversation_context,
-                    coach_bundle=coach_bundle,
-                ),
+                context=turn_context_builder.planning_context_from_artifacts(context_artifacts),
                 db=db,
                 user=user,
                 source_text=payload.text,
                 coach_state_bundle=coach_bundle,
                 reviewer_request_json_fn=gw.request_json,
-                grounding_facts=tuple(render_grounding_packet_for_prompt(grounding_packet)),
+                grounding_facts=grounding_facts,
                 decision_reply_composer_fn=_decision_reply_composer,
                 turn_context=turn_context,
             )
@@ -458,17 +288,13 @@ def _run_conversation_turn_impl(
             ):
                 canonical_planning_outcome = planning_runtime.handle_canonical_planning(
                     understanding=planning_understanding,
-                    context=_planning_context_from_turn_state(
-                        state=state,
-                        conversation_context=conversation_context,
-                        coach_bundle=coach_bundle,
-                    ),
+                    context=turn_context_builder.planning_context_from_artifacts(context_artifacts),
                     db=db,
                     user=user,
                     source_text=payload.text,
                     coach_state_bundle=coach_bundle,
                     reviewer_request_json_fn=gw.request_json,
-                    grounding_facts=tuple(render_grounding_packet_for_prompt(grounding_packet)),
+                    grounding_facts=grounding_facts,
                     decision_reply_composer_fn=_decision_reply_composer,
                     turn_context=turn_context,
                 )
@@ -500,7 +326,7 @@ def _run_conversation_turn_impl(
         user_text=payload.text,
         turn_plan=turn_plan,
         turn_context=turn_context,
-        grounding_facts=tuple(render_grounding_packet_for_prompt(grounding_packet)),
+        grounding_facts=grounding_facts,
     )
     if activity_highlight_outcome is not None:
         return turn_persistence.reply_and_record_turn(
@@ -561,7 +387,7 @@ def _run_conversation_turn_impl(
                 user_text=payload.text,
                 turn_plan=turn_plan,
                 turn_context=turn_context,
-                grounding_facts=tuple(render_grounding_packet_for_prompt(grounding_packet)),
+                grounding_facts=grounding_facts,
             )
         if outcome is None:
             planning_understanding = planning_runtime.planning_understanding_for_provider(
@@ -577,17 +403,13 @@ def _run_conversation_turn_impl(
             ):
                 outcome = planning_runtime.handle_canonical_planning(
                     understanding=planning_understanding,
-                    context=_planning_context_from_turn_state(
-                        state=state,
-                        conversation_context=conversation_context,
-                        coach_bundle=coach_bundle,
-                    ),
+                    context=turn_context_builder.planning_context_from_artifacts(context_artifacts),
                     db=db,
                     user=user,
                     source_text=payload.text,
                     coach_state_bundle=coach_bundle,
                     reviewer_request_json_fn=gw.request_json,
-                    grounding_facts=tuple(render_grounding_packet_for_prompt(grounding_packet)),
+                    grounding_facts=grounding_facts,
                     decision_reply_composer_fn=_decision_reply_composer,
                     turn_context=turn_context,
                 )
@@ -605,7 +427,7 @@ def _run_conversation_turn_impl(
             outcome = coach_decision_runtime.canonical_provider_clarification_outcome(
                 reason=legacy_skip_reason,
                 user_text=payload.text,
-                grounding_facts=tuple(render_grounding_packet_for_prompt(grounding_packet)),
+                grounding_facts=grounding_facts,
                 decision_reply_composer_fn=_decision_reply_composer,
             )
 
@@ -721,47 +543,6 @@ def _run_conversation_turn_impl(
     )
 
 
-def _pending_confirmation_context_for_prompt(pending_confirmation) -> str | None:
-    if pending_confirmation is None:
-        return None
-    reason = plan_patch_reply.safe_user_visible_pending_text(str(pending_confirmation.reason or "").strip())
-    summary = plan_patch_reply.safe_user_visible_pending_text(str(pending_confirmation.summary or "").strip())
-    mutation_type = str(pending_confirmation.mutation_type or "").strip()
-    choice_instructions: tuple[str, ...] = ()
-    if mutation_type == "plan_patch_choice":
-        choice_instructions = (
-            "- ce pending contient plusieurs options candidates structurees.",
-            "- si le user choisit une option, retourne `pending_resolution.type=accept_pending` "
-            "avec `selected_candidate_id` egal a l'id exact de l'option choisie.",
-            "- si le choix est ambigu, retourne `pending_resolution.type=needs_clarification`.",
-        )
-    lines = [
-        "Confirmation planning en attente (artefact machine, pas une decision deja appliquee):",
-        f"- id: {pending_confirmation.id}",
-        f"- type: {mutation_type}",
-        f"- raison: {reason}",
-        f"- resume: {summary}",
-        "- lis le nouveau message dans ce contexte et decide toi-meme.",
-        "- si le user accepte clairement, retourne `pending_resolution.type=accept_pending`.",
-        "- si le user refuse, retourne `pending_resolution.type=reject_pending`.",
-        "- si le user modifie la demande, retourne `modify_pending` avec requested_changes; ne forge pas un nouveau patch libre.",
-        "- si le user parle d'autre chose, retourne `ignore` et reponds au nouveau message.",
-        *choice_instructions,
-        f"- payload: {pending_confirmation.decision_json}",
-    ]
-    return "\n".join(lines) + "\n"
-
-
-def _planning_context_from_turn_state(*, state, conversation_context, coach_bundle):
-    return SimpleNamespace(
-        local_time=SimpleNamespace(today_iso=conversation_context.temporal_resolution.local_date.isoformat()),
-        plan=SimpleNamespace(scheduled_sessions=tuple(state.scheduled_sessions)),
-        execution=SimpleNamespace(activities=tuple(state.activities)),
-        memory=SimpleNamespace(active_facts=tuple(state.active_facts)),
-        weekly_digest=SimpleNamespace(coach_reading=coach_bundle.coach_reading),
-    )
-
-
 def _decision_reply_composer() -> DecisionReplyComposer:
     return DecisionReplyComposer(reply_backend=LLMReplyBackend())
 
@@ -842,71 +623,6 @@ def _llm_repair_claim_reply(*, original_reply: str, user_text: str) -> str | Non
     return repaired
 
 
-def _fact_identity(fact: object) -> str:
-    if isinstance(fact, dict):
-        return f"{fact.get('category')}:{fact.get('key')}"
-    return str(fact)
-
-
-def _build_reply_grounding_packet(
-    *,
-    user,
-    local_date,
-    scheduled_sessions,
-    turn_plan,
-) -> ReplyGroundingPacket:
-    temporal_refs = resolve_temporal_intents(
-        tuple(getattr(turn_plan, "temporal_references", ()) or ()),
-        local_date=local_date,
-    )
-    return ReplyGroundingPacket(
-        local_date=local_date,
-        timezone_name=getattr(user, "timezone", None),
-        temporal_references=temporal_refs,
-        plan_window=plan_window_facts_from_sessions(scheduled_sessions),
-    )
-
-
-def _turn_plan_payload(turn_plan) -> dict | None:
-    if turn_plan is None:
-        return None
-    if hasattr(turn_plan, "model_dump"):
-        payload = turn_plan.model_dump(mode="json")
-    else:
-        payload = {
-            "primary_intent": getattr(turn_plan, "primary_intent", None),
-            "secondary_intents": list(getattr(turn_plan, "secondary_intents", ()) or ()),
-        }
-    payload["has_plan_mutation"] = bool(getattr(turn_plan, "has_plan_mutation", False))
-    return payload
-
-
-def _adaptation_intent_payload(turn_plan, pending_confirmation) -> dict:
-    payload = _turn_plan_payload(turn_plan) or {}
-    pending_payload = _pending_confirmation_payload_for_adaptation(pending_confirmation)
-    if pending_payload is not None:
-        payload["active_pending_confirmation"] = pending_payload
-    return payload
-
-
-def _pending_confirmation_payload_for_adaptation(pending_confirmation) -> dict[str, Any] | None:
-    if pending_confirmation is None:
-        return None
-    if str(getattr(pending_confirmation, "status", "") or "") != "pending":
-        return None
-    return {
-        "id": getattr(pending_confirmation, "id", None),
-        "mutation_type": str(getattr(pending_confirmation, "mutation_type", "") or ""),
-        "summary": str(getattr(pending_confirmation, "summary", "") or ""),
-        "reason": str(getattr(pending_confirmation, "reason", "") or ""),
-        "source_text": str(getattr(pending_confirmation, "source_text", "") or ""),
-        "decision_json": pending_resolution.truncate_for_recheck(
-            str(getattr(pending_confirmation, "decision_json", "") or ""),
-            limit=2500,
-        ),
-    }
-
-
 def _should_use_terminal_close_path(
     *,
     turn_plan,
@@ -926,120 +642,3 @@ def _should_use_terminal_close_path(
     if open_calibration_need is not None:
         return False
     return True
-
-
-def _should_route_availability_context_to_llm(
-    turn_plan,
-    *,
-    week_scope_reply: str | None,
-    no_candidate_reply: str | None,
-) -> bool:
-    return week_scope_reply is not None or no_candidate_reply is not None
-
-
-def _should_route_adaptation_context_to_llm(
-    turn_plan,
-    adaptation,
-    *,
-    plan_mutation_request: bool = False,
-) -> bool:
-    return adaptation is not None
-
-
-def _adaptation_context_for_prompt(adaptation) -> str | None:
-    if adaptation is None:
-        return None
-    scenario = adaptation.selected_scenario
-    mutation = scenario.mutation
-    lines = [
-        "Adaptation candidate deterministe:",
-        f"- raison: {adaptation.event.reason_code.value}",
-        f"- confiance: {adaptation.event.confidence}",
-        f"- mutation candidate: {mutation.mutation_type}",
-        f"- session cible: {mutation.target_session_id}",
-        f"- date cible: {mutation.target_date}",
-        f"- resume: {scenario.summary}",
-        f"- message candidate: {adaptation.user_message}",
-        "- utilise cette candidate comme option valide, mais arbitre la reponse finale selon le message utilisateur",
-    ]
-    return "\n".join(lines)
-
-
-def _availability_context_for_prompt(*, week_scope_reply: str | None, no_candidate_reply: str | None) -> str | None:
-    reply = week_scope_reply or no_candidate_reply
-    if not reply:
-        return None
-    return (
-        "Contexte orchestration planning:\n"
-        f"- grounding deterministe: {reply}\n"
-        "- utilise ce grounding comme verite de contexte, mais formule toi-meme la reponse finale\n"
-        "- si aucune mutation sure n'est applicable, garde mutation_type=no_change et explique sobrement"
-    )
-
-def _execution_contestation_context_for_prompt(reply: str | None) -> str | None:
-    """Chantier 1 (autonomy refactor): the deterministic execution
-    contestation resolver previously short-circuited the LLM with a
-    templated "Je ne compte pas X comme faite" reply. We now expose its
-    finding as prompt context so decide() can keep the same factual
-    posture but adapt the wording to the conversation thread."""
-    if not reply:
-        return None
-    return (
-        "Contexte execution contestation:\n"
-        f"- grounding deterministe: {reply}\n"
-        "- l'utilisateur conteste une execution: ne compte pas la seance comme faite\n"
-        "- formule toi-meme la reponse finale en gardant cette verite de contexte"
-    )
-
-
-def _append_prompt_section(base: str, section: str | None) -> str:
-    if not section:
-        return base
-    return "\n".join(part for part in (base, section) if part)
-
-
-def _selected_facts_for_prompt(conversation_context, active_facts: list[dict]) -> list[str]:
-    from fitmas.app.api import routes_messages as api_messages
-
-    selected = list(getattr(conversation_context, "selected_facts", ()) or ())
-    for fact in api_messages.select_prompt_facts(active_facts):
-        if fact not in selected:
-            selected.append(fact)
-    return selected[:6]
-
-
-_DIGEST_INTENTS = frozenset({"execution_report", "availability_constraint"})
-
-
-def _maybe_build_coach_reading_digest_text(
-    db,
-    *,
-    user,
-    today,
-    recent_reality_window,
-    turn_plan,
-) -> str | None:
-    """Build a coach-reading digest when the turn intent calls for it.
-
-    Gated on the turn planner's primary_intent so we don't spend a second LLM
-    call on trivial acks or pure mutations (the mutation prompt already has
-    plenty of grounding). Degrades silently on any failure: None -> the
-    immediate layer just skips the block."""
-    primary_intent = getattr(turn_plan, "primary_intent", None) if turn_plan is not None else None
-    if primary_intent not in _DIGEST_INTENTS:
-        return None
-    try:
-        digest = build_coach_reading_digest(
-            db,
-            user,
-            today=today,
-            recent_reality=recent_reality_window,
-        )
-    except Exception:
-        logger.warning("decide: failed to build coach reading digest", exc_info=True)
-        return None
-    try:
-        return render_digest_for_prompt(digest)
-    except Exception:
-        logger.warning("decide: failed to render coach reading digest", exc_info=True)
-        return None
