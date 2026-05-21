@@ -49,6 +49,7 @@ Les cuts physiques recents :
 - `legacy/conversation_command_bus.py` supprime.
 - `legacy/conversation_canonical_readonly_bridge.py` supprime.
 - `legacy/conversation_readonly_reply_bridge.py` supprime.
+- `legacy/conversation_understanding_bridge.py` supprime.
 - `legacy/coach_command_adapter.py` reduit a un re-export compat.
 - `docs/superpowers/plans/` supprime : l'historique d'execution reste dans git, pas dans la memoire active.
 
@@ -57,31 +58,31 @@ Etat chiffre au dernier check local :
 - root modules : `113`.
 - legacy modules : en baisse continue, avec bridges conversationnels mesures par
   census dedie.
-- backend complet : `1509 passed, 11 skipped`.
+- backend complet : `1512 passed, 11 skipped`.
 - smoke core API : OK.
 - fallback census core : `0`.
 
 ## Prochain Chantier
 
-10H readonly/reply canonique est maintenant applique.
+10I understanding runtime canonique est maintenant applique.
 
 Commande :
 
 ```bash
 ./scripts/decision-runtime-conversation-bridge-census \
-  --json-out /tmp/fitmas-10h-conversation-bridge-census.json
+  --json-out /tmp/fitmas-10i-conversation-bridge-census.json
 ```
 
-Etat 10H actuel :
+Etat 10I actuel :
 
 ```text
-runtime_active_count=2
+runtime_active_count=1
 legacy_internal_count=0
 test_only_count=0
-deleted_count=8
+deleted_count=9
 ```
 
-Huit bridges conversationnels ont ete supprimes physiquement :
+Neuf bridges conversationnels ont ete supprimes physiquement :
 
 ```text
 legacy/conversation_activity_highlight_bridge.py
@@ -92,6 +93,7 @@ legacy/conversation_command_bridge.py
 legacy/conversation_command_bus.py
 legacy/conversation_decision_bridge.py
 legacy/conversation_readonly_reply_bridge.py
+legacy/conversation_understanding_bridge.py
 ```
 
 Commands vivent maintenant dans :
@@ -108,10 +110,16 @@ Readonly/reply vit maintenant dans :
 decision/readonly_reply.py
 ```
 
+Understanding runtime vit maintenant dans :
+
+```text
+decision/understanding_runtime.py
+```
+
 Prochain chantier logique :
 
-- attaquer les 2 bridges `legacy/conversation_*` encore runtime-active :
-  provider et understanding ;
+- attaquer le dernier bridge `legacy/conversation_*` runtime-active :
+  provider / `CoachDecision` ;
 - garder `CoachDecision` comme dernier gros contrat legacy a tuer, pas comme
   architecture stable ;
 - shrinker `conversation_pipeline.py` autour de moins d'entrypoints ;

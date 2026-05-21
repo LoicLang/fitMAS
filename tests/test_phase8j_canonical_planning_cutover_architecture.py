@@ -52,7 +52,7 @@ def test_8j_keeps_8i_wrapper_without_planning_cutover() -> None:
 
 
 def test_8j_retired_planning_cutover_flag_is_not_read() -> None:
-    bridge = _source("legacy/conversation_understanding_bridge.py")
+    bridge = _source("decision/understanding_runtime.py")
 
     assert "FITMAS_UNDERSTANDING_RUNTIME_PLANNING_CUTOVER" not in bridge
 
@@ -67,7 +67,7 @@ def test_8j_decision_package_stays_pure() -> None:
         "fitmas.plan_mutation_service",
     }
     for path in (SRC / "decision").glob("*.py"):
-        if path.name in {"command_application.py", "readonly_reply.py"}:
+        if path.name in {"command_application.py", "readonly_reply.py", "understanding_runtime.py"}:
             continue
         imports = _imports(f"decision/{path.name}")
         assert not forbidden.intersection(imports), f"{path.name}: {forbidden.intersection(imports)}"

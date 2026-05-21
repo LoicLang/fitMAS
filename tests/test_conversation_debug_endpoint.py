@@ -139,7 +139,7 @@ class ConversationDebugEndpointTest(unittest.TestCase):
 
     def test_debug_message_endpoint_exposes_canonical_understanding_when_shadow_enabled(self) -> None:
         from fitmas.decision import CoachUnderstanding
-        from fitmas.legacy import conversation_understanding_bridge
+        from fitmas.decision import understanding_runtime
 
         api_messages.plan_conversation_turn = lambda *args, **kwargs: None
         api_messages.extract_facts = lambda *args, **kwargs: []
@@ -161,9 +161,9 @@ class ConversationDebugEndpointTest(unittest.TestCase):
                     clarification_need=None,
                 )
 
-        original_service = conversation_understanding_bridge.LLMUnderstandingService
+        original_service = understanding_runtime.LLMUnderstandingService
         try:
-            conversation_understanding_bridge.LLMUnderstandingService = lambda: FakeService()
+            understanding_runtime.LLMUnderstandingService = lambda: FakeService()
             os.environ["FITMAS_UNDERSTANDING_RUNTIME_SHADOW"] = "1"
             response = self.client.post(
                 "/ops/conversation/debug",
@@ -173,7 +173,7 @@ class ConversationDebugEndpointTest(unittest.TestCase):
                 },
             )
         finally:
-            conversation_understanding_bridge.LLMUnderstandingService = original_service
+            understanding_runtime.LLMUnderstandingService = original_service
             os.environ.pop("FITMAS_UNDERSTANDING_RUNTIME_SHADOW", None)
 
         self.assertEqual(response.status_code, 200)

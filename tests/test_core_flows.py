@@ -439,11 +439,11 @@ class FitMASCoreFlowsTest(unittest.TestCase):
         self.assertEqual(today["duration_min"], original_duration)
 
     def test_canonical_understanding_shadow_flag_off_does_not_call_service(self) -> None:
-        from fitmas.legacy import conversation_understanding_bridge
+        from fitmas.decision import understanding_runtime
 
         original_decide = api_messages.decide
         original_extract_facts = api_messages.extract_facts
-        original_service = conversation_understanding_bridge.LLMUnderstandingService
+        original_service = understanding_runtime.LLMUnderstandingService
         try:
             api_messages.decide = lambda *args, **kwargs: CoachDecision(
                 response_type="no_change",
@@ -456,25 +456,25 @@ class FitMASCoreFlowsTest(unittest.TestCase):
                 def understand(self, request):
                     raise AssertionError("canonical understanding should be off")
 
-            conversation_understanding_bridge.LLMUnderstandingService = lambda: FailingService()
+            understanding_runtime.LLMUnderstandingService = lambda: FailingService()
             os.environ.pop("FITMAS_UNDERSTANDING_RUNTIME_SHADOW", None)
 
             response = self.client.post("/api/v0/messages", json={"text": "redonne le plan actuel"})
         finally:
             api_messages.decide = original_decide
             api_messages.extract_facts = original_extract_facts
-            conversation_understanding_bridge.LLMUnderstandingService = original_service
+            understanding_runtime.LLMUnderstandingService = original_service
             os.environ.pop("FITMAS_UNDERSTANDING_RUNTIME_SHADOW", None)
 
         self.assertEqual(response.status_code, 200)
 
     def test_canonical_understanding_shadow_flag_on_records_context(self) -> None:
         from fitmas.decision import CoachUnderstanding
-        from fitmas.legacy import conversation_understanding_bridge
+        from fitmas.decision import understanding_runtime
 
         original_decide = api_messages.decide
         original_extract_facts = api_messages.extract_facts
-        original_service = conversation_understanding_bridge.LLMUnderstandingService
+        original_service = understanding_runtime.LLMUnderstandingService
         try:
             api_messages.decide = lambda *args, **kwargs: CoachDecision(
                 response_type="no_change",
@@ -495,7 +495,7 @@ class FitMASCoreFlowsTest(unittest.TestCase):
                         clarification_need=None,
                     )
 
-            conversation_understanding_bridge.LLMUnderstandingService = lambda: FakeService()
+            understanding_runtime.LLMUnderstandingService = lambda: FakeService()
             os.environ["FITMAS_UNDERSTANDING_RUNTIME_SHADOW"] = "1"
 
             response = self.client.post(
@@ -505,7 +505,7 @@ class FitMASCoreFlowsTest(unittest.TestCase):
         finally:
             api_messages.decide = original_decide
             api_messages.extract_facts = original_extract_facts
-            conversation_understanding_bridge.LLMUnderstandingService = original_service
+            understanding_runtime.LLMUnderstandingService = original_service
             os.environ.pop("FITMAS_UNDERSTANDING_RUNTIME_SHADOW", None)
 
         self.assertEqual(response.status_code, 200)
@@ -520,7 +520,7 @@ class FitMASCoreFlowsTest(unittest.TestCase):
 
     def test_canonical_pending_accept_survives_legacy_decide_none(self) -> None:
         from fitmas.decision import CoachUnderstanding, PendingResolution
-        from fitmas.legacy import conversation_understanding_bridge
+        from fitmas.decision import understanding_runtime
 
         _, session = self._create_plan_for_today()
         target_date = (session.scheduled_date.date() + timedelta(days=1)).isoformat()
@@ -551,7 +551,7 @@ class FitMASCoreFlowsTest(unittest.TestCase):
         original_plan_turn = api_messages.plan_conversation_turn
         original_decide = api_messages.decide
         original_extract_facts = api_messages.extract_facts
-        original_understanding = conversation_understanding_bridge.run_canonical_understanding_shadow
+        original_understanding = understanding_runtime.run_canonical_understanding_shadow
         original_verify = conversation_pending_bridge.verify_pending_accept_resolution
         old_pending_flag = os.environ.get("FITMAS_PENDING_FROM_UNDERSTANDING")
         try:
@@ -594,7 +594,7 @@ class FitMASCoreFlowsTest(unittest.TestCase):
                 }
                 return understanding
 
-            conversation_understanding_bridge.run_canonical_understanding_shadow = fake_canonical_understanding
+            understanding_runtime.run_canonical_understanding_shadow = fake_canonical_understanding
             conversation_pending_bridge.verify_pending_accept_resolution = lambda **kwargs: "accept_pending"
 
             response = self.client.post(
@@ -605,7 +605,7 @@ class FitMASCoreFlowsTest(unittest.TestCase):
             api_messages.plan_conversation_turn = original_plan_turn
             api_messages.decide = original_decide
             api_messages.extract_facts = original_extract_facts
-            conversation_understanding_bridge.run_canonical_understanding_shadow = original_understanding
+            understanding_runtime.run_canonical_understanding_shadow = original_understanding
             conversation_pending_bridge.verify_pending_accept_resolution = original_verify
             if old_pending_flag is None:
                 os.environ.pop("FITMAS_PENDING_FROM_UNDERSTANDING", None)
@@ -624,7 +624,7 @@ class FitMASCoreFlowsTest(unittest.TestCase):
 
     def test_canonical_pending_accept_preempts_legacy_decide(self) -> None:
         from fitmas.decision import CoachUnderstanding, PendingResolution
-        from fitmas.legacy import conversation_understanding_bridge
+        from fitmas.decision import understanding_runtime
 
         _, session = self._create_plan_for_today()
         target_date = (session.scheduled_date.date() + timedelta(days=1)).isoformat()
@@ -655,7 +655,7 @@ class FitMASCoreFlowsTest(unittest.TestCase):
         original_plan_turn = api_messages.plan_conversation_turn
         original_decide = api_messages.decide
         original_extract_facts = api_messages.extract_facts
-        original_understanding = conversation_understanding_bridge.run_canonical_understanding_shadow
+        original_understanding = understanding_runtime.run_canonical_understanding_shadow
         original_verify = conversation_pending_bridge.verify_pending_accept_resolution
         old_pending_flag = os.environ.get("FITMAS_PENDING_FROM_UNDERSTANDING")
         try:
@@ -702,7 +702,7 @@ class FitMASCoreFlowsTest(unittest.TestCase):
                 }
                 return understanding
 
-            conversation_understanding_bridge.run_canonical_understanding_shadow = fake_canonical_understanding
+            understanding_runtime.run_canonical_understanding_shadow = fake_canonical_understanding
             conversation_pending_bridge.verify_pending_accept_resolution = lambda **kwargs: "accept_pending"
 
             response = self.client.post(
@@ -713,7 +713,7 @@ class FitMASCoreFlowsTest(unittest.TestCase):
             api_messages.plan_conversation_turn = original_plan_turn
             api_messages.decide = original_decide
             api_messages.extract_facts = original_extract_facts
-            conversation_understanding_bridge.run_canonical_understanding_shadow = original_understanding
+            understanding_runtime.run_canonical_understanding_shadow = original_understanding
             conversation_pending_bridge.verify_pending_accept_resolution = original_verify
             if old_pending_flag is None:
                 os.environ.pop("FITMAS_PENDING_FROM_UNDERSTANDING", None)
@@ -734,7 +734,7 @@ class FitMASCoreFlowsTest(unittest.TestCase):
 
     def test_canonical_planning_cutover_confirmation_keeps_single_pending_row(self) -> None:
         from fitmas.decision import CoachUnderstanding, PendingResolution
-        from fitmas.legacy import conversation_understanding_bridge
+        from fitmas.decision import understanding_runtime
 
         _, session = self._create_plan_for_today()
         target_date = (session.scheduled_date.date() + timedelta(days=1)).isoformat()
@@ -765,7 +765,7 @@ class FitMASCoreFlowsTest(unittest.TestCase):
         original_plan_turn = api_messages.plan_conversation_turn
         original_decide = api_messages.decide
         original_extract_facts = api_messages.extract_facts
-        original_understanding = conversation_understanding_bridge.run_canonical_understanding_shadow
+        original_understanding = understanding_runtime.run_canonical_understanding_shadow
         original_verify = conversation_pending_bridge.verify_pending_accept_resolution
         old_pending_flag = os.environ.get("FITMAS_PENDING_FROM_UNDERSTANDING")
         try:
@@ -783,7 +783,7 @@ class FitMASCoreFlowsTest(unittest.TestCase):
             )
             api_messages.decide = lambda *args, **kwargs: None
             api_messages.extract_facts = lambda *args, **kwargs: []
-            conversation_understanding_bridge.run_canonical_understanding_shadow = (
+            understanding_runtime.run_canonical_understanding_shadow = (
                 lambda **kwargs: CoachUnderstanding(
                     intent="pending_response",
                     confidence=0.95,
@@ -810,7 +810,7 @@ class FitMASCoreFlowsTest(unittest.TestCase):
             api_messages.plan_conversation_turn = original_plan_turn
             api_messages.decide = original_decide
             api_messages.extract_facts = original_extract_facts
-            conversation_understanding_bridge.run_canonical_understanding_shadow = original_understanding
+            understanding_runtime.run_canonical_understanding_shadow = original_understanding
             conversation_pending_bridge.verify_pending_accept_resolution = original_verify
             if old_pending_flag is None:
                 os.environ.pop("FITMAS_PENDING_FROM_UNDERSTANDING", None)
@@ -2686,14 +2686,14 @@ class FitMASCoreFlowsTest(unittest.TestCase):
     def test_canonical_planning_provider_preempts_legacy_decide(self) -> None:
         from fitmas.decision import CoachUnderstanding, RequestedPlanChange
         from fitmas.decision import planning_runtime
-        from fitmas.legacy import conversation_understanding_bridge
+        from fitmas.decision import understanding_runtime
 
         _, session = self._create_plan_for_today()
         target_date = (session.scheduled_date.date() + timedelta(days=2)).isoformat()
         original_plan_turn = api_messages.plan_conversation_turn
         original_decide = api_messages.decide
         original_extract_facts = api_messages.extract_facts
-        original_understanding = conversation_understanding_bridge.run_canonical_understanding_shadow
+        original_understanding = understanding_runtime.run_canonical_understanding_shadow
         original_canonical_planning = planning_runtime.handle_canonical_planning
         old_flag = os.environ.get("FITMAS_CANONICAL_PLANNING_PROVIDER")
         try:
@@ -2712,7 +2712,7 @@ class FitMASCoreFlowsTest(unittest.TestCase):
                 AssertionError("legacy decide must be skipped")
             )
             api_messages.extract_facts = lambda *args, **kwargs: []
-            conversation_understanding_bridge.run_canonical_understanding_shadow = (
+            understanding_runtime.run_canonical_understanding_shadow = (
                 lambda **kwargs: CoachUnderstanding(
                     intent="plan_change",
                     confidence=0.93,
@@ -2753,7 +2753,7 @@ class FitMASCoreFlowsTest(unittest.TestCase):
             api_messages.plan_conversation_turn = original_plan_turn
             api_messages.decide = original_decide
             api_messages.extract_facts = original_extract_facts
-            conversation_understanding_bridge.run_canonical_understanding_shadow = original_understanding
+            understanding_runtime.run_canonical_understanding_shadow = original_understanding
             planning_runtime.handle_canonical_planning = original_canonical_planning
             if old_flag is None:
                 os.environ.pop("FITMAS_CANONICAL_PLANNING_PROVIDER", None)
@@ -2770,13 +2770,13 @@ class FitMASCoreFlowsTest(unittest.TestCase):
     def test_legacy_provider_gate_blocks_canonical_planning_fallback_trace(self) -> None:
         from fitmas.decision import CoachUnderstanding
         from fitmas.decision import planning_runtime
-        from fitmas.legacy import conversation_understanding_bridge
+        from fitmas.decision import understanding_runtime
 
         self._create_plan_for_today()
         original_plan_turn = api_messages.plan_conversation_turn
         original_decide = api_messages.decide
         original_extract_facts = api_messages.extract_facts
-        original_understanding = conversation_understanding_bridge.run_canonical_understanding_shadow
+        original_understanding = understanding_runtime.run_canonical_understanding_shadow
         original_should_use = planning_runtime.should_use_canonical_planning_without_legacy
         original_should_handle_unsupported = (
             planning_runtime.should_handle_unsupported_canonical_planning_without_legacy
@@ -2799,7 +2799,7 @@ class FitMASCoreFlowsTest(unittest.TestCase):
                 AssertionError("legacy decide must be blocked by provider gate")
             )
             api_messages.extract_facts = lambda *args, **kwargs: []
-            conversation_understanding_bridge.run_canonical_understanding_shadow = (
+            understanding_runtime.run_canonical_understanding_shadow = (
                 lambda **kwargs: CoachUnderstanding(
                     intent="plan_change",
                     confidence=0.91,
@@ -2831,7 +2831,7 @@ class FitMASCoreFlowsTest(unittest.TestCase):
             api_messages.plan_conversation_turn = original_plan_turn
             api_messages.decide = original_decide
             api_messages.extract_facts = original_extract_facts
-            conversation_understanding_bridge.run_canonical_understanding_shadow = original_understanding
+            understanding_runtime.run_canonical_understanding_shadow = original_understanding
             planning_runtime.should_use_canonical_planning_without_legacy = original_should_use
             planning_runtime.should_handle_unsupported_canonical_planning_without_legacy = (
                 original_should_handle_unsupported

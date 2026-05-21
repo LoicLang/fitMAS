@@ -13,7 +13,7 @@ def _source(relative: str) -> str:
 
 
 def test_8q_understanding_bridge_exposes_provider_pivot_boundary() -> None:
-    source = _source("legacy/conversation_understanding_bridge.py")
+    source = _source("decision/understanding_runtime.py")
 
     assert "def canonical_provider_pivot_enabled(" in source
     assert "FITMAS_CANONICAL_PROVIDER_NON_PLANNING" in source

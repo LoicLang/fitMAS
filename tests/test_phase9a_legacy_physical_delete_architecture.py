@@ -23,7 +23,7 @@ def test_conversation_planning_bridge_is_physically_removed() -> None:
 
 
 def test_understanding_bridge_no_longer_reads_retired_planning_cutover_flag() -> None:
-    source = _read("backend/src/fitmas/legacy/conversation_understanding_bridge.py")
+    source = _read("backend/src/fitmas/decision/understanding_runtime.py")
 
     assert "understanding_runtime_planning_cutover_enabled" not in source
     assert "FITMAS_UNDERSTANDING_RUNTIME_PLANNING_CUTOVER" not in source

@@ -113,7 +113,7 @@ def test_8n_new_legacy_modules_do_not_import_runtime_or_app_or_heartbeat_layers(
 
 
 def test_8n_retired_planning_cutover_flag_is_not_read() -> None:
-    source = _source("legacy/conversation_understanding_bridge.py")
+    source = _source("decision/understanding_runtime.py")
 
     assert "FITMAS_UNDERSTANDING_RUNTIME_PLANNING_CUTOVER" not in source
 

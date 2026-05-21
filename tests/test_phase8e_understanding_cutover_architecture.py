@@ -43,17 +43,18 @@ def test_8e_llm_understanding_service_exists_without_legacy_contracts() -> None:
     assert "reply_text" not in source
 
 
-def test_8e_conversation_uses_understanding_bridge_not_direct_llm_service() -> None:
+def test_8e_conversation_uses_understanding_runtime_not_direct_llm_service() -> None:
     source = _source("conversation_pipeline.py")
 
-    assert "conversation_understanding_bridge" in source
+    assert "understanding_runtime" in source
+    assert "conversation_understanding_bridge" not in source
     assert "LLMUnderstandingService" not in source
     assert "build_understanding_prompt" not in source
     assert "canonical_understanding" in source
 
 
 def test_8e_understanding_bridge_is_legacy_boundary() -> None:
-    source = _source("legacy/conversation_understanding_bridge.py")
+    source = _source("decision/understanding_runtime.py")
 
     assert "FITMAS_UNDERSTANDING_RUNTIME_SHADOW" in source
     assert "FITMAS_UNDERSTANDING_RUNTIME_PLANNING_CUTOVER" not in source
@@ -74,7 +75,7 @@ def test_8e_planning_runtime_accepts_canonical_understanding_input() -> None:
 def test_8e_decision_package_still_has_no_llm_or_legacy_imports() -> None:
     offenders: list[str] = []
     for path in sorted((SRC / "decision").glob("*.py")):
-        if path.name in {"command_application.py", "readonly_reply.py"}:
+        if path.name in {"command_application.py", "readonly_reply.py", "understanding_runtime.py"}:
             continue
         tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
         for node in ast.walk(tree):

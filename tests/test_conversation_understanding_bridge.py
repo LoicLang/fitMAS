@@ -4,7 +4,7 @@ from datetime import date
 from types import SimpleNamespace
 
 from fitmas.decision import CoachUnderstanding, PendingResolution, RequestedPlanChange, UserSignal
-from fitmas.legacy import conversation_understanding_bridge as bridge
+from fitmas.decision import understanding_runtime as bridge
 
 
 def _understanding() -> CoachUnderstanding:

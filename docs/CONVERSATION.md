@@ -53,11 +53,11 @@ Etat actuel :
 - `conversation_pipeline.py` reste le gros orchestrateur.
 - `decision/` porte deja les types et l'outcome canonique.
 - `llm/understanding_service.py` porte l'understanding cible.
-- deux bridges `legacy/conversation_*` restent temporaires : provider et
-  understanding.
+- `decision/understanding_runtime.py` porte l'appel understanding canonique.
+- un bridge `legacy/conversation_*` reste temporaire : provider `CoachDecision`.
 - planning, pending, command writes, activity highlight, clarification,
-  readonly/reply et helpers artifact ne vivent plus dans ces petits wrappers
-  legacy.
+  readonly/reply, understanding et helpers artifact ne vivent plus dans ces
+  petits wrappers legacy.
 
 ## Regles Dures
 

@@ -60,14 +60,14 @@ def test_8l_decision_package_stays_pure() -> None:
         "fitmas.plan_mutation_service",
     }
     for path in (SRC / "decision").glob("*.py"):
-        if path.name in {"command_application.py", "readonly_reply.py"}:
+        if path.name in {"command_application.py", "readonly_reply.py", "understanding_runtime.py"}:
             continue
         imports = _imports(f"decision/{path.name}")
         assert not forbidden.intersection(imports), f"{path.name}: {forbidden.intersection(imports)}"
 
 
 def test_8l_retired_planning_cutover_flag_is_not_read() -> None:
-    source = _source("legacy/conversation_understanding_bridge.py")
+    source = _source("decision/understanding_runtime.py")
 
     assert "FITMAS_UNDERSTANDING_RUNTIME_PLANNING_CUTOVER" not in source
 

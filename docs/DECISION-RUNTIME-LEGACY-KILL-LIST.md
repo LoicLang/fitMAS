@@ -29,6 +29,7 @@ Les wrappers deja supprimes :
 - `legacy/conversation_decision_bridge.py`
 - `legacy/conversation_canonical_readonly_bridge.py`
 - `legacy/conversation_readonly_reply_bridge.py`
+- `legacy/conversation_understanding_bridge.py`
 
 Le gros residu actif n'est plus planning/pending. Le prochain risque est le
 reste des bridges conversationnels encore relies a `conversation_pipeline.py`.
@@ -78,13 +79,13 @@ Fichiers :
 - `legacy/coach_decision_provider.py`
 - `legacy/coach_understanding_adapter.py`
 - `legacy/conversation_decide_bridge.py`
-- `legacy/conversation_understanding_bridge.py`
 - `legacy/understanding_shadow.py`
 
 Probleme :
 
 - `CoachDecision` reste l'ancien contrat provider/runtime ;
-- l'understanding canonique existe mais n'a pas encore tue toute la compat.
+- l'understanding canonique vit maintenant dans `decision/understanding_runtime.py`,
+  mais il produit encore un artifact `CoachDecision` compat pour certaines lanes.
 
 Sortie attendue :
 
@@ -137,28 +138,27 @@ Etat :
   `decision/readonly_reply.py`;
 - le dernier risque actif est provider/understanding.
 
-### P4 — Conversation Bridge Census — 10H
+### P4 — Conversation Bridge Census — 10I
 
 Commande :
 
 ```bash
 ./scripts/decision-runtime-conversation-bridge-census \
-  --json-out /tmp/fitmas-10h-conversation-bridge-census.json
+  --json-out /tmp/fitmas-10i-conversation-bridge-census.json
 ```
 
-Resultat courant apres 10H :
+Resultat courant apres 10I :
 
 ```text
-runtime_active_count=2
+runtime_active_count=1
 legacy_internal_count=0
 test_only_count=0
-deleted_count=8
+deleted_count=9
 ```
 
 Encore runtime-active :
 
 - `legacy/conversation_decide_bridge.py`
-- `legacy/conversation_understanding_bridge.py`
 
 ## Gates A Garder
 
@@ -171,23 +171,23 @@ Encore runtime-active :
 
 ## Prochain Slice
 
-Apres 10H : attaquer le dernier bloc provider/understanding sans recréer de
+Apres 10I : attaquer le dernier bloc provider `CoachDecision` sans recréer de
 fallback local.
 
 Commande :
 
 ```bash
 ./scripts/decision-runtime-conversation-bridge-census \
-  --json-out /tmp/fitmas-10h-conversation-bridge-census.json
+  --json-out /tmp/fitmas-10i-conversation-bridge-census.json
 ```
 
-Resultat 10H :
+Resultat 10I :
 
 - census conversationnel ajoute ;
 - activity highlight et clarification vivent dans `decision/`;
 - helpers de forme `CoachDecision` vivent dans `legacy/coach_decision_artifact.py`;
 - readonly/reply vit dans `decision/readonly_reply.py`;
+- understanding runtime vit dans `decision/understanding_runtime.py`;
 - command mapping/application vit dans `decision/`;
-- huit bridges conversationnels sont supprimes ;
-- deux bridges restent actifs : `conversation_decide_bridge.py` et
-  `conversation_understanding_bridge.py`.
+- neuf bridges conversationnels sont supprimes ;
+- un bridge reste actif : `conversation_decide_bridge.py`.

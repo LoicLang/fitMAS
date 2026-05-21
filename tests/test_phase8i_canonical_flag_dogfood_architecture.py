@@ -25,7 +25,7 @@ def _imports(relative: str) -> set[str]:
 
 
 def test_8i_canonical_flags_exist_and_match_current_default_policy() -> None:
-    understanding = _source("legacy/conversation_understanding_bridge.py")
+    understanding = _source("decision/understanding_runtime.py")
     commands = _source("decision/command_application.py")
     pending = _source("decision/pending_resolution.py")
 
@@ -61,7 +61,7 @@ def test_8i_decision_package_stays_pure() -> None:
         "fitmas.plan_mutation_service",
     }
     for path in (SRC / "decision").glob("*.py"):
-        if path.name in {"command_application.py", "readonly_reply.py"}:
+        if path.name in {"command_application.py", "readonly_reply.py", "understanding_runtime.py"}:
             continue
         imports = _imports(f"decision/{path.name}")
         assert not forbidden.intersection(imports), f"{path.name}: {forbidden.intersection(imports)}"

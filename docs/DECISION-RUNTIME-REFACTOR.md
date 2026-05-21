@@ -187,12 +187,20 @@ Et supprime :
 - `legacy/conversation_canonical_readonly_bridge.py`
 - `legacy/conversation_readonly_reply_bridge.py`
 
+10I a sorti l'understanding runtime de `legacy/conversation_*` :
+
+- `decision/understanding_runtime.py`
+
+Et supprime :
+
+- `legacy/conversation_understanding_bridge.py`
+
 Le census courant annonce :
 
 ```text
-runtime_active_count=2
+runtime_active_count=1
 legacy_internal_count=0
-deleted_count=8
+deleted_count=9
 ```
 
 Objectif suivant :

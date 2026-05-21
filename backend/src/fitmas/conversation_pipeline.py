@@ -45,7 +45,7 @@ from fitmas.decision import activity_highlight
 from fitmas.decision import readonly_reply
 from fitmas.legacy import conversation_decide_bridge
 import fitmas.llm.reply_backend as final_reply
-from fitmas.legacy import conversation_understanding_bridge
+from fitmas.decision import understanding_runtime
 from fitmas.decision.planning_outcomes import (
     legacy_decision_contract_disabled_outcome,
     plan_patch_service_result_to_outcome,
@@ -367,7 +367,7 @@ def _run_conversation_turn_impl(
             "source": "coach_understanding",
             "result": "prepared",
         }
-        canonical_understanding = conversation_understanding_bridge.run_canonical_understanding_shadow(
+        canonical_understanding = understanding_runtime.run_canonical_understanding_shadow(
             user=user,
             user_text=payload.text,
             turn_plan=turn_plan,
@@ -435,7 +435,7 @@ def _run_conversation_turn_impl(
             turn_plan=turn_plan,
             pending_confirmation=pending_confirmation,
         )
-        canonical_understanding = conversation_understanding_bridge.run_canonical_understanding_shadow(
+        canonical_understanding = understanding_runtime.run_canonical_understanding_shadow(
             user=user,
             user_text=payload.text,
             turn_plan=turn_plan,
@@ -596,7 +596,7 @@ def _run_conversation_turn_impl(
         ),
     )
     if canonical_understanding is None:
-        canonical_understanding = conversation_understanding_bridge.run_canonical_understanding_shadow(
+        canonical_understanding = understanding_runtime.run_canonical_understanding_shadow(
             user=user,
             user_text=payload.text,
             turn_plan=turn_plan,
@@ -608,16 +608,16 @@ def _run_conversation_turn_impl(
         )
     outcome: ConversationTurnOutcome | None = None
     legacy_decision_artifact = None
-    if conversation_understanding_bridge.should_use_canonical_understanding_without_legacy(
+    if understanding_runtime.should_use_canonical_understanding_without_legacy(
         understanding=canonical_understanding,
         turn_plan=turn_plan,
         pending_confirmation=pending_confirmation,
     ):
-        legacy_decision_artifact = conversation_understanding_bridge.coach_decision_artifact_from_understanding(
+        legacy_decision_artifact = understanding_runtime.coach_decision_artifact_from_understanding(
             canonical_understanding,
             turn_plan=turn_plan,
         )
-        turn_context["legacy_decide"] = conversation_understanding_bridge.trace_canonical_provider_artifact(
+        turn_context["legacy_decide"] = understanding_runtime.trace_canonical_provider_artifact(
             legacy_decision_artifact
         )
     else:
