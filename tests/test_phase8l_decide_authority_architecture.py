@@ -59,7 +59,7 @@ def test_8l_decision_package_stays_pure() -> None:
         "fitmas.plan_mutation_service",
     }
     for path in (SRC / "decision").glob("*.py"):
-        if path.name in {"command_application.py", "readonly_reply.py", "understanding_runtime.py", "coach_decision_runtime.py"}:
+        if path.name in {"command_application.py", "no_change_reply.py", "readonly_reply.py", "understanding_runtime.py", "coach_decision_runtime.py"}:
             continue
         imports = _imports(f"decision/{path.name}")
         assert not forbidden.intersection(imports), f"{path.name}: {forbidden.intersection(imports)}"

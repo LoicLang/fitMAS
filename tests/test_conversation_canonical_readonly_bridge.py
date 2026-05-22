@@ -4,6 +4,7 @@ from datetime import datetime
 from types import SimpleNamespace
 
 from fitmas.decision import CoachUnderstanding, PendingResolution, RequestedPlanChange, UserSignal
+from fitmas.decision import no_change_reply
 from fitmas.decision import readonly_reply as bridge
 
 
@@ -91,9 +92,9 @@ def test_execution_action_phrase_preserves_committed_session_date(monkeypatch) -
         completion_status="skipped",
         scheduled_date=datetime.fromisoformat("2026-04-29T07:00:00+02:00"),
     )
-    monkeypatch.setattr(bridge.planning_repo, "get_scheduled_session", lambda *args, **kwargs: session)
+    monkeypatch.setattr(no_change_reply.planning_repo, "get_scheduled_session", lambda *args, **kwargs: session)
 
-    phrases = bridge.execution_action_phrases_for_final_reply(
+    phrases = no_change_reply.execution_action_phrases_for_final_reply(
         SimpleNamespace(),
         user=SimpleNamespace(id=1),
         action_result={"execution_updated_session_ids": [42], "execution_applied": 1},

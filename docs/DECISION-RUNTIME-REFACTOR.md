@@ -218,6 +218,7 @@ Et supprime :
 10H a sorti readonly/reply de `legacy/conversation_*` :
 
 - `decision/readonly_reply.py`
+- `decision/no_change_reply.py` pour les replies no-change / execution report.
 
 Et supprime :
 

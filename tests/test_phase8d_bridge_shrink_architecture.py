@@ -99,13 +99,15 @@ def test_8d_planning_reply_helpers_live_in_legacy_bridge_without_old_cutover() -
 
 def test_8d_readonly_reply_helpers_live_in_decision_owner() -> None:
     pipeline = _source("decision/conversation_pipeline.py")
-    bridge = _source("decision/readonly_reply.py")
+    readonly = _source("decision/readonly_reply.py")
+    no_change = _source("decision/no_change_reply.py")
 
     assert not (SRC / "legacy/conversation_readonly_reply_bridge.py").exists()
-    assert "def compose_no_change_reply_for_turn" in bridge
+    assert "def compose_canonical_readonly_reply" in readonly
+    assert "def compose_no_change_reply_for_turn" in no_change
     assert "def _compose_no_change_reply_for_turn" not in pipeline
-    assert "compose_plan_lookup_reply" in bridge
-    assert "compose_execution_report_reply" in bridge
+    assert "compose_plan_lookup_reply" in no_change
+    assert "compose_execution_report_reply" in no_change
 
 
 def test_8d_legacy_decision_helpers_are_deleted_with_artifact_owner() -> None:

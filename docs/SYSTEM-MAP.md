@@ -57,6 +57,7 @@ Etat actuel :
   mince autour des owners.
 - Les replies post-commandes understanding vivent dans `command_reply.py`, pas
   dans `readonly_reply.py`.
+- Les replies no-change / execution report vivent dans `no_change_reply.py`.
 - `decision/turn_context.py` ne porte plus les helpers prompt/pending ni les
   helpers grounding/payload : ils vivent dans `turn_prompt_context.py` et
   `turn_context_payload.py`.

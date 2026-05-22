@@ -94,16 +94,19 @@ def test_10h_readonly_reply_lives_in_decision_not_legacy() -> None:
     router = _source("decision/turn_router.py")
     understanding_route = _source("decision/turn_understanding_route.py")
     readonly = _source("decision/readonly_reply.py")
+    no_change = _source("decision/no_change_reply.py")
 
     assert "turn_understanding_route" in router
     assert "from fitmas.decision import readonly_reply" in understanding_route
+    assert "from fitmas.decision import no_change_reply" in understanding_route
     assert "conversation_canonical_readonly_bridge" not in router
     assert "conversation_readonly_reply_bridge" not in router
     assert not (SRC / "legacy/conversation_canonical_readonly_bridge.py").exists()
     assert not (SRC / "legacy/conversation_readonly_reply_bridge.py").exists()
     assert "def should_use_canonical_readonly_without_legacy(" in readonly
     assert "def compose_canonical_readonly_reply(" in readonly
-    assert "def compose_no_change_reply_for_turn(" in readonly
+    assert "def compose_no_change_reply_for_turn(" not in readonly
+    assert "def compose_no_change_reply_for_turn(" in no_change
     assert "def compose_coach_decision_reply(" not in readonly
 
 

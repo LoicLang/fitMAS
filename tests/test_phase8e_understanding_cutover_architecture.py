@@ -79,6 +79,7 @@ def test_8e_decision_package_still_has_no_llm_or_legacy_imports() -> None:
     for path in sorted((SRC / "decision").glob("*.py")):
         if path.name in {
             "command_application.py",
+            "no_change_reply.py",
             "readonly_reply.py",
             "turn_finalization.py",
             "turn_router.py",

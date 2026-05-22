@@ -10,6 +10,7 @@ from fitmas.decision.message_models import Extraction
 from fitmas.decision import coach_decision_runtime
 from fitmas.decision import command_application
 from fitmas.decision import command_reply
+from fitmas.decision import no_change_reply
 from fitmas.decision import pending_resolution
 from fitmas.decision import readonly_reply
 from fitmas.decision import turn_context as turn_context_builder
@@ -226,6 +227,6 @@ def _route_pending_or_command_reply(
             turn_context=turn_context,
             grounding=grounding_packet,
             action_result=understanding_action_result or {},
-            compose_no_change_reply_for_turn_fn=readonly_reply.compose_no_change_reply_for_turn,
+            compose_no_change_reply_for_turn_fn=no_change_reply.compose_no_change_reply_for_turn,
         )
     return None
