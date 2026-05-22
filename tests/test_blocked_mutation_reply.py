@@ -497,7 +497,7 @@ class BlockedMutationReplyTest(unittest.TestCase):
         from datetime import date
 
         from fitmas.decision.plan_patch_reply import _build_plan_patch_confirmation_prompt
-        from fitmas.grounding_contract import ReplyGroundingPacket
+        from fitmas.decision.grounding import ReplyGroundingPacket
 
         result = PlanPatchServiceResult(
             patch=PlanPatch(
@@ -556,7 +556,7 @@ class BlockedMutationReplyTest(unittest.TestCase):
         from datetime import date
 
         from fitmas.decision.plan_patch_reply import _build_plan_patch_confirmation_prompt
-        from fitmas.grounding_contract import ReplyGroundingPacket
+        from fitmas.decision.grounding import ReplyGroundingPacket
 
         result = PlanPatchServiceResult(
             patch=PlanPatch(

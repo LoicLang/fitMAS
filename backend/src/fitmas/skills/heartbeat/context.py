@@ -20,7 +20,7 @@ from datetime import date, datetime, timedelta
 from typing import Any, Literal, Sequence
 
 from fitmas.domain.execution.claims import ActivityClaim
-from fitmas.grounding_contract import PlanWindowFact, plan_window_facts_from_sessions
+from fitmas.decision.grounding import PlanWindowFact, plan_window_facts_from_sessions
 from fitmas.domain.execution.recent_reality import RecentRealityWindow
 
 REST_SPORTS = {"rest", "off"}

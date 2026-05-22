@@ -13,7 +13,7 @@ from fitmas.decision import DecisionReplyComposer
 from fitmas.decision.planning_outcomes import plan_patch_service_result_to_outcome
 from fitmas.decision.turn_recording import decision_reply_text_for_turn
 from fitmas.domain.planning.patch_mutation_service import PlanPatchServiceResult
-from fitmas.grounding_contract import ReplyGroundingPacket, render_grounding_packet_for_prompt
+from fitmas.decision.grounding import ReplyGroundingPacket, render_grounding_packet_for_prompt
 from fitmas.llm.reply_decision_backend import LLMReplyBackend
 from fitmas.domain.planning.plan_patch import PlanPatch
 

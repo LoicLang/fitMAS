@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import os
 
-from fitmas.grounding_contract import ReplyGroundingPacket, render_grounding_packet_for_prompt
+from fitmas.decision.grounding import ReplyGroundingPacket, render_grounding_packet_for_prompt
 from fitmas.llm.gateway import request_text
 from fitmas.llm.prompts.reply import ReplyPromptBlockedEvent, ReplyPromptInput, build_reply_prompt
 from fitmas.domain.planning.policy import AdaptationPolicyDecision

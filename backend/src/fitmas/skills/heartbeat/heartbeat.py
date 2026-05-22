@@ -39,7 +39,7 @@ from fitmas.coach_messages import CoachDraft, DraftPendingConfirmation
 from fitmas.core.db import SessionLocal
 import fitmas.llm.reply_backend as reply_backend
 from fitmas.domain.execution.clarification import build_execution_clarification
-from fitmas.grounding_contract import ReplyGroundingPacket, plan_window_facts_from_sessions
+from fitmas.decision.grounding import ReplyGroundingPacket, plan_window_facts_from_sessions
 from fitmas.skills.heartbeat import evaluation as heartbeat_evaluation
 from fitmas.skills.heartbeat import reply_composer as heartbeat_reply
 from fitmas.skills.heartbeat.context import build_heartbeat_context_bundle

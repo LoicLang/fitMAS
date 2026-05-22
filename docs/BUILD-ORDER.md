@@ -124,6 +124,7 @@ Les cuts physiques recents :
   `build_week_label` dans `domain/planning/periodization.py`.
 - La resolution de fenetre planning pour tools vit maintenant dans
   `domain/planning/window_resolution.py`.
+- Le grounding visible des replies vit maintenant dans `decision/grounding.py`.
 - La resolution pending canonique normalise les aliases d'enum provider
   (`confirm`, `accepted`, etc.) vers `accept_pending` avant application.
   Un type inconnu devient une clarification pending, jamais un trou vers
@@ -143,7 +144,7 @@ Les cuts physiques recents :
 
 Etat chiffre au dernier check local :
 
-- root modules : `23`.
+- root modules : `22`.
 - legacy modules : `0` fichier source actif.
 - backend complet : `1336 passed, 11 skipped, 14 subtests passed`.
 - smoke canonical planning default : OK `10/10`.
