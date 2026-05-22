@@ -1,6 +1,6 @@
-"""Tests pour le module claim_guard (Chantier 1bis)."""
+"""Tests for the anti-claim helpers owned by decision/output_verifier.py."""
 
-from fitmas.claim_guard import (
+from fitmas.decision.output_verifier import (
     looks_like_action_claim,
     safe_rewrite_for_claim_without_mutation,
 )

@@ -926,7 +926,7 @@ def _looks_like_backend_action_claim(message: str) -> bool:
     try:
         if str(BACKEND_SRC) not in sys.path:
             sys.path.insert(0, str(BACKEND_SRC))
-        from fitmas.claim_guard import looks_like_action_claim
+        from fitmas.decision.output_verifier import looks_like_action_claim
     except Exception:
         return False
     return looks_like_action_claim(message)

@@ -91,6 +91,7 @@ Ce qui n'est plus l'architecture active :
 - root planning metadata helpers (`session_metadata.py`, `week_metadata.py`)
 - root planning window resolution (`planning_window_resolution.py`)
 - root grounding contract (`grounding_contract.py`)
+- root claim guard (`claim_guard.py`)
 - root `final_reply.py`
 - root `heartbeat.py`
 - root `telegram_scheduler.py`

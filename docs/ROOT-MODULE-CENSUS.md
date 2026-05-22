@@ -23,7 +23,7 @@ is allowed only for hotspots that need a separate shrink slice.
 
 ## Summary
 
-- Root files counted: 22
+- Root files counted: 21
 - Permanent root entrypoints allowed: 3
 - First wrapper cuts completed: `heartbeat*.py`, `llm_gateway.py`,
   `telegram_scheduler.py`, `tool_*.py`, `api_messages.py`,
@@ -69,6 +69,7 @@ is allowed only for hotspots that need a separate shrink slice.
 - Planning window resolution root cut completed:
   `planning_window_resolution.py`
 - Decision grounding root cut completed: `grounding_contract.py`
+- Decision output verification root cut completed: `claim_guard.py`
 - Primary risk: moving files faster than deleting obsolete boundaries
 - Thursday criterion: root is explainable, delete candidates are explicit, and
   new root files fail architecture tests unless classified here
@@ -81,7 +82,6 @@ is allowed only for hotspots that need a separate shrink slice.
 | `adaptation.py` | domain/planning | merge | old adaptation facade overlaps planning runtime | planning simplification |
 | `adaptation_decision.py` | domain/planning | merge | decision value object should live with planning decisions | planning simplification |
 | `api.py` | root-entrypoint | entrypoint | FastAPI app assembly entrypoint | keep until app package owns all routes |
-| `claim_guard.py` | decision | merge | visible claim protection should collapse into OutputVerifier | output verifier shrink |
 | `coach_messages.py` | domain/coaching | merge | message fixtures overlap coach voice and reply composer | coaching package split |
 | `coach_state_bundle.py` | domain/coaching | merge | old bundle should collapse into CoachContext | coach context shrink |
 | `context_pack.py` | decision | merge | prompt context pack overlaps Decision ContextBuilder | context builder shrink |

@@ -125,6 +125,8 @@ Les cuts physiques recents :
 - La resolution de fenetre planning pour tools vit maintenant dans
   `domain/planning/window_resolution.py`.
 - Le grounding visible des replies vit maintenant dans `decision/grounding.py`.
+- La detection anti-claim d'action non committee vit maintenant dans
+  `decision/output_verifier.py`; root `claim_guard.py` est supprime.
 - La resolution pending canonique normalise les aliases d'enum provider
   (`confirm`, `accepted`, etc.) vers `accept_pending` avant application.
   Un type inconnu devient une clarification pending, jamais un trou vers
@@ -144,7 +146,7 @@ Les cuts physiques recents :
 
 Etat chiffre au dernier check local :
 
-- root modules : `22`.
+- root modules : `21`.
 - legacy modules : `0` fichier source actif.
 - backend complet : `1347 passed, 11 skipped, 14 subtests passed`.
 - smoke canonical planning default : OK `10/10`.

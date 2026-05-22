@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from fitmas.domain.coaching import coach_voice
-from fitmas.claim_guard import looks_like_action_claim
+from fitmas.decision.output_verifier import looks_like_action_claim
 
 from .reply_types import FinalReplyContext
 
