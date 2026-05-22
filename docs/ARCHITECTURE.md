@@ -89,6 +89,7 @@ Ce qui n'est plus l'architecture active :
 - root planning core modules (`plan_patch.py`, `week_coherence.py`)
 - root conversation turn planner (`conversation_turn_planner.py`)
 - root planning metadata helpers (`session_metadata.py`, `week_metadata.py`)
+- root planning window resolution (`planning_window_resolution.py`)
 - root `final_reply.py`
 - root `heartbeat.py`
 - root `telegram_scheduler.py`
