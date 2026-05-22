@@ -948,7 +948,7 @@ def signal_check() -> CoachDraft | None:
 
         # Adaptive plan triggers
         try:
-            from fitmas.adaptation import check_and_adapt_tsb, check_and_adapt_missed
+            from fitmas.domain.planning.adaptation import check_and_adapt_tsb, check_and_adapt_missed
             tsb_result = check_and_adapt_tsb(db, user)
             if tsb_result and tsb_result.decisions and tsb_result.message:
                 draft = _adaptation_plan_patch_confirmation_draft(

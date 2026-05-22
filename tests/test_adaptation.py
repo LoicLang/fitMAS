@@ -2,9 +2,9 @@
 
 from types import SimpleNamespace
 
-import fitmas.adaptation as adaptation
+import fitmas.domain.planning.adaptation as adaptation
 
-from fitmas.adaptation import (
+from fitmas.domain.planning.adaptation import (
     _HIGH_URGENCY_KEYWORDS,
     _build_conservative_health_fallback,
     _model_for_trigger,
@@ -261,7 +261,7 @@ class TestRunAdaptationFreeze:
         from pathlib import Path
 
         root = Path(__file__).resolve().parents[1]
-        source = (root / "backend/src/fitmas/adaptation.py").read_text()
+        source = (root / "backend/src/fitmas/domain/planning/adaptation.py").read_text()
         assert "plan_mutation_service" not in source
 
     def test_conversation_does_not_request_adaptation_auto_apply(self):
@@ -275,5 +275,5 @@ class TestRunAdaptationFreeze:
         from pathlib import Path
 
         root = Path(__file__).resolve().parents[1]
-        source = (root / "backend/src/fitmas/adaptation.py").read_text()
+        source = (root / "backend/src/fitmas/domain/planning/adaptation.py").read_text()
         assert "allow_apply" not in source

@@ -105,6 +105,7 @@ Ce qui n'est plus l'architecture active :
 - root coach messages (`coach_messages.py`)
 - root coach state bundle (`coach_state_bundle.py`)
 - root signals (`signals.py`)
+- root adaptation (`adaptation.py`)
 - root `final_reply.py`
 - root `heartbeat.py`
 - root `telegram_scheduler.py`

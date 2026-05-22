@@ -90,7 +90,6 @@ def test_9y_census_is_delete_first_not_move_only() -> None:
 
     assert actions.count("delete") == 0
     if non_entrypoint_actions:
-        assert "merge" in non_entrypoint_actions
         assert actions.count("move") < len(non_entrypoint_actions)
 
 

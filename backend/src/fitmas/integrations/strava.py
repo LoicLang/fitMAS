@@ -228,7 +228,7 @@ def import_recent_activities(
             import logging
             logging.getLogger(__name__).exception("Threshold estimation failed (non-blocking)")
         try:
-            from fitmas.adaptation import check_and_adapt_post_activity
+            from fitmas.domain.planning.adaptation import check_and_adapt_post_activity
             check_and_adapt_post_activity(db, user, activity)
         except Exception:
             import logging

@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from fitmas import repository as repo
-from fitmas.adaptation import check_and_adapt_health_facts
+from fitmas.domain.planning.adaptation import check_and_adapt_health_facts
 from fitmas.domain.execution.helpers import claimed_activities_last_days
 from fitmas.app.api.payloads import IncomingMessage
 from fitmas.domain.memory.availability_constraints import parse_availability_fact_key
