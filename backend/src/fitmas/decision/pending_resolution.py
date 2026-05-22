@@ -10,7 +10,7 @@ from typing import Any, Callable, Literal
 
 from sqlalchemy.orm import Session
 
-from fitmas import schema as s
+from fitmas.core import orm as s
 from fitmas.decision.conversation_contract import ConversationTurnOutcome
 from fitmas.decision import CoachUnderstanding, DecisionReplyComposer
 from fitmas.decision import pending_reply

@@ -5,7 +5,7 @@ from datetime import date, datetime
 
 from sqlalchemy.orm import Session
 
-from fitmas import schema as s
+from fitmas.core import orm as s
 from fitmas.domain.athlete.fitness_snapshot import FitnessSnapshot
 from fitmas.domain.athlete.readiness import ReadinessState
 from fitmas.domain.athlete.view_models import Profile

@@ -20,7 +20,7 @@ from typing import Any, Sequence
 
 from sqlalchemy.orm import Session
 
-from fitmas import schema as s
+from fitmas.core import orm as s
 from fitmas.domain.execution.helpers import (
     activities_last_days as _activities_last_days,
     claimed_activities_last_days as _claimed_activities_last_days,

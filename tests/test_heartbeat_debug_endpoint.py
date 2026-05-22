@@ -14,7 +14,7 @@ os.environ["FITMAS_ENABLE_DEBUG_ENDPOINTS"] = "1"
 from fastapi.testclient import TestClient
 
 import fitmas.skills.heartbeat.heartbeat as heartbeat
-from fitmas import schema as s
+from fitmas.core import orm as s
 from fitmas.api import app
 from fitmas.app.telegram.delivery import CoachDraft
 from fitmas.core.db import Base, SessionLocal, engine, init_db

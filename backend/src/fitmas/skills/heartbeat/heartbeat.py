@@ -24,7 +24,7 @@ from typing import Any, Iterator
 
 from sqlalchemy.orm import Session
 
-from fitmas import schema as s
+from fitmas.core import orm as s
 from fitmas.domain.athlete import repository as athlete_repo
 from fitmas.domain.coaching import coach_voice
 from fitmas.domain.coaching import repo_conversation

@@ -69,7 +69,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy import text
 
 from fitmas.api import app
-from fitmas import schema as s
+from fitmas.core import orm as s
 from fitmas.core.db import SessionLocal, engine, init_db
 from fitmas.domain.athlete import repository as athlete_repo
 from fitmas.domain.coaching import repo_conversation

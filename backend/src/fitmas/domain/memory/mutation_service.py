@@ -8,7 +8,7 @@ from typing import Iterable
 
 from sqlalchemy.orm import Session
 
-from fitmas import schema as s
+from fitmas.core import orm as s
 from fitmas.decision.command_actions import (
     AvailabilityConstraintAction,
     HealthSignalAction,

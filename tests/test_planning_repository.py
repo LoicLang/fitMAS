@@ -7,7 +7,7 @@ from datetime import date
 
 os.environ.setdefault("FITMAS_DB_PATH", tempfile.mktemp(prefix="fitmas-planning-repo-", suffix=".db"))
 
-from fitmas import schema as s
+from fitmas.core import orm as s
 from fitmas.core.db import Base, SessionLocal, engine, init_db
 from fitmas.domain.athlete import repository as athlete_repo
 from fitmas.domain.athlete.fitness_snapshot import FitnessSnapshot

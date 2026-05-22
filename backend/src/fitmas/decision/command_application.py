@@ -7,7 +7,7 @@ from typing import Any, Sequence
 
 from sqlalchemy.orm import Session
 
-from fitmas import schema as s
+from fitmas.core import orm as s
 from fitmas.decision import CoachUnderstanding, Command, CommandResult
 from fitmas.decision import pending_resolution
 from fitmas.decision.command_mapping import (

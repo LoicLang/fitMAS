@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Iterable, Sequence
 
-from fitmas import schema as s
+from fitmas.core import orm as s
 
 DAY_ALIASES = {
     "monday": ("lundi", "monday"),

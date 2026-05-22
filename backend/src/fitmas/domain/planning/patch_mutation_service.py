@@ -7,7 +7,7 @@ from typing import Any, Sequence
 
 from sqlalchemy.orm import Session
 
-from fitmas import schema as s
+from fitmas.core import orm as s
 from fitmas.domain.execution import repository as execution_repo
 from fitmas.domain.planning import repository as repo
 from fitmas.domain.planning import mutation_executor

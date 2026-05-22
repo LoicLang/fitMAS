@@ -5,7 +5,7 @@ from datetime import date, datetime
 
 from sqlalchemy.orm import Session
 
-from fitmas import schema as s
+from fitmas.core import orm as s
 from fitmas.domain.coaching.adaptation_log import AdaptationLogEntry, _impact_label, _mission_label, _reason_label
 from fitmas.domain.planning.adaptation_decision import DecisionReasonCode, TrajectoryImpact, WeekMissionStatus
 

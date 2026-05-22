@@ -6,7 +6,7 @@ from typing import Sequence
 
 from sqlalchemy.orm import Session
 
-from fitmas import schema as s
+from fitmas.core import orm as s
 from fitmas.domain.execution.claims import ActivityClaim, extract_claims_from_facts
 from fitmas.domain.execution import repository as execution_repo
 from fitmas.domain.memory import repository as memory_repo

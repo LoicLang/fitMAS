@@ -1492,7 +1492,7 @@ def _row_to_dict(row: sqlite3.Row) -> dict[str, Any]:
 def _reset_and_seed_database(db_path: Path) -> None:
     _reset_database_schema(db_path)
 
-    from fitmas import schema as s
+    from fitmas.core import orm as s
     from fitmas.core.db import SessionLocal
     from fitmas.core.time_context import DAY_KEYS, day_label_fr, get_local_now
     from fitmas.domain.execution import repository as execution_repo

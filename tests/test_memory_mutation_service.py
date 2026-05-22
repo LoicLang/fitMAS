@@ -8,7 +8,7 @@ from fitmas.domain.planning import repository as planning_repo
 
 os.environ.setdefault("FITMAS_DB_PATH", tempfile.mktemp(prefix="fitmas-memory-service-", suffix=".db"))
 
-from fitmas import schema as s
+from fitmas.core import orm as s
 from fitmas.core.db import Base, SessionLocal, engine, init_db
 from fitmas.decision.command_actions import (
     AvailabilityConstraintAction,

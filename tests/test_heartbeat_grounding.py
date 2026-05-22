@@ -16,7 +16,7 @@ os.environ.setdefault("FITMAS_DB_PATH", tempfile.mktemp(prefix="fitmas-heartbeat
 
 import fitmas.skills.heartbeat.heartbeat as heartbeat
 import fitmas.domain.planning.adaptation as adaptation
-from fitmas import schema as s
+from fitmas.core import orm as s
 from fitmas.domain.planning.adaptation import AdaptationResult
 from fitmas.app.telegram.delivery import persist_draft
 from fitmas.core.db import Base, SessionLocal, engine, init_db

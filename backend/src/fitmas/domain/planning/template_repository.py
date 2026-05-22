@@ -4,7 +4,7 @@ from datetime import datetime, timedelta
 
 from sqlalchemy.orm import Session
 
-from fitmas import schema as s
+from fitmas.core import orm as s
 from fitmas.core.time_context import DAY_KEYS, current_week_dates, get_local_now
 from fitmas.domain.planning import repository as planning_repo
 from fitmas.domain.planning.models import compute_load_band

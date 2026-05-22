@@ -6,7 +6,7 @@ import re
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
-from fitmas import schema as s
+from fitmas.core import orm as s
 from fitmas.app.api.payloads import OnboardPayload, OnboardPreviewPayload
 from fitmas.app.api.support import apply_onboarding_to_user, build_onboarding_facts, normalized_onboarding_payload
 from fitmas.domain.coaching.calibration_status import build_calibration_status, build_initial_calibration_status

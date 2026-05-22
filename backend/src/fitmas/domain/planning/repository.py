@@ -5,7 +5,7 @@ from datetime import date, datetime, time, timedelta
 
 from sqlalchemy.orm import Session
 
-from fitmas import schema as s
+from fitmas.core import orm as s
 from fitmas.core.time_context import get_local_now
 from fitmas.domain.planning.models import compute_load_band
 from fitmas.domain.planning.planning_decision import PlanningDecision

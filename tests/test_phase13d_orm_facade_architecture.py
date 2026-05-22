@@ -99,8 +99,8 @@ def test_13d_core_orm_import_registers_same_tables() -> None:
     assert set(Base.metadata.tables) == EXPECTED_TABLES
 
 
-def test_13d_schema_compat_import_resolves_temporarily() -> None:
-    from fitmas import schema as s
+def test_13d_core_orm_owner_import_resolves_records() -> None:
+    from fitmas.core import orm as s
 
     assert s.User.__tablename__ == "users"
     assert s.ScheduledSession.__tablename__ == "scheduled_sessions"

@@ -5,7 +5,7 @@ import logging
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
-from fitmas import schema as s
+from fitmas.core import orm as s
 from fitmas.app.api.support import ensure_debug_enabled
 from fitmas.app.telegram.delivery import persist_draft
 from fitmas.core.db import get_db

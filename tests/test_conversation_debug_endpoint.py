@@ -13,7 +13,7 @@ os.environ["FITMAS_ENABLE_DEBUG_ENDPOINTS"] = "1"
 from fastapi.testclient import TestClient
 
 from fitmas.app.api import routes_messages as api_messages
-from fitmas import schema as s
+from fitmas.core import orm as s
 from fitmas.api import app
 from fitmas.core.db import Base, SessionLocal, engine, init_db
 from fitmas.core.time_context import DAY_KEYS, day_label_fr, get_local_now

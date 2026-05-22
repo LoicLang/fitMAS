@@ -9,7 +9,7 @@ from fitmas.domain.planning import repository as planning_repo
 
 os.environ.setdefault("FITMAS_DB_PATH", tempfile.mktemp(prefix="fitmas-planning-state-", suffix=".db"))
 
-from fitmas import schema as s
+from fitmas.core import orm as s
 from fitmas.core.db import Base, SessionLocal, engine, init_db
 from fitmas.domain.planning.planning_state import refresh_planning_state
 

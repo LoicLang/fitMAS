@@ -6,7 +6,7 @@ import os
 import httpx
 from sqlalchemy.orm import Session
 
-from fitmas import schema as s
+from fitmas.core import orm as s
 from fitmas.domain.athlete import repository as athlete_repo
 
 logger = logging.getLogger(__name__)

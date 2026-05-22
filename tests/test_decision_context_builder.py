@@ -11,7 +11,7 @@ from fitmas.domain.planning import template_repository as template_repo
 os.environ.setdefault("FITMAS_DB_PATH", tempfile.mktemp(prefix="fitmas-decision-context-", suffix=".db"))
 
 from fitmas.core.db import Base, SessionLocal, engine, init_db
-from fitmas import schema as s
+from fitmas.core import orm as s
 from fitmas.decision import InputEvent
 from fitmas.decision.context_builder import (
     ContextBuilderInput,

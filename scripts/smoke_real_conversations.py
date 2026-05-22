@@ -20,7 +20,7 @@ sys.path.insert(0, str(ROOT / "backend" / "src"))
 from fastapi.testclient import TestClient
 
 import fitmas.skills.heartbeat.heartbeat as heartbeat
-from fitmas import schema as s
+from fitmas.core import orm as s
 from fitmas.api import app
 from fitmas.app.telegram.delivery import CoachDraft, persist_draft
 from fitmas.core.db import Base, SessionLocal, engine, init_db

@@ -5,7 +5,7 @@ from datetime import datetime, time, timedelta
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
-from fitmas import schema as s
+from fitmas.core import orm as s
 from fitmas.integrations import strava
 from fitmas.integrations import repository as integration_repo
 from fitmas.app.api.read_models import RecentSportActivity, RuntimeDay, RuntimeWeek, TodayFitness, TodayView

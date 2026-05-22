@@ -113,7 +113,7 @@ def _morning_briefing_window_status(
 def _has_proactive_message_today(timezone_name: str) -> bool:
     from datetime import timezone as dt_timezone
 
-    from fitmas import schema as s
+    from fitmas.core import orm as s
     from fitmas.core.db import SessionLocal
 
     timezone = pytz.timezone(timezone_name)

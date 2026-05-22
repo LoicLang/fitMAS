@@ -4,7 +4,7 @@ from datetime import datetime
 
 from sqlalchemy.orm import Session
 
-from fitmas import schema as s
+from fitmas.core import orm as s
 
 
 def get_strava_connection(db: Session, user_id: int) -> s.StravaConnection | None:

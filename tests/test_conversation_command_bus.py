@@ -8,7 +8,7 @@ from fitmas.domain.planning import repository as planning_repo
 
 os.environ.setdefault("FITMAS_DB_PATH", tempfile.mktemp(prefix="fitmas-command-bus-", suffix=".db"))
 
-from fitmas import schema as s
+from fitmas.core import orm as s
 from fitmas.core.db import Base, SessionLocal, engine, init_db
 from fitmas.decision import Command
 from fitmas.decision.command_application import RuntimeCommandBus

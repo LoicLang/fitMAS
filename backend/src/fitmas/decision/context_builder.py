@@ -5,7 +5,7 @@ from datetime import datetime
 
 from sqlalchemy.orm import Session
 
-import fitmas.schema as s
+from fitmas.core import orm as s
 from fitmas.domain.coaching.coach_state import build_coach_state_bundle
 from fitmas.core.time_context import build_time_context, get_local_now
 from fitmas.domain.athlete import repository as athlete_repo

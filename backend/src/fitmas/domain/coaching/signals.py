@@ -14,7 +14,7 @@ from typing import Any
 
 from sqlalchemy.orm import Session
 
-from fitmas import schema as s
+from fitmas.core import orm as s
 from fitmas.domain.execution.claims import extract_claims_from_facts
 from fitmas.domain.execution.helpers import activities_on_local_date, claimed_activities_on_local_date
 from fitmas.domain.planning import repository as planning_repo

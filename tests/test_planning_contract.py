@@ -4,7 +4,7 @@ import unittest
 from datetime import datetime
 
 from fitmas.domain.athlete.profile import AthleteProfileSnapshot
-from fitmas import schema as s
+from fitmas.core import orm as s
 from fitmas.domain.planning.contract import (
     AvailabilityConfidence,
     PlanConfidence,

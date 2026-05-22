@@ -4,7 +4,7 @@ import logging
 
 from sqlalchemy.orm import Session
 
-from fitmas import schema as s
+from fitmas.core import orm as s
 
 logger = logging.getLogger(__name__)
 

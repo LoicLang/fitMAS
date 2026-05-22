@@ -7,7 +7,7 @@ from pathlib import Path
 
 from fastapi import HTTPException, Request
 
-from fitmas import schema as s
+from fitmas.core import orm as s
 from fitmas.app.api.payloads import OnboardPayload, OnboardPreviewPayload
 from fitmas.app.api.onboarding_contract import build_coach_profile, build_goal_summary
 from fitmas.domain.planning.planner import normalize_sports

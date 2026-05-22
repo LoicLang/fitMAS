@@ -35,7 +35,7 @@ from fitmas.domain.planning.mutation_permissions import serialize_plan_patch_con
 from fitmas.domain.planning.plan_patch import PlanPatch, PlanPatchOperation, PlanPatchValidation
 from fitmas.domain.planning.session_actions import move_session
 from fitmas.domain.athlete.training_load import compute_ctl_atl_tsb, estimate_tss
-from fitmas import schema as s
+from fitmas.core import orm as s
 from fitmas.core.time_context import DAY_KEYS, day_label_fr, get_local_now
 from fitmas.domain.planning.week_coherence import WeekCoherenceFinding, WeekCoherenceReview
 
