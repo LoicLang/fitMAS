@@ -4,7 +4,7 @@ from pathlib import Path
 
 
 def test_conversation_runtime_no_longer_uses_adaptation_candidate_flow() -> None:
-    source = Path("backend/src/fitmas/conversation_pipeline.py").read_text()
+    source = Path("backend/src/fitmas/decision/conversation_pipeline.py").read_text()
 
     forbidden = (
         "adaptation_candidate_flow",

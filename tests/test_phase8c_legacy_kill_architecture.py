@@ -25,7 +25,7 @@ def _imports(path: Path) -> set[str]:
 
 
 def test_8c1_conversation_has_no_active_mutationdecision_planning_routes() -> None:
-    source = _source("conversation_pipeline.py")
+    source = _source("decision/conversation_pipeline.py")
     forbidden = {
         "from fitmas.llm import MutationDecision",
         "MutationDecision(",

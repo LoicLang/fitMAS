@@ -53,6 +53,7 @@ def test_decision_runtime_phase1_modules_exist() -> None:
         "command_actions.py",
         "command_application.py",
         "coach_decision_runtime.py",
+        "conversation_pipeline.py",
         "conversation_contract.py",
         "conversation_context.py",
         "input_event.py",
@@ -169,7 +170,7 @@ def test_context_builder_is_read_only_and_not_runtime_wired() -> None:
 def test_phase2_does_not_wire_existing_runtime_to_context_builder() -> None:
     root = ROOT / "backend" / "src" / "fitmas"
     files = [
-        root / "conversation_pipeline.py",
+        root / "decision" / "conversation_pipeline.py",
         root / "skills" / "heartbeat" / "heartbeat.py",
         root / "app" / "api" / "routes_app.py",
         root / "app" / "api" / "routes_messages.py",

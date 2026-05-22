@@ -7,7 +7,7 @@ ROOT = Path(__file__).resolve().parents[1]
 FITMAS = ROOT / "backend" / "src" / "fitmas"
 DECISION = FITMAS / "decision"
 LEGACY = FITMAS / "legacy"
-CONVERSATION = FITMAS / "conversation_pipeline.py"
+CONVERSATION = FITMAS / "decision" / "conversation_pipeline.py"
 
 
 def _imports(path: Path) -> set[str]:

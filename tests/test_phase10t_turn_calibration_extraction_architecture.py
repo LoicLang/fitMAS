@@ -7,7 +7,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 SRC = ROOT / "backend" / "src" / "fitmas"
 DECISION = SRC / "decision"
-PIPELINE = SRC / "conversation_pipeline.py"
+PIPELINE = SRC / "decision" / "conversation_pipeline.py"
 
 PIPELINE_CALIBRATION_IMPORTS_TO_REMOVE = {
     "fitmas.llm.calibration",

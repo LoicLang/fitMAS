@@ -67,7 +67,7 @@ def test_10f_activity_and_clarification_live_in_decision_not_legacy() -> None:
 
 
 def test_10f_decision_artifact_helpers_are_deleted_with_artifact_owner() -> None:
-    pipeline = _source("conversation_pipeline.py")
+    pipeline = _source("decision/conversation_pipeline.py")
 
     assert "conversation_decision_bridge" not in pipeline
     assert not (SRC / "legacy/conversation_decision_bridge.py").exists()
@@ -76,7 +76,7 @@ def test_10f_decision_artifact_helpers_are_deleted_with_artifact_owner() -> None
 
 
 def test_10f_coach_decision_reply_helpers_live_in_readonly_reply_owner() -> None:
-    pipeline = _source("conversation_pipeline.py")
+    pipeline = _source("decision/conversation_pipeline.py")
     readonly = _source("decision/readonly_reply.py")
 
     assert "conversation_coach_decision_reply_bridge" not in pipeline

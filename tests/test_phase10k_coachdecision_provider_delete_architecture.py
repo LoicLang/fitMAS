@@ -17,7 +17,7 @@ def _backend_python_files() -> list[Path]:
 
 
 def test_10k_conversation_runtime_no_longer_builds_or_calls_coachdecision_provider() -> None:
-    pipeline = _source("conversation_pipeline.py")
+    pipeline = _source("decision/conversation_pipeline.py")
     runtime = _source("decision/coach_decision_runtime.py")
     contract = _source("decision/conversation_contract.py")
     routes = _source("app/api/routes_messages.py")

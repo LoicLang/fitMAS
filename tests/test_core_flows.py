@@ -11,7 +11,7 @@ os.environ.setdefault("FITMAS_DB_PATH", tempfile.mktemp(prefix="fitmas-tests-", 
 from fastapi.testclient import TestClient
 
 from fitmas.app.api import routes_messages as api_messages
-import fitmas.conversation_pipeline as conversation_pipeline
+import fitmas.decision.conversation_pipeline as conversation_pipeline
 import fitmas.domain.planning.patch_mutation_service as plan_mutation_service
 from fitmas.api import app
 from fitmas.decision.conversation_contract import (

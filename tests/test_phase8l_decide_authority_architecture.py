@@ -25,7 +25,7 @@ def _imports(relative: str) -> set[str]:
 
 
 def test_8l_conversation_pipeline_does_not_call_decide_directly() -> None:
-    source = _source("conversation_pipeline.py")
+    source = _source("decision/conversation_pipeline.py")
 
     assert "dependencies.decide(" not in source
     assert "dependencies.decide" not in source

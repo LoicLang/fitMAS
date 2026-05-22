@@ -70,8 +70,9 @@ Les cuts physiques recents :
 - Les executors planning vivent dans `domain/planning/`.
 - Les helpers de reply PlanPatch conversationnels sont sortis de
   `conversation_pipeline.py` vers `decision/plan_patch_reply.py`.
-- `conversation_pipeline.py` est passe de `1819` a `78` lignes et delegue
-  aux owners `decision/turn_*`.
+- `decision/conversation_pipeline.py` est passe de `1819` a `78` lignes et
+  delegue aux owners `decision/turn_*`; root `conversation_pipeline.py` est
+  supprime.
 - `decision/turn_router.py` est passe de `444` a `361` lignes : la route
   planning canonique vit maintenant dans `decision/turn_planning_route.py`.
 - Les anciens modules root du pipeline candidat planning ont disparu :
@@ -162,6 +163,9 @@ Les cuts physiques recents :
   `domain/coaching/signals.py`; root `signals.py` est supprime.
 - L'ancien systeme d'adaptation proactive vit maintenant dans
   `domain/planning/adaptation.py`; root `adaptation.py` est supprime.
+- L'adapter conversationnel vit maintenant dans
+  `decision/conversation_pipeline.py`; root `conversation_pipeline.py` est
+  supprime.
 - La resolution pending canonique normalise les aliases d'enum provider
   (`confirm`, `accepted`, etc.) vers `accept_pending` avant application.
   Un type inconnu devient une clarification pending, jamais un trou vers
@@ -181,7 +185,7 @@ Les cuts physiques recents :
 
 Etat chiffre au dernier check local :
 
-- root modules : `7`.
+- root modules : `6`.
 - legacy modules : `0` fichier source actif.
 - backend complet : `1347 passed, 11 skipped, 14 subtests passed`.
 - smoke canonical planning default : OK `10/10`.
@@ -259,7 +263,7 @@ Prochain chantier logique :
 
 - il n'y a plus de bridge `legacy/conversation_*` runtime-active ;
 - il n'y a plus de provider ou artifact `CoachDecision` ;
-- `conversation_pipeline.py` est mince, donc le nouveau hotspot est
+- le root runtime conversationnel est supprime ; le nouveau hotspot est
   `decision/turn_context.py`, puis le reste des petites routes dans
   `decision/turn_router.py` ;
 - garder la priorite runtime plus petit, pas refactor plus complet.

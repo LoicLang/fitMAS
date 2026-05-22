@@ -11,7 +11,7 @@ def _read(path: str) -> str:
 
 
 def test_conversation_pipeline_no_longer_calls_legacy_planning_runtime_cutover() -> None:
-    source = _read("backend/src/fitmas/conversation_pipeline.py")
+    source = _read("backend/src/fitmas/decision/conversation_pipeline.py")
 
     assert "maybe_handle_planning_runtime_cutover" not in source
     assert "understanding_runtime_planning_cutover_enabled" not in source
@@ -43,7 +43,7 @@ def test_active_smoke_scripts_no_longer_use_retired_planning_cutover_flag() -> N
 
 
 def test_empty_availability_candidate_route_is_physically_removed_from_conversation_pipeline() -> None:
-    source = _read("backend/src/fitmas/conversation_pipeline.py")
+    source = _read("backend/src/fitmas/decision/conversation_pipeline.py")
 
     assert "availability_no_affected_session" not in source
     assert "_availability_no_affected_sport_session" not in source

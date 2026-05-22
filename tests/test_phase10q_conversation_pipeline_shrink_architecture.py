@@ -53,7 +53,7 @@ def _imports(relative: str) -> set[str]:
 def test_10q_plan_patch_reply_helpers_live_in_decision_owner() -> None:
     assert (SRC / "decision" / "plan_patch_reply.py").exists()
 
-    pipeline_functions = _function_names("conversation_pipeline.py")
+    pipeline_functions = _function_names("decision/conversation_pipeline.py")
     reply_functions = _function_names("decision/plan_patch_reply.py")
 
     assert PLAN_PATCH_REPLY_HELPERS.isdisjoint(pipeline_functions)
@@ -61,7 +61,7 @@ def test_10q_plan_patch_reply_helpers_live_in_decision_owner() -> None:
 
 
 def test_10q_conversation_pipeline_does_not_import_plan_patch_reply_internals() -> None:
-    imports = _imports("conversation_pipeline.py")
+    imports = _imports("decision/conversation_pipeline.py")
     context_imports = _imports("decision/turn_context.py")
 
     assert "fitmas.decision.plan_patch_reply" in context_imports
@@ -74,8 +74,8 @@ def test_10q_conversation_pipeline_does_not_import_plan_patch_reply_internals() 
 def test_10q_plan_patch_reply_owner_does_not_depend_on_conversation_pipeline() -> None:
     imports = _imports("decision/plan_patch_reply.py")
 
-    assert "fitmas.conversation_pipeline" not in imports
+    assert "fitmas.decision.conversation_pipeline" not in imports
 
 
 def test_10q_conversation_pipeline_shrinks_below_next_budget() -> None:
-    assert len(_source("conversation_pipeline.py").splitlines()) <= 1500
+    assert len(_source("decision/conversation_pipeline.py").splitlines()) <= 1500

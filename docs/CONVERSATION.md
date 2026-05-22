@@ -50,8 +50,9 @@ message Telegram / app
 
 Etat actuel :
 
-- `conversation_pipeline.py` est devenu un adapter mince de 78 lignes : user,
-  idempotence, calibration, contexte, puis delegation au router.
+- `decision/conversation_pipeline.py` est devenu un adapter mince de 78 lignes :
+  user, idempotence, calibration, contexte, puis delegation au router. Le root
+  `conversation_pipeline.py` est supprime.
 - `decision/` porte deja les types et l'outcome canonique.
 - `llm/understanding_service.py` porte l'understanding cible.
 - `decision/understanding_runtime.py` porte l'appel understanding canonique.

@@ -30,7 +30,7 @@ def test_app_read_models_do_not_load_legacy_week_plan_runtime_truth() -> None:
 def test_conversation_runtime_does_not_load_legacy_week_plan_truth() -> None:
     root = Path(__file__).resolve().parents[1]
     files = [
-        root / "backend/src/fitmas/conversation_pipeline.py",
+        root / "backend/src/fitmas/decision/conversation_pipeline.py",
         root / "backend/src/fitmas/decision/conversation_contract.py",
     ]
     forbidden = (

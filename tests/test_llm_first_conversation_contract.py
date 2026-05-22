@@ -24,7 +24,7 @@ def test_legacy_user_indication_modules_are_removed() -> None:
 
 
 def test_conversation_pipeline_has_no_deterministic_user_text_gates() -> None:
-    source = _source("conversation_pipeline.py")
+    source = _source("decision/conversation_pipeline.py")
 
     forbidden = (
         "interpret_user_indication",

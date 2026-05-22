@@ -9,7 +9,7 @@ SRC = ROOT / "backend" / "src" / "fitmas"
 
 def test_phase8b_does_not_enable_cutover_flags_by_default() -> None:
     sources = [
-        SRC / "conversation_pipeline.py",
+        SRC / "decision" / "conversation_pipeline.py",
         SRC / "skills" / "heartbeat" / "runtime_adapter.py",
         SRC / "app" / "telegram" / "scheduler.py",
     ]
@@ -32,7 +32,13 @@ def test_phase8b_decision_package_stays_free_of_legacy_adapters() -> None:
     offenders: list[str] = []
 
     for path in sorted(decision_dir.glob("*.py")):
-        if path.name in {"command_application.py", "readonly_reply.py", "understanding_runtime.py", "coach_decision_runtime.py"}:
+        if path.name in {
+            "command_application.py",
+            "conversation_pipeline.py",
+            "readonly_reply.py",
+            "understanding_runtime.py",
+            "coach_decision_runtime.py",
+        }:
             continue
         source = path.read_text(encoding="utf-8")
         if "fitmas.legacy" in source or "conversation_pipeline" in source:

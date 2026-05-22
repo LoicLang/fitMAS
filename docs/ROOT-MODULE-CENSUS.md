@@ -23,7 +23,7 @@ is allowed only for hotspots that need a separate shrink slice.
 
 ## Summary
 
-- Root files counted: 7
+- Root files counted: 6
 - Permanent root entrypoints allowed: 3
 - First wrapper cuts completed: `heartbeat*.py`, `llm_gateway.py`,
   `telegram_scheduler.py`, `tool_*.py`, `api_messages.py`,
@@ -86,6 +86,7 @@ is allowed only for hotspots that need a separate shrink slice.
 - Coaching state bundle root cut completed: `coach_state_bundle.py`
 - Coaching signals root cut completed: `signals.py`
 - Planning adaptation root cut completed: `adaptation.py`
+- Decision conversation pipeline root cut completed: `conversation_pipeline.py`
 - Primary risk: moving files faster than deleting obsolete boundaries
 - Thursday criterion: root is explainable, delete candidates are explicit, and
   new root files fail architecture tests unless classified here
@@ -96,7 +97,6 @@ is allowed only for hotspots that need a separate shrink slice.
 | --- | --- | --- | --- | --- |
 | `__init__.py` | root-entrypoint | entrypoint | package marker only | permanent root |
 | `api.py` | root-entrypoint | entrypoint | FastAPI app assembly entrypoint | keep until app package owns all routes |
-| `conversation_pipeline.py` | decision | keep_root_temporarily | hotspot orchestrator is shrinking; PlanPatch replies already moved to `decision/plan_patch_reply.py` | turn state / idempotence / recording shrink |
 | `main.py` | root-entrypoint | entrypoint | ASGI import entrypoint | permanent root |
 | `models.py` | core | keep_root_temporarily | central SQLAlchemy models need a dedicated schema split | model schema split |
 | `repository.py` | core | keep_root_temporarily | monolithic repository needs domain repository split | repository split |
@@ -104,9 +104,9 @@ is allowed only for hotspots that need a separate shrink slice.
 
 ## Immediate Cut Order
 
-1. Move athlete/coaching services to `domain/*` before touching monoliths.
-2. Split monoliths only after deletion:
-   `conversation_pipeline.py`, `repository.py`, `schema.py`, `models.py`.
+1. Keep only root entrypoints plus bounded monoliths in root.
+2. Split monoliths only with stable facades:
+   `repository.py`, `schema.py`, `models.py`.
 
 ## Non Goals
 

@@ -5,7 +5,7 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
-PIPELINE = ROOT / "backend" / "src" / "fitmas" / "conversation_pipeline.py"
+PIPELINE = ROOT / "backend" / "src" / "fitmas" / "decision" / "conversation_pipeline.py"
 
 ALLOWED_IMPORT_PREFIXES = {
     "__future__",

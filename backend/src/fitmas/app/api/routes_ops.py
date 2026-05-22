@@ -45,7 +45,7 @@ def trigger_conversation_debug(payload: IncomingMessage, db: Session = Depends(g
         raise HTTPException(status_code=404, detail="No onboarded user yet")
 
     from fitmas.app.api import routes_messages as api_messages
-    from fitmas.conversation_pipeline import run_conversation_turn
+    from fitmas.decision.conversation_pipeline import run_conversation_turn
 
     client_message_key = str(payload.client_message_key or "").strip() or f"ops-debug:{uuid4()}"
     try:

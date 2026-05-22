@@ -75,8 +75,9 @@ En place :
 
 Encore actif :
 
-- `conversation_pipeline.py` est maintenant un adapter de 78 lignes. Il garde
-  l'entree API historique, puis delegue aux owners `decision/turn_*`.
+- `decision/conversation_pipeline.py` est maintenant un adapter de 78 lignes.
+  Il garde l'entree API historique, puis delegue aux owners `decision/turn_*`.
+  Le root `conversation_pipeline.py` est supprime.
 - La responsabilite conversationnelle restante est concentree dans
   `decision/turn_router.py`, `decision/turn_planning_route.py` et
   `decision/turn_context.py`, pas dans le root pipeline.

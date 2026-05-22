@@ -35,7 +35,7 @@ def test_8d_decision_runtime_service_exists_without_legacy_imports() -> None:
 
 
 def test_8d_conversation_pipeline_stays_under_bridge_shrink_budget() -> None:
-    line_count = len(_source("conversation_pipeline.py").splitlines())
+    line_count = len(_source("decision/conversation_pipeline.py").splitlines())
 
     assert line_count <= 3600
 
@@ -86,7 +86,7 @@ def test_8d_conversation_pipeline_uses_decision_owners_not_legacy_bridges() -> N
 
 
 def test_8d_planning_reply_helpers_live_in_legacy_bridge_without_old_cutover() -> None:
-    pipeline = _source("conversation_pipeline.py")
+    pipeline = _source("decision/conversation_pipeline.py")
     outcomes = _source("decision/planning_outcomes.py")
 
     assert "def maybe_handle_planning_runtime_cutover" not in pipeline
@@ -96,7 +96,7 @@ def test_8d_planning_reply_helpers_live_in_legacy_bridge_without_old_cutover() -
 
 
 def test_8d_readonly_reply_helpers_live_in_decision_owner() -> None:
-    pipeline = _source("conversation_pipeline.py")
+    pipeline = _source("decision/conversation_pipeline.py")
     bridge = _source("decision/readonly_reply.py")
 
     assert not (SRC / "legacy/conversation_readonly_reply_bridge.py").exists()
@@ -107,7 +107,7 @@ def test_8d_readonly_reply_helpers_live_in_decision_owner() -> None:
 
 
 def test_8d_legacy_decision_helpers_are_deleted_with_artifact_owner() -> None:
-    pipeline = _source("conversation_pipeline.py")
+    pipeline = _source("decision/conversation_pipeline.py")
 
     assert not (SRC / "legacy/conversation_decision_bridge.py").exists()
     assert not (SRC / "legacy/coach_decision_artifact.py").exists()

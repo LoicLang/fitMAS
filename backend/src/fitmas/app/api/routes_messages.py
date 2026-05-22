@@ -196,7 +196,7 @@ def _latest_agent_text(conversation_history: list[dict]) -> str | None:
 
 @router.post("/api/v0/messages", response_model=MessageReply)
 def post_message(payload: IncomingMessage, db: Session = Depends(get_db)) -> MessageReply:
-    from fitmas.conversation_pipeline import run_conversation_turn
+    from fitmas.decision.conversation_pipeline import run_conversation_turn
 
     try:
         return run_conversation_turn(

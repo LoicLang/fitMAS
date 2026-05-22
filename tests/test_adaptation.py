@@ -268,7 +268,7 @@ class TestRunAdaptationFreeze:
         from pathlib import Path
 
         root = Path(__file__).resolve().parents[1]
-        source = (root / "backend/src/fitmas/conversation_pipeline.py").read_text()
+        source = (root / "backend/src/fitmas/decision/conversation_pipeline.py").read_text()
         assert "allow_apply=True" not in source
 
     def test_adaptation_api_no_longer_exposes_allow_apply(self):

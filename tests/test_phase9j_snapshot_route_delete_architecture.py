@@ -4,7 +4,7 @@ from pathlib import Path
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-CONVERSATION_PIPELINE = REPO_ROOT / "backend/src/fitmas/conversation_pipeline.py"
+CONVERSATION_PIPELINE = REPO_ROOT / "backend/src/fitmas/decision/conversation_pipeline.py"
 
 
 def test_conversation_pipeline_no_longer_calls_planning_snapshot_flow() -> None:

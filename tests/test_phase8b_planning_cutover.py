@@ -99,7 +99,7 @@ def test_runtime_mapper_blocks_applicable_unhandled_change() -> None:
 
 
 def test_old_coachdecision_planning_cutover_route_is_removed() -> None:
-    pipeline = (ROOT / "backend/src/fitmas/conversation_pipeline.py").read_text()
+    pipeline = (ROOT / "backend/src/fitmas/decision/conversation_pipeline.py").read_text()
 
     assert "maybe_handle_planning_runtime_cutover" not in pipeline
     assert not (ROOT / "backend/src/fitmas/legacy/conversation_planning_bridge.py").exists()

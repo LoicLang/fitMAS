@@ -61,7 +61,8 @@ backend/src/fitmas/
 Root encore accepte :
 
 - `api.py`, `main.py`, `__init__.py` pour l'assemblage app.
-- modules racine non encore classes, suivis dans `ROOT-MODULE-CENSUS.md`.
+- `models.py`, `repository.py`, `schema.py` restent les trois monolithes
+  bornes a splitter avec facade stable.
 
 Ce qui n'est plus l'architecture active :
 
@@ -106,6 +107,7 @@ Ce qui n'est plus l'architecture active :
 - root coach state bundle (`coach_state_bundle.py`)
 - root signals (`signals.py`)
 - root adaptation (`adaptation.py`)
+- root conversation pipeline (`conversation_pipeline.py`)
 - root `final_reply.py`
 - root `heartbeat.py`
 - root `telegram_scheduler.py`
@@ -174,19 +176,19 @@ Interdits :
 
 ## Risque Actuel
 
-Le point chaud reste `conversation_pipeline.py`.
+Le root runtime conversationnel est supprime. Les prochains risques sont les
+monolithes transverses :
 
-Les prochains cuts doivent attaquer :
-
-- `conversation_pipeline.py`, encore trop gros ;
-- fichiers racine encore non classes.
+- `repository.py` ;
+- `schema.py` ;
+- `models.py`.
 
 Critere de succes jeudi :
 
 ```text
 Moins de chemins runtime.
 Moins de legacy appele.
-Moins de branches dans conversation_pipeline.py.
+Moins de branches dans les owners `decision/turn_*`.
 Plus de bugs localisables par couche.
 ```
 

@@ -39,7 +39,7 @@ def test_10l_understanding_runtime_no_longer_builds_coachdecision_artifacts() ->
 
 
 def test_10l_conversation_pipeline_has_no_coachdecision_artifact_branch() -> None:
-    source = _source("conversation_pipeline.py")
+    source = _source("decision/conversation_pipeline.py")
 
     assert "legacy_decision_artifact" not in source
     assert "is_coach_decision_artifact" not in source
