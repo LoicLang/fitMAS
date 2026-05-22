@@ -10,7 +10,7 @@ from fitmas.conversation_prompt_modules import (
 )
 from fitmas.llm.prompts.conversation_policy import ConversationPromptPolicy
 from fitmas.llm.prompt_observability import PromptTrace, build_prompt_trace
-from fitmas.prompt_layers import assemble_layered_prompt
+from fitmas.llm.prompts.layers import assemble_layered_prompt
 from fitmas.llm.prompt_contracts import get_prompt_contract
 from fitmas.core.time_context import render_time_context
 

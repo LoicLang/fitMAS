@@ -23,7 +23,7 @@ is allowed only for hotspots that need a separate shrink slice.
 
 ## Summary
 
-- Root files counted: 17
+- Root files counted: 16
 - Permanent root entrypoints allowed: 3
 - First wrapper cuts completed: `heartbeat*.py`, `llm_gateway.py`,
   `telegram_scheduler.py`, `tool_*.py`, `api_messages.py`,
@@ -75,6 +75,7 @@ is allowed only for hotspots that need a separate shrink slice.
 - Decision context pack root cut completed: `context_pack.py`
 - Decision conversation context root cut completed: `conversation_context.py`
 - LLM prompt policy root cut completed: `conversation_prompting.py`
+- LLM prompt layers root cut completed: `prompt_layers.py`
 - Primary risk: moving files faster than deleting obsolete boundaries
 - Thursday criterion: root is explainable, delete candidates are explicit, and
   new root files fail architecture tests unless classified here
@@ -96,7 +97,6 @@ is allowed only for hotspots that need a separate shrink slice.
 | `models.py` | core | keep_root_temporarily | central SQLAlchemy models need a dedicated schema split | model schema split |
 | `plan_validator.py` | domain/planning | merge | validation should live with planning policy and mutation service | planning simplification |
 | `planning_contract.py` | domain/planning | merge | planning contract should merge with domain planning models | planning simplification |
-| `prompt_layers.py` | llm | merge | prompt layering should collapse into canonical prompt families | prompt shrink |
 | `repository.py` | core | keep_root_temporarily | monolithic repository needs domain repository split | repository split |
 | `schema.py` | core | keep_root_temporarily | central Pydantic schema needs bounded API/domain split | schema split |
 | `signals.py` | domain/coaching | merge | signal derivation overlaps context and memory substrates | coaching substrate shrink |
