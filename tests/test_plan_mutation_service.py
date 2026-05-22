@@ -27,7 +27,7 @@ def _default_week_review(monkeypatch) -> None:
         "fitmas.domain.planning.patch_mutation_service.review_week_coherence_with_llm",
         lambda *args, **kwargs: _week_review("valid", "commit_original"),
     )
-    monkeypatch.setattr("fitmas.domain.planning.patch_mutation_service.root_repo.get_activities", lambda *args, **kwargs: [])
+    monkeypatch.setattr("fitmas.domain.planning.patch_mutation_service.execution_repo.get_activities", lambda *args, **kwargs: [])
     monkeypatch.setattr("fitmas.domain.planning.patch_mutation_service.root_repo.get_active_memory_items", lambda *args, **kwargs: [])
 
 

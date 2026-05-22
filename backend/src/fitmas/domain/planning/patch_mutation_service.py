@@ -8,6 +8,7 @@ from typing import Any, Sequence
 from sqlalchemy.orm import Session
 
 from fitmas import repository as root_repo, schema as s
+from fitmas.domain.execution import repository as execution_repo
 from fitmas.domain.planning import repository as repo
 from fitmas.domain.planning import mutation_executor
 from fitmas.domain.planning import session_actions as plan_actions
@@ -429,7 +430,7 @@ def _request_week_coherence_json(**kwargs) -> dict[str, Any] | None:
 
 def _recent_activities_for_week_review(db: Session, user_id: int) -> tuple[Any, ...]:
     try:
-        return tuple(root_repo.get_activities(db, user_id, limit=120))
+        return tuple(execution_repo.get_activities(db, user_id, limit=120))
     except Exception:
         return ()
 

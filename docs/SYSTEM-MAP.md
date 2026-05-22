@@ -109,6 +109,20 @@ Compat seulement :
 - `WeeklyPlan`
 - `DayPlan`
 
+### Execution
+
+Owner :
+
+- `domain/execution/`
+- `domain/execution/repository.py` pour `Activity`.
+
+Role :
+
+- lire les activites reelles ;
+- enregistrer une activite manuelle ou importee ;
+- exposer la conversion API `Activity` ;
+- ne pas porter la planification ni les credentials d'integration.
+
 ### Memory
 
 Owner :

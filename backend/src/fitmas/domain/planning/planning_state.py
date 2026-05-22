@@ -7,6 +7,7 @@ from typing import Sequence
 from sqlalchemy.orm import Session
 
 from fitmas import repository as root_repo, schema as s
+from fitmas.domain.execution import repository as execution_repo
 from fitmas.domain.athlete.profile import AthleteProfileSnapshot, build_athlete_profile
 from fitmas.domain.athlete.zones import AthleteZones, build_athlete_zones
 from fitmas.domain.athlete.fitness_snapshot import FitnessSnapshot, build_fitness_snapshot
@@ -85,7 +86,7 @@ def refresh_planning_state(
         pattern_limit=8,
         total_limit=72,
     )
-    activities = root_repo.get_activities(db, user.id, limit=500)
+    activities = execution_repo.get_activities(db, user.id, limit=500)
     scheduled_sessions = planning_repo.get_scheduled_sessions(db, user.id, limit=84)
     bundle = assemble_planning_state(
         user=user,

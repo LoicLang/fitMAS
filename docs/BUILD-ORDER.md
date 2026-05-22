@@ -270,6 +270,8 @@ Prochain chantier logique :
   en facade temporaire ;
 - `domain/memory/repository.py` possede deja facts profile, working memory et
   patterns, avec `fitmas.repository` en facade temporaire ;
+- `domain/execution/repository.py` possede deja les activites reelles, avec
+  `fitmas.repository` en facade temporaire ;
 - continuer le split repository par owner reel avant de toucher a
   `schema.py`/`models.py` ;
 - garder la priorite runtime plus petit, pas refactor plus complet.

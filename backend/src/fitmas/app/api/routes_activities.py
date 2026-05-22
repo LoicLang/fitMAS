@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 
 from fitmas import repository as repo
 from fitmas.integrations import strava
+from fitmas.domain.execution import repository as execution_repo
 from fitmas.domain.execution.activities import infer_activity_title, match_activity_to_day, normalize_activity_sport
 from fitmas.app.api.payloads import ManualActivityPayload
 from fitmas.app.api.support import parse_optional_datetime, public_base_url
@@ -87,7 +88,7 @@ def create_manual_activity(payload: ManualActivityPayload, db: Session = Depends
         timezone_name=user.timezone,
     )
 
-    activity = repo.add_activity(
+    activity = execution_repo.add_activity(
         db,
         user_id=user.id,
         source="manual",
@@ -117,7 +118,7 @@ def create_manual_activity(payload: ManualActivityPayload, db: Session = Depends
             source="manual_activity",
         )
 
-    return repo.to_pydantic_activity(activity)
+    return execution_repo.to_pydantic_activity(activity)
 
 
 @router.post("/api/v0/strava/sync")

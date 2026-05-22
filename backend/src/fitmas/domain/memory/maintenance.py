@@ -6,6 +6,7 @@ from datetime import datetime
 from sqlalchemy.orm import Session
 
 from fitmas import repository as root_repo, schema as s
+from fitmas.domain.execution import repository as execution_repo
 from fitmas.domain.memory import repository as memory_repo
 from fitmas.domain.memory.patterns import derive_pattern_payloads
 
@@ -35,7 +36,7 @@ def run_memory_maintenance(
         pattern_payloads = derive_pattern_payloads(
             timezone_name=user.timezone,
             user_messages=root_repo.get_messages(db, user.id)[-200:],
-            activities=root_repo.get_activities(db, user.id, limit=500),
+            activities=execution_repo.get_activities(db, user.id, limit=500),
             adaptation_events=root_repo.get_recent_adaptation_events(db, user.id, limit=80),
             now=now,
         )

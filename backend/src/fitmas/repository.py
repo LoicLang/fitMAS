@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 from fitmas import schema as s
 from fitmas.domain.coaching import repo_conversation
 from fitmas.domain.coaching.adaptation_log import AdaptationLogEntry
+from fitmas.domain.execution import repository as execution_repo
 from fitmas.domain.memory import repository as memory_repo
 from fitmas.domain.athlete.fitness_snapshot import FitnessSnapshot
 from fitmas.domain.planning import repository as planning_repo
@@ -182,30 +183,7 @@ def to_pydantic_pattern(pattern: s.UserPattern) -> UserPattern:
 
 
 def to_pydantic_activity(activity: s.Activity) -> Activity:
-    return Activity(
-        id=activity.id,
-        source=activity.source,
-        external_id=activity.external_id,
-        scheduled_session_id=activity.scheduled_session_id,
-        sport_type=activity.sport_type,
-        title=activity.title,
-        duration_min=activity.duration_min,
-        distance_m=activity.distance_m,
-        elevation_m=activity.elevation_m,
-        perceived_load=activity.perceived_load,
-        note=activity.note,
-        started_at=activity.started_at.isoformat() if activity.started_at else None,
-        matched_day=activity.matched_day,
-        match_reason=activity.match_reason,
-        avg_hr=activity.avg_hr,
-        max_hr=activity.max_hr,
-        avg_speed=activity.avg_speed,
-        calories=activity.calories,
-        suffer_score=activity.suffer_score,
-        tss=activity.tss,
-        map_polyline=activity.map_polyline,
-        start_latlng=activity.start_latlng,
-    )
+    return execution_repo.to_pydantic_activity(activity)
 
 
 def to_domain_fitness_snapshot(row: s.FitnessSnapshotRecord) -> FitnessSnapshot:
@@ -398,13 +376,7 @@ def get_latest_planning_decision_record(db: Session, user_id: int) -> s.Planning
 
 
 def get_activities(db: Session, user_id: int, limit: int = 30) -> list[s.Activity]:
-    return (
-        db.query(s.Activity)
-        .filter(s.Activity.user_id == user_id)
-        .order_by(s.Activity.started_at.is_(None), s.Activity.started_at.desc(), s.Activity.created_at.desc())
-        .limit(limit)
-        .all()
-    )
+    return execution_repo.get_activities(db, user_id, limit=limit)
 
 
 def get_recent_activity_for_sport(
@@ -414,25 +386,16 @@ def get_recent_activity_for_sport(
     sport_type: str,
     before: datetime | None = None,
 ) -> s.Activity | None:
-    query = (
-        db.query(s.Activity)
-        .filter(s.Activity.user_id == user_id, s.Activity.sport_type == sport_type)
-    )
-    if before is not None:
-        query = query.filter(s.Activity.started_at.is_not(None), s.Activity.started_at < before)
-    return (
-        query
-        .order_by(s.Activity.started_at.is_(None), s.Activity.started_at.desc(), s.Activity.created_at.desc())
-        .first()
+    return execution_repo.get_recent_activity_for_sport(
+        db,
+        user_id,
+        sport_type=sport_type,
+        before=before,
     )
 
 
 def get_activity_by_external_id(db: Session, user_id: int, external_id: str) -> s.Activity | None:
-    return (
-        db.query(s.Activity)
-        .filter(s.Activity.user_id == user_id, s.Activity.external_id == external_id)
-        .first()
-    )
+    return execution_repo.get_activity_by_external_id(db, user_id, external_id)
 
 
 def get_strava_connection(db: Session, user_id: int) -> s.StravaConnection | None:
@@ -714,7 +677,8 @@ def add_activity(
     map_polyline: str | None = None,
     start_latlng: str | None = None,
 ) -> s.Activity:
-    activity = s.Activity(
+    return execution_repo.add_activity(
+        db,
         user_id=user_id,
         source=source,
         external_id=external_id,
@@ -738,10 +702,6 @@ def add_activity(
         map_polyline=map_polyline,
         start_latlng=start_latlng,
     )
-    db.add(activity)
-    db.commit()
-    db.refresh(activity)
-    return activity
 
 
 def replace_user_lists(

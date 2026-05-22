@@ -64,7 +64,8 @@ Root encore accepte :
 - `models.py`, `schema.py` restent les deux monolithes bruts.
 - `repository.py` reste en facade temporaire, avec deja extraits :
   `domain/planning/repository.py` pour sessions/audit planning et
-  `domain/memory/repository.py` pour facts, working memory et patterns.
+  `domain/memory/repository.py` pour facts, working memory et patterns,
+  `domain/execution/repository.py` pour activites reelles.
 
 Ce qui n'est plus l'architecture active :
 
@@ -181,8 +182,8 @@ Interdits :
 Le root runtime conversationnel est supprime. Les premiers owners repository
 sont extraits. Les prochains risques sont les monolithes transverses restants :
 
-- `repository.py`, tant qu'il porte encore execution, athlete et
-  compat templates ;
+- `repository.py`, tant qu'il porte encore athlete, integration et compat
+  templates ;
 - `schema.py` ;
 - `models.py`.
 

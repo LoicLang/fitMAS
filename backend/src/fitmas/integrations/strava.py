@@ -8,6 +8,7 @@ import httpx
 from sqlalchemy.orm import Session
 
 from fitmas import repository as repo, schema as s
+from fitmas.domain.execution import repository as execution_repo
 from fitmas.domain.execution.activities import infer_activity_title, match_activity_to_day, normalize_activity_sport
 from fitmas.domain.planning.patch_mutation_service import complete_session_from_activity_for_user, mark_session_completed_for_user
 from fitmas.domain.athlete.training_load import estimate_tss
@@ -121,7 +122,7 @@ def import_recent_activities(
     scheduled_sessions = repo.get_scheduled_sessions(db, user_id, limit=84)
     imported = 0
     for raw_activity in fetch_recent_activities(access_token, per_page=30):
-        existing = repo.get_activity_by_external_id(db, user_id, str(raw_activity["id"]))
+        existing = execution_repo.get_activity_by_external_id(db, user_id, str(raw_activity["id"]))
         if existing:
             # Backfill map data for activities imported before polyline support
             estimated_tss = estimate_tss(
@@ -182,7 +183,7 @@ def import_recent_activities(
             timezone_name=user.timezone,
         )
 
-        activity = repo.add_activity(
+        activity = execution_repo.add_activity(
             db,
             user_id=user_id,
             source="strava",

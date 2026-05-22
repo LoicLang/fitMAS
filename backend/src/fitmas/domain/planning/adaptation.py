@@ -16,7 +16,8 @@ from datetime import date, timedelta
 
 from sqlalchemy.orm import Session
 
-from fitmas import repository as root_repo, schema as s
+from fitmas import schema as s
+from fitmas.domain.execution import repository as execution_repo
 from fitmas.domain.planning import repository as planning_repo
 from fitmas.domain.planning.mutation_decision import MutationDecision
 from fitmas.core.time_context import get_local_now
@@ -237,7 +238,7 @@ def check_post_activity_trigger(
             reasons.append(f"seance ecoutee: {activity.duration_min}min vs {session.duration_min}min prevus")
 
     # TSB check
-    activities = root_repo.get_activities(db, user.id, limit=90)
+    activities = execution_repo.get_activities(db, user.id, limit=90)
     tsb_data = compute_ctl_atl_tsb([a for a in activities])
     tsb = tsb_data.get("tsb", 0)
     if tsb < -20:
@@ -301,7 +302,7 @@ def check_tsb_trigger(
     user: s.User,
 ) -> AdaptationTrigger | None:
     """Fire when TSB indicates overreaching or significant freshness."""
-    activities = root_repo.get_activities(db, user.id, limit=90)
+    activities = execution_repo.get_activities(db, user.id, limit=90)
     if len(activities) < 3:
         return None
 
