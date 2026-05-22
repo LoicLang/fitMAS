@@ -146,7 +146,7 @@ Etat chiffre au dernier check local :
 
 - root modules : `22`.
 - legacy modules : `0` fichier source actif.
-- backend complet : `1336 passed, 11 skipped, 14 subtests passed`.
+- backend complet : `1347 passed, 11 skipped, 14 subtests passed`.
 - smoke canonical planning default : OK `10/10`.
 - smoke A+ API cible post root-cleanup : OK `4/4`, fallback scenario count `0`.
 - fallback census core : `0`.
