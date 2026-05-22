@@ -87,6 +87,10 @@ is allowed only for hotspots that need a separate shrink slice.
 - Coaching signals root cut completed: `signals.py`
 - Planning adaptation root cut completed: `adaptation.py`
 - Decision conversation pipeline root cut completed: `conversation_pipeline.py`
+- Planning repository extraction started:
+  `domain/planning/repository.py` owns `ScheduledSession` runtime reads/writes
+  and `PlanMutationEvent` audit writes; root `repository.py` keeps a facade for
+  compatibility.
 - Primary risk: moving files faster than deleting obsolete boundaries
 - Thursday criterion: root is explainable, delete candidates are explicit, and
   new root files fail architecture tests unless classified here
@@ -99,7 +103,7 @@ is allowed only for hotspots that need a separate shrink slice.
 | `api.py` | root-entrypoint | entrypoint | FastAPI app assembly entrypoint | keep until app package owns all routes |
 | `main.py` | root-entrypoint | entrypoint | ASGI import entrypoint | permanent root |
 | `models.py` | core | keep_root_temporarily | central SQLAlchemy models need a dedicated schema split | model schema split |
-| `repository.py` | core | keep_root_temporarily | monolithic repository needs domain repository split | repository split |
+| `repository.py` | core | keep_root_temporarily | planning session/audit repository extracted; remaining memory, execution, athlete and template DB helpers need domain facades | repository split continuation |
 | `schema.py` | core | keep_root_temporarily | central Pydantic schema needs bounded API/domain split | schema split |
 
 ## Immediate Cut Order
@@ -107,6 +111,8 @@ is allowed only for hotspots that need a separate shrink slice.
 1. Keep only root entrypoints plus bounded monoliths in root.
 2. Split monoliths only with stable facades:
    `repository.py`, `schema.py`, `models.py`.
+3. For `repository.py`, extract one real owner at a time and keep root as
+   compatibility facade until call sites can migrate safely.
 
 ## Non Goals
 

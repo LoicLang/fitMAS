@@ -6,10 +6,11 @@ from typing import Sequence
 
 from sqlalchemy.orm import Session
 
-from fitmas import repository as repo, schema as s
+from fitmas import repository as root_repo, schema as s
 from fitmas.domain.athlete.profile import AthleteProfileSnapshot, build_athlete_profile
 from fitmas.domain.athlete.zones import AthleteZones, build_athlete_zones
 from fitmas.domain.athlete.fitness_snapshot import FitnessSnapshot, build_fitness_snapshot
+from fitmas.domain.planning import repository as planning_repo
 from fitmas.domain.planning.planning_decision import PlanningDecision, build_planning_decision
 from fitmas.domain.execution.recent_reality import build_recent_reality_window
 from fitmas.domain.athlete.readiness import ReadinessState, build_readiness_state
@@ -75,7 +76,7 @@ def refresh_planning_state(
     as_of_date: date | datetime | None = None,
     mesocycle_week: int = 1,
 ) -> PlanningStateBundle:
-    facts = repo.get_active_memory_items(
+    facts = root_repo.get_active_memory_items(
         db,
         user.id,
         profile_limit=48,
@@ -84,8 +85,8 @@ def refresh_planning_state(
         pattern_limit=8,
         total_limit=72,
     )
-    activities = repo.get_activities(db, user.id, limit=500)
-    scheduled_sessions = repo.get_scheduled_sessions(db, user.id, limit=84)
+    activities = root_repo.get_activities(db, user.id, limit=500)
+    scheduled_sessions = planning_repo.get_scheduled_sessions(db, user.id, limit=84)
     bundle = assemble_planning_state(
         user=user,
         facts=facts,
@@ -94,7 +95,7 @@ def refresh_planning_state(
         as_of_date=as_of_date,
         mesocycle_week=mesocycle_week,
     )
-    repo.save_fitness_snapshot(db, bundle.fitness)
-    repo.save_readiness_snapshot(db, bundle.readiness)
-    repo.save_planning_decision(db, bundle.decision)
+    root_repo.save_fitness_snapshot(db, bundle.fitness)
+    root_repo.save_readiness_snapshot(db, bundle.readiness)
+    root_repo.save_planning_decision(db, bundle.decision)
     return bundle

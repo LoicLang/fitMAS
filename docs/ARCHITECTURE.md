@@ -45,7 +45,7 @@ backend/src/fitmas/
   core/           db, time, temporal/calendar resolution, seed
   decision/       InputEvent, context, outcome, command bus, reply, verifier
   domain/
-    planning/     candidates, evaluator, policy, mutation service
+    planning/     repository, candidates, evaluator, policy, mutation service
     execution/    activities, claims, evidence, context, recent reality, writes
     memory/       durable facts, profile summary, routing, patterns, maintenance, writes
     athlete/      profile, zones, readiness, load, strength, performance
@@ -61,8 +61,10 @@ backend/src/fitmas/
 Root encore accepte :
 
 - `api.py`, `main.py`, `__init__.py` pour l'assemblage app.
-- `models.py`, `repository.py`, `schema.py` restent les trois monolithes
-  bornes a splitter avec facade stable.
+- `models.py`, `schema.py` restent les deux monolithes bruts.
+- `repository.py` reste en facade temporaire, avec les sessions planning et
+  l'audit `PlanMutationEvent` deja extraits vers
+  `domain/planning/repository.py`.
 
 Ce qui n'est plus l'architecture active :
 
@@ -176,10 +178,11 @@ Interdits :
 
 ## Risque Actuel
 
-Le root runtime conversationnel est supprime. Les prochains risques sont les
-monolithes transverses :
+Le root runtime conversationnel est supprime. Le premier owner repository est
+extrait. Les prochains risques sont les monolithes transverses restants :
 
-- `repository.py` ;
+- `repository.py`, tant qu'il porte encore memoire, execution, athlete et
+  compat templates ;
 - `schema.py` ;
 - `models.py`.
 

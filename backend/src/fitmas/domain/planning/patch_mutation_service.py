@@ -7,7 +7,8 @@ from typing import Any, Sequence
 
 from sqlalchemy.orm import Session
 
-from fitmas import repository as repo, schema as s
+from fitmas import repository as root_repo, schema as s
+from fitmas.domain.planning import repository as repo
 from fitmas.domain.planning import mutation_executor
 from fitmas.domain.planning import session_actions as plan_actions
 from fitmas.domain.planning.mutation_decision import MutationDecision
@@ -428,14 +429,14 @@ def _request_week_coherence_json(**kwargs) -> dict[str, Any] | None:
 
 def _recent_activities_for_week_review(db: Session, user_id: int) -> tuple[Any, ...]:
     try:
-        return tuple(repo.get_activities(db, user_id, limit=120))
+        return tuple(root_repo.get_activities(db, user_id, limit=120))
     except Exception:
         return ()
 
 
 def _active_facts_for_week_review(db: Session, user_id: int) -> tuple[dict[str, Any], ...]:
     try:
-        rows = repo.get_active_memory_items(
+        rows = root_repo.get_active_memory_items(
             db,
             user_id,
             profile_limit=24,
@@ -449,7 +450,7 @@ def _active_facts_for_week_review(db: Session, user_id: int) -> tuple[dict[str, 
     payloads: list[dict[str, Any]] = []
     for row in rows:
         try:
-            payloads.append(repo.to_pydantic_fact(row).model_dump())
+            payloads.append(root_repo.to_pydantic_fact(row).model_dump())
         except Exception:
             continue
     return tuple(payloads)

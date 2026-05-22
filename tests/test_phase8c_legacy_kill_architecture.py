@@ -76,12 +76,12 @@ def test_8c4_tools_registry_does_not_offer_legacy_mutation_tools_by_default() ->
 
 def test_8c5_runtime_files_do_not_read_weeklyplan_dayplan() -> None:
     checked = {
-            "conversation_pipeline.py",
-            "domain/planning/patch_mutation_service.py",
-            "decision/context_builder.py",
-            "domain/planning/mutation_service.py",
-            "app/api/routes_read.py",
-        }
+        "decision/conversation_pipeline.py",
+        "domain/planning/patch_mutation_service.py",
+        "decision/context_builder.py",
+        "domain/planning/mutation_service.py",
+        "app/api/routes_read.py",
+    }
     forbidden = {
         "get_active_plan(",
         "get_active_plan_optional(",

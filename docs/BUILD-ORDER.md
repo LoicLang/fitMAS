@@ -264,8 +264,12 @@ Prochain chantier logique :
 - il n'y a plus de bridge `legacy/conversation_*` runtime-active ;
 - il n'y a plus de provider ou artifact `CoachDecision` ;
 - le root runtime conversationnel est supprime ; le nouveau hotspot est
-  `decision/turn_context.py`, puis le reste des petites routes dans
-  `decision/turn_router.py` ;
+  `repository.py` puis les monolithes `schema.py` et `models.py` ;
+- `domain/planning/repository.py` possede deja les reads/writes
+  `ScheduledSession` et l'audit `PlanMutationEvent`, avec `fitmas.repository`
+  en facade temporaire ;
+- continuer le split repository par owner reel avant de toucher a
+  `schema.py`/`models.py` ;
 - garder la priorite runtime plus petit, pas refactor plus complet.
 
 ## Ordre De Lecture Pour Un Agent

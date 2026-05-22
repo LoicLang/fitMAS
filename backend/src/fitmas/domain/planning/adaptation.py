@@ -16,7 +16,8 @@ from datetime import date, timedelta
 
 from sqlalchemy.orm import Session
 
-from fitmas import repository as repo, schema as s
+from fitmas import repository as root_repo, schema as s
+from fitmas.domain.planning import repository as planning_repo
 from fitmas.domain.planning.mutation_decision import MutationDecision
 from fitmas.core.time_context import get_local_now
 from fitmas.domain.athlete.training_load import compute_ctl_atl_tsb
@@ -90,7 +91,7 @@ def check_health_fact_trigger(
 
     # Get upcoming sessions (next 7 days)
     local_now = get_local_now(user.timezone)
-    upcoming = repo.get_scheduled_sessions_between_dates(
+    upcoming = planning_repo.get_scheduled_sessions_between_dates(
         db, user.id,
         start_date=local_now.date(),
         end_date=local_now.date() + timedelta(days=7),
@@ -218,7 +219,7 @@ def check_post_activity_trigger(
     if activity.scheduled_session_id is None:
         return None
 
-    session = repo.get_scheduled_session(db, user.id, activity.scheduled_session_id)
+    session = planning_repo.get_scheduled_session(db, user.id, activity.scheduled_session_id)
     if session is None:
         return None
 
@@ -236,7 +237,7 @@ def check_post_activity_trigger(
             reasons.append(f"seance ecoutee: {activity.duration_min}min vs {session.duration_min}min prevus")
 
     # TSB check
-    activities = repo.get_activities(db, user.id, limit=90)
+    activities = root_repo.get_activities(db, user.id, limit=90)
     tsb_data = compute_ctl_atl_tsb([a for a in activities])
     tsb = tsb_data.get("tsb", 0)
     if tsb < -20:
@@ -248,7 +249,7 @@ def check_post_activity_trigger(
 
     # Get next 48h sessions
     local_now = get_local_now(user.timezone)
-    upcoming = repo.get_scheduled_sessions_between_dates(
+    upcoming = planning_repo.get_scheduled_sessions_between_dates(
         db, user.id,
         start_date=local_now.date() + timedelta(days=1),
         end_date=local_now.date() + timedelta(days=3),
@@ -300,7 +301,7 @@ def check_tsb_trigger(
     user: s.User,
 ) -> AdaptationTrigger | None:
     """Fire when TSB indicates overreaching or significant freshness."""
-    activities = repo.get_activities(db, user.id, limit=90)
+    activities = root_repo.get_activities(db, user.id, limit=90)
     if len(activities) < 3:
         return None
 
@@ -311,7 +312,7 @@ def check_tsb_trigger(
         return None  # Normal range
 
     local_now = get_local_now(user.timezone)
-    upcoming = repo.get_scheduled_sessions_between_dates(
+    upcoming = planning_repo.get_scheduled_sessions_between_dates(
         db, user.id,
         start_date=local_now.date(),
         end_date=local_now.date() + timedelta(days=4),
@@ -354,7 +355,7 @@ def check_missed_cascade_trigger(
 ) -> AdaptationTrigger | None:
     """Fire when 2+ sessions missed in rolling 5 days."""
     local_now = get_local_now(user.timezone)
-    recent = repo.get_scheduled_sessions_between_dates(
+    recent = planning_repo.get_scheduled_sessions_between_dates(
         db, user.id,
         start_date=local_now.date() - timedelta(days=5),
         end_date=local_now.date(),
@@ -371,7 +372,7 @@ def check_missed_cascade_trigger(
         return None
 
     # Get remaining sessions this week
-    upcoming = repo.get_scheduled_sessions_between_dates(
+    upcoming = planning_repo.get_scheduled_sessions_between_dates(
         db, user.id,
         start_date=local_now.date(),
         end_date=local_now.date() + timedelta(days=4),

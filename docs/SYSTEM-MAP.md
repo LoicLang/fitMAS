@@ -45,9 +45,9 @@ Role :
 
 Etat actuel :
 
-- `conversation_pipeline.py` reste le gros orchestrateur, mais il est descendu
-  a `1248` lignes apres extraction des replies PlanPatch.
-- Il est en train d'etre reduit vers `DecisionRuntime`.
+- `decision/conversation_pipeline.py` reste le gros orchestrateur, mais il
+  n'est plus un module root.
+- Il est reduit progressivement vers `DecisionRuntime`.
 - Il n'y a plus de bridge `legacy/conversation_*` runtime-active.
 - Les replies PlanPatch conversationnelles vivent dans
   `decision/plan_patch_reply.py`.
@@ -86,6 +86,8 @@ Regle :
 Owner :
 
 - `domain/planning/`
+- `domain/planning/repository.py` pour les reads/writes runtime
+  `ScheduledSession` et l'audit `PlanMutationEvent`.
 
 Pipeline :
 

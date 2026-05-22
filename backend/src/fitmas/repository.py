@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from datetime import date, datetime, time, timedelta
+from datetime import date, datetime, timedelta
 
 from sqlalchemy.orm import Session
 
@@ -10,6 +10,7 @@ from fitmas.domain.coaching import repo_conversation
 from fitmas.domain.coaching.adaptation_log import AdaptationLogEntry
 from fitmas.domain.memory.fact_memory import fact_is_current, normalize_fact_payload
 from fitmas.domain.athlete.fitness_snapshot import FitnessSnapshot
+from fitmas.domain.planning import repository as planning_repo
 from fitmas.models import (
     Activity,
     ChangeNote,
@@ -518,22 +519,7 @@ def get_scheduled_sessions(
     date_from: date | None = None,
     limit: int = 42,
 ) -> list[s.ScheduledSession]:
-    query = db.query(s.ScheduledSession).filter(s.ScheduledSession.user_id == user_id)
-    if date_from is not None:
-        return (
-            query
-            .filter(s.ScheduledSession.scheduled_date >= datetime.combine(date_from, time.min))
-            .order_by(s.ScheduledSession.scheduled_date.asc(), s.ScheduledSession.id.asc())
-            .limit(limit)
-            .all()
-        )
-    sessions = (
-        query
-        .order_by(s.ScheduledSession.scheduled_date.desc(), s.ScheduledSession.id.desc())
-        .limit(limit)
-        .all()
-    )
-    return list(reversed(sessions))
+    return planning_repo.get_scheduled_sessions(db, user_id, date_from=date_from, limit=limit)
 
 
 def get_scheduled_sessions_for_date(
@@ -542,18 +528,7 @@ def get_scheduled_sessions_for_date(
     *,
     target_date: date,
 ) -> list[s.ScheduledSession]:
-    day_start = datetime.combine(target_date, time.min)
-    day_end = day_start + timedelta(days=1)
-    return (
-        db.query(s.ScheduledSession)
-        .filter(
-            s.ScheduledSession.user_id == user_id,
-            s.ScheduledSession.scheduled_date >= day_start,
-            s.ScheduledSession.scheduled_date < day_end,
-        )
-        .order_by(s.ScheduledSession.scheduled_date.asc(), s.ScheduledSession.id.asc())
-        .all()
-    )
+    return planning_repo.get_scheduled_sessions_for_date(db, user_id, target_date=target_date)
 
 
 def get_scheduled_sessions_between_dates(
@@ -564,18 +539,12 @@ def get_scheduled_sessions_between_dates(
     end_date: date,
     limit: int = 42,
 ) -> list[s.ScheduledSession]:
-    day_start = datetime.combine(start_date, time.min)
-    day_end = datetime.combine(end_date + timedelta(days=1), time.min)
-    return (
-        db.query(s.ScheduledSession)
-        .filter(
-            s.ScheduledSession.user_id == user_id,
-            s.ScheduledSession.scheduled_date >= day_start,
-            s.ScheduledSession.scheduled_date < day_end,
-        )
-        .order_by(s.ScheduledSession.scheduled_date.asc(), s.ScheduledSession.id.asc())
-        .limit(limit)
-        .all()
+    return planning_repo.get_scheduled_sessions_between_dates(
+        db,
+        user_id,
+        start_date=start_date,
+        end_date=end_date,
+        limit=limit,
     )
 
 
@@ -586,23 +555,16 @@ def get_scheduled_session_for_date(
     day: str,
     scheduled_date: datetime,
 ) -> s.ScheduledSession | None:
-    return (
-        db.query(s.ScheduledSession)
-        .filter(
-            s.ScheduledSession.user_id == user_id,
-            s.ScheduledSession.day == day,
-            s.ScheduledSession.scheduled_date == scheduled_date,
-        )
-        .first()
+    return planning_repo.get_scheduled_session_for_date(
+        db,
+        user_id,
+        day=day,
+        scheduled_date=scheduled_date,
     )
 
 
 def get_scheduled_session(db: Session, user_id: int, session_id: int) -> s.ScheduledSession | None:
-    return (
-        db.query(s.ScheduledSession)
-        .filter(s.ScheduledSession.user_id == user_id, s.ScheduledSession.id == session_id)
-        .first()
-    )
+    return planning_repo.get_scheduled_session(db, user_id, session_id)
 
 
 def get_today_scheduled_session(
@@ -611,19 +573,7 @@ def get_today_scheduled_session(
     *,
     timezone_name: str | None,
 ) -> s.ScheduledSession | None:
-    local_date = get_local_now(timezone_name).date()
-    day_start = datetime.combine(local_date, time.min)
-    day_end = day_start + timedelta(days=1)
-    return (
-        db.query(s.ScheduledSession)
-        .filter(
-            s.ScheduledSession.user_id == user_id,
-            s.ScheduledSession.scheduled_date >= day_start,
-            s.ScheduledSession.scheduled_date < day_end,
-        )
-        .order_by(s.ScheduledSession.id.asc())
-        .first()
-    )
+    return planning_repo.get_today_scheduled_session(db, user_id, timezone_name=timezone_name)
 
 
 def find_scheduled_session_for_activity(
@@ -634,32 +584,13 @@ def find_scheduled_session_for_activity(
     started_at: datetime | None,
     timezone_name: str | None,
 ) -> s.ScheduledSession | None:
-    if started_at is None:
-        local_date = get_local_now(timezone_name).date()
-    elif started_at.tzinfo is None:
-        local_date = started_at.date()
-    else:
-        local_date = get_local_now(timezone_name, now=started_at).date()
-
-    day_start = datetime.combine(local_date, time.min)
-    day_end = day_start + timedelta(days=1)
-    sessions = (
-        db.query(s.ScheduledSession)
-        .filter(
-            s.ScheduledSession.user_id == user_id,
-            s.ScheduledSession.scheduled_date >= day_start,
-            s.ScheduledSession.scheduled_date < day_end,
-        )
-        .order_by(s.ScheduledSession.id.asc())
-        .all()
+    return planning_repo.find_scheduled_session_for_activity(
+        db,
+        user_id=user_id,
+        sport_type=sport_type,
+        started_at=started_at,
+        timezone_name=timezone_name,
     )
-    if not sessions:
-        return None
-
-    for session in sessions:
-        if session.sport_type == sport_type and session.completion_status != "done":
-            return session
-    return None
 
 
 # ── Writes ─────────────────────────────────────────────────────────────────
@@ -764,24 +695,21 @@ def add_plan_mutation_event(
     explained_to_user: bool = False,
     conversation_turn_id: int | None = None,
 ) -> s.PlanMutationEventRecord:
-    row = s.PlanMutationEventRecord(
+    return planning_repo.add_plan_mutation_event(
+        db,
         user_id=user_id,
         source=source,
         trigger_type=trigger_type,
         command_type=command_type,
-        target_session_ids_json=_json_dumps(target_session_ids),
-        before_snapshot_json=_json_dumps(before_snapshot or {}),
-        after_snapshot_json=_json_dumps(after_snapshot or {}),
-        reason_json=_json_dumps(reason or {}),
-        impact_json=_json_dumps(impact or {}),
+        target_session_ids=target_session_ids,
+        before_snapshot=before_snapshot,
+        after_snapshot=after_snapshot,
+        reason=reason,
+        impact=impact,
         user_visible_summary=user_visible_summary,
         explained_to_user=explained_to_user,
         conversation_turn_id=conversation_turn_id,
     )
-    db.add(row)
-    db.commit()
-    db.refresh(row)
-    return row
 
 
 def add_adaptation_event(db: Session, user_id: int, entry: AdaptationLogEntry) -> s.AdaptationEventRecord:
@@ -1402,24 +1330,11 @@ def mark_day_completed(db: Session, plan_id: int, day: str) -> bool:
 
 
 def mark_scheduled_session_completed(db: Session, session_id: int | None) -> bool:
-    if session_id is None:
-        return False
-    session = db.query(s.ScheduledSession).filter(s.ScheduledSession.id == session_id).first()
-    if not session or session.completion_status == "done":
-        return False
-    session.completion_status = "done"
-    db.commit()
-    return True
+    return planning_repo.mark_scheduled_session_completed(db, session_id)
 
 
 def set_scheduled_session_status(db: Session, session_id: int, status: str) -> s.ScheduledSession | None:
-    session = db.query(s.ScheduledSession).filter(s.ScheduledSession.id == session_id).first()
-    if session is None:
-        return None
-    session.completion_status = status
-    db.commit()
-    db.refresh(session)
-    return session
+    return planning_repo.set_scheduled_session_status(db, session_id, status)
 
 
 def get_current_week_day_plan_for_session(
