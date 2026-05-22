@@ -4,7 +4,6 @@ from dataclasses import dataclass
 
 from sqlalchemy.orm import Session
 
-from fitmas.llm.calibration import extract_calibration_resolution
 from fitmas.domain.coaching.calibration_needs import (
     build_resolution_memory_updates,
     find_open_calibration_need,
@@ -28,11 +27,12 @@ def apply_turn_calibration(
     payload: ConversationTurnInput,
     state: ConversationTurnState,
     turn_memory_writes: list[dict],
+    resolve_calibration_need,
 ) -> TurnCalibrationResult:
     open_calibration_need = find_open_calibration_need(state.active_memory_rows)
     calibration_resolution = None
     if open_calibration_need is not None:
-        calibration_resolution = extract_calibration_resolution(
+        calibration_resolution = resolve_calibration_need(
             user_text=payload.text,
             need=open_calibration_need,
             timezone_name=user.timezone,

@@ -20,6 +20,7 @@ from fitmas.domain.execution.clarification import (
     looks_like_execution_clarification_prompt,
 )
 import fitmas.llm.gateway as gw
+from fitmas.llm.calibration import extract_calibration_resolution
 import fitmas.llm.legacy_fact_memory as legacy_fact_memory
 from fitmas.llm.legacy_summaries import make_timeline_summary
 from fitmas.domain.memory.profile_memory import upsert_profile_memory
@@ -202,6 +203,7 @@ def post_message(payload: IncomingMessage, db: Session = Depends(get_db)) -> Mes
                 extract_facts=extract_facts,
                 check_and_adapt_health_facts=check_and_adapt_health_facts,
                 plan_turn=plan_conversation_turn,
+                resolve_calibration_need=extract_calibration_resolution,
             ),
         )
     except ConversationUserNotFoundError as exc:

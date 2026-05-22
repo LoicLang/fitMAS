@@ -54,6 +54,7 @@ def _run_conversation_turn_impl(
         payload=payload,
         state=state,
         turn_memory_writes=turn_memory_writes,
+        resolve_calibration_need=dependencies.resolve_calibration_need,
     )
     open_calibration_need = calibration_result.open_calibration_need
 

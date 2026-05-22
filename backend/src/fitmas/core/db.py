@@ -7,8 +7,15 @@ from typing import Generator
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 
+def _repo_root() -> Path:
+    for parent in Path(__file__).resolve().parents:
+        if (parent / "PROJECT.md").exists() and (parent / "pyproject.toml").exists():
+            return parent
+    return Path.cwd()
+
+
 # DB path: env var (for prod/Docker) or repo root (for dev)
-_DB_PATH = Path(os.getenv("FITMAS_DB_PATH", Path(__file__).resolve().parents[4] / "fitmas.core.db"))
+_DB_PATH = Path(os.getenv("FITMAS_DB_PATH", _repo_root() / "fitmas.db"))
 DATABASE_URL = f"sqlite:///{_DB_PATH}"
 
 engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})

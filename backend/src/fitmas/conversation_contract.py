@@ -7,6 +7,10 @@ from fitmas.domain.planning.mutation_decision import MutationDecision
 from fitmas.models import DayId, Extraction
 
 
+def _no_calibration_resolution(**_: Any) -> Any:
+    return None
+
+
 @dataclass(slots=True)
 class ConversationTurnInput:
     text: str
@@ -45,6 +49,7 @@ class ConversationPipelineDependencies:
     extract_facts: Callable[[str, str, list[dict[str, Any]]], list[dict[str, Any]]]
     check_and_adapt_health_facts: Callable[..., Any]
     plan_turn: Callable[..., Any]
+    resolve_calibration_need: Callable[..., Any] = _no_calibration_resolution
 
 
 class ConversationUserNotFoundError(RuntimeError):

@@ -60,6 +60,7 @@ def trigger_conversation_debug(payload: IncomingMessage, db: Session = Depends(g
                 extract_facts=api_messages.extract_facts,
                 check_and_adapt_health_facts=api_messages.check_and_adapt_health_facts,
                 plan_turn=api_messages.plan_conversation_turn,
+                resolve_calibration_need=api_messages.extract_calibration_resolution,
             ),
         )
     except ConversationUserNotFoundError as exc:

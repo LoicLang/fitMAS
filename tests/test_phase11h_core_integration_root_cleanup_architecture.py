@@ -70,3 +70,21 @@ def test_11h_no_python_imports_use_root_core_or_integration_modules() -> None:
                 offenders.append(f"{path.relative_to(ROOT)}: {', '.join(matched)}")
 
     assert offenders == []
+
+
+def test_11h_db_move_keeps_default_database_filename() -> None:
+    forbidden_literal = "fitmas" + ".core.db"
+    checked_paths = [
+        SRC / "core" / "db.py",
+        SRC / "app" / "telegram" / "bot.py",
+        ROOT / "scripts" / "smoke_real_profile.py",
+    ]
+    offenders: list[str] = []
+
+    for path in checked_paths:
+        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Constant) and node.value == forbidden_literal:
+                offenders.append(str(path.relative_to(ROOT)))
+
+    assert offenders == []

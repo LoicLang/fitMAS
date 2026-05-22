@@ -8,7 +8,7 @@ def test_app_read_models_do_not_load_legacy_week_plan_runtime_truth() -> None:
     files = [
         root / "backend/src/fitmas/app/api/routes_app.py",
         root / "backend/src/fitmas/app/api/routes_stats.py",
-        root / "backend/src/fitmas/performance_overview.py",
+        root / "backend/src/fitmas/domain/athlete/performance_overview.py",
     ]
     forbidden = (
         "repo.get_active_plan",
@@ -90,7 +90,7 @@ def test_activity_import_runtime_does_not_load_legacy_week_plan_truth() -> None:
     root = Path(__file__).resolve().parents[1]
     files = [
         root / "backend/src/fitmas/app/api/routes_activities.py",
-        root / "backend/src/fitmas/strava.py",
+        root / "backend/src/fitmas/integrations/strava.py",
     ]
     forbidden = (
         "repo.get_active_plan",
