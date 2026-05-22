@@ -9,6 +9,10 @@ class IncomingMessage(BaseModel):
     source: str | None = None
 
 
+class MoveSessionPayload(BaseModel):
+    target_date: str | None = None
+
+
 class OnboardPayload(BaseModel):
     name: str
     primary_objective: str

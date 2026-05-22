@@ -9,28 +9,38 @@ SRC = ROOT / "backend" / "src" / "fitmas"
 MODELS = SRC / "models.py"
 SCHEMA = SRC / "schema.py"
 
-EXPECTED_PYDANTIC_CLASSES = {
-    "MessageRole",
-    "DayId",
-    "ChangeNote",
-    "WatchItem",
-    "DayPlan",
-    "WeeklyPlan",
-    "Profile",
-    "TodayFitness",
-    "RecentSportActivity",
-    "TodayView",
-    "MoveSessionPayload",
-    "Message",
-    "ScheduledSession",
-    "WorkoutContentView",
-    "Extraction",
-    "MessageReply",
-    "UserFact",
-    "UserPattern",
-    "Activity",
-    "OnboardPreview",
-    "OnboardResult",
+EXPECTED_PYDANTIC_OWNER_CLASSES = {
+    SRC / "decision" / "message_models.py": {
+        "MessageRole",
+        "Message",
+        "Extraction",
+        "MessageReply",
+    },
+    SRC / "domain" / "planning" / "view_models.py": {
+        "DayId",
+        "ChangeNote",
+        "WatchItem",
+        "DayPlan",
+        "WeeklyPlan",
+        "ScheduledSession",
+        "WorkoutContentView",
+    },
+    SRC / "domain" / "athlete" / "view_models.py": {"Profile"},
+    SRC / "domain" / "execution" / "view_models.py": {"Activity"},
+    SRC / "domain" / "memory" / "view_models.py": {"UserFact", "UserPattern"},
+    SRC / "app" / "api" / "read_models.py": {
+        "TodayFitness",
+        "RecentSportActivity",
+        "TodayView",
+    },
+    SRC / "app" / "api" / "payloads.py": {
+        "IncomingMessage",
+        "MoveSessionPayload",
+        "OnboardPayload",
+        "OnboardPreviewPayload",
+        "ManualActivityPayload",
+    },
+    SRC / "app" / "api" / "onboarding_models.py": {"OnboardPreview", "OnboardResult"},
 }
 
 EXPECTED_ORM_CLASSES = {
@@ -91,13 +101,18 @@ def _class_names(path: Path) -> set[str]:
     return {node.name for node in tree.body if isinstance(node, ast.ClassDef)}
 
 
-def test_13a_root_models_and_schema_exist_before_split() -> None:
+def test_13a_root_models_facade_and_schema_exist_mid_split() -> None:
     assert MODELS.exists()
     assert SCHEMA.exists()
 
 
-def test_13a_models_exports_expected_pydantic_contracts() -> None:
-    assert _class_names(MODELS) == EXPECTED_PYDANTIC_CLASSES
+def test_13a_root_models_no_longer_declares_pydantic_contracts() -> None:
+    assert _class_names(MODELS) == set()
+
+
+def test_13a_owner_modules_export_expected_pydantic_contracts() -> None:
+    for path, expected in EXPECTED_PYDANTIC_OWNER_CLASSES.items():
+        assert _class_names(path) == expected
 
 
 def test_13a_schema_exports_expected_orm_records() -> None:
