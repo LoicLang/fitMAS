@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 
 from fitmas import repository as repo
 from fitmas.coach_state_bundle import build_coach_state_bundle
-from fitmas.conversation_context import (
+from fitmas.decision.conversation_context import (
     activity_claim_summary_for_prompt,
     build_conversation_context,
     execution_summary_for_prompt,

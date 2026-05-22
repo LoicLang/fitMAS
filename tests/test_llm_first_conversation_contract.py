@@ -56,7 +56,7 @@ def test_conversation_pipeline_has_no_deterministic_user_text_gates() -> None:
 
 
 def test_conversation_context_does_not_parse_free_user_text() -> None:
-    source = _source("conversation_context.py")
+    source = _source("decision/conversation_context.py")
 
     forbidden = (
         "extract_activity_claim",

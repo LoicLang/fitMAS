@@ -1323,7 +1323,7 @@ class FitMASCoreFlowsTest(unittest.TestCase):
         )
         self.db.commit()
 
-        from fitmas.conversation_context import build_conversation_context
+        from fitmas.decision.conversation_context import build_conversation_context
 
         scheduled_payloads = [
             {

@@ -94,6 +94,7 @@ Ce qui n'est plus l'architecture active :
 - root claim guard (`claim_guard.py`)
 - root conversation contract (`conversation_contract.py`)
 - root context pack (`context_pack.py`)
+- root conversation context (`conversation_context.py`)
 - root `final_reply.py`
 - root `heartbeat.py`
 - root `telegram_scheduler.py`
