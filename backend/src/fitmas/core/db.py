@@ -35,7 +35,8 @@ def get_db() -> Generator[Session, None, None]:
 
 
 def init_db() -> None:
-    from fitmas import schema  # noqa: F401 — registers all ORM models with Base
+    from fitmas.core import orm  # noqa: F401 - registers all ORM models with Base
+
     Base.metadata.create_all(bind=engine)
     _ensure_sqlite_columns()
 

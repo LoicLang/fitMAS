@@ -8,6 +8,7 @@ ROOT = Path(__file__).resolve().parents[1]
 SRC = ROOT / "backend" / "src" / "fitmas"
 MODELS = SRC / "models.py"
 SCHEMA = SRC / "schema.py"
+ORM = SRC / "core" / "orm"
 
 EXPECTED_PYDANTIC_OWNER_CLASSES = {
     SRC / "decision" / "message_models.py": {
@@ -69,6 +70,42 @@ EXPECTED_ORM_CLASSES = {
     "PlanningDecisionRecord",
 }
 
+EXPECTED_ORM_OWNER_CLASSES = {
+    ORM / "user.py": {
+        "User",
+        "UserConstraint",
+        "UserPreference",
+        "UserSport",
+    },
+    ORM / "memory.py": {
+        "UserFact",
+        "WorkingMemoryEntry",
+        "UserPattern",
+        "MemoryMutationEventRecord",
+    },
+    ORM / "execution.py": {"Activity"},
+    ORM / "integrations.py": {"StravaConnection"},
+    ORM / "planning.py": {
+        "WeeklyPlan",
+        "ScheduledSession",
+        "DayPlan",
+        "ChangeNote",
+        "WatchItem",
+        "PlanMutationEventRecord",
+        "PlanningDecisionRecord",
+    },
+    ORM / "coaching.py": {
+        "CoachMessage",
+        "ConversationTurnRecord",
+        "PendingMutationConfirmation",
+        "AdaptationEventRecord",
+    },
+    ORM / "athlete.py": {
+        "FitnessSnapshotRecord",
+        "ReadinessSnapshotRecord",
+    },
+}
+
 EXPECTED_TABLES = {
     "users",
     "user_constraints",
@@ -111,8 +148,18 @@ def test_13a_owner_modules_export_expected_pydantic_contracts() -> None:
         assert _class_names(path) == expected
 
 
-def test_13a_schema_exports_expected_orm_records() -> None:
-    assert _class_names(SCHEMA) == EXPECTED_ORM_CLASSES
+def test_13a_schema_no_longer_declares_orm_records() -> None:
+    assert _class_names(SCHEMA) == set()
+
+
+def test_13a_orm_owner_modules_export_expected_records() -> None:
+    discovered: set[str] = set()
+    for path, expected in EXPECTED_ORM_OWNER_CLASSES.items():
+        class_names = _class_names(path)
+        assert class_names == expected
+        discovered.update(class_names)
+
+    assert discovered == EXPECTED_ORM_CLASSES
 
 
 def test_13a_schema_registers_expected_table_names() -> None:
