@@ -22,7 +22,7 @@ from fitmas.models import (
     UserPattern,
     WatchItem,
 )
-from fitmas.session_metadata import compute_load_band
+from fitmas.domain.planning.models import compute_load_band
 from fitmas.domain.athlete.training_load import compute_ctl_atl_tsb
 from fitmas.core.time_context import current_week_dates, get_local_now
 

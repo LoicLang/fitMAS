@@ -23,7 +23,7 @@ is allowed only for hotspots that need a separate shrink slice.
 
 ## Summary
 
-- Root files counted: 26
+- Root files counted: 24
 - Permanent root entrypoints allowed: 3
 - First wrapper cuts completed: `heartbeat*.py`, `llm_gateway.py`,
   `telegram_scheduler.py`, `tool_*.py`, `api_messages.py`,
@@ -64,6 +64,8 @@ is allowed only for hotspots that need a separate shrink slice.
   `session_similarity.py`, `session_templates.py`, `workout_content.py`
 - Planning core root cut completed: `plan_patch.py`, `week_coherence.py`
 - Decision root cut completed: `conversation_turn_planner.py`
+- Planning metadata root modules merged and deleted: `session_metadata.py`,
+  `week_metadata.py`
 - Primary risk: moving files faster than deleting obsolete boundaries
 - Thursday criterion: root is explainable, delete candidates are explicit, and
   new root files fail architecture tests unless classified here
@@ -95,9 +97,7 @@ is allowed only for hotspots that need a separate shrink slice.
 | `prompt_layers.py` | llm | merge | prompt layering should collapse into canonical prompt families | prompt shrink |
 | `repository.py` | core | keep_root_temporarily | monolithic repository needs domain repository split | repository split |
 | `schema.py` | core | keep_root_temporarily | central Pydantic schema needs bounded API/domain split | schema split |
-| `session_metadata.py` | domain/planning | merge | load band helper belongs with session/timeline models | planning simplification |
 | `signals.py` | domain/coaching | merge | signal derivation overlaps context and memory substrates | coaching substrate shrink |
-| `week_metadata.py` | domain/planning | merge | week label helper belongs with periodization | planning simplification |
 
 ## Immediate Cut Order
 

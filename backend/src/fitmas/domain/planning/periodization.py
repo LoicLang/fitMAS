@@ -89,3 +89,8 @@ def adjust_planning_mode(current_mode: str, week_in_cycle: int) -> str:
     if should_force_deload(week_in_cycle):
         return "deload"
     return current_mode
+
+
+def build_week_label(state: MesocycleState) -> str:
+    block_label = "Recuperation" if state.is_recovery_week else "Build"
+    return f"Semaine {state.week_in_cycle}/{state.cycle_length} · {block_label}"

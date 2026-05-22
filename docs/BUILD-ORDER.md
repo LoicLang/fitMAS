@@ -119,6 +119,9 @@ Les cuts physiques recents :
   `domain/planning/` : `plan_patch.py`, `week_coherence.py`.
 - Le routeur d'intention de tour vit maintenant sous `decision/turn_planner.py`
   et recoit le provider LLM par injection depuis l'API.
+- Les mini-modules metadata planning root ont ete absorbes :
+  `compute_load_band` dans `domain/planning/models.py`,
+  `build_week_label` dans `domain/planning/periodization.py`.
 - La resolution pending canonique normalise les aliases d'enum provider
   (`confirm`, `accepted`, etc.) vers `accept_pending` avant application.
   Un type inconnu devient une clarification pending, jamais un trou vers
@@ -138,7 +141,7 @@ Les cuts physiques recents :
 
 Etat chiffre au dernier check local :
 
-- root modules : `26`.
+- root modules : `24`.
 - legacy modules : `0` fichier source actif.
 - backend complet : `1336 passed, 11 skipped, 14 subtests passed`.
 - smoke canonical planning default : OK `10/10`.
