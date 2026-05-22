@@ -23,7 +23,7 @@ is allowed only for hotspots that need a separate shrink slice.
 
 ## Summary
 
-- Root files counted: 84
+- Root files counted: 76
 - Permanent root entrypoints allowed: 3
 - First wrapper cuts completed: `heartbeat*.py`, `llm_gateway.py`,
   `telegram_scheduler.py`, `tool_*.py`, `api_messages.py`,
@@ -38,6 +38,10 @@ is allowed only for hotspots that need a separate shrink slice.
 - Telegram root cut completed: `telegram_api.py`, `telegram_bot.py`,
   `telegram_channel.py`, `telegram_commands.py`, `telegram_debounce.py`,
   `telegram_onboarding.py`, `telegram_shared.py`
+- Execution root cut completed: `activities.py`, `activity_claims.py`,
+  `activity_helpers.py`, `execution_clarification.py`,
+  `execution_context.py`, `execution_evidence.py`,
+  `execution_mutation_service.py`, `recent_reality.py`
 - Primary risk: moving files faster than deleting obsolete boundaries
 - Thursday criterion: root is explainable, delete candidates are explicit, and
   new root files fail architecture tests unless classified here
@@ -47,9 +51,6 @@ is allowed only for hotspots that need a separate shrink slice.
 | File | Owner cible | Action | Reason | Next slice |
 | --- | --- | --- | --- | --- |
 | `__init__.py` | root-entrypoint | entrypoint | package marker only | permanent root |
-| `activities.py` | domain/execution | move | activity ingestion and matching belongs to execution | execution package split |
-| `activity_claims.py` | domain/execution | move | user activity claims are execution truth | execution package split |
-| `activity_helpers.py` | domain/execution | merge | helper boundary too small for root | merge into execution helpers |
 | `adaptation.py` | domain/planning | merge | old adaptation facade overlaps planning runtime | planning simplification |
 | `adaptation_decision.py` | domain/planning | merge | decision value object should live with planning decisions | planning simplification |
 | `adaptation_log.py` | domain/coaching | move | user-visible adaptation history is coaching evidence | coaching package split |
@@ -74,10 +75,6 @@ is allowed only for hotspots that need a separate shrink slice.
 | `conversation_prompting.py` | llm | merge | prompt assembly should move into llm prompts | prompt shrink |
 | `conversation_turn_planner.py` | decision | move | typed turn planning belongs to decision | decision package split |
 | `db.py` | core | move | DB session and engine are core infrastructure | core package split |
-| `execution_clarification.py` | domain/execution | move | execution ambiguity belongs to execution domain | execution package split |
-| `execution_context.py` | domain/execution | move | execution context belongs to execution domain | execution package split |
-| `execution_evidence.py` | domain/execution | move | execution evidence belongs to execution domain | execution package split |
-| `execution_mutation_service.py` | domain/execution | move | execution writes need a domain service | execution package split |
 | `fact_memory.py` | domain/memory | move | fact normalization belongs to memory | memory package split |
 | `fitness_snapshot.py` | domain/athlete | move | fitness snapshot is athlete state | athlete package split |
 | `generated_week_coherence.py` | domain/coaching | move | generated week review is coaching context | coaching package split |
@@ -109,7 +106,6 @@ is allowed only for hotspots that need a separate shrink slice.
 | `prompt_layers.py` | llm | merge | prompt layering should collapse into canonical prompt families | prompt shrink |
 | `prompt_observability.py` | llm | move | prompt telemetry belongs under llm | llm package cleanup |
 | `readiness.py` | domain/athlete | move | readiness is athlete state | athlete package split |
-| `recent_reality.py` | domain/execution | move | recent reality is execution substrate | execution package split |
 | `repo_conversation.py` | domain/coaching | move | conversation persistence should leave monolithic repository | repository split |
 | `repository.py` | core | keep_root_temporarily | monolithic repository needs domain repository split | repository split |
 | `schema.py` | core | keep_root_temporarily | central Pydantic schema needs bounded API/domain split | schema split |
@@ -133,7 +129,7 @@ is allowed only for hotspots that need a separate shrink slice.
 
 ## Immediate Cut Order
 
-1. Move execution and memory services to `domain/*` before touching monoliths.
+1. Move memory services to `domain/memory` before touching monoliths.
 2. Split monoliths only after deletion:
    `conversation_pipeline.py`, `repository.py`, `week_coherence.py`.
 

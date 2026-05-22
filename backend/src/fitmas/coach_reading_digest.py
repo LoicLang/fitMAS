@@ -21,12 +21,12 @@ from typing import Any, Sequence
 from sqlalchemy.orm import Session
 
 from fitmas import repository as repo, schema as s
-from fitmas.activity_helpers import (
+from fitmas.domain.execution.helpers import (
     activities_last_days as _activities_last_days,
     claimed_activities_last_days as _claimed_activities_last_days,
 )
 from fitmas.llm.gateway import request_json
-from fitmas.recent_reality import RecentRealityWindow
+from fitmas.domain.execution.recent_reality import RecentRealityWindow
 
 logger = logging.getLogger(__name__)
 

@@ -8,7 +8,7 @@ from fitmas.athlete_profile import AthleteProfileSnapshot
 from fitmas.fact_memory import select_readiness_facts
 from fitmas.fitness_snapshot import FitnessSnapshot
 from fitmas.planning_config import get_global_planning_config
-from fitmas.recent_reality import RecentRealityWindow
+from fitmas.domain.execution.recent_reality import RecentRealityWindow
 
 
 @dataclass(frozen=True, slots=True)

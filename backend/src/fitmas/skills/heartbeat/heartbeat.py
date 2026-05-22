@@ -25,7 +25,7 @@ from typing import Any, Iterator
 from sqlalchemy.orm import Session
 
 from fitmas import coach_voice, repository as repo, schema as s
-from fitmas.activity_helpers import (
+from fitmas.domain.execution.helpers import (
     activities_last_days as _activities_last_days,
     activities_on_local_date as _activities_on_local_date,
     claimed_activities_last_days as _claimed_activities_last_days,
@@ -37,7 +37,7 @@ from fitmas.coach_state_bundle import build_coach_state_bundle
 from fitmas.coach_messages import CoachDraft, DraftPendingConfirmation
 from fitmas.db import SessionLocal
 import fitmas.llm.reply_backend as reply_backend
-from fitmas.execution_clarification import build_execution_clarification
+from fitmas.domain.execution.clarification import build_execution_clarification
 from fitmas.grounding_contract import ReplyGroundingPacket, plan_window_facts_from_sessions
 from fitmas.skills.heartbeat import evaluation as heartbeat_evaluation
 from fitmas.skills.heartbeat import reply_composer as heartbeat_reply
@@ -65,7 +65,7 @@ from fitmas.llm.gateway import generate_heartbeat_text, generate_heartbeat_text_
 from fitmas.llm_prompt_builder import detect_open_question
 from fitmas.domain.planning.mutation_permissions import default_confirmation_expiry, serialize_plan_patch_confirmation
 from fitmas.plan_patch import PlanPatch, PlanPatchValidation, plan_patch_from_mutation_decisions, validate_plan_patch
-from fitmas.recent_reality import build_recent_reality_window
+from fitmas.domain.execution.recent_reality import build_recent_reality_window
 from fitmas.signals import collect_signals, format_signals_for_prompt
 from fitmas.skills.heartbeat.tool_loop import (
     generate_heartbeat_text_with_tools_debug,

@@ -22,7 +22,7 @@ from fitmas.conversation_contract import (
     ConversationTurnInput,
     ConversationTurnState,
 )
-from fitmas.execution_clarification import render_unresolved_execution_followup
+from fitmas.domain.execution.clarification import render_unresolved_execution_followup
 from fitmas.grounding_contract import (
     ReplyGroundingPacket,
     plan_window_facts_from_sessions,

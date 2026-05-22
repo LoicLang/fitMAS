@@ -7,7 +7,7 @@ from typing import Sequence
 from sqlalchemy.orm import Session
 
 from fitmas import repository as repo, schema as s
-from fitmas.activity_claims import ActivityClaim, extract_claims_from_facts
+from fitmas.domain.execution.claims import ActivityClaim, extract_claims_from_facts
 from fitmas.time_context import get_local_now, get_timezone
 
 

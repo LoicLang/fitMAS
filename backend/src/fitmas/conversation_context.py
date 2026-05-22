@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Sequence
 
-from fitmas.execution_context import (
+from fitmas.domain.execution.context import (
     TodayExecutionContext,
     build_today_execution_context,
     format_execution_context_for_prompt,

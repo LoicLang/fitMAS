@@ -15,7 +15,7 @@ from fitmas.decision.command_actions import (
     HealthSignalAction,
     PreferenceSignalAction,
 )
-from fitmas.execution_mutation_service import apply_execution_actions_for_user
+from fitmas.domain.execution.mutation_service import apply_execution_actions_for_user
 from fitmas.memory_mutation_service import apply_memory_actions_for_user
 from fitmas.time_context import DAY_KEYS, day_label_fr
 

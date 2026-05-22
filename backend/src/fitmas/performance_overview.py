@@ -6,7 +6,7 @@ from typing import Any
 from fitmas.fitness_snapshot import build_fitness_snapshot, estimate_scheduled_session_tss
 from fitmas.load_projection import planning_mode_label_fr
 from fitmas.periodization import compute_mesocycle_state
-from fitmas.recent_reality import build_recent_reality_window
+from fitmas.domain.execution.recent_reality import build_recent_reality_window
 from fitmas.session_metadata import compute_load_band
 from fitmas.time_context import get_local_now
 from fitmas.week_metadata import build_week_label

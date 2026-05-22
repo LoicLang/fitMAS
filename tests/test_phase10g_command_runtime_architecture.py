@@ -41,7 +41,7 @@ def test_10g_command_application_is_the_only_conversation_command_writer() -> No
     assert "def apply_coach_decision_commands(" in source
     assert "def apply_turn_plan_memory_commands(" in source
     assert "fitmas.memory_mutation_service" in imports
-    assert "fitmas.execution_mutation_service" in imports
+    assert "fitmas.domain.execution.mutation_service" in imports
     assert "fitmas.legacy" not in imports
     assert "fitmas.conversation_pipeline" not in imports
 
@@ -56,7 +56,7 @@ def test_10g_command_mapping_is_canonical_and_legacy_free() -> None:
     assert "def execution_action_from_command(" in source
     assert "fitmas.legacy" not in imports
     assert "fitmas.memory_mutation_service" not in imports
-    assert "fitmas.execution_mutation_service" not in imports
+    assert "fitmas.domain.execution.mutation_service" not in imports
 
 
 def test_10g_action_contracts_are_not_owned_by_legacy_decision_contracts() -> None:

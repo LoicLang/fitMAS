@@ -15,8 +15,8 @@ from typing import Any
 from sqlalchemy.orm import Session
 
 from fitmas import repository as repo, schema as s
-from fitmas.activity_claims import extract_claims_from_facts
-from fitmas.activity_helpers import activities_on_local_date, claimed_activities_on_local_date
+from fitmas.domain.execution.claims import extract_claims_from_facts
+from fitmas.domain.execution.helpers import activities_on_local_date, claimed_activities_on_local_date
 from fitmas.time_context import DAY_KEYS, DAY_LABELS_FR, build_time_context, get_local_now, get_timezone, hours_since, utc_cutoff
 
 logger = logging.getLogger(__name__)

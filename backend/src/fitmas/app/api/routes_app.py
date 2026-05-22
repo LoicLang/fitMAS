@@ -12,7 +12,7 @@ from fitmas.coach_state_bundle import build_coach_state_bundle
 from fitmas.db import get_db
 from fitmas.performance_overview import build_performance_overview
 from fitmas.performance_stats import build_training_load_stats
-from fitmas.recent_reality import build_recent_reality_window
+from fitmas.domain.execution.recent_reality import build_recent_reality_window
 from fitmas.time_context import get_local_now
 
 router = APIRouter()

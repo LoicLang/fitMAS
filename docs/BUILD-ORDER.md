@@ -88,6 +88,9 @@ Les cuts physiques recents :
 - Les modules Telegram root ont ete deplaces sous `app/telegram/` :
   `api.py`, `bot.py`, `channel.py`, `commands.py`, `debounce.py`,
   `onboarding.py`, `shared.py`, plus `scheduler.py`.
+- Les modules execution root ont ete deplaces sous `domain/execution/` :
+  `activities.py`, `claims.py`, `helpers.py`, `clarification.py`,
+  `context.py`, `evidence.py`, `mutation_service.py`, `recent_reality.py`.
 - La route planning canonique tolere maintenant les signaux preference
   sidecar sans scope : une demande planning supportee ne retombe plus en
   clarification provider parce que le LLM a varie la forme metadata.
@@ -103,9 +106,9 @@ Les cuts physiques recents :
 
 Etat chiffre au dernier check local :
 
-- root modules : `84`.
+- root modules : `76`.
 - legacy modules : `0` fichier source actif.
-- backend complet : `1317 passed, 11 skipped, 14 subtests passed`.
+- backend complet : `1319 passed, 11 skipped, 14 subtests passed`.
 - smoke canonical planning default : OK `10/10`.
 - fallback census core : `0`.
 

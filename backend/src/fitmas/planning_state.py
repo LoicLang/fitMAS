@@ -11,7 +11,7 @@ from fitmas.athlete_profile import AthleteProfileSnapshot, build_athlete_profile
 from fitmas.athlete_zones import AthleteZones, build_athlete_zones
 from fitmas.fitness_snapshot import FitnessSnapshot, build_fitness_snapshot
 from fitmas.planning_decision import PlanningDecision, build_planning_decision
-from fitmas.recent_reality import build_recent_reality_window
+from fitmas.domain.execution.recent_reality import build_recent_reality_window
 from fitmas.readiness import ReadinessState, build_readiness_state
 
 

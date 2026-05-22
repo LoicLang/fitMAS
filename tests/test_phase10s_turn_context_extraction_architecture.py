@@ -26,7 +26,7 @@ PIPELINE_CONTEXT_IMPORTS_TO_REMOVE = {
     "fitmas.coach_reading_digest",
     "fitmas.coach_state_bundle",
     "fitmas.conversation_context",
-    "fitmas.execution_clarification",
+    "fitmas.domain.execution.clarification",
     "fitmas.grounding_contract",
     "fitmas.profile_summary",
     "fitmas.signals",

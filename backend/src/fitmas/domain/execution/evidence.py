@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Literal, Sequence
 
-from fitmas.activity_claims import ActivityClaim
+from fitmas.domain.execution.claims import ActivityClaim
 
 
 @dataclass(frozen=True, slots=True)

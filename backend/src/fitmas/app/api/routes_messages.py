@@ -8,13 +8,13 @@ from sqlalchemy.orm import Session
 
 from fitmas import repository as repo
 from fitmas.adaptation import check_and_adapt_health_facts
-from fitmas.activity_helpers import claimed_activities_last_days
+from fitmas.domain.execution.helpers import claimed_activities_last_days
 from fitmas.app.api.payloads import IncomingMessage
 from fitmas.availability_constraints import parse_availability_fact_key
 from fitmas.conversation_contract import ConversationPipelineDependencies, ConversationTurnInput, ConversationUserNotFoundError
 from fitmas.conversation_turn_planner import plan_conversation_turn
 from fitmas.db import get_db
-from fitmas.execution_clarification import (
+from fitmas.domain.execution.clarification import (
     ExecutionClarification,
     build_execution_clarification,
     looks_like_execution_clarification_prompt,

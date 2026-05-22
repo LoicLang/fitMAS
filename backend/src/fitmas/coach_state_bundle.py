@@ -19,7 +19,7 @@ from fitmas.planning_contract import (
     build_session_policies,
     build_week_mission,
 )
-from fitmas.recent_reality import RecentRealityWindow, build_recent_reality_window
+from fitmas.domain.execution.recent_reality import RecentRealityWindow, build_recent_reality_window
 from fitmas.week_context import (
     build_deterministic_coach_reading,
     build_next_week_cadrage,

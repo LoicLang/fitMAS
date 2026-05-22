@@ -25,7 +25,7 @@ from types import SimpleNamespace
 import pytest
 
 from fitmas.coach_reading_digest import CoachReadingLens
-from fitmas.recent_reality import RecentRealityWindow
+from fitmas.domain.execution.recent_reality import RecentRealityWindow
 from fitmas.skills.heartbeat.context import HeartbeatContextBundle, build_heartbeat_context_bundle
 from fitmas.skills.heartbeat import roles
 from fitmas.skills.heartbeat.roles import build_briefing_prompt

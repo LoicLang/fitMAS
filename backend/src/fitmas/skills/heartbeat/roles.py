@@ -18,7 +18,7 @@ from typing import Any, Sequence
 from sqlalchemy.orm import Session
 
 from fitmas import repository as repo, schema as s
-from fitmas.activity_helpers import (
+from fitmas.domain.execution.helpers import (
     activities_last_days as _activities_last_days,
     activities_on_local_date as _activities_on_local_date,
     claimed_activities_last_days as _claimed_activities_last_days,
@@ -34,8 +34,8 @@ from fitmas.calibration_needs import (
 from fitmas.calibration_status import build_calibration_status
 from fitmas.coach_messages import CoachDraft
 from fitmas.coach_reading_digest import CoachReadingDigest, render_digest_for_prompt
-from fitmas.execution_clarification import build_execution_clarification
-from fitmas.execution_evidence import classify_execution_evidence
+from fitmas.domain.execution.clarification import build_execution_clarification
+from fitmas.domain.execution.evidence import classify_execution_evidence
 from fitmas.fact_memory import fact_is_current
 from fitmas.knowledge import load_sport_knowledge
 from fitmas.planning_contract import build_availability_state

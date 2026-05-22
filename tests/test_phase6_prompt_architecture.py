@@ -32,7 +32,7 @@ def test_new_prompt_modules_do_not_import_runtime_or_writers() -> None:
         "fitmas.models",
         "fitmas.plan_mutation_service",
         "fitmas.memory_mutation_service",
-        "fitmas.execution_mutation_service",
+        "fitmas.domain.execution.mutation_service",
         "fitmas.legacy",
     }
     offenders: list[str] = []

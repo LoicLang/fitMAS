@@ -45,6 +45,7 @@ backend/src/fitmas/
   decision/       InputEvent, context, outcome, command bus, reply, verifier
   domain/
     planning/     candidates, evaluator, policy, mutation service
+    execution/    activities, claims, evidence, context, recent reality, writes
   llm/            gateway, prompts, understanding, reply backends, compat legacy
   skills/
     heartbeat/    heartbeat runtime, reply composer, tool loop
@@ -62,6 +63,7 @@ Ce qui n'est plus l'architecture active :
 - root `api_messages.py`
 - root `api_*.py`
 - root `telegram_*.py`
+- root execution modules (`activities.py`, `execution_*.py`, `recent_reality.py`)
 - root `final_reply.py`
 - root `heartbeat.py`
 - root `telegram_scheduler.py`

@@ -4,8 +4,8 @@ from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 from typing import Any, Sequence
 
-from fitmas.activity_claims import ActivityClaim
-from fitmas.execution_evidence import classify_execution_evidence
+from fitmas.domain.execution.claims import ActivityClaim
+from fitmas.domain.execution.evidence import classify_execution_evidence
 from fitmas.fitness_snapshot import estimate_scheduled_session_tss
 
 KEY_PRIORITIES = {"high", "key", "important"}

@@ -9,7 +9,7 @@ from fitmas.planning_config import (
     get_level_planning_config,
     get_sport_planning_config,
 )
-from fitmas.recent_reality import RecentRealityWindow
+from fitmas.domain.execution.recent_reality import RecentRealityWindow
 from fitmas.readiness import ReadinessState
 
 DECISION_VERSION = "v1"

@@ -19,9 +19,9 @@ from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 from typing import Any, Literal, Sequence
 
-from fitmas.activity_claims import ActivityClaim
+from fitmas.domain.execution.claims import ActivityClaim
 from fitmas.grounding_contract import PlanWindowFact, plan_window_facts_from_sessions
-from fitmas.recent_reality import RecentRealityWindow
+from fitmas.domain.execution.recent_reality import RecentRealityWindow
 
 REST_SPORTS = {"rest", "off"}
 

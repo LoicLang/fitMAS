@@ -17,7 +17,7 @@ from fitmas.decision.command_mapping import (
     execution_action_from_command,
     memory_action_from_command,
 )
-from fitmas.execution_mutation_service import apply_execution_actions_for_user
+from fitmas.domain.execution.mutation_service import apply_execution_actions_for_user
 from fitmas.memory_mutation_service import apply_memory_actions_for_user
 
 

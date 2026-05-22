@@ -6,10 +6,10 @@ from dataclasses import dataclass
 from datetime import date
 from typing import Any, Sequence
 
-from fitmas.activity_claims import ActivityClaim
-from fitmas.execution_evidence import classify_execution_evidence
+from fitmas.domain.execution.claims import ActivityClaim
+from fitmas.domain.execution.evidence import classify_execution_evidence
 from fitmas.fitness_snapshot import estimate_scheduled_session_tss
-from fitmas.recent_reality import build_recent_reality_window
+from fitmas.domain.execution.recent_reality import build_recent_reality_window
 
 _QUESTIONABLE_STATUSES = {"planned_pending", "uncertain"}
 _SPORT_LABELS = {
