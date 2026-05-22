@@ -6,7 +6,7 @@ from dataclasses import dataclass
 
 from fitmas.domain.athlete.profile import AthleteProfileSnapshot
 from fitmas.domain.athlete.zones import AthleteZones
-from fitmas.plan_validator import validate_week_plan
+from fitmas.domain.planning.validator import validate_week_plan
 from fitmas.domain.planning.planning_config import get_sport_planning_config
 from fitmas.domain.planning.planning_decision import PlanningDecision
 from fitmas.domain.planning.session_templates import render_session_description, select_session_template

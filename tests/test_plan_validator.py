@@ -3,7 +3,7 @@ from __future__ import annotations
 import unittest
 from datetime import date
 
-from fitmas.plan_validator import validate_week_plan
+from fitmas.domain.planning.validator import validate_week_plan
 from fitmas.domain.planning.planning_decision import PlanningDecision
 
 

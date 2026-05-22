@@ -23,7 +23,7 @@ is allowed only for hotspots that need a separate shrink slice.
 
 ## Summary
 
-- Root files counted: 12
+- Root files counted: 11
 - Permanent root entrypoints allowed: 3
 - First wrapper cuts completed: `heartbeat*.py`, `llm_gateway.py`,
   `telegram_scheduler.py`, `tool_*.py`, `api_messages.py`,
@@ -81,6 +81,7 @@ is allowed only for hotspots that need a separate shrink slice.
 - LLM conversation prompt builder root cut completed: `llm_prompt_builder.py`
 - Planning adaptation decision root cut completed: `adaptation_decision.py`
 - Planning contract root cut completed: `planning_contract.py`
+- Planning validator root cut completed: `plan_validator.py`
 - Primary risk: moving files faster than deleting obsolete boundaries
 - Thursday criterion: root is explainable, delete candidates are explicit, and
   new root files fail architecture tests unless classified here
@@ -97,7 +98,6 @@ is allowed only for hotspots that need a separate shrink slice.
 | `conversation_pipeline.py` | decision | keep_root_temporarily | hotspot orchestrator is shrinking; PlanPatch replies already moved to `decision/plan_patch_reply.py` | turn state / idempotence / recording shrink |
 | `main.py` | root-entrypoint | entrypoint | ASGI import entrypoint | permanent root |
 | `models.py` | core | keep_root_temporarily | central SQLAlchemy models need a dedicated schema split | model schema split |
-| `plan_validator.py` | domain/planning | merge | validation should live with planning policy and mutation service | planning simplification |
 | `repository.py` | core | keep_root_temporarily | monolithic repository needs domain repository split | repository split |
 | `schema.py` | core | keep_root_temporarily | central Pydantic schema needs bounded API/domain split | schema split |
 | `signals.py` | domain/coaching | merge | signal derivation overlaps context and memory substrates | coaching substrate shrink |

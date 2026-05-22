@@ -5,7 +5,7 @@ from datetime import date, datetime, timedelta
 from typing import Any, Sequence
 
 from fitmas.domain.memory.availability_constraints import parse_availability_fact_key
-from fitmas.plan_validator import validate_week_plan
+from fitmas.domain.planning.validator import validate_week_plan
 
 DAY_ORDER = ("monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday")
 REST_DAY = {
