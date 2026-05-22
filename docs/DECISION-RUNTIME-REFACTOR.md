@@ -141,11 +141,14 @@ Etat actuel :
 - root `final_reply.py` est supprime.
 - `decision/plan_patch_reply.py` porte les replies conversationnelles liees aux
   anciens artefacts PlanPatch.
-- `decision/readonly_reply.py` fallback sur les facts `PlanWindow` si une reply
-  plan lookup composee ne cite aucune verite planning, et fallback sur
-  l'event execution applique si une reply execution composee est invalide.
-- `llm/reply_backend.py` porte les primitives communes de composition/verif
-  LLM et re-exporte les owners plus specialises.
+- `decision/readonly_reply.py` orchestre les answers read-only.
+- `decision/readonly_grounding.py` force un fallback factuel depuis
+  `PlanWindow` si une reply plan lookup composee ne cite aucune verite planning.
+- `decision/no_change_reply.py` porte les replies no-change et execution report,
+  avec fallback depuis l'event machine applique quand le composer LLM sort une
+  reply invalide.
+- `decision/command_reply.py` porte la reply post-commandes understanding.
+- `llm/reply_backend.py` est redevenu un backend mince de primitives communes.
 - `llm/reply_conversation.py` porte les lanes conversationnelles read-only,
   no-change et execution report.
 - `llm/reply_close_turn.py` porte la lane terminal social close.
@@ -154,13 +157,19 @@ Etat actuel :
 - `llm/reply_decision_backend.py` implemente le backend concret du `DecisionReplyComposer`.
 - `skills/heartbeat/reply_composer.py` porte la reply heartbeat.
 
-Prochaine simplification :
+Etat de gel :
 
-- pousser plus de verification commune dans `OutputVerifier`.
-- garder les replies planning-specific hors du backend generaliste.
-- garder `decision/turn_router.py` mince ; ne pas y remettre de logique de decision.
-- continuer le menage des prompts conversationnels anciens encore centres sur
-  les artefacts PlanPatch historiques.
+- `decision/conversation_pipeline.py` : `80` lignes.
+- `decision/turn_router.py` : `172` lignes.
+- `decision/turn_understanding_route.py` : `232` lignes.
+- `decision/turn_planning_route.py` : `263` lignes.
+- `llm/reply_backend.py` : `75` lignes.
+- `decision/readonly_reply.py` : `204` lignes.
+- `decision/no_change_reply.py` : `179` lignes.
+- `decision/readonly_grounding.py` : `129` lignes.
+- `decision/command_reply.py` : `69` lignes.
+
+Ne pas relancer un shrink large avant les smokes de verdict.
 
 ## Heartbeat Cible
 
@@ -172,7 +181,7 @@ Etat actuel :
 - root wrappers heartbeat et adapters legacy ont ete supprimes.
 - le code historique heartbeat reste sous `skills/heartbeat/` et doit etre shrinke plus tard.
 
-## Prochain Gros Risque
+## Etat De Gel / Verdict
 
 Planning/pending P0 a ete extrait en 10E :
 
@@ -284,19 +293,18 @@ deleted_count=10
 - `decision/turn_recording.py`
 
 `conversation_pipeline.py` n'est plus le hotspot principal. Il ne doit pas
-regrossir. `decision/turn_router.py` a ete reduit de `444` a `361` lignes par
-extraction de la route planning canonique.
+regrossir. `decision/turn_router.py` a ete reduit de `444` a `172` lignes par
+extraction des routes close, pending, pre-understanding, post-understanding et
+planning.
 
-Objectif suivant :
+La suite immediate est le verdict, pas un nouveau refactor large :
 
-1. reduire `decision/turn_understanding_route.py` si une responsabilite
-   nouvelle apparait ;
-2. continuer a reduire les replies LLM restantes en owners explicites, puis
-   pousser les checks communs vers `OutputVerifier` ;
-3. continuer le menage des prompts conversationnels anciens encore centres
-   sur les artefacts PlanPatch historiques ;
-4. garder les smokes reels comme arbitre de fiabilite, meme quand le provider
-   rend les tours lents.
+1. relancer backend complet ;
+2. relancer smokes reels avec fallback census ;
+3. analyser les erreurs comme bugs de couche, pas comme pretexte a recreer un
+   fallback local ;
+4. ne reprendre le shrink que sur une responsabilite prouvee trop grosse par
+   les tests ou le dogfood.
 
 ## Critere De Verdict
 

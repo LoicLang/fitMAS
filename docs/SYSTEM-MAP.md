@@ -46,6 +46,7 @@ Role :
 Etat actuel :
 
 - `decision/conversation_pipeline.py` est un adapter mince.
+- root `conversation_pipeline.py` est supprime.
 - La responsabilite conversationnelle restante vit dans les owners
   `decision/turn_*`.
 - Les routes close/pending vivent dans `turn_close_route.py` et
@@ -254,6 +255,18 @@ Regle :
 - aucun nouveau module legacy ;
 - tout fichier legacy doit avoir une sortie ;
 - si une route legacy n'est plus appelee par runtime reel, elle doit etre supprimee.
+
+## Etat De Gel
+
+Le repo est en etat de verdict :
+
+- root backend contient seulement `__init__.py`, `api.py`, `main.py` ;
+- `legacy/` ne contient plus de module source actif ;
+- backend complet dernier check : `1462 passed, 11 skipped` ;
+- smoke A+ API court dernier check : `lookup_current_plan` et
+  `create_easy_free_day`, fallback census `0`.
+
+Ne pas ouvrir de grand chantier avant une campagne de test reel.
 
 ## Verifications
 

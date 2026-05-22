@@ -185,115 +185,70 @@ Les cuts physiques recents :
 
 Etat chiffre au dernier check local :
 
-- root modules : `6`.
+- root modules : `3` (`__init__.py`, `api.py`, `main.py`).
 - legacy modules : `0` fichier source actif.
-- backend complet : `1347 passed, 11 skipped, 14 subtests passed`.
-- smoke canonical planning default : OK `10/10`.
-- smoke A+ API cible post root-cleanup : OK `4/4`, fallback scenario count `0`.
-- fallback census core : `0`.
+- backend complet : `1462 passed, 11 skipped`.
+- smoke A+ API court : OK `lookup_current_plan`, `create_easy_free_day`.
+- fallback census court : `0` scenario fallback, `0` turn fallback.
 
-## Prochain Chantier
+## Etat De Gel
 
-10M CoachDecision compat / old LLM path delete est maintenant applique.
+Le refactor structurel est maintenant assez avance pour arreter les gros cuts
+avant le verdict produit.
 
-Commande :
+Ce qui est ferme :
+
+- aucun bridge `legacy/conversation_*` runtime-active ;
+- aucun provider ou artifact `CoachDecision` callable ;
+- aucun root `conversation_pipeline.py`, `final_reply.py`, `repository.py`,
+  `models.py` ou `schema.py` ;
+- root backend reduit aux entrypoints `__init__.py`, `api.py`, `main.py` ;
+- root `legacy/` sans module source actif ;
+- repositories explicites par domaine : planning, execution, memory, athlete,
+  coaching, integration et template planning ;
+- `decision/conversation_pipeline.py` adapter mince ;
+- `decision/turn_router.py` routeur mince ;
+- replies conversationnelles reparties entre owners :
+  `command_reply.py`, `no_change_reply.py`, `readonly_reply.py`,
+  `readonly_grounding.py`, `plan_patch_reply.py`.
+
+La prochaine etape n'est pas un nouveau refactor large.
+C'est une campagne de verdict.
+
+## Verdict A Lancer
+
+Objectif :
+
+```text
+Decider froidement si le runtime est devenu plus petit, plus fiable et plus
+expliquable, ou s'il reste une usine a gaz mieux rangee.
+```
+
+Commandes minimales :
 
 ```bash
-./scripts/decision-runtime-conversation-bridge-census \
-  --json-out /tmp/fitmas-10j-conversation-bridge-census.json
+./scripts/test-backend
+
+./scripts/smoke-a-plus-api --skip-generated-week \
+  --scenario lookup_current_plan \
+  --scenario create_easy_free_day \
+  --fallback-census-json /tmp/fitmas-verdict-core-census.json \
+  --timeout 420
+
+./scripts/decision-runtime-fallback-census-summary \
+  /tmp/fitmas-verdict-core-census.json \
+  --json-out /tmp/fitmas-verdict-core-summary.json
 ```
 
-Etat conversation bridge courant :
+Questions de verdict :
 
-```text
-runtime_active_count=0
-legacy_internal_count=0
-test_only_count=0
-deleted_count=10
-```
-
-Tous les bridges conversationnels mesures ont ete supprimes physiquement :
-
-```text
-legacy/conversation_activity_highlight_bridge.py
-legacy/conversation_canonical_clarification_bridge.py
-legacy/conversation_canonical_readonly_bridge.py
-legacy/conversation_coach_decision_reply_bridge.py
-legacy/conversation_command_bridge.py
-legacy/conversation_command_bus.py
-legacy/conversation_decide_bridge.py
-legacy/conversation_decision_bridge.py
-legacy/conversation_readonly_reply_bridge.py
-legacy/conversation_understanding_bridge.py
-```
-
-Commands vivent maintenant dans :
-
-```text
-decision/command_actions.py
-decision/command_mapping.py
-decision/command_application.py
-```
-
-Readonly/reply vit maintenant dans :
-
-```text
-decision/readonly_reply.py
-```
-
-Understanding runtime vit maintenant dans :
-
-```text
-decision/understanding_runtime.py
-```
-
-Trace de provider CoachDecision supprime vit maintenant dans :
-
-```text
-decision/coach_decision_runtime.py
-```
-
-Mais il ne lance plus aucun provider legacy :
-
-```text
-legacy_provider_skip_reason -> canonical_provider_clarification_outcome
-```
-
-Prochain chantier logique :
-
-- il n'y a plus de bridge `legacy/conversation_*` runtime-active ;
-- il n'y a plus de provider ou artifact `CoachDecision` ;
-- le root runtime conversationnel est supprime ;
-- root `repository.py` est supprime : les sources, tests et scripts passent
-  directement par les owners domaine/integration ;
-- `domain/planning/repository.py` possede deja les reads/writes
-  `ScheduledSession`, l'audit `PlanMutationEvent` et `PlanningDecisionRecord` ;
-- `domain/memory/repository.py` possede deja facts profile, working memory et
-  patterns ;
-- `domain/execution/repository.py` possede deja les activites reelles ;
-- `domain/athlete/repository.py` possede deja user/profile, sports/constraints/
-  preferences et snapshots fitness/readiness ;
-- `domain/coaching/repository.py` possede deja les adaptation events ;
-- `integrations/repository.py` possede deja connection/tokens/sync metadata
-  Strava ;
-- `domain/planning/template_repository.py` possede deja la compat
-  `WeeklyPlan/DayPlan` onboarding/template/archive ;
-- root `models.py` est supprime : les DTOs Pydantic vivent dans leurs owners
-  `decision/`, `domain/*/view_models.py` et `app/api/` ;
-- root `schema.py` est supprime : les records SQLAlchemy vivent sous
-  `core/orm/` et les call sites importent cet owner directement ;
-- root backend est reduit aux entrypoints `__init__.py`, `api.py`, `main.py` ;
-- `decision/turn_context.py` est reduit de `392` a `276` lignes :
-  les sections prompt/pending vivent dans `decision/turn_prompt_context.py`
-  et les helpers grounding/payload dans `decision/turn_context_payload.py` ;
-- `decision/turn_router.py` est reduit de `361` a `172` lignes :
-  la route close vit dans `decision/turn_close_route.py` et la route pending
-  pre-understanding dans `decision/turn_pending_route.py` ; les replies
-  pre-understanding clarification/activity highlight vivent dans
-  `decision/turn_pre_understanding_reply_route.py` ; le post-understanding
-  canonical/readonly/planning/provider fallback vit dans
-  `decision/turn_understanding_route.py` ;
-- garder la priorite runtime plus petit, pas refactor plus complet.
+- Le coach ment-il moins sur les mutations appliquees ?
+- Les bugs tombent-ils dans une couche identifiable ?
+- Les smokes reels passent-ils sans fallback legacy ?
+- Le repo est-il comprehensible en lisant `PROJECT.md`, `docs/` puis les owners
+  `app/`, `decision/`, `domain/`, `llm/`, `integrations/` ?
+- Le prochain changement produit peut-il etre ajoute sans regonfler
+  `conversation_pipeline.py` ou recreer un bridge compat ?
 
 ## Ordre De Lecture Pour Un Agent
 
