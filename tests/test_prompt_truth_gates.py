@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import unittest
 
-from fitmas.conversation_prompting import select_conversation_prompt_policy
-from fitmas.llm_prompt_builder import build_conversation_prompt_bundle, build_layered_conversation_prompt
+from fitmas.llm.prompts.conversation_policy import select_conversation_prompt_policy
+from fitmas.llm.prompts.conversation_builder import build_conversation_prompt_bundle, build_layered_conversation_prompt
 from fitmas.tools.routing import IntentCategory
 
 

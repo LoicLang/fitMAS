@@ -1,0 +1,57 @@
+from __future__ import annotations
+
+import ast
+from pathlib import Path
+
+
+ROOT = Path(__file__).resolve().parents[1]
+SRC = ROOT / "backend" / "src" / "fitmas"
+SEARCH_ROOTS = (
+    SRC,
+    ROOT / "tests",
+    ROOT / "scripts",
+)
+
+
+def _python_like_files(root: Path) -> list[Path]:
+    files: list[Path] = []
+    for path in root.rglob("*"):
+        if not path.is_file():
+            continue
+        if path.suffix == ".py" or (root.name == "scripts" and path.suffix == ""):
+            files.append(path)
+    return sorted(files)
+
+
+def _imports(path: Path) -> set[str]:
+    try:
+        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+    except SyntaxError:
+        return set()
+    modules: set[str] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            modules.update(alias.name for alias in node.names)
+        elif isinstance(node, ast.ImportFrom) and node.module:
+            modules.add(node.module)
+            modules.update(f"{node.module}.{alias.name}" for alias in node.names)
+    return modules
+
+
+def test_11n_planning_window_resolution_leaves_root() -> None:
+    assert not (SRC / "planning_window_resolution.py").exists()
+    assert (SRC / "domain" / "planning" / "window_resolution.py").exists()
+
+
+def test_11n_no_python_imports_use_root_planning_window_resolution() -> None:
+    offenders: list[str] = []
+
+    for root in SEARCH_ROOTS:
+        for path in _python_like_files(root):
+            if path == Path(__file__):
+                continue
+            imports = _imports(path)
+            if "fitmas.planning_window_resolution" in imports:
+                offenders.append(f"{path.relative_to(ROOT)}: fitmas.planning_window_resolution")
+
+    assert offenders == []

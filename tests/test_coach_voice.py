@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import unittest
 
-from fitmas.coach_voice import (
+from fitmas.domain.coaching.coach_voice import (
     COACH_VOICE_FEW_SHOTS_BAD,
     COACH_VOICE_FEW_SHOTS_GOOD,
     COACH_VOICE_RULES,
@@ -108,6 +108,12 @@ class CoachVoiceHardGuardTest(unittest.TestCase):
         self.assertTrue(message_violates_coach_voice("Le coach te dit que..."))
         self.assertTrue(message_violates_coach_voice("Le coach vous propose..."))
 
+    def test_detects_analysis_summary_leak(self) -> None:
+        self.assertTrue(message_violates_coach_voice("User reports lifting 100 kg and asks what to do next."))
+        self.assertTrue(message_violates_coach_voice("User expresses a preference for running in the morning."))
+        self.assertTrue(message_violates_coach_voice("Athlete reports running for 30 minutes today."))
+        self.assertTrue(message_violates_coach_voice("L'utilisateur indique qu'il prefere courir le matin."))
+
     def test_does_not_flag_correct_voice(self) -> None:
         ok = [
             "Vendredi pour le footing, jeudi tu coupes.",
@@ -132,6 +138,8 @@ class InternalJargonGuardTest(unittest.TestCase):
         self.assertTrue(message_has_user_facing_internal_jargon("Le validateur detecte une fragilite."))
         self.assertTrue(message_has_user_facing_internal_jargon("Demande si le user confirme."))
         self.assertTrue(message_has_user_facing_internal_jargon("swap_sessions touche une seance cle."))
+        self.assertTrue(message_has_user_facing_internal_jargon("Candidate backend, pas une reponse finale."))
+        self.assertTrue(message_has_user_facing_internal_jargon("Candidate possible, confirmation recommandee."))
 
     def test_does_not_flag_human_equivalents(self) -> None:
         ok = [

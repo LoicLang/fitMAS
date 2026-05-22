@@ -2,9 +2,9 @@
 
 from types import SimpleNamespace
 
-import fitmas.adaptation as adaptation
+import fitmas.domain.planning.adaptation as adaptation
 
-from fitmas.adaptation import (
+from fitmas.domain.planning.adaptation import (
     _HIGH_URGENCY_KEYWORDS,
     _build_conservative_health_fallback,
     _model_for_trigger,
@@ -195,7 +195,7 @@ class TestRunAdaptationFreeze:
         user = SimpleNamespace(id=1, timezone="Europe/Paris")
 
         monkeypatch.setattr(
-            "fitmas.llm._request_json",
+            "fitmas.llm.gateway.request_json",
             lambda **kwargs: {
                 "adaptations": [
                     {"session_id": 7, "action": "lighten", "rationale": "charge haute"}
@@ -209,7 +209,7 @@ class TestRunAdaptationFreeze:
             called["apply"] = True
             raise AssertionError("mutations.apply should stay off by default")
 
-        monkeypatch.setattr("fitmas.mutations.apply", _fail_apply)
+        monkeypatch.setattr("fitmas.domain.planning.mutation_executor.apply", _fail_apply)
 
         result = adaptation.run_adaptation(object(), user=user, trigger=trigger)
 
@@ -234,7 +234,7 @@ class TestRunAdaptationFreeze:
         user = SimpleNamespace(id=1, timezone="Europe/Paris")
 
         monkeypatch.setattr(
-            "fitmas.llm._request_json",
+            "fitmas.llm.gateway.request_json",
             lambda **kwargs: {
                 "adaptations": [
                     {"session_id": 7, "action": "lighten", "rationale": "charge haute"}
@@ -248,7 +248,7 @@ class TestRunAdaptationFreeze:
             calls["apply"] += 1
             raise AssertionError("adaptation.py must not apply mutations directly")
 
-        monkeypatch.setattr("fitmas.mutations.apply", _record_apply)
+        monkeypatch.setattr("fitmas.domain.planning.mutation_executor.apply", _record_apply)
 
         result = adaptation.run_adaptation(object(), user=user, trigger=trigger)
 
@@ -261,19 +261,19 @@ class TestRunAdaptationFreeze:
         from pathlib import Path
 
         root = Path(__file__).resolve().parents[1]
-        source = (root / "backend/src/fitmas/adaptation.py").read_text()
+        source = (root / "backend/src/fitmas/domain/planning/adaptation.py").read_text()
         assert "plan_mutation_service" not in source
 
     def test_conversation_does_not_request_adaptation_auto_apply(self):
         from pathlib import Path
 
         root = Path(__file__).resolve().parents[1]
-        source = (root / "backend/src/fitmas/conversation_pipeline.py").read_text()
+        source = (root / "backend/src/fitmas/decision/conversation_pipeline.py").read_text()
         assert "allow_apply=True" not in source
 
     def test_adaptation_api_no_longer_exposes_allow_apply(self):
         from pathlib import Path
 
         root = Path(__file__).resolve().parents[1]
-        source = (root / "backend/src/fitmas/adaptation.py").read_text()
+        source = (root / "backend/src/fitmas/domain/planning/adaptation.py").read_text()
         assert "allow_apply" not in source

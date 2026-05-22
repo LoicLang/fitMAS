@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import date
 
-from fitmas.session_similarity import find_same_sport_proximity_conflict
+from fitmas.domain.planning.session_similarity import find_same_sport_proximity_conflict
 
 
 def test_finds_same_sport_type_proximity_conflict() -> None:

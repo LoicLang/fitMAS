@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import unittest
 
-from fitmas.session_templates import list_session_templates, render_session_description, select_session_template
+from fitmas.domain.planning.session_templates import list_session_templates, render_session_description, select_session_template
 
 
 class SessionTemplatesTest(unittest.TestCase):

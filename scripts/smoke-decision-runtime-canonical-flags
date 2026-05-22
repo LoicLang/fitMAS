@@ -1,0 +1,33 @@
+#!/usr/bin/env zsh
+
+set -euo pipefail
+
+script_dir="$(cd "$(dirname "$0")" && pwd)"
+repo_root="$(cd "$script_dir/.." && pwd)"
+cd "$repo_root"
+
+export FITMAS_UNDERSTANDING_RUNTIME_SHADOW=1
+export FITMAS_COMMANDS_FROM_UNDERSTANDING=1
+export FITMAS_PENDING_FROM_UNDERSTANDING=1
+
+echo "canonical flags:"
+echo "  FITMAS_UNDERSTANDING_RUNTIME_SHADOW=$FITMAS_UNDERSTANDING_RUNTIME_SHADOW"
+echo "  FITMAS_COMMANDS_FROM_UNDERSTANDING=$FITMAS_COMMANDS_FROM_UNDERSTANDING"
+echo "  FITMAS_PENDING_FROM_UNDERSTANDING=$FITMAS_PENDING_FROM_UNDERSTANDING"
+
+./scripts/test-backend -q \
+  tests/test_conversation_understanding_bridge.py \
+  tests/test_core_flows.py \
+  tests/test_phase10l_coachdecision_runtime_delete_architecture.py
+
+./scripts/smoke-real-conversations \
+  --scenario execution_update \
+  --scenario today_unavailability \
+  --scenario fatigue_today \
+  --scenario health_signal \
+  --scenario heartbeat_non_completion
+
+./scripts/smoke-a-plus-api \
+  --scenario move_easy_then_confirm \
+  --scenario confirm_without_pending \
+  --timeout 240

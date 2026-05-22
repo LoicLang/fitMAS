@@ -3,13 +3,14 @@ from __future__ import annotations
 import os
 import tempfile
 from datetime import datetime
+from fitmas.domain.planning import template_repository as template_repo
 
 os.environ.setdefault("FITMAS_DB_PATH", tempfile.mktemp(prefix="fitmas-phase5-", suffix=".db"))
 
-from fitmas import repository as repo, schema as s
-from fitmas.db import Base, SessionLocal, engine, init_db
-from fitmas.llm import MutationDecision
-from fitmas.plan_mutation_service import apply_decisions_for_user
+from fitmas.core import orm as s
+from fitmas.core.db import Base, SessionLocal, engine, init_db
+from fitmas.domain.planning.mutation_decision import MutationDecision
+from fitmas.domain.planning.patch_mutation_service import apply_decisions_for_user
 
 
 def setup_function() -> None:
@@ -26,7 +27,7 @@ def test_same_sport_proximity_guard_blocks_apply_and_event() -> None:
         db.add(user)
         db.commit()
         db.refresh(user)
-        repo.replace_plan(
+        template_repo.replace_plan(
             db,
             user.id,
             intention="template actif",
@@ -127,7 +128,7 @@ def test_move_to_stable_recovery_applies_and_moves_recovery() -> None:
         db.add(user)
         db.commit()
         db.refresh(user)
-        repo.replace_plan(
+        template_repo.replace_plan(
             db,
             user.id,
             intention="template actif",

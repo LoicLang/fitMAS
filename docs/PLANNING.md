@@ -5,7 +5,7 @@ read_when:
   - rendre la planification plus lisible dans l'app
   - ajouter des adaptations suite a un imprevu utilisateur
   - definir ce qui est ferme, adaptable ou projete
-  - modifier planner.py ou llm.py
+  - modifier planner.py ou les prompts planning LLM
   - ajouter readiness, decision engine ou periodization
 ---
 
@@ -150,12 +150,14 @@ FitMAS repond toujours a 4 questions :
 3. calcule readiness (`readiness.py`)
 4. produit la planning decision (`planning_decision.py`)
 5. construit le squelette hebdo deterministe (`planner.py`)
-6. demande au LLM le detail borne des seances (`llm.py`)
-7. valide (`plan_validator.py`)
+6. demande au LLM le detail borne des seances via le gateway/prompts LLM
+7. valide (`domain/planning/validator.py`)
 8. relit la qualite sportive de la semaine generee (`generated_week_coherence.py`)
 9. persiste
 
 ### Modules
+
+Ces modules vivent maintenant sous `backend/src/fitmas/domain/planning/`.
 
 | Module | Role | Etat |
 |--------|------|------|
@@ -166,9 +168,9 @@ FitMAS repond toujours a 4 questions :
 | `planning_decision.py` | Decision explicite avant generation | Fait |
 | `planning_state.py` | Pipeline V2 complete depuis DB | Fait |
 | `session_templates.py` | Librairie running/cycling/swimming/strength/climbing | Fait |
-| `plan_validator.py` | Garde-fous charge/structure/profil | Fait |
+| `domain/planning/validator.py` | Garde-fous charge/structure/profil | Fait |
 | `periodization.py` | Mesocycle 3+1, progression automatique | Fait |
-| `planning_contract.py` | Horizons, confidence, week mission, availability, session policy | Fait |
+| `domain/planning/contract.py` | Horizons, confidence, week mission, availability, session policy | Fait |
 | `replan_from_life_change.py` | Replan suite a changement de vie | Fait |
 
 Tables SQL ajoutees : `fitness_snapshots`, `readiness_snapshots`, `planning_decisions`.

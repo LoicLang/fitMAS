@@ -4,11 +4,12 @@ import json
 import os
 import tempfile
 import unittest
+from fitmas.domain.planning import repository as planning_repo
 
 os.environ.setdefault("FITMAS_DB_PATH", tempfile.mktemp(prefix="fitmas-plan-mutations-", suffix=".db"))
 
-from fitmas import repository as repo, schema as s
-from fitmas.db import Base, SessionLocal, engine, init_db
+from fitmas.core import orm as s
+from fitmas.core.db import Base, SessionLocal, engine, init_db
 
 
 class PlanMutationEventsTest(unittest.TestCase):
@@ -30,7 +31,7 @@ class PlanMutationEventsTest(unittest.TestCase):
         self.db.close()
 
     def test_add_plan_mutation_event_persists_json_payloads(self) -> None:
-        row = repo.add_plan_mutation_event(
+        row = planning_repo.add_plan_mutation_event(
             self.db,
             user_id=self.user.id,
             source="conversation",

@@ -1,0 +1,102 @@
+#!/usr/bin/env python3
+from __future__ import annotations
+
+import argparse
+import json
+import sys
+from pathlib import Path
+from typing import Any
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(
+        description="Summarize FitMAS Decision Runtime fallback census JSON reports."
+    )
+    parser.add_argument("reports", nargs="+", type=Path)
+    parser.add_argument("--allow-fallbacks", action="store_true")
+    parser.add_argument("--json-out", type=Path)
+    args = parser.parse_args()
+
+    summary = summarize_reports(args.reports)
+    print_summary(summary)
+    if args.json_out is not None:
+        args.json_out.parent.mkdir(parents=True, exist_ok=True)
+        args.json_out.write_text(
+            json.dumps(summary, ensure_ascii=False, indent=2, sort_keys=True) + "\n"
+        )
+    if summary["fallback_scenario_count"] and not args.allow_fallbacks:
+        return 1
+    return 0
+
+
+def summarize_reports(paths: list[Path]) -> dict[str, Any]:
+    scenario_count = 0
+    fallback_scenario_count = 0
+    fallback_turn_count = 0
+    owner_counts: dict[str, int] = {}
+    source_counts: dict[str, int] = {}
+    fallback_scenarios: list[dict[str, Any]] = []
+
+    for path in paths:
+        payload = json.loads(path.read_text())
+        reports = payload.get("reports")
+        if not isinstance(reports, list):
+            raise SystemExit(f"{path}: missing reports list")
+        scenario_count += len(reports)
+        for report in reports:
+            if not isinstance(report, dict):
+                continue
+            turn_count = _int(report.get("fallback_turn_count"))
+            fallback_turn_count += turn_count
+            _merge_counts(owner_counts, report.get("owner_counts"))
+            _merge_counts(source_counts, report.get("source_counts"))
+            if turn_count:
+                fallback_scenario_count += 1
+                fallback_scenarios.append(
+                    {
+                        "scenario": str(report.get("scenario") or "unknown"),
+                        "fallback_turn_count": turn_count,
+                        "owner_counts": dict(report.get("owner_counts") or {}),
+                        "source_counts": dict(report.get("source_counts") or {}),
+                    }
+                )
+
+    return {
+        "scenario_count": scenario_count,
+        "fallback_scenario_count": fallback_scenario_count,
+        "fallback_turn_count": fallback_turn_count,
+        "owner_counts": dict(sorted(owner_counts.items())),
+        "source_counts": dict(sorted(source_counts.items())),
+        "fallback_scenarios": fallback_scenarios,
+    }
+
+
+def print_summary(summary: dict[str, Any]) -> None:
+    print(f"scenario_count={summary['scenario_count']}")
+    print(f"fallback_scenario_count={summary['fallback_scenario_count']}")
+    print(f"fallback_turn_count={summary['fallback_turn_count']}")
+    for owner, count in summary["owner_counts"].items():
+        print(f"owner {owner}={count}")
+    for source, count in summary["source_counts"].items():
+        print(f"source {source}={count}")
+    for item in summary["fallback_scenarios"]:
+        print(f"fallback scenario {item['scenario']} turns={item['fallback_turn_count']}")
+
+
+def _merge_counts(target: dict[str, int], raw: object) -> None:
+    if not isinstance(raw, dict):
+        return
+    for key, value in raw.items():
+        name = str(key or "unknown")
+        target[name] = target.get(name, 0) + _int(value)
+
+
+def _int(value: object) -> int:
+    try:
+        return int(value or 0)
+    except (TypeError, ValueError):
+        return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

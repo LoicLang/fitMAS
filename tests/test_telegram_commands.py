@@ -6,8 +6,9 @@ from unittest.mock import AsyncMock
 
 import httpx
 
-import fitmas.telegram_commands as telegram_commands
-from fitmas.telegram_debounce import reset_state
+from fitmas.app.telegram.delivery import CoachDraft
+import fitmas.app.telegram.commands as telegram_commands
+from fitmas.app.telegram.debounce import reset_state
 
 
 class _FakeJob:
@@ -138,3 +139,54 @@ class TelegramCommandsTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(api_post_mock.await_count, 2)
         api_post_mock.assert_any_await("/api/v0/messages", payload)
         update.message.reply_text.assert_awaited_once_with("Réponse récupérée")
+
+    async def test_cmd_heartbeat_routes_manual_cutover_through_runtime(self) -> None:
+        import os
+
+        import fitmas.skills.heartbeat.runtime_adapter as adapter
+
+        draft = CoachDraft(text="Runtime heartbeat", proactive=True)
+        calls: list[dict[str, object]] = []
+        persisted: list[CoachDraft] = []
+        update = SimpleNamespace(message=SimpleNamespace(reply_text=AsyncMock()))
+        context = SimpleNamespace()
+
+        original_flag = os.environ.get("FITMAS_HEARTBEAT_RUNTIME_CUTOVER")
+        original_run = adapter.run_heartbeat_trigger
+        original_persist = telegram_commands.persist_draft_for_owner
+
+        def fake_run(**kwargs):
+            calls.append(kwargs)
+            event = adapter.build_heartbeat_input_event(
+                user_id=0,
+                trigger=kwargs["trigger"],
+                source=kwargs["source"],
+                delivery_channel=kwargs["delivery_channel"],
+                manual=kwargs["manual"],
+            )
+            return adapter.HeartbeatRuntimeResult(
+                event=event,
+                outcome=adapter.heartbeat_draft_to_outcome(draft, trigger=kwargs["trigger"]),
+                draft=draft,
+                reply_text=draft.text,
+            )
+
+        try:
+            os.environ["FITMAS_HEARTBEAT_RUNTIME_CUTOVER"] = "1"
+            adapter.run_heartbeat_trigger = fake_run
+            telegram_commands.persist_draft_for_owner = lambda value: persisted.append(value)
+
+            await telegram_commands.cmd_heartbeat(update, context)
+        finally:
+            if original_flag is None:
+                os.environ.pop("FITMAS_HEARTBEAT_RUNTIME_CUTOVER", None)
+            else:
+                os.environ["FITMAS_HEARTBEAT_RUNTIME_CUTOVER"] = original_flag
+            adapter.run_heartbeat_trigger = original_run
+            telegram_commands.persist_draft_for_owner = original_persist
+
+        self.assertEqual(calls[0]["trigger"], "morning_briefing")
+        self.assertEqual(calls[0]["source"], "telegram")
+        self.assertTrue(calls[0]["manual"])
+        update.message.reply_text.assert_awaited_once_with("Runtime heartbeat", parse_mode="Markdown")
+        self.assertEqual(persisted, [draft])

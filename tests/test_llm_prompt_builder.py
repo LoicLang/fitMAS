@@ -3,9 +3,9 @@ from __future__ import annotations
 import unittest
 from types import SimpleNamespace
 
-from fitmas.conversation_prompting import ConversationPromptPolicy, select_conversation_prompt_policy
-from fitmas.llm import make_timeline_summary
-from fitmas.llm_prompt_builder import (
+from fitmas.llm.prompts.conversation_policy import ConversationPromptPolicy, select_conversation_prompt_policy
+from fitmas.llm.legacy_summaries import make_timeline_summary
+from fitmas.llm.prompts.conversation_builder import (
     build_conversation_prompt_bundle,
     build_layered_conversation_prompt,
     detect_open_question,
@@ -313,16 +313,16 @@ class CoachPostureTest(unittest.TestCase):
         # The posture must explicitly reject the menu-of-options pattern.
         self.assertIn("Tu ne renvoies pas la balle", system_text)
         self.assertIn("Imprevu", system_text)
-        self.assertIn("utilise `suggest_replan_candidates`", system_text)
-        self.assertIn("tools `draft_*`", system_text)
-        self.assertIn("ne commit jamais", system_text)
-        self.assertIn("payload.patch + validation", system_text)
+        self.assertIn("tools read-only", system_text)
+        self.assertIn("PlanPatch", system_text)
+        self.assertIn("backend valide", system_text)
+        self.assertNotIn("suggest_replan_candidates", system_text)
+        self.assertNotIn("tools `draft_*`", system_text)
         self.assertNotIn("validate_week_coherence", system_text)
         self.assertIn("backend review sportive", system_text)
-        self.assertIn("candidate", system_text)
         self.assertIn("Workflow replan_after_constraint", system_text)
         self.assertIn("PlanPatch | no_change | requires_confirmation", system_text)
-        self.assertIn("La candidate n'est pas une decision", system_text)
+        self.assertIn("La proposition n'est pas une mutation appliquee", system_text)
         self.assertIn("ne repropose pas un menu running/renfo", system_text)
         self.assertIn("autorisation d'ajuster", system_text)
         self.assertIn("\"demain soir\"", system_text)

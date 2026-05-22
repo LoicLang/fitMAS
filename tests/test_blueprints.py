@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import unittest
 
-from fitmas.athlete_zones import AthleteZones, compute_cycling_zones, compute_running_zones, compute_swimming_zones
-from fitmas.session_templates import (
+from fitmas.domain.athlete.zones import AthleteZones, compute_cycling_zones, compute_running_zones, compute_swimming_zones
+from fitmas.domain.planning.session_templates import (
     SessionBlueprint,
     get_blueprint,
     render_blueprint,

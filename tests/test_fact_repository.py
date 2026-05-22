@@ -4,11 +4,12 @@ import os
 import tempfile
 import unittest
 from datetime import datetime, timedelta, timezone
+from fitmas.domain.memory import repository as memory_repo
 
 os.environ.setdefault("FITMAS_DB_PATH", tempfile.mktemp(prefix="fitmas-facts-", suffix=".db"))
 
-from fitmas import repository as repo, schema as s
-from fitmas.db import Base, SessionLocal, engine, init_db
+from fitmas.core import orm as s
+from fitmas.core.db import Base, SessionLocal, engine, init_db
 
 
 class FactRepositoryTest(unittest.TestCase):
@@ -30,7 +31,7 @@ class FactRepositoryTest(unittest.TestCase):
         self.db.close()
 
     def test_upsert_facts_persists_memory_metadata(self) -> None:
-        saved = repo.upsert_facts(
+        saved = memory_repo.upsert_facts(
             self.db,
             self.user.id,
             [
@@ -87,13 +88,13 @@ class FactRepositoryTest(unittest.TestCase):
         )
         self.db.commit()
 
-        active = repo.get_active_facts(self.db, self.user.id, limit=12)
+        active = memory_repo.get_active_facts(self.db, self.user.id, limit=12)
 
         self.assertEqual(len(active), 1)
         self.assertEqual(active[0].key, "morning")
 
     def test_upsert_working_memory_keeps_short_lived_state_out_of_profile_memory(self) -> None:
-        saved = repo.upsert_working_memory(
+        saved = memory_repo.upsert_working_memory(
             self.db,
             self.user.id,
             [
@@ -113,8 +114,8 @@ class FactRepositoryTest(unittest.TestCase):
 
         self.assertEqual(len(saved), 1)
         self.assertEqual(saved[0].scope, "day")
-        self.assertEqual(len(repo.get_active_facts(self.db, self.user.id, limit=12)), 0)
-        active_memory = repo.get_active_memory_items(self.db, self.user.id, profile_limit=12, working_limit=12, total_limit=24)
+        self.assertEqual(len(memory_repo.get_active_facts(self.db, self.user.id, limit=12)), 0)
+        active_memory = memory_repo.get_active_memory_items(self.db, self.user.id, profile_limit=12, working_limit=12, total_limit=24)
         self.assertEqual(len(active_memory), 1)
         self.assertEqual(active_memory[0].category, "execution")
 
@@ -138,10 +139,10 @@ class FactRepositoryTest(unittest.TestCase):
         )
         self.db.commit()
 
-        archived = repo.purge_expired_working_memory(self.db, self.user.id)
+        archived = memory_repo.purge_expired_working_memory(self.db, self.user.id)
 
         self.assertEqual(archived, 1)
-        self.assertEqual(len(repo.get_active_working_memory(self.db, self.user.id, limit=12)), 0)
+        self.assertEqual(len(memory_repo.get_active_working_memory(self.db, self.user.id, limit=12)), 0)
 
 
 if __name__ == "__main__":

@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from fitmas import final_reply
+from fitmas.skills.heartbeat import reply_composer
 from fitmas.skills.heartbeat.context import HeartbeatContextBundle
 
 _READ_ONLY_FORBIDDEN_CLAIMS = (
@@ -21,8 +21,8 @@ def build_briefing_reply_context(
     bundle: HeartbeatContextBundle,
     time_context: dict[str, str],
     active_fact_lines: list[str] | tuple[str, ...],
-) -> final_reply.HeartbeatReplyContext:
-    return final_reply.HeartbeatReplyContext(
+) -> reply_composer.HeartbeatReplyContext:
+    return reply_composer.HeartbeatReplyContext(
         role="briefing",
         capability=_capability_label(bundle.capability),
         temporal=_temporal_lines(time_context),
@@ -41,8 +41,8 @@ def build_reminder_reply_context(
     key_session: Any,
     time_context: dict[str, str],
     active_fact_lines: list[str] | tuple[str, ...],
-) -> final_reply.HeartbeatReplyContext:
-    return final_reply.HeartbeatReplyContext(
+) -> reply_composer.HeartbeatReplyContext:
+    return reply_composer.HeartbeatReplyContext(
         role="reminder",
         capability="read_only",
         temporal=_temporal_lines(time_context),
@@ -66,7 +66,7 @@ def build_review_reply_context(
     claimed_duration_min: int,
     active_fact_lines: list[str] | tuple[str, ...],
     weekly_highlights: str = "",
-) -> final_reply.HeartbeatReplyContext:
+) -> reply_composer.HeartbeatReplyContext:
     week_digest = [
         (
             f"total_sessions={total_sessions} done_count={done_count} "
@@ -81,7 +81,7 @@ def build_review_reply_context(
     ]
     if weekly_highlights.strip():
         week_digest.append(f"evenements_explicatifs={weekly_highlights.strip()}")
-    return final_reply.HeartbeatReplyContext(
+    return reply_composer.HeartbeatReplyContext(
         role="review",
         capability="read_only",
         temporal=_temporal_lines(time_context),
@@ -98,8 +98,8 @@ def build_signal_reply_context(
     actionable_signals: list[dict[str, Any]] | tuple[dict[str, Any], ...],
     time_context: dict[str, str],
     active_fact_lines: list[str] | tuple[str, ...],
-) -> final_reply.HeartbeatReplyContext:
-    return final_reply.HeartbeatReplyContext(
+) -> reply_composer.HeartbeatReplyContext:
+    return reply_composer.HeartbeatReplyContext(
         role="signal",
         capability="candidate_only",
         temporal=_temporal_lines(time_context),
@@ -218,9 +218,9 @@ def _scheduled_session_line(session: Any) -> str:
     return " ".join(pieces)
 
 
-def _active_reply_facts(active_fact_lines: list[str] | tuple[str, ...]) -> tuple[final_reply.HeartbeatReplyFact, ...]:
+def _active_reply_facts(active_fact_lines: list[str] | tuple[str, ...]) -> tuple[reply_composer.HeartbeatReplyFact, ...]:
     return tuple(
-        final_reply.HeartbeatReplyFact(category="", value=_fact_line_value(line))
+        reply_composer.HeartbeatReplyFact(category="", value=_fact_line_value(line))
         for line in active_fact_lines
         if _fact_line_value(line)
     )

@@ -3,9 +3,9 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 import unittest
 
-from fitmas import schema as s
-from fitmas.athlete_profile import build_athlete_profile
-from fitmas.calibration_status import build_calibration_status, build_initial_calibration_status
+from fitmas.core import orm as s
+from fitmas.domain.athlete.profile import build_athlete_profile
+from fitmas.domain.coaching.calibration_status import build_calibration_status, build_initial_calibration_status
 
 
 class CalibrationStatusTest(unittest.TestCase):

@@ -1,5 +1,5 @@
-from fitmas.conversation_prompting import list_conversation_prompt_policies
-from fitmas.prompt_contracts import get_prompt_contract
+from fitmas.llm.prompts.conversation_policy import list_conversation_prompt_policies
+from fitmas.llm.prompt_contracts import get_prompt_contract
 
 
 def test_every_intent_prompt_policy_contract_resolves() -> None:

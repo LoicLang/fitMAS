@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime, timedelta
 from types import SimpleNamespace
 
-from fitmas.conversation_pipeline import _pending_confirmation_context_for_prompt
+from fitmas.decision.turn_prompt_context import pending_confirmation_context_for_prompt
 
 
 def test_pending_choice_context_instructs_llm_to_select_candidate_id() -> None:
@@ -21,7 +21,7 @@ def test_pending_choice_context_instructs_llm_to_select_candidate_id() -> None:
         expires_at=datetime.now() + timedelta(minutes=10),
     )
 
-    context = _pending_confirmation_context_for_prompt(pending)
+    context = pending_confirmation_context_for_prompt(pending)
 
     assert context is not None
     assert "plan_patch_choice" in context

@@ -5,12 +5,13 @@ import tempfile
 import unittest
 from datetime import datetime
 from types import SimpleNamespace
+from fitmas.domain.planning import repository as planning_repo
 
 os.environ.setdefault("FITMAS_DB_PATH", tempfile.mktemp(prefix="fitmas-matching-", suffix=".db"))
 
-from fitmas import repository as repo, schema as s
-from fitmas.activities import match_activity_to_day
-from fitmas.db import Base, SessionLocal, engine, init_db
+from fitmas.core import orm as s
+from fitmas.domain.execution.activities import match_activity_to_day
+from fitmas.core.db import Base, SessionLocal, engine, init_db
 
 
 class ActivityMatchingTruthTest(unittest.TestCase):
@@ -130,7 +131,7 @@ class ActivityMatchingTruthTest(unittest.TestCase):
         self.db.add(session)
         self.db.commit()
 
-        found = repo.find_scheduled_session_for_activity(
+        found = planning_repo.find_scheduled_session_for_activity(
             self.db,
             user_id=self.user.id,
             sport_type="running",

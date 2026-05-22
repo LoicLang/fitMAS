@@ -1,4 +1,4 @@
-from fitmas.prompt_contracts import get_prompt_contract, list_prompt_contracts
+from fitmas.llm.prompt_contracts import get_prompt_contract, list_prompt_contracts
 from fitmas.tools.registry import build_tool_registry
 
 
@@ -16,7 +16,7 @@ def test_plan_lookup_contract_is_read_only() -> None:
     assert "plan_window" in contract.required_truth_blocks
 
 
-def test_plan_negotiation_contract_can_draft_plan_patch() -> None:
+def test_plan_negotiation_contract_uses_read_and_validation_tools_only() -> None:
     contract = get_prompt_contract("conversation_plan_negotiation")
 
     assert contract.capability == "draft_action"
@@ -24,15 +24,11 @@ def test_plan_negotiation_contract_can_draft_plan_patch() -> None:
         "get_plan_window",
         "resolve_planning_window",
         "get_user_constraints",
-        "suggest_replan_candidates",
-        "draft_move_session",
-        "draft_swap_sessions",
-        "draft_replace_session",
-        "draft_lighten_day",
-        "draft_create_session",
         "validate_plan_patch",
     )
-    assert len(contract.allowed_tools) == 10
+    assert len(contract.allowed_tools) == 4
+    assert not any(tool.startswith("draft_") for tool in contract.allowed_tools)
+    assert "suggest_replan_candidates" not in contract.allowed_tools
     assert "get_recent_activities" not in contract.allowed_tools
     assert "get_activity_highlights" not in contract.allowed_tools
     assert "get_recent_reality_window" not in contract.allowed_tools
@@ -68,8 +64,6 @@ def test_health_signal_contract_keeps_small_adaptation_surface() -> None:
     assert contract.allowed_tools == (
         "get_plan_window",
         "get_user_constraints",
-        "draft_lighten_day",
-        "draft_replace_session",
         "validate_plan_patch",
     )
     assert "get_today_context" not in contract.allowed_tools

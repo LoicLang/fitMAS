@@ -12,7 +12,7 @@ import unittest
 from datetime import date
 from types import SimpleNamespace
 
-from fitmas.recent_reality import RecentRealityWindow
+from fitmas.domain.execution.recent_reality import RecentRealityWindow
 from fitmas.skills.heartbeat.context import (
     HeartbeatCapabilityBudget,
     build_heartbeat_context_bundle,

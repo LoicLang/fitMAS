@@ -1,0 +1,30 @@
+#!/usr/bin/env zsh
+
+set -euo pipefail
+
+script_dir="$(cd "$(dirname "$0")" && pwd)"
+repo_root="$(cd "$script_dir/.." && pwd)"
+cd "$repo_root"
+
+core_report="/tmp/fitmas-9p-core-census.json"
+daily_report="/tmp/fitmas-9p-daily-census.json"
+extended_report="/tmp/fitmas-9p-extended-census.json"
+global_report="/tmp/fitmas-9p-global-summary.json"
+
+echo "decision runtime extended census:"
+echo "  core: $core_report"
+echo "  daily: $daily_report"
+echo "  extended: $extended_report"
+echo "  global: $global_report"
+
+./scripts/smoke-a-plus-api --skip-generated-week --fallback-census-json /tmp/fitmas-9p-core-census.json --timeout 900
+
+./scripts/smoke-a-plus-api --daily --skip-generated-week --fallback-census-json /tmp/fitmas-9p-daily-census.json --timeout 1200
+
+./scripts/smoke-a-plus-api --extended --skip-generated-week --fallback-census-json /tmp/fitmas-9p-extended-census.json --timeout 1600
+
+./scripts/decision-runtime-fallback-census-summary \
+  /tmp/fitmas-9p-core-census.json \
+  /tmp/fitmas-9p-daily-census.json \
+  /tmp/fitmas-9p-extended-census.json \
+  --json-out /tmp/fitmas-9p-global-summary.json

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from fitmas.final_reply import compose_plan_adaptation_reply
-from fitmas.plan_patch_adaptation_policy import AdaptationPolicyDecision
+from fitmas.llm.reply_backend import compose_plan_adaptation_reply
+from fitmas.domain.planning.policy import AdaptationPolicyDecision
 
 
 def test_adaptation_commit_reply_is_verified_against_committed_events() -> None:

@@ -3,8 +3,8 @@ from __future__ import annotations
 from datetime import datetime
 from types import SimpleNamespace
 
-from fitmas.plan_patch import PlanPatch, PlanPatchOperation, PlanPatchValidation
-from fitmas.week_coherence import (
+from fitmas.domain.planning.plan_patch import PlanPatch, PlanPatchOperation, PlanPatchValidation
+from fitmas.domain.planning.week_coherence import (
     DeterministicWeekChecks,
     WeekCoherenceContext,
     WeekCoherenceFinding,

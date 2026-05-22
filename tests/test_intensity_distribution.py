@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import unittest
 
-from fitmas.intensity_distribution import (
+from fitmas.domain.planning.intensity_distribution import (
     check_distribution,
     classify_session_intensity,
     compute_intensity_budget,

@@ -5,18 +5,21 @@ import tempfile
 import unittest
 from datetime import timedelta
 from types import SimpleNamespace
+from fitmas.domain.execution import repository as execution_repo
+from fitmas.domain.planning import template_repository as template_repo
 
 os.environ.setdefault("FITMAS_DB_PATH", tempfile.mktemp(prefix="fitmas-heartbeat-debug-", suffix=".db"))
 os.environ["FITMAS_ENABLE_DEBUG_ENDPOINTS"] = "1"
 
 from fastapi.testclient import TestClient
 
-import fitmas.heartbeat as heartbeat
-from fitmas import repository as repo, schema as s
+import fitmas.skills.heartbeat.heartbeat as heartbeat
+from fitmas.core import orm as s
 from fitmas.api import app
-from fitmas.db import Base, SessionLocal, engine, init_db
+from fitmas.app.telegram.delivery import CoachDraft
+from fitmas.core.db import Base, SessionLocal, engine, init_db
 from fitmas.skills.heartbeat import tool_loop
-from fitmas.time_context import DAY_KEYS, day_label_fr, get_local_now
+from fitmas.core.time_context import DAY_KEYS, day_label_fr, get_local_now
 
 
 class HeartbeatDebugEndpointTest(unittest.TestCase):
@@ -51,7 +54,7 @@ class HeartbeatDebugEndpointTest(unittest.TestCase):
         now = get_local_now(self.user.timezone)
         today_key = DAY_KEYS[now.weekday()]
         yesterday_key = DAY_KEYS[(now.weekday() - 1) % 7]
-        repo.replace_plan(
+        template_repo.replace_plan(
             self.db,
             self.user.id,
             intention="debug heartbeat",
@@ -94,7 +97,7 @@ class HeartbeatDebugEndpointTest(unittest.TestCase):
                 },
             ],
         )
-        repo.add_activity(
+        execution_repo.add_activity(
             self.db,
             user_id=self.user.id,
             source="manual",
@@ -165,6 +168,96 @@ class HeartbeatDebugEndpointTest(unittest.TestCase):
         self.assertEqual(debug["decision"]["action"], "no_send")
         self.assertEqual(debug["decision"]["reason"], "no_today_session")
         self.assertIsNone(debug["final"]["message"])
+
+    def test_debug_heartbeat_routes_normal_cutover_through_runtime(self) -> None:
+        import fitmas.skills.heartbeat.runtime_adapter as adapter
+
+        draft = CoachDraft(text="Runtime debug heartbeat", proactive=True)
+        calls: list[dict[str, object]] = []
+        original_flag = os.environ.get("FITMAS_HEARTBEAT_RUNTIME_CUTOVER")
+        original_run = adapter.run_heartbeat_trigger
+
+        def fake_run(**kwargs):
+            calls.append(kwargs)
+            event = adapter.build_heartbeat_input_event(
+                user_id=kwargs["user_id"],
+                trigger=kwargs["trigger"],
+                source=kwargs["source"],
+                delivery_channel=kwargs["delivery_channel"],
+                manual=kwargs["manual"],
+            )
+            return adapter.HeartbeatRuntimeResult(
+                event=event,
+                outcome=adapter.heartbeat_draft_to_outcome(draft, trigger=kwargs["trigger"]),
+                draft=draft,
+                reply_text=draft.text,
+            )
+
+        try:
+            os.environ["FITMAS_HEARTBEAT_RUNTIME_CUTOVER"] = "1"
+            adapter.run_heartbeat_trigger = fake_run
+            response = self.client.post("/api/v0/debug/heartbeat/morning?send=false")
+        finally:
+            if original_flag is None:
+                os.environ.pop("FITMAS_HEARTBEAT_RUNTIME_CUTOVER", None)
+            else:
+                os.environ["FITMAS_HEARTBEAT_RUNTIME_CUTOVER"] = original_flag
+            adapter.run_heartbeat_trigger = original_run
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertTrue(payload["triggered"])
+        self.assertEqual(payload["message"], "Runtime debug heartbeat")
+        self.assertEqual(payload["runtime"]["outcome"], "answer")
+        self.assertEqual(payload["runtime"]["event_type"], "heartbeat_tick")
+        self.assertEqual(calls[0]["source"], "ops")
+        self.assertEqual(calls[0]["delivery_channel"], "debug")
+        self.assertTrue(calls[0]["manual"])
+
+    def test_ops_heartbeat_routes_normal_cutover_through_runtime(self) -> None:
+        import fitmas.skills.heartbeat.runtime_adapter as adapter
+
+        draft = CoachDraft(text="Runtime ops heartbeat", proactive=True)
+        calls: list[dict[str, object]] = []
+        original_flag = os.environ.get("FITMAS_HEARTBEAT_RUNTIME_CUTOVER")
+        original_run = adapter.run_heartbeat_trigger
+
+        def fake_run(**kwargs):
+            calls.append(kwargs)
+            event = adapter.build_heartbeat_input_event(
+                user_id=kwargs["user_id"],
+                trigger=kwargs["trigger"],
+                source=kwargs["source"],
+                delivery_channel=kwargs["delivery_channel"],
+                manual=kwargs["manual"],
+            )
+            return adapter.HeartbeatRuntimeResult(
+                event=event,
+                outcome=adapter.heartbeat_draft_to_outcome(draft, trigger=kwargs["trigger"]),
+                draft=draft,
+                reply_text=draft.text,
+            )
+
+        try:
+            os.environ["FITMAS_HEARTBEAT_RUNTIME_CUTOVER"] = "1"
+            adapter.run_heartbeat_trigger = fake_run
+            response = self.client.post("/ops/heartbeat/morning?send=false")
+        finally:
+            if original_flag is None:
+                os.environ.pop("FITMAS_HEARTBEAT_RUNTIME_CUTOVER", None)
+            else:
+                os.environ["FITMAS_HEARTBEAT_RUNTIME_CUTOVER"] = original_flag
+            adapter.run_heartbeat_trigger = original_run
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertTrue(payload["triggered"])
+        self.assertEqual(payload["message"], "Runtime ops heartbeat")
+        self.assertEqual(payload["runtime"]["outcome"], "answer")
+        self.assertEqual(payload["runtime"]["event_type"], "heartbeat_tick")
+        self.assertEqual(calls[0]["source"], "ops")
+        self.assertEqual(calls[0]["delivery_channel"], "ops")
+        self.assertTrue(calls[0]["manual"])
 
     def test_debug_dump_exposes_heartbeat_read_tools(self) -> None:
         self._create_today_plan()

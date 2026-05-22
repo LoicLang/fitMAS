@@ -4,7 +4,7 @@ from datetime import date
 from pathlib import Path
 from types import SimpleNamespace
 
-from fitmas.recent_reality import RecentRealityWindow
+from fitmas.domain.execution.recent_reality import RecentRealityWindow
 from fitmas.skills.heartbeat.context import build_heartbeat_context_bundle
 from fitmas.skills.heartbeat.roles import (
     build_briefing_prompt,

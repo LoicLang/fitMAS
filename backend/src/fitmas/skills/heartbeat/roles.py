@@ -17,35 +17,39 @@ from typing import Any, Sequence
 
 from sqlalchemy.orm import Session
 
-from fitmas import repository as repo, schema as s
-from fitmas.activity_helpers import (
+from fitmas.core import orm as s
+from fitmas.domain.coaching import repository as coaching_repo
+from fitmas.domain.execution import repository as execution_repo
+from fitmas.domain.execution.helpers import (
     activities_last_days as _activities_last_days,
     activities_on_local_date as _activities_on_local_date,
     claimed_activities_last_days as _claimed_activities_last_days,
     claimed_activities_on_local_date as _claimed_activities_on_local_date,
 )
-from fitmas.athlete_profile import build_athlete_profile
-from fitmas.calibration_needs import (
+from fitmas.domain.athlete.profile import build_athlete_profile
+from fitmas.domain.memory import repository as memory_repo
+from fitmas.domain.planning import repository as planning_repo
+from fitmas.domain.coaching.calibration_needs import (
     CalibrationNeedType,
     detect_calibration_need,
     looks_like_clarification_message,
     render_hidden_need_brief,
 )
-from fitmas.calibration_status import build_calibration_status
-from fitmas.coach_messages import CoachDraft
-from fitmas.coach_reading_digest import CoachReadingDigest, render_digest_for_prompt
-from fitmas.execution_clarification import build_execution_clarification
-from fitmas.execution_evidence import classify_execution_evidence
-from fitmas.fact_memory import fact_is_current
+from fitmas.domain.coaching.calibration_status import build_calibration_status
+from fitmas.app.telegram.delivery import CoachDraft
+from fitmas.domain.coaching.coach_reading_digest import CoachReadingDigest, render_digest_for_prompt
+from fitmas.domain.execution.clarification import build_execution_clarification
+from fitmas.domain.execution.evidence import classify_execution_evidence
+from fitmas.domain.memory.fact_memory import fact_is_current
 from fitmas.knowledge import load_sport_knowledge
-from fitmas.planning_contract import build_availability_state
-from fitmas.signals import collect_signals, format_signals_for_prompt
+from fitmas.domain.planning.contract import build_availability_state
+from fitmas.domain.coaching.signals import collect_signals, format_signals_for_prompt
 from fitmas.skills.heartbeat.context import (
     HeartbeatCapabilityBudget,
     HeartbeatContextBundle,
     render_heartbeat_context_bundle,
 )
-from fitmas.time_context import DAY_LABELS_FR, build_time_context, get_local_now, render_time_context
+from fitmas.core.time_context import DAY_LABELS_FR, build_time_context, get_local_now, render_time_context
 
 logger = logging.getLogger(__name__)
 
@@ -88,7 +92,7 @@ def get_active_fact_lines(
     suppress_stable_constraints: bool = True,
 ) -> list[str]:
     """Return short fact lines for active health/fatigue/constraint facts."""
-    facts = repo.get_active_memory_items(
+    facts = memory_repo.get_active_memory_items(
         db,
         user.id,
         profile_limit=24,
@@ -133,16 +137,16 @@ def select_calibration_need(
     today: date,
     source: str,
 ) -> object | None:
-    memory_items = repo.get_active_memory_items(
+    memory_items = memory_repo.get_active_memory_items(
         db, user.id,
         profile_limit=24, working_limit=24,
         include_patterns=True, pattern_limit=8, total_limit=48,
     )
     profile = build_athlete_profile(user, facts=memory_items)
     availability_state = build_availability_state(profile)
-    activities = repo.get_activities(db, user.id, limit=30)
-    adaptation_events = repo.get_recent_adaptation_events(db, user.id, limit=6)
-    scheduled_sessions = repo.get_scheduled_sessions(db, user.id, date_from=today, limit=14)
+    activities = execution_repo.get_activities(db, user.id, limit=30)
+    adaptation_events = coaching_repo.get_recent_adaptation_events(db, user.id, limit=6)
+    scheduled_sessions = planning_repo.get_scheduled_sessions(db, user.id, date_from=today, limit=14)
     calibration_status = build_calibration_status(
         profile=profile,
         memory_items=memory_items,

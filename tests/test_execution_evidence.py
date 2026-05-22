@@ -1,5 +1,5 @@
-from fitmas.activity_claims import ActivityClaim
-from fitmas.execution_evidence import classify_execution_evidence
+from fitmas.domain.execution.claims import ActivityClaim
+from fitmas.domain.execution.evidence import classify_execution_evidence
 
 
 def test_same_sport_activity_without_link_stays_uncertain() -> None:

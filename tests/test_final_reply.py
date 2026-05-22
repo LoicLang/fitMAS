@@ -1,15 +1,11 @@
 from __future__ import annotations
 
-from fitmas.final_reply import (
+from fitmas.llm.reply_backend import (
     BlockedEvent,
     FinalReplyContext,
-    HeartbeatReplyContext,
-    HeartbeatReplyFact,
     build_post_event_reply_verifier_prompt,
-    build_heartbeat_reply_prompt,
     build_final_reply_prompt,
     close_turn_outage_fallback_reply,
-    compose_heartbeat_reply,
     compose_final_reply,
     compose_close_turn_reply,
     compose_execution_report_reply,
@@ -23,7 +19,13 @@ from fitmas.final_reply import (
     verify_uncommitted_reply,
     verify_post_event_reply,
 )
-from fitmas.plan_patch_adaptation_policy import AdaptationPolicyDecision
+from fitmas.domain.planning.policy import AdaptationPolicyDecision
+from fitmas.skills.heartbeat.reply_composer import (
+    HeartbeatReplyContext,
+    HeartbeatReplyFact,
+    build_heartbeat_reply_prompt,
+    compose_heartbeat_reply,
+)
 
 
 def _blocked_context() -> FinalReplyContext:
@@ -85,6 +87,41 @@ def test_validation_rejects_user_facing_internal_jargon() -> None:
 
     assert is_valid_final_reply("Deux sorties hors planning cette semaine.", ctx) is True
     assert is_valid_final_reply("Je te propose de confirmer ce changement.", ctx) is True
+
+
+def test_validation_rejects_analysis_summary_leak() -> None:
+    ctx = _blocked_context()
+
+    assert is_valid_final_reply("User reports lifting 100 kg and asks what to do next.", ctx) is False
+    assert is_valid_final_reply("L'utilisateur indique qu'il prefere courir le matin.", ctx) is False
+
+
+def test_validation_rejects_memory_claim_without_memory_event() -> None:
+    ctx = FinalReplyContext(
+        user_text="je prefere courir le matin",
+        original_llm_reply="Je retiens que tu preferes courir le matin.",
+        memory_actions_applied=(),
+        allowed_to_claim_mutation=False,
+        pipeline="conversation",
+        pipeline_capability="no_change",
+    )
+
+    assert is_valid_final_reply("Je retiens que tu preferes courir le matin.", ctx) is False
+    assert is_valid_final_reply("Courir le matin, ca colle bien quand le planning le permet.", ctx) is True
+
+
+def test_validation_rejects_execution_registration_talk_without_execution_event() -> None:
+    ctx = FinalReplyContext(
+        user_text="putain je fais 100kg",
+        original_llm_reply="Je ne vois pas de nouvelle seance enregistree.",
+        execution_actions_applied=(),
+        allowed_to_claim_mutation=False,
+        pipeline="conversation",
+        pipeline_capability="no_change",
+    )
+
+    assert is_valid_final_reply("Je ne vois pas de nouvelle seance enregistree.", ctx) is False
+    assert is_valid_final_reply("On traite ca comme un point de repere, pas comme une alerte.", ctx) is True
 
 
 def test_compose_final_reply_uses_request_text_and_validates_output() -> None:
@@ -376,6 +413,27 @@ def test_execution_report_composer_repairs_receipt_without_applied_action() -> N
 
     assert reply == "Je garde ca comme info, sans le noter comme fait tant que la cible reste floue."
     assert len(calls) == 2
+
+
+def test_execution_report_composer_prioritizes_applied_execution_date() -> None:
+    def fake_request_text(**kwargs):
+        if "Reponse sortante a verifier:" in kwargs["prompt"]:
+            assert "Renfo support du 2026-04-29 notee comme non faite." in kwargs["prompt"]
+            assert "REPAIR si une execution appliquee contient une date" in kwargs["prompt"]
+            return '{"verdict":"allow","reason":"date respectee"}'
+        assert "La source autoritaire pour la seance, le statut et la date est `Execution appliquee`" in kwargs["prompt"]
+        assert "ne la remplace pas par aujourd'hui, demain ou hier" in kwargs["prompt"]
+        return "Renfo support du 2026-04-29 notee comme non faite. On ne cherche pas a rattraper."
+
+    reply = compose_execution_report_reply(
+        user_text="J'ai rate hier",
+        original_llm_reply="On reste sur la seance de renfo prevue aujourd'hui.",
+        execution_actions_applied=("Renfo support du 2026-04-29 notee comme non faite.",),
+        request_text_fn=fake_request_text,
+        verifier_text_fn=fake_request_text,
+    )
+
+    assert reply == "Renfo support du 2026-04-29 notee comme non faite. On ne cherche pas a rattraper."
 
 
 def test_plan_lookup_composer_uses_fact_preservation_context() -> None:

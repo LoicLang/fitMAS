@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-from fitmas import repo_conversation
-from fitmas import schema as s
-from fitmas.db import Base, SessionLocal, engine, init_db
+from fitmas.domain.coaching import repo_conversation
+from fitmas.core import orm as s
+from fitmas.core.db import Base, SessionLocal, engine, init_db
 
 
 def setup_function() -> None:

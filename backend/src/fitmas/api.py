@@ -9,18 +9,18 @@ from fastapi import FastAPI
 
 load_dotenv(Path(__file__).resolve().parents[3] / ".env")
 
-from fitmas.api_activities import router as activities_router
-from fitmas.api_app import router as app_router
-from fitmas.api_debug import router as debug_router
-from fitmas.api_ops import router as ops_router
-from fitmas.api_messages import router as messages_router
-from fitmas.api_onboarding import router as onboarding_router
-from fitmas.api_plan import router as plan_router
-from fitmas.api_read import router as read_router
-from fitmas.api_stats import router as stats_router
-from fitmas.api_static import router as static_router
-from fitmas.db import SessionLocal, init_db
-from fitmas.seed import seed_if_empty
+from fitmas.app.api.routes_activities import router as activities_router
+from fitmas.app.api.routes_app import router as app_router
+from fitmas.app.api.routes_debug import router as debug_router
+from fitmas.app.api.routes_ops import router as ops_router
+from fitmas.app.api.routes_messages import router as messages_router
+from fitmas.app.api.routes_onboarding import router as onboarding_router
+from fitmas.app.api.routes_plan import router as plan_router
+from fitmas.app.api.routes_read import router as read_router
+from fitmas.app.api.routes_stats import router as stats_router
+from fitmas.app.api.routes_static import router as static_router
+from fitmas.core.db import SessionLocal, init_db
+from fitmas.core.seed import seed_if_empty
 
 logger = logging.getLogger(__name__)
 

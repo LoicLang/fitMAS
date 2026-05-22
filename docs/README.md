@@ -7,93 +7,85 @@ read_when:
 
 # Docs
 
-## Set documentaire actuel
+## Regle
 
-| Document | Contenu |
-|----------|---------|
-| `BUILD-ORDER.md` | Source de verite sur l'etat reel, les priorites et la suite immediate |
-| `API-DOGFOOD-RELIABILITY-2026-05-12.md` | Dogfood API reel du 12 mai : tests, conclusions DeepSeek/gateway, plan de remediation |
-| `LLM-FIRST-CONVERSATION.md` | Doctrine zero determinisme sur texte utilisateur libre + plan de migration conversation |
-| `ARCHITECTURE.md` | Stack, principes de harness, modele de donnees, flux techniques |
-| `SYSTEM-MAP.md` | Carte du systeme : flux, frontieres LLM/tools/skills, points d'extension |
-| `PRODUCT.md` | Vision, wedge multisport, scope, parcours utilisateur |
-| `COACH-COHERENCE-REFACTOR.md` | Gouvernance etat : verite runtime unique, writer unique, bundle partage, gates |
-| `SPORT-QUALITY-REVIEW.md` | Doctrine Phase A+ : reviewer sportif non-writer, coherence semaine, policy runtime, prescription/progression future |
-| `PLANNING.md` | Contrat produit + moteur V2 de la planification adaptative |
-| `CONVERSATION.md` | Grounding conversationnel, doctrine LLM-first, dette active des anciens extracteurs |
-| `MEMORY-V2.md` | Architecture memoire : profile vs working vs patterns, regles et migration |
-| `RUNTIME-TOOLS.md` | Contrat des tools runtime multi-tool bornes, registre read-only/candidate/validation, limites et metriques |
-| `PROMPT-CONTEXT-REFACTOR.md` | Etat du chantier prompt/contexte : PromptContract, context diet, snapshots, `decide_none`, dettes restantes |
-| `ADAPTATION-CANDIDATE-PIPELINE.md` | Adaptation par candidats : refs backend, evaluator, policy, pending choice, reviewer LLM borne |
-| `APP-UX.md` | Contrat UX de la webapp : calendrier, today, performance |
-| `SOUL.md` | Voix FitMAS, heartbeat, messagerie, ton |
-| `RUNBOOK.md` | Commandes, flux a tester, debug, deploiement, mapping du code |
-| `TESTER-GUIDE.md` | Guide d'onboarding pour les testeurs alpha |
-| `CONVERSATION-AUDIT-2026-04-17.md` | Audit architecture conversation + contexte post-passe de fiabilite |
-| `COACH-AUTONOMY-REFACTOR.md` | Refonte coach : suppression court-circuits, tools de lecture brute, skill replan validé, posture "DÉCIDE" |
-| `COACH-AUTONOMY-AUDIT.md` | Inventaire system prompts + court-circuits du pipeline coach (sortie du Chantier 0) |
+Les docs doivent aider un agent a agir vite.
+Le journal de chantier n'est pas une source de verite active.
 
-## Hierarchie de verite
+Pour tout audit complet :
 
-Quand plusieurs docs semblent raconter des choses differentes :
+```bash
+./scripts/docs:list --all
+```
 
-1. `BUILD-ORDER.md` gagne pour l'etat reel et les priorites
-2. `LLM-FIRST-CONVERSATION.md` gagne sur la doctrine conversation : aucun regex/keyword/parser deterministe sur texte utilisateur libre
-3. `PRODUCT.md` gagne pour la promesse produit et le scope
-4. `ARCHITECTURE.md` gagne pour la structure technique et les contraintes
-5. les docs domaine gagnent pour leur contrat local
+Par defaut :
 
-## Ordre de lecture
+```bash
+./scripts/docs:list
+```
 
-Pour un nouvel agent :
+liste seulement les docs actives.
 
-1. `BUILD-ORDER.md` — etat reel et suite immediate
-2. `API-DOGFOOD-RELIABILITY-2026-05-12.md` — dernier dogfood API, causes verifiees, remediation Phase A
-3. `LLM-FIRST-CONVERSATION.md` — doctrine zero determinisme sur texte user
-4. `PROMPT-CONTEXT-REFACTOR.md` — contrats LLM et contexte par route
-5. `ADAPTATION-CANDIDATE-PIPELINE.md` — adaptation candidates + reviewer borne
-6. `SYSTEM-MAP.md` — carte d'ensemble
-7. `RUNTIME-TOOLS.md` — tools multi-tool bornes et workflow `replan_after_constraint`
-8. `SPORT-QUALITY-REVIEW.md` — Phase A+ reviewer sportif, week coherence, progression par stimulus
-9. `CONVERSATION.md` — grounding + indications
-10. `RUNBOOK.md` — ops, smokes, debug prod
-11. `ARCHITECTURE.md` — stack, principes, modules
-12. `PRODUCT.md` — vision et scope
-13. `PLANNING.md` — contrat + moteur planning
-14. `MEMORY-V2.md` — memoire utilisateur
-15. `APP-UX.md` — contrat UX app
-16. `SOUL.md` — voix coach
-17. `COACH-AUTONOMY-REFACTOR.md` — historique long de refactor autonomie, a lire seulement pour archeologie
+## Lecture Recommandee
 
-## Raccourcis
+1. `PROJECT.md` — entree repo courte.
+2. `docs/BUILD-ORDER.md` — etat actuel et prochaine tranche.
+3. `docs/DECISION-RUNTIME-REFACTOR.md` — architecture canonique.
+4. `docs/DECISION-RUNTIME-LEGACY-KILL-LIST.md` — legacy restant.
+5. `docs/SYSTEM-MAP.md` — carte rapide.
+6. `docs/RUNBOOK.md` — commandes et smokes.
 
-| Question | Doc |
-|----------|-----|
-| Ou en est le repo et que construit-on ensuite ? | `BUILD-ORDER.md` |
-| Qu'a montre le dogfood API reel du 12 mai et quelle est la remediation ? | `API-DOGFOOD-RELIABILITY-2026-05-12.md` |
-| Quelle est la doctrine conversation LLM-first ? | `LLM-FIRST-CONVERSATION.md` |
-| Comment fonctionne FitMAS dans son ensemble ? | `SYSTEM-MAP.md` |
-| Quel contrat produit ? | `PRODUCT.md` |
-| Quelle fondation technique ? | `ARCHITECTURE.md` |
-| Comment retablir une verite unique coach/app/planning ? | `COACH-COHERENCE-REFACTOR.md` |
-| Comment eviter les plans valides mais mauvais sportivement ? | `SPORT-QUALITY-REVIEW.md` |
-| Qui tranche entre coach, reviewer sportif, runtime et writer ? | `SPORT-QUALITY-REVIEW.md` |
-| Comment evoluer le planner ? | `PLANNING.md` |
-| Pourquoi le coach se trompe sur le reel, le temps ou l'intention ? | `CONVERSATION.md` |
-| Comment evoluer la memoire sans fourre-tout ? | `MEMORY-V2.md` |
-| Comment brancher des tools runtime ? | `RUNTIME-TOOLS.md` |
-| Comment reduire les prompts, specialiser le contexte LLM et analyser les `decide() None` ? | `PROMPT-CONTEXT-REFACTOR.md` |
-| Comment laisser le LLM proposer une adaptation sans lui donner le commit ? | `ADAPTATION-CANDIDATE-PIPELINE.md` |
-| Quelle est la prochaine tranche avant dogfood ? | `BUILD-ORDER.md` |
-| Comment l'app doit se comporter ? | `APP-UX.md` |
-| Pourquoi le coach hallucine, agrege au lieu de detailler, demande au lieu de decider ? | `COACH-AUTONOMY-REFACTOR.md` |
+Puis lire seulement le doc domaine utile.
 
-## Regles
+## Docs Actives
 
-- Chaque doc a un front matter `summary` + `read_when`
-- Quand le comportement change, mettre a jour le doc concerne
-- Pas de doc jetable
+| Doc | Role |
+| --- | --- |
+| `BUILD-ORDER.md` | etat court, prochaine tranche, verification minimale |
+| `DECISION-RUNTIME-REFACTOR.md` | architecture canonique du runtime |
+| `DECISION-RUNTIME-LEGACY-KILL-LIST.md` | surfaces legacy restantes et ordre de coupe |
+| `ROOT-MODULE-CENSUS.md` | ownership des modules root restants |
+| `SYSTEM-MAP.md` | carte d'ensemble du systeme |
+| `RUNBOOK.md` | commandes locales, smokes, debug |
+| `PRODUCT.md` | promesse et scope produit |
+| `ARCHITECTURE.md` | stack et contraintes techniques |
+| `LLM-FIRST-CONVERSATION.md` | doctrine zero determinisme sur texte user |
+| `PLANNING.md` | contrat planning produit/moteur |
+| `ADAPTATION-CANDIDATE-PIPELINE.md` | adaptation planning par candidats |
+| `SPORT-QUALITY-REVIEW.md` | review sportive et coherence semaine |
+| `RUNTIME-TOOLS.md` | contrat des tools runtime |
+| `CONVERSATION.md` | grounding conversationnel |
+| `MEMORY-V2.md` | architecture memoire |
+| `APP-UX.md` | contrat UX app |
+| `SOUL.md` | voix et ton FitMAS |
+| `TESTER-GUIDE.md` | guide testeurs |
 
 ## Archive
 
-Les anciens documents (cadrage v1, docs absorbes, journaux de refactor termines) sont dans `docs/archive/`.
+`docs/archive/` contient :
+
+- anciens cadrages v1 ;
+- longs journaux de refactor ;
+- docs absorbes par le Decision Runtime ;
+- audits historiques.
+
+Ces fichiers peuvent expliquer le passe.
+Ils ne tranchent plus l'architecture.
+
+## Hierarchie De Verite
+
+En cas de contradiction :
+
+1. `BUILD-ORDER.md` gagne sur l'etat reel et la suite.
+2. `DECISION-RUNTIME-REFACTOR.md` gagne sur l'architecture runtime.
+3. `DECISION-RUNTIME-LEGACY-KILL-LIST.md` gagne sur la suppression legacy.
+4. `LLM-FIRST-CONVERSATION.md` gagne sur la doctrine user-text.
+5. `PRODUCT.md` gagne sur le scope produit.
+
+## Hygiene
+
+- chaque doc doit avoir front matter `summary` + `read_when`;
+- ne pas ajouter de plan daté dans `docs/` sans intention durable ;
+- si un doc devient historique, l'archiver ou le supprimer ;
+- garder les docs actives courtes ;
+- preferer un gate de test a une longue explication.

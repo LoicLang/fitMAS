@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-from fitmas import conversation_turn_planner as planner
+from fitmas.decision import turn_planner as planner
 
 
-def test_plan_conversation_turn_parses_compound_intent(monkeypatch) -> None:
+def test_plan_conversation_turn_parses_compound_intent() -> None:
     captured: dict[str, str] = {}
 
     def fake_request_json(*, system, prompt, model, max_tokens):
@@ -24,9 +24,8 @@ def test_plan_conversation_turn_parses_compound_intent(monkeypatch) -> None:
             "confidence": 0.91,
         }
 
-    monkeypatch.setattr(planner.gw, "request_json", fake_request_json)
-
     turn_plan = planner.plan_conversation_turn(
+        request_json_fn=fake_request_json,
         user_text="Piscine impossible ce matin, vendredi a la place ?",
         temporal_summary="aujourd'hui = 2026-04-15",
         execution_summary="Natation CSS planned",
@@ -43,10 +42,9 @@ def test_plan_conversation_turn_parses_compound_intent(monkeypatch) -> None:
     assert "Aucun write" in captured["system"]
 
 
-def test_plan_conversation_turn_rejects_invalid_payload(monkeypatch) -> None:
-    monkeypatch.setattr(planner.gw, "request_json", lambda **kwargs: {"primary_intent": "nonsense"})
-
+def test_plan_conversation_turn_rejects_invalid_payload() -> None:
     turn_plan = planner.plan_conversation_turn(
+        request_json_fn=lambda **kwargs: {"primary_intent": "nonsense"},
         user_text="Piscine impossible ce matin, vendredi a la place ?",
         temporal_summary="aujourd'hui = 2026-04-15",
         execution_summary="Natation CSS planned",
@@ -57,7 +55,7 @@ def test_plan_conversation_turn_rejects_invalid_payload(monkeypatch) -> None:
     assert turn_plan is None
 
 
-def test_plan_conversation_turn_accepts_availability_constraint(monkeypatch) -> None:
+def test_plan_conversation_turn_accepts_availability_constraint() -> None:
     captured: dict[str, str] = {}
 
     def fake_request_json(*, system, prompt, model, max_tokens):
@@ -84,13 +82,8 @@ def test_plan_conversation_turn_accepts_availability_constraint(monkeypatch) -> 
             "confidence": 0.88,
         }
 
-    monkeypatch.setattr(
-        planner.gw,
-        "request_json",
-        fake_request_json,
-    )
-
     turn_plan = planner.plan_conversation_turn(
+        request_json_fn=fake_request_json,
         user_text="Demain soir c'est impossible pour moi",
         temporal_summary="demain = 2026-05-13, soir = evening",
         execution_summary="seances planifiees dans la fenetre",
@@ -108,6 +101,15 @@ def test_plan_conversation_turn_accepts_availability_constraint(monkeypatch) -> 
     assert "Availability constraint" in captured["prompt"]
     assert "disponibilite datee claire" in captured["system"]
     assert "Demain soir c'est impossible pour moi" in captured["prompt"]
+
+
+def test_turn_planner_prompt_splits_memory_only_availability_from_planning_request() -> None:
+    system = planner._SYSTEM
+
+    assert "Disponibilite seule" in system
+    assert "ne declenche pas de planning" in system
+    assert "si le user demande d'adapter" in system
+    assert "secondary_intents inclut plan_mutation" in system
 
 
 def test_turn_plan_can_carry_grounding_requirements() -> None:
@@ -130,11 +132,9 @@ def test_turn_plan_can_carry_grounding_requirements() -> None:
     assert plan.truth_scope == "plan_window"
 
 
-def test_plan_conversation_turn_accepts_execution_report_as_secondary(monkeypatch) -> None:
-    monkeypatch.setattr(
-        planner.gw,
-        "request_json",
-        lambda **kwargs: {
+def test_plan_conversation_turn_accepts_execution_report_as_secondary() -> None:
+    turn_plan = planner.plan_conversation_turn(
+        request_json_fn=lambda **kwargs: {
             "primary_intent": "health_signal",
             "secondary_intents": ["execution_report"],
             "user_goal": "signaler fatigue apres une seance faite",
@@ -148,9 +148,6 @@ def test_plan_conversation_turn_accepts_execution_report_as_secondary(monkeypatc
             "clarification_question": None,
             "confidence": 0.84,
         },
-    )
-
-    turn_plan = planner.plan_conversation_turn(
         user_text="J'ai couru mais jambes lourdes",
         temporal_summary="aujourd'hui = 2026-05-08",
         execution_summary="Footing planned",
@@ -163,7 +160,7 @@ def test_plan_conversation_turn_accepts_execution_report_as_secondary(monkeypatc
     assert turn_plan.secondary_intents == ("execution_report",)
 
 
-def test_plan_conversation_turn_accepts_generic_body_metric_question(monkeypatch) -> None:
+def test_plan_conversation_turn_accepts_generic_body_metric_question() -> None:
     captured: dict[str, str] = {}
 
     def fake_request_json(*, system, prompt, model, max_tokens):
@@ -181,9 +178,8 @@ def test_plan_conversation_turn_accepts_generic_body_metric_question(monkeypatch
             "confidence": 0.82,
         }
 
-    monkeypatch.setattr(planner.gw, "request_json", fake_request_json)
-
     turn_plan = planner.plan_conversation_turn(
+        request_json_fn=fake_request_json,
         user_text="Putain enft je fais 100kg qu'est ce qu'on fait ?",
         temporal_summary="aujourd'hui = 2026-05-08",
         execution_summary="aucun",
@@ -198,7 +194,7 @@ def test_plan_conversation_turn_accepts_generic_body_metric_question(monkeypatch
     assert "generic_question" in captured["prompt"]
 
 
-def test_plan_conversation_turn_routes_activity_highlights(monkeypatch) -> None:
+def test_plan_conversation_turn_routes_activity_highlights() -> None:
     captured: dict[str, str] = {}
 
     def fake_request_json(*, system, prompt, model, max_tokens):
@@ -217,9 +213,8 @@ def test_plan_conversation_turn_routes_activity_highlights(monkeypatch) -> None:
             "confidence": 0.86,
         }
 
-    monkeypatch.setattr(planner.gw, "request_json", fake_request_json)
-
     turn_plan = planner.plan_conversation_turn(
+        request_json_fn=fake_request_json,
         user_text="C'etait quoi ma plus longue sortie recente ?",
         temporal_summary="aujourd'hui = 2026-05-08",
         execution_summary="activites recentes disponibles",
@@ -235,11 +230,9 @@ def test_plan_conversation_turn_routes_activity_highlights(monkeypatch) -> None:
     assert "plus longue sortie" in captured["system"]
 
 
-def test_plan_conversation_turn_accepts_generic_question_as_secondary(monkeypatch) -> None:
-    monkeypatch.setattr(
-        planner.gw,
-        "request_json",
-        lambda **kwargs: {
+def test_plan_conversation_turn_accepts_generic_question_as_secondary() -> None:
+    turn_plan = planner.plan_conversation_turn(
+        request_json_fn=lambda **kwargs: {
             "primary_intent": "generic_question",
             "secondary_intents": ["generic_question"],
             "user_goal": "continuer une question generale sur le poids",
@@ -251,9 +244,6 @@ def test_plan_conversation_turn_accepts_generic_question_as_secondary(monkeypatc
             "clarification_question": None,
             "confidence": 0.78,
         },
-    )
-
-    turn_plan = planner.plan_conversation_turn(
         user_text="Je voulais dire c'est pas grave que je fasse 100kg",
         temporal_summary="aujourd'hui = 2026-05-08",
         execution_summary="aucun",
@@ -266,7 +256,7 @@ def test_plan_conversation_turn_accepts_generic_question_as_secondary(monkeypatc
     assert turn_plan.secondary_intents == ("generic_question",)
 
 
-def test_plan_conversation_turn_includes_recent_thread_for_elliptic_followup(monkeypatch) -> None:
+def test_plan_conversation_turn_includes_recent_thread_for_elliptic_followup() -> None:
     captured: dict[str, str] = {}
 
     def fake_request_json(*, system, prompt, model, max_tokens):
@@ -285,9 +275,8 @@ def test_plan_conversation_turn_includes_recent_thread_for_elliptic_followup(mon
             "confidence": 0.81,
         }
 
-    monkeypatch.setattr(planner.gw, "request_json", fake_request_json)
-
     turn_plan = planner.plan_conversation_turn(
+        request_json_fn=fake_request_json,
         user_text="Rien de grave quoi",
         temporal_summary="aujourd'hui = 2026-05-08",
         execution_summary="Footing planned",
@@ -306,7 +295,7 @@ def test_plan_conversation_turn_includes_recent_thread_for_elliptic_followup(mon
     assert "messages courts ou elliptiques" in captured["system"]
 
 
-def test_plan_conversation_turn_prompts_bare_day_without_thread_as_clarification(monkeypatch) -> None:
+def test_plan_conversation_turn_prompts_bare_day_without_thread_as_clarification() -> None:
     captured: dict[str, str] = {}
 
     def fake_request_json(*, system, prompt, model, max_tokens):
@@ -326,9 +315,8 @@ def test_plan_conversation_turn_prompts_bare_day_without_thread_as_clarification
             "confidence": 0.76,
         }
 
-    monkeypatch.setattr(planner.gw, "request_json", fake_request_json)
-
     turn_plan = planner.plan_conversation_turn(
+        request_json_fn=fake_request_json,
         user_text="samedi",
         temporal_summary="aujourd'hui = 2026-05-08",
         execution_summary="Plan semaine disponible",

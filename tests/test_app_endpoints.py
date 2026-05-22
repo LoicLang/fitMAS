@@ -4,16 +4,20 @@ import os
 import tempfile
 import unittest
 from datetime import datetime, timedelta
+from fitmas.domain.coaching import repository as coaching_repo
+from fitmas.domain.execution import repository as execution_repo
+from fitmas.domain.planning import repository as planning_repo
+from fitmas.domain.planning import template_repository as template_repo
 
 os.environ.setdefault("FITMAS_DB_PATH", tempfile.mktemp(prefix="fitmas-app-tests-", suffix=".db"))
 
 from fastapi.testclient import TestClient
 
-from fitmas import repository as repo, schema as s
-from fitmas.adaptation_log import AdaptationLogEntry
+from fitmas.core import orm as s
+from fitmas.domain.coaching.adaptation_log import AdaptationLogEntry
 from fitmas.api import app
-from fitmas.db import Base, SessionLocal, engine, init_db
-from fitmas.time_context import DAY_KEYS, day_label_fr, get_local_now
+from fitmas.core.db import Base, SessionLocal, engine, init_db
+from fitmas.core.time_context import DAY_KEYS, day_label_fr, get_local_now
 
 
 class AppEndpointsTest(unittest.TestCase):
@@ -47,7 +51,7 @@ class AppEndpointsTest(unittest.TestCase):
     def _seed_plan(self) -> s.ScheduledSession:
         now = get_local_now(self.user.timezone)
         today_key = DAY_KEYS[now.weekday()]
-        plan = repo.replace_plan(
+        plan = template_repo.replace_plan(
             self.db,
             self.user.id,
             intention="reprendre propre",
@@ -77,9 +81,9 @@ class AppEndpointsTest(unittest.TestCase):
             ],
         )
         self.assertIsNotNone(plan)
-        session = repo.get_today_scheduled_session(self.db, self.user.id, timezone_name=self.user.timezone)
+        session = planning_repo.get_today_scheduled_session(self.db, self.user.id, timezone_name=self.user.timezone)
         self.assertIsNotNone(session)
-        repo.add_activity(
+        execution_repo.add_activity(
             self.db,
             user_id=self.user.id,
             source="manual",
@@ -98,7 +102,7 @@ class AppEndpointsTest(unittest.TestCase):
             avg_speed=3.27,
             tss=48.0,
         )
-        repo.add_activity(
+        execution_repo.add_activity(
             self.db,
             user_id=self.user.id,
             source="manual",
@@ -117,12 +121,12 @@ class AppEndpointsTest(unittest.TestCase):
             avg_speed=7.2,
             tss=32.0,
         )
-        repo.mark_scheduled_session_completed(self.db, session.id)
+        planning_repo.mark_scheduled_session_completed(self.db, session.id)
         return session
 
     def test_app_routes_expose_overview_calendar_and_evolution(self) -> None:
         session = self._seed_plan()
-        repo.add_adaptation_event(
+        coaching_repo.add_adaptation_event(
             self.db,
             self.user.id,
             AdaptationLogEntry(

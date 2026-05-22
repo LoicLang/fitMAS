@@ -19,12 +19,17 @@ sys.path.insert(0, str(ROOT / "backend" / "src"))
 
 from fastapi.testclient import TestClient
 
-import fitmas.heartbeat as heartbeat
-from fitmas import repository as repo, schema as s
+import fitmas.skills.heartbeat.heartbeat as heartbeat
+from fitmas.core import orm as s
 from fitmas.api import app
-from fitmas.coach_messages import CoachDraft, persist_draft
-from fitmas.db import Base, SessionLocal, engine, init_db
-from fitmas.time_context import DAY_KEYS, day_label_fr, get_local_now
+from fitmas.app.telegram.delivery import CoachDraft, persist_draft
+from fitmas.core.db import Base, SessionLocal, engine, init_db
+from fitmas.core.time_context import DAY_KEYS, day_label_fr, get_local_now
+from fitmas.domain.coaching import repository as coaching_repo
+from fitmas.domain.execution import repository as execution_repo
+from fitmas.domain.memory import repository as memory_repo
+from fitmas.domain.planning import repository as planning_repo
+from fitmas.domain.planning import template_repository as template_repo
 
 
 ScenarioFn = Callable[[SessionLocal, TestClient, s.User], None]
@@ -96,7 +101,7 @@ def _create_user(
 def _seed_today_plan(db: SessionLocal, user: s.User, *, title: str = "Footing facile", intensity: str = "easy") -> s.ScheduledSession:
     now = get_local_now(user.timezone)
     today_key = DAY_KEYS[now.weekday()]
-    repo.replace_plan(
+    template_repo.replace_plan(
         db,
         user.id,
         intention="reprendre propre",
@@ -122,7 +127,7 @@ def _seed_today_plan(db: SessionLocal, user: s.User, *, title: str = "Footing fa
             }
         ],
     )
-    session = repo.get_today_scheduled_session(db, user.id, timezone_name=user.timezone)
+    session = planning_repo.get_today_scheduled_session(db, user.id, timezone_name=user.timezone)
     assert session is not None
     return session
 
@@ -180,7 +185,7 @@ def _seed_recent_activities(db: SessionLocal, user: s.User) -> None:
     ]
     for sport_type, title, duration_min, days_ago, distance_m in samples:
         started_at = now - timedelta(days=days_ago)
-        repo.add_activity(
+        execution_repo.add_activity(
             db,
             user_id=user.id,
             source="manual",
@@ -200,9 +205,9 @@ def _seed_recent_activities(db: SessionLocal, user: s.User) -> None:
 
 
 def _snapshot(db: SessionLocal, user_id: int) -> dict:
-    memory = repo.get_active_memory_items(db, user_id, include_patterns=True, total_limit=48)
-    sessions = repo.get_scheduled_sessions(db, user_id, limit=12)
-    latest_adaptation = repo.get_latest_adaptation_event(db, user_id)
+    memory = memory_repo.get_active_memory_items(db, user_id, include_patterns=True, total_limit=48)
+    sessions = planning_repo.get_scheduled_sessions(db, user_id, limit=12)
+    latest_adaptation = coaching_repo.get_latest_adaptation_event(db, user_id)
     return {
         "memory": {
             (getattr(item, "category", ""), getattr(item, "key", "")): str(getattr(item, "value", ""))
@@ -410,7 +415,7 @@ def scenario_fatigue_today(db: SessionLocal, client: TestClient, user: s.User) -
 def scenario_health_signal(db: SessionLocal, client: TestClient, user: s.User) -> None:
     tomorrow = get_local_now(user.timezone) + timedelta(days=1)
     tomorrow_key = DAY_KEYS[tomorrow.weekday()]
-    for session in repo.get_scheduled_sessions(db, user.id, limit=12):
+    for session in planning_repo.get_scheduled_sessions(db, user.id, limit=12):
         if session.day == tomorrow_key and session.sport_type == "running":
             session.active = False
     db.commit()
@@ -447,7 +452,7 @@ def _setup_compound_swap(db: SessionLocal) -> s.User:
     friday_offset = (4 - now.weekday()) % 7 or 7  # ensure a future Friday
     friday = (now + timedelta(days=friday_offset)).replace(hour=7, minute=0, second=0, microsecond=0)
     friday_key = DAY_KEYS[friday.weekday()]
-    repo.replace_plan(
+    template_repo.replace_plan(
         db,
         user.id,
         intention="reprise propre",
@@ -568,7 +573,7 @@ def _setup_golden_case_autonomy(db: SessionLocal) -> s.User:
 
     # Activite reelle : nage offplan vendredi-equivalent (J-2), 22 min
     offplan_swim_started = (now - timedelta(days=2)).replace(hour=14, minute=0, second=0, microsecond=0)
-    repo.add_activity(
+    execution_repo.add_activity(
         db,
         user_id=user.id,
         source="strava",
@@ -587,7 +592,7 @@ def _setup_golden_case_autonomy(db: SessionLocal) -> s.User:
     )
     # Activite reelle : renfo done (J-3), 58 min
     strength_started = (now - timedelta(days=3)).replace(hour=18, minute=0, second=0, microsecond=0)
-    repo.add_activity(
+    execution_repo.add_activity(
         db,
         user_id=user.id,
         source="manual",
@@ -620,8 +625,8 @@ def scenario_golden_case_autonomy(db: SessionLocal, client: TestClient, user: s.
     Le refactor (Chantiers 1 a 5) doit faire disparaitre chacun de ces bugs.
     """
     # Tour 1 : briefing Sunday evening (heartbeat weekly_review)
-    import fitmas.heartbeat as heartbeat
-    from fitmas.coach_messages import persist_draft
+    import fitmas.skills.heartbeat.heartbeat as heartbeat
+    from fitmas.app.telegram.delivery import persist_draft
 
     sunday_review = "2026-04-19T20:00:00+02:00"
     monday_followup = "2026-04-20T08:05:00+02:00"
@@ -771,7 +776,7 @@ def scenario_heartbeat_non_completion(db: SessionLocal, client: TestClient, user
         _post_message(client, db, user, "J'ai pas eu le temps hier malheureusement, petit imprevu au travail")
 
     yesterday = datetime.fromisoformat("2026-04-29T07:00:00+02:00").date()
-    sessions = repo.get_scheduled_sessions_for_date(db, user.id, target_date=yesterday)
+    sessions = planning_repo.get_scheduled_sessions_for_date(db, user.id, target_date=yesterday)
     strength = [session for session in sessions if session.sport_type == "strength"]
     if len(strength) != 1 or strength[0].completion_status != "skipped":
         status = strength[0].completion_status if strength else "missing"

@@ -1,6 +1,6 @@
 from datetime import date
 
-from fitmas.recent_reality import build_recent_reality_window
+from fitmas.domain.execution.recent_reality import build_recent_reality_window
 
 
 def test_recent_reality_counts_confirmed_sessions_and_load_gap() -> None:

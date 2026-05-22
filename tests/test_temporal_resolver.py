@@ -3,7 +3,7 @@ from __future__ import annotations
 import unittest
 from datetime import datetime
 
-from fitmas.temporal_resolver import resolve_temporal_context
+from fitmas.core.temporal_resolver import resolve_temporal_context
 
 
 class TemporalResolverTest(unittest.TestCase):

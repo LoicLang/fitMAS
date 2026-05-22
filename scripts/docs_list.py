@@ -1,20 +1,21 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
+import argparse
 from pathlib import Path
 
 
 DOCS_DIR = Path(__file__).resolve().parent.parent / "docs"
-EXCLUDED_DIRS = {"archive", "research"}
+DEFAULT_EXCLUDED_DIRS = {"archive", "research", "superpowers"}
 
 
-def walk_markdown_files(root: Path) -> list[Path]:
+def walk_markdown_files(root: Path, *, include_all: bool = False) -> list[Path]:
     files: list[Path] = []
     for path in root.rglob("*.md"):
         rel = path.relative_to(root)
         if any(part.startswith(".") for part in rel.parts):
             continue
-        if any(part in EXCLUDED_DIRS for part in rel.parts):
+        if not include_all and any(part in DEFAULT_EXCLUDED_DIRS for part in rel.parts):
             continue
         files.append(path)
     return sorted(files, key=lambda item: str(item.relative_to(root)))
@@ -73,13 +74,24 @@ def extract_metadata(full_path: Path) -> tuple[str | None, list[str], str | None
     return summary, read_when, None
 
 
-def main() -> int:
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(description="List FitMAS docs with front-matter summaries.")
+    parser.add_argument(
+        "--all",
+        action="store_true",
+        help="include archive and superpowers historical plan docs",
+    )
+    args = parser.parse_args(argv)
+
     if not DOCS_DIR.exists():
         print("docs directory not found.")
         return 1
 
-    print("Listing all markdown files in docs folder:")
-    markdown_files = walk_markdown_files(DOCS_DIR)
+    if args.all:
+        print("Listing all markdown files in docs folder, including archive and historical plans:")
+    else:
+        print("Listing active markdown docs. Use ./scripts/docs:list --all for archive and historical plans:")
+    markdown_files = walk_markdown_files(DOCS_DIR, include_all=args.all)
 
     for full_path in markdown_files:
         rel = full_path.relative_to(DOCS_DIR)

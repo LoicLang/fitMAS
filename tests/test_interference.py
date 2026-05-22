@@ -1,6 +1,6 @@
 """Tests for multisport interference matrix."""
 
-from fitmas.interference import check_adjacent_conflicts, format_conflicts_for_prompt
+from fitmas.domain.planning.interference import check_adjacent_conflicts, format_conflicts_for_prompt
 
 
 def _session(sport_type="running", intensity="moderate"):

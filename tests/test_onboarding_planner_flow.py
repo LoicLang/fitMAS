@@ -11,8 +11,8 @@ os.environ.setdefault("FITMAS_DB_PATH", tempfile.mktemp(prefix="fitmas-onboardin
 from fastapi.testclient import TestClient
 
 from fitmas.api import app
-import fitmas.api_onboarding as api_onboarding
-from fitmas.db import Base, engine, init_db
+import fitmas.app.api.routes_onboarding as api_onboarding
+from fitmas.core.db import Base, engine, init_db
 
 
 class OnboardingPlannerFlowTest(unittest.TestCase):
@@ -52,7 +52,7 @@ class OnboardingPlannerFlowTest(unittest.TestCase):
 
         with (
             patch.object(api_onboarding, "formulate_onboarding_recap", return_value="recap"),
-            patch.object(api_onboarding, "formulate_week_plan", side_effect=lambda planner_output, user_profile, coach_profile, time_context=None: {
+            patch.object(api_onboarding, "formulate_week_plan", side_effect=lambda planner_output, user_profile, coach_profile, time_context=None, **_kwargs: {
                 "intention": planner_output["intention_seed"],
                 "summary": "summary",
                 "days": planner_output["days"],
@@ -130,6 +130,45 @@ class OnboardingPlannerFlowTest(unittest.TestCase):
             "Sortie longue endurance 45min - version facile",
         )
         self.assertEqual(normalized["days"][1]["session_title"], "Repos complet")
+
+    def test_generated_week_rest_day_cannot_keep_active_session_content(self) -> None:
+        week = {
+            "intention": "ok",
+            "summary": "ok",
+            "days": [
+                {
+                    "day": "saturday",
+                    "label": "Samedi",
+                    "sport_type": "rest",
+                    "session_type": "rest",
+                    "session_title": "Footing endurance 36min zone 2",
+                    "session_goal": "Courir facile",
+                    "session_note": "Optionnel selon sensations",
+                    "session_description": "36 min en zone 2, facile.",
+                    "duration_min": 36,
+                    "intensity": "easy",
+                    "load_score": 1,
+                    "priority": "Support",
+                    "nutrition_focus": "Hydratation",
+                    "flexibility": "flexible",
+                    "completion_status": "planned",
+                    "watch_items": [("Charge", "Courir facile")],
+                }
+            ],
+        }
+
+        normalized = api_onboarding._normalize_generated_week_text_durations(week)
+        day = normalized["days"][0]
+
+        self.assertEqual(day["sport_type"], "rest")
+        self.assertEqual(day["session_type"], "rest")
+        self.assertEqual(day["session_title"], "Repos")
+        self.assertEqual(day["session_description"], "")
+        self.assertIsNone(day["duration_min"])
+        self.assertEqual(day["load_score"], 0)
+        self.assertEqual(day["session_goal"], "Recuperer.")
+        self.assertEqual(day["session_note"], "Repos.")
+        self.assertEqual(day["watch_items"], [])
 
 
 if __name__ == "__main__":

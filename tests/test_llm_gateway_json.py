@@ -6,7 +6,7 @@ import sys
 from types import SimpleNamespace
 from unittest.mock import patch
 
-import fitmas.llm_gateway as gw
+import fitmas.llm.gateway as gw
 
 
 def _fake_text_response(text: str) -> SimpleNamespace:
@@ -52,6 +52,23 @@ class LLMGatewayJsonTest(unittest.TestCase):
 
         self.assertIsNotNone(data)
         self.assertEqual(data["mutation_type"], "no_change")
+
+    def test_request_json_preserves_custom_schema_payload(self) -> None:
+        original_request_text = gw.request_text
+        try:
+            gw.request_text = lambda **kwargs: (
+                '{"response_type":"adaptation_proposal",'
+                '"operations":[{"op":"move","source_ref":"session:1","target_date":"2026-05-14","reason":"ok"}],'
+                '"summary":"running demain","confidence":0.9}'
+            )
+            data = gw.request_json(system="x", prompt="y", schema_hint="AdaptationProposal")
+        finally:
+            gw.request_text = original_request_text
+
+        self.assertIsNotNone(data)
+        self.assertEqual(data["response_type"], "adaptation_proposal")
+        self.assertEqual(data["operations"][0]["source_ref"], "session:1")
+        self.assertNotIn("mutation_type", data)
 
     def test_message_json_repairs_truncated_tail(self) -> None:
         response = _fake_text_response(

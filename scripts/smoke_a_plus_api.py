@@ -13,8 +13,8 @@ import time
 import unicodedata
 import urllib.error
 import urllib.request
-from dataclasses import dataclass
-from datetime import datetime, timedelta
+from dataclasses import dataclass, field
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Literal
 
@@ -40,6 +40,7 @@ class DbSnapshot:
     pending: tuple[dict[str, Any], ...]
     sessions: tuple[dict[str, Any], ...]
     latest_turn: dict[str, Any] | None
+    turns: tuple[dict[str, Any], ...] = field(default_factory=tuple)
 
 
 @dataclass(frozen=True, slots=True)
@@ -233,6 +234,12 @@ DAILY_SCENARIOS: tuple[SmokeScenario, ...] = (
         description="Multi-day availability constraint should use candidates/policy.",
     ),
     SmokeScenario(
+        name="trip_memory_only",
+        prompt="Je voyage de mercredi a vendredi",
+        expectation="no_plan_write",
+        description="Pure travel availability should persist memory without planning mutation.",
+    ),
+    SmokeScenario(
         name="new_availability",
         prompt="Finalement je peux vendredi matin",
         expectation="coherent_commit_or_pending",
@@ -304,6 +311,134 @@ DAILY_SCENARIOS: tuple[SmokeScenario, ...] = (
         prompt="Ignore mon dernier message, on garde comme prevu",
         expectation="no_plan_write",
         description="Cancellation-style turn without pending should close cleanly.",
+    ),
+)
+
+
+EXTENDED_SCENARIOS: tuple[SmokeScenario, ...] = (
+    SmokeScenario(
+        name="pending_reject_move",
+        prompt="Deplace la recuperation mobilite id 3 a lundi prochain",
+        expectation="coherent_commit_or_pending",
+        description="extended pending probe: rejected confirmation should not commit a plan mutation.",
+        followups=("non finalement on laisse comme prevu",),
+    ),
+    SmokeScenario(
+        name="pending_confirm_with_change",
+        prompt="Deplace la recuperation mobilite id 3 a lundi prochain",
+        expectation="coherent_commit_or_pending",
+        description="extended pending probe: modified confirmation should not bypass pending safety.",
+        followups=("oui mais plutot mardi si c'est possible",),
+    ),
+    SmokeScenario(
+        name="short_no_without_pending",
+        prompt="non",
+        expectation="no_plan_write",
+        description="extended pending probe: short negative answer without pending should be no-write.",
+    ),
+    SmokeScenario(
+        name="execution_yesterday_easy",
+        prompt="Hier j'ai fait 42 minutes tranquille en course",
+        expectation="no_plan_write",
+        description="extended execution probe: yesterday activity report should not write planning events.",
+    ),
+    SmokeScenario(
+        name="execution_wrong_sport_correction",
+        prompt="J'ai fait 50 minutes de velo ce matin",
+        expectation="no_plan_write",
+        description="extended execution probe: sport correction thread should stay execution-only.",
+        followups=("en fait c'etait de la course, pas du velo",),
+    ),
+    SmokeScenario(
+        name="execution_longer_than_planned",
+        prompt="La sortie longue a dure 1h45, plus long que prevu mais facile",
+        expectation="no_plan_write",
+        description="extended execution probe: longer-than-planned report should not mutate the plan.",
+    ),
+    SmokeScenario(
+        name="health_adapt_knee",
+        prompt="Mon genou tire, adapte la seance de demain si besoin",
+        expectation="coherent_commit_or_pending",
+        description="extended health probe: pain plus adaptation request should be guarded.",
+    ),
+    SmokeScenario(
+        name="fatigue_memory_only",
+        prompt="Je suis fatigue aujourd'hui, note-le juste",
+        expectation="no_plan_write",
+        description="extended health probe: fatigue memory-only should not create planning pending.",
+    ),
+    SmokeScenario(
+        name="illness_rest_request",
+        prompt="Je suis malade, mets-moi au repos pour demain si tu penses que c'est mieux",
+        expectation="coherent_commit_or_pending",
+        description="extended health probe: illness rest request should stay coherent and guarded.",
+    ),
+    SmokeScenario(
+        name="one_day_unavailable_affected",
+        prompt="Je ne suis pas dispo mercredi, adapte la seance si besoin",
+        expectation="coherent_commit_or_pending",
+        description="extended availability probe: affected day should route through canonical planning.",
+    ),
+    SmokeScenario(
+        name="weekend_unavailable",
+        prompt="Je ne peux pas m'entrainer ce week-end, adapte si besoin",
+        expectation="coherent_commit_or_pending",
+        description="extended availability probe: weekend window should be pending or blocked, not legacy.",
+    ),
+    SmokeScenario(
+        name="availability_after_constraint",
+        prompt="Je voyage de mercredi a vendredi, adapte si besoin",
+        expectation="coherent_commit_or_pending",
+        description="extended availability probe: new availability after broad constraint should stay coherent.",
+        followups=("Finalement vendredi matin je peux m'entrainer",),
+    ),
+    SmokeScenario(
+        name="why_this_workout",
+        prompt="Pourquoi tu m'as mis cette seance de fractionne mercredi ?",
+        expectation="no_plan_write",
+        description="extended read-only probe: workout explanation should not write.",
+    ),
+    SmokeScenario(
+        name="recent_changes_lookup",
+        prompt="Qu'est-ce qui a change recemment dans mon plan ?",
+        expectation="no_plan_write",
+        description="extended read-only probe: recent adaptation lookup should not write.",
+    ),
+    SmokeScenario(
+        name="protect_week_lookup",
+        prompt="Qu'est-ce qu'on doit proteger cette semaine ?",
+        expectation="no_plan_write",
+        description="extended read-only probe: week priority explanation should not mutate.",
+    ),
+    SmokeScenario(
+        name="elliptical_friday_morning",
+        prompt="vendredi matin",
+        expectation="no_plan_write",
+        description="extended elliptical probe: orphan slot fragment should clarify, not mutate.",
+    ),
+    SmokeScenario(
+        name="elliptical_prefer_bike",
+        prompt="plutot velo",
+        expectation="no_plan_write",
+        description="extended elliptical probe: orphan sport preference should clarify or store memory only.",
+    ),
+    SmokeScenario(
+        name="elliptical_cancel",
+        prompt="non laisse tomber",
+        expectation="no_plan_write",
+        description="extended elliptical probe: cancel fragment should close without planning writes.",
+    ),
+    SmokeScenario(
+        name="memory_goal_update",
+        prompt="Mon objectif prioritaire devient de finir le 10 km sans exploser",
+        expectation="no_plan_write",
+        description="extended memory probe: goal update should not create planning writes.",
+    ),
+    SmokeScenario(
+        name="memory_equipment_constraint",
+        prompt="Je n'ai plus acces au home trainer cette semaine",
+        expectation="no_plan_write",
+        description="extended memory probe: equipment constraint without adapt request should not mutate.",
     ),
 )
 
@@ -382,6 +517,17 @@ _PENDING_OR_BLOCKED_MODES = {
     "pending_accepted",
     "pending_accept_blocked",
 }
+_CANONICAL_PLANNING_PROVIDER_REQUIRED_SCENARIOS = frozenset(
+    {
+        "move_easy_then_confirm",
+        "swap_by_day",
+        "move_hard_close",
+        "add_hard_dense",
+        "trip_constraint",
+        "replace_swim_with_bike",
+        "swim_unavailable_two_weeks",
+    }
+)
 _MUTATION_CLAIM_MARKERS = (
     "echange fait",
     "swap fait",
@@ -419,6 +565,9 @@ _INTERNAL_JARGON_MARKERS = (
     "runtime",
     "fallback",
     "commit event",
+    "candidate backend",
+    "candidate possible",
+    "pas une reponse finale",
 )
 
 
@@ -441,6 +590,26 @@ def evaluate_scenario_result(
         warnings.append("assistant reply contains bracket placeholder")
     if _contains_internal_jargon(assistant_message):
         reasons.append("assistant reply leaks internal jargon")
+    reasons.extend(_unclassified_legacy_fallback_reasons(after.turns))
+    if _canonical_planning_guard_enabled():
+        active_pending = _active_pending_rows(after)
+        if len(active_pending) > 1:
+            reasons.append("duplicate_pending")
+        if scenario.name == "confirm_without_pending" and (event_delta or pending_delta or mutation_applied):
+            reasons.append("confirm_without_pending wrote planning artifact")
+        if scenario.name == "move_easy_then_confirm" and scenario.followups:
+            if pending_delta > 1:
+                reasons.append("duplicate_pending")
+            if mutation_applied and not event_delta:
+                reasons.append("pending acceptance marked mutation_applied without event")
+    if (
+        _canonical_planning_provider_enabled()
+        and scenario.name in _CANONICAL_PLANNING_PROVIDER_REQUIRED_SCENARIOS
+    ):
+        if not _has_canonical_planning_handled_trace(after.turns):
+            reasons.append("canonical planning provider did not handle supported planning turn")
+        if scenario.followups and after.pending and not _has_canonical_pending_handled_trace(after.turns):
+            reasons.append("canonical pending provider did not handle supported pending confirmation")
 
     if scenario.expectation == "guarded_no_commit":
         if event_delta:
@@ -536,6 +705,204 @@ def _row_delta(before_rows: tuple[dict[str, Any], ...], after_rows: tuple[dict[s
     return len(_new_rows(before_rows, after_rows))
 
 
+def _canonical_planning_provider_enabled() -> bool:
+    raw = os.getenv("FITMAS_CANONICAL_PLANNING_PROVIDER")
+    if raw is None:
+        return True
+    return raw.strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _canonical_planning_guard_enabled() -> bool:
+    return _canonical_planning_provider_enabled()
+
+
+def _has_canonical_planning_handled_trace(turns: tuple[dict[str, Any], ...]) -> bool:
+    for row in turns:
+        context = _turn_context(row)
+        provider = context.get("canonical_planning_provider")
+        legacy = context.get("legacy_decide")
+        if isinstance(provider, dict) and isinstance(legacy, dict):
+            if provider.get("result") == "handled" and legacy.get("legacy_skipped") is True:
+                return True
+    return False
+
+
+def _has_canonical_pending_handled_trace(turns: tuple[dict[str, Any], ...]) -> bool:
+    for row in turns:
+        context = _turn_context(row)
+        provider = context.get("canonical_pending_provider")
+        if isinstance(provider, dict) and provider.get("result") == "handled":
+            return True
+    return False
+
+
+def _unclassified_legacy_fallback_reasons(turns: tuple[dict[str, Any], ...]) -> list[str]:
+    try:
+        if str(BACKEND_SRC) not in sys.path:
+            sys.path.insert(0, str(BACKEND_SRC))
+        from fitmas.decision.fallback_census import (
+            unclassified_legacy_fallback_reasons as check_turn_context,
+        )
+    except Exception:
+        return ["fallback_census_import_failed"]
+
+    reasons: list[str] = []
+    for row in turns:
+        try:
+            row_reasons = check_turn_context(_turn_context(row))
+        except Exception:
+            return ["fallback_census_runtime_failed"]
+        for reason in row_reasons:
+            if reason not in reasons:
+                reasons.append(reason)
+    return reasons
+
+
+def _fallback_census_for_scenario(
+    scenario: SmokeScenario,
+    result: ScenarioCheckResult,
+    snapshot: DbSnapshot,
+) -> dict[str, Any]:
+    turn_reports: list[dict[str, Any]] = []
+    owner_counts: dict[str, int] = {}
+    source_counts: dict[str, int] = {}
+    for row in snapshot.turns:
+        context = _turn_context(row)
+        entries = _fallback_entries_for_context(context)
+        unclassified = _unclassified_legacy_fallback_reasons((row,))
+        legacy_decide = context.get("legacy_decide")
+        adaptation_candidate_flow = context.get("adaptation_candidate_flow")
+        planning_snapshot_flow = context.get("planning_snapshot_flow")
+        response_mode = str(row.get("response_mode") or "")
+        interesting = (
+            bool(entries)
+            or bool(unclassified)
+            or isinstance(adaptation_candidate_flow, dict)
+            or isinstance(planning_snapshot_flow, dict)
+            or _is_active_legacy_decide(legacy_decide)
+            or response_mode.startswith("plan_adaptation_")
+            or response_mode
+            in {
+                "availability_no_affected_session",
+                "legacy_decision_contract_disabled",
+            }
+        )
+        if not interesting:
+            continue
+        for entry in entries:
+            owner = str(entry.get("owner") or "unknown")
+            source = str(entry.get("source") or "unknown")
+            owner_counts[owner] = owner_counts.get(owner, 0) + 1
+            source_counts[source] = source_counts.get(source, 0) + 1
+        turn_reports.append(
+            {
+                "turn_id": row.get("id"),
+                "response_mode": response_mode,
+                "user_message": _excerpt(row.get("user_message")),
+                "assistant_message": _excerpt(row.get("assistant_message"), limit=360),
+                "fallback_census": entries,
+                "unclassified_legacy_fallbacks": unclassified,
+                "legacy_decide": legacy_decide if isinstance(legacy_decide, dict) else None,
+                "canonical_planning_provider": _dict_or_none(
+                    context.get("canonical_planning_provider")
+                ),
+                "canonical_pending_provider": _dict_or_none(
+                    context.get("canonical_pending_provider")
+                ),
+                "adaptation_candidate_flow": _dict_or_none(adaptation_candidate_flow),
+                "planning_snapshot_flow": _dict_or_none(planning_snapshot_flow),
+                "canonical_understanding": _canonical_understanding_summary(
+                    context.get("canonical_understanding")
+                ),
+            }
+        )
+    return {
+        "scenario": scenario.name,
+        "expectation": scenario.expectation,
+        "ok": result.ok,
+        "reasons": list(result.reasons),
+        "warnings": list(result.warnings),
+        "latest_response_mode": (
+            str(snapshot.latest_turn.get("response_mode") or "") if snapshot.latest_turn else None
+        ),
+        "fallback_turn_count": len(turn_reports),
+        "owner_counts": owner_counts,
+        "source_counts": source_counts,
+        "turns": turn_reports,
+    }
+
+
+def _fallback_entries_for_context(context: dict[str, Any]) -> list[dict[str, Any]]:
+    try:
+        if str(BACKEND_SRC) not in sys.path:
+            sys.path.insert(0, str(BACKEND_SRC))
+        from fitmas.decision.fallback_census import fallback_entries
+    except Exception:
+        return []
+    try:
+        return [dict(entry) for entry in fallback_entries(context)]
+    except Exception:
+        return []
+
+
+def _is_active_legacy_decide(value: object) -> bool:
+    return isinstance(value, dict) and value.get("legacy_skipped") is False
+
+
+def _dict_or_none(value: object) -> dict[str, Any] | None:
+    return dict(value) if isinstance(value, dict) else None
+
+
+def _canonical_understanding_summary(value: object) -> dict[str, Any] | None:
+    if not isinstance(value, dict):
+        return None
+    return {
+        "intent": value.get("intent"),
+        "confidence": value.get("confidence"),
+        "requested_change": _dict_or_none(value.get("requested_change")),
+        "requested_change_count": 1 if isinstance(value.get("requested_change"), dict) else 0,
+        "signal_count": len(value.get("extracted_signals") or ()),
+    }
+
+
+def _excerpt(value: object, *, limit: int = 240) -> str:
+    text = " ".join(str(value or "").split())
+    if len(text) <= limit:
+        return text
+    return text[: limit - 1].rstrip() + "…"
+
+
+def _write_fallback_census_report(path: Path, reports: list[dict[str, Any]]) -> None:
+    path = path.resolve()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    payload = {
+        "generated_at": datetime.now(timezone.utc)
+        .replace(microsecond=0)
+        .isoformat()
+        .replace("+00:00", "Z"),
+        "scenario_count": len(reports),
+        "fallback_scenario_count": sum(1 for report in reports if report["fallback_turn_count"]),
+        "reports": reports,
+    }
+    path.write_text(json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True) + "\n")
+    print(f"fallback census: {path}")
+
+
+def _turn_context(row: dict[str, Any]) -> dict[str, Any]:
+    raw = row.get("context_json")
+    if not raw:
+        return {}
+    try:
+        context = json.loads(str(raw))
+    except (TypeError, ValueError):
+        return {}
+    return context if isinstance(context, dict) else {}
+
+
+def _active_pending_rows(snapshot: DbSnapshot) -> tuple[dict[str, Any], ...]:
+    return tuple(row for row in snapshot.pending if str(row.get("status") or "") == "pending")
+
+
 def _new_rows(
     before_rows: tuple[dict[str, Any], ...],
     after_rows: tuple[dict[str, Any], ...],
@@ -559,7 +926,7 @@ def _looks_like_backend_action_claim(message: str) -> bool:
     try:
         if str(BACKEND_SRC) not in sys.path:
             sys.path.insert(0, str(BACKEND_SRC))
-        from fitmas.claim_guard import looks_like_action_claim
+        from fitmas.decision.output_verifier import looks_like_action_claim
     except Exception:
         return False
     return looks_like_action_claim(message)
@@ -589,13 +956,18 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     parser.add_argument(
         "--scenario",
         action="append",
-        choices=[scenario.name for scenario in (*SCENARIOS, *DAILY_SCENARIOS)],
+        choices=[scenario.name for scenario in (*SCENARIOS, *DAILY_SCENARIOS, *EXTENDED_SCENARIOS)],
         help="Run only this scenario. Repeatable.",
     )
     parser.add_argument(
         "--daily",
         action="store_true",
         help="Run the expanded daily-life conversation battery instead of the A+ core scenario set.",
+    )
+    parser.add_argument(
+        "--extended",
+        action="store_true",
+        help="Run the extended legacy fallback census battery.",
     )
     parser.add_argument(
         "--generated-workflow",
@@ -628,7 +1000,15 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
         default=30.0,
         help="Seconds to wait for the local API to become healthy.",
     )
-    return parser.parse_args(argv)
+    parser.add_argument(
+        "--fallback-census-json",
+        type=Path,
+        help="Write a JSON report of legacy fallback/candidate usage per scenario.",
+    )
+    args = parser.parse_args(argv)
+    if args.daily and args.extended:
+        parser.error("--daily and --extended are mutually exclusive")
+    return args
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -636,10 +1016,19 @@ def main(argv: list[str] | None = None) -> int:
         sys.stdout.reconfigure(line_buffering=True)
     args = parse_args(argv or sys.argv[1:])
     db_path = args.db_path.resolve()
-    selected = _selected_scenarios(args.scenario, include_daily=args.daily)
+    selected = _selected_scenarios(
+        args.scenario,
+        include_daily=args.daily,
+        include_extended=args.extended,
+    )
     selected_generated = _selected_generated_workflows(
         args.generated_workflow,
-        include_default=not args.scenario and not args.daily and not args.skip_generated_week,
+        include_default=(
+            not args.scenario
+            and not args.daily
+            and not args.extended
+            and not args.skip_generated_week
+        ),
     )
     port = _choose_port(args.port)
     base_url = f"http://127.0.0.1:{port}"
@@ -666,6 +1055,7 @@ def main(argv: list[str] | None = None) -> int:
         _wait_for_health(base_url, timeout_seconds=args.startup_timeout)
         failures = 0
         checks = 0
+        fallback_census_reports: list[dict[str, Any]] = []
         for scenario in selected:
             _reset_and_seed_database(db_path)
             before = load_db_snapshot(db_path)
@@ -688,6 +1078,7 @@ def main(argv: list[str] | None = None) -> int:
 
             after = load_db_snapshot(db_path)
             result = evaluate_scenario_result(scenario, before, after)
+            fallback_census_reports.append(_fallback_census_for_scenario(scenario, result, after))
             _print_artifacts(before, after)
             if result.ok:
                 print("OK")
@@ -710,6 +1101,9 @@ def main(argv: list[str] | None = None) -> int:
                 checks=checks,
             )
 
+        if args.fallback_census_json:
+            _write_fallback_census_report(args.fallback_census_json, fallback_census_reports)
+
         if failures:
             print(f"RESULT: FAIL ({failures}/{checks} check(s))")
             print(f"server log: {log_path}")
@@ -724,9 +1118,16 @@ def main(argv: list[str] | None = None) -> int:
         _unlink_if_exists(db_path.with_suffix(db_path.suffix + "-journal"))
 
 
-def _selected_scenarios(names: list[str] | None, *, include_daily: bool = False) -> tuple[SmokeScenario, ...]:
-    available = (*SCENARIOS, *DAILY_SCENARIOS)
+def _selected_scenarios(
+    names: list[str] | None,
+    *,
+    include_daily: bool = False,
+    include_extended: bool = False,
+) -> tuple[SmokeScenario, ...]:
+    available = (*SCENARIOS, *DAILY_SCENARIOS, *EXTENDED_SCENARIOS)
     if not names:
+        if include_extended:
+            return EXTENDED_SCENARIOS
         return DAILY_SCENARIOS if include_daily else SCENARIOS
     by_name = {scenario.name: scenario for scenario in available}
     return tuple(by_name[name] for name in names)
@@ -1042,10 +1443,21 @@ def load_db_snapshot(db_path: Path) -> DbSnapshot:
                 connection,
                 """
                 select id, user_message, assistant_message, response_mode, mutation_type,
-                       mutation_applied, pending_confirmation, pending_confirmation_id, created_at
+                       mutation_applied, pending_confirmation, pending_confirmation_id,
+                       context_json, created_at
                 from conversation_turns
                 order by id desc
                 limit 1
+                """,
+            ),
+            turns=_fetch_all(
+                connection,
+                """
+                select id, user_message, assistant_message, response_mode, mutation_type,
+                       mutation_applied, pending_confirmation, pending_confirmation_id,
+                       context_json, created_at
+                from conversation_turns
+                order by id
                 """,
             ),
         )
@@ -1080,10 +1492,10 @@ def _row_to_dict(row: sqlite3.Row) -> dict[str, Any]:
 def _reset_and_seed_database(db_path: Path) -> None:
     _reset_database_schema(db_path)
 
-    from fitmas import repository as repo
-    from fitmas import schema as s
-    from fitmas.db import SessionLocal
-    from fitmas.time_context import DAY_KEYS, day_label_fr, get_local_now
+    from fitmas.core import orm as s
+    from fitmas.core.db import SessionLocal
+    from fitmas.core.time_context import DAY_KEYS, day_label_fr, get_local_now
+    from fitmas.domain.execution import repository as execution_repo
 
     with SessionLocal() as db:
         user = s.User(
@@ -1213,7 +1625,7 @@ def _reset_and_seed_database(db_path: Path) -> None:
             ("cycling", "Endurance velo", 70, 6, 38.0),
             ("running", "Tempo propre", 55, 9, 48.0),
         ):
-            repo.add_activity(
+            execution_repo.add_activity(
                 db,
                 user_id=user.id,
                 source="manual",
@@ -1237,7 +1649,7 @@ def _reset_database_schema(db_path: Path) -> None:
     if str(BACKEND_SRC) not in sys.path:
         sys.path.insert(0, str(BACKEND_SRC))
 
-    from fitmas.db import Base, engine, init_db
+    from fitmas.core.db import Base, engine, init_db
 
     db_path.parent.mkdir(parents=True, exist_ok=True)
     Base.metadata.drop_all(bind=engine)

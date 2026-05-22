@@ -24,7 +24,7 @@ def test_legacy_user_indication_modules_are_removed() -> None:
 
 
 def test_conversation_pipeline_has_no_deterministic_user_text_gates() -> None:
-    source = _source("conversation_pipeline.py")
+    source = _source("decision/conversation_pipeline.py")
 
     forbidden = (
         "interpret_user_indication",
@@ -56,7 +56,7 @@ def test_conversation_pipeline_has_no_deterministic_user_text_gates() -> None:
 
 
 def test_conversation_context_does_not_parse_free_user_text() -> None:
-    source = _source("conversation_context.py")
+    source = _source("decision/conversation_context.py")
 
     forbidden = (
         "extract_activity_claim",
@@ -73,16 +73,8 @@ def test_conversation_context_does_not_parse_free_user_text() -> None:
         assert symbol not in source
 
 
-def test_llm_decide_does_not_route_tools_from_raw_user_text() -> None:
-    source = _source("llm.py")
-
-    forbidden = (
-        "route_tools_for_query(user_text",
-        "_fallback_extract_facts(user_text",
-    )
-
-    for symbol in forbidden:
-        assert symbol not in source
+def test_legacy_llm_decide_path_is_deleted() -> None:
+    assert not (SRC / "llm/decision_legacy.py").exists()
 
 
 def test_tools_routing_has_no_user_text_classifier() -> None:
@@ -99,8 +91,8 @@ def test_tools_routing_has_no_user_text_classifier() -> None:
         assert symbol not in source
 
 
-def test_api_messages_runtime_dependencies_do_not_include_user_indication_prestep() -> None:
-    source = _source("api_messages.py")
+def test_message_route_runtime_dependencies_do_not_include_user_indication_prestep() -> None:
+    source = _source("app/api/routes_messages.py")
 
     forbidden = (
         "from fitmas.user_indications",
@@ -114,7 +106,7 @@ def test_api_messages_runtime_dependencies_do_not_include_user_indication_preste
 
 
 def test_conversation_dependencies_do_not_expose_user_indication_prestep() -> None:
-    source = _source("conversation_contract.py")
+    source = _source("decision/conversation_contract.py")
 
     forbidden = (
         "interpret_user_indication",
