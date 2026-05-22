@@ -5,7 +5,7 @@ from datetime import datetime
 
 from fitmas.domain.athlete.profile import AthleteProfileSnapshot
 from fitmas import schema as s
-from fitmas.planning_contract import (
+from fitmas.domain.planning.contract import (
     AvailabilityConfidence,
     PlanConfidence,
     SessionRole,

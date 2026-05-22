@@ -149,6 +149,8 @@ Les cuts physiques recents :
 - Les value objects de decision d'adaptation vivent maintenant dans
   `domain/planning/adaptation_decision.py`; root `adaptation_decision.py`
   est supprime.
+- Le planning contract vit maintenant dans `domain/planning/contract.py`;
+  root `planning_contract.py` est supprime.
 - La resolution pending canonique normalise les aliases d'enum provider
   (`confirm`, `accepted`, etc.) vers `accept_pending` avant application.
   Un type inconnu devient une clarification pending, jamais un trou vers
@@ -168,7 +170,7 @@ Les cuts physiques recents :
 
 Etat chiffre au dernier check local :
 
-- root modules : `13`.
+- root modules : `12`.
 - legacy modules : `0` fichier source actif.
 - backend complet : `1347 passed, 11 skipped, 14 subtests passed`.
 - smoke canonical planning default : OK `10/10`.

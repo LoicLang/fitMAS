@@ -170,7 +170,7 @@ Ces modules vivent maintenant sous `backend/src/fitmas/domain/planning/`.
 | `session_templates.py` | Librairie running/cycling/swimming/strength/climbing | Fait |
 | `plan_validator.py` | Garde-fous charge/structure/profil | Fait |
 | `periodization.py` | Mesocycle 3+1, progression automatique | Fait |
-| `planning_contract.py` | Horizons, confidence, week mission, availability, session policy | Fait |
+| `domain/planning/contract.py` | Horizons, confidence, week mission, availability, session policy | Fait |
 | `replan_from_life_change.py` | Replan suite a changement de vie | Fait |
 
 Tables SQL ajoutees : `fitness_snapshots`, `readiness_snapshots`, `planning_decisions`.

@@ -11,7 +11,7 @@ from fitmas.domain.coaching.calibration_needs import (
     fallback_resolve_calibration_need,
 )
 from fitmas.domain.coaching.calibration_status import CalibrationPhase, CalibrationStatus
-from fitmas.planning_contract import AvailabilityConfidence, AvailabilityState
+from fitmas.domain.planning.contract import AvailabilityConfidence, AvailabilityState
 
 
 class CalibrationNeedsTest(unittest.TestCase):

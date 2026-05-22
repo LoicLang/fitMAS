@@ -100,6 +100,7 @@ Ce qui n'est plus l'architecture active :
 - root prompt layers (`prompt_layers.py`)
 - root conversation prompt builder (`llm_prompt_builder.py`)
 - root adaptation decision (`adaptation_decision.py`)
+- root planning contract (`planning_contract.py`)
 - root `final_reply.py`
 - root `heartbeat.py`
 - root `telegram_scheduler.py`

@@ -8,7 +8,7 @@ from typing import Any, Sequence
 
 from fitmas.domain.athlete.profile import AthleteProfileSnapshot
 from fitmas.domain.coaching.calibration_status import CalibrationPhase, CalibrationStatus
-from fitmas.planning_contract import AvailabilityConfidence, AvailabilityState
+from fitmas.domain.planning.contract import AvailabilityConfidence, AvailabilityState
 
 DAY_LABELS = {
     "monday": "lundi",
