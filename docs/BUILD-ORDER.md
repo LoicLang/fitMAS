@@ -280,8 +280,9 @@ Prochain chantier logique :
   `WeeklyPlan/DayPlan` onboarding/template/archive ;
 - root `models.py` est supprime : les DTOs Pydantic vivent dans leurs owners
   `decision/`, `domain/*/view_models.py` et `app/api/` ;
-- prochain hotspot : le monolithe ORM `schema.py`, a traiter seulement avec un
-  plan de coupe clair ;
+- root `schema.py` est supprime : les records SQLAlchemy vivent sous
+  `core/orm/` et les call sites importent cet owner directement ;
+- root backend est reduit aux entrypoints `__init__.py`, `api.py`, `main.py` ;
 - garder la priorite runtime plus petit, pas refactor plus complet.
 
 ## Ordre De Lecture Pour Un Agent

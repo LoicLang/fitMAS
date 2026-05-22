@@ -25,12 +25,12 @@ Non-but : deplacer 800 lignes pour faire joli.
 
 ## Etat Actuel
 
-Apres 13C :
+Apres 13F :
 
 ```text
 models.py  = supprime
-schema.py  = dernier monolithe root restant
-root files = 4 (__init__.py, api.py, main.py, schema.py)
+schema.py  = supprime
+root files = 3 (__init__.py, api.py, main.py)
 ```
 
 Les contrats Pydantic sont maintenant repartis par owner :
@@ -44,6 +44,18 @@ domain/memory/view_models.py
 app/api/read_models.py
 app/api/payloads.py
 app/api/onboarding_models.py
+```
+
+Les records ORM SQLAlchemy sont maintenant repartis sous :
+
+```text
+core/orm/user.py
+core/orm/memory.py
+core/orm/execution.py
+core/orm/integrations.py
+core/orm/planning.py
+core/orm/coaching.py
+core/orm/athlete.py
 ```
 
 ## Diagnostic Initial
@@ -67,7 +79,7 @@ Decision :
 
 ```text
 1. Supprimer models.py d'abord. Fait en 13C.
-2. Supprimer schema.py ensuite.
+2. Supprimer schema.py ensuite. Fait en 13F.
 3. Garder des facades temporaires seulement a l'interieur d'un slice.
 4. A la fin, root doit contenir uniquement __init__.py, api.py, main.py.
 ```

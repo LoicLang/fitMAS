@@ -61,10 +61,11 @@ backend/src/fitmas/
 Root encore accepte :
 
 - `api.py`, `main.py`, `__init__.py` pour l'assemblage app.
-- `schema.py` reste le dernier monolithe brut root.
 - root `models.py` est supprime. Les contrats Pydantic vivent dans leurs
   owners : `decision/message_models.py`, `domain/*/view_models.py` et
   `app/api/*_models.py`.
+- root `schema.py` est supprime. Les records SQLAlchemy vivent sous
+  `core/orm/`.
 - root `repository.py` est supprime. Les reads/writes vivent directement dans
   leurs owners :
   `domain/planning/repository.py`, `domain/planning/template_repository.py`,
@@ -184,11 +185,10 @@ Interdits :
 
 ## Risque Actuel
 
-Le root runtime conversationnel est supprime. Les premiers owners repository
-sont extraits et la facade root `repository.py` est supprimee. Le prochain
-risque est le monolithe ORM transverse restant :
-
-- `schema.py`.
+Le root runtime conversationnel est supprime. Les repositories, DTOs Pydantic
+et records ORM ne vivent plus en root. Le risque principal redevient le produit
+lui-meme : continuer a reduire les chemins runtime, pas seulement ranger les
+fichiers.
 
 Critere de succes jeudi :
 
