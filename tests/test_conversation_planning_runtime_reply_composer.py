@@ -9,7 +9,7 @@ from fitmas.decision.reply_request import ReplyRequest, ReplyResult
 from fitmas.domain.planning.models import PlanningCommandResult, PlanningDecisionResult
 from fitmas.llm.reply_decision_backend import LLMReplyBackend
 from fitmas.domain.planning.patch_mutation_service import PlanPatchServiceResult
-from fitmas.plan_patch import PlanPatch, PlanPatchOperation, PlanPatchValidation
+from fitmas.domain.planning.plan_patch import PlanPatch, PlanPatchOperation, PlanPatchValidation
 
 
 def _planning_result(kind: str) -> PlanningDecisionResult:

@@ -17,8 +17,8 @@ from fitmas.domain.planning.patch_mutation_service import (
     PlanMutationServiceResult,
     PlanPatchServiceResult,
 )
-from fitmas.plan_patch import PlanPatch, PlanPatchOperation, PlanPatchOperationValidation, PlanPatchValidation
-from fitmas.week_coherence import WeekCoherenceFinding, WeekCoherenceReview
+from fitmas.domain.planning.plan_patch import PlanPatch, PlanPatchOperation, PlanPatchOperationValidation, PlanPatchValidation
+from fitmas.domain.planning.week_coherence import WeekCoherenceFinding, WeekCoherenceReview
 
 
 def _service_result_with(event: PlanBlockedMutationEvent) -> PlanMutationServiceResult:

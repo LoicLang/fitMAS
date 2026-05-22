@@ -15,7 +15,7 @@ from fitmas.decision.turn_recording import decision_reply_text_for_turn
 from fitmas.domain.planning.patch_mutation_service import PlanPatchServiceResult
 from fitmas.grounding_contract import ReplyGroundingPacket, render_grounding_packet_for_prompt
 from fitmas.llm.reply_decision_backend import LLMReplyBackend
-from fitmas.plan_patch import PlanPatch
+from fitmas.domain.planning.plan_patch import PlanPatch
 
 import fitmas.llm.reply_backend as final_reply
 

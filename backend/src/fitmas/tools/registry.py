@@ -527,7 +527,7 @@ def _suggest_replan_candidates(context: ToolContext, arguments: dict[str, Any]) 
 
 
 def _validate_plan_patch_tool(context: ToolContext, arguments: dict[str, Any]) -> ToolResult:
-    from fitmas.plan_patch import PlanPatch, validate_plan_patch
+    from fitmas.domain.planning.plan_patch import PlanPatch, validate_plan_patch
 
     try:
         patch = PlanPatch.model_validate(_raw_patch_payload(arguments))
@@ -555,8 +555,8 @@ def _validate_plan_patch_tool(context: ToolContext, arguments: dict[str, Any]) -
 
 
 def _validate_week_coherence_tool(context: ToolContext, arguments: dict[str, Any]) -> ToolResult:
-    from fitmas.plan_patch import PlanPatch, validate_plan_patch
-    from fitmas.week_coherence import aggregate_week_coherence_policy, build_week_coherence_context
+    from fitmas.domain.planning.plan_patch import PlanPatch, validate_plan_patch
+    from fitmas.domain.planning.week_coherence import aggregate_week_coherence_policy, build_week_coherence_context
 
     try:
         patch = PlanPatch.model_validate(_raw_patch_payload(arguments))
@@ -741,7 +741,7 @@ def _request_week_coherence_json(**kwargs) -> dict[str, Any] | None:
 
 
 def review_week_coherence_with_llm(context: Any, *, request_json_fn: Any = None) -> Any:
-    from fitmas.week_coherence import review_week_coherence_with_llm as review
+    from fitmas.domain.planning.week_coherence import review_week_coherence_with_llm as review
 
     return review(context, request_json_fn=request_json_fn)
 

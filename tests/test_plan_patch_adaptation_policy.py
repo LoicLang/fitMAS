@@ -1,11 +1,11 @@
 from __future__ import annotations
 
-from fitmas.plan_patch import PlanPatch, PlanPatchOperation, PlanPatchValidation
+from fitmas.domain.planning.plan_patch import PlanPatch, PlanPatchOperation, PlanPatchValidation
 from fitmas.domain.planning.policy import decide_adaptation_policy
 from fitmas.domain.planning.evaluator import EvaluatedPlanPatchCandidate
 from fitmas.domain.planning.reviewer import PlanPatchCandidateReviewDecision
 from fitmas.domain.planning.candidates import PlanPatchCandidate, PlanPatchCandidateValidation
-from fitmas.week_coherence import CoherenceFinding, WeekCoherenceScore
+from fitmas.domain.planning.week_coherence import CoherenceFinding, WeekCoherenceScore
 
 
 def test_policy_blocks_when_no_candidate_is_usable() -> None:

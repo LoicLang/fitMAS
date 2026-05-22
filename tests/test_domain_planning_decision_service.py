@@ -4,10 +4,10 @@ from types import SimpleNamespace
 
 from fitmas.decision import RequestedPlanChange
 from fitmas.domain.planning.decision_service import decide_plan_change
-from fitmas.plan_patch import PlanPatchValidation
+from fitmas.domain.planning.plan_patch import PlanPatchValidation
 from fitmas.domain.planning.evaluator import EvaluatedPlanPatchCandidate
 from fitmas.domain.planning.candidates import PlanPatchCandidateValidation
-from fitmas.week_coherence import WeekCoherenceScore
+from fitmas.domain.planning.week_coherence import WeekCoherenceScore
 
 
 def _context():

@@ -6,7 +6,7 @@ from datetime import date, datetime
 from typing import Any, Callable, Literal, Sequence
 
 from fitmas.domain.athlete.fitness_snapshot import estimate_scheduled_session_tss
-from fitmas.plan_patch import PlanPatch, PlanPatchValidation
+from fitmas.domain.planning.plan_patch import PlanPatch, PlanPatchValidation
 
 WeekCoherenceStatus = Literal["valid", "warning", "requires_confirmation", "blocked"]
 SportQuality = Literal["good", "acceptable", "fragile", "poor"]

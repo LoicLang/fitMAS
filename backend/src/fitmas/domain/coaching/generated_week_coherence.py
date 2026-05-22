@@ -5,9 +5,9 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Callable, Sequence
 
-from fitmas.plan_patch import PlanPatch, PlanPatchOperation, PlanPatchValidation, validate_plan_patch
+from fitmas.domain.planning.plan_patch import PlanPatch, PlanPatchOperation, PlanPatchValidation, validate_plan_patch
 from fitmas.core.time_context import current_week_dates, get_local_now
-from fitmas.week_coherence import (
+from fitmas.domain.planning.week_coherence import (
     WeekCoherenceReview,
     aggregate_week_coherence_policy,
     build_week_coherence_context,

@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Literal, Sequence
 
-from fitmas.plan_patch import PlanPatch
+from fitmas.domain.planning.plan_patch import PlanPatch
 
 PlanPatchCandidateValidationStatus = Literal["valid", "blocked"]
 

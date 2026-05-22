@@ -4,7 +4,7 @@ from types import SimpleNamespace
 
 from fitmas.decision.planning_outcomes import plan_patch_service_result_to_outcome
 from fitmas.domain.planning.patch_mutation_service import PlanPatchServiceResult
-from fitmas.plan_patch import PlanPatch, PlanPatchOperation, PlanPatchOperationValidation, PlanPatchValidation
+from fitmas.domain.planning.plan_patch import PlanPatch, PlanPatchOperation, PlanPatchOperationValidation, PlanPatchValidation
 
 
 def _patch() -> PlanPatch:

@@ -12,14 +12,14 @@ from fitmas.domain.planning import mutation_executor
 from fitmas.domain.planning import session_actions as plan_actions
 from fitmas.domain.planning.mutation_decision import MutationDecision
 from fitmas.domain.planning.mutation_hooks import run_pre_mutation_hooks
-from fitmas.plan_patch import (
+from fitmas.domain.planning.plan_patch import (
     PlanPatch,
     PlanPatchOperation,
     PlanPatchValidation,
     adapt_plan_patch_to_mutation_decisions,
     validate_plan_patch,
 )
-from fitmas.week_coherence import (
+from fitmas.domain.planning.week_coherence import (
     WeekCoherenceContext,
     WeekCoherenceReview,
     aggregate_week_coherence_policy,

@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from datetime import UTC, date, datetime, timedelta
 
 from fitmas.domain.planning.mutation_decision import MutationDecision
-from fitmas.plan_patch import PlanPatch
+from fitmas.domain.planning.plan_patch import PlanPatch
 from fitmas.domain.planning.candidates import PlanPatchCandidate
 
 _YES_TEXTS = {

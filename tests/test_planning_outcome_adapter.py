@@ -4,7 +4,7 @@ from types import SimpleNamespace
 
 from fitmas.decision.planning_outcomes import planning_decision_to_outcome
 from fitmas.domain.planning.models import PlanningCommandResult, PlanningDecisionResult
-from fitmas.plan_patch import PlanPatch, PlanPatchOperation
+from fitmas.domain.planning.plan_patch import PlanPatch, PlanPatchOperation
 
 
 def _decision(kind: str, *, command_result: PlanningCommandResult | None = None) -> PlanningDecisionResult:

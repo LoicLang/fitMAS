@@ -5,14 +5,14 @@ from typing import Any, Literal, Mapping, Sequence
 
 from sqlalchemy.orm import Session
 
-from fitmas.plan_patch import PlanPatch, PlanPatchValidation, validate_plan_patch
+from fitmas.domain.planning.plan_patch import PlanPatch, PlanPatchValidation, validate_plan_patch
 from fitmas.domain.planning.candidates import (
     ALLOWED_CANDIDATE_OPERATION_TYPES,
     PlanPatchCandidate,
     PlanPatchCandidateValidation,
     validate_plan_patch_candidate_contract,
 )
-from fitmas.week_coherence import (
+from fitmas.domain.planning.week_coherence import (
     CoherenceFinding,
     WeekCoherenceContext,
     WeekCoherenceScore,

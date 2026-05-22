@@ -7,7 +7,7 @@ from unittest.mock import patch
 from fitmas.tools.contract import ToolCall, ToolContext
 from fitmas.tools.registry import build_tool_registry, list_tools_for_pipeline
 from fitmas.tools.runtime import execute_tool_call, execute_tool_calls
-from fitmas.week_coherence import WeekCoherenceFinding, WeekCoherenceReview
+from fitmas.domain.planning.week_coherence import WeekCoherenceFinding, WeekCoherenceReview
 
 
 class ToolRuntimeTest(unittest.TestCase):

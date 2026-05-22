@@ -67,7 +67,7 @@ def test_10q_conversation_pipeline_does_not_import_plan_patch_reply_internals() 
     assert "fitmas.decision.plan_patch_reply" in context_imports
     assert "fitmas.decision.plan_patch_reply" not in imports
     assert "fitmas.domain.planning.patch_mutation_service.PlanPatchServiceResult" not in imports
-    assert "fitmas.plan_patch.PlanPatch" not in imports
+    assert "fitmas.domain.planning.plan_patch.PlanPatch" not in imports
     assert "re" not in imports
 
 

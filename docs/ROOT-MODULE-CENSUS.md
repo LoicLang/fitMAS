@@ -23,7 +23,7 @@ is allowed only for hotspots that need a separate shrink slice.
 
 ## Summary
 
-- Root files counted: 29
+- Root files counted: 27
 - Permanent root entrypoints allowed: 3
 - First wrapper cuts completed: `heartbeat*.py`, `llm_gateway.py`,
   `telegram_scheduler.py`, `tool_*.py`, `api_messages.py`,
@@ -62,6 +62,7 @@ is allowed only for hotspots that need a separate shrink slice.
   `interference.py`, `periodization.py`, `planner.py`,
   `planning_config.py`, `planning_decision.py`, `planning_state.py`,
   `session_similarity.py`, `session_templates.py`, `workout_content.py`
+- Planning core root cut completed: `plan_patch.py`, `week_coherence.py`
 - Primary risk: moving files faster than deleting obsolete boundaries
 - Thursday criterion: root is explainable, delete candidates are explicit, and
   new root files fail architecture tests unless classified here
@@ -88,7 +89,6 @@ is allowed only for hotspots that need a separate shrink slice.
 | `llm_prompt_builder.py` | llm | merge | legacy prompt builder should collapse into llm prompts | prompt shrink |
 | `main.py` | root-entrypoint | entrypoint | ASGI import entrypoint | permanent root |
 | `models.py` | core | keep_root_temporarily | central SQLAlchemy models need a dedicated schema split | model schema split |
-| `plan_patch.py` | domain/planning | move | PlanPatch is planning domain language | planning package split |
 | `plan_validator.py` | domain/planning | merge | validation should live with planning policy and mutation service | planning simplification |
 | `planning_contract.py` | domain/planning | merge | planning contract should merge with domain planning models | planning simplification |
 | `planning_window_resolution.py` | domain/planning | merge | window resolver should merge into ReferenceResolver | planning simplification |
@@ -97,14 +97,13 @@ is allowed only for hotspots that need a separate shrink slice.
 | `schema.py` | core | keep_root_temporarily | central Pydantic schema needs bounded API/domain split | schema split |
 | `session_metadata.py` | domain/planning | merge | load band helper belongs with session/timeline models | planning simplification |
 | `signals.py` | domain/coaching | merge | signal derivation overlaps context and memory substrates | coaching substrate shrink |
-| `week_coherence.py` | domain/planning | move | week coherence is planning quality | planning package split |
 | `week_metadata.py` | domain/planning | merge | week label helper belongs with periodization | planning simplification |
 
 ## Immediate Cut Order
 
 1. Move athlete/coaching services to `domain/*` before touching monoliths.
 2. Split monoliths only after deletion:
-   `conversation_pipeline.py`, `repository.py`, `week_coherence.py`.
+   `conversation_pipeline.py`, `repository.py`, `schema.py`, `models.py`.
 
 ## Non Goals
 

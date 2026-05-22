@@ -7,11 +7,11 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 SRC_ROOT = ROOT / "backend" / "src" / "fitmas"
 DELETED_ROOT_MODULES = (
-    "fitmas.plan_patch_adaptation_policy",
-    "fitmas.plan_patch_candidate_evaluator",
-    "fitmas.plan_patch_candidate_reviewer",
-    "fitmas.plan_patch_candidates",
-    "fitmas.plan_patch_backend_candidates",
+    "fitmas.domain.planning.plan_patch_adaptation_policy",
+    "fitmas.domain.planning.plan_patch_candidate_evaluator",
+    "fitmas.domain.planning.plan_patch_candidate_reviewer",
+    "fitmas.domain.planning.plan_patch_candidates",
+    "fitmas.domain.planning.plan_patch_backend_candidates",
 )
 
 

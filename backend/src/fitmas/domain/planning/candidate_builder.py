@@ -4,7 +4,7 @@ from datetime import date, datetime
 from typing import Any
 
 from fitmas.domain.planning.models import PlanningCandidateSet, ResolvedPlanChange
-from fitmas.plan_patch import PlanPatch, PlanPatchOperation
+from fitmas.domain.planning.plan_patch import PlanPatch, PlanPatchOperation
 from fitmas.domain.planning.candidates import PlanPatchCandidate
 
 _PLAN_ID = "plan_current"

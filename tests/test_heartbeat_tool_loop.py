@@ -8,7 +8,7 @@ from unittest.mock import patch
 import fitmas.skills.heartbeat.heartbeat as heartbeat
 from fitmas.skills.heartbeat import tool_loop
 from fitmas.tools.contract import ToolContext
-from fitmas.week_coherence import WeekCoherenceFinding, WeekCoherenceReview
+from fitmas.domain.planning.week_coherence import WeekCoherenceFinding, WeekCoherenceReview
 
 
 class HeartbeatToolLoopTest(unittest.TestCase):

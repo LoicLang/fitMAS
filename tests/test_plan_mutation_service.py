@@ -7,7 +7,7 @@ from types import SimpleNamespace
 import pytest
 
 from fitmas.domain.planning.mutation_decision import MutationDecision
-from fitmas.plan_patch import PlanPatch, PlanPatchOperation
+from fitmas.domain.planning.plan_patch import PlanPatch, PlanPatchOperation
 from fitmas.domain.planning.patch_mutation_service import (
     apply_decisions_for_user,
     apply_patch_for_user,
@@ -18,7 +18,7 @@ from fitmas.domain.planning.patch_mutation_service import (
     move_session_for_user,
     skip_session_for_user,
 )
-from fitmas.week_coherence import WeekCoherenceFinding, WeekCoherenceReview
+from fitmas.domain.planning.week_coherence import WeekCoherenceFinding, WeekCoherenceReview
 
 
 @pytest.fixture(autouse=True)

@@ -9,7 +9,7 @@ from fitmas.domain.planning.mutation_permissions import (
     serialize_plan_patch_choice_confirmation,
     serialize_plan_patch_confirmation,
 )
-from fitmas.plan_patch import PlanPatch, PlanPatchOperation, PlanPatchValidation
+from fitmas.domain.planning.plan_patch import PlanPatch, PlanPatchOperation, PlanPatchValidation
 from fitmas.domain.planning.policy import AdaptationPolicyDecision
 from fitmas.domain.planning.evaluator import EvaluatedPlanPatchCandidate
 from fitmas.domain.planning.candidates import PlanPatchCandidate, PlanPatchCandidateValidation

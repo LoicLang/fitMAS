@@ -8,7 +8,7 @@ HISTORICAL_MODULES = frozenset(
     {
         "fitmas.planning_snapshot",
         "fitmas.adaptation_proposal",
-        "fitmas.plan_patch_candidate_generator",
+        "fitmas.domain.planning.plan_patch_candidate_generator",
     }
 )
 

@@ -5,10 +5,10 @@ from types import SimpleNamespace
 from fitmas.domain.planning.evaluator import PlanCandidateEvaluator
 from fitmas.domain.planning.models import PlanningCandidateSet
 from fitmas.domain.planning.policy import SportPolicy
-from fitmas.plan_patch import PlanPatch, PlanPatchOperation, PlanPatchValidation
+from fitmas.domain.planning.plan_patch import PlanPatch, PlanPatchOperation, PlanPatchValidation
 from fitmas.domain.planning.evaluator import EvaluatedPlanPatchCandidate
 from fitmas.domain.planning.candidates import PlanPatchCandidate, PlanPatchCandidateValidation
-from fitmas.week_coherence import WeekCoherenceScore
+from fitmas.domain.planning.week_coherence import WeekCoherenceScore
 
 
 def _candidate() -> PlanPatchCandidate:

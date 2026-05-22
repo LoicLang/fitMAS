@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import date
 from typing import Any
 
-from fitmas.plan_patch import PlanPatch
+from fitmas.domain.planning.plan_patch import PlanPatch
 
 
 def summarize_plan_patch_for_user(patch: PlanPatch) -> str | None:
