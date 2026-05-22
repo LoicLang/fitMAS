@@ -23,7 +23,7 @@ is allowed only for hotspots that need a separate shrink slice.
 
 ## Summary
 
-- Root files counted: 21
+- Root files counted: 20
 - Permanent root entrypoints allowed: 3
 - First wrapper cuts completed: `heartbeat*.py`, `llm_gateway.py`,
   `telegram_scheduler.py`, `tool_*.py`, `api_messages.py`,
@@ -70,6 +70,8 @@ is allowed only for hotspots that need a separate shrink slice.
   `planning_window_resolution.py`
 - Decision grounding root cut completed: `grounding_contract.py`
 - Decision output verification root cut completed: `claim_guard.py`
+- Decision conversation contract root cut completed:
+  `conversation_contract.py`
 - Primary risk: moving files faster than deleting obsolete boundaries
 - Thursday criterion: root is explainable, delete candidates are explicit, and
   new root files fail architecture tests unless classified here
@@ -86,7 +88,6 @@ is allowed only for hotspots that need a separate shrink slice.
 | `coach_state_bundle.py` | domain/coaching | merge | old bundle should collapse into CoachContext | coach context shrink |
 | `context_pack.py` | decision | merge | prompt context pack overlaps Decision ContextBuilder | context builder shrink |
 | `conversation_context.py` | decision | merge | conversation context should be one DecisionRuntime context | decision package split |
-| `conversation_contract.py` | decision | merge | conversation contracts should be canonical outcome contracts | decision package split |
 | `conversation_pipeline.py` | decision | keep_root_temporarily | hotspot orchestrator is shrinking; PlanPatch replies already moved to `decision/plan_patch_reply.py` | turn state / idempotence / recording shrink |
 | `conversation_prompt_modules.py` | llm | merge | prompt fragments should collapse into three prompt families | prompt shrink |
 | `conversation_prompting.py` | llm | merge | prompt assembly should move into llm prompts | prompt shrink |

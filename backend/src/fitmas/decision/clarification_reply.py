@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from fitmas.conversation_contract import ConversationTurnOutcome
+from fitmas.decision.conversation_contract import ConversationTurnOutcome
 from fitmas.decision import DecisionExplanation, DecisionOutcome, ReplyContract
 from fitmas.models import Extraction
 

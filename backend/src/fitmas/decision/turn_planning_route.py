@@ -5,7 +5,7 @@ from typing import Any, Callable
 
 from sqlalchemy.orm import Session
 
-from fitmas.conversation_contract import ConversationTurnOutcome, ConversationTurnState
+from fitmas.decision.conversation_contract import ConversationTurnOutcome, ConversationTurnState
 from fitmas.decision import planning_runtime
 from fitmas.decision import turn_context as turn_context_builder
 

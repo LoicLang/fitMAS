@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import date
 from typing import Any, Callable, Literal
 
-from fitmas.conversation_contract import ConversationTurnOutcome
+from fitmas.decision.conversation_contract import ConversationTurnOutcome
 from fitmas.decision import CommandResult, DecisionExplanation, DecisionOutcome, ReplyContract
 from fitmas.domain.planning.models import PlanningDecisionResult
 from fitmas.domain.planning.patch_summary import summarize_plan_patch_for_user

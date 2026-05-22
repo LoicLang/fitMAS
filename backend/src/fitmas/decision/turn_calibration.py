@@ -9,7 +9,7 @@ from fitmas.domain.coaching.calibration_needs import (
     find_open_calibration_need,
     should_apply_calibration_resolution,
 )
-from fitmas.conversation_contract import ConversationTurnInput, ConversationTurnState
+from fitmas.decision.conversation_contract import ConversationTurnInput, ConversationTurnState
 from fitmas.decision import turn_persistence
 from fitmas.decision import turn_state
 

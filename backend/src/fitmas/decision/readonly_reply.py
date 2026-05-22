@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 
 from fitmas.domain.coaching import coach_voice
 from fitmas import repository as repo
-from fitmas.conversation_contract import ConversationTurnOutcome
+from fitmas.decision.conversation_contract import ConversationTurnOutcome
 from fitmas.decision import CoachUnderstanding, DecisionExplanation, DecisionOutcome, ReplyContract
 from fitmas.decision.command_mapping import commands_from_understanding
 from fitmas.decision.grounding import ReplyGroundingPacket

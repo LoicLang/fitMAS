@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 import fitmas.llm.gateway as gw
 import fitmas.llm.reply_backend as final_reply
 import fitmas.decision.turn_planning_route as turn_planning_route
-from fitmas.conversation_contract import (
+from fitmas.decision.conversation_contract import (
     ConversationPipelineDependencies,
     ConversationTurnInput,
     ConversationTurnOutcome,

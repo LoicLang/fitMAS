@@ -106,7 +106,7 @@ def test_message_route_runtime_dependencies_do_not_include_user_indication_prest
 
 
 def test_conversation_dependencies_do_not_expose_user_indication_prestep() -> None:
-    source = _source("conversation_contract.py")
+    source = _source("decision/conversation_contract.py")
 
     forbidden = (
         "interpret_user_indication",

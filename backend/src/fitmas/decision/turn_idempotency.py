@@ -7,7 +7,7 @@ from threading import Lock
 from sqlalchemy.orm import Session
 
 from fitmas import repository as repo
-from fitmas.conversation_contract import ConversationTurnInput, ConversationTurnOutcome
+from fitmas.decision.conversation_contract import ConversationTurnInput, ConversationTurnOutcome
 from fitmas.models import DayId, Extraction, Message, MessageReply, MessageRole
 
 

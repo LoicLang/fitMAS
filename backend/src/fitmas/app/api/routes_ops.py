@@ -18,7 +18,7 @@ from fitmas import repository as repo, schema as s
 from fitmas.app.api.payloads import IncomingMessage
 from fitmas.app.api.support import ensure_debug_enabled
 from fitmas.coach_messages import persist_draft
-from fitmas.conversation_contract import (
+from fitmas.decision.conversation_contract import (
     ConversationPipelineDependencies,
     ConversationTurnInput,
     ConversationUserNotFoundError,

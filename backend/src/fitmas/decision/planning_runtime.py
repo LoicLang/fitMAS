@@ -6,7 +6,7 @@ from typing import Any, Callable
 
 from sqlalchemy.orm import Session
 
-from fitmas.conversation_contract import ConversationTurnOutcome
+from fitmas.decision.conversation_contract import ConversationTurnOutcome
 from fitmas.decision import CoachUnderstanding, RequestedPlanChange
 from fitmas.domain.planning.decision_service import decide_plan_change
 from fitmas.domain.planning.models import PlanningDecisionResult

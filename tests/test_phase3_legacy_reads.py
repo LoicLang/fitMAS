@@ -31,7 +31,7 @@ def test_conversation_runtime_does_not_load_legacy_week_plan_truth() -> None:
     root = Path(__file__).resolve().parents[1]
     files = [
         root / "backend/src/fitmas/conversation_pipeline.py",
-        root / "backend/src/fitmas/conversation_contract.py",
+        root / "backend/src/fitmas/decision/conversation_contract.py",
     ]
     forbidden = (
         "pydantic_plan",

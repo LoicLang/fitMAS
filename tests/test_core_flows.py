@@ -14,7 +14,7 @@ from fitmas.app.api import routes_messages as api_messages
 import fitmas.conversation_pipeline as conversation_pipeline
 import fitmas.domain.planning.patch_mutation_service as plan_mutation_service
 from fitmas.api import app
-from fitmas.conversation_contract import (
+from fitmas.decision.conversation_contract import (
     ConversationTurnOutcome,
 )
 from fitmas.core.db import Base, SessionLocal, engine, init_db

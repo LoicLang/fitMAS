@@ -17,7 +17,7 @@ from fitmas.conversation_context import (
     signal_summary_for_prompt,
     temporal_summary_for_prompt,
 )
-from fitmas.conversation_contract import (
+from fitmas.decision.conversation_contract import (
     ConversationPipelineDependencies,
     ConversationTurnInput,
     ConversationTurnState,

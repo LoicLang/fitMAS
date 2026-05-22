@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 from fitmas.domain.coaching import coach_voice
 import fitmas.llm.gateway as gw
 from fitmas.decision.output_verifier import build_claim_repair_prompt, looks_like_action_claim, outage_fallback_reply
-from fitmas.conversation_contract import (
+from fitmas.decision.conversation_contract import (
     ConversationPipelineDependencies,
     ConversationTurnInput,
     ConversationTurnOutcome,

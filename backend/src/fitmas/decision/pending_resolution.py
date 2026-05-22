@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session
 
 from fitmas import repository as repo
 from fitmas import schema as s
-from fitmas.conversation_contract import ConversationTurnOutcome
+from fitmas.decision.conversation_contract import ConversationTurnOutcome
 from fitmas.decision import CoachUnderstanding, DecisionReplyComposer
 from fitmas.decision import pending_reply
 from fitmas.decision.planning_outcomes import (

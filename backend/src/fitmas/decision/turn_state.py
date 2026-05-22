@@ -5,7 +5,7 @@ import logging
 from sqlalchemy.orm import Session
 
 from fitmas import repository as repo
-from fitmas.conversation_contract import ConversationTurnState
+from fitmas.decision.conversation_contract import ConversationTurnState
 
 
 logger = logging.getLogger(__name__)

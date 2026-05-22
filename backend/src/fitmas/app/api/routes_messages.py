@@ -11,7 +11,7 @@ from fitmas.adaptation import check_and_adapt_health_facts
 from fitmas.domain.execution.helpers import claimed_activities_last_days
 from fitmas.app.api.payloads import IncomingMessage
 from fitmas.domain.memory.availability_constraints import parse_availability_fact_key
-from fitmas.conversation_contract import ConversationPipelineDependencies, ConversationTurnInput, ConversationUserNotFoundError
+from fitmas.decision.conversation_contract import ConversationPipelineDependencies, ConversationTurnInput, ConversationUserNotFoundError
 from fitmas.decision import turn_planner
 from fitmas.core.db import get_db
 from fitmas.domain.execution.clarification import (

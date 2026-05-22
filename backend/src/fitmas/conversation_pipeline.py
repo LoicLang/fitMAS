@@ -8,7 +8,7 @@ from fitmas.decision import turn_context as turn_context_builder
 from fitmas.decision import turn_idempotency
 from fitmas.decision import turn_router
 from fitmas.decision import turn_state
-from fitmas.conversation_contract import (
+from fitmas.decision.conversation_contract import (
     ConversationPipelineDependencies,
     ConversationTurnInput,
     ConversationUserNotFoundError,

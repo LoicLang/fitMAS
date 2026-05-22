@@ -13,7 +13,7 @@ ALLOWED_IMPORT_PREFIXES = {
     "fitmas",
     "fitmas.repository",
     "fitmas.decision",
-    "fitmas.conversation_contract",
+    "fitmas.decision.conversation_contract",
     "fitmas.models",
 }
 

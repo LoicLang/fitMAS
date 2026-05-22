@@ -127,6 +127,9 @@ Les cuts physiques recents :
 - Le grounding visible des replies vit maintenant dans `decision/grounding.py`.
 - La detection anti-claim d'action non committee vit maintenant dans
   `decision/output_verifier.py`; root `claim_guard.py` est supprime.
+- Les contrats de tour conversationnel vivent maintenant dans
+  `decision/conversation_contract.py`; root `conversation_contract.py` est
+  supprime.
 - La resolution pending canonique normalise les aliases d'enum provider
   (`confirm`, `accepted`, etc.) vers `accept_pending` avant application.
   Un type inconnu devient une clarification pending, jamais un trou vers
@@ -146,7 +149,7 @@ Les cuts physiques recents :
 
 Etat chiffre au dernier check local :
 
-- root modules : `21`.
+- root modules : `20`.
 - legacy modules : `0` fichier source actif.
 - backend complet : `1347 passed, 11 skipped, 14 subtests passed`.
 - smoke canonical planning default : OK `10/10`.
