@@ -48,6 +48,7 @@ backend/src/fitmas/
     execution/    activities, claims, evidence, context, recent reality, writes
     memory/       durable facts, profile summary, routing, patterns, maintenance, writes
     athlete/      profile, zones, readiness, load, strength, performance
+    coaching/     voice, calibration, digest, week context, adaptation evidence
   llm/            gateway, prompts, understanding, reply backends, compat legacy
   skills/
     heartbeat/    heartbeat runtime, reply composer, tool loop
@@ -71,6 +72,9 @@ Ce qui n'est plus l'architecture active :
 - root athlete modules (`athlete_*.py`, `fitness_snapshot.py`,
   `load_projection.py`, `performance_*.py`, `readiness.py`,
   `strength_*.py`, `threshold_estimation.py`, `training_load.py`)
+- root coaching modules (`adaptation_log.py`, `calibration_*.py`,
+  `coach_reading_digest.py`, `coach_voice.py`,
+  `generated_week_coherence.py`, `repo_conversation.py`, `week_context.py`)
 - root `final_reply.py`
 - root `heartbeat.py`
 - root `telegram_scheduler.py`

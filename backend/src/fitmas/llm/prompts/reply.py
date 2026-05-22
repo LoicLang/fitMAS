@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from fitmas import coach_voice
+from fitmas.domain.coaching import coach_voice
 
 from .base import PromptRender
 

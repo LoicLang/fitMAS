@@ -7,7 +7,7 @@ from enum import StrEnum
 from typing import Any, Sequence
 
 from fitmas.domain.athlete.profile import AthleteProfileSnapshot
-from fitmas.calibration_status import CalibrationPhase, CalibrationStatus
+from fitmas.domain.coaching.calibration_status import CalibrationPhase, CalibrationStatus
 from fitmas.planning_contract import AvailabilityConfidence, AvailabilityState
 
 DAY_LABELS = {

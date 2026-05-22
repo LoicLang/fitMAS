@@ -5,7 +5,7 @@ from typing import Any, Callable
 
 from sqlalchemy.orm import Session
 
-from fitmas import coach_voice
+from fitmas.domain.coaching import coach_voice
 from fitmas import repository as repo
 from fitmas.conversation_contract import ConversationTurnOutcome
 from fitmas.decision import CoachUnderstanding, DecisionExplanation, DecisionOutcome, ReplyContract

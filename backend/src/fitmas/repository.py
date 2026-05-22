@@ -5,8 +5,9 @@ from datetime import date, datetime, time, timedelta
 
 from sqlalchemy.orm import Session
 
-from fitmas import repo_conversation, schema as s
-from fitmas.adaptation_log import AdaptationLogEntry
+from fitmas import schema as s
+from fitmas.domain.coaching import repo_conversation
+from fitmas.domain.coaching.adaptation_log import AdaptationLogEntry
 from fitmas.domain.memory.fact_memory import fact_is_current, normalize_fact_payload
 from fitmas.domain.athlete.fitness_snapshot import FitnessSnapshot
 from fitmas.models import (
@@ -111,7 +112,7 @@ def to_pydantic_message(msg: s.CoachMessage) -> Message:
 
 def to_domain_adaptation_event(record: s.AdaptationEventRecord) -> AdaptationLogEntry:
     from fitmas.adaptation_decision import DecisionReasonCode, TrajectoryImpact, WeekMissionStatus
-    from fitmas.adaptation_log import _impact_label, _mission_label, _reason_label
+    from fitmas.domain.coaching.adaptation_log import _impact_label, _mission_label, _reason_label
 
     reason_code = DecisionReasonCode(str(record.reason_code or DecisionReasonCode.LOGISTICS_CONFLICT.value))
     week_mission_status = WeekMissionStatus(str(record.week_mission_status or WeekMissionStatus.UNCHANGED.value))

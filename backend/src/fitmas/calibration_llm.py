@@ -4,7 +4,7 @@ import json
 from typing import Any
 
 import fitmas.llm.gateway as gw
-from fitmas.calibration_needs import (
+from fitmas.domain.coaching.calibration_needs import (
     CalibrationNeed,
     CalibrationNeedType,
     CalibrationResolution,

@@ -10,7 +10,7 @@ os.environ.setdefault("FITMAS_DB_PATH", tempfile.mktemp(prefix="fitmas-app-tests
 from fastapi.testclient import TestClient
 
 from fitmas import repository as repo, schema as s
-from fitmas.adaptation_log import AdaptationLogEntry
+from fitmas.domain.coaching.adaptation_log import AdaptationLogEntry
 from fitmas.api import app
 from fitmas.db import Base, SessionLocal, engine, init_db
 from fitmas.time_context import DAY_KEYS, day_label_fr, get_local_now

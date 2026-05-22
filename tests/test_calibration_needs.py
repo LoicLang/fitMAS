@@ -4,13 +4,13 @@ import unittest
 from datetime import date, datetime, timezone
 
 from fitmas.domain.athlete.profile import AthleteProfileSnapshot
-from fitmas.calibration_needs import (
+from fitmas.domain.coaching.calibration_needs import (
     CalibrationNeedType,
     build_resolution_memory_updates,
     detect_calibration_need,
     fallback_resolve_calibration_need,
 )
-from fitmas.calibration_status import CalibrationPhase, CalibrationStatus
+from fitmas.domain.coaching.calibration_status import CalibrationPhase, CalibrationStatus
 from fitmas.planning_contract import AvailabilityConfidence, AvailabilityState
 
 

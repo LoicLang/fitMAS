@@ -3,7 +3,7 @@ from __future__ import annotations
 import re
 from datetime import date
 
-from fitmas import coach_voice
+from fitmas.domain.coaching import coach_voice
 from fitmas.decision.reply_request import ReplyRequest
 import fitmas.llm.reply_backend as final_reply
 from fitmas.domain.planning.policy import AdaptationPolicyDecision

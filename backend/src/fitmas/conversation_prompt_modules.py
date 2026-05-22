@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from fitmas import coach_voice
+from fitmas.domain.coaching import coach_voice
 from fitmas.prompt_contracts import PromptContract
 
 

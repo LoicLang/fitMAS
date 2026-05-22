@@ -23,7 +23,7 @@ is allowed only for hotspots that need a separate shrink slice.
 
 ## Summary
 
-- Root files counted: 56
+- Root files counted: 48
 - Permanent root entrypoints allowed: 3
 - First wrapper cuts completed: `heartbeat*.py`, `llm_gateway.py`,
   `telegram_scheduler.py`, `tool_*.py`, `api_messages.py`,
@@ -51,6 +51,9 @@ is allowed only for hotspots that need a separate shrink slice.
   `performance_stats.py`, `readiness.py`, `strength_engine.py`,
   `strength_exercise_bank.py`, `strength_signals.py`,
   `threshold_estimation.py`, `training_load.py`
+- Coaching root cut completed: `adaptation_log.py`, `calibration_needs.py`,
+  `calibration_status.py`, `coach_reading_digest.py`, `coach_voice.py`,
+  `generated_week_coherence.py`, `repo_conversation.py`, `week_context.py`
 - Primary risk: moving files faster than deleting obsolete boundaries
 - Thursday criterion: root is explainable, delete candidates are explicit, and
   new root files fail architecture tests unless classified here
@@ -62,17 +65,12 @@ is allowed only for hotspots that need a separate shrink slice.
 | `__init__.py` | root-entrypoint | entrypoint | package marker only | permanent root |
 | `adaptation.py` | domain/planning | merge | old adaptation facade overlaps planning runtime | planning simplification |
 | `adaptation_decision.py` | domain/planning | merge | decision value object should live with planning decisions | planning simplification |
-| `adaptation_log.py` | domain/coaching | move | user-visible adaptation history is coaching evidence | coaching package split |
 | `api.py` | root-entrypoint | entrypoint | FastAPI app assembly entrypoint | keep until app package owns all routes |
 | `calendar_resolution.py` | core | move | date resolution is shared infrastructure | core package split |
 | `calibration_llm.py` | llm | move | LLM calibration helper | llm package cleanup |
-| `calibration_needs.py` | domain/coaching | move | coach calibration state | coaching package split |
-| `calibration_status.py` | domain/coaching | move | coach calibration status | coaching package split |
 | `claim_guard.py` | decision | merge | visible claim protection should collapse into OutputVerifier | output verifier shrink |
 | `coach_messages.py` | domain/coaching | merge | message fixtures overlap coach voice and reply composer | coaching package split |
-| `coach_reading_digest.py` | domain/coaching | move | digest is coaching context | coaching package split |
 | `coach_state_bundle.py` | domain/coaching | merge | old bundle should collapse into CoachContext | coach context shrink |
-| `coach_voice.py` | domain/coaching | move | voice rules are coaching domain policy | coaching package split |
 | `context_pack.py` | decision | merge | prompt context pack overlaps Decision ContextBuilder | context builder shrink |
 | `conversation_context.py` | decision | merge | conversation context should be one DecisionRuntime context | decision package split |
 | `conversation_contract.py` | decision | merge | conversation contracts should be canonical outcome contracts | decision package split |
@@ -81,7 +79,6 @@ is allowed only for hotspots that need a separate shrink slice.
 | `conversation_prompting.py` | llm | merge | prompt assembly should move into llm prompts | prompt shrink |
 | `conversation_turn_planner.py` | decision | move | typed turn planning belongs to decision | decision package split |
 | `db.py` | core | move | DB session and engine are core infrastructure | core package split |
-| `generated_week_coherence.py` | domain/coaching | move | generated week review is coaching context | coaching package split |
 | `grounding_contract.py` | decision | merge | grounding should be part of reply request and verifier | output verifier shrink |
 | `intensity_distribution.py` | domain/planning | move | intensity distribution is planning quality | planning package split |
 | `interference.py` | domain/planning | move | sport interference is planning policy | planning package split |
@@ -100,7 +97,6 @@ is allowed only for hotspots that need a separate shrink slice.
 | `prompt_contracts.py` | llm | move | prompt contracts belong under llm | llm package cleanup |
 | `prompt_layers.py` | llm | merge | prompt layering should collapse into canonical prompt families | prompt shrink |
 | `prompt_observability.py` | llm | move | prompt telemetry belongs under llm | llm package cleanup |
-| `repo_conversation.py` | domain/coaching | move | conversation persistence should leave monolithic repository | repository split |
 | `repository.py` | core | keep_root_temporarily | monolithic repository needs domain repository split | repository split |
 | `schema.py` | core | keep_root_temporarily | central Pydantic schema needs bounded API/domain split | schema split |
 | `seed.py` | core | move | seed data is infrastructure and fixtures | core package split |
@@ -112,7 +108,6 @@ is allowed only for hotspots that need a separate shrink slice.
 | `temporal_resolver.py` | core | move | temporal resolution is shared core | core package split |
 | `time_context.py` | core | move | time helpers are shared core | core package split |
 | `week_coherence.py` | domain/planning | move | week coherence is planning quality | planning package split |
-| `week_context.py` | domain/coaching | move | week context is coaching context | coaching package split |
 | `week_metadata.py` | domain/planning | merge | week label helper belongs with periodization | planning simplification |
 | `workout_content.py` | domain/planning | move | workout content belongs to planning/session domain | planning package split |
 

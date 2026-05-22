@@ -11,7 +11,7 @@ PIPELINE = SRC / "conversation_pipeline.py"
 
 PIPELINE_CALIBRATION_IMPORTS_TO_REMOVE = {
     "fitmas.calibration_llm",
-    "fitmas.calibration_needs",
+    "fitmas.domain.coaching.calibration_needs",
 }
 
 

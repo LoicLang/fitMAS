@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 import re
 
-from fitmas import coach_voice
+from fitmas.domain.coaching import coach_voice
 from fitmas.llm.reply_types import FinalReplyContext, RequestTextFn
 from fitmas.llm.reply_validation import is_valid_final_reply
 from fitmas.llm.gateway import request_text

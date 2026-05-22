@@ -5,7 +5,7 @@ import re
 import unicodedata
 from typing import Any
 
-from fitmas import coach_voice
+from fitmas.domain.coaching import coach_voice
 from fitmas.grounding_contract import ReplyGroundingPacket, render_grounding_packet_for_prompt
 from fitmas.llm.gateway import request_text
 

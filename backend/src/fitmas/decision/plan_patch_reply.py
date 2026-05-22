@@ -7,7 +7,7 @@ from typing import Any
 
 from sqlalchemy.orm import Session
 
-from fitmas import coach_voice
+from fitmas.domain.coaching import coach_voice
 from fitmas import repository as repo
 from fitmas.decision import DecisionReplyComposer
 from fitmas.decision.planning_outcomes import plan_patch_service_result_to_outcome

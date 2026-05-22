@@ -11,7 +11,7 @@ CoachReadingLens to isolate rendering from LLM output variability.
 """
 from __future__ import annotations
 
-from fitmas.coach_reading_digest import (
+from fitmas.domain.coaching.coach_reading_digest import (
     CoachReadingDigest,
     CoachReadingFacts,
     CoachReadingLens,

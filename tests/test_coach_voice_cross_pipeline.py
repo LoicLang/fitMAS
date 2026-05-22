@@ -12,7 +12,7 @@ from __future__ import annotations
 import inspect
 import unittest
 
-from fitmas import coach_voice
+from fitmas.domain.coaching import coach_voice
 from fitmas.llm_prompt_builder import _CONVERSATION_SYSTEM_TEXT
 from fitmas.skills.heartbeat import roles as heartbeat_roles
 

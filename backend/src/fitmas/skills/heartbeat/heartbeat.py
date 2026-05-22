@@ -24,15 +24,16 @@ from typing import Any, Iterator
 
 from sqlalchemy.orm import Session
 
-from fitmas import coach_voice, repository as repo, schema as s
+from fitmas import repository as repo, schema as s
+from fitmas.domain.coaching import coach_voice
 from fitmas.domain.execution.helpers import (
     activities_last_days as _activities_last_days,
     activities_on_local_date as _activities_on_local_date,
     claimed_activities_last_days as _claimed_activities_last_days,
     claimed_activities_on_local_date as _claimed_activities_on_local_date,
 )
-from fitmas.calibration_needs import CalibrationNeedType, looks_like_clarification_message
-from fitmas.coach_reading_digest import CoachReadingDigest, build_coach_reading_facts
+from fitmas.domain.coaching.calibration_needs import CalibrationNeedType, looks_like_clarification_message
+from fitmas.domain.coaching.coach_reading_digest import CoachReadingDigest, build_coach_reading_facts
 from fitmas.coach_state_bundle import build_coach_state_bundle
 from fitmas.coach_messages import CoachDraft, DraftPendingConfirmation
 from fitmas.db import SessionLocal

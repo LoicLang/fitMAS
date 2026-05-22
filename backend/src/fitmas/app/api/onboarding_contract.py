@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from fitmas.calibration_status import build_onboarding_unknowns
+from fitmas.domain.coaching.calibration_status import build_onboarding_unknowns
 
 
 @dataclass(frozen=True, slots=True)

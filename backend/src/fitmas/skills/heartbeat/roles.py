@@ -25,15 +25,15 @@ from fitmas.domain.execution.helpers import (
     claimed_activities_on_local_date as _claimed_activities_on_local_date,
 )
 from fitmas.domain.athlete.profile import build_athlete_profile
-from fitmas.calibration_needs import (
+from fitmas.domain.coaching.calibration_needs import (
     CalibrationNeedType,
     detect_calibration_need,
     looks_like_clarification_message,
     render_hidden_need_brief,
 )
-from fitmas.calibration_status import build_calibration_status
+from fitmas.domain.coaching.calibration_status import build_calibration_status
 from fitmas.coach_messages import CoachDraft
-from fitmas.coach_reading_digest import CoachReadingDigest, render_digest_for_prompt
+from fitmas.domain.coaching.coach_reading_digest import CoachReadingDigest, render_digest_for_prompt
 from fitmas.domain.execution.clarification import build_execution_clarification
 from fitmas.domain.execution.evidence import classify_execution_evidence
 from fitmas.domain.memory.fact_memory import fact_is_current

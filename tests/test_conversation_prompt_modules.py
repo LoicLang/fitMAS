@@ -1,4 +1,4 @@
-from fitmas import coach_voice
+from fitmas.domain.coaching import coach_voice
 from fitmas.conversation_prompting import select_conversation_prompt_policy
 from fitmas.conversation_prompt_modules import (
     build_action_contract_system_text,

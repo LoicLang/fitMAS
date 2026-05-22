@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 
 from fitmas import repository as repo, schema as s
 from fitmas.domain.athlete.profile import AthleteProfileSnapshot, build_athlete_profile
-from fitmas.calibration_status import CalibrationStatus, build_calibration_status
+from fitmas.domain.coaching.calibration_status import CalibrationStatus, build_calibration_status
 from fitmas.planning_contract import (
     AvailabilityState,
     PlanningContract,
@@ -20,7 +20,7 @@ from fitmas.planning_contract import (
     build_week_mission,
 )
 from fitmas.domain.execution.recent_reality import RecentRealityWindow, build_recent_reality_window
-from fitmas.week_context import (
+from fitmas.domain.coaching.week_context import (
     build_deterministic_coach_reading,
     build_next_week_cadrage,
     build_planning_context,

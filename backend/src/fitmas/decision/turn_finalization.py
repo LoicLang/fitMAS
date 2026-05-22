@@ -4,7 +4,7 @@ import logging
 
 from sqlalchemy.orm import Session
 
-from fitmas import coach_voice
+from fitmas.domain.coaching import coach_voice
 import fitmas.llm.gateway as gw
 from fitmas.claim_guard import build_claim_repair_prompt, looks_like_action_claim, outage_fallback_reply
 from fitmas.conversation_contract import (

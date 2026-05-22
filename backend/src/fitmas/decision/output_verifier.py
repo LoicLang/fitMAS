@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Protocol
 
-from fitmas import coach_voice
+from fitmas.domain.coaching import coach_voice
 from fitmas.claim_guard import looks_like_action_claim
 
 from .context import CoachContext
