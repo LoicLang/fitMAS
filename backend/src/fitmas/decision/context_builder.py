@@ -5,10 +5,12 @@ from datetime import datetime
 
 from sqlalchemy.orm import Session
 
-import fitmas.repository as repo
 import fitmas.schema as s
 from fitmas.domain.coaching.coach_state import build_coach_state_bundle
 from fitmas.core.time_context import build_time_context, get_local_now
+from fitmas.domain.athlete import repository as athlete_repo
+from fitmas.domain.execution import repository as execution_repo
+from fitmas.domain.planning import repository as planning_repo
 
 from .context import (
     AthleteContext,
@@ -51,16 +53,16 @@ class DecisionContextBuilder:
         local_now = get_local_now(user.timezone, now=request.now)
         time_context = build_time_context(user.timezone, now=request.now)
         scheduled_sessions = tuple(
-            repo.get_scheduled_sessions(
+            planning_repo.get_scheduled_sessions(
                 self._db,
                 user.id,
                 limit=request.scheduled_sessions_limit,
             )
         )
-        activities = tuple(repo.get_activities(self._db, user.id, limit=request.activities_limit))
-        planning_decision = repo.get_latest_planning_decision_record(self._db, user.id)
-        readiness_row = repo.get_latest_readiness_snapshot_record(self._db, user.id)
-        readiness = repo.to_domain_readiness_snapshot(readiness_row) if readiness_row else None
+        activities = tuple(execution_repo.get_activities(self._db, user.id, limit=request.activities_limit))
+        planning_decision = planning_repo.get_latest_planning_decision_record(self._db, user.id)
+        readiness_row = athlete_repo.get_latest_readiness_snapshot_record(self._db, user.id)
+        readiness = athlete_repo.to_domain_readiness_snapshot(readiness_row) if readiness_row else None
         coach_bundle = build_coach_state_bundle(
             self._db,
             user=user,

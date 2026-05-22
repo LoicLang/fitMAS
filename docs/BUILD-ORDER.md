@@ -266,12 +266,14 @@ Prochain chantier logique :
 - le root runtime conversationnel est supprime ; le nouveau hotspot est
   `repository.py` puis les monolithes `schema.py` et `models.py` ;
 - `domain/planning/repository.py` possede deja les reads/writes
-  `ScheduledSession` et l'audit `PlanMutationEvent`, avec `fitmas.repository`
-  en facade temporaire ;
+  `ScheduledSession`, l'audit `PlanMutationEvent` et `PlanningDecisionRecord`,
+  avec `fitmas.repository` en facade temporaire ;
 - `domain/memory/repository.py` possede deja facts profile, working memory et
   patterns, avec `fitmas.repository` en facade temporaire ;
 - `domain/execution/repository.py` possede deja les activites reelles, avec
   `fitmas.repository` en facade temporaire ;
+- `domain/athlete/repository.py` possede deja les snapshots fitness/readiness,
+  avec `fitmas.repository` en facade temporaire ;
 - continuer le split repository par owner reel avant de toucher a
   `schema.py`/`models.py` ;
 - garder la priorite runtime plus petit, pas refactor plus complet.

@@ -7,7 +7,6 @@ from typing import Any
 
 from sqlalchemy.orm import Session
 
-from fitmas import repository as repo
 from fitmas.domain.coaching.coach_state import build_coach_state_bundle
 from fitmas.decision.conversation_context import (
     activity_claim_summary_for_prompt,
@@ -33,6 +32,7 @@ from fitmas.decision import pending_resolution
 from fitmas.decision import plan_patch_reply
 from fitmas.domain.memory.profile_summary import build_profile_summary
 from fitmas.domain.coaching.signals import collect_signals
+from fitmas.domain.planning import repository as planning_repo
 
 
 logger = logging.getLogger(__name__)
@@ -95,7 +95,7 @@ def build_turn_context_artifacts(
     if non_completion_summary:
         claim_summary = "\n".join(part for part in (claim_summary, non_completion_summary) if part)
 
-    planning_decision = repo.get_latest_planning_decision_record(db, user.id)
+    planning_decision = planning_repo.get_latest_planning_decision_record(db, user.id)
     coach_bundle = build_coach_state_bundle(
         db,
         user=user,

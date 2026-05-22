@@ -7,6 +7,7 @@ from fitmas import repository as repo
 from fitmas.core.db import get_db
 from fitmas.domain.athlete.performance_overview import build_performance_overview
 from fitmas.domain.athlete.performance_stats import build_records_stats, build_training_load_stats, build_volume_stats
+from fitmas.domain.planning import repository as planning_repo
 
 router = APIRouter()
 
@@ -45,7 +46,7 @@ def get_performance_overview(db: Session = Depends(get_db)) -> dict:
         raise HTTPException(status_code=404, detail="No onboarded user yet")
     activities = repo.get_activities(db, user.id, limit=500)
     scheduled_sessions = repo.get_scheduled_sessions(db, user.id, limit=84)
-    planning_decision = repo.get_latest_planning_decision_record(db, user.id)
+    planning_decision = planning_repo.get_latest_planning_decision_record(db, user.id)
     return build_performance_overview(
         user_id=user.id,
         timezone_name=user.timezone,

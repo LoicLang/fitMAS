@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 
 from fitmas import schema as s
 from fitmas.core.time_context import get_local_now
+from fitmas.domain.planning.planning_decision import PlanningDecision
 
 
 def get_scheduled_sessions(
@@ -217,8 +218,72 @@ def set_scheduled_session_status(db: Session, session_id: int, status: str) -> s
     return session
 
 
+def to_domain_planning_decision(row: s.PlanningDecisionRecord) -> PlanningDecision:
+    return PlanningDecision(
+        user_id=row.user_id,
+        week_start=row.week_start,
+        decision_version=row.decision_version,
+        planning_mode=row.planning_mode,
+        adaptation_level=row.adaptation_level,
+        adaptation_scope=row.adaptation_scope,
+        weekly_target_tss=row.weekly_target_tss,
+        intensity_distribution=row.intensity_distribution,
+        key_session_count=row.key_session_count,
+        strength_session_count=row.strength_session_count,
+        long_session=row.long_session,
+        rationale=tuple(_json_loads_list(row.rationale_json)),
+        adaptations=tuple(_json_loads_list(row.adaptations_json)),
+        risk_flags=tuple(_json_loads_list(row.risk_flags_json)),
+    )
+
+
+def get_latest_planning_decision_record(db: Session, user_id: int) -> s.PlanningDecisionRecord | None:
+    return (
+        db.query(s.PlanningDecisionRecord)
+        .filter(s.PlanningDecisionRecord.user_id == user_id)
+        .order_by(s.PlanningDecisionRecord.week_start.desc(), s.PlanningDecisionRecord.id.desc())
+        .first()
+    )
+
+
+def save_planning_decision(db: Session, decision: PlanningDecision) -> s.PlanningDecisionRecord:
+    row = (
+        db.query(s.PlanningDecisionRecord)
+        .filter(
+            s.PlanningDecisionRecord.user_id == decision.user_id,
+            s.PlanningDecisionRecord.week_start == decision.week_start,
+        )
+        .first()
+    )
+    if row is None:
+        row = s.PlanningDecisionRecord(user_id=decision.user_id, week_start=decision.week_start)
+        db.add(row)
+
+    row.decision_version = decision.decision_version
+    row.planning_mode = decision.planning_mode
+    row.adaptation_level = decision.adaptation_level
+    row.adaptation_scope = decision.adaptation_scope
+    row.weekly_target_tss = decision.weekly_target_tss
+    row.intensity_distribution = decision.intensity_distribution
+    row.key_session_count = decision.key_session_count
+    row.strength_session_count = decision.strength_session_count
+    row.long_session = decision.long_session
+    row.rationale_json = _json_dumps(list(decision.rationale))
+    row.adaptations_json = _json_dumps(list(decision.adaptations))
+    row.risk_flags_json = _json_dumps(list(decision.risk_flags))
+    db.commit()
+    db.refresh(row)
+    return row
+
+
 def _json_dumps(value: object) -> str:
     return json.dumps(value, ensure_ascii=True, sort_keys=True, default=_json_default)
+
+
+def _json_loads_list(raw_value: str) -> list[str]:
+    if not raw_value:
+        return []
+    return [str(value) for value in json.loads(raw_value)]
 
 
 def _json_default(value: object) -> str:

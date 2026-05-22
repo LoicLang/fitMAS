@@ -6,8 +6,10 @@ from typing import Sequence
 
 from sqlalchemy.orm import Session
 
-from fitmas import repository as root_repo, schema as s
+from fitmas import schema as s
+from fitmas.domain.athlete import repository as athlete_repo
 from fitmas.domain.execution import repository as execution_repo
+from fitmas.domain.memory import repository as memory_repo
 from fitmas.domain.athlete.profile import AthleteProfileSnapshot, build_athlete_profile
 from fitmas.domain.athlete.zones import AthleteZones, build_athlete_zones
 from fitmas.domain.athlete.fitness_snapshot import FitnessSnapshot, build_fitness_snapshot
@@ -77,7 +79,7 @@ def refresh_planning_state(
     as_of_date: date | datetime | None = None,
     mesocycle_week: int = 1,
 ) -> PlanningStateBundle:
-    facts = root_repo.get_active_memory_items(
+    facts = memory_repo.get_active_memory_items(
         db,
         user.id,
         profile_limit=48,
@@ -96,7 +98,7 @@ def refresh_planning_state(
         as_of_date=as_of_date,
         mesocycle_week=mesocycle_week,
     )
-    root_repo.save_fitness_snapshot(db, bundle.fitness)
-    root_repo.save_readiness_snapshot(db, bundle.readiness)
-    root_repo.save_planning_decision(db, bundle.decision)
+    athlete_repo.save_fitness_snapshot(db, bundle.fitness)
+    athlete_repo.save_readiness_snapshot(db, bundle.readiness)
+    planning_repo.save_planning_decision(db, bundle.decision)
     return bundle

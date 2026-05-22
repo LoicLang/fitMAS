@@ -11,9 +11,11 @@ from fitmas.app.api.routes_read import _build_recent_activity, _build_today_fitn
 from fitmas.app.api.app_views import build_app_calendar, build_app_evolution, build_app_overview, build_session_detail
 from fitmas.domain.coaching.coach_state import build_coach_state_bundle
 from fitmas.core.db import get_db
+from fitmas.domain.athlete import repository as athlete_repo
 from fitmas.domain.athlete.performance_overview import build_performance_overview
 from fitmas.domain.athlete.performance_stats import build_training_load_stats
 from fitmas.domain.execution.recent_reality import build_recent_reality_window
+from fitmas.domain.planning import repository as planning_repo
 from fitmas.core.time_context import get_local_now
 
 router = APIRouter()
@@ -26,7 +28,7 @@ def get_app_overview(db: Session = Depends(get_db)) -> dict:
 
     scheduled_sessions = repo.get_scheduled_sessions(db, user.id, limit=84)
     activities = repo.get_activities(db, user.id, limit=500)
-    planning_decision = repo.get_latest_planning_decision_record(db, user.id)
+    planning_decision = planning_repo.get_latest_planning_decision_record(db, user.id)
     today_session = repo.get_today_scheduled_session(db, user.id, timezone_name=user.timezone)
     today_view = _build_today_view(db, user=user, session=today_session).model_dump() if today_session is not None else None
     today_date = get_local_now(user.timezone).date()
@@ -45,8 +47,8 @@ def get_app_overview(db: Session = Depends(get_db)) -> dict:
     connection = repo.get_strava_connection(db, user.id)
     if connection and connection.last_sync_at:
         strava_status["last_sync_at"] = connection.last_sync_at.isoformat()
-    readiness_row = repo.get_latest_readiness_snapshot_record(db, user.id)
-    readiness = repo.to_domain_readiness_snapshot(readiness_row) if readiness_row else None
+    readiness_row = athlete_repo.get_latest_readiness_snapshot_record(db, user.id)
+    readiness = athlete_repo.to_domain_readiness_snapshot(readiness_row) if readiness_row else None
     coach_bundle = build_coach_state_bundle(
         db,
         user=user,
@@ -97,7 +99,7 @@ def get_app_calendar(
     month_start = date.fromisoformat(f"{month or today_date.isoformat()[:7]}-01")
     scheduled_sessions = repo.get_scheduled_sessions(db, user.id, limit=120)
     activities = repo.get_activities(db, user.id, limit=500)
-    planning_decision = repo.get_latest_planning_decision_record(db, user.id)
+    planning_decision = planning_repo.get_latest_planning_decision_record(db, user.id)
     performance_overview = build_performance_overview(
         user_id=user.id,
         timezone_name=user.timezone,
@@ -142,7 +144,7 @@ def get_app_evolution(db: Session = Depends(get_db)) -> dict:
     today_date = get_local_now(user.timezone).date()
     scheduled_sessions = repo.get_scheduled_sessions(db, user.id, limit=120)
     activities = repo.get_activities(db, user.id, limit=500)
-    planning_decision = repo.get_latest_planning_decision_record(db, user.id)
+    planning_decision = planning_repo.get_latest_planning_decision_record(db, user.id)
     performance_overview = build_performance_overview(
         user_id=user.id,
         timezone_name=user.timezone,
@@ -151,8 +153,8 @@ def get_app_evolution(db: Session = Depends(get_db)) -> dict:
         planning_decision=planning_decision,
     )
     training_load = build_training_load_stats(activities, as_of_date=today_date, weeks=16)
-    readiness_row = repo.get_latest_readiness_snapshot_record(db, user.id)
-    readiness = repo.to_domain_readiness_snapshot(readiness_row) if readiness_row else None
+    readiness_row = athlete_repo.get_latest_readiness_snapshot_record(db, user.id)
+    readiness = athlete_repo.to_domain_readiness_snapshot(readiness_row) if readiness_row else None
     coach_bundle = build_coach_state_bundle(
         db,
         user=user,

@@ -66,6 +66,7 @@ from fitmas.llm.gateway import generate_heartbeat_text, generate_heartbeat_text_
 from fitmas.llm.prompts.conversation_builder import detect_open_question
 from fitmas.domain.planning.mutation_permissions import default_confirmation_expiry, serialize_plan_patch_confirmation
 from fitmas.domain.planning.plan_patch import PlanPatch, PlanPatchValidation, plan_patch_from_mutation_decisions, validate_plan_patch
+from fitmas.domain.planning import repository as planning_repo
 from fitmas.domain.execution.recent_reality import build_recent_reality_window
 from fitmas.domain.coaching.signals import collect_signals, format_signals_for_prompt
 from fitmas.skills.heartbeat.tool_loop import (
@@ -794,7 +795,7 @@ def weekly_review() -> CoachDraft | None:
         activities = repo.get_activities(db, user.id, limit=500)
         _trace_context("scheduled_sessions", scheduled_sessions)
         _trace_context("activities", activities[:20])
-        planning_decision = repo.get_latest_planning_decision_record(db, user.id)
+        planning_decision = planning_repo.get_latest_planning_decision_record(db, user.id)
         coach_bundle = build_coach_state_bundle(
             db,
             user=user,

@@ -87,7 +87,7 @@ Owner :
 
 - `domain/planning/`
 - `domain/planning/repository.py` pour les reads/writes runtime
-  `ScheduledSession` et l'audit `PlanMutationEvent`.
+  `ScheduledSession`, l'audit `PlanMutationEvent` et les decisions planning.
 
 Pipeline :
 
@@ -122,6 +122,19 @@ Role :
 - enregistrer une activite manuelle ou importee ;
 - exposer la conversion API `Activity` ;
 - ne pas porter la planification ni les credentials d'integration.
+
+### Athlete
+
+Owner :
+
+- `domain/athlete/`
+- `domain/athlete/repository.py` pour les snapshots fitness/readiness.
+
+Role :
+
+- convertir et persister l'etat athlete calcule ;
+- alimenter app, conversation et heartbeat avec une source unique ;
+- ne pas porter planning, execution ni integration.
 
 ### Memory
 
