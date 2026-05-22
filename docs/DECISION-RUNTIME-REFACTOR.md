@@ -146,6 +146,8 @@ Etat actuel :
   l'event execution applique si une reply execution composee est invalide.
 - `llm/reply_backend.py` porte les primitives communes de composition/verif
   LLM et re-exporte les owners plus specialises.
+- `llm/reply_conversation.py` porte les lanes conversationnelles read-only,
+  no-change et execution report.
 - `llm/reply_close_turn.py` porte la lane terminal social close.
 - `llm/reply_plan_adaptation.py` porte la reply planning-specific
   `AdaptationPolicyDecision -> FinalReplyContext -> verifier`.
@@ -154,7 +156,7 @@ Etat actuel :
 
 Prochaine simplification :
 
-- reduire `llm/reply_backend.py` et pousser plus de verification dans `OutputVerifier`.
+- pousser plus de verification commune dans `OutputVerifier`.
 - garder les replies planning-specific hors du backend generaliste.
 - garder `decision/turn_router.py` mince ; ne pas y remettre de logique de decision.
 - continuer le menage des prompts conversationnels anciens encore centres sur
@@ -189,8 +191,10 @@ de `turn_close_route.py`, `turn_pending_route.py` et
 `turn_pre_understanding_reply_route.py`, puis du post-understanding vers
 `turn_understanding_route.py`. `llm/reply_backend.py` est passe de `367` a
 `206` lignes apres extraction de `llm/reply_plan_adaptation.py` et
-`llm/reply_close_turn.py`. Les nouveaux hotspots sont `decision/turn_understanding_route.py`,
-`decision/turn_planning_route.py` et les replies LLM restantes.
+`llm/reply_close_turn.py`, puis a `75` lignes apres extraction de
+`llm/reply_conversation.py`. Les nouveaux hotspots sont
+`decision/turn_understanding_route.py`, `decision/turn_planning_route.py` et
+les replies LLM specialisees restantes.
 
 10F a ajoute le census conversationnel et supprime quatre bridges :
 
