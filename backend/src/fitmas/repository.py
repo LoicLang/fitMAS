@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 
 from fitmas import repo_conversation, schema as s
 from fitmas.adaptation_log import AdaptationLogEntry
-from fitmas.fact_memory import fact_is_current, normalize_fact_payload
+from fitmas.domain.memory.fact_memory import fact_is_current, normalize_fact_payload
 from fitmas.fitness_snapshot import FitnessSnapshot
 from fitmas.models import (
     Activity,

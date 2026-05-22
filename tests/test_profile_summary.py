@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import unittest
 
-from fitmas.profile_summary import build_profile_summary
+from fitmas.domain.memory.profile_summary import build_profile_summary
 
 
 class ProfileSummaryTest(unittest.TestCase):

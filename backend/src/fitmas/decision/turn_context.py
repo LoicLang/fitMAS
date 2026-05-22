@@ -31,7 +31,7 @@ from fitmas.grounding_contract import (
 )
 from fitmas.decision import pending_resolution
 from fitmas.decision import plan_patch_reply
-from fitmas.profile_summary import build_profile_summary
+from fitmas.domain.memory.profile_summary import build_profile_summary
 from fitmas.signals import collect_signals
 
 

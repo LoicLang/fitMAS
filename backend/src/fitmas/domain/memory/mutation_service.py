@@ -15,7 +15,7 @@ from fitmas.decision.command_actions import (
     MemoryAction,
     PreferenceSignalAction,
 )
-from fitmas.memory_routing import split_memory_payloads
+from fitmas.domain.memory.routing import split_memory_payloads
 
 
 @dataclass(frozen=True, slots=True)

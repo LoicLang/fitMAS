@@ -28,7 +28,7 @@ PIPELINE_CONTEXT_IMPORTS_TO_REMOVE = {
     "fitmas.conversation_context",
     "fitmas.domain.execution.clarification",
     "fitmas.grounding_contract",
-    "fitmas.profile_summary",
+    "fitmas.domain.memory.profile_summary",
     "fitmas.signals",
 }
 

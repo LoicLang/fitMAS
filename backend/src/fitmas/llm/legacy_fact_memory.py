@@ -4,8 +4,8 @@ import json
 import re
 from collections.abc import Callable
 
-from fitmas.fact_memory import normalize_fact_payload as normalize_fact_memory_payload
-from fitmas.fact_memory import select_relevant_facts
+from fitmas.domain.memory.fact_memory import normalize_fact_payload as normalize_fact_memory_payload
+from fitmas.domain.memory.fact_memory import select_relevant_facts
 from fitmas.llm.legacy_onboarding import COACH_SOUL
 
 

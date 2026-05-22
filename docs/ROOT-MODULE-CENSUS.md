@@ -23,7 +23,7 @@ is allowed only for hotspots that need a separate shrink slice.
 
 ## Summary
 
-- Root files counted: 76
+- Root files counted: 68
 - Permanent root entrypoints allowed: 3
 - First wrapper cuts completed: `heartbeat*.py`, `llm_gateway.py`,
   `telegram_scheduler.py`, `tool_*.py`, `api_messages.py`,
@@ -42,6 +42,10 @@ is allowed only for hotspots that need a separate shrink slice.
   `activity_helpers.py`, `execution_clarification.py`,
   `execution_context.py`, `execution_evidence.py`,
   `execution_mutation_service.py`, `recent_reality.py`
+- Memory root cut completed: `availability_constraints.py`,
+  `fact_memory.py`, `memory_maintenance.py`,
+  `memory_mutation_service.py`, `memory_patterns.py`,
+  `memory_profile.py`, `memory_routing.py`, `profile_summary.py`
 - Primary risk: moving files faster than deleting obsolete boundaries
 - Thursday criterion: root is explainable, delete candidates are explicit, and
   new root files fail architecture tests unless classified here
@@ -57,7 +61,6 @@ is allowed only for hotspots that need a separate shrink slice.
 | `api.py` | root-entrypoint | entrypoint | FastAPI app assembly entrypoint | keep until app package owns all routes |
 | `athlete_profile.py` | domain/athlete | move | athlete profile domain model | athlete package split |
 | `athlete_zones.py` | domain/athlete | move | zones are athlete physiology | athlete package split |
-| `availability_constraints.py` | domain/memory | move | durable availability facts belong with memory | memory package split |
 | `calendar_resolution.py` | core | move | date resolution is shared infrastructure | core package split |
 | `calibration_llm.py` | llm | move | LLM calibration helper | llm package cleanup |
 | `calibration_needs.py` | domain/coaching | move | coach calibration state | coaching package split |
@@ -75,7 +78,6 @@ is allowed only for hotspots that need a separate shrink slice.
 | `conversation_prompting.py` | llm | merge | prompt assembly should move into llm prompts | prompt shrink |
 | `conversation_turn_planner.py` | decision | move | typed turn planning belongs to decision | decision package split |
 | `db.py` | core | move | DB session and engine are core infrastructure | core package split |
-| `fact_memory.py` | domain/memory | move | fact normalization belongs to memory | memory package split |
 | `fitness_snapshot.py` | domain/athlete | move | fitness snapshot is athlete state | athlete package split |
 | `generated_week_coherence.py` | domain/coaching | move | generated week review is coaching context | coaching package split |
 | `grounding_contract.py` | decision | merge | grounding should be part of reply request and verifier | output verifier shrink |
@@ -84,11 +86,6 @@ is allowed only for hotspots that need a separate shrink slice.
 | `llm_prompt_builder.py` | llm | merge | legacy prompt builder should collapse into llm prompts | prompt shrink |
 | `load_projection.py` | domain/athlete | move | load projection is athlete state | athlete package split |
 | `main.py` | root-entrypoint | entrypoint | ASGI import entrypoint | permanent root |
-| `memory_maintenance.py` | domain/memory | move | memory cleanup belongs to memory domain | memory package split |
-| `memory_mutation_service.py` | domain/memory | move | memory writes need a domain service | memory package split |
-| `memory_patterns.py` | domain/memory | move | learned patterns belong to memory domain | memory package split |
-| `memory_profile.py` | domain/memory | merge | thin repository wrapper should vanish | memory package split |
-| `memory_routing.py` | domain/memory | move | memory routing belongs to memory domain | memory package split |
 | `models.py` | core | keep_root_temporarily | central SQLAlchemy models need a dedicated schema split | model schema split |
 | `performance_overview.py` | domain/athlete | move | performance overview is athlete analytics | athlete package split |
 | `performance_stats.py` | domain/athlete | move | performance stats are athlete analytics | athlete package split |
@@ -101,7 +98,6 @@ is allowed only for hotspots that need a separate shrink slice.
 | `planning_decision.py` | domain/planning | move | planning decision model belongs to planning | planning package split |
 | `planning_state.py` | domain/planning | move | planning state belongs to planning | planning package split |
 | `planning_window_resolution.py` | domain/planning | merge | window resolver should merge into ReferenceResolver | planning simplification |
-| `profile_summary.py` | domain/memory | move | compact profile summary belongs to memory | memory package split |
 | `prompt_contracts.py` | llm | move | prompt contracts belong under llm | llm package cleanup |
 | `prompt_layers.py` | llm | merge | prompt layering should collapse into canonical prompt families | prompt shrink |
 | `prompt_observability.py` | llm | move | prompt telemetry belongs under llm | llm package cleanup |
@@ -129,7 +125,7 @@ is allowed only for hotspots that need a separate shrink slice.
 
 ## Immediate Cut Order
 
-1. Move memory services to `domain/memory` before touching monoliths.
+1. Move athlete/coaching services to `domain/*` before touching monoliths.
 2. Split monoliths only after deletion:
    `conversation_pipeline.py`, `repository.py`, `week_coherence.py`.
 

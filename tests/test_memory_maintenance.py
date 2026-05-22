@@ -9,7 +9,7 @@ os.environ.setdefault("FITMAS_DB_PATH", tempfile.mktemp(prefix="fitmas-memory-ma
 
 from fitmas import repository as repo, schema as s
 from fitmas.db import Base, SessionLocal, engine, init_db
-from fitmas.memory_maintenance import run_memory_maintenance
+from fitmas.domain.memory.maintenance import run_memory_maintenance
 
 
 class MemoryMaintenanceTest(unittest.TestCase):

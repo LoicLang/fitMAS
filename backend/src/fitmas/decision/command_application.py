@@ -18,7 +18,7 @@ from fitmas.decision.command_mapping import (
     memory_action_from_command,
 )
 from fitmas.domain.execution.mutation_service import apply_execution_actions_for_user
-from fitmas.memory_mutation_service import apply_memory_actions_for_user
+from fitmas.domain.memory.mutation_service import apply_memory_actions_for_user
 
 
 logger = logging.getLogger(__name__)

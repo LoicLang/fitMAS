@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any, Sequence
 
-from fitmas.fact_memory import fact_is_current
+from fitmas.domain.memory.fact_memory import fact_is_current
 
 _DURABLE_TTLS = {"medium", "long", "permanent"}
 _CATEGORY_PRIORITY = {

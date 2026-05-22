@@ -222,7 +222,7 @@ async def strava_sync_cron(context: ContextTypes.DEFAULT_TYPE) -> None:
 
 async def memory_maintenance_cron(context: ContextTypes.DEFAULT_TYPE) -> None:
     from fitmas.db import SessionLocal
-    from fitmas.memory_maintenance import run_memory_maintenance
+    from fitmas.domain.memory.maintenance import run_memory_maintenance
 
     db = SessionLocal()
     try:

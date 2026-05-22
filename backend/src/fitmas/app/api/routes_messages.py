@@ -10,7 +10,7 @@ from fitmas import repository as repo
 from fitmas.adaptation import check_and_adapt_health_facts
 from fitmas.domain.execution.helpers import claimed_activities_last_days
 from fitmas.app.api.payloads import IncomingMessage
-from fitmas.availability_constraints import parse_availability_fact_key
+from fitmas.domain.memory.availability_constraints import parse_availability_fact_key
 from fitmas.conversation_contract import ConversationPipelineDependencies, ConversationTurnInput, ConversationUserNotFoundError
 from fitmas.conversation_turn_planner import plan_conversation_turn
 from fitmas.db import get_db
@@ -22,8 +22,8 @@ from fitmas.domain.execution.clarification import (
 import fitmas.llm.gateway as gw
 import fitmas.llm.legacy_fact_memory as legacy_fact_memory
 from fitmas.llm.legacy_summaries import make_timeline_summary
-from fitmas.memory_profile import upsert_profile_memory
-from fitmas.memory_routing import split_memory_payloads
+from fitmas.domain.memory.profile_memory import upsert_profile_memory
+from fitmas.domain.memory.routing import split_memory_payloads
 from fitmas.models import DayId, MessageReply
 from fitmas.time_context import get_timezone
 

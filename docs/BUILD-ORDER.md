@@ -13,7 +13,7 @@ read_when:
 Je ne veux pas un refactor plus complet.
 Je veux un runtime plus petit.
 
-## Etat Actuel — 21 mai 2026
+## Etat Actuel — 22 mai 2026
 
 FitMAS est en refactor Decision Runtime.
 
@@ -91,6 +91,14 @@ Les cuts physiques recents :
 - Les modules execution root ont ete deplaces sous `domain/execution/` :
   `activities.py`, `claims.py`, `helpers.py`, `clarification.py`,
   `context.py`, `evidence.py`, `mutation_service.py`, `recent_reality.py`.
+- Les modules memory root ont ete deplaces sous `domain/memory/` :
+  `availability_constraints.py`, `fact_memory.py`, `maintenance.py`,
+  `mutation_service.py`, `patterns.py`, `profile_memory.py`, `routing.py`,
+  `profile_summary.py`.
+- La resolution pending canonique normalise les aliases d'enum provider
+  (`confirm`, `accepted`, etc.) vers `accept_pending` avant application.
+  Un type inconnu devient une clarification pending, jamais un trou vers
+  `llm_unavailable`.
 - La route planning canonique tolere maintenant les signaux preference
   sidecar sans scope : une demande planning supportee ne retombe plus en
   clarification provider parce que le LLM a varie la forme metadata.
@@ -106,9 +114,9 @@ Les cuts physiques recents :
 
 Etat chiffre au dernier check local :
 
-- root modules : `76`.
+- root modules : `68`.
 - legacy modules : `0` fichier source actif.
-- backend complet : `1319 passed, 11 skipped, 14 subtests passed`.
+- backend complet : `1323 passed, 11 skipped, 14 subtests passed`.
 - smoke canonical planning default : OK `10/10`.
 - fallback census core : `0`.
 

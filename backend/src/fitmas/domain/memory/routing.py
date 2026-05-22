@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any, Sequence
 
-from fitmas.fact_memory import normalize_fact_payload
+from fitmas.domain.memory.fact_memory import normalize_fact_payload
 
 PROFILE_TTLS = {"medium", "long", "permanent"}
 WORKING_TTLS = {"immediate", "short"}

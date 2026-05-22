@@ -6,7 +6,7 @@ from datetime import datetime
 from sqlalchemy.orm import Session
 
 from fitmas import repository as repo, schema as s
-from fitmas.memory_patterns import derive_pattern_payloads
+from fitmas.domain.memory.patterns import derive_pattern_payloads
 
 
 @dataclass(frozen=True, slots=True)

@@ -13,7 +13,7 @@ from datetime import datetime, timezone
 from sqlalchemy.orm import Session
 
 from fitmas import schema as s
-from fitmas.memory_profile import get_active_profile_memory, upsert_profile_memory
+from fitmas.domain.memory.profile_memory import get_active_profile_memory, upsert_profile_memory
 
 logger = logging.getLogger(__name__)
 

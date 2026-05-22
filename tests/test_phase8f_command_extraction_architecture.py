@@ -28,7 +28,7 @@ def test_8f_conversation_pipeline_no_longer_imports_action_writers() -> None:
     source = _source("decision/turn_router.py")
     imports = _imports("decision/turn_router.py")
 
-    assert "fitmas.memory_mutation_service" not in imports
+    assert "fitmas.domain.memory.mutation_service" not in imports
     assert "fitmas.domain.execution.mutation_service" not in imports
     assert "apply_memory_actions_for_user" not in source
     assert "apply_execution_actions_for_user" not in source
@@ -43,7 +43,7 @@ def test_8f_command_application_is_the_only_conversation_action_application_boun
     assert "apply_turn_plan_memory_commands" in source
     assert "RuntimeCommandBus" in source
     assert "fitmas.conversation_pipeline" not in imports
-    assert "fitmas.memory_mutation_service" in imports
+    assert "fitmas.domain.memory.mutation_service" in imports
     assert "fitmas.domain.execution.mutation_service" in imports
 
 
@@ -58,7 +58,7 @@ def test_8f_command_mapping_does_not_write_or_parse_user_text() -> None:
     assert "commands_from_legacy_decision" in source
     assert "commands_from_understanding" in source
     assert "fitmas.decision" in imports
-    assert "fitmas.memory_mutation_service" not in imports
+    assert "fitmas.domain.memory.mutation_service" not in imports
     assert "fitmas.domain.execution.mutation_service" not in imports
     assert ".commit(" not in source
     assert "re.search" not in source
@@ -69,7 +69,7 @@ def test_8f_decision_package_stays_pure() -> None:
     forbidden = {
         "fitmas.legacy",
         "fitmas.llm",
-        "fitmas.memory_mutation_service",
+        "fitmas.domain.memory.mutation_service",
         "fitmas.domain.execution.mutation_service",
         "fitmas.conversation_pipeline",
     }

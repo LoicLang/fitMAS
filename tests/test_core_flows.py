@@ -557,6 +557,73 @@ class FitMASCoreFlowsTest(unittest.TestCase):
         self.assertEqual(refreshed_pending.status, "accepted")
         self.assertEqual(refreshed_session.scheduled_date.date().isoformat(), target_date)
 
+    def test_pending_resolution_alias_confirm_is_canonicalized_before_application(self) -> None:
+        _, session = self._create_plan_for_today()
+        target_date = (get_local_now(self.user.timezone).date() + timedelta(days=2)).isoformat()
+        pending = repo.create_pending_mutation_confirmation(
+            self.db,
+            user_id=self.user.id,
+            impact_level="high",
+            reason="week_coherence_requires_confirmation",
+            mutation_type="plan_patch",
+            summary="deplacer la seance",
+            source_text="deplace vendredi",
+            decision_json=serialize_plan_patch_confirmation(
+                PlanPatch(
+                    coach_message="Je deplace la seance.",
+                    operations=[
+                        PlanPatchOperation(
+                            operation_type="move_session",
+                            target_session_id=session.id,
+                            target_date=target_date,
+                            rationale="Demande utilisateur a confirmer.",
+                        )
+                    ],
+                )
+            ),
+            expires_at=datetime.now() + timedelta(minutes=10),
+        )
+        decision = SimpleNamespace(
+            response_type="reply",
+            rationale="acceptation pending comprise avec alias provider",
+            fitmas_message="C'est confirme. Je l'applique.",
+            pending_resolution=_pending("confirm"),
+        )
+
+        original_verify = conversation_pending_bridge.verify_pending_accept_resolution
+        try:
+            conversation_pending_bridge.verify_pending_accept_resolution = lambda **kwargs: "accept_pending"
+            outcome = conversation_pending_bridge.apply_pending_resolution(
+                db=self.db,
+                user=self.user,
+                decision_artifact=decision,
+                canonical_understanding=None,
+                pending_confirmation=pending,
+                user_text="oui je confirme si tu penses que c'est propre",
+            )
+        finally:
+            conversation_pending_bridge.verify_pending_accept_resolution = original_verify
+
+        self.db.expire_all()
+        refreshed_pending = self.db.get(s.PendingMutationConfirmation, pending.id)
+        refreshed_session = repo.get_scheduled_session(self.db, self.user.id, session.id)
+
+        self.assertIsNotNone(outcome)
+        self.assertEqual(outcome.response_mode, "pending_accepted")
+        self.assertTrue(outcome.mutation_applied)
+        self.assertEqual(refreshed_pending.status, "accepted")
+        self.assertEqual(refreshed_session.scheduled_date.date().isoformat(), target_date)
+
+    def test_unknown_pending_resolution_type_becomes_clarification_artifact(self) -> None:
+        artifact = conversation_pending_bridge.pending_resolution_from_sources(
+            decision_artifact=SimpleNamespace(pending_resolution=_pending("provider_specific_yesish")),
+            canonical_understanding=None,
+        )
+
+        self.assertIsNotNone(artifact)
+        self.assertEqual(artifact.type, "needs_clarification")
+        self.assertIn("invalid_pending_resolution_type", artifact.reason)
+
     def test_pending_reject_recheck_blocks_ambiguous_rejection(self) -> None:
         _, session = self._create_plan_for_today()
         patch = PlanPatch(

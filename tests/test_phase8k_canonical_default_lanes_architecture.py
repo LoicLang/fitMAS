@@ -66,7 +66,7 @@ def test_8k_decision_package_stays_pure() -> None:
         "fitmas.legacy",
         "fitmas.llm",
         "fitmas.conversation_pipeline",
-        "fitmas.memory_mutation_service",
+        "fitmas.domain.memory.mutation_service",
         "fitmas.domain.execution.mutation_service",
         "fitmas.plan_mutation_service",
     }

@@ -222,6 +222,43 @@ _PENDING_ACCEPT_RECHECK_TYPES = frozenset(
     }
 )
 
+_PENDING_RESOLUTION_TYPE_ALIASES = {
+    "accept": "accept_pending",
+    "accepted": "accept_pending",
+    "acceptance": "accept_pending",
+    "approve": "accept_pending",
+    "approved": "accept_pending",
+    "apply": "accept_pending",
+    "apply_pending": "accept_pending",
+    "commit": "accept_pending",
+    "commit_pending": "accept_pending",
+    "confirm": "accept_pending",
+    "confirmed": "accept_pending",
+    "confirmation": "accept_pending",
+    "ok": "accept_pending",
+    "validate": "accept_pending",
+    "validated": "accept_pending",
+    "yes": "accept_pending",
+    "cancel": "reject_pending",
+    "decline": "reject_pending",
+    "deny": "reject_pending",
+    "no": "reject_pending",
+    "reject": "reject_pending",
+    "rejected": "reject_pending",
+    "change": "modify_pending",
+    "modify": "modify_pending",
+    "new_request": "modify_pending",
+    "replace_pending": "modify_pending",
+    "update": "modify_pending",
+    "ambiguous": "needs_clarification",
+    "clarification": "needs_clarification",
+    "clarify": "needs_clarification",
+    "unclear": "needs_clarification",
+    "none": "ignore",
+    "no_response": "ignore",
+    "other": "ignore",
+}
+
 
 def verify_pending_accept_resolution(
     *,
@@ -309,6 +346,7 @@ def verify_pending_accept_resolution(
         or (data or {}).get("pending_resolution")
         or ""
     ).strip()
+    resolution_type = normalize_pending_resolution_type(resolution_type) or resolution_type
     if resolution_type in _PENDING_ACCEPT_RECHECK_TYPES:
         logger.info(
             "pending_accept_recheck result=%s confidence=%s pending=%s",
@@ -723,17 +761,32 @@ def _artifact_from_resolution(
 ) -> PendingResolutionArtifact | None:
     if resolution is None:
         return None
-    resolution_type = str(getattr(resolution, "type", "") or "").strip()
-    if not resolution_type:
+    raw_resolution_type = str(getattr(resolution, "type", "") or "").strip()
+    if not raw_resolution_type:
         return None
+    resolution_type = normalize_pending_resolution_type(raw_resolution_type)
+    reason = _optional_text(getattr(resolution, "reason", None))
+    if resolution_type is None:
+        resolution_type = "needs_clarification"
+        reason = reason or f"invalid_pending_resolution_type:{raw_resolution_type}"
     return PendingResolutionArtifact(
         type=resolution_type,
-        reason=_optional_text(getattr(resolution, "reason", None)),
+        reason=reason,
         selected_candidate_id=_optional_text(getattr(resolution, "selected_candidate_id", None)),
         requested_changes=_optional_text(getattr(resolution, "requested_changes", None)),
         question=_optional_text(getattr(resolution, "question", None)),
         source=source,
     )
+
+
+def normalize_pending_resolution_type(value: Any) -> str | None:
+    raw = str(value or "").strip()
+    if not raw:
+        return None
+    normalized = raw.lower().replace("-", "_").replace(" ", "_")
+    if normalized in _PENDING_ACCEPT_RECHECK_TYPES:
+        return normalized
+    return _PENDING_RESOLUTION_TYPE_ALIASES.get(normalized)
 
 
 def _optional_text(value: Any) -> str | None:

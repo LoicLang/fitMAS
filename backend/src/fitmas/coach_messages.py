@@ -7,8 +7,8 @@ from sqlalchemy.orm import Session
 
 from fitmas import repository as repo, schema as s
 from fitmas.db import SessionLocal
-from fitmas.memory_profile import upsert_profile_memory
-from fitmas.memory_routing import split_memory_payloads
+from fitmas.domain.memory.profile_memory import upsert_profile_memory
+from fitmas.domain.memory.routing import split_memory_payloads
 
 
 @dataclass(slots=True)
