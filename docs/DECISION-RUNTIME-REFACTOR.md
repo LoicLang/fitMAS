@@ -151,8 +151,9 @@ Etat actuel :
 Prochaine simplification :
 
 - reduire `llm/reply_backend.py` et pousser plus de verification dans `OutputVerifier`.
-- shrinker `decision/turn_context.py`, puis extraire les petites routes
-  restantes de `decision/turn_router.py`.
+- extraire les petites routes restantes de `decision/turn_router.py`.
+- continuer le menage des prompts conversationnels anciens encore centres sur
+  les artefacts PlanPatch historiques.
 
 ## Heartbeat Cible
 
@@ -175,8 +176,10 @@ Planning/pending P0 a ete extrait en 10E :
 
 Les sept wrappers legacy P0 ont ete supprimes. Le gros risque suivant etait
 `conversation_pipeline.py`; il est desormais un adapter mince. La route planning
-canonique a ete sortie vers `decision/turn_planning_route.py`. Le nouveau
-hotspot principal est `decision/turn_context.py`.
+canonique a ete sortie vers `decision/turn_planning_route.py`.
+`decision/turn_context.py` est passe de `392` a `276` lignes apres extraction
+de `turn_prompt_context.py` et `turn_context_payload.py`. Les nouveaux hotspots
+sont `decision/turn_router.py` et `llm/reply_backend.py`.
 
 10F a ajoute le census conversationnel et supprime quatre bridges :
 
@@ -267,10 +270,12 @@ extraction de la route planning canonique.
 
 Objectif suivant :
 
-1. shrinker `decision/turn_context.py` ;
-2. continuer le menage des prompts conversationnels anciens encore centres
+1. extraire les routes restantes de `decision/turn_router.py` ;
+2. reduire `llm/reply_backend.py` en poussant les checks communs vers
+   `OutputVerifier` ;
+3. continuer le menage des prompts conversationnels anciens encore centres
    sur les artefacts PlanPatch historiques ;
-3. garder les smokes reels comme arbitre de fiabilite, meme quand le provider
+4. garder les smokes reels comme arbitre de fiabilite, meme quand le provider
    rend les tours lents.
 
 ## Critere De Verdict

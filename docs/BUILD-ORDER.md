@@ -283,6 +283,9 @@ Prochain chantier logique :
 - root `schema.py` est supprime : les records SQLAlchemy vivent sous
   `core/orm/` et les call sites importent cet owner directement ;
 - root backend est reduit aux entrypoints `__init__.py`, `api.py`, `main.py` ;
+- `decision/turn_context.py` est reduit de `392` a `276` lignes :
+  les sections prompt/pending vivent dans `decision/turn_prompt_context.py`
+  et les helpers grounding/payload dans `decision/turn_context_payload.py` ;
 - garder la priorite runtime plus petit, pas refactor plus complet.
 
 ## Ordre De Lecture Pour Un Agent

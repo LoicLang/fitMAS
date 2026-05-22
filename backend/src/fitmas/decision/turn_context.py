@@ -24,12 +24,21 @@ from fitmas.decision.conversation_contract import (
 from fitmas.domain.execution.clarification import render_unresolved_execution_followup
 from fitmas.decision.grounding import (
     ReplyGroundingPacket,
-    plan_window_facts_from_sessions,
     render_grounding_packet_for_prompt,
-    resolve_temporal_intents,
 )
-from fitmas.decision import pending_resolution
-from fitmas.decision import plan_patch_reply
+from fitmas.decision.turn_context_payload import (
+    build_reply_grounding_packet,
+    fact_identity,
+    turn_plan_payload,
+)
+from fitmas.decision.turn_prompt_context import (
+    adaptation_context_for_prompt,
+    append_prompt_section,
+    availability_context_for_prompt,
+    pending_confirmation_context_for_prompt,
+    should_route_adaptation_context_to_llm,
+    should_route_availability_context_to_llm,
+)
 from fitmas.domain.memory.profile_summary import build_profile_summary
 from fitmas.domain.coaching.signals import collect_signals
 from fitmas.domain.planning import repository as planning_repo
@@ -236,37 +245,6 @@ def build_turn_context_artifacts(
     )
 
 
-def pending_confirmation_context_for_prompt(pending_confirmation) -> str | None:
-    if pending_confirmation is None:
-        return None
-    reason = plan_patch_reply.safe_user_visible_pending_text(str(pending_confirmation.reason or "").strip())
-    summary = plan_patch_reply.safe_user_visible_pending_text(str(pending_confirmation.summary or "").strip())
-    mutation_type = str(pending_confirmation.mutation_type or "").strip()
-    choice_instructions: tuple[str, ...] = ()
-    if mutation_type == "plan_patch_choice":
-        choice_instructions = (
-            "- ce pending contient plusieurs options candidates structurees.",
-            "- si le user choisit une option, retourne `pending_resolution.type=accept_pending` "
-            "avec `selected_candidate_id` egal a l'id exact de l'option choisie.",
-            "- si le choix est ambigu, retourne `pending_resolution.type=needs_clarification`.",
-        )
-    lines = [
-        "Confirmation planning en attente (artefact machine, pas une decision deja appliquee):",
-        f"- id: {pending_confirmation.id}",
-        f"- type: {mutation_type}",
-        f"- raison: {reason}",
-        f"- resume: {summary}",
-        "- lis le nouveau message dans ce contexte et decide toi-meme.",
-        "- si le user accepte clairement, retourne `pending_resolution.type=accept_pending`.",
-        "- si le user refuse, retourne `pending_resolution.type=reject_pending`.",
-        "- si le user modifie la demande, retourne `modify_pending` avec requested_changes; ne forge pas un nouveau patch libre.",
-        "- si le user parle d'autre chose, retourne `ignore` et reponds au nouveau message.",
-        *choice_instructions,
-        f"- payload: {pending_confirmation.decision_json}",
-    ]
-    return "\n".join(lines) + "\n"
-
-
 def planning_context_from_artifacts(artifacts: TurnContextArtifacts):
     return SimpleNamespace(
         local_time=SimpleNamespace(today_iso=artifacts.conversation_context.temporal_resolution.local_date.isoformat()),
@@ -275,100 +253,6 @@ def planning_context_from_artifacts(artifacts: TurnContextArtifacts):
         memory=SimpleNamespace(active_facts=tuple(artifacts.state.active_facts)),
         weekly_digest=SimpleNamespace(coach_reading=artifacts.coach_bundle.coach_reading),
     )
-
-
-def fact_identity(fact: object) -> str:
-    if isinstance(fact, dict):
-        return f"{fact.get('category')}:{fact.get('key')}"
-    return str(fact)
-
-
-def build_reply_grounding_packet(
-    *,
-    user,
-    local_date,
-    scheduled_sessions,
-    turn_plan,
-) -> ReplyGroundingPacket:
-    temporal_refs = resolve_temporal_intents(
-        tuple(getattr(turn_plan, "temporal_references", ()) or ()),
-        local_date=local_date,
-    )
-    return ReplyGroundingPacket(
-        local_date=local_date,
-        timezone_name=getattr(user, "timezone", None),
-        temporal_references=temporal_refs,
-        plan_window=plan_window_facts_from_sessions(scheduled_sessions),
-    )
-
-
-def turn_plan_payload(turn_plan) -> dict | None:
-    if turn_plan is None:
-        return None
-    if hasattr(turn_plan, "model_dump"):
-        payload = turn_plan.model_dump(mode="json")
-    else:
-        payload = {
-            "primary_intent": getattr(turn_plan, "primary_intent", None),
-            "secondary_intents": list(getattr(turn_plan, "secondary_intents", ()) or ()),
-        }
-    payload["has_plan_mutation"] = bool(getattr(turn_plan, "has_plan_mutation", False))
-    return payload
-
-
-def should_route_availability_context_to_llm(
-    turn_plan,
-    *,
-    week_scope_reply: str | None,
-    no_candidate_reply: str | None,
-) -> bool:
-    return week_scope_reply is not None or no_candidate_reply is not None
-
-
-def should_route_adaptation_context_to_llm(
-    turn_plan,
-    adaptation,
-    *,
-    plan_mutation_request: bool = False,
-) -> bool:
-    return adaptation is not None
-
-
-def adaptation_context_for_prompt(adaptation) -> str | None:
-    if adaptation is None:
-        return None
-    scenario = adaptation.selected_scenario
-    mutation = scenario.mutation
-    lines = [
-        "Adaptation candidate deterministe:",
-        f"- raison: {adaptation.event.reason_code.value}",
-        f"- confiance: {adaptation.event.confidence}",
-        f"- mutation candidate: {mutation.mutation_type}",
-        f"- session cible: {mutation.target_session_id}",
-        f"- date cible: {mutation.target_date}",
-        f"- resume: {scenario.summary}",
-        f"- message candidate: {adaptation.user_message}",
-        "- utilise cette candidate comme option valide, mais arbitre la reponse finale selon le message utilisateur",
-    ]
-    return "\n".join(lines)
-
-
-def availability_context_for_prompt(*, week_scope_reply: str | None, no_candidate_reply: str | None) -> str | None:
-    reply = week_scope_reply or no_candidate_reply
-    if not reply:
-        return None
-    return (
-        "Contexte orchestration planning:\n"
-        f"- grounding deterministe: {reply}\n"
-        "- utilise ce grounding comme verite de contexte, mais formule toi-meme la reponse finale\n"
-        "- si aucune mutation sure n'est applicable, garde mutation_type=no_change et explique sobrement"
-    )
-
-
-def append_prompt_section(base: str, section: str | None) -> str:
-    if not section:
-        return base
-    return "\n".join(part for part in (base, section) if part)
 
 
 def should_use_terminal_close_path(

@@ -45,9 +45,12 @@ Role :
 
 Etat actuel :
 
-- `decision/conversation_pipeline.py` reste le gros orchestrateur, mais il
-  n'est plus un module root.
-- Il est reduit progressivement vers `DecisionRuntime`.
+- `decision/conversation_pipeline.py` est un adapter mince.
+- La responsabilite conversationnelle restante vit dans les owners
+  `decision/turn_*`.
+- `decision/turn_context.py` ne porte plus les helpers prompt/pending ni les
+  helpers grounding/payload : ils vivent dans `turn_prompt_context.py` et
+  `turn_context_payload.py`.
 - Il n'y a plus de bridge `legacy/conversation_*` runtime-active.
 - Les replies PlanPatch conversationnelles vivent dans
   `decision/plan_patch_reply.py`.

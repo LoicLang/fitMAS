@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime, timedelta
 from types import SimpleNamespace
 
-from fitmas.decision.turn_context import pending_confirmation_context_for_prompt
+from fitmas.decision.turn_prompt_context import pending_confirmation_context_for_prompt
 
 
 def test_pending_choice_context_instructs_llm_to_select_candidate_id() -> None:
