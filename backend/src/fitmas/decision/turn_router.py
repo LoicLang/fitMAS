@@ -7,6 +7,8 @@ from sqlalchemy.orm import Session
 
 import fitmas.llm.gateway as gw
 import fitmas.llm.reply_backend as final_reply
+import fitmas.decision.turn_close_route as turn_close_route
+import fitmas.decision.turn_pending_route as turn_pending_route
 import fitmas.decision.turn_planning_route as turn_planning_route
 from fitmas.decision.conversation_contract import (
     ConversationPipelineDependencies,
@@ -25,12 +27,10 @@ from fitmas.decision import turn_context as turn_context_builder
 from fitmas.decision import turn_finalization
 from fitmas.decision import turn_idempotency
 from fitmas.decision import understanding_runtime
-from fitmas.llm.reply_decision_backend import LLMReplyBackend
 from fitmas.decision.message_models import Extraction, MessageReply
-
+from fitmas.llm.reply_decision_backend import LLMReplyBackend
 
 logger = logging.getLogger(__name__)
-
 
 def route_conversation_turn(
     *,
@@ -52,77 +52,46 @@ def route_conversation_turn(
     grounding_facts = context_artifacts.grounding_facts
     turn_context = context_artifacts.turn_context
 
-    if turn_context_builder.should_use_terminal_close_path(
+    close_outcome = turn_close_route.compose_terminal_close_outcome(
+        user_text=payload.text,
+        previous_agent_text=state.previous_agent_text,
         turn_plan=turn_plan,
         pending_confirmation=pending_confirmation,
         open_calibration_need=open_calibration_need,
-    ):
-        composed_close_reply = final_reply.compose_close_turn_reply(
-            user_text=payload.text,
-            previous_agent_text=state.previous_agent_text,
-            grounding=grounding_packet,
-        )
-        close_reply_source = "composer" if composed_close_reply else "outage_fallback"
-        reply_text = composed_close_reply or final_reply.close_turn_outage_fallback_reply()
-        turn_context.update(
-            {
-                "terminal_close": True,
-                "tools_offered": 0,
-                "open_question_marker": "suppressed",
-                "close_turn_reply_source": close_reply_source,
-            }
-        )
-        return turn_finalization.record_turn_reply(
+        grounding=grounding_packet,
+        turn_context=turn_context,
+        reply_backend=final_reply,
+    )
+    if close_outcome is not None:
+        return turn_finalization.record_turn_outcome(
             db=db,
             user=user,
             payload=payload,
-            reply_text=reply_text,
-            extraction=Extraction(confidence=float(getattr(turn_plan, "confidence", 0.95) or 0.95)),
-            response_mode="close_turn_composed",
+            outcome=close_outcome,
             turn_context=turn_context,
             turn_memory_writes=turn_memory_writes,
         )
 
-    canonical_understanding = None
-    if pending_resolution.should_prepare_canonical_pending_understanding(
+    pending_route = turn_pending_route.route_pending_confirmation(
+        db=db,
+        user=user,
+        user_text=payload.text,
+        turn_plan=turn_plan,
+        conversation_context=conversation_context,
+        coach_bundle=coach_bundle,
+        state=state,
         pending_confirmation=pending_confirmation,
-    ):
-        turn_context["canonical_pending_provider"] = {
-            "active_pending_id": getattr(pending_confirmation, "id", None),
-            "source": "coach_understanding",
-            "result": "prepared",
-        }
-        canonical_understanding = understanding_runtime.run_canonical_understanding_shadow(
-            user=user,
-            user_text=payload.text,
-            turn_plan=turn_plan,
-            conversation_context=conversation_context,
-            coach_bundle=coach_bundle,
-            state=state,
-            pending_confirmation=pending_confirmation,
-            turn_context=turn_context,
-        )
-        pending_outcome = pending_resolution.apply_pending_resolution(
+        turn_context=turn_context,
+    )
+    canonical_understanding = pending_route.canonical_understanding
+    if pending_route.outcome is not None:
+        return turn_finalization.record_turn_outcome(
             db=db,
             user=user,
-            decision_artifact=None,
-            canonical_understanding=canonical_understanding,
-            pending_confirmation=pending_confirmation,
-            user_text=payload.text,
-            turn_plan=turn_plan,
-        )
-        if pending_outcome is not None:
-            turn_context["canonical_pending_provider"]["result"] = "handled"
-            return turn_finalization.record_turn_outcome(
-                db=db,
-                user=user,
-                payload=payload,
-                outcome=pending_outcome,
-                turn_context=turn_context,
-                turn_memory_writes=turn_memory_writes,
-            )
-        turn_context["canonical_pending_provider"]["result"] = (
-            "no_pending_resolution" if canonical_understanding is None else "fallback_legacy"
+            payload=payload,
+            outcome=pending_route.outcome,
+            turn_context=turn_context,
+            turn_memory_writes=turn_memory_writes,
         )
 
     canonical_clarification_outcome = clarification_reply.compose_canonical_clarification_reply(
