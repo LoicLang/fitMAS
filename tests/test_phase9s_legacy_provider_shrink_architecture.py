@@ -27,18 +27,19 @@ def test_9s_coachdecision_runtime_exposes_removed_provider_trace() -> None:
 
 def test_9s_pipeline_never_calls_legacy_decide_after_canonical_routes() -> None:
     source = _source("decision/turn_router.py")
+    understanding_route = _source("decision/turn_understanding_route.py")
     planning_route = _source("decision/turn_planning_route.py")
     early_reply_route = _source("decision/turn_pre_understanding_reply_route.py")
 
-    clarification_index = source.index("canonical_provider_clarification_outcome(")
-    assert source.index("route_pre_understanding_replies(") < clarification_index
+    clarification_index = understanding_route.index("canonical_provider_clarification_outcome(")
+    assert source.index("route_pre_understanding_replies(") < source.index("route_post_pre_understanding_decision(")
     assert "compose_canonical_clarification_reply(" in early_reply_route
-    assert source.index("should_use_canonical_understanding_without_legacy(") < clarification_index
-    assert source.index("should_use_canonical_readonly_without_legacy(") < clarification_index
-    assert source.index("route_with_existing_understanding(") < clarification_index
+    assert understanding_route.index("should_use_canonical_understanding_without_legacy(") < clarification_index
+    assert understanding_route.index("should_use_canonical_readonly_without_legacy(") < clarification_index
+    assert understanding_route.index("route_with_existing_understanding(") < clarification_index
     assert "should_use_canonical_planning_without_legacy(" in planning_route
-    assert "run_legacy_coach_decision(" not in source
-    assert "canonical_provider_clarification_outcome(" in source
+    assert "run_legacy_coach_decision(" not in understanding_route
+    assert "canonical_provider_clarification_outcome(" in understanding_route
 
 
 def test_9s_legacy_decide_call_is_removed_from_backend_runtime() -> None:
@@ -75,15 +76,16 @@ def test_9s_no_direct_decision_legacy_decide_import_outside_llm_package() -> Non
 
 def test_9s_canonical_routes_still_precede_removed_provider_clarification() -> None:
     source = _source("decision/turn_router.py")
+    understanding_route = _source("decision/turn_understanding_route.py")
     planning_route = _source("decision/turn_planning_route.py")
     early_reply_route = _source("decision/turn_pre_understanding_reply_route.py")
 
-    clarification_index = source.index("canonical_provider_clarification_outcome(")
-    assert source.index("route_pre_understanding_replies(") < clarification_index
+    clarification_index = understanding_route.index("canonical_provider_clarification_outcome(")
+    assert source.index("route_pre_understanding_replies(") < source.index("route_post_pre_understanding_decision(")
     assert "compose_canonical_clarification_reply(" in early_reply_route
-    assert source.index("should_use_canonical_understanding_without_legacy(") < clarification_index
-    assert source.index("should_use_canonical_readonly_without_legacy(") < clarification_index
-    assert source.index("route_with_existing_understanding(") < clarification_index
+    assert understanding_route.index("should_use_canonical_understanding_without_legacy(") < clarification_index
+    assert understanding_route.index("should_use_canonical_readonly_without_legacy(") < clarification_index
+    assert understanding_route.index("route_with_existing_understanding(") < clarification_index
     assert "should_use_canonical_planning_without_legacy(" in planning_route
 
 

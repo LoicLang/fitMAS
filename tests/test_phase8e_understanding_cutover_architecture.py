@@ -44,8 +44,10 @@ def test_8e_llm_understanding_service_exists_without_legacy_contracts() -> None:
 
 
 def test_8e_conversation_uses_understanding_runtime_not_direct_llm_service() -> None:
-    source = _source("decision/turn_router.py")
+    router = _source("decision/turn_router.py")
+    source = _source("decision/turn_understanding_route.py")
 
+    assert "turn_understanding_route" in router
     assert "understanding_runtime" in source
     assert "conversation_understanding_bridge" not in source
     assert "LLMUnderstandingService" not in source

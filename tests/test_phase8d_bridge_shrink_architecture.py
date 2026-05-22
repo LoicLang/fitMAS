@@ -77,8 +77,10 @@ def test_8d_no_active_heartbeat_skill_imports_outside_legacy() -> None:
 
 def test_8d_conversation_pipeline_uses_decision_owners_not_legacy_bridges() -> None:
     source = _source("decision/turn_router.py")
+    understanding_route = _source("decision/turn_understanding_route.py")
 
-    assert "readonly_reply" in source
+    assert "turn_understanding_route" in source
+    assert "readonly_reply" in understanding_route
     assert "legacy_decision_contract_disabled" not in source
     assert 'response_type == "plan_patch"' not in source
     assert 'response_type == "requires_confirmation"' not in source

@@ -34,7 +34,7 @@ def test_8l_conversation_pipeline_does_not_call_decide_directly() -> None:
 
 
 def test_8l_conversation_pipeline_does_not_read_fitmas_message_directly() -> None:
-    source = _source("decision/turn_router.py")
+    source = _source("decision/turn_understanding_route.py")
 
     assert "decision.fitmas_message" not in source
     assert "readonly_reply.compose_understanding_command_reply" in source

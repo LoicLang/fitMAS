@@ -24,11 +24,13 @@ def test_8r_canonical_readonly_bridge_exists() -> None:
 
 
 def test_8r_pipeline_routes_readonly_before_removed_provider_clarification() -> None:
-    source = _source("decision/turn_router.py")
+    router = _source("decision/turn_router.py")
+    source = _source("decision/turn_understanding_route.py")
 
     readonly_index = source.index("should_use_canonical_readonly_without_legacy(")
     clarification_index = source.index("canonical_provider_clarification_outcome(")
     assert readonly_index < clarification_index
+    assert "route_post_pre_understanding_decision(" in router
     assert "run_legacy_coach_decision(" not in source
     assert "compose_canonical_readonly_reply(" in source
 

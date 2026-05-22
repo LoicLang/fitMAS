@@ -30,8 +30,9 @@ def _function_defs(relative: str) -> set[str]:
 
 
 def test_8g_conversation_pipeline_delegates_pending_resolution() -> None:
-    source = _source("decision/turn_router.py")
-    functions = _function_defs("decision/turn_router.py")
+    router = _source("decision/turn_router.py")
+    source = _source("decision/turn_understanding_route.py")
+    functions = _function_defs("decision/turn_understanding_route.py")
 
     forbidden_helpers = {
         "_apply_pending_resolution",
@@ -45,6 +46,7 @@ def test_8g_conversation_pipeline_delegates_pending_resolution() -> None:
     }
 
     assert not forbidden_helpers.intersection(functions)
+    assert "turn_understanding_route" in router
     assert "pending_resolution" in source
     assert "conversation_pending_bridge" not in source
 

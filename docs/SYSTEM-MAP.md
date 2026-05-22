@@ -52,6 +52,9 @@ Etat actuel :
   `turn_pending_route.py`; les replies pre-understanding clarification/activity
   highlight vivent dans `turn_pre_understanding_reply_route.py`. Le routeur ne
   porte plus ces branches en direct.
+- La decision post-understanding canonical/readonly/planning/provider fallback
+  vit dans `turn_understanding_route.py`; `turn_router.py` reste un routeur
+  mince autour des owners.
 - `decision/turn_context.py` ne porte plus les helpers prompt/pending ni les
   helpers grounding/payload : ils vivent dans `turn_prompt_context.py` et
   `turn_context_payload.py`.

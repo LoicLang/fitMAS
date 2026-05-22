@@ -25,13 +25,15 @@ def _imports(relative: str) -> set[str]:
 
 
 def test_8f_conversation_pipeline_no_longer_imports_action_writers() -> None:
-    source = _source("decision/turn_router.py")
-    imports = _imports("decision/turn_router.py")
+    router = _source("decision/turn_router.py")
+    source = _source("decision/turn_understanding_route.py")
+    imports = _imports("decision/turn_understanding_route.py")
 
     assert "fitmas.domain.memory.mutation_service" not in imports
     assert "fitmas.domain.execution.mutation_service" not in imports
     assert "apply_memory_actions_for_user" not in source
     assert "apply_execution_actions_for_user" not in source
+    assert "turn_understanding_route" in router
     assert "command_application" in source
 
 

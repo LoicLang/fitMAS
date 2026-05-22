@@ -90,9 +90,11 @@ def test_10f_coach_decision_reply_helpers_live_in_readonly_reply_owner() -> None
 
 def test_10h_readonly_reply_lives_in_decision_not_legacy() -> None:
     router = _source("decision/turn_router.py")
+    understanding_route = _source("decision/turn_understanding_route.py")
     readonly = _source("decision/readonly_reply.py")
 
-    assert "from fitmas.decision import readonly_reply" in router
+    assert "turn_understanding_route" in router
+    assert "from fitmas.decision import readonly_reply" in understanding_route
     assert "conversation_canonical_readonly_bridge" not in router
     assert "conversation_readonly_reply_bridge" not in router
     assert not (SRC / "legacy/conversation_canonical_readonly_bridge.py").exists()
@@ -105,9 +107,11 @@ def test_10h_readonly_reply_lives_in_decision_not_legacy() -> None:
 
 def test_10i_understanding_runtime_lives_in_decision_not_legacy() -> None:
     router = _source("decision/turn_router.py")
+    understanding_route = _source("decision/turn_understanding_route.py")
     runtime = _source("decision/understanding_runtime.py")
 
-    assert "from fitmas.decision import understanding_runtime" in router
+    assert "turn_understanding_route" in router
+    assert "from fitmas.decision import understanding_runtime" in understanding_route
     assert "conversation_understanding_bridge" not in router
     assert not (SRC / "legacy/conversation_understanding_bridge.py").exists()
     assert "def run_canonical_understanding_shadow(" in runtime
@@ -130,9 +134,11 @@ def test_10i_conversation_bridge_census_only_tracks_legacy_decide_active() -> No
 
 def test_10j_coach_decision_runtime_lives_in_decision_not_legacy_bridge() -> None:
     router = _source("decision/turn_router.py")
+    understanding_route = _source("decision/turn_understanding_route.py")
     runtime = _source("decision/coach_decision_runtime.py")
 
-    assert "from fitmas.decision import coach_decision_runtime" in router
+    assert "turn_understanding_route" in router
+    assert "from fitmas.decision import coach_decision_runtime" in understanding_route
     assert "conversation_decide_bridge" not in router
     assert not (SRC / "legacy/conversation_decide_bridge.py").exists()
     assert "def build_legacy_coach_decision_request(" not in runtime

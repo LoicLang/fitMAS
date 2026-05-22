@@ -151,7 +151,7 @@ Etat actuel :
 Prochaine simplification :
 
 - reduire `llm/reply_backend.py` et pousser plus de verification dans `OutputVerifier`.
-- extraire les petites routes restantes de `decision/turn_router.py`.
+- garder `decision/turn_router.py` mince ; ne pas y remettre de logique de decision.
 - continuer le menage des prompts conversationnels anciens encore centres sur
   les artefacts PlanPatch historiques.
 
@@ -179,10 +179,12 @@ Les sept wrappers legacy P0 ont ete supprimes. Le gros risque suivant etait
 canonique a ete sortie vers `decision/turn_planning_route.py`.
 `decision/turn_context.py` est passe de `392` a `276` lignes apres extraction
 de `turn_prompt_context.py` et `turn_context_payload.py`.
-`decision/turn_router.py` est passe de `361` a `310` lignes apres extraction
+`decision/turn_router.py` est passe de `361` a `172` lignes apres extraction
 de `turn_close_route.py`, `turn_pending_route.py` et
-`turn_pre_understanding_reply_route.py`. Les nouveaux hotspots sont les routes
-restantes de `decision/turn_router.py` et `llm/reply_backend.py`.
+`turn_pre_understanding_reply_route.py`, puis du post-understanding vers
+`turn_understanding_route.py`. Les nouveaux hotspots sont
+`decision/turn_understanding_route.py`, `decision/turn_planning_route.py` et
+`llm/reply_backend.py`.
 
 10F a ajoute le census conversationnel et supprime quatre bridges :
 
@@ -273,7 +275,8 @@ extraction de la route planning canonique.
 
 Objectif suivant :
 
-1. extraire les routes restantes de `decision/turn_router.py` ;
+1. reduire `decision/turn_understanding_route.py` si une responsabilite
+   nouvelle apparait ;
 2. reduire `llm/reply_backend.py` en poussant les checks communs vers
    `OutputVerifier` ;
 3. continuer le menage des prompts conversationnels anciens encore centres

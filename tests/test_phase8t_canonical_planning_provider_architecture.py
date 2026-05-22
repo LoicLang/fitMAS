@@ -26,10 +26,11 @@ def test_8t_canonical_planning_bridge_exists_and_is_default_on_with_opt_out() ->
 
 def test_8t_pipeline_routes_canonical_planning_before_removed_provider_clarification() -> None:
     router = _source("decision/turn_router.py")
+    understanding_route = _source("decision/turn_understanding_route.py")
     planning_route = _source("decision/turn_planning_route.py")
 
-    planning_index = router.index("route_with_existing_understanding(")
-    clarification_index = router.index("canonical_provider_clarification_outcome(")
+    planning_index = understanding_route.index("route_with_existing_understanding(")
+    clarification_index = understanding_route.index("canonical_provider_clarification_outcome(")
     assert planning_index < clarification_index
     assert "run_legacy_coach_decision(" not in router
     assert "handle_canonical_planning(" not in router

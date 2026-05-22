@@ -117,6 +117,28 @@ def route_with_existing_understanding(
     )
 
 
+def apply_turn_plan_memory_commands_once(
+    *,
+    db: Session,
+    user: Any,
+    turn_plan: Any,
+    turn_memory_writes: list[dict],
+    turn_context: dict[str, object],
+) -> None:
+    if "turn_plan_memory_action_result" in turn_context:
+        return
+
+    from fitmas.decision import command_application
+
+    command_application.apply_turn_plan_memory_commands(
+        db=db,
+        user=user,
+        turn_plan=turn_plan,
+        turn_memory_writes=turn_memory_writes,
+        turn_context=turn_context,
+    )
+
+
 def _run_planning_understanding(
     *,
     user: Any,

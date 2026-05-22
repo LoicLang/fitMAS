@@ -26,8 +26,10 @@ def _imports(relative: str) -> set[str]:
 
 def test_10g_conversation_pipeline_uses_canonical_command_application() -> None:
     router = _source("decision/turn_router.py")
+    understanding_route = _source("decision/turn_understanding_route.py")
 
-    assert "from fitmas.decision import command_application" in router
+    assert "turn_understanding_route" in router
+    assert "from fitmas.decision import command_application" in understanding_route
     assert "conversation_command_bridge" not in router
     assert not (SRC / "legacy/conversation_command_bridge.py").exists()
     assert not (SRC / "legacy/conversation_command_bus.py").exists()

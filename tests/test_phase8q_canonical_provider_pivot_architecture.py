@@ -24,11 +24,13 @@ def test_8q_understanding_bridge_exposes_provider_pivot_boundary() -> None:
 
 
 def test_8q_conversation_pipeline_runs_canonical_before_removed_provider_clarification() -> None:
-    source = _source("decision/turn_router.py")
+    router = _source("decision/turn_router.py")
+    source = _source("decision/turn_understanding_route.py")
 
     canonical_index = source.index("run_canonical_understanding_shadow(")
     clarification_index = source.index("canonical_provider_clarification_outcome(")
     assert canonical_index < clarification_index
+    assert "route_post_pre_understanding_decision(" in router
     assert "run_legacy_coach_decision(" not in source
     assert "should_use_canonical_understanding_without_legacy(" in source
     assert "trace_canonical_understanding_pivot(" in source
