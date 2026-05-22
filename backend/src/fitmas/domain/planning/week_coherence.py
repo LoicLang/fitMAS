@@ -837,7 +837,8 @@ def _is_recovery_session(session: dict[str, Any]) -> bool:
 
 
 def _is_completed(session: dict[str, Any]) -> bool:
-    return str(session.get("completion_status") or "").strip().lower() in {"done", "skipped", "canceled"}
+    completion_status = str(session.get("completion_status") or "").strip().lower()
+    return completion_status in {"done", "skipped", "canceled"}
 
 
 def _empty_checks() -> DeterministicWeekChecks:

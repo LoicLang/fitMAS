@@ -33,7 +33,8 @@ def find_same_sport_proximity_conflict(
         session_id = _value(session, "id")
         if session_id == target_session_id:
             continue
-        if str(_value(session, "completion_status") or "").strip().lower() in {"done", "skipped"}:
+        completion_status = str(_value(session, "completion_status") or "").strip().lower()
+        if completion_status in {"done", "skipped"}:
             continue
         session_sport = str(_value(session, "sport_type") or "").strip().lower()
         session_type = str(_value(session, "session_type") or "").strip().lower()
