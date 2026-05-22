@@ -39,7 +39,7 @@ from fitmas.domain.execution.evidence import classify_execution_evidence
 from fitmas.domain.memory.fact_memory import fact_is_current
 from fitmas.knowledge import load_sport_knowledge
 from fitmas.domain.planning.contract import build_availability_state
-from fitmas.signals import collect_signals, format_signals_for_prompt
+from fitmas.domain.coaching.signals import collect_signals, format_signals_for_prompt
 from fitmas.skills.heartbeat.context import (
     HeartbeatCapabilityBudget,
     HeartbeatContextBundle,

@@ -10,7 +10,7 @@ from fitmas.domain.execution.context import (
     format_execution_context_for_prompt,
 )
 from fitmas.domain.memory.fact_memory import normalize_fact_payload, select_relevant_facts
-from fitmas.signals import Signal, format_signals_for_prompt, select_conversation_signals
+from fitmas.domain.coaching.signals import Signal, format_signals_for_prompt, select_conversation_signals
 from fitmas.core.temporal_resolver import (
     TemporalResolution,
     format_temporal_resolution_for_prompt,

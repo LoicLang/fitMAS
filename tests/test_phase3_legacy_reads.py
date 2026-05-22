@@ -114,7 +114,7 @@ def test_runtime_truth_modules_do_not_read_or_write_legacy_week_plan() -> None:
     files = [
         root / "backend/src/fitmas/domain/planning/session_actions.py",
         root / "backend/src/fitmas/domain/planning/mutation_executor.py",
-        root / "backend/src/fitmas/signals.py",
+        root / "backend/src/fitmas/domain/coaching/signals.py",
         root / "backend/src/fitmas/domain/execution/activities.py",
     ]
     forbidden = (

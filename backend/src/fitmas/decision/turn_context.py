@@ -32,7 +32,7 @@ from fitmas.decision.grounding import (
 from fitmas.decision import pending_resolution
 from fitmas.decision import plan_patch_reply
 from fitmas.domain.memory.profile_summary import build_profile_summary
-from fitmas.signals import collect_signals
+from fitmas.domain.coaching.signals import collect_signals
 
 
 logger = logging.getLogger(__name__)

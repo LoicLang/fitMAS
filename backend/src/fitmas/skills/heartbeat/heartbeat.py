@@ -67,7 +67,7 @@ from fitmas.llm.prompts.conversation_builder import detect_open_question
 from fitmas.domain.planning.mutation_permissions import default_confirmation_expiry, serialize_plan_patch_confirmation
 from fitmas.domain.planning.plan_patch import PlanPatch, PlanPatchValidation, plan_patch_from_mutation_decisions, validate_plan_patch
 from fitmas.domain.execution.recent_reality import build_recent_reality_window
-from fitmas.signals import collect_signals, format_signals_for_prompt
+from fitmas.domain.coaching.signals import collect_signals, format_signals_for_prompt
 from fitmas.skills.heartbeat.tool_loop import (
     generate_heartbeat_text_with_tools_debug,
     heartbeat_read_tools_enabled,

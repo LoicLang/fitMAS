@@ -158,6 +158,8 @@ Les cuts physiques recents :
 - Le bundle de contexte coach vit maintenant dans
   `domain/coaching/coach_state.py`; root `coach_state_bundle.py` est
   supprime.
+- Les signaux coach runtime vivent maintenant dans
+  `domain/coaching/signals.py`; root `signals.py` est supprime.
 - La resolution pending canonique normalise les aliases d'enum provider
   (`confirm`, `accepted`, etc.) vers `accept_pending` avant application.
   Un type inconnu devient une clarification pending, jamais un trou vers
@@ -177,7 +179,7 @@ Les cuts physiques recents :
 
 Etat chiffre au dernier check local :
 
-- root modules : `9`.
+- root modules : `8`.
 - legacy modules : `0` fichier source actif.
 - backend complet : `1347 passed, 11 skipped, 14 subtests passed`.
 - smoke canonical planning default : OK `10/10`.

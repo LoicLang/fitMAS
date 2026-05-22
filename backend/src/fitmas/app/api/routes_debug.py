@@ -22,7 +22,7 @@ def get_signals(db: Session = Depends(get_db)) -> dict:
     user = repo.get_user_optional(db)
     if user is None:
         return {"signals": []}
-    from fitmas.signals import collect_signals
+    from fitmas.domain.coaching.signals import collect_signals
 
     return {"signals": collect_signals(db, user)}
 

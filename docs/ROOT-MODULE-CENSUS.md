@@ -23,7 +23,7 @@ is allowed only for hotspots that need a separate shrink slice.
 
 ## Summary
 
-- Root files counted: 9
+- Root files counted: 8
 - Permanent root entrypoints allowed: 3
 - First wrapper cuts completed: `heartbeat*.py`, `llm_gateway.py`,
   `telegram_scheduler.py`, `tool_*.py`, `api_messages.py`,
@@ -84,6 +84,7 @@ is allowed only for hotspots that need a separate shrink slice.
 - Planning validator root cut completed: `plan_validator.py`
 - Telegram delivery root cut completed: `coach_messages.py`
 - Coaching state bundle root cut completed: `coach_state_bundle.py`
+- Coaching signals root cut completed: `signals.py`
 - Primary risk: moving files faster than deleting obsolete boundaries
 - Thursday criterion: root is explainable, delete candidates are explicit, and
   new root files fail architecture tests unless classified here
@@ -100,7 +101,6 @@ is allowed only for hotspots that need a separate shrink slice.
 | `models.py` | core | keep_root_temporarily | central SQLAlchemy models need a dedicated schema split | model schema split |
 | `repository.py` | core | keep_root_temporarily | monolithic repository needs domain repository split | repository split |
 | `schema.py` | core | keep_root_temporarily | central Pydantic schema needs bounded API/domain split | schema split |
-| `signals.py` | domain/coaching | merge | signal derivation overlaps context and memory substrates | coaching substrate shrink |
 
 ## Immediate Cut Order
 
