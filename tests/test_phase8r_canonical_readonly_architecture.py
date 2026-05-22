@@ -14,12 +14,14 @@ def _source(relative: str) -> str:
 
 def test_8r_canonical_readonly_bridge_exists() -> None:
     source = _source("decision/readonly_reply.py")
+    grounding = _source("decision/readonly_grounding.py")
 
     assert "def canonical_readonly_provider_enabled(" in source
     assert "FITMAS_CANONICAL_READONLY_PROVIDER" in source
     assert "def should_use_canonical_readonly_without_legacy(" in source
     assert "def compose_canonical_readonly_reply(" in source
-    assert "DecisionOutcome(" in source
+    assert "readonly_grounding.answer_outcome_from_understanding(" in source
+    assert "DecisionOutcome(" in grounding
     assert "DecisionReplyComposer" not in source
 
 

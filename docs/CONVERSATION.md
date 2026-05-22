@@ -67,6 +67,8 @@ Etat actuel :
 - `decision/readonly_reply.py` refuse une reply plan lookup non grounded quand
   des facts `PlanWindow` permettent un fallback factuel ; pour une execution
   appliquee, le fallback visible parle depuis l'event machine.
+- `decision/readonly_grounding.py` porte l'outcome answer et le fallback
+  factuel plan lookup depuis les facts de grounding.
 - `decision/no_change_reply.py` porte la reply conversationnelle no-change,
   plan lookup composee et execution report apres actions appliquees.
 - `decision/command_reply.py` porte la reply visible apres commandes
@@ -168,6 +170,7 @@ Reply actuelle :
 
 - `decision/reply_composer.py`
 - `decision/readonly_reply.py`
+- `decision/readonly_grounding.py`
 - `decision/no_change_reply.py`
 - `decision/plan_patch_reply.py`
 - `llm/reply_backend.py`

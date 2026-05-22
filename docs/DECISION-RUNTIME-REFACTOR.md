@@ -218,6 +218,8 @@ Et supprime :
 10H a sorti readonly/reply de `legacy/conversation_*` :
 
 - `decision/readonly_reply.py`
+- `decision/readonly_grounding.py` pour l'outcome answer et fallback factuel
+  plan lookup.
 - `decision/no_change_reply.py` pour les replies no-change / execution report.
 
 Et supprime :
