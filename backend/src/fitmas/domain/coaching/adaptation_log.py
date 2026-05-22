@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Sequence
 
-from fitmas.adaptation_decision import AdaptationDecision, DecisionReasonCode, TrajectoryImpact, WeekMissionStatus
+from fitmas.domain.planning.adaptation_decision import AdaptationDecision, DecisionReasonCode, TrajectoryImpact, WeekMissionStatus
 
 
 @dataclass(frozen=True, slots=True)

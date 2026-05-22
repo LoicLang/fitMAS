@@ -111,7 +111,7 @@ def to_pydantic_message(msg: s.CoachMessage) -> Message:
 
 
 def to_domain_adaptation_event(record: s.AdaptationEventRecord) -> AdaptationLogEntry:
-    from fitmas.adaptation_decision import DecisionReasonCode, TrajectoryImpact, WeekMissionStatus
+    from fitmas.domain.planning.adaptation_decision import DecisionReasonCode, TrajectoryImpact, WeekMissionStatus
     from fitmas.domain.coaching.adaptation_log import _impact_label, _mission_label, _reason_label
 
     reason_code = DecisionReasonCode(str(record.reason_code or DecisionReasonCode.LOGISTICS_CONFLICT.value))

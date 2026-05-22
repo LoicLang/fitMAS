@@ -23,7 +23,7 @@ is allowed only for hotspots that need a separate shrink slice.
 
 ## Summary
 
-- Root files counted: 14
+- Root files counted: 13
 - Permanent root entrypoints allowed: 3
 - First wrapper cuts completed: `heartbeat*.py`, `llm_gateway.py`,
   `telegram_scheduler.py`, `tool_*.py`, `api_messages.py`,
@@ -79,6 +79,7 @@ is allowed only for hotspots that need a separate shrink slice.
 - LLM conversation system prompt root cut completed:
   `conversation_prompt_modules.py`
 - LLM conversation prompt builder root cut completed: `llm_prompt_builder.py`
+- Planning adaptation decision root cut completed: `adaptation_decision.py`
 - Primary risk: moving files faster than deleting obsolete boundaries
 - Thursday criterion: root is explainable, delete candidates are explicit, and
   new root files fail architecture tests unless classified here
@@ -89,7 +90,6 @@ is allowed only for hotspots that need a separate shrink slice.
 | --- | --- | --- | --- | --- |
 | `__init__.py` | root-entrypoint | entrypoint | package marker only | permanent root |
 | `adaptation.py` | domain/planning | merge | old adaptation facade overlaps planning runtime | planning simplification |
-| `adaptation_decision.py` | domain/planning | merge | decision value object should live with planning decisions | planning simplification |
 | `api.py` | root-entrypoint | entrypoint | FastAPI app assembly entrypoint | keep until app package owns all routes |
 | `coach_messages.py` | domain/coaching | merge | message fixtures overlap coach voice and reply composer | coaching package split |
 | `coach_state_bundle.py` | domain/coaching | merge | old bundle should collapse into CoachContext | coach context shrink |

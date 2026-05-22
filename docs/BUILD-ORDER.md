@@ -146,6 +146,9 @@ Les cuts physiques recents :
 - Le builder de prompt conversationnel vit maintenant dans
   `llm/prompts/conversation_builder.py`; root `llm_prompt_builder.py` est
   supprime.
+- Les value objects de decision d'adaptation vivent maintenant dans
+  `domain/planning/adaptation_decision.py`; root `adaptation_decision.py`
+  est supprime.
 - La resolution pending canonique normalise les aliases d'enum provider
   (`confirm`, `accepted`, etc.) vers `accept_pending` avant application.
   Un type inconnu devient une clarification pending, jamais un trou vers
@@ -165,7 +168,7 @@ Les cuts physiques recents :
 
 Etat chiffre au dernier check local :
 
-- root modules : `14`.
+- root modules : `13`.
 - legacy modules : `0` fichier source actif.
 - backend complet : `1347 passed, 11 skipped, 14 subtests passed`.
 - smoke canonical planning default : OK `10/10`.
