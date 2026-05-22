@@ -130,6 +130,8 @@ Les cuts physiques recents :
 - Les contrats de tour conversationnel vivent maintenant dans
   `decision/conversation_contract.py`; root `conversation_contract.py` est
   supprime.
+- Le context pack d'observabilite prompt vit maintenant dans
+  `decision/context_pack.py`; root `context_pack.py` est supprime.
 - La resolution pending canonique normalise les aliases d'enum provider
   (`confirm`, `accepted`, etc.) vers `accept_pending` avant application.
   Un type inconnu devient une clarification pending, jamais un trou vers
@@ -149,7 +151,7 @@ Les cuts physiques recents :
 
 Etat chiffre au dernier check local :
 
-- root modules : `20`.
+- root modules : `19`.
 - legacy modules : `0` fichier source actif.
 - backend complet : `1347 passed, 11 skipped, 14 subtests passed`.
 - smoke canonical planning default : OK `10/10`.

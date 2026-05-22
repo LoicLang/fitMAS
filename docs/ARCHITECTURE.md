@@ -93,6 +93,7 @@ Ce qui n'est plus l'architecture active :
 - root grounding contract (`grounding_contract.py`)
 - root claim guard (`claim_guard.py`)
 - root conversation contract (`conversation_contract.py`)
+- root context pack (`context_pack.py`)
 - root `final_reply.py`
 - root `heartbeat.py`
 - root `telegram_scheduler.py`

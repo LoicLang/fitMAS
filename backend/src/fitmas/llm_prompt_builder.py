@@ -4,7 +4,7 @@ import re
 from dataclasses import dataclass
 from typing import Any
 
-from fitmas.context_pack import ConversationContextPack
+from fitmas.decision.context_pack import ConversationContextPack
 from fitmas.conversation_prompt_modules import (
     build_conversation_system_text,
 )
