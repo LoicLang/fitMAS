@@ -134,7 +134,8 @@ Role :
 Owner :
 
 - `domain/athlete/`
-- `domain/athlete/repository.py` pour les snapshots fitness/readiness.
+- `domain/athlete/repository.py` pour user/profile, sports/constraints/
+  preferences et snapshots fitness/readiness.
 
 Role :
 
@@ -156,6 +157,19 @@ Role :
 - stocker signaux courts en working memory ;
 - maintenir patterns observes ;
 - ne pas comprendre le texte utilisateur libre.
+
+### Coaching
+
+Owner :
+
+- `domain/coaching/`
+- `domain/coaching/repository.py` pour les adaptation events.
+
+Role :
+
+- convertir et persister les decisions d'adaptation visibles ;
+- alimenter coach state, app et ops ;
+- ne pas porter la mutation planning elle-meme.
 
 ### LLM
 

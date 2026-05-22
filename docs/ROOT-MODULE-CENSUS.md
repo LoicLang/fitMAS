@@ -98,8 +98,9 @@ is allowed only for hotspots that need a separate shrink slice.
   `domain/execution/repository.py` owns `Activity` reads, conversion and
   writes; root `repository.py` keeps a facade for compatibility.
 - Athlete repository extraction started:
-  `domain/athlete/repository.py` owns fitness and readiness snapshot storage;
-  root `repository.py` keeps a facade for compatibility.
+  `domain/athlete/repository.py` owns user/profile facades, user sports /
+  constraints / preferences and fitness/readiness snapshot storage; root
+  `repository.py` keeps a facade for compatibility.
 - Integration repository extraction started:
   `integrations/repository.py` owns Strava connection, token and sync metadata;
   root `repository.py` keeps a facade for compatibility.
@@ -107,6 +108,12 @@ is allowed only for hotspots that need a separate shrink slice.
   `domain/planning/template_repository.py` owns `WeeklyPlan` / `DayPlan`
   onboarding, template and archive compatibility; root `repository.py` keeps a
   facade for compatibility.
+- Coaching repository extraction started:
+  `domain/coaching/repository.py` owns adaptation event conversion and storage;
+  root `repository.py` keeps a facade for compatibility.
+- Root repository storage removed:
+  `repository.py` is now facade-only; it must not query, write or construct DB
+  records directly.
 - Primary risk: moving files faster than deleting obsolete boundaries
 - Thursday criterion: root is explainable, delete candidates are explicit, and
   new root files fail architecture tests unless classified here
@@ -119,7 +126,7 @@ is allowed only for hotspots that need a separate shrink slice.
 | `api.py` | root-entrypoint | entrypoint | FastAPI app assembly entrypoint | keep until app package owns all routes |
 | `main.py` | root-entrypoint | entrypoint | ASGI import entrypoint | permanent root |
 | `models.py` | core | keep_root_temporarily | central SQLAlchemy models need a dedicated schema split | model schema split |
-| `repository.py` | core | keep_root_temporarily | planning, memory, execution, athlete snapshot, Strava connection and template repositories extracted; remaining user/profile facades need domain ownership | repository split continuation |
+| `repository.py` | core | keep_root_temporarily | facade-only compatibility layer; real DB owners live in domain/integrations modules | migrate remaining call sites then delete facade |
 | `schema.py` | core | keep_root_temporarily | central Pydantic schema needs bounded API/domain split | schema split |
 
 ## Immediate Cut Order
@@ -127,8 +134,8 @@ is allowed only for hotspots that need a separate shrink slice.
 1. Keep only root entrypoints plus bounded monoliths in root.
 2. Split monoliths only with stable facades:
    `repository.py`, `schema.py`, `models.py`.
-3. For `repository.py`, extract one real owner at a time and keep root as
-   compatibility facade until call sites can migrate safely.
+3. For `repository.py`, migrate call sites from facade to owners, then delete
+   the facade once source imports are gone.
 
 ## Non Goals
 

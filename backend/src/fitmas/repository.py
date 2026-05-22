@@ -1,11 +1,11 @@
 from __future__ import annotations
 
-import json
 from datetime import date, datetime
 
 from sqlalchemy.orm import Session
 
 from fitmas import schema as s
+from fitmas.domain.coaching import repository as coaching_repo
 from fitmas.domain.coaching import repo_conversation
 from fitmas.domain.coaching.adaptation_log import AdaptationLogEntry
 from fitmas.domain.athlete import repository as athlete_repo
@@ -17,7 +17,6 @@ from fitmas.domain.planning import template_repository as template_repo
 from fitmas.integrations import repository as integration_repo
 from fitmas.models import (
     Activity,
-    DayId,
     DayPlan,
     Message,
     MessageRole,
@@ -29,31 +28,12 @@ from fitmas.models import (
 )
 from fitmas.domain.planning.planning_decision import PlanningDecision
 from fitmas.domain.athlete.readiness import ReadinessState
-from fitmas.domain.planning.models import compute_load_band
 
 
 # ── Converters ─────────────────────────────────────────────────────────────
 
 def to_pydantic_profile(user: s.User) -> Profile:
-    return Profile(
-        name=user.name,
-        age=user.age,
-        objective=user.primary_objective or user.objective,
-        coaching_style=user.coach_soul or user.coaching_style,
-        primary_objective=user.primary_objective,
-        weekly_structure_notes=user.weekly_structure_notes,
-        coach_name=user.coach_name,
-        coach_style=user.coach_style,
-        coach_relationship=user.coach_relationship,
-        coach_do=user.coach_do,
-        coach_dont=user.coach_dont,
-        coach_soul=user.coach_soul,
-        onboarding_status=user.onboarding_status,
-        sports=[sport.sport_type for sport in user.sports if sport.active],
-        constraints=[c.text for c in user.constraints],
-        preferences=[p.text for p in user.preferences],
-        integrations=["Strava", "Telegram", "Manual"],
-    )
+    return athlete_repo.to_pydantic_profile(user)
 
 
 def to_pydantic_day(day: s.DayPlan) -> DayPlan:
@@ -69,65 +49,11 @@ def to_pydantic_message(msg: s.CoachMessage) -> Message:
 
 
 def to_domain_adaptation_event(record: s.AdaptationEventRecord) -> AdaptationLogEntry:
-    from fitmas.domain.planning.adaptation_decision import DecisionReasonCode, TrajectoryImpact, WeekMissionStatus
-    from fitmas.domain.coaching.adaptation_log import _impact_label, _mission_label, _reason_label
-
-    reason_code = DecisionReasonCode(str(record.reason_code or DecisionReasonCode.LOGISTICS_CONFLICT.value))
-    week_mission_status = WeekMissionStatus(str(record.week_mission_status or WeekMissionStatus.UNCHANGED.value))
-    trajectory_impact = TrajectoryImpact(str(record.trajectory_impact or TrajectoryImpact.LOW.value))
-    return AdaptationLogEntry(
-        created_at=record.created_at.isoformat() if record.created_at else None,
-        reason_code=record.reason_code,
-        reason_label=_reason_label(reason_code),
-        adaptation_level=record.adaptation_level,
-        week_mission_status=record.week_mission_status,
-        mission_label=_mission_label(week_mission_status),
-        trajectory_impact=record.trajectory_impact,
-        impact_label=_impact_label(trajectory_impact),
-        scenario_type=record.scenario_type,
-        mutation_type=record.mutation_type,
-        summary=record.summary,
-        what_changed=record.what_changed,
-        what_protected=record.what_protected,
-        user_message=record.user_message,
-        source_text=record.source_text,
-        change_cost=int(record.change_cost or 0),
-        stability_penalty=float(record.stability_penalty or 0.0),
-        protected_session_ids=tuple(int(value) for value in _json_loads_list(record.protected_session_ids_json)),
-    )
+    return coaching_repo.to_domain_adaptation_event(record)
 
 
 def to_pydantic_scheduled_session(session: s.ScheduledSession) -> ScheduledSession:
-    linked_activity_id = None
-    if session.activities:
-        linked_activity_id = max((activity.id for activity in session.activities), default=None)
-    load_band = compute_load_band(
-        sport_type=session.sport_type,
-        session_type=session.session_type,
-        intensity=session.intensity,
-        load_score=session.load_score,
-    )
-    return ScheduledSession(
-        id=session.id,
-        day=DayId(session.day),
-        label=session.label,
-        scheduled_date=session.scheduled_date.date().isoformat(),
-        sport_type=session.sport_type,
-        session_type=session.session_type,
-        session_title=session.session_title,
-        session_goal=session.session_goal,
-        session_note=session.session_note or "",
-        session_description=session.session_description or "",
-        duration_min=session.duration_min,
-        intensity=session.intensity,
-        load_score=session.load_score,
-        load_band=load_band,
-        priority=session.priority,
-        nutrition_focus=session.nutrition_focus or "",
-        flexibility=session.flexibility,
-        completion_status=session.completion_status,
-        linked_activity_id=linked_activity_id,
-    )
+    return planning_repo.to_pydantic_scheduled_session(session)
 
 
 def to_pydantic_fact(fact: object) -> UserFact:
@@ -157,15 +83,11 @@ def to_domain_planning_decision(row: s.PlanningDecisionRecord) -> PlanningDecisi
 # ── Queries ────────────────────────────────────────────────────────────────
 
 def get_user(db: Session) -> s.User:
-    user = get_user_optional(db)
-    if user is None:
-        raise RuntimeError("No user in DB — onboarding required")
-    return user
+    return athlete_repo.get_user(db)
 
 
 def get_user_optional(db: Session) -> s.User | None:
-    user = db.query(s.User).first()
-    return user
+    return athlete_repo.get_user_optional(db)
 
 
 def get_active_plan_optional(db: Session, user_id: int) -> s.WeeklyPlan | None:
@@ -495,48 +417,15 @@ def add_plan_mutation_event(
 
 
 def add_adaptation_event(db: Session, user_id: int, entry: AdaptationLogEntry) -> s.AdaptationEventRecord:
-    row = s.AdaptationEventRecord(
-        user_id=user_id,
-        reason_code=entry.reason_code,
-        adaptation_level=entry.adaptation_level,
-        week_mission_status=entry.week_mission_status,
-        trajectory_impact=entry.trajectory_impact,
-        scenario_type=entry.scenario_type,
-        mutation_type=entry.mutation_type,
-        summary=entry.summary,
-        what_changed=entry.what_changed,
-        what_protected=entry.what_protected,
-        user_message=entry.user_message,
-        source_text=entry.source_text,
-        change_cost=entry.change_cost,
-        stability_penalty=entry.stability_penalty,
-        protected_session_ids_json=_json_dumps(list(entry.protected_session_ids)),
-    )
-    db.add(row)
-    db.commit()
-    db.refresh(row)
-    return row
+    return coaching_repo.add_adaptation_event(db, user_id, entry)
 
 
 def get_latest_adaptation_event(db: Session, user_id: int) -> AdaptationLogEntry | None:
-    row = (
-        db.query(s.AdaptationEventRecord)
-        .filter(s.AdaptationEventRecord.user_id == user_id)
-        .order_by(s.AdaptationEventRecord.created_at.desc(), s.AdaptationEventRecord.id.desc())
-        .first()
-    )
-    return to_domain_adaptation_event(row) if row else None
+    return coaching_repo.get_latest_adaptation_event(db, user_id)
 
 
 def get_recent_adaptation_events(db: Session, user_id: int, *, limit: int = 4) -> list[AdaptationLogEntry]:
-    rows = (
-        db.query(s.AdaptationEventRecord)
-        .filter(s.AdaptationEventRecord.user_id == user_id)
-        .order_by(s.AdaptationEventRecord.created_at.desc(), s.AdaptationEventRecord.id.desc())
-        .limit(limit)
-        .all()
-    )
-    return [to_domain_adaptation_event(row) for row in rows]
+    return coaching_repo.get_recent_adaptation_events(db, user_id, limit=limit)
 
 
 def add_activity(
@@ -600,18 +489,13 @@ def replace_user_lists(
     constraints: list[str],
     preferences: list[str],
 ) -> None:
-    db.query(s.UserSport).filter(s.UserSport.user_id == user.id).delete()
-    db.query(s.UserConstraint).filter(s.UserConstraint.user_id == user.id).delete()
-    db.query(s.UserPreference).filter(s.UserPreference.user_id == user.id).delete()
-
-    for index, sport in enumerate(sports):
-        db.add(s.UserSport(user_id=user.id, sport_type=sport, priority_rank=index))
-    for text in constraints:
-        db.add(s.UserConstraint(user_id=user.id, text=text))
-    for text in preferences:
-        db.add(s.UserPreference(user_id=user.id, text=text))
-
-    db.commit()
+    athlete_repo.replace_user_lists(
+        db,
+        user,
+        sports=sports,
+        constraints=constraints,
+        preferences=preferences,
+    )
 
 
 def replace_user_facts(db: Session, user_id: int, facts: list[dict]) -> None:
@@ -725,27 +609,3 @@ def move_session(db: Session, plan_id: int, from_day: str, to_day: str) -> None:
 
 def set_change_notes(db: Session, day_plan_id: int, notes: list[tuple[str, str]]) -> None:
     template_repo.set_change_notes(db, day_plan_id, notes)
-
-
-def _json_dumps(value: object) -> str:
-    return json.dumps(value, ensure_ascii=True, sort_keys=True, default=_json_default)
-
-
-def _json_loads_dict(raw_value: str) -> dict[str, float]:
-    if not raw_value:
-        return {}
-    return {str(key): float(value) for key, value in json.loads(raw_value).items()}
-
-
-def _json_loads_list(raw_value: str) -> list[str]:
-    if not raw_value:
-        return []
-    return [str(value) for value in json.loads(raw_value)]
-
-
-def _json_default(value: object) -> str:
-    if isinstance(value, datetime):
-        return value.isoformat()
-    if isinstance(value, date):
-        return value.isoformat()
-    return str(value)

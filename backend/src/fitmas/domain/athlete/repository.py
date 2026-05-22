@@ -8,6 +8,62 @@ from sqlalchemy.orm import Session
 from fitmas import schema as s
 from fitmas.domain.athlete.fitness_snapshot import FitnessSnapshot
 from fitmas.domain.athlete.readiness import ReadinessState
+from fitmas.models import Profile
+
+
+def to_pydantic_profile(user: s.User) -> Profile:
+    return Profile(
+        name=user.name,
+        age=user.age,
+        objective=user.primary_objective or user.objective,
+        coaching_style=user.coach_soul or user.coaching_style,
+        primary_objective=user.primary_objective,
+        weekly_structure_notes=user.weekly_structure_notes,
+        coach_name=user.coach_name,
+        coach_style=user.coach_style,
+        coach_relationship=user.coach_relationship,
+        coach_do=user.coach_do,
+        coach_dont=user.coach_dont,
+        coach_soul=user.coach_soul,
+        onboarding_status=user.onboarding_status,
+        sports=[sport.sport_type for sport in user.sports if sport.active],
+        constraints=[constraint.text for constraint in user.constraints],
+        preferences=[preference.text for preference in user.preferences],
+        integrations=["Strava", "Telegram", "Manual"],
+    )
+
+
+def get_user(db: Session) -> s.User:
+    user = get_user_optional(db)
+    if user is None:
+        raise RuntimeError("No user in DB - onboarding required")
+    return user
+
+
+def get_user_optional(db: Session) -> s.User | None:
+    return db.query(s.User).first()
+
+
+def replace_user_lists(
+    db: Session,
+    user: s.User,
+    *,
+    sports: list[str],
+    constraints: list[str],
+    preferences: list[str],
+) -> None:
+    db.query(s.UserSport).filter(s.UserSport.user_id == user.id).delete()
+    db.query(s.UserConstraint).filter(s.UserConstraint.user_id == user.id).delete()
+    db.query(s.UserPreference).filter(s.UserPreference.user_id == user.id).delete()
+
+    for index, sport in enumerate(sports):
+        db.add(s.UserSport(user_id=user.id, sport_type=sport, priority_rank=index))
+    for text in constraints:
+        db.add(s.UserConstraint(user_id=user.id, text=text))
+    for text in preferences:
+        db.add(s.UserPreference(user_id=user.id, text=text))
+
+    db.commit()
 
 
 def to_domain_fitness_snapshot(row: s.FitnessSnapshotRecord) -> FitnessSnapshot:

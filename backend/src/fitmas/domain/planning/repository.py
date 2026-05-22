@@ -7,7 +7,42 @@ from sqlalchemy.orm import Session
 
 from fitmas import schema as s
 from fitmas.core.time_context import get_local_now
+from fitmas.domain.planning.models import compute_load_band
 from fitmas.domain.planning.planning_decision import PlanningDecision
+from fitmas.models import DayId, ScheduledSession
+
+
+def to_pydantic_scheduled_session(session: s.ScheduledSession) -> ScheduledSession:
+    linked_activity_id = None
+    if session.activities:
+        linked_activity_id = max((activity.id for activity in session.activities), default=None)
+    load_band = compute_load_band(
+        sport_type=session.sport_type,
+        session_type=session.session_type,
+        intensity=session.intensity,
+        load_score=session.load_score,
+    )
+    return ScheduledSession(
+        id=session.id,
+        day=DayId(session.day),
+        label=session.label,
+        scheduled_date=session.scheduled_date.date().isoformat(),
+        sport_type=session.sport_type,
+        session_type=session.session_type,
+        session_title=session.session_title,
+        session_goal=session.session_goal,
+        session_note=session.session_note or "",
+        session_description=session.session_description or "",
+        duration_min=session.duration_min,
+        intensity=session.intensity,
+        load_score=session.load_score,
+        load_band=load_band,
+        priority=session.priority,
+        nutrition_focus=session.nutrition_focus or "",
+        flexibility=session.flexibility,
+        completion_status=session.completion_status,
+        linked_activity_id=linked_activity_id,
+    )
 
 
 def get_scheduled_sessions(

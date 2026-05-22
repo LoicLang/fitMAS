@@ -272,15 +272,20 @@ Prochain chantier logique :
   patterns, avec `fitmas.repository` en facade temporaire ;
 - `domain/execution/repository.py` possede deja les activites reelles, avec
   `fitmas.repository` en facade temporaire ;
-- `domain/athlete/repository.py` possede deja les snapshots fitness/readiness,
-  avec `fitmas.repository` en facade temporaire ;
+- `domain/athlete/repository.py` possede deja user/profile, sports/constraints/
+  preferences et snapshots fitness/readiness, avec `fitmas.repository` en
+  facade temporaire ;
+- `domain/coaching/repository.py` possede deja les adaptation events, avec
+  `fitmas.repository` en facade temporaire ;
 - `integrations/repository.py` possede deja connection/tokens/sync metadata
   Strava, avec `fitmas.repository` en facade temporaire ;
 - `domain/planning/template_repository.py` possede deja la compat
   `WeeklyPlan/DayPlan` onboarding/template/archive, avec `fitmas.repository`
   en facade temporaire ;
-- continuer le split repository par owner reel avant de toucher a
-  `schema.py`/`models.py` ;
+- `fitmas.repository` est maintenant facade-only : il ne porte plus de query ni
+  write DB direct ;
+- prochaine etape : migrer les imports source restants vers les owners, puis
+  supprimer la facade avant de toucher a `schema.py`/`models.py` ;
 - garder la priorite runtime plus petit, pas refactor plus complet.
 
 ## Ordre De Lecture Pour Un Agent
