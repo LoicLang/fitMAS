@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Sequence
 
-from fitmas.fitness_snapshot import estimate_scheduled_session_tss
+from fitmas.domain.athlete.fitness_snapshot import estimate_scheduled_session_tss
 from fitmas.intensity_distribution import check_distribution
 from fitmas.planning_config import get_global_planning_config, get_sport_planning_config
 

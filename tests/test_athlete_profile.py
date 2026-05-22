@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import unittest
 
-from fitmas.athlete_profile import build_athlete_profile
+from fitmas.domain.athlete.profile import build_athlete_profile
 from fitmas import schema as s
 
 

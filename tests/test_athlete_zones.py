@@ -3,7 +3,7 @@ from __future__ import annotations
 import unittest
 from types import SimpleNamespace
 
-from fitmas.athlete_zones import (
+from fitmas.domain.athlete.zones import (
     AthleteZones,
     build_athlete_zones,
     compute_cycling_zones,

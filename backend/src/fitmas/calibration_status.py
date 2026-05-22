@@ -5,7 +5,7 @@ from datetime import date, datetime, timedelta
 from enum import StrEnum
 from typing import Any, Sequence
 
-from fitmas.athlete_profile import AthleteProfileSnapshot
+from fitmas.domain.athlete.profile import AthleteProfileSnapshot
 
 
 class CalibrationPhase(StrEnum):

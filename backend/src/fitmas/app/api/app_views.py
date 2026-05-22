@@ -5,8 +5,8 @@ from datetime import date, datetime, timedelta
 from typing import Any
 
 from fitmas.calendar_resolution import build_session_item, resolve_calendar_payload
-from fitmas.fitness_snapshot import estimate_scheduled_session_tss
-from fitmas.load_projection import build_load_forecast, planning_mode_label_fr
+from fitmas.domain.athlete.fitness_snapshot import estimate_scheduled_session_tss
+from fitmas.domain.athlete.load_projection import build_load_forecast, planning_mode_label_fr
 from fitmas.workout_content import build_workout_content
 from fitmas.time_context import get_local_now
 

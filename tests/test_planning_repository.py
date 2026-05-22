@@ -9,9 +9,9 @@ os.environ.setdefault("FITMAS_DB_PATH", tempfile.mktemp(prefix="fitmas-planning-
 
 from fitmas import repository as repo, schema as s
 from fitmas.db import Base, SessionLocal, engine, init_db
-from fitmas.fitness_snapshot import FitnessSnapshot
+from fitmas.domain.athlete.fitness_snapshot import FitnessSnapshot
 from fitmas.planning_decision import PlanningDecision
-from fitmas.readiness import ReadinessState
+from fitmas.domain.athlete.readiness import ReadinessState
 
 
 class PlanningRepositoryTest(unittest.TestCase):

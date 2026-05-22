@@ -19,7 +19,7 @@ from sqlalchemy.orm import Session
 from fitmas import repository as repo, schema as s
 from fitmas.domain.planning.mutation_decision import MutationDecision
 from fitmas.time_context import get_local_now
-from fitmas.training_load import compute_ctl_atl_tsb
+from fitmas.domain.athlete.training_load import compute_ctl_atl_tsb
 
 logger = logging.getLogger(__name__)
 

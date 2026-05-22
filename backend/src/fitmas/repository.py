@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 from fitmas import repo_conversation, schema as s
 from fitmas.adaptation_log import AdaptationLogEntry
 from fitmas.domain.memory.fact_memory import fact_is_current, normalize_fact_payload
-from fitmas.fitness_snapshot import FitnessSnapshot
+from fitmas.domain.athlete.fitness_snapshot import FitnessSnapshot
 from fitmas.models import (
     Activity,
     ChangeNote,
@@ -25,7 +25,7 @@ from fitmas.models import (
 )
 from fitmas.planning_decision import PlanningDecision
 from fitmas.periodization import compute_mesocycle_state, derive_total_weeks
-from fitmas.readiness import ReadinessState
+from fitmas.domain.athlete.readiness import ReadinessState
 from fitmas.session_metadata import compute_load_band
 from fitmas.time_context import DAY_KEYS, current_week_dates, get_local_now
 from fitmas.week_metadata import build_week_label

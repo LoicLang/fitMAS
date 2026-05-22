@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from datetime import date, datetime
 from typing import Any, Callable, Literal, Sequence
 
-from fitmas.fitness_snapshot import estimate_scheduled_session_tss
+from fitmas.domain.athlete.fitness_snapshot import estimate_scheduled_session_tss
 from fitmas.plan_patch import PlanPatch, PlanPatchValidation
 
 WeekCoherenceStatus = Literal["valid", "warning", "requires_confirmation", "blocked"]

@@ -6,7 +6,7 @@ from typing import Any, Sequence
 
 from fitmas.domain.execution.claims import ActivityClaim
 from fitmas.domain.execution.evidence import classify_execution_evidence
-from fitmas.fitness_snapshot import estimate_scheduled_session_tss
+from fitmas.domain.athlete.fitness_snapshot import estimate_scheduled_session_tss
 
 KEY_PRIORITIES = {"high", "key", "important"}
 REST_SPORTS = {"rest", "off"}

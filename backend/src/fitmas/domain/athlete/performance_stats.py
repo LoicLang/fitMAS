@@ -4,7 +4,7 @@ from collections import defaultdict
 from datetime import date, datetime, timedelta
 from typing import Any
 
-from fitmas.training_load import compute_ctl_atl_tsb
+from fitmas.domain.athlete.training_load import compute_ctl_atl_tsb
 
 SPORTS = ("running", "cycling", "swimming", "climbing", "strength")
 

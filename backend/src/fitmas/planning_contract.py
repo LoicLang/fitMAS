@@ -5,8 +5,8 @@ from datetime import date, datetime, timedelta
 from enum import StrEnum
 from typing import Any, Sequence
 
-from fitmas.athlete_profile import AthleteProfileSnapshot
-from fitmas.load_projection import planning_mode_label_fr
+from fitmas.domain.athlete.profile import AthleteProfileSnapshot
+from fitmas.domain.athlete.load_projection import planning_mode_label_fr
 
 REST_SPORTS = {"rest", "off"}
 DAY_LABELS_FR = {

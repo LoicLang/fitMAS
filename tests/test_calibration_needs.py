@@ -3,7 +3,7 @@ from __future__ import annotations
 import unittest
 from datetime import date, datetime, timezone
 
-from fitmas.athlete_profile import AthleteProfileSnapshot
+from fitmas.domain.athlete.profile import AthleteProfileSnapshot
 from fitmas.calibration_needs import (
     CalibrationNeedType,
     build_resolution_memory_updates,

@@ -1,4 +1,4 @@
-from fitmas.strength_signals import derive_strength_signals
+from fitmas.domain.athlete.strength_signals import derive_strength_signals
 
 
 def test_strength_signals_detect_low_week_fatigue_and_short_time() -> None:

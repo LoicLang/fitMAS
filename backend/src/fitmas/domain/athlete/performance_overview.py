@@ -3,8 +3,8 @@ from __future__ import annotations
 from datetime import date, datetime, timedelta
 from typing import Any
 
-from fitmas.fitness_snapshot import build_fitness_snapshot, estimate_scheduled_session_tss
-from fitmas.load_projection import planning_mode_label_fr
+from fitmas.domain.athlete.fitness_snapshot import build_fitness_snapshot, estimate_scheduled_session_tss
+from fitmas.domain.athlete.load_projection import planning_mode_label_fr
 from fitmas.periodization import compute_mesocycle_state
 from fitmas.domain.execution.recent_reality import build_recent_reality_window
 from fitmas.session_metadata import compute_load_band

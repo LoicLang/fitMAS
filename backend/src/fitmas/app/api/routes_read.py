@@ -22,7 +22,7 @@ from fitmas.models import (
     WatchItem,
 )
 from fitmas.session_metadata import compute_load_band
-from fitmas.training_load import compute_ctl_atl_tsb
+from fitmas.domain.athlete.training_load import compute_ctl_atl_tsb
 from fitmas.time_context import current_week_dates, get_local_now
 
 router = APIRouter()

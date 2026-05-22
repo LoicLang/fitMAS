@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import unittest
 
-from fitmas.fitness_snapshot import build_fitness_snapshot, estimate_scheduled_session_tss
+from fitmas.domain.athlete.fitness_snapshot import build_fitness_snapshot, estimate_scheduled_session_tss
 
 
 class FitnessSnapshotTest(unittest.TestCase):

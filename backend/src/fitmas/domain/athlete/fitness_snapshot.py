@@ -5,7 +5,7 @@ from datetime import date, datetime, timedelta
 from typing import Any, Iterable, Sequence
 
 from fitmas.planning_config import SUPPORTED_SPORTS, get_sport_planning_config
-from fitmas.training_load import compute_ctl_atl_tsb
+from fitmas.domain.athlete.training_load import compute_ctl_atl_tsb
 
 DONE_SESSION_STATUSES = {"done"}
 KEY_PRIORITIES = {"high", "key", "important"}

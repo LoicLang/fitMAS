@@ -4,8 +4,8 @@ import logging
 import re
 from dataclasses import dataclass
 
-from fitmas.athlete_profile import AthleteProfileSnapshot
-from fitmas.athlete_zones import AthleteZones
+from fitmas.domain.athlete.profile import AthleteProfileSnapshot
+from fitmas.domain.athlete.zones import AthleteZones
 from fitmas.plan_validator import validate_week_plan
 from fitmas.planning_config import get_sport_planning_config
 from fitmas.planning_decision import PlanningDecision
@@ -647,7 +647,7 @@ def _session_note(session: PlannedSession, *, planning_decision: PlanningDecisio
         return "Protection prioritaire. Tout doit rester propre et tenable."
     if planning_decision.planning_mode == "restart_consistency":
         return "Relance cadrée. On repart plus simple pour reconstruire de la régularité."
-    from fitmas.load_projection import planning_mode_label_fr
+    from fitmas.domain.athlete.load_projection import planning_mode_label_fr
     mode_label = planning_mode_label_fr(planning_decision.planning_mode)
     if session.priority == "Séance clé":
         return f"Semaine {mode_label.lower()}. Ce bloc porte le stimulus principal."

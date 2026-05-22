@@ -24,7 +24,7 @@ from fitmas.domain.execution.helpers import (
     claimed_activities_last_days as _claimed_activities_last_days,
     claimed_activities_on_local_date as _claimed_activities_on_local_date,
 )
-from fitmas.athlete_profile import build_athlete_profile
+from fitmas.domain.athlete.profile import build_athlete_profile
 from fitmas.calibration_needs import (
     CalibrationNeedType,
     detect_calibration_need,

@@ -4,8 +4,8 @@ from dataclasses import dataclass
 from typing import Any
 
 from fitmas.session_templates import render_session_description, select_session_template
-from fitmas.strength_engine import build_strength_workout
-from fitmas.strength_signals import derive_strength_signals
+from fitmas.domain.athlete.strength_engine import build_strength_workout
+from fitmas.domain.athlete.strength_signals import derive_strength_signals
 
 _SYSTEM_MARKERS = (
     "clawcoach",

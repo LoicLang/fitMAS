@@ -6,7 +6,7 @@ from datetime import date, datetime, timedelta, timezone
 from enum import StrEnum
 from typing import Any, Sequence
 
-from fitmas.athlete_profile import AthleteProfileSnapshot
+from fitmas.domain.athlete.profile import AthleteProfileSnapshot
 from fitmas.calibration_status import CalibrationPhase, CalibrationStatus
 from fitmas.planning_contract import AvailabilityConfidence, AvailabilityState
 

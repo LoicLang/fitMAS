@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from fitmas.athlete_zones import AthleteZones
+    from fitmas.domain.athlete.zones import AthleteZones
 
 
 @dataclass(frozen=True, slots=True)
@@ -418,7 +418,7 @@ def render_blueprint(
     cycle_week: int = 1,
 ) -> str:
     """Render a blueprint with real zone targets injected."""
-    from fitmas.athlete_zones import get_zone_target
+    from fitmas.domain.athlete.zones import get_zone_target
 
     lines: list[str] = []
     sport = blueprint.sport_type
@@ -494,7 +494,7 @@ def _format_zone_inline(zone_band: object, sport: str) -> str:
 
 def _enrich_rest(rest_type: str, zones: object, sport: str) -> str:
     """Enrich rest description with zone target if it references a zone."""
-    from fitmas.athlete_zones import get_zone_target
+    from fitmas.domain.athlete.zones import get_zone_target
 
     if "Z1" in rest_type:
         z1 = get_zone_target(zones, sport, "Z1")

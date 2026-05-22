@@ -95,6 +95,11 @@ Les cuts physiques recents :
   `availability_constraints.py`, `fact_memory.py`, `maintenance.py`,
   `mutation_service.py`, `patterns.py`, `profile_memory.py`, `routing.py`,
   `profile_summary.py`.
+- Les modules athlete root ont ete deplaces sous `domain/athlete/` :
+  `profile.py`, `zones.py`, `fitness_snapshot.py`, `load_projection.py`,
+  `performance_overview.py`, `performance_stats.py`, `readiness.py`,
+  `strength_engine.py`, `strength_exercise_bank.py`, `strength_signals.py`,
+  `threshold_estimation.py`, `training_load.py`.
 - La resolution pending canonique normalise les aliases d'enum provider
   (`confirm`, `accepted`, etc.) vers `accept_pending` avant application.
   Un type inconnu devient une clarification pending, jamais un trou vers
@@ -114,7 +119,7 @@ Les cuts physiques recents :
 
 Etat chiffre au dernier check local :
 
-- root modules : `68`.
+- root modules : `56`.
 - legacy modules : `0` fichier source actif.
 - backend complet : `1323 passed, 11 skipped, 14 subtests passed`.
 - smoke canonical planning default : OK `10/10`.

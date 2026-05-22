@@ -7,7 +7,7 @@ from typing import Any
 from sqlalchemy.orm import Session
 
 from fitmas import repository as repo, schema as s
-from fitmas.athlete_profile import AthleteProfileSnapshot, build_athlete_profile
+from fitmas.domain.athlete.profile import AthleteProfileSnapshot, build_athlete_profile
 from fitmas.calibration_status import CalibrationStatus, build_calibration_status
 from fitmas.planning_contract import (
     AvailabilityState,

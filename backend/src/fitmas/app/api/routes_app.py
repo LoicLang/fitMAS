@@ -10,8 +10,8 @@ from fitmas.app.api.routes_read import _build_recent_activity, _build_today_fitn
 from fitmas.app.api.app_views import build_app_calendar, build_app_evolution, build_app_overview, build_session_detail
 from fitmas.coach_state_bundle import build_coach_state_bundle
 from fitmas.db import get_db
-from fitmas.performance_overview import build_performance_overview
-from fitmas.performance_stats import build_training_load_stats
+from fitmas.domain.athlete.performance_overview import build_performance_overview
+from fitmas.domain.athlete.performance_stats import build_training_load_stats
 from fitmas.domain.execution.recent_reality import build_recent_reality_window
 from fitmas.time_context import get_local_now
 

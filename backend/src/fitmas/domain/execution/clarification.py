@@ -8,7 +8,7 @@ from typing import Any, Sequence
 
 from fitmas.domain.execution.claims import ActivityClaim
 from fitmas.domain.execution.evidence import classify_execution_evidence
-from fitmas.fitness_snapshot import estimate_scheduled_session_tss
+from fitmas.domain.athlete.fitness_snapshot import estimate_scheduled_session_tss
 from fitmas.domain.execution.recent_reality import build_recent_reality_window
 
 _QUESTIONABLE_STATUSES = {"planned_pending", "uncertain"}

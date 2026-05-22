@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 from fitmas import repository as repo, schema as s
 from fitmas.domain.execution.activities import infer_activity_title, match_activity_to_day, normalize_activity_sport
 from fitmas.domain.planning.patch_mutation_service import complete_session_from_activity_for_user, mark_session_completed_for_user
-from fitmas.training_load import estimate_tss
+from fitmas.domain.athlete.training_load import estimate_tss
 
 AUTH_URL = "https://www.strava.com/oauth/authorize"
 TOKEN_URL = "https://www.strava.com/oauth/token"
@@ -222,7 +222,7 @@ def import_recent_activities(
 
         # Adaptive plan: estimate thresholds + check if activity triggers adaptation
         try:
-            from fitmas.threshold_estimation import update_threshold_facts
+            from fitmas.domain.athlete.threshold_estimation import update_threshold_facts
             update_threshold_facts(db, user, activity)
         except Exception:
             import logging

@@ -9,7 +9,7 @@ from fitmas.planning_window_resolution import format_planning_window_summary, re
 from fitmas.tools.replan_proposal import build_replan_proposal
 from fitmas.time_context import get_local_now, get_timezone
 from fitmas.tools.contract import ToolContext, ToolResult, ToolSpec
-from fitmas.training_load import compute_ctl_atl_tsb, estimate_tss
+from fitmas.domain.athlete.training_load import compute_ctl_atl_tsb, estimate_tss
 
 
 def build_tool_registry() -> dict[str, ToolSpec]:

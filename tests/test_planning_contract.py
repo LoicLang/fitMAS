@@ -3,7 +3,7 @@ from __future__ import annotations
 import unittest
 from datetime import datetime
 
-from fitmas.athlete_profile import AthleteProfileSnapshot
+from fitmas.domain.athlete.profile import AthleteProfileSnapshot
 from fitmas import schema as s
 from fitmas.planning_contract import (
     AvailabilityConfidence,

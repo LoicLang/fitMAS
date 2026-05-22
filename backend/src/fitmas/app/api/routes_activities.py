@@ -13,7 +13,7 @@ from fitmas.app.api.support import parse_optional_datetime, public_base_url
 from fitmas.db import get_db
 from fitmas.models import Activity
 from fitmas.domain.planning.patch_mutation_service import complete_session_from_activity_for_user
-from fitmas.training_load import estimate_tss
+from fitmas.domain.athlete.training_load import estimate_tss
 
 logger = logging.getLogger(__name__)
 

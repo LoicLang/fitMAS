@@ -13,8 +13,8 @@ import logging
 from datetime import date, timedelta
 from typing import Any
 
-from fitmas.fitness_snapshot import estimate_scheduled_session_tss
-from fitmas.load_projection import planning_mode_label_fr
+from fitmas.domain.athlete.fitness_snapshot import estimate_scheduled_session_tss
+from fitmas.domain.athlete.load_projection import planning_mode_label_fr
 
 logger = logging.getLogger(__name__)
 

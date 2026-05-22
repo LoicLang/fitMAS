@@ -23,7 +23,7 @@ is allowed only for hotspots that need a separate shrink slice.
 
 ## Summary
 
-- Root files counted: 68
+- Root files counted: 56
 - Permanent root entrypoints allowed: 3
 - First wrapper cuts completed: `heartbeat*.py`, `llm_gateway.py`,
   `telegram_scheduler.py`, `tool_*.py`, `api_messages.py`,
@@ -46,6 +46,11 @@ is allowed only for hotspots that need a separate shrink slice.
   `fact_memory.py`, `memory_maintenance.py`,
   `memory_mutation_service.py`, `memory_patterns.py`,
   `memory_profile.py`, `memory_routing.py`, `profile_summary.py`
+- Athlete root cut completed: `athlete_profile.py`, `athlete_zones.py`,
+  `fitness_snapshot.py`, `load_projection.py`, `performance_overview.py`,
+  `performance_stats.py`, `readiness.py`, `strength_engine.py`,
+  `strength_exercise_bank.py`, `strength_signals.py`,
+  `threshold_estimation.py`, `training_load.py`
 - Primary risk: moving files faster than deleting obsolete boundaries
 - Thursday criterion: root is explainable, delete candidates are explicit, and
   new root files fail architecture tests unless classified here
@@ -59,8 +64,6 @@ is allowed only for hotspots that need a separate shrink slice.
 | `adaptation_decision.py` | domain/planning | merge | decision value object should live with planning decisions | planning simplification |
 | `adaptation_log.py` | domain/coaching | move | user-visible adaptation history is coaching evidence | coaching package split |
 | `api.py` | root-entrypoint | entrypoint | FastAPI app assembly entrypoint | keep until app package owns all routes |
-| `athlete_profile.py` | domain/athlete | move | athlete profile domain model | athlete package split |
-| `athlete_zones.py` | domain/athlete | move | zones are athlete physiology | athlete package split |
 | `calendar_resolution.py` | core | move | date resolution is shared infrastructure | core package split |
 | `calibration_llm.py` | llm | move | LLM calibration helper | llm package cleanup |
 | `calibration_needs.py` | domain/coaching | move | coach calibration state | coaching package split |
@@ -78,17 +81,13 @@ is allowed only for hotspots that need a separate shrink slice.
 | `conversation_prompting.py` | llm | merge | prompt assembly should move into llm prompts | prompt shrink |
 | `conversation_turn_planner.py` | decision | move | typed turn planning belongs to decision | decision package split |
 | `db.py` | core | move | DB session and engine are core infrastructure | core package split |
-| `fitness_snapshot.py` | domain/athlete | move | fitness snapshot is athlete state | athlete package split |
 | `generated_week_coherence.py` | domain/coaching | move | generated week review is coaching context | coaching package split |
 | `grounding_contract.py` | decision | merge | grounding should be part of reply request and verifier | output verifier shrink |
 | `intensity_distribution.py` | domain/planning | move | intensity distribution is planning quality | planning package split |
 | `interference.py` | domain/planning | move | sport interference is planning policy | planning package split |
 | `llm_prompt_builder.py` | llm | merge | legacy prompt builder should collapse into llm prompts | prompt shrink |
-| `load_projection.py` | domain/athlete | move | load projection is athlete state | athlete package split |
 | `main.py` | root-entrypoint | entrypoint | ASGI import entrypoint | permanent root |
 | `models.py` | core | keep_root_temporarily | central SQLAlchemy models need a dedicated schema split | model schema split |
-| `performance_overview.py` | domain/athlete | move | performance overview is athlete analytics | athlete package split |
-| `performance_stats.py` | domain/athlete | move | performance stats are athlete analytics | athlete package split |
 | `periodization.py` | domain/planning | move | periodization belongs to planning | planning package split |
 | `plan_patch.py` | domain/planning | move | PlanPatch is planning domain language | planning package split |
 | `plan_validator.py` | domain/planning | merge | validation should live with planning policy and mutation service | planning simplification |
@@ -101,7 +100,6 @@ is allowed only for hotspots that need a separate shrink slice.
 | `prompt_contracts.py` | llm | move | prompt contracts belong under llm | llm package cleanup |
 | `prompt_layers.py` | llm | merge | prompt layering should collapse into canonical prompt families | prompt shrink |
 | `prompt_observability.py` | llm | move | prompt telemetry belongs under llm | llm package cleanup |
-| `readiness.py` | domain/athlete | move | readiness is athlete state | athlete package split |
 | `repo_conversation.py` | domain/coaching | move | conversation persistence should leave monolithic repository | repository split |
 | `repository.py` | core | keep_root_temporarily | monolithic repository needs domain repository split | repository split |
 | `schema.py` | core | keep_root_temporarily | central Pydantic schema needs bounded API/domain split | schema split |
@@ -111,13 +109,8 @@ is allowed only for hotspots that need a separate shrink slice.
 | `session_templates.py` | domain/planning | move | session templates belong to planning | planning package split |
 | `signals.py` | domain/coaching | merge | signal derivation overlaps context and memory substrates | coaching substrate shrink |
 | `strava.py` | integrations | move | external Strava client belongs to integrations | integration package split |
-| `strength_engine.py` | domain/athlete | move | strength engine is athlete capability | athlete package split |
-| `strength_exercise_bank.py` | domain/athlete | move | strength exercise bank is athlete capability data | athlete package split |
-| `strength_signals.py` | domain/athlete | move | strength signals are athlete state | athlete package split |
 | `temporal_resolver.py` | core | move | temporal resolution is shared core | core package split |
-| `threshold_estimation.py` | domain/athlete | move | threshold estimation is athlete physiology | athlete package split |
 | `time_context.py` | core | move | time helpers are shared core | core package split |
-| `training_load.py` | domain/athlete | move | training load is athlete state | athlete package split |
 | `week_coherence.py` | domain/planning | move | week coherence is planning quality | planning package split |
 | `week_context.py` | domain/coaching | move | week context is coaching context | coaching package split |
 | `week_metadata.py` | domain/planning | merge | week label helper belongs with periodization | planning simplification |

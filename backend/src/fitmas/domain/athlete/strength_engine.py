@@ -3,8 +3,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Sequence
 
-from fitmas.strength_exercise_bank import StrengthExercise, list_strength_exercises
-from fitmas.strength_signals import StrengthSignals, derive_strength_signals
+from fitmas.domain.athlete.strength_exercise_bank import StrengthExercise, list_strength_exercises
+from fitmas.domain.athlete.strength_signals import StrengthSignals, derive_strength_signals
 
 
 @dataclass(frozen=True, slots=True)

@@ -3,14 +3,14 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import date, timedelta
 
-from fitmas.athlete_profile import AthleteProfileSnapshot
-from fitmas.fitness_snapshot import FitnessSnapshot
+from fitmas.domain.athlete.profile import AthleteProfileSnapshot
+from fitmas.domain.athlete.fitness_snapshot import FitnessSnapshot
 from fitmas.planning_config import (
     get_level_planning_config,
     get_sport_planning_config,
 )
 from fitmas.domain.execution.recent_reality import RecentRealityWindow
-from fitmas.readiness import ReadinessState
+from fitmas.domain.athlete.readiness import ReadinessState
 
 DECISION_VERSION = "v1"
 
