@@ -135,6 +135,9 @@ Les cuts physiques recents :
 - Le contexte de tour conversationnel vit maintenant dans
   `decision/conversation_context.py`; root `conversation_context.py` est
   supprime.
+- La policy de prompt conversationnel vit maintenant dans
+  `llm/prompts/conversation_policy.py`; root `conversation_prompting.py` est
+  supprime.
 - La resolution pending canonique normalise les aliases d'enum provider
   (`confirm`, `accepted`, etc.) vers `accept_pending` avant application.
   Un type inconnu devient une clarification pending, jamais un trou vers
@@ -154,7 +157,7 @@ Les cuts physiques recents :
 
 Etat chiffre au dernier check local :
 
-- root modules : `18`.
+- root modules : `17`.
 - legacy modules : `0` fichier source actif.
 - backend complet : `1347 passed, 11 skipped, 14 subtests passed`.
 - smoke canonical planning default : OK `10/10`.

@@ -19,7 +19,7 @@ if os.getenv("FITMAS_RUN_REAL_LLM_TESTS") == "1":
 
 from fitmas.llm.gateway import client, request_text, request_json, request_message, message_text, message_json
 from fitmas.tools.routing import IntentCategory
-from fitmas.conversation_prompting import select_conversation_prompt_policy
+from fitmas.llm.prompts.conversation_policy import select_conversation_prompt_policy
 from fitmas.prompt_layers import assemble_layered_prompt, build_identity_layer
 from fitmas.llm_prompt_builder import (
     build_conversation_prompt_bundle,

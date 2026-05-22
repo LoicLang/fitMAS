@@ -3,7 +3,7 @@ from __future__ import annotations
 import unittest
 from types import SimpleNamespace
 
-from fitmas.conversation_prompting import ConversationPromptPolicy, select_conversation_prompt_policy
+from fitmas.llm.prompts.conversation_policy import ConversationPromptPolicy, select_conversation_prompt_policy
 from fitmas.llm.legacy_summaries import make_timeline_summary
 from fitmas.llm_prompt_builder import (
     build_conversation_prompt_bundle,

@@ -8,7 +8,7 @@ from fitmas.decision.context_pack import ConversationContextPack
 from fitmas.conversation_prompt_modules import (
     build_conversation_system_text,
 )
-from fitmas.conversation_prompting import ConversationPromptPolicy
+from fitmas.llm.prompts.conversation_policy import ConversationPromptPolicy
 from fitmas.llm.prompt_observability import PromptTrace, build_prompt_trace
 from fitmas.prompt_layers import assemble_layered_prompt
 from fitmas.llm.prompt_contracts import get_prompt_contract

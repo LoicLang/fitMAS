@@ -1,4 +1,4 @@
-from fitmas.conversation_prompting import list_conversation_prompt_policies
+from fitmas.llm.prompts.conversation_policy import list_conversation_prompt_policies
 from fitmas.llm.prompt_contracts import get_prompt_contract
 
 
