@@ -67,7 +67,9 @@ Root encore accepte :
   `domain/memory/repository.py` pour facts, working memory et patterns,
   `domain/execution/repository.py` pour activites reelles,
   `domain/athlete/repository.py` pour snapshots fitness/readiness,
-  `integrations/repository.py` pour connection/tokens Strava.
+  `integrations/repository.py` pour connection/tokens Strava,
+  `domain/planning/template_repository.py` pour compat `WeeklyPlan/DayPlan`
+  onboarding/template/archive.
 
 Ce qui n'est plus l'architecture active :
 
@@ -184,7 +186,7 @@ Interdits :
 Le root runtime conversationnel est supprime. Les premiers owners repository
 sont extraits. Les prochains risques sont les monolithes transverses restants :
 
-- `repository.py`, tant qu'il porte encore compat templates ;
+- `repository.py`, tant qu'il porte encore user/profile facades ;
 - `schema.py` ;
 - `models.py`.
 

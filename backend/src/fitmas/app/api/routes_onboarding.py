@@ -24,6 +24,7 @@ from fitmas.app.api.onboarding_contract import build_goal_summary, build_onboard
 from fitmas.domain.planning.periodization import compute_mesocycle_state, derive_total_weeks
 from fitmas.domain.planning.planner import build_week_plan
 from fitmas.domain.planning.planning_state import refresh_planning_state
+from fitmas.domain.planning import template_repository as template_repo
 from fitmas.core.time_context import build_time_context, get_local_now
 
 logger = logging.getLogger(__name__)
@@ -267,7 +268,7 @@ def onboard(payload: OnboardPayload, db: Session = Depends(get_db)) -> OnboardRe
     )
     repo.add_message(db, user.id, "agent", first_msg)
 
-    plan = repo.replace_plan(
+    plan = template_repo.replace_plan(
         db,
         user.id,
         intention=enriched_week["intention"],
@@ -281,7 +282,7 @@ def onboard(payload: OnboardPayload, db: Session = Depends(get_db)) -> OnboardRe
 
     return OnboardResult(
         recap=recap,
-        week_plan=repo.to_pydantic_plan(plan),
+        week_plan=template_repo.to_pydantic_plan(plan),
         calibration_status=calibration_status.as_dict(),
     )
 
@@ -296,7 +297,7 @@ def regenerate_week(db: Session = Depends(get_db)) -> WeeklyPlan:
         enriched_week = _generate_enriched_week_for_user(db, user)
     except GeneratedWeekCoherenceBlocked as exc:
         raise HTTPException(status_code=409, detail="Generated week blocked by sport quality review") from exc
-    plan = repo.replace_plan(
+    plan = template_repo.replace_plan(
         db,
         user.id,
         intention=enriched_week["intention"],
@@ -309,7 +310,7 @@ def regenerate_week(db: Session = Depends(get_db)) -> WeeklyPlan:
     )
 
     logger.info("Week regenerated for user %s (mesocycle %s/%s)", user.id, enriched_week.get("_mesocycle_week", 1), enriched_week.get("_mesocycle_number", 1))
-    return repo.to_pydantic_plan(plan)
+    return template_repo.to_pydantic_plan(plan)
 
 
 def _active_facts_for_generated_week_review(db: Session, user_id: int) -> tuple[dict, ...]:

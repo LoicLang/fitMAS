@@ -276,6 +276,9 @@ Prochain chantier logique :
   avec `fitmas.repository` en facade temporaire ;
 - `integrations/repository.py` possede deja connection/tokens/sync metadata
   Strava, avec `fitmas.repository` en facade temporaire ;
+- `domain/planning/template_repository.py` possede deja la compat
+  `WeeklyPlan/DayPlan` onboarding/template/archive, avec `fitmas.repository`
+  en facade temporaire ;
 - continuer le split repository par owner reel avant de toucher a
   `schema.py`/`models.py` ;
 - garder la priorite runtime plus petit, pas refactor plus complet.

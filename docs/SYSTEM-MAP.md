@@ -109,6 +109,12 @@ Compat seulement :
 - `WeeklyPlan`
 - `DayPlan`
 
+Owner compat :
+
+- `domain/planning/template_repository.py`
+- utilise uniquement pour onboarding, templates et archive historique ;
+- ne doit pas redevenir une source runtime conversation/app/heartbeat.
+
 ### Execution
 
 Owner :
