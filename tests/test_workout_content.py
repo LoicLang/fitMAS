@@ -1,4 +1,4 @@
-from fitmas.workout_content import build_workout_content
+from fitmas.domain.planning.workout_content import build_workout_content
 
 
 def test_workout_content_filters_system_like_rationale_and_nutrition() -> None:

@@ -4,8 +4,8 @@ from dataclasses import dataclass
 from typing import Any, Sequence
 
 from fitmas.domain.athlete.fitness_snapshot import estimate_scheduled_session_tss
-from fitmas.intensity_distribution import check_distribution
-from fitmas.planning_config import get_global_planning_config, get_sport_planning_config
+from fitmas.domain.planning.intensity_distribution import check_distribution
+from fitmas.domain.planning.planning_config import get_global_planning_config, get_sport_planning_config
 
 REST_SPORTS = {"rest", "off"}
 HARD_INTENSITIES = {"hard"}

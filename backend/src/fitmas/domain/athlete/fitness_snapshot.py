@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 from typing import Any, Iterable, Sequence
 
-from fitmas.planning_config import SUPPORTED_SPORTS, get_sport_planning_config
+from fitmas.domain.planning.planning_config import SUPPORTED_SPORTS, get_sport_planning_config
 from fitmas.domain.athlete.training_load import compute_ctl_atl_tsb
 
 DONE_SESSION_STATUSES = {"done"}

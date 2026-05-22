@@ -5,7 +5,7 @@ from datetime import date, timedelta
 
 from fitmas.domain.athlete.profile import AthleteProfileSnapshot
 from fitmas.domain.athlete.fitness_snapshot import FitnessSnapshot
-from fitmas.planning_config import (
+from fitmas.domain.planning.planning_config import (
     get_level_planning_config,
     get_sport_planning_config,
 )

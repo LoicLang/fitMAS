@@ -110,6 +110,11 @@ Les cuts physiques recents :
   `integrations/strava.py`.
 - Les modules support LLM root ont ete deplaces sous `llm/` :
   `calibration.py`, `prompt_contracts.py`, `prompt_observability.py`.
+- Les primitives planning root ont ete deplacees sous `domain/planning/` :
+  `intensity_distribution.py`, `interference.py`, `periodization.py`,
+  `planner.py`, `planning_config.py`, `planning_decision.py`,
+  `planning_state.py`, `session_similarity.py`, `session_templates.py`,
+  `workout_content.py`.
 - La resolution pending canonique normalise les aliases d'enum provider
   (`confirm`, `accepted`, etc.) vers `accept_pending` avant application.
   Un type inconnu devient une clarification pending, jamais un trou vers
@@ -129,7 +134,7 @@ Les cuts physiques recents :
 
 Etat chiffre au dernier check local :
 
-- root modules : `39`.
+- root modules : `29`.
 - legacy modules : `0` fichier source actif.
 - backend complet : `1332 passed, 11 skipped, 14 subtests passed`.
 - smoke canonical planning default : OK `10/10`.

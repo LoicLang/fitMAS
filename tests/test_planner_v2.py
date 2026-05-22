@@ -4,8 +4,8 @@ import unittest
 from datetime import date
 
 from fitmas.domain.athlete.profile import AthleteProfileSnapshot
-from fitmas.planner import build_week_plan
-from fitmas.planning_decision import PlanningDecision
+from fitmas.domain.planning.planner import build_week_plan
+from fitmas.domain.planning.planning_decision import PlanningDecision
 
 
 class PlannerV2Test(unittest.TestCase):

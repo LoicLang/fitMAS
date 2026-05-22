@@ -7,7 +7,7 @@ from typing import Any, Sequence
 from fitmas.domain.athlete.profile import AthleteProfileSnapshot
 from fitmas.domain.memory.fact_memory import select_readiness_facts
 from fitmas.domain.athlete.fitness_snapshot import FitnessSnapshot
-from fitmas.planning_config import get_global_planning_config
+from fitmas.domain.planning.planning_config import get_global_planning_config
 from fitmas.domain.execution.recent_reality import RecentRealityWindow
 
 

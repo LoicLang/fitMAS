@@ -23,7 +23,7 @@ is allowed only for hotspots that need a separate shrink slice.
 
 ## Summary
 
-- Root files counted: 39
+- Root files counted: 29
 - Permanent root entrypoints allowed: 3
 - First wrapper cuts completed: `heartbeat*.py`, `llm_gateway.py`,
   `telegram_scheduler.py`, `tool_*.py`, `api_messages.py`,
@@ -58,6 +58,10 @@ is allowed only for hotspots that need a separate shrink slice.
   `seed.py`, `temporal_resolver.py`, `time_context.py`, `strava.py`
 - LLM support root cut completed: `calibration_llm.py`,
   `prompt_contracts.py`, `prompt_observability.py`
+- Planning primitive root cut completed: `intensity_distribution.py`,
+  `interference.py`, `periodization.py`, `planner.py`,
+  `planning_config.py`, `planning_decision.py`, `planning_state.py`,
+  `session_similarity.py`, `session_templates.py`, `workout_content.py`
 - Primary risk: moving files faster than deleting obsolete boundaries
 - Thursday criterion: root is explainable, delete candidates are explicit, and
   new root files fail architecture tests unless classified here
@@ -81,30 +85,20 @@ is allowed only for hotspots that need a separate shrink slice.
 | `conversation_prompting.py` | llm | merge | prompt assembly should move into llm prompts | prompt shrink |
 | `conversation_turn_planner.py` | decision | move | typed turn planning belongs to decision | decision package split |
 | `grounding_contract.py` | decision | merge | grounding should be part of reply request and verifier | output verifier shrink |
-| `intensity_distribution.py` | domain/planning | move | intensity distribution is planning quality | planning package split |
-| `interference.py` | domain/planning | move | sport interference is planning policy | planning package split |
 | `llm_prompt_builder.py` | llm | merge | legacy prompt builder should collapse into llm prompts | prompt shrink |
 | `main.py` | root-entrypoint | entrypoint | ASGI import entrypoint | permanent root |
 | `models.py` | core | keep_root_temporarily | central SQLAlchemy models need a dedicated schema split | model schema split |
-| `periodization.py` | domain/planning | move | periodization belongs to planning | planning package split |
 | `plan_patch.py` | domain/planning | move | PlanPatch is planning domain language | planning package split |
 | `plan_validator.py` | domain/planning | merge | validation should live with planning policy and mutation service | planning simplification |
-| `planner.py` | domain/planning | move | planner belongs to planning domain | planning package split |
-| `planning_config.py` | domain/planning | move | planning configuration belongs to planning | planning package split |
 | `planning_contract.py` | domain/planning | merge | planning contract should merge with domain planning models | planning simplification |
-| `planning_decision.py` | domain/planning | move | planning decision model belongs to planning | planning package split |
-| `planning_state.py` | domain/planning | move | planning state belongs to planning | planning package split |
 | `planning_window_resolution.py` | domain/planning | merge | window resolver should merge into ReferenceResolver | planning simplification |
 | `prompt_layers.py` | llm | merge | prompt layering should collapse into canonical prompt families | prompt shrink |
 | `repository.py` | core | keep_root_temporarily | monolithic repository needs domain repository split | repository split |
 | `schema.py` | core | keep_root_temporarily | central Pydantic schema needs bounded API/domain split | schema split |
 | `session_metadata.py` | domain/planning | merge | load band helper belongs with session/timeline models | planning simplification |
-| `session_similarity.py` | domain/planning | move | session matching similarity is planning/execution boundary | planning package split |
-| `session_templates.py` | domain/planning | move | session templates belong to planning | planning package split |
 | `signals.py` | domain/coaching | merge | signal derivation overlaps context and memory substrates | coaching substrate shrink |
 | `week_coherence.py` | domain/planning | move | week coherence is planning quality | planning package split |
 | `week_metadata.py` | domain/planning | merge | week label helper belongs with periodization | planning simplification |
-| `workout_content.py` | domain/planning | move | workout content belongs to planning/session domain | planning package split |
 
 ## Immediate Cut Order
 

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from fitmas.periodization import MesocycleState
+from fitmas.domain.planning.periodization import MesocycleState
 
 
 def build_week_label(state: MesocycleState) -> str:

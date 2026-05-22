@@ -24,8 +24,8 @@ from fitmas.models import (
     WatchItem,
     WeeklyPlan,
 )
-from fitmas.planning_decision import PlanningDecision
-from fitmas.periodization import compute_mesocycle_state, derive_total_weeks
+from fitmas.domain.planning.planning_decision import PlanningDecision
+from fitmas.domain.planning.periodization import compute_mesocycle_state, derive_total_weeks
 from fitmas.domain.athlete.readiness import ReadinessState
 from fitmas.session_metadata import compute_load_band
 from fitmas.core.time_context import DAY_KEYS, current_week_dates, get_local_now

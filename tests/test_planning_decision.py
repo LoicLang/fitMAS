@@ -5,7 +5,7 @@ from datetime import date
 
 from fitmas.domain.athlete.profile import AthleteProfileSnapshot
 from fitmas.domain.athlete.fitness_snapshot import FitnessSnapshot
-from fitmas.planning_decision import build_planning_decision
+from fitmas.domain.planning.planning_decision import build_planning_decision
 from fitmas.domain.execution.recent_reality import RecentRealityWindow
 from fitmas.domain.athlete.readiness import ReadinessState, build_readiness_state
 

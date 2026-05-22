@@ -157,6 +157,8 @@ FitMAS repond toujours a 4 questions :
 
 ### Modules
 
+Ces modules vivent maintenant sous `backend/src/fitmas/domain/planning/`.
+
 | Module | Role | Etat |
 |--------|------|------|
 | `planning_config.py` | Seuils et overrides V1 par sport/niveau | Fait |

@@ -10,7 +10,7 @@ from fastapi import HTTPException, Request
 from fitmas import schema as s
 from fitmas.app.api.payloads import OnboardPayload, OnboardPreviewPayload
 from fitmas.app.api.onboarding_contract import build_coach_profile, build_goal_summary
-from fitmas.planner import normalize_sports
+from fitmas.domain.planning.planner import normalize_sports
 
 ROOT_DIR = Path(__file__).resolve().parents[5]
 FRONTEND_DIR = ROOT_DIR / "frontend"

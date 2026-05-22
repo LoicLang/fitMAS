@@ -14,8 +14,8 @@ from sqlalchemy.orm import Session
 
 from fitmas import repository as repo
 from fitmas.domain.planning.mutation_decision import MutationDecision
-from fitmas.planning_config import GLOBAL_PLANNING_CONFIG, get_sport_planning_config
-from fitmas.session_similarity import find_same_sport_proximity_conflict
+from fitmas.domain.planning.planning_config import GLOBAL_PLANNING_CONFIG, get_sport_planning_config
+from fitmas.domain.planning.session_similarity import find_same_sport_proximity_conflict
 from fitmas.core.time_context import get_local_now
 
 logger = logging.getLogger(__name__)

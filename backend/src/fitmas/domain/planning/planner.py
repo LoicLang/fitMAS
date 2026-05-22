@@ -7,9 +7,9 @@ from dataclasses import dataclass
 from fitmas.domain.athlete.profile import AthleteProfileSnapshot
 from fitmas.domain.athlete.zones import AthleteZones
 from fitmas.plan_validator import validate_week_plan
-from fitmas.planning_config import get_sport_planning_config
-from fitmas.planning_decision import PlanningDecision
-from fitmas.session_templates import render_session_description, select_session_template
+from fitmas.domain.planning.planning_config import get_sport_planning_config
+from fitmas.domain.planning.planning_decision import PlanningDecision
+from fitmas.domain.planning.session_templates import render_session_description, select_session_template
 
 logger = logging.getLogger(__name__)
 
@@ -289,7 +289,7 @@ def _schedule_sessions(
 
 def _resolve_interference(day_list: list[dict]) -> None:
     """Swap sessions to resolve adjacent-day interference conflicts."""
-    from fitmas.interference import check_adjacent_conflicts
+    from fitmas.domain.planning.interference import check_adjacent_conflicts
 
     conflicts = check_adjacent_conflicts(day_list)
     if not conflicts:

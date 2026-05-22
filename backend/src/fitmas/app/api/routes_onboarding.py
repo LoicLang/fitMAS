@@ -21,9 +21,9 @@ from fitmas.llm.legacy_onboarding import (
 from fitmas.domain.memory.profile_memory import replace_profile_memory
 from fitmas.models import OnboardPreview, OnboardResult, WeeklyPlan
 from fitmas.app.api.onboarding_contract import build_goal_summary, build_onboarding_setup_preview, build_protected_focus
-from fitmas.periodization import compute_mesocycle_state, derive_total_weeks
-from fitmas.planner import build_week_plan
-from fitmas.planning_state import refresh_planning_state
+from fitmas.domain.planning.periodization import compute_mesocycle_state, derive_total_weeks
+from fitmas.domain.planning.planner import build_week_plan
+from fitmas.domain.planning.planning_state import refresh_planning_state
 from fitmas.core.time_context import build_time_context, get_local_now
 
 logger = logging.getLogger(__name__)

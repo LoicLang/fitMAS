@@ -82,6 +82,10 @@ Ce qui n'est plus l'architecture active :
 - root integration modules (`strava.py`)
 - root LLM support modules (`calibration_llm.py`, `prompt_contracts.py`,
   `prompt_observability.py`)
+- root planning primitives (`intensity_distribution.py`, `interference.py`,
+  `periodization.py`, `planner.py`, `planning_config.py`,
+  `planning_decision.py`, `planning_state.py`, `session_similarity.py`,
+  `session_templates.py`, `workout_content.py`)
 - root `final_reply.py`
 - root `heartbeat.py`
 - root `telegram_scheduler.py`

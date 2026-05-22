@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import date, datetime
 from typing import Any
 
-from fitmas.planner import normalize_sports
+from fitmas.domain.planning.planner import normalize_sports
 
 
 def normalize_activity_sport(raw_sport: str) -> str:
