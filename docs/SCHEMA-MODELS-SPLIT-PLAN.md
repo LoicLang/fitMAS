@@ -23,9 +23,32 @@ transverses.
 
 Non-but : deplacer 800 lignes pour faire joli.
 
-## Diagnostic
+## Etat Actuel
 
-Etat actuel :
+Apres 13C :
+
+```text
+models.py  = supprime
+schema.py  = dernier monolithe root restant
+root files = 4 (__init__.py, api.py, main.py, schema.py)
+```
+
+Les contrats Pydantic sont maintenant repartis par owner :
+
+```text
+decision/message_models.py
+domain/planning/view_models.py
+domain/athlete/view_models.py
+domain/execution/view_models.py
+domain/memory/view_models.py
+app/api/read_models.py
+app/api/payloads.py
+app/api/onboarding_models.py
+```
+
+## Diagnostic Initial
+
+Etat initial :
 
 ```text
 schema.py  = 547 lignes, 23 classes ORM SQLAlchemy, 68 imports actifs
@@ -43,7 +66,7 @@ Un split naif peut casser les relationships, l'ordre d'import ou init_db().
 Decision :
 
 ```text
-1. Supprimer models.py d'abord.
+1. Supprimer models.py d'abord. Fait en 13C.
 2. Supprimer schema.py ensuite.
 3. Garder des facades temporaires seulement a l'interieur d'un slice.
 4. A la fin, root doit contenir uniquement __init__.py, api.py, main.py.
@@ -67,6 +90,7 @@ domain/planning/view_models.py
   DayPlan
   WeeklyPlan
   ScheduledSession
+  WorkoutContentView
 
 domain/athlete/view_models.py
   Profile
@@ -146,8 +170,8 @@ tests/test_phase13a_models_schema_census_architecture.py
 Tests :
 
 ```text
-- root contient encore models.py/schema.py au debut du chantier
-- liste exacte des classes Pydantic attendues
+- root models.py est supprime apres 13C
+- liste exacte des classes Pydantic par owner
 - liste exacte des classes ORM attendues
 - liste exacte des table names attendus
 ```

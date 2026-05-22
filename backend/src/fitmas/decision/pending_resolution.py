@@ -18,7 +18,7 @@ from fitmas.decision.planning_outcomes import (
     legacy_decision_contract_disabled_outcome,
     plan_patch_service_result_to_outcome,
 )
-from fitmas.models import Extraction
+from fitmas.decision.message_models import Extraction
 from fitmas.domain.planning.mutation_permissions import (
     deserialize_plan_patch_choice_confirmation,
     deserialize_plan_patch_confirmation,

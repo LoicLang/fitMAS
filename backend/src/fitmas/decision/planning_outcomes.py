@@ -7,7 +7,7 @@ from fitmas.decision.conversation_contract import ConversationTurnOutcome
 from fitmas.decision import CommandResult, DecisionExplanation, DecisionOutcome, ReplyContract
 from fitmas.domain.planning.models import PlanningDecisionResult
 from fitmas.domain.planning.patch_summary import summarize_plan_patch_for_user
-from fitmas.models import Extraction
+from fitmas.decision.message_models import Extraction
 
 
 PlanPatchReplyMode = Literal["applied", "pending", "blocked", "clarification"]

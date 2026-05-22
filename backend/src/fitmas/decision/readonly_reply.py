@@ -10,7 +10,7 @@ from fitmas.decision.conversation_contract import ConversationTurnOutcome
 from fitmas.decision import CoachUnderstanding, DecisionExplanation, DecisionOutcome, ReplyContract
 from fitmas.decision.command_mapping import commands_from_understanding
 from fitmas.decision.grounding import ReplyGroundingPacket
-from fitmas.models import Extraction
+from fitmas.decision.message_models import Extraction
 import fitmas.llm.reply_backend as final_reply
 from fitmas.domain.planning import repository as planning_repo
 

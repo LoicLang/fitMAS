@@ -30,7 +30,7 @@ from fitmas.decision.command_actions import (
 from fitmas.decision import command_application
 from fitmas.decision import plan_patch_reply
 from fitmas.decision import pending_resolution as conversation_pending_bridge
-from fitmas.models import Extraction
+from fitmas.decision.message_models import Extraction
 from fitmas.domain.planning.mutation_permissions import serialize_plan_patch_confirmation
 from fitmas.domain.planning.plan_patch import PlanPatch, PlanPatchOperation, PlanPatchValidation
 from fitmas.domain.planning.session_actions import move_session

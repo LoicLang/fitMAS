@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 from fitmas import schema as s
 from fitmas.domain.athlete.fitness_snapshot import FitnessSnapshot
 from fitmas.domain.athlete.readiness import ReadinessState
-from fitmas.models import Profile
+from fitmas.domain.athlete.view_models import Profile
 
 
 def to_pydantic_profile(user: s.User) -> Profile:

@@ -8,21 +8,12 @@ from sqlalchemy.orm import Session
 from fitmas import schema as s
 from fitmas.integrations import strava
 from fitmas.integrations import repository as integration_repo
-from fitmas.app.api.read_models import RuntimeDay, RuntimeWeek
+from fitmas.app.api.read_models import RecentSportActivity, RuntimeDay, RuntimeWeek, TodayFitness, TodayView
 from fitmas.core.db import get_db
-from fitmas.models import (
-    Activity,
-    ChangeNote,
-    DayId,
-    Profile,
-    RecentSportActivity,
-    ScheduledSession,
-    TodayFitness,
-    TodayView,
-    UserFact,
-    UserPattern,
-    WatchItem,
-)
+from fitmas.domain.athlete.view_models import Profile
+from fitmas.domain.execution.view_models import Activity
+from fitmas.domain.memory.view_models import UserFact, UserPattern
+from fitmas.domain.planning.view_models import ChangeNote, DayId, ScheduledSession, WatchItem
 from fitmas.domain.planning.models import compute_load_band
 from fitmas.domain.athlete.training_load import compute_ctl_atl_tsb
 from fitmas.core.time_context import current_week_dates, get_local_now

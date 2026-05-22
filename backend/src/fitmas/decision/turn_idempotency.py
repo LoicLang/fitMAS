@@ -7,7 +7,8 @@ from threading import Lock
 from sqlalchemy.orm import Session
 
 from fitmas.decision.conversation_contract import ConversationTurnInput, ConversationTurnOutcome
-from fitmas.models import DayId, Extraction, Message, MessageReply, MessageRole
+from fitmas.decision.message_models import Extraction, Message, MessageReply, MessageRole
+from fitmas.domain.planning.view_models import DayId
 from fitmas.domain.coaching import repo_conversation
 
 

@@ -66,9 +66,12 @@ def test_9x_tool_runtime_tests_do_not_depend_on_deleted_plan_patch_tools() -> No
 
 
 def test_9x_api_read_uses_runtime_week_models_directly() -> None:
-    source = _source(SRC / "app" / "api" / "routes_read.py")
+    path = SRC / "app" / "api" / "routes_read.py"
+    source = _source(path)
+    imports = _imports(path)
 
     assert "fitmas.legacy.weekly_plan_compat" not in source
-    assert "fitmas.app.api.read_models import RuntimeDay, RuntimeWeek" in source
+    assert "fitmas.app.api.read_models.RuntimeDay" in imports
+    assert "fitmas.app.api.read_models.RuntimeWeek" in imports
     assert "WeeklyPlan" not in source
     assert "DayPlan" not in source

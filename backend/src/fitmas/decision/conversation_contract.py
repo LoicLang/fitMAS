@@ -4,7 +4,8 @@ from dataclasses import dataclass
 from typing import Any, Callable
 
 from fitmas.domain.planning.mutation_decision import MutationDecision
-from fitmas.models import DayId, Extraction
+from fitmas.decision.message_models import Extraction
+from fitmas.domain.planning.view_models import DayId
 
 
 def _no_calibration_resolution(**_: Any) -> Any:

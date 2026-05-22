@@ -23,7 +23,7 @@ is allowed only for hotspots that need a separate shrink slice.
 
 ## Summary
 
-- Root files counted: 5
+- Root files counted: 4
 - Permanent root entrypoints allowed: 3
 - First wrapper cuts completed: `heartbeat*.py`, `llm_gateway.py`,
   `telegram_scheduler.py`, `tool_*.py`, `api_messages.py`,
@@ -109,6 +109,9 @@ is allowed only for hotspots that need a separate shrink slice.
 - Root repository deleted:
   root `repository.py` no longer exists; source, tests and scripts import the
   real owner repositories directly.
+- Root Pydantic models deleted:
+  root `models.py` no longer exists; DTOs live under decision, domain owners
+  and app/api read or onboarding models.
 - Primary risk: moving files faster than deleting obsolete boundaries
 - Thursday criterion: root is explainable, delete candidates are explicit, and
   new root files fail architecture tests unless classified here
@@ -120,14 +123,12 @@ is allowed only for hotspots that need a separate shrink slice.
 | `__init__.py` | root-entrypoint | entrypoint | package marker only | permanent root |
 | `api.py` | root-entrypoint | entrypoint | FastAPI app assembly entrypoint | keep until app package owns all routes |
 | `main.py` | root-entrypoint | entrypoint | ASGI import entrypoint | permanent root |
-| `models.py` | core | keep_root_temporarily | central SQLAlchemy models need a dedicated schema split | model schema split |
-| `schema.py` | core | keep_root_temporarily | central Pydantic schema needs bounded API/domain split | schema split |
+| `schema.py` | core | keep_root_temporarily | central SQLAlchemy ORM records need a dedicated core/orm split | schema split |
 
 ## Immediate Cut Order
 
-1. Keep only root entrypoints plus bounded monoliths in root.
-2. Next cuts target the bounded monoliths only:
-   `schema.py`, `models.py`.
+1. Keep only root entrypoints plus the remaining bounded ORM monolith in root.
+2. Next cut targets `schema.py`.
 
 ## Non Goals
 

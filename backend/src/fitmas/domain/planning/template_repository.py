@@ -9,7 +9,7 @@ from fitmas.core.time_context import DAY_KEYS, current_week_dates, get_local_now
 from fitmas.domain.planning import repository as planning_repo
 from fitmas.domain.planning.models import compute_load_band
 from fitmas.domain.planning.periodization import build_week_label, compute_mesocycle_state, derive_total_weeks
-from fitmas.models import ChangeNote, DayId, DayPlan, WatchItem, WeeklyPlan
+from fitmas.domain.planning.view_models import ChangeNote, DayId, DayPlan, WatchItem, WeeklyPlan
 
 
 def to_pydantic_day(day: s.DayPlan) -> DayPlan:

@@ -101,13 +101,9 @@ def _class_names(path: Path) -> set[str]:
     return {node.name for node in tree.body if isinstance(node, ast.ClassDef)}
 
 
-def test_13a_root_models_facade_and_schema_exist_mid_split() -> None:
-    assert MODELS.exists()
+def test_13a_root_models_deleted_and_schema_exists_mid_split() -> None:
+    assert not MODELS.exists()
     assert SCHEMA.exists()
-
-
-def test_13a_root_models_no_longer_declares_pydantic_contracts() -> None:
-    assert _class_names(MODELS) == set()
 
 
 def test_13a_owner_modules_export_expected_pydantic_contracts() -> None:

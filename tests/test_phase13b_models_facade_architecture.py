@@ -35,23 +35,12 @@ def test_13b_pydantic_contracts_live_in_owner_modules() -> None:
     assert _class_names(SRC / "app" / "api" / "onboarding_models.py") == {"OnboardPreview", "OnboardResult"}
 
 
-def test_13b_root_models_is_reexport_facade_only() -> None:
-    source = (SRC / "models.py").read_text(encoding="utf-8")
-    tree = ast.parse(source, filename=str(SRC / "models.py"))
-
-    assert not [node.name for node in tree.body if isinstance(node, ast.ClassDef)]
-    assert "from fitmas.decision.message_models import" in source
-    assert "from fitmas.domain.planning.view_models import" in source
-    assert "from fitmas.domain.athlete.view_models import" in source
-    assert "from fitmas.domain.execution.view_models import" in source
-    assert "from fitmas.domain.memory.view_models import" in source
-    assert "from fitmas.app.api.read_models import" in source
-    assert "from fitmas.app.api.payloads import" in source
-    assert "from fitmas.app.api.onboarding_models import" in source
-
-
-def test_13b_legacy_fitmas_models_imports_still_resolve_temporarily() -> None:
-    from fitmas.models import Activity, DayId, Extraction, MessageReply, OnboardResult, TodayView
+def test_13b_owner_imports_resolve_without_root_models_facade() -> None:
+    from fitmas.app.api.onboarding_models import OnboardResult
+    from fitmas.app.api.read_models import TodayView
+    from fitmas.decision.message_models import Extraction, MessageReply
+    from fitmas.domain.execution.view_models import Activity
+    from fitmas.domain.planning.view_models import DayId
 
     assert Activity.__name__ == "Activity"
     assert DayId.MONDAY.value == "monday"

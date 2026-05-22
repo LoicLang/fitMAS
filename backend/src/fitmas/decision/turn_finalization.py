@@ -15,7 +15,7 @@ from fitmas.decision.conversation_contract import (
 )
 from fitmas.decision import pending_resolution
 from fitmas.decision import turn_persistence
-from fitmas.models import Extraction, MessageReply
+from fitmas.decision.message_models import Extraction, MessageReply
 
 
 logger = logging.getLogger(__name__)

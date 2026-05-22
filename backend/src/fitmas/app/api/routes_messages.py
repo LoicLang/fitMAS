@@ -24,7 +24,8 @@ import fitmas.llm.legacy_fact_memory as legacy_fact_memory
 from fitmas.llm.legacy_summaries import make_timeline_summary
 from fitmas.domain.memory.profile_memory import upsert_profile_memory
 from fitmas.domain.memory.routing import split_memory_payloads
-from fitmas.models import DayId, MessageReply
+from fitmas.decision.message_models import MessageReply
+from fitmas.domain.planning.view_models import DayId
 from fitmas.core.time_context import get_timezone
 from fitmas.domain.execution import repository as execution_repo
 from fitmas.domain.memory import repository as memory_repo

@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 
 from fitmas import schema as s
 from fitmas.domain.memory.fact_memory import fact_is_current, normalize_fact_payload
-from fitmas.models import UserFact, UserPattern
+from fitmas.domain.memory.view_models import UserFact, UserPattern
 
 
 def to_pydantic_fact(fact: object) -> UserFact:

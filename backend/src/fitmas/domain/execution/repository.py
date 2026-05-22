@@ -5,7 +5,7 @@ from datetime import datetime
 from sqlalchemy.orm import Session
 
 from fitmas import schema as s
-from fitmas.models import Activity as ActivityDTO
+from fitmas.domain.execution.view_models import Activity as ActivityDTO
 
 
 def to_pydantic_activity(activity: s.Activity) -> ActivityDTO:

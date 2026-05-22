@@ -12,7 +12,7 @@ from fitmas.decision.conversation_contract import (
     ConversationTurnInput,
     ConversationUserNotFoundError,
 )
-from fitmas.models import MessageReply
+from fitmas.decision.message_models import MessageReply
 from fitmas.domain.athlete import repository as athlete_repo
 from fitmas.domain.coaching import repo_conversation
 

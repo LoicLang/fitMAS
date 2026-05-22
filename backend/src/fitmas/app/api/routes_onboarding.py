@@ -19,7 +19,8 @@ from fitmas.llm.legacy_onboarding import (
     preview_coach_voice,
 )
 from fitmas.domain.memory.profile_memory import replace_profile_memory
-from fitmas.models import OnboardPreview, OnboardResult, WeeklyPlan
+from fitmas.app.api.onboarding_models import OnboardPreview, OnboardResult
+from fitmas.domain.planning.view_models import WeeklyPlan
 from fitmas.app.api.onboarding_contract import build_goal_summary, build_onboarding_setup_preview, build_protected_focus
 from fitmas.domain.planning.periodization import compute_mesocycle_state, derive_total_weeks
 from fitmas.domain.planning.planner import build_week_plan

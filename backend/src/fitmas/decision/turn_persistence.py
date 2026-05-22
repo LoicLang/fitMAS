@@ -3,7 +3,7 @@ from __future__ import annotations
 from sqlalchemy.orm import Session
 
 from fitmas.decision.turn_recording import decision_json_for_turn
-from fitmas.models import Extraction, Message, MessageReply, MessageRole
+from fitmas.decision.message_models import Extraction, Message, MessageReply, MessageRole
 from fitmas.domain.coaching import repo_conversation
 
 

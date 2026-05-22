@@ -9,7 +9,7 @@ from fitmas import schema as s
 from fitmas.core.time_context import get_local_now
 from fitmas.domain.planning.models import compute_load_band
 from fitmas.domain.planning.planning_decision import PlanningDecision
-from fitmas.models import DayId, ScheduledSession
+from fitmas.domain.planning.view_models import DayId, ScheduledSession
 
 
 def to_pydantic_scheduled_session(session: s.ScheduledSession) -> ScheduledSession:

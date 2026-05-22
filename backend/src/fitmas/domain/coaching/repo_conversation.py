@@ -7,7 +7,7 @@ from datetime import UTC, date, datetime
 from sqlalchemy.orm import Session
 
 from fitmas import schema as s
-from fitmas.models import Message, MessageRole
+from fitmas.decision.message_models import Message, MessageRole
 
 logger = logging.getLogger(__name__)
 

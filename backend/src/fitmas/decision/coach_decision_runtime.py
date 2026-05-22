@@ -4,7 +4,7 @@ from typing import Any
 
 from fitmas.decision.conversation_contract import ConversationTurnOutcome
 from fitmas.decision import DecisionExplanation, DecisionOutcome, ReplyContract
-from fitmas.models import Extraction
+from fitmas.decision.message_models import Extraction
 
 
 def legacy_provider_skip_reason(turn_context: dict[str, object]) -> str:

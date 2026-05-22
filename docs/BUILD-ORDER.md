@@ -278,8 +278,10 @@ Prochain chantier logique :
   Strava ;
 - `domain/planning/template_repository.py` possede deja la compat
   `WeeklyPlan/DayPlan` onboarding/template/archive ;
-- prochain hotspot : les monolithes `schema.py` et `models.py`, a traiter
-  seulement avec un plan de coupe clair ;
+- root `models.py` est supprime : les DTOs Pydantic vivent dans leurs owners
+  `decision/`, `domain/*/view_models.py` et `app/api/` ;
+- prochain hotspot : le monolithe ORM `schema.py`, a traiter seulement avec un
+  plan de coupe clair ;
 - garder la priorite runtime plus petit, pas refactor plus complet.
 
 ## Ordre De Lecture Pour Un Agent

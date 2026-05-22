@@ -6,7 +6,8 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from fitmas.core.db import get_db
-from fitmas.models import MoveSessionPayload, ScheduledSession
+from fitmas.app.api.payloads import MoveSessionPayload
+from fitmas.domain.planning.view_models import ScheduledSession
 from fitmas.domain.planning.patch_mutation_service import complete_session_for_user, move_session_for_user, skip_session_for_user
 from fitmas.domain.athlete import repository as athlete_repo
 from fitmas.domain.planning import repository as planning_repo

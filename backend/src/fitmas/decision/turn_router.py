@@ -26,7 +26,7 @@ from fitmas.decision import turn_finalization
 from fitmas.decision import turn_idempotency
 from fitmas.decision import understanding_runtime
 from fitmas.llm.reply_decision_backend import LLMReplyBackend
-from fitmas.models import Extraction, MessageReply
+from fitmas.decision.message_models import Extraction, MessageReply
 
 
 logger = logging.getLogger(__name__)
