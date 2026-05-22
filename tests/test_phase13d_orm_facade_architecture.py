@@ -9,7 +9,6 @@ from sqlalchemy import create_engine
 ROOT = Path(__file__).resolve().parents[1]
 SRC = ROOT / "backend" / "src" / "fitmas"
 ORM = SRC / "core" / "orm"
-SCHEMA = SRC / "schema.py"
 
 EXPECTED_ORM_OWNER_CLASSES = {
     ORM / "user.py": {
@@ -82,14 +81,6 @@ def _class_names(path: Path) -> set[str]:
 def test_13d_orm_records_live_in_core_orm_owner_modules() -> None:
     for path, expected in EXPECTED_ORM_OWNER_CLASSES.items():
         assert _class_names(path) == expected
-
-
-def test_13d_root_schema_is_reexport_facade_only() -> None:
-    source = SCHEMA.read_text(encoding="utf-8")
-    tree = ast.parse(source, filename=str(SCHEMA))
-
-    assert not [node.name for node in tree.body if isinstance(node, ast.ClassDef)]
-    assert "from fitmas.core.orm import" in source
 
 
 def test_13d_core_orm_import_registers_same_tables() -> None:

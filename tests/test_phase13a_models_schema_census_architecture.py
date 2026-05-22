@@ -138,18 +138,14 @@ def _class_names(path: Path) -> set[str]:
     return {node.name for node in tree.body if isinstance(node, ast.ClassDef)}
 
 
-def test_13a_root_models_deleted_and_schema_exists_mid_split() -> None:
+def test_13a_root_models_and_schema_are_deleted() -> None:
     assert not MODELS.exists()
-    assert SCHEMA.exists()
+    assert not SCHEMA.exists()
 
 
 def test_13a_owner_modules_export_expected_pydantic_contracts() -> None:
     for path, expected in EXPECTED_PYDANTIC_OWNER_CLASSES.items():
         assert _class_names(path) == expected
-
-
-def test_13a_schema_no_longer_declares_orm_records() -> None:
-    assert _class_names(SCHEMA) == set()
 
 
 def test_13a_orm_owner_modules_export_expected_records() -> None:
