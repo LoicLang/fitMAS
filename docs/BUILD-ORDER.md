@@ -143,6 +143,9 @@ Les cuts physiques recents :
 - Le system prompt conversationnel vit maintenant dans
   `llm/prompts/conversation_system.py`; root
   `conversation_prompt_modules.py` est supprime.
+- Le builder de prompt conversationnel vit maintenant dans
+  `llm/prompts/conversation_builder.py`; root `llm_prompt_builder.py` est
+  supprime.
 - La resolution pending canonique normalise les aliases d'enum provider
   (`confirm`, `accepted`, etc.) vers `accept_pending` avant application.
   Un type inconnu devient une clarification pending, jamais un trou vers
@@ -162,7 +165,7 @@ Les cuts physiques recents :
 
 Etat chiffre au dernier check local :
 
-- root modules : `15`.
+- root modules : `14`.
 - legacy modules : `0` fichier source actif.
 - backend complet : `1347 passed, 11 skipped, 14 subtests passed`.
 - smoke canonical planning default : OK `10/10`.

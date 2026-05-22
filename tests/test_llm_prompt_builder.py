@@ -5,7 +5,7 @@ from types import SimpleNamespace
 
 from fitmas.llm.prompts.conversation_policy import ConversationPromptPolicy, select_conversation_prompt_policy
 from fitmas.llm.legacy_summaries import make_timeline_summary
-from fitmas.llm_prompt_builder import (
+from fitmas.llm.prompts.conversation_builder import (
     build_conversation_prompt_bundle,
     build_layered_conversation_prompt,
     detect_open_question,

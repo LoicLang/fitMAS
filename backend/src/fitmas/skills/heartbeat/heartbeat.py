@@ -63,7 +63,7 @@ from fitmas.skills.heartbeat.roles import (
 )
 from fitmas.knowledge import load_sport_knowledge
 from fitmas.llm.gateway import generate_heartbeat_text, generate_heartbeat_text_with_debug, request_text
-from fitmas.llm_prompt_builder import detect_open_question
+from fitmas.llm.prompts.conversation_builder import detect_open_question
 from fitmas.domain.planning.mutation_permissions import default_confirmation_expiry, serialize_plan_patch_confirmation
 from fitmas.domain.planning.plan_patch import PlanPatch, PlanPatchValidation, plan_patch_from_mutation_decisions, validate_plan_patch
 from fitmas.domain.execution.recent_reality import build_recent_reality_window

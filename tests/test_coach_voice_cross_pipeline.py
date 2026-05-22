@@ -13,7 +13,7 @@ import inspect
 import unittest
 
 from fitmas.domain.coaching import coach_voice
-from fitmas.llm_prompt_builder import _CONVERSATION_SYSTEM_TEXT
+from fitmas.llm.prompts.conversation_builder import _CONVERSATION_SYSTEM_TEXT
 from fitmas.skills.heartbeat import roles as heartbeat_roles
 
 
