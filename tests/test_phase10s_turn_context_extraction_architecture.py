@@ -24,7 +24,7 @@ PIPELINE_CONTEXT_HELPERS_TO_REMOVE = {
 
 PIPELINE_CONTEXT_IMPORTS_TO_REMOVE = {
     "fitmas.domain.coaching.coach_reading_digest",
-    "fitmas.coach_state_bundle",
+    "fitmas.domain.coaching.coach_state",
     "fitmas.decision.conversation_context",
     "fitmas.domain.execution.clarification",
     "fitmas.decision.grounding",

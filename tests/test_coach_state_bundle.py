@@ -7,7 +7,7 @@ import unittest
 os.environ.setdefault("FITMAS_DB_PATH", tempfile.mktemp(prefix="fitmas-bundle-tests-", suffix=".db"))
 
 from fitmas import repository as repo, schema as s
-from fitmas.coach_state_bundle import build_coach_state_bundle
+from fitmas.domain.coaching.coach_state import build_coach_state_bundle
 from fitmas.core.db import Base, SessionLocal, engine, init_db
 from fitmas.core.time_context import DAY_KEYS, day_label_fr, get_local_now
 

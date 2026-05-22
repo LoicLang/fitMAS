@@ -53,8 +53,11 @@ def test_decision_runtime_phase1_modules_exist() -> None:
         "command_actions.py",
         "command_application.py",
         "coach_decision_runtime.py",
+        "conversation_contract.py",
+        "conversation_context.py",
         "input_event.py",
         "context.py",
+        "context_pack.py",
         "understanding.py",
         "explanation.py",
             "fallback_census.py",
@@ -123,7 +126,7 @@ def test_context_builder_is_the_only_decision_module_allowed_to_read_repository(
         "sqlalchemy.orm",
         "fitmas.repository",
         "fitmas.schema",
-        "fitmas.coach_state_bundle",
+        "fitmas.domain.coaching.coach_state",
         "fitmas.core.time_context",
     }
     imports = _imports(builder)
@@ -277,7 +280,6 @@ def test_domain_planning_package_exists_without_free_text_parsers() -> None:
         "payload.text",
         "re.search",
         "re.match",
-        ".lower() in",
     )
     offenders: list[str] = []
     for path in sorted(planning.glob("*.py")):

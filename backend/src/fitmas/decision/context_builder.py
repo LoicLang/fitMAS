@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 
 import fitmas.repository as repo
 import fitmas.schema as s
-from fitmas.coach_state_bundle import build_coach_state_bundle
+from fitmas.domain.coaching.coach_state import build_coach_state_bundle
 from fitmas.core.time_context import build_time_context, get_local_now
 
 from .context import (
