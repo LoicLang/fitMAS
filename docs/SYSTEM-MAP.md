@@ -172,6 +172,19 @@ Regle :
 - il ne commit pas ;
 - il ne porte pas la verite DB.
 
+### Integrations
+
+Owner :
+
+- `integrations/`
+- `integrations/repository.py` pour les credentials et metadata Strava.
+
+Role :
+
+- garder le client HTTP dans `integrations/strava.py` ;
+- garder la persistence connection/tokens/sync dans `integrations/repository.py` ;
+- ne pas exposer ces writes via le root repository sauf facade temporaire.
+
 ### Heartbeat
 
 Owner :

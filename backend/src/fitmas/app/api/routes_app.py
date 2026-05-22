@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 
 from fitmas import repository as repo, schema as s
 from fitmas.integrations import strava
+from fitmas.integrations import repository as integration_repo
 from fitmas.app.api.routes_read import _build_recent_activity, _build_today_fitness, _build_today_view
 from fitmas.app.api.app_views import build_app_calendar, build_app_evolution, build_app_overview, build_session_detail
 from fitmas.domain.coaching.coach_state import build_coach_state_bundle
@@ -41,10 +42,10 @@ def get_app_overview(db: Session = Depends(get_db)) -> dict:
     )
     strava_status = {
         "configured": strava.is_configured(),
-        "connected": repo.get_strava_connection(db, user.id) is not None,
+        "connected": integration_repo.get_strava_connection(db, user.id) is not None,
         "last_sync_at": None,
     }
-    connection = repo.get_strava_connection(db, user.id)
+    connection = integration_repo.get_strava_connection(db, user.id)
     if connection and connection.last_sync_at:
         strava_status["last_sync_at"] = connection.last_sync_at.isoformat()
     readiness_row = athlete_repo.get_latest_readiness_snapshot_record(db, user.id)

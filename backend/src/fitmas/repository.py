@@ -13,6 +13,7 @@ from fitmas.domain.execution import repository as execution_repo
 from fitmas.domain.memory import repository as memory_repo
 from fitmas.domain.athlete.fitness_snapshot import FitnessSnapshot
 from fitmas.domain.planning import repository as planning_repo
+from fitmas.integrations import repository as integration_repo
 from fitmas.models import (
     Activity,
     ChangeNote,
@@ -347,11 +348,7 @@ def get_activity_by_external_id(db: Session, user_id: int, external_id: str) -> 
 
 
 def get_strava_connection(db: Session, user_id: int) -> s.StravaConnection | None:
-    return (
-        db.query(s.StravaConnection)
-        .filter(s.StravaConnection.user_id == user_id)
-        .first()
-    )
+    return integration_repo.get_strava_connection(db, user_id)
 
 
 def get_scheduled_sessions(

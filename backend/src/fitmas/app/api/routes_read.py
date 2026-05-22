@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 
 from fitmas import repository as repo, schema as s
 from fitmas.integrations import strava
+from fitmas.integrations import repository as integration_repo
 from fitmas.app.api.read_models import RuntimeDay, RuntimeWeek
 from fitmas.core.db import get_db
 from fitmas.models import (
@@ -284,7 +285,7 @@ def get_strava_status(db: Session = Depends(get_db)) -> dict:
     user = repo.get_user_optional(db)
     if user is None:
         return {"configured": strava.is_configured(), "connected": False, "last_sync_at": None}
-    connection = repo.get_strava_connection(db, user.id)
+    connection = integration_repo.get_strava_connection(db, user.id)
     return {
         "configured": strava.is_configured(),
         "connected": connection is not None,

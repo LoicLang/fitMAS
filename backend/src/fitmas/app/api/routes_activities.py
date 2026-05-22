@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 
 from fitmas import repository as repo
 from fitmas.integrations import strava
+from fitmas.integrations import repository as integration_repo
 from fitmas.domain.execution import repository as execution_repo
 from fitmas.domain.execution.activities import infer_activity_title, match_activity_to_day, normalize_activity_sport
 from fitmas.app.api.payloads import ManualActivityPayload
@@ -128,7 +129,7 @@ def sync_strava(db: Session = Depends(get_db)) -> dict:
         raise HTTPException(status_code=404, detail="No onboarded user yet")
     if not strava.is_configured():
         return {"synced": False, "reason": "Strava not configured"}
-    connection = repo.get_strava_connection(db, user.id)
+    connection = integration_repo.get_strava_connection(db, user.id)
     if connection is None:
         return {"synced": False, "reason": "Strava not connected"}
     imported = strava.import_recent_activities(

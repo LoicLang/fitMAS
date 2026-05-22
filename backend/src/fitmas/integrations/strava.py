@@ -8,6 +8,7 @@ import httpx
 from sqlalchemy.orm import Session
 
 from fitmas import repository as repo, schema as s
+from fitmas.integrations import repository as integration_repo
 from fitmas.domain.execution import repository as execution_repo
 from fitmas.domain.execution.activities import infer_activity_title, match_activity_to_day, normalize_activity_sport
 from fitmas.domain.planning.patch_mutation_service import complete_session_from_activity_for_user, mark_session_completed_for_user
@@ -66,10 +67,13 @@ def refresh_token_if_needed(db: Session, connection: s.StravaConnection) -> str:
     )
     response.raise_for_status()
     payload = response.json()
-    connection.access_token = payload["access_token"]
-    connection.refresh_token = payload["refresh_token"]
-    connection.expires_at = payload["expires_at"]
-    db.commit()
+    integration_repo.update_strava_tokens(
+        db,
+        connection,
+        access_token=payload["access_token"],
+        refresh_token=payload["refresh_token"],
+        expires_at=payload["expires_at"],
+    )
     return connection.access_token
 
 
@@ -85,30 +89,17 @@ def fetch_recent_activities(access_token: str, *, per_page: int = 20) -> list[di
 
 
 def store_connection_from_token_payload(db: Session, *, user_id: int, payload: dict) -> s.StravaConnection:
-    connection = repo.get_strava_connection(db, user_id)
     athlete_id = int(payload["athlete"]["id"])
     scopes = ",".join(payload.get("scope", "").split(",")) if isinstance(payload.get("scope"), str) else ""
-
-    if connection is None:
-        connection = s.StravaConnection(
-            user_id=user_id,
-            athlete_id=athlete_id,
-            access_token=payload["access_token"],
-            refresh_token=payload["refresh_token"],
-            expires_at=payload["expires_at"],
-            scopes=scopes,
-        )
-        db.add(connection)
-    else:
-        connection.athlete_id = athlete_id
-        connection.access_token = payload["access_token"]
-        connection.refresh_token = payload["refresh_token"]
-        connection.expires_at = payload["expires_at"]
-        connection.scopes = scopes
-
-    db.commit()
-    db.refresh(connection)
-    return connection
+    return integration_repo.upsert_strava_connection(
+        db,
+        user_id=user_id,
+        athlete_id=athlete_id,
+        access_token=payload["access_token"],
+        refresh_token=payload["refresh_token"],
+        expires_at=payload["expires_at"],
+        scopes=scopes,
+    )
 
 
 def import_recent_activities(
@@ -235,8 +226,7 @@ def import_recent_activities(
             import logging
             logging.getLogger(__name__).exception("Adaptation post_activity check failed (non-blocking)")
 
-    connection.last_sync_at = datetime.now(tz=timezone.utc)
-    db.commit()
+    integration_repo.mark_strava_synced(db, connection, synced_at=datetime.now(tz=timezone.utc))
     return imported
 
 

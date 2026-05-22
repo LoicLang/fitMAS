@@ -274,6 +274,8 @@ Prochain chantier logique :
   `fitmas.repository` en facade temporaire ;
 - `domain/athlete/repository.py` possede deja les snapshots fitness/readiness,
   avec `fitmas.repository` en facade temporaire ;
+- `integrations/repository.py` possede deja connection/tokens/sync metadata
+  Strava, avec `fitmas.repository` en facade temporaire ;
 - continuer le split repository par owner reel avant de toucher a
   `schema.py`/`models.py` ;
 - garder la priorite runtime plus petit, pas refactor plus complet.
