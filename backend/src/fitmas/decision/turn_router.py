@@ -10,15 +10,13 @@ import fitmas.llm.reply_backend as final_reply
 import fitmas.decision.turn_close_route as turn_close_route
 import fitmas.decision.turn_pending_route as turn_pending_route
 import fitmas.decision.turn_planning_route as turn_planning_route
+import fitmas.decision.turn_pre_understanding_reply_route as turn_pre_understanding_reply_route
 from fitmas.decision.conversation_contract import (
     ConversationPipelineDependencies,
     ConversationTurnInput,
-    ConversationTurnOutcome,
     ConversationTurnState,
 )
 from fitmas.decision import DecisionReplyComposer
-from fitmas.decision import activity_highlight
-from fitmas.decision import clarification_reply
 from fitmas.decision import coach_decision_runtime
 from fitmas.decision import command_application
 from fitmas.decision import pending_resolution
@@ -94,19 +92,20 @@ def route_conversation_turn(
             turn_memory_writes=turn_memory_writes,
         )
 
-    canonical_clarification_outcome = clarification_reply.compose_canonical_clarification_reply(
-        composer=_decision_reply_composer(),
+    pre_understanding_reply_outcome = turn_pre_understanding_reply_route.route_pre_understanding_replies(
         user_text=payload.text,
         turn_plan=turn_plan,
+        state=state,
         turn_context=turn_context,
         grounding_facts=grounding_facts,
+        decision_reply_composer_fn=_decision_reply_composer,
     )
-    if canonical_clarification_outcome is not None:
+    if pre_understanding_reply_outcome is not None:
         return turn_finalization.record_turn_outcome(
             db=db,
             user=user,
             payload=payload,
-            outcome=canonical_clarification_outcome,
+            outcome=pre_understanding_reply_outcome,
             turn_context=turn_context,
             turn_memory_writes=turn_memory_writes,
         )
@@ -146,24 +145,6 @@ def route_conversation_turn(
             turn_memory_writes=turn_memory_writes,
         )
 
-    activity_highlight_outcome = activity_highlight.compose_activity_highlight_reply(
-        composer=_decision_reply_composer(),
-        activities=tuple(state.activities),
-        user_text=payload.text,
-        turn_plan=turn_plan,
-        turn_context=turn_context,
-        grounding_facts=grounding_facts,
-    )
-    if activity_highlight_outcome is not None:
-        return turn_finalization.record_turn_outcome(
-            db=db,
-            user=user,
-            payload=payload,
-            outcome=activity_highlight_outcome,
-            turn_context=turn_context,
-            turn_memory_writes=turn_memory_writes,
-        )
-
     if canonical_understanding is None:
         canonical_understanding = understanding_runtime.run_canonical_understanding_shadow(
             user=user,
@@ -175,7 +156,7 @@ def route_conversation_turn(
             pending_confirmation=pending_confirmation,
             turn_context=turn_context,
         )
-    outcome: ConversationTurnOutcome | None = None
+    outcome = None
     understanding_action_result: dict[str, Any] | None = None
     if understanding_runtime.should_use_canonical_understanding_without_legacy(
         understanding=canonical_understanding,
@@ -309,7 +290,6 @@ def route_conversation_turn(
 
 def _decision_reply_composer() -> DecisionReplyComposer:
     return DecisionReplyComposer(reply_backend=LLMReplyBackend())
-
 
 def _apply_turn_plan_memory_commands_once(
     *,

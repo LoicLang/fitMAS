@@ -57,9 +57,11 @@ def test_10f_census_cli_writes_json(tmp_path: Path) -> None:
 
 def test_10f_activity_and_clarification_live_in_decision_not_legacy() -> None:
     router = _source("decision/turn_router.py")
+    early_reply_route = _source("decision/turn_pre_understanding_reply_route.py")
 
-    assert "from fitmas.decision import activity_highlight" in router
-    assert "from fitmas.decision import clarification_reply" in router
+    assert "turn_pre_understanding_reply_route" in router
+    assert "from fitmas.decision import activity_highlight" in early_reply_route
+    assert "from fitmas.decision import clarification_reply" in early_reply_route
     assert "conversation_activity_highlight_bridge" not in router
     assert "conversation_canonical_clarification_bridge" not in router
     assert not (SRC / "legacy/conversation_activity_highlight_bridge.py").exists()

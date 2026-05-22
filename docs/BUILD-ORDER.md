@@ -286,9 +286,11 @@ Prochain chantier logique :
 - `decision/turn_context.py` est reduit de `392` a `276` lignes :
   les sections prompt/pending vivent dans `decision/turn_prompt_context.py`
   et les helpers grounding/payload dans `decision/turn_context_payload.py` ;
-- `decision/turn_router.py` est reduit de `361` a `330` lignes :
+- `decision/turn_router.py` est reduit de `361` a `310` lignes :
   la route close vit dans `decision/turn_close_route.py` et la route pending
-  pre-understanding dans `decision/turn_pending_route.py` ;
+  pre-understanding dans `decision/turn_pending_route.py` ; les replies
+  pre-understanding clarification/activity highlight vivent dans
+  `decision/turn_pre_understanding_reply_route.py` ;
 - garder la priorite runtime plus petit, pas refactor plus complet.
 
 ## Ordre De Lecture Pour Un Agent

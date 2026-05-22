@@ -85,6 +85,7 @@ def test_decision_runtime_phase1_modules_exist() -> None:
             "turn_planner.py",
             "turn_pending_route.py",
             "turn_planning_route.py",
+            "turn_pre_understanding_reply_route.py",
             "turn_prompt_context.py",
         "turn_state.py",
         "turn_router.py",

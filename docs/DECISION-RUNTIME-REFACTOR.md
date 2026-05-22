@@ -179,9 +179,10 @@ Les sept wrappers legacy P0 ont ete supprimes. Le gros risque suivant etait
 canonique a ete sortie vers `decision/turn_planning_route.py`.
 `decision/turn_context.py` est passe de `392` a `276` lignes apres extraction
 de `turn_prompt_context.py` et `turn_context_payload.py`.
-`decision/turn_router.py` est passe de `361` a `330` lignes apres extraction
-de `turn_close_route.py` et `turn_pending_route.py`. Les nouveaux hotspots
-sont les routes restantes de `decision/turn_router.py` et `llm/reply_backend.py`.
+`decision/turn_router.py` est passe de `361` a `310` lignes apres extraction
+de `turn_close_route.py`, `turn_pending_route.py` et
+`turn_pre_understanding_reply_route.py`. Les nouveaux hotspots sont les routes
+restantes de `decision/turn_router.py` et `llm/reply_backend.py`.
 
 10F a ajoute le census conversationnel et supprime quatre bridges :
 

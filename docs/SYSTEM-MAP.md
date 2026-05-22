@@ -49,7 +49,9 @@ Etat actuel :
 - La responsabilite conversationnelle restante vit dans les owners
   `decision/turn_*`.
 - Les routes close/pending vivent dans `turn_close_route.py` et
-  `turn_pending_route.py`; le routeur ne porte plus ces branches en direct.
+  `turn_pending_route.py`; les replies pre-understanding clarification/activity
+  highlight vivent dans `turn_pre_understanding_reply_route.py`. Le routeur ne
+  porte plus ces branches en direct.
 - `decision/turn_context.py` ne porte plus les helpers prompt/pending ni les
   helpers grounding/payload : ils vivent dans `turn_prompt_context.py` et
   `turn_context_payload.py`.
