@@ -11,7 +11,7 @@ from typing import Callable, Mapping
 import pytz
 from telegram.ext import Application, ContextTypes
 
-from fitmas.coach_messages import CoachDraft
+from fitmas.app.telegram.delivery import CoachDraft
 from fitmas.app.telegram.api import api_post
 from fitmas.app.telegram.shared import (
     persist_draft_for_owner,

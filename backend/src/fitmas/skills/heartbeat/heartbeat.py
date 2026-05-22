@@ -35,7 +35,7 @@ from fitmas.domain.execution.helpers import (
 from fitmas.domain.coaching.calibration_needs import CalibrationNeedType, looks_like_clarification_message
 from fitmas.domain.coaching.coach_reading_digest import CoachReadingDigest, build_coach_reading_facts
 from fitmas.coach_state_bundle import build_coach_state_bundle
-from fitmas.coach_messages import CoachDraft, DraftPendingConfirmation
+from fitmas.app.telegram.delivery import CoachDraft, DraftPendingConfirmation
 from fitmas.core.db import SessionLocal
 import fitmas.llm.reply_backend as reply_backend
 from fitmas.domain.execution.clarification import build_execution_clarification

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from fitmas.coach_messages import CoachDraft
+from fitmas.app.telegram.delivery import CoachDraft
 from fitmas.skills.heartbeat.runtime_adapter import HeartbeatRuntimeResult, run_heartbeat_trigger
 
 

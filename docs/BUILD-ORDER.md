@@ -153,6 +153,8 @@ Les cuts physiques recents :
   root `planning_contract.py` est supprime.
 - Le validateur de plan vit maintenant dans `domain/planning/validator.py`;
   root `plan_validator.py` est supprime.
+- La persistence/livraison des brouillons coach vit maintenant dans
+  `app/telegram/delivery.py`; root `coach_messages.py` est supprime.
 - La resolution pending canonique normalise les aliases d'enum provider
   (`confirm`, `accepted`, etc.) vers `accept_pending` avant application.
   Un type inconnu devient une clarification pending, jamais un trou vers
@@ -172,7 +174,7 @@ Les cuts physiques recents :
 
 Etat chiffre au dernier check local :
 
-- root modules : `11`.
+- root modules : `10`.
 - legacy modules : `0` fichier source actif.
 - backend complet : `1347 passed, 11 skipped, 14 subtests passed`.
 - smoke canonical planning default : OK `10/10`.

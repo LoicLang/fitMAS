@@ -34,7 +34,7 @@ def test_decision_package_imports_no_heartbeat_or_telegram_runtime() -> None:
         "fitmas.skills.heartbeat",
         "fitmas.telegram_scheduler",
         "fitmas.app.telegram",
-        "fitmas.coach_messages",
+        "fitmas.app.telegram.delivery",
     }
     offenders: list[str] = []
 

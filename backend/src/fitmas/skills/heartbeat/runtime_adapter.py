@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 from typing import Callable, Literal, Mapping
 from uuid import uuid4
 
-from fitmas.coach_messages import CoachDraft
+from fitmas.app.telegram.delivery import CoachDraft
 from fitmas.decision import DecisionExplanation, DecisionOutcome, InputEvent, ReplyContract
 from fitmas.decision.output_verifier import DecisionOutputVerifier, OutputVerifier
 

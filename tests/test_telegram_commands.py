@@ -6,7 +6,7 @@ from unittest.mock import AsyncMock
 
 import httpx
 
-from fitmas.coach_messages import CoachDraft
+from fitmas.app.telegram.delivery import CoachDraft
 import fitmas.app.telegram.commands as telegram_commands
 from fitmas.app.telegram.debounce import reset_state
 

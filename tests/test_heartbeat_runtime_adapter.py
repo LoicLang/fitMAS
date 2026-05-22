@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-from fitmas.coach_messages import CoachDraft, DraftPendingConfirmation
+from fitmas.app.telegram.delivery import CoachDraft, DraftPendingConfirmation
 from fitmas.decision import VerificationResult
 from fitmas.skills.heartbeat.runtime_adapter import (
     HeartbeatRuntimeResult,

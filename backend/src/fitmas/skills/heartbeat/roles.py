@@ -32,7 +32,7 @@ from fitmas.domain.coaching.calibration_needs import (
     render_hidden_need_brief,
 )
 from fitmas.domain.coaching.calibration_status import build_calibration_status
-from fitmas.coach_messages import CoachDraft
+from fitmas.app.telegram.delivery import CoachDraft
 from fitmas.domain.coaching.coach_reading_digest import CoachReadingDigest, render_digest_for_prompt
 from fitmas.domain.execution.clarification import build_execution_clarification
 from fitmas.domain.execution.evidence import classify_execution_evidence
