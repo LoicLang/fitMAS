@@ -1,6 +1,6 @@
 from fitmas.domain.coaching import coach_voice
 from fitmas.llm.prompts.conversation_policy import select_conversation_prompt_policy
-from fitmas.conversation_prompt_modules import (
+from fitmas.llm.prompts.conversation_system import (
     build_action_contract_system_text,
     build_calendar_truth_system_text,
     build_coach_voice_examples_system_text,

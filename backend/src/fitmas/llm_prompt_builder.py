@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from fitmas.decision.context_pack import ConversationContextPack
-from fitmas.conversation_prompt_modules import (
+from fitmas.llm.prompts.conversation_system import (
     build_conversation_system_text,
 )
 from fitmas.llm.prompts.conversation_policy import ConversationPromptPolicy

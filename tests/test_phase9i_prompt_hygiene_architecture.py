@@ -4,10 +4,7 @@ from pathlib import Path
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-PROMPT_FILES = (
-    REPO_ROOT / "backend/src/fitmas/conversation_prompt_modules.py",
-    *(REPO_ROOT / "backend/src/fitmas/llm/prompts").glob("*.py"),
-)
+PROMPT_FILES = tuple((REPO_ROOT / "backend/src/fitmas/llm/prompts").glob("*.py"))
 FORBIDDEN_TEST_LEAKS = (
     "Cette semaine je voyage de mercredi a vendredi",
     "Je voyage de mercredi a vendredi",
