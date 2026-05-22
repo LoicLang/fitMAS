@@ -6,8 +6,6 @@ from typing import Any, Sequence
 
 from pydantic import BaseModel, Field, ValidationError
 
-import fitmas.llm.gateway as gw
-
 logger = logging.getLogger(__name__)
 
 
@@ -68,6 +66,7 @@ class ConversationTurnPlan(BaseModel):
 
 def plan_conversation_turn(
     *,
+    request_json_fn,
     user_text: str,
     temporal_summary: str,
     execution_summary: str,
@@ -75,7 +74,7 @@ def plan_conversation_turn(
     signal_summary: str,
     conversation_history: Sequence[dict[str, Any]] | None = None,
 ) -> ConversationTurnPlan | None:
-    data = gw.request_json(
+    data = request_json_fn(
         system=_SYSTEM,
         prompt=_build_prompt(
             user_text=user_text,

@@ -87,6 +87,7 @@ Ce qui n'est plus l'architecture active :
   `planning_decision.py`, `planning_state.py`, `session_similarity.py`,
   `session_templates.py`, `workout_content.py`)
 - root planning core modules (`plan_patch.py`, `week_coherence.py`)
+- root conversation turn planner (`conversation_turn_planner.py`)
 - root `final_reply.py`
 - root `heartbeat.py`
 - root `telegram_scheduler.py`

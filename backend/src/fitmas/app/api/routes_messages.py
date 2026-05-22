@@ -12,7 +12,7 @@ from fitmas.domain.execution.helpers import claimed_activities_last_days
 from fitmas.app.api.payloads import IncomingMessage
 from fitmas.domain.memory.availability_constraints import parse_availability_fact_key
 from fitmas.conversation_contract import ConversationPipelineDependencies, ConversationTurnInput, ConversationUserNotFoundError
-from fitmas.conversation_turn_planner import plan_conversation_turn
+from fitmas.decision import turn_planner
 from fitmas.core.db import get_db
 from fitmas.domain.execution.clarification import (
     ExecutionClarification,
@@ -46,6 +46,13 @@ def extract_facts(user_text: str, assistant_text: str, existing_facts: list[dict
 
 def select_prompt_facts(facts: list[dict]) -> list[str]:
     return legacy_fact_memory.select_prompt_facts(facts)
+
+
+def plan_conversation_turn(**kwargs):
+    return turn_planner.plan_conversation_turn(
+        request_json_fn=gw.request_json,
+        **kwargs,
+    )
 
 
 def _resolve_day_updated(decision) -> DayId | None:

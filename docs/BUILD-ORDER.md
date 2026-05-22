@@ -117,6 +117,8 @@ Les cuts physiques recents :
   `workout_content.py`.
 - Le langage de mutation et la review qualite semaine vivent maintenant sous
   `domain/planning/` : `plan_patch.py`, `week_coherence.py`.
+- Le routeur d'intention de tour vit maintenant sous `decision/turn_planner.py`
+  et recoit le provider LLM par injection depuis l'API.
 - La resolution pending canonique normalise les aliases d'enum provider
   (`confirm`, `accepted`, etc.) vers `accept_pending` avant application.
   Un type inconnu devient une clarification pending, jamais un trou vers
@@ -136,7 +138,7 @@ Les cuts physiques recents :
 
 Etat chiffre au dernier check local :
 
-- root modules : `27`.
+- root modules : `26`.
 - legacy modules : `0` fichier source actif.
 - backend complet : `1336 passed, 11 skipped, 14 subtests passed`.
 - smoke canonical planning default : OK `10/10`.

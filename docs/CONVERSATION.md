@@ -56,7 +56,8 @@ Etat actuel :
 - `llm/understanding_service.py` porte l'understanding cible.
 - `decision/understanding_runtime.py` porte l'appel understanding canonique.
 - `decision/turn_state.py`, `decision/turn_context.py`,
-  `decision/turn_calibration.py`, `decision/turn_router.py`,
+  `decision/turn_calibration.py`, `decision/turn_planner.py`,
+  `decision/turn_router.py`,
   `decision/turn_planning_route.py`, `decision/turn_finalization.py`,
   `decision/turn_persistence.py` et `decision/turn_idempotency.py` portent
   les anciens blocs du pipeline.
