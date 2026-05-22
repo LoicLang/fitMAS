@@ -19,8 +19,8 @@ from fitmas.app.api.routes_plan import router as plan_router
 from fitmas.app.api.routes_read import router as read_router
 from fitmas.app.api.routes_stats import router as stats_router
 from fitmas.app.api.routes_static import router as static_router
-from fitmas.db import SessionLocal, init_db
-from fitmas.seed import seed_if_empty
+from fitmas.core.db import SessionLocal, init_db
+from fitmas.core.seed import seed_if_empty
 
 logger = logging.getLogger(__name__)
 

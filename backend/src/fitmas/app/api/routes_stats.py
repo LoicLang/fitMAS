@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from fitmas import repository as repo
-from fitmas.db import get_db
+from fitmas.core.db import get_db
 from fitmas.domain.athlete.performance_overview import build_performance_overview
 from fitmas.domain.athlete.performance_stats import build_records_stats, build_training_load_stats, build_volume_stats
 

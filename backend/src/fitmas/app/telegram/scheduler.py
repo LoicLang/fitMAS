@@ -113,7 +113,7 @@ def _has_proactive_message_today(timezone_name: str) -> bool:
     from datetime import timezone as dt_timezone
 
     from fitmas import repository as repo, schema as s
-    from fitmas.db import SessionLocal
+    from fitmas.core.db import SessionLocal
 
     timezone = pytz.timezone(timezone_name)
     local_now = datetime.now(timezone)
@@ -160,7 +160,7 @@ async def _send_serialized_draft(
 
 def _reserve_heartbeat_guard_after_send() -> None:
     from fitmas import repository as repo
-    from fitmas.db import SessionLocal
+    from fitmas.core.db import SessionLocal
     from fitmas.skills.heartbeat.heartbeat import _reserve_module_guard
 
     db = SessionLocal()
@@ -221,7 +221,7 @@ async def strava_sync_cron(context: ContextTypes.DEFAULT_TYPE) -> None:
 
 
 async def memory_maintenance_cron(context: ContextTypes.DEFAULT_TYPE) -> None:
-    from fitmas.db import SessionLocal
+    from fitmas.core.db import SessionLocal
     from fitmas.domain.memory.maintenance import run_memory_maintenance
 
     db = SessionLocal()

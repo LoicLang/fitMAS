@@ -23,7 +23,7 @@ from fitmas.conversation_contract import (
     ConversationTurnInput,
     ConversationUserNotFoundError,
 )
-from fitmas.db import get_db
+from fitmas.core.db import get_db
 from fitmas.skills.heartbeat.runtime_adapter import heartbeat_runtime_payload, run_heartbeat_endpoint, run_heartbeat_trigger
 from fitmas.app.telegram.channel import resolve_chat_id, send_text_message
 

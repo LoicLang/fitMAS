@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 
 from fitmas import repository as repo, schema as s
 from fitmas.decision.command_actions import ExecutionUpdateAction
-from fitmas.time_context import get_local_now
+from fitmas.core.time_context import get_local_now
 
 
 @dataclass(frozen=True, slots=True)

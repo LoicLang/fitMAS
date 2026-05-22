@@ -6,7 +6,7 @@ from datetime import datetime
 from sqlalchemy.orm import Session
 
 from fitmas import repository as repo, schema as s
-from fitmas.db import SessionLocal
+from fitmas.core.db import SessionLocal
 from fitmas.domain.memory.profile_memory import upsert_profile_memory
 from fitmas.domain.memory.routing import split_memory_payloads
 

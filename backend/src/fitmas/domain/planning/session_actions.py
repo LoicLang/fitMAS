@@ -5,7 +5,7 @@ from datetime import date, datetime, time, timedelta
 from sqlalchemy.orm import Session
 
 from fitmas import repository as repo, schema as s
-from fitmas.time_context import DAY_KEYS, day_label_fr
+from fitmas.core.time_context import DAY_KEYS, day_label_fr
 
 
 def create_session(

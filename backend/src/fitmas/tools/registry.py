@@ -7,7 +7,7 @@ from fitmas.domain.execution.context import build_today_execution_context
 from fitmas.domain.memory.fact_memory import fact_is_current, select_relevant_facts
 from fitmas.planning_window_resolution import format_planning_window_summary, resolve_planning_window_inputs
 from fitmas.tools.replan_proposal import build_replan_proposal
-from fitmas.time_context import get_local_now, get_timezone
+from fitmas.core.time_context import get_local_now, get_timezone
 from fitmas.tools.contract import ToolContext, ToolResult, ToolSpec
 from fitmas.domain.athlete.training_load import compute_ctl_atl_tsb, estimate_tss
 

@@ -12,7 +12,7 @@ from fitmas.conversation_prompting import ConversationPromptPolicy
 from fitmas.prompt_observability import PromptTrace, build_prompt_trace
 from fitmas.prompt_layers import assemble_layered_prompt
 from fitmas.prompt_contracts import get_prompt_contract
-from fitmas.time_context import render_time_context
+from fitmas.core.time_context import render_time_context
 
 _CONVERSATION_SYSTEM_TEXT = build_conversation_system_text()
 

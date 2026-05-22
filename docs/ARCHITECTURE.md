@@ -42,6 +42,7 @@ backend/src/fitmas/
   app/
     api/          routes et read models HTTP
     telegram/     bot, commands, onboarding, delivery et scheduler Telegram
+  core/           db, time, temporal/calendar resolution, seed
   decision/       InputEvent, context, outcome, command bus, reply, verifier
   domain/
     planning/     candidates, evaluator, policy, mutation service
@@ -50,6 +51,7 @@ backend/src/fitmas/
     athlete/      profile, zones, readiness, load, strength, performance
     coaching/     voice, calibration, digest, week context, adaptation evidence
   llm/            gateway, prompts, understanding, reply backends, compat legacy
+  integrations/   Strava et clients externes
   skills/
     heartbeat/    heartbeat runtime, reply composer, tool loop
   tools/          contracts, registry, runtime, metrics
@@ -75,6 +77,9 @@ Ce qui n'est plus l'architecture active :
 - root coaching modules (`adaptation_log.py`, `calibration_*.py`,
   `coach_reading_digest.py`, `coach_voice.py`,
   `generated_week_coherence.py`, `repo_conversation.py`, `week_context.py`)
+- root core modules (`calendar_resolution.py`, `db.py`, `seed.py`,
+  `temporal_resolver.py`, `time_context.py`)
+- root integration modules (`strava.py`)
 - root `final_reply.py`
 - root `heartbeat.py`
 - root `telegram_scheduler.py`

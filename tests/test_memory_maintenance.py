@@ -8,7 +8,7 @@ from datetime import datetime, timedelta, timezone
 os.environ.setdefault("FITMAS_DB_PATH", tempfile.mktemp(prefix="fitmas-memory-maint-", suffix=".db"))
 
 from fitmas import repository as repo, schema as s
-from fitmas.db import Base, SessionLocal, engine, init_db
+from fitmas.core.db import Base, SessionLocal, engine, init_db
 from fitmas.domain.memory.maintenance import run_memory_maintenance
 
 

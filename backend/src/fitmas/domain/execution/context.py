@@ -5,7 +5,7 @@ from datetime import date, datetime
 from typing import Any, Iterable, Sequence
 
 from fitmas.domain.execution.evidence import classify_execution_evidence
-from fitmas.time_context import get_local_now, get_timezone
+from fitmas.core.time_context import get_local_now, get_timezone
 
 REST_SPORTS = {"rest", "off"}
 

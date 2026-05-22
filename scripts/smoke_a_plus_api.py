@@ -1494,8 +1494,8 @@ def _reset_and_seed_database(db_path: Path) -> None:
 
     from fitmas import repository as repo
     from fitmas import schema as s
-    from fitmas.db import SessionLocal
-    from fitmas.time_context import DAY_KEYS, day_label_fr, get_local_now
+    from fitmas.core.db import SessionLocal
+    from fitmas.core.time_context import DAY_KEYS, day_label_fr, get_local_now
 
     with SessionLocal() as db:
         user = s.User(
@@ -1649,7 +1649,7 @@ def _reset_database_schema(db_path: Path) -> None:
     if str(BACKEND_SRC) not in sys.path:
         sys.path.insert(0, str(BACKEND_SRC))
 
-    from fitmas.db import Base, engine, init_db
+    from fitmas.core.db import Base, engine, init_db
 
     db_path.parent.mkdir(parents=True, exist_ok=True)
     Base.metadata.drop_all(bind=engine)

@@ -23,7 +23,7 @@ is allowed only for hotspots that need a separate shrink slice.
 
 ## Summary
 
-- Root files counted: 48
+- Root files counted: 42
 - Permanent root entrypoints allowed: 3
 - First wrapper cuts completed: `heartbeat*.py`, `llm_gateway.py`,
   `telegram_scheduler.py`, `tool_*.py`, `api_messages.py`,
@@ -54,6 +54,8 @@ is allowed only for hotspots that need a separate shrink slice.
 - Coaching root cut completed: `adaptation_log.py`, `calibration_needs.py`,
   `calibration_status.py`, `coach_reading_digest.py`, `coach_voice.py`,
   `generated_week_coherence.py`, `repo_conversation.py`, `week_context.py`
+- Core/integration root cut completed: `calendar_resolution.py`, `db.py`,
+  `seed.py`, `temporal_resolver.py`, `time_context.py`, `strava.py`
 - Primary risk: moving files faster than deleting obsolete boundaries
 - Thursday criterion: root is explainable, delete candidates are explicit, and
   new root files fail architecture tests unless classified here
@@ -66,7 +68,6 @@ is allowed only for hotspots that need a separate shrink slice.
 | `adaptation.py` | domain/planning | merge | old adaptation facade overlaps planning runtime | planning simplification |
 | `adaptation_decision.py` | domain/planning | merge | decision value object should live with planning decisions | planning simplification |
 | `api.py` | root-entrypoint | entrypoint | FastAPI app assembly entrypoint | keep until app package owns all routes |
-| `calendar_resolution.py` | core | move | date resolution is shared infrastructure | core package split |
 | `calibration_llm.py` | llm | move | LLM calibration helper | llm package cleanup |
 | `claim_guard.py` | decision | merge | visible claim protection should collapse into OutputVerifier | output verifier shrink |
 | `coach_messages.py` | domain/coaching | merge | message fixtures overlap coach voice and reply composer | coaching package split |
@@ -78,7 +79,6 @@ is allowed only for hotspots that need a separate shrink slice.
 | `conversation_prompt_modules.py` | llm | merge | prompt fragments should collapse into three prompt families | prompt shrink |
 | `conversation_prompting.py` | llm | merge | prompt assembly should move into llm prompts | prompt shrink |
 | `conversation_turn_planner.py` | decision | move | typed turn planning belongs to decision | decision package split |
-| `db.py` | core | move | DB session and engine are core infrastructure | core package split |
 | `grounding_contract.py` | decision | merge | grounding should be part of reply request and verifier | output verifier shrink |
 | `intensity_distribution.py` | domain/planning | move | intensity distribution is planning quality | planning package split |
 | `interference.py` | domain/planning | move | sport interference is planning policy | planning package split |
@@ -99,14 +99,10 @@ is allowed only for hotspots that need a separate shrink slice.
 | `prompt_observability.py` | llm | move | prompt telemetry belongs under llm | llm package cleanup |
 | `repository.py` | core | keep_root_temporarily | monolithic repository needs domain repository split | repository split |
 | `schema.py` | core | keep_root_temporarily | central Pydantic schema needs bounded API/domain split | schema split |
-| `seed.py` | core | move | seed data is infrastructure and fixtures | core package split |
 | `session_metadata.py` | domain/planning | merge | load band helper belongs with session/timeline models | planning simplification |
 | `session_similarity.py` | domain/planning | move | session matching similarity is planning/execution boundary | planning package split |
 | `session_templates.py` | domain/planning | move | session templates belong to planning | planning package split |
 | `signals.py` | domain/coaching | merge | signal derivation overlaps context and memory substrates | coaching substrate shrink |
-| `strava.py` | integrations | move | external Strava client belongs to integrations | integration package split |
-| `temporal_resolver.py` | core | move | temporal resolution is shared core | core package split |
-| `time_context.py` | core | move | time helpers are shared core | core package split |
 | `week_coherence.py` | domain/planning | move | week coherence is planning quality | planning package split |
 | `week_metadata.py` | domain/planning | merge | week label helper belongs with periodization | planning simplification |
 | `workout_content.py` | domain/planning | move | workout content belongs to planning/session domain | planning package split |

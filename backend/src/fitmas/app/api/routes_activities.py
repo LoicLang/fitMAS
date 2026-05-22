@@ -6,11 +6,12 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import RedirectResponse
 from sqlalchemy.orm import Session
 
-from fitmas import repository as repo, strava
+from fitmas import repository as repo
+from fitmas.integrations import strava
 from fitmas.domain.execution.activities import infer_activity_title, match_activity_to_day, normalize_activity_sport
 from fitmas.app.api.payloads import ManualActivityPayload
 from fitmas.app.api.support import parse_optional_datetime, public_base_url
-from fitmas.db import get_db
+from fitmas.core.db import get_db
 from fitmas.models import Activity
 from fitmas.domain.planning.patch_mutation_service import complete_session_from_activity_for_user
 from fitmas.domain.athlete.training_load import estimate_tss

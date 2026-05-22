@@ -5,8 +5,8 @@ from dataclasses import dataclass
 from datetime import date, datetime
 from typing import Any, Sequence
 
-from fitmas.temporal_resolver import resolve_temporal_context
-from fitmas.time_context import get_timezone
+from fitmas.core.temporal_resolver import resolve_temporal_context
+from fitmas.core.time_context import get_timezone
 
 SPORT_KEYWORDS = {
     "running": ("couru", "courir", "course", "footing", "run", "running"),

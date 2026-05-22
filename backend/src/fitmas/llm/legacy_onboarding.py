@@ -7,7 +7,7 @@ from typing import Any
 
 from fitmas.knowledge import load_sport_knowledge
 from fitmas.app.api.onboarding_contract import build_coach_profile, build_goal_summary
-from fitmas.time_context import build_time_context, render_time_context
+from fitmas.core.time_context import build_time_context, render_time_context
 
 logger = logging.getLogger("fitmas.llm")
 

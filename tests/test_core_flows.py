@@ -17,7 +17,7 @@ from fitmas.api import app
 from fitmas.conversation_contract import (
     ConversationTurnOutcome,
 )
-from fitmas.db import Base, SessionLocal, engine, init_db
+from fitmas.core.db import Base, SessionLocal, engine, init_db
 from fitmas.decision import PendingResolution
 from fitmas.decision.command_actions import (
     AvailabilityConstraintAction,
@@ -32,7 +32,7 @@ from fitmas.plan_patch import PlanPatch, PlanPatchOperation, PlanPatchValidation
 from fitmas.domain.planning.session_actions import move_session
 from fitmas.domain.athlete.training_load import compute_ctl_atl_tsb, estimate_tss
 from fitmas import repository as repo, schema as s
-from fitmas.time_context import DAY_KEYS, day_label_fr, get_local_now
+from fitmas.core.time_context import DAY_KEYS, day_label_fr, get_local_now
 from fitmas.week_coherence import WeekCoherenceFinding, WeekCoherenceReview
 
 

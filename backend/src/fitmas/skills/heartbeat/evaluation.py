@@ -7,7 +7,7 @@ from datetime import datetime, timedelta, timezone
 from sqlalchemy.orm import Session
 
 from fitmas import schema as s
-from fitmas.time_context import get_local_now, hours_since
+from fitmas.core.time_context import get_local_now, hours_since
 
 logger = logging.getLogger(__name__)
 

@@ -14,7 +14,7 @@ from fitmas.domain.planning.mutation_hooks import (
     run_post_mutation_hooks,
     run_pre_mutation_hooks,
 )
-from fitmas.time_context import get_local_now
+from fitmas.core.time_context import get_local_now
 
 logger = logging.getLogger(__name__)
 

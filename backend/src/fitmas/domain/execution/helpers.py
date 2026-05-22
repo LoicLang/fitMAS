@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 
 from fitmas import repository as repo, schema as s
 from fitmas.domain.execution.claims import ActivityClaim, extract_claims_from_facts
-from fitmas.time_context import get_local_now, get_timezone
+from fitmas.core.time_context import get_local_now, get_timezone
 
 
 def activities_on_local_date(db: Session, user: s.User, *, target_date: date) -> list[s.Activity]:

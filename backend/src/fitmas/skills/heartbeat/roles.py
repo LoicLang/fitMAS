@@ -45,7 +45,7 @@ from fitmas.skills.heartbeat.context import (
     HeartbeatContextBundle,
     render_heartbeat_context_bundle,
 )
-from fitmas.time_context import DAY_LABELS_FR, build_time_context, get_local_now, render_time_context
+from fitmas.core.time_context import DAY_LABELS_FR, build_time_context, get_local_now, render_time_context
 
 logger = logging.getLogger(__name__)
 

@@ -28,7 +28,7 @@ os.environ.setdefault(
 )
 
 from fitmas import schema as s
-from fitmas.db import Base, SessionLocal, engine, init_db
+from fitmas.core.db import Base, SessionLocal, engine, init_db
 from fitmas.skills.heartbeat.heartbeat import (
     RECENT_PROACTIVE_TTL_HOURS,
     _recent_proactive_context,

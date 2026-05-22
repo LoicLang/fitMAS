@@ -46,7 +46,7 @@ def _copy_source_db(source_db: Path) -> Path:
 load_dotenv(ROOT / ".env", override=False)
 
 parser = argparse.ArgumentParser(description="Run real conversation smokes on a copy of an existing FitMAS profile DB.")
-parser.add_argument("--source-db", default=os.getenv("FITMAS_DB_PATH", str(ROOT / "fitmas.db")))
+parser.add_argument("--source-db", default=os.getenv("FITMAS_DB_PATH", str(ROOT / "fitmas.core.db")))
 parser.add_argument("--user-id", type=int, default=None)
 parser.add_argument("--message", action="append", dest="messages", help="Custom message to send. Repeatable.")
 parser.add_argument("--keep-db", action="store_true", help="Keep the temporary copied DB.")
@@ -70,7 +70,7 @@ from sqlalchemy import text
 
 from fitmas.api import app
 from fitmas import repository as repo, schema as s
-from fitmas.db import SessionLocal, engine, init_db
+from fitmas.core.db import SessionLocal, engine, init_db
 
 
 @dataclass(slots=True)

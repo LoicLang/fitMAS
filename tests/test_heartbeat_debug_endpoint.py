@@ -15,9 +15,9 @@ import fitmas.skills.heartbeat.heartbeat as heartbeat
 from fitmas import repository as repo, schema as s
 from fitmas.api import app
 from fitmas.coach_messages import CoachDraft
-from fitmas.db import Base, SessionLocal, engine, init_db
+from fitmas.core.db import Base, SessionLocal, engine, init_db
 from fitmas.skills.heartbeat import tool_loop
-from fitmas.time_context import DAY_KEYS, day_label_fr, get_local_now
+from fitmas.core.time_context import DAY_KEYS, day_label_fr, get_local_now
 
 
 class HeartbeatDebugEndpointTest(unittest.TestCase):

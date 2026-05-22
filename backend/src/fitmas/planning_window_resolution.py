@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 from typing import Any, Sequence
 
-from fitmas.time_context import DAY_KEYS, get_local_now, get_timezone
+from fitmas.core.time_context import DAY_KEYS, get_local_now, get_timezone
 
 
 @dataclass(frozen=True, slots=True)

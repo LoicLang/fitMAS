@@ -91,7 +91,7 @@ def test_decision_runtime_phase1_modules_exist() -> None:
 def test_pure_decision_modules_have_no_database_or_legacy_imports() -> None:
     forbidden_exact = {
         "sqlalchemy",
-        "fitmas.db",
+        "fitmas.core.db",
         "fitmas.repository",
         "fitmas.schema",
         "fitmas.models",
@@ -122,7 +122,7 @@ def test_context_builder_is_the_only_decision_module_allowed_to_read_repository(
         "fitmas.repository",
         "fitmas.schema",
         "fitmas.coach_state_bundle",
-        "fitmas.time_context",
+        "fitmas.core.time_context",
     }
     imports = _imports(builder)
     read_imports = {module for module in imports if module in allowed}

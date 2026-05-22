@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from fitmas import repository as repo
 from fitmas.coach_messages import CoachDraft, persist_draft
-from fitmas.db import SessionLocal
+from fitmas.core.db import SessionLocal
 from fitmas.app.telegram.channel import resolve_chat_id
 
 DAY_LABELS = {

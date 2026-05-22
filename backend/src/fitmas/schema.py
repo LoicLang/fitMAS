@@ -5,7 +5,7 @@ from datetime import date, datetime
 from sqlalchemy import Boolean, Date, DateTime, Float, ForeignKey, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from fitmas.db import Base
+from fitmas.core.db import Base
 
 
 class User(Base):

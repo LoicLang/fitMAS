@@ -36,7 +36,7 @@ from fitmas.domain.coaching.calibration_needs import CalibrationNeedType, looks_
 from fitmas.domain.coaching.coach_reading_digest import CoachReadingDigest, build_coach_reading_facts
 from fitmas.coach_state_bundle import build_coach_state_bundle
 from fitmas.coach_messages import CoachDraft, DraftPendingConfirmation
-from fitmas.db import SessionLocal
+from fitmas.core.db import SessionLocal
 import fitmas.llm.reply_backend as reply_backend
 from fitmas.domain.execution.clarification import build_execution_clarification
 from fitmas.grounding_contract import ReplyGroundingPacket, plan_window_facts_from_sessions
@@ -72,7 +72,7 @@ from fitmas.skills.heartbeat.tool_loop import (
     generate_heartbeat_text_with_tools_debug,
     heartbeat_read_tools_enabled,
 )
-from fitmas.time_context import build_time_context, get_local_now
+from fitmas.core.time_context import build_time_context, get_local_now
 from fitmas.tools.contract import ToolContext
 
 logger = logging.getLogger(__name__)

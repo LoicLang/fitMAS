@@ -6,7 +6,7 @@ from datetime import datetime
 from typing import Any, Callable, Sequence
 
 from fitmas.plan_patch import PlanPatch, PlanPatchOperation, PlanPatchValidation, validate_plan_patch
-from fitmas.time_context import current_week_dates, get_local_now
+from fitmas.core.time_context import current_week_dates, get_local_now
 from fitmas.week_coherence import (
     WeekCoherenceReview,
     aggregate_week_coherence_policy,

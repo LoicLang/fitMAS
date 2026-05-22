@@ -13,7 +13,7 @@ from fitmas.app.api.payloads import IncomingMessage
 from fitmas.domain.memory.availability_constraints import parse_availability_fact_key
 from fitmas.conversation_contract import ConversationPipelineDependencies, ConversationTurnInput, ConversationUserNotFoundError
 from fitmas.conversation_turn_planner import plan_conversation_turn
-from fitmas.db import get_db
+from fitmas.core.db import get_db
 from fitmas.domain.execution.clarification import (
     ExecutionClarification,
     build_execution_clarification,
@@ -25,7 +25,7 @@ from fitmas.llm.legacy_summaries import make_timeline_summary
 from fitmas.domain.memory.profile_memory import upsert_profile_memory
 from fitmas.domain.memory.routing import split_memory_payloads
 from fitmas.models import DayId, MessageReply
-from fitmas.time_context import get_timezone
+from fitmas.core.time_context import get_timezone
 
 logger = logging.getLogger(__name__)
 

@@ -40,7 +40,7 @@ from fitmas.skills.heartbeat.roles import (
 )
 from fitmas.tools.contract import ToolCall, ToolContext, ToolResult
 from fitmas.tools.runtime import execute_tool_call
-from fitmas.time_context import build_time_context
+from fitmas.core.time_context import build_time_context
 
 
 def _skip_if_no_key():

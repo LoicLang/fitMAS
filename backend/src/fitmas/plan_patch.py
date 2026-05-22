@@ -8,7 +8,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from fitmas.domain.planning.mutation_hooks import run_pre_mutation_hooks
-from fitmas.time_context import get_local_now
+from fitmas.core.time_context import get_local_now
 
 PlanPatchOperationType = Literal[
     "move_session",

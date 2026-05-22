@@ -8,9 +8,9 @@ from datetime import datetime, timedelta
 os.environ.setdefault("FITMAS_DB_PATH", tempfile.mktemp(prefix="fitmas-signals-", suffix=".db"))
 
 from fitmas import repository as repo, schema as s
-from fitmas.db import Base, SessionLocal, engine, init_db
+from fitmas.core.db import Base, SessionLocal, engine, init_db
 from fitmas.signals import collect_signals, format_signals_for_prompt
-from fitmas.time_context import DAY_KEYS, day_label_fr, get_local_now
+from fitmas.core.time_context import DAY_KEYS, day_label_fr, get_local_now
 
 
 class SignalsGroundingTest(unittest.TestCase):

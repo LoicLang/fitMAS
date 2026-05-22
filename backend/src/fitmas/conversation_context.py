@@ -11,12 +11,12 @@ from fitmas.domain.execution.context import (
 )
 from fitmas.domain.memory.fact_memory import normalize_fact_payload, select_relevant_facts
 from fitmas.signals import Signal, format_signals_for_prompt, select_conversation_signals
-from fitmas.temporal_resolver import (
+from fitmas.core.temporal_resolver import (
     TemporalResolution,
     format_temporal_resolution_for_prompt,
     resolve_temporal_context,
 )
-from fitmas.time_context import build_time_context
+from fitmas.core.time_context import build_time_context
 
 
 @dataclass(frozen=True, slots=True)

@@ -8,7 +8,7 @@ from datetime import datetime, timedelta
 os.environ.setdefault("FITMAS_DB_PATH", tempfile.mktemp(prefix="fitmas-memory-service-", suffix=".db"))
 
 from fitmas import repository as repo, schema as s
-from fitmas.db import Base, SessionLocal, engine, init_db
+from fitmas.core.db import Base, SessionLocal, engine, init_db
 from fitmas.decision.command_actions import (
     AvailabilityConstraintAction,
     ExecutionUpdateAction,
@@ -17,7 +17,7 @@ from fitmas.decision.command_actions import (
 )
 from fitmas.domain.execution.mutation_service import apply_execution_actions_for_user
 from fitmas.domain.memory.mutation_service import apply_memory_actions_for_user
-from fitmas.time_context import DAY_KEYS, day_label_fr
+from fitmas.core.time_context import DAY_KEYS, day_label_fr
 
 
 class MutationActionServicesTest(unittest.TestCase):

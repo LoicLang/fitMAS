@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 from typing import Iterable
 
-from fitmas.time_context import DAY_KEYS, build_time_context, get_local_now
+from fitmas.core.time_context import DAY_KEYS, build_time_context, get_local_now
 
 DAY_ALIASES = {
     "monday": ("lundi", "monday"),

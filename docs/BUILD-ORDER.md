@@ -104,6 +104,10 @@ Les cuts physiques recents :
   `adaptation_log.py`, `calibration_needs.py`, `calibration_status.py`,
   `coach_reading_digest.py`, `coach_voice.py`,
   `generated_week_coherence.py`, `repo_conversation.py`, `week_context.py`.
+- Les modules core/integrations root ont ete deplaces :
+  `core/calendar_resolution.py`, `core/db.py`, `core/seed.py`,
+  `core/temporal_resolver.py`, `core/time_context.py`,
+  `integrations/strava.py`.
 - La resolution pending canonique normalise les aliases d'enum provider
   (`confirm`, `accepted`, etc.) vers `accept_pending` avant application.
   Un type inconnu devient une clarification pending, jamais un trou vers
@@ -123,7 +127,7 @@ Les cuts physiques recents :
 
 Etat chiffre au dernier check local :
 
-- root modules : `48`.
+- root modules : `42`.
 - legacy modules : `0` fichier source actif.
 - backend complet : `1323 passed, 11 skipped, 14 subtests passed`.
 - smoke canonical planning default : OK `10/10`.

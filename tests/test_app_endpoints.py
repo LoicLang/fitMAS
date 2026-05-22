@@ -12,8 +12,8 @@ from fastapi.testclient import TestClient
 from fitmas import repository as repo, schema as s
 from fitmas.domain.coaching.adaptation_log import AdaptationLogEntry
 from fitmas.api import app
-from fitmas.db import Base, SessionLocal, engine, init_db
-from fitmas.time_context import DAY_KEYS, day_label_fr, get_local_now
+from fitmas.core.db import Base, SessionLocal, engine, init_db
+from fitmas.core.time_context import DAY_KEYS, day_label_fr, get_local_now
 
 
 class AppEndpointsTest(unittest.TestCase):

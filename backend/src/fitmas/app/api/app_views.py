@@ -4,11 +4,11 @@ from collections import defaultdict
 from datetime import date, datetime, timedelta
 from typing import Any
 
-from fitmas.calendar_resolution import build_session_item, resolve_calendar_payload
+from fitmas.core.calendar_resolution import build_session_item, resolve_calendar_payload
 from fitmas.domain.athlete.fitness_snapshot import estimate_scheduled_session_tss
 from fitmas.domain.athlete.load_projection import build_load_forecast, planning_mode_label_fr
 from fitmas.workout_content import build_workout_content
-from fitmas.time_context import get_local_now
+from fitmas.core.time_context import get_local_now
 
 _DAY_LABELS_FR_SHORT = {0: "Lun", 1: "Mar", 2: "Mer", 3: "Jeu", 4: "Ven", 5: "Sam", 6: "Dim"}
 

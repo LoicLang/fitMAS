@@ -5,9 +5,10 @@ from datetime import datetime, time, timedelta
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
-from fitmas import repository as repo, schema as s, strava
+from fitmas import repository as repo, schema as s
+from fitmas.integrations import strava
 from fitmas.app.api.read_models import RuntimeDay, RuntimeWeek
-from fitmas.db import get_db
+from fitmas.core.db import get_db
 from fitmas.models import (
     Activity,
     ChangeNote,
@@ -23,7 +24,7 @@ from fitmas.models import (
 )
 from fitmas.session_metadata import compute_load_band
 from fitmas.domain.athlete.training_load import compute_ctl_atl_tsb
-from fitmas.time_context import current_week_dates, get_local_now
+from fitmas.core.time_context import current_week_dates, get_local_now
 
 router = APIRouter()
 

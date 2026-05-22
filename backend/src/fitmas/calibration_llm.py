@@ -10,7 +10,7 @@ from fitmas.domain.coaching.calibration_needs import (
     CalibrationResolution,
     fallback_ack_text,
 )
-from fitmas.time_context import build_time_context, render_time_context
+from fitmas.core.time_context import build_time_context, render_time_context
 
 _CALIBRATION_SOUL = """\
 Tu es FitMAS, un coach multisport IA.

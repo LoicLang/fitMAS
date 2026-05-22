@@ -10,7 +10,7 @@ os.environ.setdefault("FITMAS_DB_PATH", tempfile.mktemp(prefix="fitmas-matching-
 
 from fitmas import repository as repo, schema as s
 from fitmas.domain.execution.activities import match_activity_to_day
-from fitmas.db import Base, SessionLocal, engine, init_db
+from fitmas.core.db import Base, SessionLocal, engine, init_db
 
 
 class ActivityMatchingTruthTest(unittest.TestCase):

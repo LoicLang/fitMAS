@@ -23,7 +23,7 @@ def build_application() -> Application:
     if not token:
         raise SystemExit("TELEGRAM_BOT_TOKEN not set in environment")
 
-    db_path = os.getenv("FITMAS_DB_PATH", "fitmas.db")
+    db_path = os.getenv("FITMAS_DB_PATH", "fitmas.core.db")
     persistence_path = str(Path(db_path).parent / "telegram_persistence.pickle")
     persistence = PicklePersistence(filepath=persistence_path)
     app = Application.builder().token(token).persistence(persistence).build()

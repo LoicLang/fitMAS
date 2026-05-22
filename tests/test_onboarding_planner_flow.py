@@ -12,7 +12,7 @@ from fastapi.testclient import TestClient
 
 from fitmas.api import app
 import fitmas.app.api.routes_onboarding as api_onboarding
-from fitmas.db import Base, engine, init_db
+from fitmas.core.db import Base, engine, init_db
 
 
 class OnboardingPlannerFlowTest(unittest.TestCase):
