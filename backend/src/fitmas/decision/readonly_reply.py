@@ -6,13 +6,13 @@ from typing import Any, Callable
 from sqlalchemy.orm import Session
 
 from fitmas.domain.coaching import coach_voice
-from fitmas import repository as repo
 from fitmas.decision.conversation_contract import ConversationTurnOutcome
 from fitmas.decision import CoachUnderstanding, DecisionExplanation, DecisionOutcome, ReplyContract
 from fitmas.decision.command_mapping import commands_from_understanding
 from fitmas.decision.grounding import ReplyGroundingPacket
 from fitmas.models import Extraction
 import fitmas.llm.reply_backend as final_reply
+from fitmas.domain.planning import repository as planning_repo
 
 
 _READONLY_INTENTS = {
@@ -173,7 +173,7 @@ def execution_action_phrases_for_final_reply(
             session_id = int(raw_session_id)
         except (TypeError, ValueError):
             continue
-        session = repo.get_scheduled_session(db, user.id, session_id)
+        session = planning_repo.get_scheduled_session(db, user.id, session_id)
         if session is None:
             continue
         title = str(session.session_title or "La seance").strip()

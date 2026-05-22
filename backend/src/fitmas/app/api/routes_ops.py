@@ -14,15 +14,19 @@ from uuid import uuid4
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
-from fitmas import repository as repo, schema as s
+from fitmas import schema as s
 from fitmas.app.api.payloads import IncomingMessage
 from fitmas.app.api.support import ensure_debug_enabled
 from fitmas.app.telegram.delivery import persist_draft
+from fitmas.domain.athlete import repository as athlete_repo
+from fitmas.domain.coaching import repo_conversation
+from fitmas.domain.coaching import repository as coaching_repo
 from fitmas.decision.conversation_contract import (
     ConversationPipelineDependencies,
     ConversationTurnInput,
     ConversationUserNotFoundError,
 )
+from fitmas.domain.memory import repository as memory_repo
 from fitmas.core.db import get_db
 from fitmas.skills.heartbeat.runtime_adapter import heartbeat_runtime_payload, run_heartbeat_endpoint, run_heartbeat_trigger
 from fitmas.app.telegram.channel import resolve_chat_id, send_text_message
@@ -40,7 +44,7 @@ router = APIRouter(prefix="/ops", tags=["ops"])
 def trigger_conversation_debug(payload: IncomingMessage, db: Session = Depends(get_db)) -> dict:
     """Run a normal conversation turn and expose the persisted debug flow."""
     ensure_debug_enabled()
-    user = repo.get_user_optional(db)
+    user = athlete_repo.get_user_optional(db)
     if user is None:
         raise HTTPException(status_code=404, detail="No onboarded user yet")
 
@@ -66,7 +70,7 @@ def trigger_conversation_debug(payload: IncomingMessage, db: Session = Depends(g
     except ConversationUserNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
 
-    row = repo.get_conversation_turn_by_client_message_key(db, user.id, client_message_key)
+    row = repo_conversation.get_conversation_turn_by_client_message_key(db, user.id, client_message_key)
     return {
         "kind": "conversation",
         "triggered": True,
@@ -293,7 +297,7 @@ def _json_loads_list(raw_value: str | None) -> list:
 def get_signals(db: Session = Depends(get_db)) -> dict:
     """Inspect currently active signals for the user."""
     ensure_debug_enabled()
-    user = repo.get_user_optional(db)
+    user = athlete_repo.get_user_optional(db)
     if user is None:
         return {"signals": []}
     from fitmas.domain.coaching.signals import collect_signals
@@ -314,7 +318,7 @@ def trigger_heartbeat(
     """Manually trigger a heartbeat generation and optional delivery."""
     ensure_debug_enabled()
 
-    user = repo.get_user_optional(db)
+    user = athlete_repo.get_user_optional(db)
     if user is None:
         raise HTTPException(status_code=404, detail="No onboarded user yet")
 
@@ -396,11 +400,11 @@ def trigger_heartbeat(
 def get_memory_state(db: Session = Depends(get_db)) -> dict:
     """Inspect current memory state: facts, working memory, patterns."""
     ensure_debug_enabled()
-    user = repo.get_user_optional(db)
+    user = athlete_repo.get_user_optional(db)
     if user is None:
         return {"facts": [], "working_memory": [], "patterns": []}
 
-    items = repo.get_active_memory_items(
+    items = memory_repo.get_active_memory_items(
         db, user.id,
         profile_limit=50,
         working_limit=50,
@@ -432,11 +436,11 @@ def get_memory_state(db: Session = Depends(get_db)) -> dict:
 def get_recent_mutations(limit: int = 10, db: Session = Depends(get_db)) -> dict:
     """Inspect recent adaptation events / mutation log."""
     ensure_debug_enabled()
-    user = repo.get_user_optional(db)
+    user = athlete_repo.get_user_optional(db)
     if user is None:
         return {"events": []}
 
-    events = repo.get_recent_adaptation_events(db, user.id, limit=limit)
+    events = coaching_repo.get_recent_adaptation_events(db, user.id, limit=limit)
     return {
         "total": len(events),
         "events": [
@@ -458,11 +462,11 @@ def get_recent_mutations(limit: int = 10, db: Session = Depends(get_db)) -> dict
 def get_tool_stats(db: Session = Depends(get_db)) -> dict:
     """Return tool usage statistics from recent conversation turns."""
     ensure_debug_enabled()
-    user = repo.get_user_optional(db)
+    user = athlete_repo.get_user_optional(db)
     if user is None:
         return {"turns": 0, "tool_usage": {}}
 
-    turns = repo.get_recent_conversation_turns(db, user.id, limit=50)
+    turns = repo_conversation.get_recent_conversation_turns(db, user.id, limit=50)
     tool_counts: dict[str, int] = {}
     for turn in turns:
         ctx = getattr(turn, "context", None) or {}

@@ -10,7 +10,6 @@ from typing import Any, Callable, Literal
 
 from sqlalchemy.orm import Session
 
-from fitmas import repository as repo
 from fitmas import schema as s
 from fitmas.decision.conversation_contract import ConversationTurnOutcome
 from fitmas.decision import CoachUnderstanding, DecisionReplyComposer
@@ -25,6 +24,7 @@ from fitmas.domain.planning.mutation_permissions import (
     deserialize_plan_patch_confirmation,
 )
 from fitmas.domain.planning.candidates import PlanPatchCandidate
+from fitmas.domain.coaching import repo_conversation
 
 
 logger = logging.getLogger(__name__)
@@ -162,7 +162,7 @@ def apply_pending_resolution(
                 user_text=user_text,
                 decision_reply_composer=decision_reply_composer,
             )
-        repo.resolve_pending_mutation_confirmation(db, pending_confirmation.id, status="rejected")
+        repo_conversation.resolve_pending_mutation_confirmation(db, pending_confirmation.id, status="rejected")
         return ConversationTurnOutcome(
             extraction=Extraction(confidence=0.85),
             reply_text=_pending_reply(
@@ -407,7 +407,7 @@ def accept_pending_confirmation(
             )
             applied = patch_was_applied(service_result)
             if applied:
-                repo.resolve_pending_mutation_confirmation(db, pending_confirmation.id, status="accepted")
+                repo_conversation.resolve_pending_mutation_confirmation(db, pending_confirmation.id, status="accepted")
                 return ConversationTurnOutcome(
                     extraction=Extraction(confidence=0.85),
                     reply_text=applied_plan_patch_reply(service_result, fallback=patch.coach_message),
@@ -421,7 +421,7 @@ def accept_pending_confirmation(
                 mutation_applied=False,
             )
 
-        repo.resolve_pending_mutation_confirmation(db, pending_confirmation.id, status="blocked")
+        repo_conversation.resolve_pending_mutation_confirmation(db, pending_confirmation.id, status="blocked")
         outcome = legacy_decision_contract_disabled_outcome(
             decision_reply_composer_fn=_decision_reply_composer,
         )
@@ -504,7 +504,7 @@ def accept_pending_plan_patch_choice(
     )
     applied = patch_was_applied(service_result)
     if applied:
-        repo.resolve_pending_mutation_confirmation(db, pending_confirmation.id, status="accepted")
+        repo_conversation.resolve_pending_mutation_confirmation(db, pending_confirmation.id, status="accepted")
         return ConversationTurnOutcome(
             extraction=Extraction(confidence=0.85),
             reply_text=applied_plan_patch_reply(service_result, fallback=patch.coach_message),
@@ -565,7 +565,7 @@ def pending_accept_recheck_blocked_outcome(
     decision_reply_composer: Any | None = None,
 ) -> ConversationTurnOutcome:
     if verified_resolution_type == "reject_pending":
-        repo.resolve_pending_mutation_confirmation(db, pending_confirmation.id, status="rejected")
+        repo_conversation.resolve_pending_mutation_confirmation(db, pending_confirmation.id, status="rejected")
         return ConversationTurnOutcome(
             extraction=Extraction(confidence=0.85),
             reply_text=_pending_reply(
@@ -611,7 +611,7 @@ def pending_confirmation_unavailable_outcome(
 ) -> ConversationTurnOutcome | None:
     status = str(getattr(pending_confirmation, "status", "") or "")
     if status == "pending" and pending_confirmation_is_expired(pending_confirmation):
-        repo.resolve_pending_mutation_confirmation(db, pending_confirmation.id, status="expired")
+        repo_conversation.resolve_pending_mutation_confirmation(db, pending_confirmation.id, status="expired")
         return ConversationTurnOutcome(
             extraction=Extraction(confidence=0.85),
             reply_text=_pending_reply(
@@ -707,7 +707,7 @@ def supersede_pending_if_replaced(
         return
     if outcome_keeps_pending_confirmation(outcome, pending_confirmation):
         return
-    repo.resolve_pending_mutation_confirmation(db, pending_confirmation.id, status="superseded")
+    repo_conversation.resolve_pending_mutation_confirmation(db, pending_confirmation.id, status="superseded")
 
 
 def pending_pre_adaptation_allows(resolution_type: str | None) -> bool:

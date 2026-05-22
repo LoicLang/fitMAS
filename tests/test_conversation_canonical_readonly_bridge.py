@@ -91,7 +91,7 @@ def test_execution_action_phrase_preserves_committed_session_date(monkeypatch) -
         completion_status="skipped",
         scheduled_date=datetime.fromisoformat("2026-04-29T07:00:00+02:00"),
     )
-    monkeypatch.setattr(bridge.repo, "get_scheduled_session", lambda *args, **kwargs: session)
+    monkeypatch.setattr(bridge.planning_repo, "get_scheduled_session", lambda *args, **kwargs: session)
 
     phrases = bridge.execution_action_phrases_for_final_reply(
         SimpleNamespace(),

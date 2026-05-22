@@ -14,9 +14,10 @@ from typing import Any
 
 from sqlalchemy.orm import Session
 
-from fitmas import repository as repo, schema as s
+from fitmas import schema as s
 from fitmas.domain.execution.claims import extract_claims_from_facts
 from fitmas.domain.execution.helpers import activities_on_local_date, claimed_activities_on_local_date
+from fitmas.domain.planning import repository as planning_repo
 from fitmas.core.time_context import DAY_KEYS, DAY_LABELS_FR, build_time_context, get_local_now, get_timezone, hours_since, utc_cutoff
 
 logger = logging.getLogger(__name__)
@@ -41,7 +42,7 @@ def collect_signals(db: Session, user: s.User) -> list[Signal]:
     time_ctx = build_time_context(user.timezone)
     today_key = time_ctx["day_key"]
     local_today = get_local_now(user.timezone).date()
-    scheduled_sessions = repo.get_scheduled_sessions_between_dates(
+    scheduled_sessions = planning_repo.get_scheduled_sessions_between_dates(
         db,
         user.id,
         start_date=local_today - timedelta(days=7),

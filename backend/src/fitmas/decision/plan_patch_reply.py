@@ -8,7 +8,6 @@ from typing import Any
 from sqlalchemy.orm import Session
 
 from fitmas.domain.coaching import coach_voice
-from fitmas import repository as repo
 from fitmas.decision import DecisionReplyComposer
 from fitmas.decision.planning_outcomes import plan_patch_service_result_to_outcome
 from fitmas.decision.turn_recording import decision_reply_text_for_turn
@@ -18,6 +17,7 @@ from fitmas.llm.reply_decision_backend import LLMReplyBackend
 from fitmas.domain.planning.plan_patch import PlanPatch
 
 import fitmas.llm.reply_backend as final_reply
+from fitmas.domain.planning import repository as planning_repo
 
 
 logger = logging.getLogger(__name__)
@@ -224,7 +224,7 @@ def _final_reply_context_for_execution_applied_patch_block(
     service_result: PlanPatchServiceResult | None,
 ) -> final_reply.FinalReplyContext:
     session_ids = tuple(action_result.get("execution_updated_session_ids") or ())
-    session = repo.get_scheduled_session(db, user.id, int(session_ids[0])) if session_ids else None
+    session = planning_repo.get_scheduled_session(db, user.id, int(session_ids[0])) if session_ids else None
     if session is not None:
         title = str(session.session_title or "La seance").strip()
         status = str(session.completion_status or "").strip()

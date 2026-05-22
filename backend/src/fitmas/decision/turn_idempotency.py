@@ -6,9 +6,9 @@ from threading import Lock
 
 from sqlalchemy.orm import Session
 
-from fitmas import repository as repo
 from fitmas.decision.conversation_contract import ConversationTurnInput, ConversationTurnOutcome
 from fitmas.models import DayId, Extraction, Message, MessageReply, MessageRole
+from fitmas.domain.coaching import repo_conversation
 
 
 logger = logging.getLogger(__name__)
@@ -45,7 +45,7 @@ def reply_for_duplicate_client_message(
     key = str(payload.client_message_key or "").strip()
     if not key:
         return None
-    row = repo.get_conversation_turn_by_client_message_key(db, user_id, key)
+    row = repo_conversation.get_conversation_turn_by_client_message_key(db, user_id, key)
     if row is None:
         return None
     logger.info("conversation_turn.idempotent_replay user=%s key=%s turn=%s", user_id, key, row.id)
@@ -66,7 +66,7 @@ def turn_is_obsolete(*, db: Session, user, turn_context: dict[str, object]) -> b
         message_id = None
     if message_id is None:
         return False
-    return repo.has_newer_user_message(db, user.id, message_id)
+    return repo_conversation.has_newer_user_message(db, user.id, message_id)
 
 
 def obsolete_turn_outcome(*, turn_context: dict[str, object]) -> ConversationTurnOutcome:

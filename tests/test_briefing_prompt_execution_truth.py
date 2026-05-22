@@ -228,7 +228,7 @@ def test_active_fact_lines_do_not_render_internal_categories(monkeypatch: pytest
         category="health",
         value="Tres legere tension aux tibias, pas de douleur a la palpation.",
     )
-    monkeypatch.setattr(roles.repo, "get_active_memory_items", lambda *args, **kwargs: [fact])
+    monkeypatch.setattr(roles.memory_repo, "get_active_memory_items", lambda *args, **kwargs: [fact])
     monkeypatch.setattr(roles, "fact_is_current", lambda _fact: True)
 
     lines = roles.get_active_fact_lines(object(), SimpleNamespace(id=1))

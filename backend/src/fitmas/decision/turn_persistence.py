@@ -2,9 +2,9 @@ from __future__ import annotations
 
 from sqlalchemy.orm import Session
 
-from fitmas import repository as repo
 from fitmas.decision.turn_recording import decision_json_for_turn
 from fitmas.models import Extraction, Message, MessageReply, MessageRole
+from fitmas.domain.coaching import repo_conversation
 
 
 def persist_turn_memory_updates(
@@ -53,8 +53,8 @@ def reply_and_record_turn(
     turn_context: dict[str, object] | None = None,
     memory_writes: list[dict] | None = None,
 ) -> MessageReply:
-    repo.add_message(db, user_id, "agent", reply_text)
-    repo.add_conversation_turn(
+    repo_conversation.add_message(db, user_id, "agent", reply_text)
+    repo_conversation.add_conversation_turn(
         db,
         user_id=user_id,
         user_message=user_text,

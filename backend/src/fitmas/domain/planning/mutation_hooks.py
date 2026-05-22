@@ -12,7 +12,6 @@ from typing import Any, Sequence
 
 from sqlalchemy.orm import Session
 
-from fitmas import repository as repo
 from fitmas.domain.planning.mutation_decision import MutationDecision
 from fitmas.domain.planning.planning_config import GLOBAL_PLANNING_CONFIG, get_sport_planning_config
 from fitmas.domain.planning.session_similarity import find_same_sport_proximity_conflict

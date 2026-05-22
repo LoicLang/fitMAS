@@ -6,7 +6,6 @@ from datetime import date, datetime
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
-from fitmas import repository as repo
 from fitmas.domain.planning.adaptation import check_and_adapt_health_facts
 from fitmas.domain.execution.helpers import claimed_activities_last_days
 from fitmas.app.api.payloads import IncomingMessage
@@ -27,6 +26,9 @@ from fitmas.domain.memory.profile_memory import upsert_profile_memory
 from fitmas.domain.memory.routing import split_memory_payloads
 from fitmas.models import DayId, MessageReply
 from fitmas.core.time_context import get_timezone
+from fitmas.domain.execution import repository as execution_repo
+from fitmas.domain.memory import repository as memory_repo
+from fitmas.domain.planning import repository as planning_repo
 
 logger = logging.getLogger(__name__)
 
@@ -64,7 +66,7 @@ def _resolve_day_updated(decision) -> DayId | None:
 
 
 def _active_memory_payloads(db: Session, user_id: int) -> tuple[list[object], list[dict]]:
-    rows = repo.get_active_memory_items(
+    rows = memory_repo.get_active_memory_items(
         db,
         user_id,
         profile_limit=24,
@@ -73,7 +75,7 @@ def _active_memory_payloads(db: Session, user_id: int) -> tuple[list[object], li
         pattern_limit=6,
         total_limit=36,
     )
-    return rows, [repo.to_pydantic_fact(row).model_dump() for row in rows]
+    return rows, [memory_repo.to_pydantic_fact(row).model_dump() for row in rows]
 
 
 def _persist_memory_updates(db: Session, user_id: int, payloads: list[dict]) -> None:
@@ -81,7 +83,7 @@ def _persist_memory_updates(db: Session, user_id: int, payloads: list[dict]) -> 
     if profile_payloads:
         upsert_profile_memory(db, user_id, profile_payloads)
     if working_payloads:
-        repo.upsert_working_memory(db, user_id, working_payloads)
+        memory_repo.upsert_working_memory(db, user_id, working_payloads)
 
 
 def _value(obj, key: str):
@@ -128,7 +130,7 @@ def _targeted_execution_clarification(
     today = conversation_context.temporal_resolution.local_date
     yesterday = today.fromordinal(today.toordinal() - 1)
 
-    recent_sessions = repo.get_scheduled_sessions_between_dates(
+    recent_sessions = planning_repo.get_scheduled_sessions_between_dates(
         db,
         user.id,
         start_date=today.fromordinal(today.toordinal() - 13),
@@ -158,7 +160,7 @@ def _targeted_execution_clarification(
         target_session=yesterday_sessions[0],
         target_date=yesterday,
         scheduled_sessions=recent_sessions,
-        activities=repo.get_activities(db, user.id, limit=120),
+        activities=execution_repo.get_activities(db, user.id, limit=120),
         claims=list(recent_claims),
     )
 
@@ -170,7 +172,7 @@ def _yesterday_session_covered_by_active_constraint(
     yesterday_session,
     yesterday: date,
 ) -> bool:
-    active_facts = repo.get_active_facts(db, user.id, limit=60)
+    active_facts = memory_repo.get_active_facts(db, user.id, limit=60)
     session_sport = str(_value(yesterday_session, "sport_type") or "").strip().lower() or None
     for fact in active_facts:
         if str(_value(fact, "category") or "").lower() != "availability":

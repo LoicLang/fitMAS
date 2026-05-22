@@ -5,10 +5,12 @@ from datetime import datetime
 
 from sqlalchemy.orm import Session
 
-from fitmas import repository as root_repo, schema as s
+from fitmas import schema as s
 from fitmas.domain.execution import repository as execution_repo
 from fitmas.domain.memory import repository as memory_repo
 from fitmas.domain.memory.patterns import derive_pattern_payloads
+from fitmas.domain.coaching import repo_conversation
+from fitmas.domain.coaching import repository as coaching_repo
 
 
 @dataclass(frozen=True, slots=True)
@@ -35,9 +37,9 @@ def run_memory_maintenance(
         archived_working = memory_repo.purge_expired_working_memory(db, user.id)
         pattern_payloads = derive_pattern_payloads(
             timezone_name=user.timezone,
-            user_messages=root_repo.get_messages(db, user.id)[-200:],
+            user_messages=repo_conversation.get_messages(db, user.id)[-200:],
             activities=execution_repo.get_activities(db, user.id, limit=500),
-            adaptation_events=root_repo.get_recent_adaptation_events(db, user.id, limit=80),
+            adaptation_events=coaching_repo.get_recent_adaptation_events(db, user.id, limit=80),
             now=now,
         )
         upserted, archived_patterns = memory_repo.sync_user_patterns(db, user.id, pattern_payloads)

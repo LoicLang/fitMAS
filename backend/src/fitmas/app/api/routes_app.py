@@ -5,7 +5,7 @@ from datetime import date
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
-from fitmas import repository as repo, schema as s
+from fitmas import schema as s
 from fitmas.integrations import strava
 from fitmas.integrations import repository as integration_repo
 from fitmas.app.api.routes_read import _build_recent_activity, _build_today_fitness, _build_today_view
@@ -18,19 +18,21 @@ from fitmas.domain.athlete.performance_stats import build_training_load_stats
 from fitmas.domain.execution.recent_reality import build_recent_reality_window
 from fitmas.domain.planning import repository as planning_repo
 from fitmas.core.time_context import get_local_now
+from fitmas.domain.execution import repository as execution_repo
+from fitmas.domain.memory import repository as memory_repo
 
 router = APIRouter()
 
 @router.get("/api/v0/app/overview")
 def get_app_overview(db: Session = Depends(get_db)) -> dict:
-    user = repo.get_user_optional(db)
+    user = athlete_repo.get_user_optional(db)
     if user is None:
         raise HTTPException(status_code=404, detail="No onboarded user yet")
 
-    scheduled_sessions = repo.get_scheduled_sessions(db, user.id, limit=84)
-    activities = repo.get_activities(db, user.id, limit=500)
+    scheduled_sessions = planning_repo.get_scheduled_sessions(db, user.id, limit=84)
+    activities = execution_repo.get_activities(db, user.id, limit=500)
     planning_decision = planning_repo.get_latest_planning_decision_record(db, user.id)
-    today_session = repo.get_today_scheduled_session(db, user.id, timezone_name=user.timezone)
+    today_session = planning_repo.get_today_scheduled_session(db, user.id, timezone_name=user.timezone)
     today_view = _build_today_view(db, user=user, session=today_session).model_dump() if today_session is not None else None
     today_date = get_local_now(user.timezone).date()
     performance_overview = build_performance_overview(
@@ -64,7 +66,7 @@ def get_app_overview(db: Session = Depends(get_db)) -> dict:
 
     overview = build_app_overview(
         today_date=today_date,
-        profile=repo.to_pydantic_profile(user),
+        profile=athlete_repo.to_pydantic_profile(user),
         strava_status=strava_status,
         scheduled_sessions=scheduled_sessions,
         activities=activities,
@@ -92,14 +94,14 @@ def get_app_calendar(
     month: str | None = Query(default=None, pattern=r"^\d{4}-\d{2}$"),
     db: Session = Depends(get_db),
 ) -> dict:
-    user = repo.get_user_optional(db)
+    user = athlete_repo.get_user_optional(db)
     if user is None:
         raise HTTPException(status_code=404, detail="No onboarded user yet")
 
     today_date = get_local_now(user.timezone).date()
     month_start = date.fromisoformat(f"{month or today_date.isoformat()[:7]}-01")
-    scheduled_sessions = repo.get_scheduled_sessions(db, user.id, limit=120)
-    activities = repo.get_activities(db, user.id, limit=500)
+    scheduled_sessions = planning_repo.get_scheduled_sessions(db, user.id, limit=120)
+    activities = execution_repo.get_activities(db, user.id, limit=500)
     planning_decision = planning_repo.get_latest_planning_decision_record(db, user.id)
     performance_overview = build_performance_overview(
         user_id=user.id,
@@ -138,13 +140,13 @@ def get_app_calendar(
 
 @router.get("/api/v0/app/evolution")
 def get_app_evolution(db: Session = Depends(get_db)) -> dict:
-    user = repo.get_user_optional(db)
+    user = athlete_repo.get_user_optional(db)
     if user is None:
         raise HTTPException(status_code=404, detail="No onboarded user yet")
 
     today_date = get_local_now(user.timezone).date()
-    scheduled_sessions = repo.get_scheduled_sessions(db, user.id, limit=120)
-    activities = repo.get_activities(db, user.id, limit=500)
+    scheduled_sessions = planning_repo.get_scheduled_sessions(db, user.id, limit=120)
+    activities = execution_repo.get_activities(db, user.id, limit=500)
     planning_decision = planning_repo.get_latest_planning_decision_record(db, user.id)
     performance_overview = build_performance_overview(
         user_id=user.id,
@@ -192,32 +194,32 @@ def get_app_evolution(db: Session = Depends(get_db)) -> dict:
 
 @router.get("/api/v0/sessions/{session_id}")
 def get_session_detail(session_id: int, db: Session = Depends(get_db)) -> dict:
-    user = repo.get_user_optional(db)
+    user = athlete_repo.get_user_optional(db)
     if user is None:
         raise HTTPException(status_code=404, detail="No onboarded user yet")
-    session = repo.get_scheduled_session(db, user.id, session_id)
+    session = planning_repo.get_scheduled_session(db, user.id, session_id)
     if session is None:
         raise HTTPException(status_code=404, detail="Scheduled session not found")
 
     linked_activity = next((activity for activity in session.activities if activity.sport_type == session.sport_type), None)
     recent_activity = _build_recent_activity(db, user=user, session=session)
-    scheduled_sessions = repo.get_scheduled_sessions(db, user.id, limit=84)
-    activities = repo.get_activities(db, user.id, limit=120)
+    scheduled_sessions = planning_repo.get_scheduled_sessions(db, user.id, limit=84)
+    activities = execution_repo.get_activities(db, user.id, limit=120)
     recent_reality = build_recent_reality_window(
         today=get_local_now(user.timezone).date(),
         scheduled_sessions=scheduled_sessions,
         activities=activities,
     )
-    active_facts = repo.get_active_facts(db, user.id, limit=12)
+    active_facts = memory_repo.get_active_facts(db, user.id, limit=12)
     return build_session_detail(
         today_date=get_local_now(user.timezone).date(),
         session=session,
-        linked_activity=repo.to_pydantic_activity(linked_activity).model_dump() if linked_activity is not None else None,
+        linked_activity=execution_repo.to_pydantic_activity(linked_activity).model_dump() if linked_activity is not None else None,
         fitness=_build_today_fitness(db, user=user).model_dump(),
         recent_activity=recent_activity.model_dump() if recent_activity is not None else None,
         change_notes=[],
         watch_items=[],
         recent_reality=recent_reality.as_dict(),
-        active_facts=[repo.to_pydantic_fact(fact).model_dump() for fact in active_facts],
+        active_facts=[memory_repo.to_pydantic_fact(fact).model_dump() for fact in active_facts],
         surrounding_sessions=scheduled_sessions,
     )

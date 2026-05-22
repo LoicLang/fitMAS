@@ -17,7 +17,9 @@ from typing import Any, Sequence
 
 from sqlalchemy.orm import Session
 
-from fitmas import repository as repo, schema as s
+from fitmas import schema as s
+from fitmas.domain.coaching import repository as coaching_repo
+from fitmas.domain.execution import repository as execution_repo
 from fitmas.domain.execution.helpers import (
     activities_last_days as _activities_last_days,
     activities_on_local_date as _activities_on_local_date,
@@ -25,6 +27,8 @@ from fitmas.domain.execution.helpers import (
     claimed_activities_on_local_date as _claimed_activities_on_local_date,
 )
 from fitmas.domain.athlete.profile import build_athlete_profile
+from fitmas.domain.memory import repository as memory_repo
+from fitmas.domain.planning import repository as planning_repo
 from fitmas.domain.coaching.calibration_needs import (
     CalibrationNeedType,
     detect_calibration_need,
@@ -88,7 +92,7 @@ def get_active_fact_lines(
     suppress_stable_constraints: bool = True,
 ) -> list[str]:
     """Return short fact lines for active health/fatigue/constraint facts."""
-    facts = repo.get_active_memory_items(
+    facts = memory_repo.get_active_memory_items(
         db,
         user.id,
         profile_limit=24,
@@ -133,16 +137,16 @@ def select_calibration_need(
     today: date,
     source: str,
 ) -> object | None:
-    memory_items = repo.get_active_memory_items(
+    memory_items = memory_repo.get_active_memory_items(
         db, user.id,
         profile_limit=24, working_limit=24,
         include_patterns=True, pattern_limit=8, total_limit=48,
     )
     profile = build_athlete_profile(user, facts=memory_items)
     availability_state = build_availability_state(profile)
-    activities = repo.get_activities(db, user.id, limit=30)
-    adaptation_events = repo.get_recent_adaptation_events(db, user.id, limit=6)
-    scheduled_sessions = repo.get_scheduled_sessions(db, user.id, date_from=today, limit=14)
+    activities = execution_repo.get_activities(db, user.id, limit=30)
+    adaptation_events = coaching_repo.get_recent_adaptation_events(db, user.id, limit=6)
+    scheduled_sessions = planning_repo.get_scheduled_sessions(db, user.id, date_from=today, limit=14)
     calibration_status = build_calibration_status(
         profile=profile,
         memory_items=memory_items,

@@ -6,7 +6,8 @@ import os
 import httpx
 from sqlalchemy.orm import Session
 
-from fitmas import repository as repo, schema as s
+from fitmas import schema as s
+from fitmas.domain.athlete import repository as athlete_repo
 
 logger = logging.getLogger(__name__)
 
@@ -19,7 +20,7 @@ def resolve_chat_id(db: Session, *, user: s.User | None = None) -> int | None:
         except ValueError:
             logger.warning("Invalid TELEGRAM_CHAT_ID env value: %s", explicit)
 
-    resolved_user = user or repo.get_user_optional(db)
+    resolved_user = user or athlete_repo.get_user_optional(db)
     if resolved_user and resolved_user.telegram_chat_id:
         return int(resolved_user.telegram_chat_id)
     return None

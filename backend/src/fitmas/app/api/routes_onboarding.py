@@ -6,7 +6,7 @@ import re
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
-from fitmas import repository as repo, schema as s
+from fitmas import schema as s
 from fitmas.app.api.payloads import OnboardPayload, OnboardPreviewPayload
 from fitmas.app.api.support import apply_onboarding_to_user, build_onboarding_facts, normalized_onboarding_payload
 from fitmas.domain.coaching.calibration_status import build_calibration_status, build_initial_calibration_status
@@ -26,6 +26,11 @@ from fitmas.domain.planning.planner import build_week_plan
 from fitmas.domain.planning.planning_state import refresh_planning_state
 from fitmas.domain.planning import template_repository as template_repo
 from fitmas.core.time_context import build_time_context, get_local_now
+from fitmas.domain.athlete import repository as athlete_repo
+from fitmas.domain.coaching import repo_conversation
+from fitmas.domain.coaching import repository as coaching_repo
+from fitmas.domain.execution import repository as execution_repo
+from fitmas.domain.memory import repository as memory_repo
 
 logger = logging.getLogger(__name__)
 
@@ -179,7 +184,7 @@ def _generate_enriched_week_for_user(db: Session, user: s.User) -> dict:
     review = guard_generated_week_coherence(
         enriched,
         timezone_name=user.timezone,
-        activities=repo.get_activities(db, user.id, limit=120),
+        activities=execution_repo.get_activities(db, user.id, limit=120),
         active_facts=_active_facts_for_generated_week_review(db, user.id),
     )
     if review.used_fallback:
@@ -213,7 +218,7 @@ def onboard(payload: OnboardPayload, db: Session = Depends(get_db)) -> OnboardRe
     time_context = build_time_context(normalized_payload.get("timezone"))
     recap = formulate_onboarding_recap(normalized_payload, time_context=time_context, request_text_fn=gw.request_text)
 
-    user = repo.get_user_optional(db)
+    user = athlete_repo.get_user_optional(db)
     if user is None:
         user = s.User(name=normalized_payload["name"])
         db.add(user)
@@ -222,7 +227,7 @@ def onboard(payload: OnboardPayload, db: Session = Depends(get_db)) -> OnboardRe
     apply_onboarding_to_user(user, normalized_payload)
     db.commit()
 
-    repo.replace_user_lists(
+    athlete_repo.replace_user_lists(
         db,
         user,
         sports=normalized_payload["sports"],
@@ -237,7 +242,7 @@ def onboard(payload: OnboardPayload, db: Session = Depends(get_db)) -> OnboardRe
     planning_bundle = refresh_planning_state(db, user=user)
     calibration_status = build_calibration_status(
         profile=planning_bundle.profile,
-        memory_items=repo.get_active_memory_items(
+        memory_items=memory_repo.get_active_memory_items(
             db,
             user.id,
             profile_limit=24,
@@ -246,8 +251,8 @@ def onboard(payload: OnboardPayload, db: Session = Depends(get_db)) -> OnboardRe
             pattern_limit=6,
             total_limit=36,
         ),
-        activities=repo.get_activities(db, user.id, limit=120),
-        adaptation_events=repo.get_recent_adaptation_events(db, user.id, limit=12),
+        activities=execution_repo.get_activities(db, user.id, limit=120),
+        adaptation_events=coaching_repo.get_recent_adaptation_events(db, user.id, limit=12),
         today=get_local_now(user.timezone).date(),
     )
 
@@ -266,7 +271,7 @@ def onboard(payload: OnboardPayload, db: Session = Depends(get_db)) -> OnboardRe
         f"Statut: {calibration_status.label}.\n"
         f"Si un creneau bouge ou si quelque chose sonne faux, tu me l'ecris et j'ajuste."
     )
-    repo.add_message(db, user.id, "agent", first_msg)
+    repo_conversation.add_message(db, user.id, "agent", first_msg)
 
     plan = template_repo.replace_plan(
         db,
@@ -289,7 +294,7 @@ def onboard(payload: OnboardPayload, db: Session = Depends(get_db)) -> OnboardRe
 
 @router.post("/api/v0/week/regenerate", response_model=WeeklyPlan)
 def regenerate_week(db: Session = Depends(get_db)) -> WeeklyPlan:
-    user = repo.get_user_optional(db)
+    user = athlete_repo.get_user_optional(db)
     if user is None:
         raise HTTPException(status_code=404, detail="No onboarded user yet")
 
@@ -315,7 +320,7 @@ def regenerate_week(db: Session = Depends(get_db)) -> WeeklyPlan:
 
 def _active_facts_for_generated_week_review(db: Session, user_id: int) -> tuple[dict, ...]:
     try:
-        rows = repo.get_active_memory_items(
+        rows = memory_repo.get_active_memory_items(
             db,
             user_id,
             profile_limit=24,
@@ -330,7 +335,7 @@ def _active_facts_for_generated_week_review(db: Session, user_id: int) -> tuple[
     payloads: list[dict] = []
     for row in rows:
         try:
-            payloads.append(repo.to_pydantic_fact(row).model_dump())
+            payloads.append(memory_repo.to_pydantic_fact(row).model_dump())
         except Exception:
             continue
     return tuple(payloads)

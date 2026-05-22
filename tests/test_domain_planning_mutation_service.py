@@ -105,11 +105,11 @@ def test_command_service_persists_pending_confirmation(monkeypatch) -> None:
         return SimpleNamespace(id=99)
 
     monkeypatch.setattr(
-        "fitmas.domain.planning.mutation_service.repo.create_pending_mutation_confirmation",
+        "fitmas.domain.planning.mutation_service.repo_conversation.create_pending_mutation_confirmation",
         fake_create_pending_mutation_confirmation,
     )
     monkeypatch.setattr(
-        "fitmas.domain.planning.mutation_service.repo.get_active_pending_mutation_confirmation",
+        "fitmas.domain.planning.mutation_service.repo_conversation.get_active_pending_mutation_confirmation",
         lambda db, user_id: None,
     )
 
@@ -134,11 +134,11 @@ def test_command_service_persists_multi_operation_pending_confirmation(monkeypat
         return SimpleNamespace(id=101)
 
     monkeypatch.setattr(
-        "fitmas.domain.planning.mutation_service.repo.create_pending_mutation_confirmation",
+        "fitmas.domain.planning.mutation_service.repo_conversation.create_pending_mutation_confirmation",
         fake_create_pending_mutation_confirmation,
     )
     monkeypatch.setattr(
-        "fitmas.domain.planning.mutation_service.repo.get_active_pending_mutation_confirmation",
+        "fitmas.domain.planning.mutation_service.repo_conversation.get_active_pending_mutation_confirmation",
         lambda db, user_id: None,
     )
 
@@ -175,11 +175,11 @@ def test_command_service_reuses_matching_active_pending_confirmation(monkeypatch
         return SimpleNamespace(id=99)
 
     monkeypatch.setattr(
-        "fitmas.domain.planning.mutation_service.repo.get_active_pending_mutation_confirmation",
+        "fitmas.domain.planning.mutation_service.repo_conversation.get_active_pending_mutation_confirmation",
         lambda db, user_id: existing,
     )
     monkeypatch.setattr(
-        "fitmas.domain.planning.mutation_service.repo.create_pending_mutation_confirmation",
+        "fitmas.domain.planning.mutation_service.repo_conversation.create_pending_mutation_confirmation",
         fake_create_pending_mutation_confirmation,
     )
 
@@ -256,11 +256,11 @@ def test_command_service_materializes_pending_choice_patches(monkeypatch) -> Non
         return SimpleNamespace(id=100)
 
     monkeypatch.setattr(
-        "fitmas.domain.planning.mutation_service.repo.create_pending_mutation_confirmation",
+        "fitmas.domain.planning.mutation_service.repo_conversation.create_pending_mutation_confirmation",
         fake_create_pending_mutation_confirmation,
     )
     monkeypatch.setattr(
-        "fitmas.domain.planning.mutation_service.repo.get_active_pending_mutation_confirmation",
+        "fitmas.domain.planning.mutation_service.repo_conversation.get_active_pending_mutation_confirmation",
         lambda db, user_id: None,
     )
 
@@ -344,11 +344,11 @@ def test_command_service_reuses_matching_active_pending_choice(monkeypatch) -> N
         return SimpleNamespace(id=100)
 
     monkeypatch.setattr(
-        "fitmas.domain.planning.mutation_service.repo.get_active_pending_mutation_confirmation",
+        "fitmas.domain.planning.mutation_service.repo_conversation.get_active_pending_mutation_confirmation",
         lambda db, user_id: existing,
     )
     monkeypatch.setattr(
-        "fitmas.domain.planning.mutation_service.repo.create_pending_mutation_confirmation",
+        "fitmas.domain.planning.mutation_service.repo_conversation.create_pending_mutation_confirmation",
         fake_create_pending_mutation_confirmation,
     )
 

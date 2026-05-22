@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-from fitmas import repository as repo
 from fitmas.app.telegram.delivery import CoachDraft, persist_draft
 from fitmas.core.db import SessionLocal
 from fitmas.app.telegram.channel import resolve_chat_id
+from fitmas.domain.athlete import repository as athlete_repo
 
 DAY_LABELS = {
     "monday": "Lundi",
@@ -36,7 +36,7 @@ def resolve_owner_chat_id() -> int | None:
 def persist_draft_for_owner(draft: CoachDraft) -> None:
     db = SessionLocal()
     try:
-        user = repo.get_user_optional(db)
+        user = athlete_repo.get_user_optional(db)
         if user:
             persist_draft(user.id, draft, db=db)
     finally:

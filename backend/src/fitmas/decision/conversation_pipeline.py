@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from sqlalchemy.orm import Session
 
-from fitmas import repository as repo
 from fitmas.decision import turn_calibration
 from fitmas.decision import turn_context as turn_context_builder
 from fitmas.decision import turn_idempotency
@@ -14,6 +13,8 @@ from fitmas.decision.conversation_contract import (
     ConversationUserNotFoundError,
 )
 from fitmas.models import MessageReply
+from fitmas.domain.athlete import repository as athlete_repo
+from fitmas.domain.coaching import repo_conversation
 
 
 def run_conversation_turn(
@@ -22,7 +23,7 @@ def run_conversation_turn(
     db: Session,
     dependencies: ConversationPipelineDependencies,
 ) -> MessageReply:
-    user = repo.get_user_optional(db)
+    user = athlete_repo.get_user_optional(db)
     if user is None:
         raise ConversationUserNotFoundError("No onboarded user yet")
 
@@ -36,7 +37,7 @@ def _run_conversation_turn_impl(
     db: Session,
     dependencies: ConversationPipelineDependencies,
 ) -> MessageReply:
-    user = repo.get_user_optional(db)
+    user = athlete_repo.get_user_optional(db)
     if user is None:
         raise ConversationUserNotFoundError("No onboarded user yet")
 
@@ -46,7 +47,7 @@ def _run_conversation_turn_impl(
 
     state = turn_state.load_turn_state(db=db, user=user, user_text=payload.text)
     turn_memory_writes: list[dict] = []
-    pending_confirmation = repo.get_active_pending_mutation_confirmation(db, user.id)
+    pending_confirmation = repo_conversation.get_active_pending_mutation_confirmation(db, user.id)
 
     calibration_result = turn_calibration.apply_turn_calibration(
         db=db,

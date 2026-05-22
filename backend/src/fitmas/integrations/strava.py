@@ -7,12 +7,14 @@ from urllib.parse import urlencode
 import httpx
 from sqlalchemy.orm import Session
 
-from fitmas import repository as repo, schema as s
+from fitmas import schema as s
 from fitmas.integrations import repository as integration_repo
 from fitmas.domain.execution import repository as execution_repo
 from fitmas.domain.execution.activities import infer_activity_title, match_activity_to_day, normalize_activity_sport
 from fitmas.domain.planning.patch_mutation_service import complete_session_from_activity_for_user, mark_session_completed_for_user
 from fitmas.domain.athlete.training_load import estimate_tss
+from fitmas.domain.athlete import repository as athlete_repo
+from fitmas.domain.planning import repository as planning_repo
 
 AUTH_URL = "https://www.strava.com/oauth/authorize"
 TOKEN_URL = "https://www.strava.com/oauth/token"
@@ -109,11 +111,11 @@ def import_recent_activities(
     connection: s.StravaConnection,
 ) -> int:
     access_token = refresh_token_if_needed(db, connection)
-    user = repo.get_user(db)
-    scheduled_sessions = repo.get_scheduled_sessions(db, user_id, limit=84)
+    user = athlete_repo.get_user(db)
+    scheduled_sessions = planning_repo.get_scheduled_sessions(db, user_id, limit=84)
     imported = 0
     for raw_activity in fetch_recent_activities(access_token, per_page=30):
-        existing = execution_repo.get_activity_by_external_id(db, user_id, str(raw_activity["id"]))
+        existing = execution_execution_repo.get_activity_by_external_id(db, user_id, str(raw_activity["id"]))
         if existing:
             # Backfill map data for activities imported before polyline support
             estimated_tss = estimate_tss(
@@ -125,7 +127,7 @@ def import_recent_activities(
                 },
                 user,
             )
-            scheduled_session = repo.find_scheduled_session_for_activity(
+            scheduled_session = planning_repo.find_scheduled_session_for_activity(
                 db,
                 user_id=user_id,
                 sport_type=existing.sport_type,
@@ -166,7 +168,7 @@ def import_recent_activities(
             },
             user,
         )
-        scheduled_session = repo.find_scheduled_session_for_activity(
+        scheduled_session = planning_repo.find_scheduled_session_for_activity(
             db,
             user_id=user_id,
             sport_type=sport_type,
@@ -174,7 +176,7 @@ def import_recent_activities(
             timezone_name=user.timezone,
         )
 
-        activity = execution_repo.add_activity(
+        activity = execution_execution_repo.add_activity(
             db,
             user_id=user_id,
             source="strava",

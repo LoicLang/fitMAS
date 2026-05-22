@@ -4,7 +4,6 @@ from typing import Any, Sequence
 
 from sqlalchemy.orm import Session
 
-from fitmas import repository as repo
 from fitmas.domain.planning.models import PlanningCommandResult, PlanningDecisionResult
 from fitmas.domain.planning.mutation_permissions import (
     default_confirmation_expiry,
@@ -13,6 +12,7 @@ from fitmas.domain.planning.mutation_permissions import (
 )
 from fitmas.domain.planning.patch_mutation_service import apply_patch_for_user
 from fitmas.domain.planning.candidates import PlanPatchCandidate
+from fitmas.domain.coaching import repo_conversation
 
 
 class PlanningCommandService:
@@ -105,7 +105,7 @@ class PlanningCommandService:
                     "reused_pending_confirmation": True,
                 },
             )
-        row = repo.create_pending_mutation_confirmation(
+        row = repo_conversation.create_pending_mutation_confirmation(
             self._db,
             user_id=self._user.id,
             impact_level="high",
@@ -150,7 +150,7 @@ class PlanningCommandService:
                     "reused_pending_confirmation": True,
                 },
             )
-        row = repo.create_pending_mutation_confirmation(
+        row = repo_conversation.create_pending_mutation_confirmation(
             self._db,
             user_id=self._user.id,
             impact_level="medium",
@@ -186,7 +186,7 @@ def _blocked_result(reason: str) -> PlanningCommandResult:
 
 
 def _matching_active_pending(db: Session, *, user_id: int, mutation_type: str, decision_json: str) -> Any | None:
-    row = repo.get_active_pending_mutation_confirmation(db, user_id)
+    row = repo_conversation.get_active_pending_mutation_confirmation(db, user_id)
     if row is None:
         return None
     if str(getattr(row, "status", "") or "") != "pending":

@@ -6,7 +6,7 @@ from typing import Any
 
 from sqlalchemy.orm import Session
 
-from fitmas import repository as repo, schema as s
+from fitmas import schema as s
 from fitmas.domain.athlete.profile import AthleteProfileSnapshot, build_athlete_profile
 from fitmas.domain.coaching.calibration_status import CalibrationStatus, build_calibration_status
 from fitmas.domain.planning.contract import (
@@ -26,6 +26,8 @@ from fitmas.domain.coaching.week_context import (
     build_planning_context,
     build_week_summary,
 )
+from fitmas.domain.coaching import repository as coaching_repo
+from fitmas.domain.memory import repository as memory_repo
 
 
 @dataclass(frozen=True, slots=True)
@@ -61,7 +63,7 @@ def build_coach_state_bundle(
     screen: str = "overview",
 ) -> CoachStateBundle:
     active_memory = tuple(
-        repo.get_active_memory_items(
+        memory_repo.get_active_memory_items(
             db,
             user.id,
             profile_limit=24,
@@ -87,8 +89,8 @@ def build_coach_state_bundle(
         scheduled_sessions=scheduled_sessions,
         session_policies=session_policies,
     )
-    latest_adaptation = repo.get_latest_adaptation_event(db, user.id)
-    recent_adaptations = tuple(repo.get_recent_adaptation_events(db, user.id, limit=recent_adaptations_limit))
+    latest_adaptation = coaching_repo.get_latest_adaptation_event(db, user.id)
+    recent_adaptations = tuple(coaching_repo.get_recent_adaptation_events(db, user.id, limit=recent_adaptations_limit))
     calibration_status = build_calibration_status(
         profile=profile_snapshot,
         memory_items=list(active_memory),

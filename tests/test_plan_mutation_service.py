@@ -28,7 +28,7 @@ def _default_week_review(monkeypatch) -> None:
         lambda *args, **kwargs: _week_review("valid", "commit_original"),
     )
     monkeypatch.setattr("fitmas.domain.planning.patch_mutation_service.execution_repo.get_activities", lambda *args, **kwargs: [])
-    monkeypatch.setattr("fitmas.domain.planning.patch_mutation_service.root_repo.get_active_memory_items", lambda *args, **kwargs: [])
+    monkeypatch.setattr("fitmas.domain.planning.patch_mutation_service.memory_repo.get_active_memory_items", lambda *args, **kwargs: [])
 
 
 def test_apply_decisions_for_user_returns_none_when_empty() -> None:
@@ -54,7 +54,6 @@ def test_apply_patch_for_user_commits_only_valid_patch(monkeypatch) -> None:
         coach_message="Je remplace par un running facile.",
     )
 
-    monkeypatch.setattr("fitmas.domain.planning.patch_mutation_service.root_repo.get_active_plan_optional", lambda db, user_id: SimpleNamespace(id=42))
     monkeypatch.setattr(
         "fitmas.domain.planning.patch_mutation_service.repo.get_scheduled_sessions",
         lambda *args, **kwargs: [SimpleNamespace(id=22, intensity="easy", completion_status="planned")],
@@ -87,7 +86,6 @@ def test_apply_patch_for_user_week_review_requires_confirmation_prevents_commit(
         coach_message="Je deplace.",
     )
 
-    monkeypatch.setattr("fitmas.domain.planning.patch_mutation_service.root_repo.get_active_plan_optional", lambda db, user_id: SimpleNamespace(id=42))
     monkeypatch.setattr(
         "fitmas.domain.planning.patch_mutation_service.repo.get_scheduled_sessions",
         lambda *args, **kwargs: [SimpleNamespace(id=22, scheduled_date=date(2099, 4, 29), intensity="easy", completion_status="planned")],
@@ -125,7 +123,6 @@ def test_apply_patch_for_user_week_review_blocked_prevents_commit(monkeypatch) -
         coach_message="Je deplace.",
     )
 
-    monkeypatch.setattr("fitmas.domain.planning.patch_mutation_service.root_repo.get_active_plan_optional", lambda db, user_id: SimpleNamespace(id=42))
     monkeypatch.setattr(
         "fitmas.domain.planning.patch_mutation_service.repo.get_scheduled_sessions",
         lambda *args, **kwargs: [SimpleNamespace(id=22, scheduled_date=date(2099, 4, 29), intensity="easy", completion_status="planned")],
@@ -164,7 +161,6 @@ def test_apply_patch_for_user_confirmed_week_review_can_commit(monkeypatch) -> N
     )
     calls: list[str] = []
 
-    monkeypatch.setattr("fitmas.domain.planning.patch_mutation_service.root_repo.get_active_plan_optional", lambda db, user_id: SimpleNamespace(id=42))
     monkeypatch.setattr(
         "fitmas.domain.planning.patch_mutation_service.repo.get_scheduled_sessions",
         lambda *args, **kwargs: [SimpleNamespace(id=22, scheduled_date=date(2099, 4, 29), intensity="easy", completion_status="planned")],
@@ -213,7 +209,6 @@ def test_apply_patch_for_user_passes_loaded_context_to_week_review(monkeypatch) 
     activities = (SimpleNamespace(id=1),)
     captured = []
 
-    monkeypatch.setattr("fitmas.domain.planning.patch_mutation_service.root_repo.get_active_plan_optional", lambda db, user_id: SimpleNamespace(id=42))
     monkeypatch.setattr(
         "fitmas.domain.planning.patch_mutation_service.repo.get_scheduled_sessions",
         lambda *args, **kwargs: [SimpleNamespace(id=22, scheduled_date=date(2099, 4, 29), intensity="easy", completion_status="planned")],
@@ -256,7 +251,6 @@ def test_apply_patch_for_user_runtime_block_skips_week_review(monkeypatch) -> No
         coach_message="Je deplace.",
     )
 
-    monkeypatch.setattr("fitmas.domain.planning.patch_mutation_service.root_repo.get_active_plan_optional", lambda db, user_id: SimpleNamespace(id=42))
     monkeypatch.setattr("fitmas.domain.planning.patch_mutation_service.repo.get_scheduled_sessions", lambda *args, **kwargs: [])
 
     def _review(*args, **kwargs):
@@ -296,7 +290,6 @@ def test_apply_patch_for_user_does_not_commit_patch_requiring_confirmation(monke
         SimpleNamespace(id=22, intensity="easy", completion_status="planned"),
     ]
 
-    monkeypatch.setattr("fitmas.domain.planning.patch_mutation_service.root_repo.get_active_plan_optional", lambda db, user_id: SimpleNamespace(id=42))
     monkeypatch.setattr("fitmas.domain.planning.patch_mutation_service.repo.get_scheduled_sessions", lambda *args, **kwargs: sessions)
 
     def _apply(*args, **kwargs):
@@ -328,7 +321,6 @@ def test_apply_patch_for_user_uses_runtime_sessions_without_active_plan(monkeypa
         coach_message="Je remplace par un running facile.",
     )
 
-    monkeypatch.setattr("fitmas.domain.planning.patch_mutation_service.root_repo.get_active_plan_optional", lambda db, user_id: None)
     monkeypatch.setattr(
         "fitmas.domain.planning.patch_mutation_service.repo.get_scheduled_sessions",
         lambda *args, **kwargs: [SimpleNamespace(id=22, intensity="easy", completion_status="planned")],
@@ -382,7 +374,6 @@ def test_apply_patch_for_user_normalizes_targetless_replace_to_create_without_ac
     )
     events: list[dict] = []
 
-    monkeypatch.setattr("fitmas.domain.planning.patch_mutation_service.root_repo.get_active_plan_optional", lambda db, user_id: None)
     monkeypatch.setattr("fitmas.domain.planning.patch_mutation_service.repo.get_scheduled_sessions", lambda *args, **kwargs: [])
     monkeypatch.setattr("fitmas.domain.planning.patch_mutation_service.plan_actions.create_session", lambda *args, **kwargs: created_session)
     monkeypatch.setattr("fitmas.domain.planning.patch_mutation_service.repo.add_plan_mutation_event", lambda *args, **kwargs: events.append(kwargs) or SimpleNamespace(id=124))
@@ -420,7 +411,6 @@ def test_apply_patch_for_user_can_commit_confirmed_patch_requiring_confirmation(
         SimpleNamespace(id=22, intensity="easy", completion_status="planned"),
     ]
 
-    monkeypatch.setattr("fitmas.domain.planning.patch_mutation_service.root_repo.get_active_plan_optional", lambda db, user_id: SimpleNamespace(id=42))
     monkeypatch.setattr("fitmas.domain.planning.patch_mutation_service.repo.get_scheduled_sessions", lambda *args, **kwargs: sessions)
     monkeypatch.setattr("fitmas.domain.planning.patch_mutation_service.repo.get_scheduled_session", lambda *args, **kwargs: None)
     monkeypatch.setattr("fitmas.domain.planning.patch_mutation_service.repo.add_plan_mutation_event", lambda *args, **kwargs: None)
@@ -468,7 +458,6 @@ def test_apply_patch_for_user_creates_session_from_create_operation(monkeypatch)
         completion_status="planned",
     )
 
-    monkeypatch.setattr("fitmas.domain.planning.patch_mutation_service.root_repo.get_active_plan_optional", lambda db, user_id: SimpleNamespace(id=42, created_at=None))
     monkeypatch.setattr("fitmas.domain.planning.patch_mutation_service.repo.get_scheduled_sessions", lambda *args, **kwargs: [])
     monkeypatch.setattr("fitmas.domain.planning.patch_mutation_service.plan_actions.create_session", lambda *args, **kwargs: created_session)
 
@@ -547,7 +536,6 @@ def test_apply_decisions_for_user_routes_create_session_through_patch_path(monke
         completion_status="planned",
     )
 
-    monkeypatch.setattr("fitmas.domain.planning.patch_mutation_service.root_repo.get_active_plan_optional", lambda db, user_id: SimpleNamespace(id=42, created_at=None))
     monkeypatch.setattr("fitmas.domain.planning.patch_mutation_service.repo.get_scheduled_sessions", lambda *args, **kwargs: [])
     monkeypatch.setattr("fitmas.domain.planning.patch_mutation_service.plan_actions.create_session", lambda *args, **kwargs: created_session)
 
@@ -575,10 +563,6 @@ def test_apply_decisions_for_user_uses_runtime_sessions_without_active_plan(monk
         fitmas_message="On remplace.",
     )
 
-    monkeypatch.setattr(
-        "fitmas.domain.planning.patch_mutation_service.root_repo.get_active_plan_optional",
-        lambda db, user_id: None,
-    )
     monkeypatch.setattr(
         "fitmas.domain.planning.patch_mutation_service.repo.get_scheduled_sessions",
         lambda *args, **kwargs: [],
@@ -618,10 +602,6 @@ def test_apply_decisions_for_user_counts_only_successful_applies(monkeypatch) ->
         MutationDecision(mutation_type="no_change", rationale="noop", fitmas_message=""),
     ]
 
-    monkeypatch.setattr(
-        "fitmas.domain.planning.patch_mutation_service.root_repo.get_active_plan_optional",
-        lambda db, user_id: SimpleNamespace(id=42),
-    )
 
     def _fake_apply(db, plan_id, decision, **kwargs):
         if decision.mutation_type == "lighten_day":
@@ -659,10 +639,6 @@ def test_apply_decisions_for_user_exposes_blocked_events_with_reason(monkeypatch
     )
 
     monkeypatch.setattr(
-        "fitmas.domain.planning.patch_mutation_service.root_repo.get_active_plan_optional",
-        lambda db, user_id: SimpleNamespace(id=42),
-    )
-    monkeypatch.setattr(
         "fitmas.domain.planning.patch_mutation_service.mutation_executor.apply",
         lambda db, plan_id, decision, **kwargs: (
             SimpleNamespace(allowed=False, block_reason="protected_recovery_target", warnings=[]),
@@ -699,10 +675,6 @@ def test_apply_decisions_for_user_does_not_event_noop_move(monkeypatch) -> None:
     )
 
     monkeypatch.setattr(
-        "fitmas.domain.planning.patch_mutation_service.root_repo.get_active_plan_optional",
-        lambda db, user_id: SimpleNamespace(id=42),
-    )
-    monkeypatch.setattr(
         "fitmas.domain.planning.patch_mutation_service.mutation_executor.apply",
         lambda db, plan_id, decision, **kwargs: (SimpleNamespace(allowed=True), None),
     )
@@ -732,10 +704,6 @@ def test_apply_decisions_for_user_passes_runtime_sessions_to_mutation_hooks(monk
         fitmas_message="Je deplace.",
     )
 
-    monkeypatch.setattr(
-        "fitmas.domain.planning.patch_mutation_service.root_repo.get_active_plan_optional",
-        lambda db, user_id: SimpleNamespace(id=42),
-    )
     monkeypatch.setattr(
         "fitmas.domain.planning.patch_mutation_service.repo.get_scheduled_sessions",
         lambda db, user_id, limit: sessions,
@@ -767,10 +735,6 @@ def test_apply_decisions_for_user_records_event_for_successful_apply(monkeypatch
         fitmas_message="On allege.",
     )
 
-    monkeypatch.setattr(
-        "fitmas.domain.planning.patch_mutation_service.root_repo.get_active_plan_optional",
-        lambda db, user_id: SimpleNamespace(id=42),
-    )
     monkeypatch.setattr(
         "fitmas.domain.planning.patch_mutation_service.mutation_executor.apply",
         lambda db, plan_id, decision, **kwargs: (SimpleNamespace(allowed=True), SimpleNamespace(delta_weekly_load=-2)),
@@ -825,10 +789,6 @@ def test_multi_session_decision_records_one_event_with_both_targets(monkeypatch)
         fitmas_message="J'echange les deux seances.",
     )
 
-    monkeypatch.setattr(
-        "fitmas.domain.planning.patch_mutation_service.root_repo.get_active_plan_optional",
-        lambda db, user_id: SimpleNamespace(id=42),
-    )
     monkeypatch.setattr(
         "fitmas.domain.planning.patch_mutation_service.mutation_executor.apply",
         lambda db, plan_id, decision, **kwargs: (SimpleNamespace(allowed=True), SimpleNamespace()),
@@ -886,10 +846,6 @@ def test_swap_session_event_summary_uses_committed_session_not_llm_text(monkeypa
     )
 
     monkeypatch.setattr(
-        "fitmas.domain.planning.patch_mutation_service.root_repo.get_active_plan_optional",
-        lambda db, user_id: SimpleNamespace(id=42),
-    )
-    monkeypatch.setattr(
         "fitmas.domain.planning.patch_mutation_service.mutation_executor.apply",
         lambda db, plan_id, decision, **kwargs: (SimpleNamespace(allowed=True), SimpleNamespace()),
     )
@@ -942,10 +898,6 @@ def test_apply_decisions_for_user_returns_event_summary_for_replace(monkeypatch)
         fitmas_message="Message LLM trop vague.",
     )
 
-    monkeypatch.setattr(
-        "fitmas.domain.planning.patch_mutation_service.root_repo.get_active_plan_optional",
-        lambda db, user_id: SimpleNamespace(id=42),
-    )
     monkeypatch.setattr(
         "fitmas.domain.planning.patch_mutation_service.mutation_executor.apply",
         lambda db, plan_id, decision, **kwargs: (SimpleNamespace(allowed=True), SimpleNamespace()),
@@ -1110,7 +1062,6 @@ def test_activity_completion_does_not_sync_legacy_day_plan(monkeypatch) -> None:
     def _mark_day_completed(*args, **kwargs):
         raise AssertionError("runtime activity completion must not mutate DayPlan")
 
-    monkeypatch.setattr("fitmas.domain.planning.patch_mutation_service.root_repo.mark_day_completed", _mark_day_completed)
     monkeypatch.setattr(
         "fitmas.domain.planning.patch_mutation_service.repo.add_plan_mutation_event",
         lambda db, **kwargs: events.append(kwargs) or SimpleNamespace(id=201),
@@ -1152,10 +1103,6 @@ def test_activity_completion_records_matched_day_without_legacy_sync(monkeypatch
     )
     monkeypatch.setattr("fitmas.domain.planning.patch_mutation_service.repo.get_scheduled_session", lambda *args, **kwargs: session)
     monkeypatch.setattr(
-        "fitmas.domain.planning.patch_mutation_service.root_repo.mark_day_completed",
-        lambda db, plan_id, day: day_calls.append((plan_id, day)) or True,
-    )
-    monkeypatch.setattr(
         "fitmas.domain.planning.patch_mutation_service.repo.add_plan_mutation_event",
         lambda db, **kwargs: events.append(kwargs) or SimpleNamespace(id=201),
     )
@@ -1186,7 +1133,6 @@ def test_day_completion_helper_is_noop_compat(monkeypatch) -> None:
     def _add_event(*args, **kwargs):
         raise AssertionError("compat helper must not emit legacy day events")
 
-    monkeypatch.setattr("fitmas.domain.planning.patch_mutation_service.root_repo.mark_day_completed", _mark_day_completed)
     monkeypatch.setattr("fitmas.domain.planning.patch_mutation_service.repo.add_plan_mutation_event", _add_event)
 
     result = mark_day_completed_for_user(

@@ -20,13 +20,16 @@ from typing import Any, Sequence
 
 from sqlalchemy.orm import Session
 
-from fitmas import repository as repo, schema as s
+from fitmas import schema as s
 from fitmas.domain.execution.helpers import (
     activities_last_days as _activities_last_days,
     claimed_activities_last_days as _claimed_activities_last_days,
 )
+from fitmas.domain.coaching import repo_conversation
+from fitmas.domain.memory import repository as memory_repo
 from fitmas.llm.gateway import request_json
 from fitmas.domain.execution.recent_reality import RecentRealityWindow
+from fitmas.domain.planning import repository as planning_repo
 
 logger = logging.getLogger(__name__)
 
@@ -94,7 +97,7 @@ def build_coach_reading_facts(
 
     silence_days = _compute_silence_days(db, user, today=today)
     exchanges = _build_recent_exchanges(db, user, today=today)
-    patterns = _format_patterns(repo.get_active_patterns(db, user.id, limit=4))
+    patterns = _format_patterns(memory_repo.get_active_patterns(db, user.id, limit=4))
     day_context = _render_day_context(today)
 
     missed_streak = recent_reality.missed_streak_days if recent_reality is not None else 0
@@ -146,7 +149,7 @@ def _count_plan_vs_confirmed(
     today: date,
     window_start: date,
 ) -> tuple[int, int]:
-    sessions = repo.get_scheduled_sessions_between_dates(
+    sessions = planning_repo.get_scheduled_sessions_between_dates(
         db, user.id,
         start_date=window_start,
         end_date=today,
@@ -165,7 +168,7 @@ def _count_plan_vs_confirmed(
 
 
 def _compute_silence_days(db: Session, user: s.User, *, today: date) -> int:
-    turns = repo.get_recent_conversation_turns(db, user.id, limit=10)
+    turns = repo_conversation.get_recent_conversation_turns(db, user.id, limit=10)
     last_user_at: datetime | None = None
     for turn in turns:
         if not str(getattr(turn, "user_message", "") or "").strip():
@@ -190,7 +193,7 @@ def _build_recent_exchanges(
 ) -> list[ExchangeEntry]:
     """Last 7 days of exchanges, with a guarantee that at least the last turn is
     included even if it's older than 7 days (avoids amnesia on long silence)."""
-    turns = repo.get_recent_conversation_turns(db, user.id, limit=limit)
+    turns = repo_conversation.get_recent_conversation_turns(db, user.id, limit=limit)
     if not turns:
         return []
 

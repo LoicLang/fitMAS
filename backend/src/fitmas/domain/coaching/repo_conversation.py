@@ -7,8 +7,13 @@ from datetime import UTC, date, datetime
 from sqlalchemy.orm import Session
 
 from fitmas import schema as s
+from fitmas.models import Message, MessageRole
 
 logger = logging.getLogger(__name__)
+
+
+def to_pydantic_message(msg: s.CoachMessage) -> Message:
+    return Message(role=MessageRole(msg.role), text=msg.text)
 
 
 def get_messages(db: Session, user_id: int) -> list[s.CoachMessage]:

@@ -18,6 +18,7 @@ from fitmas.app.telegram.shared import (
     persistable_plan_draft,
     resolve_owner_chat_id,
 )
+from fitmas.domain.athlete import repository as athlete_repo
 
 logger = logging.getLogger(__name__)
 _SEND_LOCK: asyncio.Lock | None = None
@@ -112,7 +113,7 @@ def _morning_briefing_window_status(
 def _has_proactive_message_today(timezone_name: str) -> bool:
     from datetime import timezone as dt_timezone
 
-    from fitmas import repository as repo, schema as s
+    from fitmas import schema as s
     from fitmas.core.db import SessionLocal
 
     timezone = pytz.timezone(timezone_name)
@@ -121,7 +122,7 @@ def _has_proactive_message_today(timezone_name: str) -> bool:
     utc_midnight = local_midnight.astimezone(dt_timezone.utc).replace(tzinfo=None)
     db = SessionLocal()
     try:
-        user = repo.get_user_optional(db)
+        user = athlete_repo.get_user_optional(db)
         if user is None:
             return False
         return (
@@ -159,13 +160,12 @@ async def _send_serialized_draft(
 
 
 def _reserve_heartbeat_guard_after_send() -> None:
-    from fitmas import repository as repo
     from fitmas.core.db import SessionLocal
     from fitmas.skills.heartbeat.heartbeat import _reserve_module_guard
 
     db = SessionLocal()
     try:
-        user = repo.get_user_optional(db)
+        user = athlete_repo.get_user_optional(db)
         if user:
             _reserve_module_guard(user.id)
     finally:

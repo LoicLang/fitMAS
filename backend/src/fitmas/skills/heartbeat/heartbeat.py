@@ -24,14 +24,18 @@ from typing import Any, Iterator
 
 from sqlalchemy.orm import Session
 
-from fitmas import repository as repo, schema as s
+from fitmas import schema as s
+from fitmas.domain.athlete import repository as athlete_repo
 from fitmas.domain.coaching import coach_voice
+from fitmas.domain.coaching import repo_conversation
+from fitmas.domain.execution import repository as execution_repo
 from fitmas.domain.execution.helpers import (
     activities_last_days as _activities_last_days,
     activities_on_local_date as _activities_on_local_date,
     claimed_activities_last_days as _claimed_activities_last_days,
     claimed_activities_on_local_date as _claimed_activities_on_local_date,
 )
+from fitmas.domain.memory import repository as memory_repo
 from fitmas.domain.coaching.calibration_needs import CalibrationNeedType, looks_like_clarification_message
 from fitmas.domain.coaching.coach_reading_digest import CoachReadingDigest, build_coach_reading_facts
 from fitmas.domain.coaching.coach_state import build_coach_state_bundle
@@ -257,9 +261,9 @@ def _heartbeat_tool_context(
         timezone_name=user.timezone,
         db=db,
         now=now or get_local_now(user.timezone),
-        scheduled_sessions=tuple(scheduled_sessions if scheduled_sessions is not None else repo.get_scheduled_sessions(db, user.id, limit=120)),
-        activities=tuple(activities if activities is not None else repo.get_activities(db, user.id, limit=200)),
-        active_facts=tuple(repo.get_active_facts(db, user.id, limit=60)),
+        scheduled_sessions=tuple(scheduled_sessions if scheduled_sessions is not None else planning_repo.get_scheduled_sessions(db, user.id, limit=120)),
+        activities=tuple(activities if activities is not None else execution_repo.get_activities(db, user.id, limit=200)),
+        active_facts=tuple(memory_repo.get_active_facts(db, user.id, limit=60)),
     )
 
 
@@ -475,7 +479,7 @@ def morning_briefing() -> CoachDraft | None:
     """Generate the morning briefing message for today, aware of yesterday's status."""
     db = SessionLocal()
     try:
-        user = repo.get_user(db)
+        user = athlete_repo.get_user(db)
 
         gate = heartbeat_evaluation.evaluate_proactive_gate(db, user)
         _trace_gate(gate)
@@ -488,7 +492,7 @@ def morning_briefing() -> CoachDraft | None:
         time_context = build_time_context(user.timezone)
         _trace_context("time_context", time_context)
         local_now = get_local_now(user.timezone)
-        today_session = repo.get_today_scheduled_session(db, user.id, timezone_name=user.timezone)
+        today_session = planning_repo.get_today_scheduled_session(db, user.id, timezone_name=user.timezone)
         if not today_session:
             _trace_decision("no_send", "no_today_session")
             _trace_final(None)
@@ -504,7 +508,7 @@ def morning_briefing() -> CoachDraft | None:
         # Yesterday-specific data — feeds YesterdayTruth in the bundle and
         # the execution clarification helper.
         yesterday_date = local_now.date() - timedelta(days=1)
-        yesterday_sessions = repo.get_scheduled_sessions_for_date(
+        yesterday_sessions = planning_repo.get_scheduled_sessions_for_date(
             db, user.id, target_date=yesterday_date,
         )
         yesterday_activities = _activities_on_local_date(db, user, target_date=yesterday_date)
@@ -514,21 +518,21 @@ def morning_briefing() -> CoachDraft | None:
             None,
         )
 
-        recent_sessions = repo.get_scheduled_sessions_between_dates(
+        recent_sessions = planning_repo.get_scheduled_sessions_between_dates(
             db, user.id,
             start_date=local_now.date() - timedelta(days=13),
             end_date=local_now.date(),
             limit=42,
         )
-        future_sessions = repo.get_scheduled_sessions_between_dates(
+        future_sessions = planning_repo.get_scheduled_sessions_between_dates(
             db,
             user.id,
             start_date=local_now.date(),
             end_date=local_now.date() + timedelta(days=6),
             limit=21,
         )
-        tool_scheduled_sessions = repo.get_scheduled_sessions(db, user.id, limit=120)
-        recent_activities = repo.get_activities(db, user.id, limit=120)
+        tool_scheduled_sessions = planning_repo.get_scheduled_sessions(db, user.id, limit=120)
+        recent_activities = execution_repo.get_activities(db, user.id, limit=120)
         recent_claims = _claimed_activities_last_days(db, user, days=14)
         clarification = build_execution_clarification(
             today=local_now.date(),
@@ -672,7 +676,7 @@ def pre_session_reminder() -> CoachDraft | None:
     """Generate a reminder the evening before a key session."""
     db = SessionLocal()
     try:
-        user = repo.get_user(db)
+        user = athlete_repo.get_user(db)
 
         gate = heartbeat_evaluation.evaluate_proactive_gate(
             db, user,
@@ -691,7 +695,7 @@ def pre_session_reminder() -> CoachDraft | None:
         today_key = time_context["day_key"]
         tomorrow_date = get_local_now(user.timezone).date() + timedelta(days=1)
         tomorrow_sessions = [
-            session for session in repo.get_scheduled_sessions_for_date(db, user.id, target_date=tomorrow_date)
+            session for session in planning_repo.get_scheduled_sessions_for_date(db, user.id, target_date=tomorrow_date)
             if session.sport_type != "rest"
         ]
         _trace_context("tomorrow_sessions", tomorrow_sessions)
@@ -787,12 +791,12 @@ def weekly_review() -> CoachDraft | None:
     """Generate a Sunday evening weekly review draft without side effects."""
     db = SessionLocal()
     try:
-        user = repo.get_user(db)
+        user = athlete_repo.get_user(db)
         local_today = get_local_now(user.timezone).date()
         _trace_context("local_today", local_today)
         start_date = local_today - timedelta(days=6)
-        scheduled_sessions = repo.get_scheduled_sessions(db, user.id, limit=120)
-        activities = repo.get_activities(db, user.id, limit=500)
+        scheduled_sessions = planning_repo.get_scheduled_sessions(db, user.id, limit=120)
+        activities = execution_repo.get_activities(db, user.id, limit=500)
         _trace_context("scheduled_sessions", scheduled_sessions)
         _trace_context("activities", activities[:20])
         planning_decision = planning_repo.get_latest_planning_decision_record(db, user.id)
@@ -933,7 +937,7 @@ def signal_check() -> CoachDraft | None:
     """Check signals and generate a proactive message if anything actionable is found."""
     db = SessionLocal()
     try:
-        user = repo.get_user(db)
+        user = athlete_repo.get_user(db)
 
         gate = heartbeat_evaluation.evaluate_proactive_gate(
             db, user,
@@ -1074,7 +1078,7 @@ def _adaptation_plan_patch_confirmation_draft(
         db,
         plan_id=0,
         patch=patch,
-        scheduled_sessions=repo.get_scheduled_sessions(db, user.id, limit=120),
+        scheduled_sessions=planning_repo.get_scheduled_sessions(db, user.id, limit=120),
         timezone_name=user.timezone,
     )
     if validation.status == "blocked":
@@ -1152,7 +1156,7 @@ def _yesterday_fallback_summary(yesterday) -> str:
 
 
 def _weekly_review_highlights(db: Session, user: s.User, *, start_date) -> str:
-    turns = repo.get_recent_conversation_turns(db, user.id, limit=40)
+    turns = repo_conversation.get_recent_conversation_turns(db, user.id, limit=40)
     keywords = (
         "malade",
         "maladie",

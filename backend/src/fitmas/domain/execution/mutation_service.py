@@ -9,9 +9,10 @@ from typing import Iterable
 
 from sqlalchemy.orm import Session
 
-from fitmas import repository as repo, schema as s
+from fitmas import schema as s
 from fitmas.decision.command_actions import ExecutionUpdateAction
 from fitmas.core.time_context import get_local_now
+from fitmas.domain.planning import repository as planning_repo
 
 
 @dataclass(frozen=True, slots=True)
@@ -57,7 +58,7 @@ def apply_execution_actions_for_user(
             )
             continue
 
-        updated = repo.set_scheduled_session_status(db, resolution.session.id, status)
+        updated = planning_repo.set_scheduled_session_status(db, resolution.session.id, status)
         if updated is None:
             blocked += 1
             event_ids.append(
@@ -93,14 +94,14 @@ def _resolve_target_session(
     now: datetime | None,
 ) -> _SessionResolution:
     if action.target_session_id is not None:
-        session = repo.get_scheduled_session(db, user.id, action.target_session_id)
+        session = planning_repo.get_scheduled_session(db, user.id, action.target_session_id)
         return _SessionResolution(session, "ok" if session is not None else "target_missing")
 
     target_date = _target_date_from_ref(action.target_ref, user=user, now=now)
     if target_date is None:
         return _SessionResolution(None, "unresolved_target_date")
 
-    candidates = repo.get_scheduled_sessions_for_date(db, user.id, target_date=target_date)
+    candidates = planning_repo.get_scheduled_sessions_for_date(db, user.id, target_date=target_date)
     if action.sport_type:
         sport = _normalize_token(action.sport_type)
         candidates = [session for session in candidates if _normalize_token(session.sport_type) == sport]

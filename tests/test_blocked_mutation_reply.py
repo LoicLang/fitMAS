@@ -370,7 +370,7 @@ class BlockedMutationReplyTest(unittest.TestCase):
         session = SimpleNamespace(session_title="Footing facile", completion_status="skipped")
 
         with (
-            patch("fitmas.decision.plan_patch_reply.repo.get_scheduled_session", return_value=session),
+            patch("fitmas.decision.plan_patch_reply.planning_repo.get_scheduled_session", return_value=session),
             patch(
                 "fitmas.decision.plan_patch_reply.final_reply.compose_final_reply",
                 return_value="Footing marque non fait. Je ne deplace rien derriere: il faut une seance encore planifiee.",

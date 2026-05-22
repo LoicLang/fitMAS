@@ -5,10 +5,12 @@ from datetime import datetime
 
 from sqlalchemy.orm import Session
 
-from fitmas import repository as repo, schema as s
+from fitmas import schema as s
 from fitmas.core.db import SessionLocal
 from fitmas.domain.memory.profile_memory import upsert_profile_memory
 from fitmas.domain.memory.routing import split_memory_payloads
+from fitmas.domain.coaching import repo_conversation
+from fitmas.domain.memory import repository as memory_repo
 
 
 @dataclass(slots=True)
@@ -35,7 +37,7 @@ def persist_draft(user_id: int, draft: CoachDraft, *, db: Session | None = None)
     owns_session = db is None
     session = db or SessionLocal()
     try:
-        message = repo.add_message(
+        message = repo_conversation.add_message(
             session,
             user_id,
             "agent",
@@ -47,10 +49,10 @@ def persist_draft(user_id: int, draft: CoachDraft, *, db: Session | None = None)
             if profile_payloads:
                 upsert_profile_memory(session, user_id, profile_payloads)
             if working_payloads:
-                repo.upsert_working_memory(session, user_id, working_payloads)
+                memory_repo.upsert_working_memory(session, user_id, working_payloads)
         if draft.pending_confirmation is not None:
             pending = draft.pending_confirmation
-            repo.create_pending_mutation_confirmation(
+            repo_conversation.create_pending_mutation_confirmation(
                 session,
                 user_id=user_id,
                 impact_level=pending.impact_level,

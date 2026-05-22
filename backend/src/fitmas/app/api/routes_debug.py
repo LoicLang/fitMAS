@@ -5,11 +5,12 @@ import logging
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
-from fitmas import repository as repo, schema as s
+from fitmas import schema as s
 from fitmas.app.api.support import ensure_debug_enabled
 from fitmas.app.telegram.delivery import persist_draft
 from fitmas.core.db import get_db
 from fitmas.app.telegram.channel import resolve_chat_id, send_text_message
+from fitmas.domain.athlete import repository as athlete_repo
 
 logger = logging.getLogger(__name__)
 
@@ -19,7 +20,7 @@ router = APIRouter()
 @router.get("/api/v0/signals")
 def get_signals(db: Session = Depends(get_db)) -> dict:
     ensure_debug_enabled()
-    user = repo.get_user_optional(db)
+    user = athlete_repo.get_user_optional(db)
     if user is None:
         return {"signals": []}
     from fitmas.domain.coaching.signals import collect_signals
@@ -36,7 +37,7 @@ def trigger_debug_heartbeat(
 ) -> dict:
     ensure_debug_enabled()
 
-    user = repo.get_user_optional(db)
+    user = athlete_repo.get_user_optional(db)
     if user is None:
         raise HTTPException(status_code=404, detail="No onboarded user yet")
 
