@@ -4,10 +4,11 @@ import os
 import tempfile
 import unittest
 from datetime import datetime, timedelta, timezone
+from fitmas.domain.memory import repository as memory_repo
 
 os.environ.setdefault("FITMAS_DB_PATH", tempfile.mktemp(prefix="fitmas-memory-maint-", suffix=".db"))
 
-from fitmas import repository as repo, schema as s
+from fitmas import schema as s
 from fitmas.core.db import Base, SessionLocal, engine, init_db
 from fitmas.domain.memory.maintenance import run_memory_maintenance
 
@@ -69,7 +70,7 @@ class MemoryMaintenanceTest(unittest.TestCase):
             now=datetime(2026, 3, 29, 9, 0, tzinfo=timezone.utc),
         )
 
-        patterns = repo.get_active_patterns(self.db, self.user.id, limit=12)
+        patterns = memory_repo.get_active_patterns(self.db, self.user.id, limit=12)
         self.assertEqual(result.users_processed, 1)
         self.assertEqual(result.working_entries_archived, 1)
         self.assertGreaterEqual(result.patterns_upserted, 1)
@@ -105,7 +106,7 @@ class MemoryMaintenanceTest(unittest.TestCase):
         )
 
         self.assertEqual(result.patterns_archived, 1)
-        self.assertEqual(len(repo.get_active_patterns(self.db, self.user.id, limit=12)), 0)
+        self.assertEqual(len(memory_repo.get_active_patterns(self.db, self.user.id, limit=12)), 0)
 
 
 if __name__ == "__main__":

@@ -52,15 +52,7 @@ def test_12q_planning_repository_owns_scheduled_session_and_audit_api() -> None:
 
 
 def test_12q_root_repository_keeps_only_facade_for_planning_session_io() -> None:
-    root_source = ROOT_REPOSITORY.read_text(encoding="utf-8")
-    assert "from fitmas.domain.planning import repository as planning_repo" in root_source
-
-    for name in sorted(SCHEDULED_SESSION_API | PLANNING_AUDIT_API):
-        body = _function_source(ROOT_REPOSITORY, name)
-        assert f"planning_repo.{name}" in body
-        assert "db.query" not in body
-        assert "s.PlanMutationEventRecord(" not in body
-
+    assert not ROOT_REPOSITORY.exists()
 
 def test_12q_planning_runtime_uses_planning_repository_for_scheduled_sessions() -> None:
     sources = {

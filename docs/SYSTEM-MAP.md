@@ -203,7 +203,7 @@ Role :
 
 - garder le client HTTP dans `integrations/strava.py` ;
 - garder la persistence connection/tokens/sync dans `integrations/repository.py` ;
-- ne pas exposer ces writes via le root repository sauf facade temporaire.
+- ne pas exposer ces writes via une facade root.
 
 ### Heartbeat
 

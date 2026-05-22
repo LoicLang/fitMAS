@@ -16,10 +16,12 @@ import os
 import tempfile
 import unittest
 from datetime import timedelta
+from fitmas.domain.execution import repository as execution_repo
+from fitmas.domain.planning import template_repository as template_repo
 
 os.environ.setdefault("FITMAS_DB_PATH", tempfile.mktemp(prefix="fitmas-streak-", suffix=".db"))
 
-from fitmas import repository as repo, schema as s
+from fitmas import schema as s
 from fitmas.core.db import Base, SessionLocal, engine, init_db
 from fitmas.domain.coaching.signals import collect_signals
 from fitmas.core.time_context import DAY_KEYS, day_label_fr, get_local_now
@@ -60,7 +62,7 @@ class StreakSignalTest(unittest.TestCase):
         self.db.commit()
         self.db.refresh(self.user)
         now = get_local_now(self.user.timezone)
-        repo.replace_plan(
+        template_repo.replace_plan(
             self.db,
             self.user.id,
             intention="test",
@@ -74,7 +76,7 @@ class StreakSignalTest(unittest.TestCase):
 
     def _add_activity(self, *, days_ago: int, duration_min: int | None, sport_type: str = "running") -> None:
         now = get_local_now(self.user.timezone)
-        repo.add_activity(
+        execution_repo.add_activity(
             self.db,
             user_id=self.user.id,
             source="strava",

@@ -3,10 +3,13 @@ from __future__ import annotations
 import os
 import tempfile
 import unittest
+from fitmas.domain.execution import repository as execution_repo
+from fitmas.domain.planning import repository as planning_repo
+from fitmas.domain.planning import template_repository as template_repo
 
 os.environ.setdefault("FITMAS_DB_PATH", tempfile.mktemp(prefix="fitmas-bundle-tests-", suffix=".db"))
 
-from fitmas import repository as repo, schema as s
+from fitmas import schema as s
 from fitmas.domain.coaching.coach_state import build_coach_state_bundle
 from fitmas.core.db import Base, SessionLocal, engine, init_db
 from fitmas.core.time_context import DAY_KEYS, day_label_fr, get_local_now
@@ -41,7 +44,7 @@ class CoachStateBundleTest(unittest.TestCase):
     def test_build_coach_state_bundle_returns_shared_runtime_truth(self) -> None:
         now = get_local_now(self.user.timezone)
         today_key = DAY_KEYS[now.weekday()]
-        repo.replace_plan(
+        template_repo.replace_plan(
             self.db,
             self.user.id,
             intention="reprendre propre",
@@ -70,10 +73,10 @@ class CoachStateBundleTest(unittest.TestCase):
                 }
             ],
         )
-        scheduled_sessions = repo.get_scheduled_sessions(self.db, self.user.id, limit=42)
-        activities = repo.get_activities(self.db, self.user.id, limit=120)
-        planning_decision = repo.get_latest_planning_decision_record(self.db, self.user.id)
-        week_plan = repo.to_pydantic_plan(repo.get_active_plan(self.db, self.user.id))
+        scheduled_sessions = planning_repo.get_scheduled_sessions(self.db, self.user.id, limit=42)
+        activities = execution_repo.get_activities(self.db, self.user.id, limit=120)
+        planning_decision = planning_repo.get_latest_planning_decision_record(self.db, self.user.id)
+        week_plan = template_repo.to_pydantic_plan(template_repo.get_active_plan(self.db, self.user.id))
 
         bundle = build_coach_state_bundle(
             self.db,

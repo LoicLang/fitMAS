@@ -4,10 +4,13 @@ import os
 import tempfile
 import unittest
 from datetime import datetime, timedelta
+from fitmas.domain.execution import repository as execution_repo
+from fitmas.domain.memory import repository as memory_repo
+from fitmas.domain.planning import template_repository as template_repo
 
 os.environ.setdefault("FITMAS_DB_PATH", tempfile.mktemp(prefix="fitmas-signals-", suffix=".db"))
 
-from fitmas import repository as repo, schema as s
+from fitmas import schema as s
 from fitmas.core.db import Base, SessionLocal, engine, init_db
 from fitmas.domain.coaching.signals import collect_signals, format_signals_for_prompt
 from fitmas.core.time_context import DAY_KEYS, day_label_fr, get_local_now
@@ -77,7 +80,7 @@ class SignalsGroundingTest(unittest.TestCase):
         )
         self.db.add(session)
         self.db.commit()
-        repo.add_activity(
+        execution_repo.add_activity(
             self.db,
             user_id=self.user.id,
             source="manual",
@@ -127,7 +130,7 @@ class SignalsGroundingTest(unittest.TestCase):
                     "completion_status": "planned",
                 }
             )
-        repo.replace_plan(
+        template_repo.replace_plan(
             self.db,
             self.user.id,
             intention="test",
@@ -135,7 +138,7 @@ class SignalsGroundingTest(unittest.TestCase):
             timezone_name=self.user.timezone,
             days=days,
         )
-        repo.add_activity(
+        execution_repo.add_activity(
             self.db,
             user_id=self.user.id,
             source="manual",
@@ -184,7 +187,7 @@ class SignalsGroundingTest(unittest.TestCase):
             )
         )
         self.db.commit()
-        repo.add_activity(
+        execution_repo.add_activity(
             self.db,
             user_id=self.user.id,
             source="manual",
@@ -232,7 +235,7 @@ class SignalsGroundingTest(unittest.TestCase):
                     "completion_status": "planned",
                 }
             )
-        repo.replace_plan(
+        template_repo.replace_plan(
             self.db,
             self.user.id,
             intention="test",
@@ -240,7 +243,7 @@ class SignalsGroundingTest(unittest.TestCase):
             timezone_name=self.user.timezone,
             days=days,
         )
-        repo.upsert_facts(
+        memory_repo.upsert_facts(
             self.db,
             self.user.id,
             [

@@ -1492,10 +1492,10 @@ def _row_to_dict(row: sqlite3.Row) -> dict[str, Any]:
 def _reset_and_seed_database(db_path: Path) -> None:
     _reset_database_schema(db_path)
 
-    from fitmas import repository as repo
     from fitmas import schema as s
     from fitmas.core.db import SessionLocal
     from fitmas.core.time_context import DAY_KEYS, day_label_fr, get_local_now
+    from fitmas.domain.execution import repository as execution_repo
 
     with SessionLocal() as db:
         user = s.User(
@@ -1625,7 +1625,7 @@ def _reset_and_seed_database(db_path: Path) -> None:
             ("cycling", "Endurance velo", 70, 6, 38.0),
             ("running", "Tempo propre", 55, 9, 48.0),
         ):
-            repo.add_activity(
+            execution_repo.add_activity(
                 db,
                 user_id=user.id,
                 source="manual",

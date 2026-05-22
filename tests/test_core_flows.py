@@ -5,6 +5,10 @@ import tempfile
 import unittest
 from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
+from fitmas.domain.coaching import repo_conversation
+from fitmas.domain.execution import repository as execution_repo
+from fitmas.domain.planning import repository as planning_repo
+from fitmas.domain.planning import template_repository as template_repo
 
 os.environ.setdefault("FITMAS_DB_PATH", tempfile.mktemp(prefix="fitmas-tests-", suffix=".db"))
 
@@ -31,7 +35,7 @@ from fitmas.domain.planning.mutation_permissions import serialize_plan_patch_con
 from fitmas.domain.planning.plan_patch import PlanPatch, PlanPatchOperation, PlanPatchValidation
 from fitmas.domain.planning.session_actions import move_session
 from fitmas.domain.athlete.training_load import compute_ctl_atl_tsb, estimate_tss
-from fitmas import repository as repo, schema as s
+from fitmas import schema as s
 from fitmas.core.time_context import DAY_KEYS, day_label_fr, get_local_now
 from fitmas.domain.planning.week_coherence import WeekCoherenceFinding, WeekCoherenceReview
 
@@ -123,7 +127,7 @@ class FitMASCoreFlowsTest(unittest.TestCase):
         self.db.close()
 
     def _assert_legacy_mutation_disabled(self, result: dict, *, mutation_type: str) -> s.ConversationTurnRecord:
-        turns = repo.get_recent_conversation_turns(self.db, self.user.id, limit=1)
+        turns = repo_conversation.get_recent_conversation_turns(self.db, self.user.id, limit=1)
         self.assertEqual(len(turns), 1)
         self.assertEqual(turns[0].response_mode, "legacy_decision_contract_disabled")
         self.assertEqual(turns[0].mutation_type, mutation_type)
@@ -135,7 +139,7 @@ class FitMASCoreFlowsTest(unittest.TestCase):
     def _create_plan_for_today(self) -> tuple[s.WeeklyPlan, s.ScheduledSession]:
         now = get_local_now(self.user.timezone)
         today_key = DAY_KEYS[now.weekday()]
-        plan = repo.replace_plan(
+        plan = template_repo.replace_plan(
             self.db,
             self.user.id,
             intention="reprendre propre",
@@ -161,7 +165,7 @@ class FitMASCoreFlowsTest(unittest.TestCase):
                 }
             ],
         )
-        session = repo.get_today_scheduled_session(self.db, self.user.id, timezone_name=self.user.timezone)
+        session = planning_repo.get_today_scheduled_session(self.db, self.user.id, timezone_name=self.user.timezone)
         self.assertIsNotNone(session)
         return plan, session
 
@@ -204,7 +208,7 @@ class FitMASCoreFlowsTest(unittest.TestCase):
         today_key = DAY_KEYS[now.weekday()]
         yesterday_key = DAY_KEYS[(now.weekday() - 1) % 7]
         two_days_ago_key = DAY_KEYS[(now.weekday() - 2) % 7]
-        plan = repo.replace_plan(
+        plan = template_repo.replace_plan(
             self.db,
             self.user.id,
             intention="reprendre propre",
@@ -281,7 +285,7 @@ class FitMASCoreFlowsTest(unittest.TestCase):
             target_date=source_date + timedelta(days=8),
         )
         self.assertIsNotNone(moved)
-        sessions = [repo.to_pydantic_scheduled_session(x) for x in repo.get_scheduled_sessions(self.db, self.user.id, limit=10)]
+        sessions = [planning_repo.to_pydantic_scheduled_session(x) for x in planning_repo.get_scheduled_sessions(self.db, self.user.id, limit=10)]
         self.assertEqual(len(sessions), 2)
         self.assertEqual(sessions[0].sport_type, "rest")
         self.assertEqual(sessions[0].completion_status, "adapted")
@@ -292,7 +296,7 @@ class FitMASCoreFlowsTest(unittest.TestCase):
     def test_read_models_expose_load_band_and_week_meta(self) -> None:
         now = get_local_now(self.user.timezone)
         today_key = DAY_KEYS[now.weekday()]
-        repo.replace_plan(
+        template_repo.replace_plan(
             self.db,
             self.user.id,
             intention="reprendre propre",
@@ -341,7 +345,7 @@ class FitMASCoreFlowsTest(unittest.TestCase):
 
     def test_week_endpoint_reads_scheduled_session_runtime_truth(self) -> None:
         plan, session = self._create_plan_for_today()
-        day_plan = repo.get_day_plan(self.db, plan.id, session.day)
+        day_plan = template_repo.get_day_plan(self.db, plan.id, session.day)
         self.assertIsNotNone(day_plan)
         self.assertEqual(day_plan.sport_type, "running")
 
@@ -383,7 +387,7 @@ class FitMASCoreFlowsTest(unittest.TestCase):
 
     def test_performance_overview_exposes_tss_and_distribution(self) -> None:
         _, session = self._create_plan_for_today()
-        repo.add_activity(
+        execution_repo.add_activity(
             self.db,
             user_id=self.user.id,
             source="manual",
@@ -402,7 +406,7 @@ class FitMASCoreFlowsTest(unittest.TestCase):
             avg_speed=3.15,
             tss=28.0,
         )
-        repo.mark_scheduled_session_completed(self.db, session.id)
+        planning_repo.mark_scheduled_session_completed(self.db, session.id)
 
         overview = self.client.get("/api/v0/stats/performance-overview")
 
@@ -432,7 +436,7 @@ class FitMASCoreFlowsTest(unittest.TestCase):
             )
         self.db.commit()
 
-        active_pending = repo.get_active_pending_mutation_confirmation(self.db, self.user.id)
+        active_pending = repo_conversation.get_active_pending_mutation_confirmation(self.db, self.user.id)
         rows = (
             self.db.query(s.PendingMutationConfirmation)
             .filter(s.PendingMutationConfirmation.user_id == self.user.id)
@@ -457,7 +461,7 @@ class FitMASCoreFlowsTest(unittest.TestCase):
                 )
             ],
         )
-        pending = repo.create_pending_mutation_confirmation(
+        pending = repo_conversation.create_pending_mutation_confirmation(
             self.db,
             user_id=self.user.id,
             impact_level="high",
@@ -491,7 +495,7 @@ class FitMASCoreFlowsTest(unittest.TestCase):
 
         self.db.expire_all()
         refreshed_pending = self.db.get(s.PendingMutationConfirmation, pending.id)
-        refreshed_session = repo.get_scheduled_session(self.db, self.user.id, session.id)
+        refreshed_session = planning_repo.get_scheduled_session(self.db, self.user.id, session.id)
 
         self.assertIsNotNone(outcome)
         self.assertEqual(outcome.response_mode, "pending_ignore")
@@ -515,7 +519,7 @@ class FitMASCoreFlowsTest(unittest.TestCase):
                 )
             ],
         )
-        pending = repo.create_pending_mutation_confirmation(
+        pending = repo_conversation.create_pending_mutation_confirmation(
             self.db,
             user_id=self.user.id,
             impact_level="high",
@@ -549,7 +553,7 @@ class FitMASCoreFlowsTest(unittest.TestCase):
 
         self.db.expire_all()
         refreshed_pending = self.db.get(s.PendingMutationConfirmation, pending.id)
-        refreshed_session = repo.get_scheduled_session(self.db, self.user.id, session.id)
+        refreshed_session = planning_repo.get_scheduled_session(self.db, self.user.id, session.id)
 
         self.assertIsNotNone(outcome)
         self.assertEqual(outcome.response_mode, "pending_accepted")
@@ -560,7 +564,7 @@ class FitMASCoreFlowsTest(unittest.TestCase):
     def test_pending_resolution_alias_confirm_is_canonicalized_before_application(self) -> None:
         _, session = self._create_plan_for_today()
         target_date = (get_local_now(self.user.timezone).date() + timedelta(days=2)).isoformat()
-        pending = repo.create_pending_mutation_confirmation(
+        pending = repo_conversation.create_pending_mutation_confirmation(
             self.db,
             user_id=self.user.id,
             impact_level="high",
@@ -606,7 +610,7 @@ class FitMASCoreFlowsTest(unittest.TestCase):
 
         self.db.expire_all()
         refreshed_pending = self.db.get(s.PendingMutationConfirmation, pending.id)
-        refreshed_session = repo.get_scheduled_session(self.db, self.user.id, session.id)
+        refreshed_session = planning_repo.get_scheduled_session(self.db, self.user.id, session.id)
 
         self.assertIsNotNone(outcome)
         self.assertEqual(outcome.response_mode, "pending_accepted")
@@ -637,7 +641,7 @@ class FitMASCoreFlowsTest(unittest.TestCase):
                 )
             ],
         )
-        pending = repo.create_pending_mutation_confirmation(
+        pending = repo_conversation.create_pending_mutation_confirmation(
             self.db,
             user_id=self.user.id,
             impact_level="high",
@@ -680,7 +684,7 @@ class FitMASCoreFlowsTest(unittest.TestCase):
 
     def test_pending_accept_recheck_mismatch_with_plan_mutation_falls_through(self) -> None:
         _, session = self._create_plan_for_today()
-        pending = repo.create_pending_mutation_confirmation(
+        pending = repo_conversation.create_pending_mutation_confirmation(
             self.db,
             user_id=self.user.id,
             impact_level="high",
@@ -736,7 +740,7 @@ class FitMASCoreFlowsTest(unittest.TestCase):
 
     def test_pending_ignore_does_not_swallow_new_plan_patch(self) -> None:
         _, session = self._create_plan_for_today()
-        pending = repo.create_pending_mutation_confirmation(
+        pending = repo_conversation.create_pending_mutation_confirmation(
             self.db,
             user_id=self.user.id,
             impact_level="high",
@@ -793,7 +797,7 @@ class FitMASCoreFlowsTest(unittest.TestCase):
 
     def test_pending_modify_with_plan_mutation_falls_through_to_adaptation(self) -> None:
         _, session = self._create_plan_for_today()
-        pending = repo.create_pending_mutation_confirmation(
+        pending = repo_conversation.create_pending_mutation_confirmation(
             self.db,
             user_id=self.user.id,
             impact_level="high",
@@ -858,7 +862,7 @@ class FitMASCoreFlowsTest(unittest.TestCase):
 
     def test_pending_survives_clarification_outcome(self) -> None:
         _, session = self._create_plan_for_today()
-        pending = repo.create_pending_mutation_confirmation(
+        pending = repo_conversation.create_pending_mutation_confirmation(
             self.db,
             user_id=self.user.id,
             impact_level="high",
@@ -892,7 +896,7 @@ class FitMASCoreFlowsTest(unittest.TestCase):
 
     def test_non_mutating_close_turn_keeps_active_pending(self) -> None:
         _, session = self._create_plan_for_today()
-        pending = repo.create_pending_mutation_confirmation(
+        pending = repo_conversation.create_pending_mutation_confirmation(
             self.db,
             user_id=self.user.id,
             impact_level="high",
@@ -984,7 +988,7 @@ class FitMASCoreFlowsTest(unittest.TestCase):
         )
 
         self.db.expire_all()
-        refreshed = repo.get_scheduled_session(self.db, self.user.id, session.id)
+        refreshed = planning_repo.get_scheduled_session(self.db, self.user.id, session.id)
 
         self.assertEqual(result["memory_applied"], 1)
         self.assertEqual(result["execution_applied"], 0)
@@ -1053,7 +1057,7 @@ class FitMASCoreFlowsTest(unittest.TestCase):
         )
 
         self.db.expire_all()
-        refreshed = repo.get_scheduled_session(self.db, self.user.id, session.id)
+        refreshed = planning_repo.get_scheduled_session(self.db, self.user.id, session.id)
 
         self.assertEqual(result["memory_applied"], 1)
         self.assertEqual(result["execution_applied"], 0)
@@ -1141,7 +1145,7 @@ class FitMASCoreFlowsTest(unittest.TestCase):
                 )
             ],
         )
-        pending = repo.create_pending_mutation_confirmation(
+        pending = repo_conversation.create_pending_mutation_confirmation(
             self.db,
             user_id=self.user.id,
             impact_level="high",
@@ -1167,7 +1171,7 @@ class FitMASCoreFlowsTest(unittest.TestCase):
         )
 
         self.db.expire_all()
-        refreshed_session = repo.get_scheduled_session(self.db, self.user.id, session.id)
+        refreshed_session = planning_repo.get_scheduled_session(self.db, self.user.id, session.id)
         refreshed_pending = self.db.get(s.PendingMutationConfirmation, pending.id)
 
         self.assertEqual(outcome.response_mode, "pending_expired")
@@ -1226,7 +1230,7 @@ class FitMASCoreFlowsTest(unittest.TestCase):
         )
 
     def test_conversation_turn_serializes_datetime_memory_writes(self) -> None:
-        row = repo.add_conversation_turn(
+        row = repo_conversation.add_conversation_turn(
             self.db,
             user_id=self.user.id,
             user_message="test",
@@ -1334,7 +1338,7 @@ class FitMASCoreFlowsTest(unittest.TestCase):
                 "session_title": row.session_title,
                 "completion_status": row.completion_status,
             }
-            for row in repo.get_scheduled_sessions_between_dates(
+            for row in planning_repo.get_scheduled_sessions_between_dates(
                 self.db,
                 self.user.id,
                 start_date=today.date() - timedelta(days=13),
@@ -1365,7 +1369,7 @@ class FitMASCoreFlowsTest(unittest.TestCase):
 
     def test_today_view_exposes_fitness_and_recent_same_sport_activity(self) -> None:
         _, session = self._create_plan_for_today()
-        repo.add_activity(
+        execution_repo.add_activity(
             self.db,
             user_id=self.user.id,
             source="manual",

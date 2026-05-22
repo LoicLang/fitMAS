@@ -59,23 +59,7 @@ def test_12t_domain_repositories_own_snapshot_and_planning_decision_api() -> Non
 
 
 def test_12t_root_repository_keeps_only_facades_for_snapshot_and_planning_decision_api() -> None:
-    source = ROOT_REPOSITORY.read_text(encoding="utf-8")
-    assert "from fitmas.domain.athlete import repository as athlete_repo" in source
-    assert "from fitmas.domain.planning import repository as planning_repo" in source
-
-    for name in sorted(ATHLETE_SNAPSHOT_API):
-        body = _function_source(ROOT_REPOSITORY, name)
-        assert f"athlete_repo.{name}" in body
-        assert "db.query" not in body
-        assert "s.FitnessSnapshotRecord(" not in body
-        assert "s.ReadinessSnapshotRecord(" not in body
-
-    for name in sorted(PLANNING_DECISION_API):
-        body = _function_source(ROOT_REPOSITORY, name)
-        assert f"planning_repo.{name}" in body
-        assert "db.query" not in body
-        assert "s.PlanningDecisionRecord(" not in body
-
+    assert not ROOT_REPOSITORY.exists()
 
 def test_12t_runtime_consumers_use_domain_repositories_for_snapshots_and_planning_decisions() -> None:
     offenders: list[str] = []

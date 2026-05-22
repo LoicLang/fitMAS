@@ -48,14 +48,7 @@ def test_12u_integrations_repository_owns_strava_connection_storage_api() -> Non
 
 
 def test_12u_root_repository_keeps_only_strava_connection_facade() -> None:
-    source = ROOT_REPOSITORY.read_text(encoding="utf-8")
-    assert "from fitmas.integrations import repository as integration_repo" in source
-
-    body = _function_source(ROOT_REPOSITORY, "get_strava_connection")
-    assert "integration_repo.get_strava_connection" in body
-    assert "db.query" not in body
-    assert "s.StravaConnection(" not in body
-
+    assert not ROOT_REPOSITORY.exists()
 
 def test_12u_strava_connection_consumers_use_integration_repository() -> None:
     offenders: list[str] = []

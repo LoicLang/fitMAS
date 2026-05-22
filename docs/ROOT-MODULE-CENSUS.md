@@ -23,7 +23,7 @@ is allowed only for hotspots that need a separate shrink slice.
 
 ## Summary
 
-- Root files counted: 6
+- Root files counted: 5
 - Permanent root entrypoints allowed: 3
 - First wrapper cuts completed: `heartbeat*.py`, `llm_gateway.py`,
   `telegram_scheduler.py`, `tool_*.py`, `api_messages.py`,
@@ -87,33 +87,28 @@ is allowed only for hotspots that need a separate shrink slice.
 - Coaching signals root cut completed: `signals.py`
 - Planning adaptation root cut completed: `adaptation.py`
 - Decision conversation pipeline root cut completed: `conversation_pipeline.py`
-- Planning repository extraction started:
+- Planning repository extraction completed:
   `domain/planning/repository.py` owns `ScheduledSession` runtime reads/writes
-  `PlanMutationEvent` audit writes and `PlanningDecisionRecord`; root
-  `repository.py` keeps a facade for compatibility.
-- Memory repository extraction started:
+  `PlanMutationEvent` audit writes and `PlanningDecisionRecord`.
+- Memory repository extraction completed:
   `domain/memory/repository.py` owns profile facts, working memory and pattern
-  storage; root `repository.py` keeps a facade for compatibility.
-- Execution repository extraction started:
+  storage.
+- Execution repository extraction completed:
   `domain/execution/repository.py` owns `Activity` reads, conversion and
-  writes; root `repository.py` keeps a facade for compatibility.
-- Athlete repository extraction started:
+  writes.
+- Athlete repository extraction completed:
   `domain/athlete/repository.py` owns user/profile facades, user sports /
-  constraints / preferences and fitness/readiness snapshot storage; root
-  `repository.py` keeps a facade for compatibility.
-- Integration repository extraction started:
-  `integrations/repository.py` owns Strava connection, token and sync metadata;
-  root `repository.py` keeps a facade for compatibility.
-- Planning template repository extraction started:
+  constraints / preferences and fitness/readiness snapshot storage.
+- Integration repository extraction completed:
+  `integrations/repository.py` owns Strava connection, token and sync metadata.
+- Planning template repository extraction completed:
   `domain/planning/template_repository.py` owns `WeeklyPlan` / `DayPlan`
-  onboarding, template and archive compatibility; root `repository.py` keeps a
-  facade for compatibility.
-- Coaching repository extraction started:
-  `domain/coaching/repository.py` owns adaptation event conversion and storage;
-  root `repository.py` keeps a facade for compatibility.
-- Root repository storage removed:
-  `repository.py` is now facade-only; it must not query, write or construct DB
-  records directly.
+  onboarding, template and archive compatibility.
+- Coaching repository extraction completed:
+  `domain/coaching/repository.py` owns adaptation event conversion and storage.
+- Root repository deleted:
+  root `repository.py` no longer exists; source, tests and scripts import the
+  real owner repositories directly.
 - Primary risk: moving files faster than deleting obsolete boundaries
 - Thursday criterion: root is explainable, delete candidates are explicit, and
   new root files fail architecture tests unless classified here
@@ -126,16 +121,13 @@ is allowed only for hotspots that need a separate shrink slice.
 | `api.py` | root-entrypoint | entrypoint | FastAPI app assembly entrypoint | keep until app package owns all routes |
 | `main.py` | root-entrypoint | entrypoint | ASGI import entrypoint | permanent root |
 | `models.py` | core | keep_root_temporarily | central SQLAlchemy models need a dedicated schema split | model schema split |
-| `repository.py` | core | keep_root_temporarily | facade-only compatibility layer; real DB owners live in domain/integrations modules | migrate remaining call sites then delete facade |
 | `schema.py` | core | keep_root_temporarily | central Pydantic schema needs bounded API/domain split | schema split |
 
 ## Immediate Cut Order
 
 1. Keep only root entrypoints plus bounded monoliths in root.
-2. Split monoliths only with stable facades:
-   `repository.py`, `schema.py`, `models.py`.
-3. For `repository.py`, migrate call sites from facade to owners, then delete
-   the facade once source imports are gone.
+2. Next cuts target the bounded monoliths only:
+   `schema.py`, `models.py`.
 
 ## Non Goals
 

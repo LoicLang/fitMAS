@@ -52,16 +52,7 @@ def test_12s_execution_repository_owns_activity_api() -> None:
 
 
 def test_12s_root_repository_keeps_only_facade_for_activity_api() -> None:
-    source = ROOT_REPOSITORY.read_text(encoding="utf-8")
-    assert "from fitmas.domain.execution import repository as execution_repo" in source
-
-    for name in sorted(ACTIVITY_API):
-        body = _function_source(ROOT_REPOSITORY, name)
-        assert f"execution_repo.{name}" in body
-        assert "db.query" not in body
-        assert "s.Activity(" not in body
-        assert "Activity(" not in body
-
+    assert not ROOT_REPOSITORY.exists()
 
 def test_12s_activity_consumers_use_execution_repository_for_activity_storage() -> None:
     offenders: list[str] = []

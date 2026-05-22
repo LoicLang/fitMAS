@@ -10,8 +10,8 @@ SRC = ROOT / "backend" / "src" / "fitmas"
 def test_12x_production_source_does_not_import_root_repository_facade() -> None:
     offenders: list[str] = []
     forbidden_markers = (
-        "from fitmas import repository",
-        "import fitmas.repository",
+        "from fitmas import " + "repository",
+        "import fitmas." + "repository",
     )
     for path in SRC.rglob("*.py"):
         if path == SRC / "repository.py":

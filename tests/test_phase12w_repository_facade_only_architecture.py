@@ -55,36 +55,7 @@ def test_12w_domain_repositories_own_remaining_root_storage_api() -> None:
 
 
 def test_12w_root_repository_has_no_direct_storage_or_query_logic() -> None:
-    source = ROOT_REPOSITORY.read_text(encoding="utf-8")
-    forbidden = (
-        "db.query",
-        "db.add",
-        "db.delete",
-        "db.commit",
-        "db.refresh",
-        "db.flush",
-        "s.UserSport(",
-        "s.UserConstraint(",
-        "s.UserPreference(",
-        "s.AdaptationEventRecord(",
-    )
-    offenders = [token for token in forbidden if token in source]
-
-    assert offenders == []
-
+    assert not ROOT_REPOSITORY.exists()
 
 def test_12w_root_repository_remaining_facades_delegate_to_real_owners() -> None:
-    source = ROOT_REPOSITORY.read_text(encoding="utf-8")
-    assert "from fitmas.domain.coaching import repository as coaching_repo" in source
-
-    for name in sorted(ATHLETE_PROFILE_API):
-        body = _function_source(ROOT_REPOSITORY, name)
-        assert f"athlete_repo.{name}" in body
-
-    for name in sorted(PLANNING_VIEW_API):
-        body = _function_source(ROOT_REPOSITORY, name)
-        assert f"planning_repo.{name}" in body
-
-    for name in sorted(COACHING_ADAPTATION_API):
-        body = _function_source(ROOT_REPOSITORY, name)
-        assert f"coaching_repo.{name}" in body
+    assert not ROOT_REPOSITORY.exists()

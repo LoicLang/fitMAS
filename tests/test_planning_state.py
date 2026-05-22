@@ -4,10 +4,12 @@ import os
 import tempfile
 import unittest
 from datetime import datetime
+from fitmas.domain.athlete import repository as athlete_repo
+from fitmas.domain.planning import repository as planning_repo
 
 os.environ.setdefault("FITMAS_DB_PATH", tempfile.mktemp(prefix="fitmas-planning-state-", suffix=".db"))
 
-from fitmas import repository as repo, schema as s
+from fitmas import schema as s
 from fitmas.core.db import Base, SessionLocal, engine, init_db
 from fitmas.domain.planning.planning_state import refresh_planning_state
 
@@ -90,9 +92,9 @@ class PlanningStateTest(unittest.TestCase):
 
         self.assertEqual(bundle.profile.primary_sport, "running")
         self.assertEqual(bundle.fitness.date.isoformat(), "2026-03-22")
-        self.assertIsNotNone(repo.get_latest_fitness_snapshot_record(self.db, self.user.id))
-        self.assertIsNotNone(repo.get_latest_readiness_snapshot_record(self.db, self.user.id))
-        self.assertIsNotNone(repo.get_latest_planning_decision_record(self.db, self.user.id))
+        self.assertIsNotNone(athlete_repo.get_latest_fitness_snapshot_record(self.db, self.user.id))
+        self.assertIsNotNone(athlete_repo.get_latest_readiness_snapshot_record(self.db, self.user.id))
+        self.assertIsNotNone(planning_repo.get_latest_planning_decision_record(self.db, self.user.id))
         self.assertIn(
             bundle.decision.planning_mode,
             {"maintain_load", "increase_load", "reduce_load", "restart_consistency", "tactical_adjustment", "injury_protection", "deload"},

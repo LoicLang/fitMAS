@@ -69,8 +69,12 @@ from fastapi.testclient import TestClient
 from sqlalchemy import text
 
 from fitmas.api import app
-from fitmas import repository as repo, schema as s
+from fitmas import schema as s
 from fitmas.core.db import SessionLocal, engine, init_db
+from fitmas.domain.athlete import repository as athlete_repo
+from fitmas.domain.coaching import repo_conversation
+from fitmas.domain.memory import repository as memory_repo
+from fitmas.domain.planning import repository as planning_repo
 
 
 @dataclass(slots=True)
@@ -86,7 +90,7 @@ def _print_header(db, user) -> None:
     print(f"User: {user.id} | {user.name} | tz={user.timezone}")
     print(f"Coach: {user.coach_name} | style={user.coach_style}")
     print("Next sessions:")
-    sessions = repo.get_scheduled_sessions(db, user.id, limit=8)
+    sessions = planning_repo.get_scheduled_sessions(db, user.id, limit=8)
     for session in sessions[:8]:
         when = session.scheduled_date.isoformat()[:16] if session.scheduled_date else "n/a"
         print(f"- {when} | {session.sport_type} | {session.session_title} | {session.completion_status}")
@@ -94,9 +98,9 @@ def _print_header(db, user) -> None:
 
 
 def _snapshot(db, user_id: int) -> Snapshot:
-    memory = repo.get_active_memory_items(db, user_id, include_patterns=True, total_limit=40)
-    sessions = repo.get_scheduled_sessions(db, user_id, limit=16)
-    messages = repo.get_messages(db, user_id)
+    memory = memory_repo.get_active_memory_items(db, user_id, include_patterns=True, total_limit=40)
+    sessions = planning_repo.get_scheduled_sessions(db, user_id, limit=16)
+    messages = repo_conversation.get_messages(db, user_id)
     latest_agent = next((message.text for message in reversed(messages) if message.role == "agent"), None)
     return Snapshot(
         memory={
@@ -145,7 +149,7 @@ def _resolve_user(db):
         if user is None:
             raise RuntimeError(f"user_id={args.user_id} not found")
         return user
-    user = repo.get_user_optional(db)
+    user = athlete_repo.get_user_optional(db)
     if user is None:
         raise RuntimeError("No user found in source DB")
     return user

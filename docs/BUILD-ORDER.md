@@ -263,29 +263,23 @@ Prochain chantier logique :
 
 - il n'y a plus de bridge `legacy/conversation_*` runtime-active ;
 - il n'y a plus de provider ou artifact `CoachDecision` ;
-- le root runtime conversationnel est supprime ; le nouveau hotspot est
-  `repository.py` puis les monolithes `schema.py` et `models.py` ;
+- le root runtime conversationnel est supprime ;
+- root `repository.py` est supprime : les sources, tests et scripts passent
+  directement par les owners domaine/integration ;
 - `domain/planning/repository.py` possede deja les reads/writes
-  `ScheduledSession`, l'audit `PlanMutationEvent` et `PlanningDecisionRecord`,
-  avec `fitmas.repository` en facade temporaire ;
+  `ScheduledSession`, l'audit `PlanMutationEvent` et `PlanningDecisionRecord` ;
 - `domain/memory/repository.py` possede deja facts profile, working memory et
-  patterns, avec `fitmas.repository` en facade temporaire ;
-- `domain/execution/repository.py` possede deja les activites reelles, avec
-  `fitmas.repository` en facade temporaire ;
+  patterns ;
+- `domain/execution/repository.py` possede deja les activites reelles ;
 - `domain/athlete/repository.py` possede deja user/profile, sports/constraints/
-  preferences et snapshots fitness/readiness, avec `fitmas.repository` en
-  facade temporaire ;
-- `domain/coaching/repository.py` possede deja les adaptation events, avec
-  `fitmas.repository` en facade temporaire ;
+  preferences et snapshots fitness/readiness ;
+- `domain/coaching/repository.py` possede deja les adaptation events ;
 - `integrations/repository.py` possede deja connection/tokens/sync metadata
-  Strava, avec `fitmas.repository` en facade temporaire ;
+  Strava ;
 - `domain/planning/template_repository.py` possede deja la compat
-  `WeeklyPlan/DayPlan` onboarding/template/archive, avec `fitmas.repository`
-  en facade temporaire ;
-- `fitmas.repository` est maintenant facade-only : il ne porte plus de query ni
-  write DB direct ;
-- prochaine etape : migrer les imports source restants vers les owners, puis
-  supprimer la facade avant de toucher a `schema.py`/`models.py` ;
+  `WeeklyPlan/DayPlan` onboarding/template/archive ;
+- prochain hotspot : les monolithes `schema.py` et `models.py`, a traiter
+  seulement avec un plan de coupe clair ;
 - garder la priorite runtime plus petit, pas refactor plus complet.
 
 ## Ordre De Lecture Pour Un Agent

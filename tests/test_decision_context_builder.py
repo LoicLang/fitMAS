@@ -5,11 +5,13 @@ import tempfile
 from datetime import datetime, timezone
 
 import pytest
+from fitmas.domain.planning import repository as planning_repo
+from fitmas.domain.planning import template_repository as template_repo
 
 os.environ.setdefault("FITMAS_DB_PATH", tempfile.mktemp(prefix="fitmas-decision-context-", suffix=".db"))
 
 from fitmas.core.db import Base, SessionLocal, engine, init_db
-from fitmas import repository as repo, schema as s
+from fitmas import schema as s
 from fitmas.decision import InputEvent
 from fitmas.decision.context_builder import (
     ContextBuilderInput,
@@ -82,7 +84,7 @@ def test_context_builder_builds_canonical_context_from_scheduled_runtime_truth()
         local_now = get_local_now(user.timezone, now=now)
         today_key = DAY_KEYS[local_now.weekday()]
         plan_day = _plan_day(today_key)
-        repo.replace_plan(
+        template_repo.replace_plan(
             db,
             user.id,
             intention="reprendre propre",
@@ -91,7 +93,7 @@ def test_context_builder_builds_canonical_context_from_scheduled_runtime_truth()
             now=now,
             days=[plan_day],
         )
-        session = repo.get_scheduled_sessions(db, user.id)[0]
+        session = planning_repo.get_scheduled_sessions(db, user.id)[0]
         session.scheduled_date = local_now.replace(hour=8, minute=0, second=0, microsecond=0).replace(tzinfo=None)
         db.commit()
         db.refresh(session)

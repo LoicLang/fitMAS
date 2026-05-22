@@ -54,24 +54,7 @@ def test_12v_template_repository_owns_weeklyplan_dayplan_api() -> None:
 
 
 def test_12v_root_repository_keeps_only_template_facades() -> None:
-    source = ROOT_REPOSITORY.read_text(encoding="utf-8")
-    assert "from fitmas.domain.planning import template_repository as template_repo" in source
-
-    forbidden_storage_calls = (
-        "db.query",
-        "s.WeeklyPlan(",
-        "s.DayPlan(",
-        "s.ChangeNote(",
-        "s.WatchItem(",
-        "s.ScheduledSession(",
-        "db.add",
-        "db.commit",
-    )
-    for name in sorted(TEMPLATE_API):
-        body = _function_source(ROOT_REPOSITORY, name)
-        assert f"template_repo.{name}" in body
-        assert all(token not in body for token in forbidden_storage_calls)
-
+    assert not ROOT_REPOSITORY.exists()
 
 def test_12v_onboarding_uses_template_repository_for_week_templates() -> None:
     offenders: list[str] = []

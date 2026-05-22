@@ -62,18 +62,12 @@ Root encore accepte :
 
 - `api.py`, `main.py`, `__init__.py` pour l'assemblage app.
 - `models.py`, `schema.py` restent les deux monolithes bruts.
-- `repository.py` reste en facade temporaire, avec deja extraits :
-  `domain/planning/repository.py` pour sessions/audit/decision planning et
-  `domain/memory/repository.py` pour facts, working memory et patterns,
-  `domain/execution/repository.py` pour activites reelles,
-  `domain/athlete/repository.py` pour user/profile et snapshots fitness/readiness,
-  `domain/coaching/repository.py` pour adaptation events,
-  `integrations/repository.py` pour connection/tokens Strava,
-  `domain/planning/template_repository.py` pour compat `WeeklyPlan/DayPlan`
-  onboarding/template/archive.
-- `repository.py` ne doit plus contenir de query/write DB direct. Il reste
-  seulement une facade de compat tant que les imports source ne sont pas tous
-  migres vers les owners.
+- root `repository.py` est supprime. Les reads/writes vivent directement dans
+  leurs owners :
+  `domain/planning/repository.py`, `domain/planning/template_repository.py`,
+  `domain/memory/repository.py`, `domain/execution/repository.py`,
+  `domain/athlete/repository.py`, `domain/coaching/repository.py` et
+  `integrations/repository.py`.
 
 Ce qui n'est plus l'architecture active :
 
@@ -188,9 +182,9 @@ Interdits :
 ## Risque Actuel
 
 Le root runtime conversationnel est supprime. Les premiers owners repository
-sont extraits. Les prochains risques sont les monolithes transverses restants :
+sont extraits et la facade root `repository.py` est supprimee. Les prochains
+risques sont les monolithes transverses restants :
 
-- `repository.py`, tant qu'il reste importe par des call sites historiques ;
 - `schema.py` ;
 - `models.py`.
 

@@ -6,12 +6,17 @@ import unittest
 from datetime import datetime, timedelta
 from datetime import timezone as dt_timezone
 from types import SimpleNamespace
+from fitmas.domain.coaching import repo_conversation
+from fitmas.domain.execution import repository as execution_repo
+from fitmas.domain.memory import repository as memory_repo
+from fitmas.domain.planning import repository as planning_repo
+from fitmas.domain.planning import template_repository as template_repo
 
 os.environ.setdefault("FITMAS_DB_PATH", tempfile.mktemp(prefix="fitmas-heartbeat-", suffix=".db"))
 
 import fitmas.skills.heartbeat.heartbeat as heartbeat
 import fitmas.domain.planning.adaptation as adaptation
-from fitmas import repository as repo, schema as s
+from fitmas import schema as s
 from fitmas.domain.planning.adaptation import AdaptationResult
 from fitmas.app.telegram.delivery import persist_draft
 from fitmas.core.db import Base, SessionLocal, engine, init_db
@@ -42,7 +47,7 @@ class HeartbeatGroundingTest(unittest.TestCase):
     def test_weekly_review_prompt_mentions_actual_activities(self) -> None:
         now = get_local_now(self.user.timezone)
         today_key = DAY_KEYS[now.weekday()]
-        repo.replace_plan(
+        template_repo.replace_plan(
             self.db,
             self.user.id,
             intention="test",
@@ -68,7 +73,7 @@ class HeartbeatGroundingTest(unittest.TestCase):
                 }
             ],
         )
-        repo.add_activity(
+        execution_repo.add_activity(
             self.db,
             user_id=self.user.id,
             source="manual",
@@ -106,7 +111,7 @@ class HeartbeatGroundingTest(unittest.TestCase):
         now = get_local_now(self.user.timezone)
         today_key = DAY_KEYS[now.weekday()]
         yesterday_key = DAY_KEYS[(now.weekday() - 1) % 7]
-        repo.replace_plan(
+        template_repo.replace_plan(
             self.db,
             self.user.id,
             intention="test",
@@ -149,7 +154,7 @@ class HeartbeatGroundingTest(unittest.TestCase):
                 },
             ],
         )
-        repo.add_activity(
+        execution_repo.add_activity(
             self.db,
             user_id=self.user.id,
             source="manual",
@@ -186,7 +191,7 @@ class HeartbeatGroundingTest(unittest.TestCase):
         now = get_local_now(self.user.timezone)
         today_key = DAY_KEYS[now.weekday()]
         yesterday_key = DAY_KEYS[(now.weekday() - 1) % 7]
-        repo.replace_plan(
+        template_repo.replace_plan(
             self.db,
             self.user.id,
             intention="test",
@@ -230,7 +235,7 @@ class HeartbeatGroundingTest(unittest.TestCase):
             ],
         )
         yesterday_iso = (now.date() - timedelta(days=1)).isoformat()
-        repo.upsert_facts(
+        memory_repo.upsert_facts(
             self.db,
             self.user.id,
             [
@@ -263,7 +268,7 @@ class HeartbeatGroundingTest(unittest.TestCase):
         now = get_local_now(self.user.timezone)
         today_key = DAY_KEYS[now.weekday()]
         yesterday_key = DAY_KEYS[(now.weekday() - 1) % 7]
-        repo.replace_plan(
+        template_repo.replace_plan(
             self.db,
             self.user.id,
             intention="test",
@@ -327,7 +332,7 @@ class HeartbeatGroundingTest(unittest.TestCase):
         today_key = DAY_KEYS[now.weekday()]
         yesterday_key = DAY_KEYS[(now.weekday() - 1) % 7]
         two_days_ago_key = DAY_KEYS[(now.weekday() - 2) % 7]
-        repo.replace_plan(
+        template_repo.replace_plan(
             self.db,
             self.user.id,
             intention="test",
@@ -433,7 +438,7 @@ class HeartbeatGroundingTest(unittest.TestCase):
         now = get_local_now(self.user.timezone)
         today_key = DAY_KEYS[now.weekday()]
         tomorrow_key = DAY_KEYS[(now.weekday() + 1) % 7]
-        repo.replace_plan(
+        template_repo.replace_plan(
             self.db,
             self.user.id,
             intention="test",
@@ -483,7 +488,7 @@ class HeartbeatGroundingTest(unittest.TestCase):
         self.user.onboarding_status = "completed"
         self.user.weekly_structure_notes = "mardi matin fiable"
         self.db.commit()
-        repo.upsert_facts(
+        memory_repo.upsert_facts(
             self.db,
             self.user.id,
             [
@@ -526,7 +531,7 @@ class HeartbeatGroundingTest(unittest.TestCase):
 
     def test_morning_briefing_does_not_repeat_stable_constraint_fact(self) -> None:
         _, _ = self._create_plan_with_today_session()
-        repo.upsert_facts(
+        memory_repo.upsert_facts(
             self.db,
             self.user.id,
             [
@@ -699,7 +704,7 @@ class HeartbeatGroundingTest(unittest.TestCase):
 
     def test_morning_briefing_passes_structured_reply_context_to_composer(self) -> None:
         _, _ = self._create_plan_with_today_session()
-        repo.upsert_facts(
+        memory_repo.upsert_facts(
             self.db,
             self.user.id,
             [
@@ -768,7 +773,7 @@ class HeartbeatGroundingTest(unittest.TestCase):
             )
         )
         self.db.commit()
-        repo.upsert_facts(
+        memory_repo.upsert_facts(
             self.db,
             self.user.id,
             [
@@ -858,7 +863,7 @@ class HeartbeatGroundingTest(unittest.TestCase):
     def test_weekly_review_prompt_mentions_claimed_activities(self) -> None:
         now = get_local_now(self.user.timezone)
         today_key = DAY_KEYS[now.weekday()]
-        repo.replace_plan(
+        template_repo.replace_plan(
             self.db,
             self.user.id,
             intention="test",
@@ -885,7 +890,7 @@ class HeartbeatGroundingTest(unittest.TestCase):
             ],
         )
         today_iso = now.date().isoformat()
-        repo.upsert_facts(
+        memory_repo.upsert_facts(
             self.db,
             self.user.id,
             [
@@ -918,7 +923,7 @@ class HeartbeatGroundingTest(unittest.TestCase):
     def test_weekly_review_prompt_mentions_active_health_fact(self) -> None:
         now = get_local_now(self.user.timezone)
         today_key = DAY_KEYS[now.weekday()]
-        repo.replace_plan(
+        template_repo.replace_plan(
             self.db,
             self.user.id,
             intention="test",
@@ -944,7 +949,7 @@ class HeartbeatGroundingTest(unittest.TestCase):
                 }
             ],
         )
-        repo.upsert_facts(
+        memory_repo.upsert_facts(
             self.db,
             self.user.id,
             [
@@ -980,7 +985,7 @@ class HeartbeatGroundingTest(unittest.TestCase):
     def test_weekly_review_passes_structured_reply_context_to_composer(self) -> None:
         now = get_local_now(self.user.timezone)
         today_key = DAY_KEYS[now.weekday()]
-        repo.replace_plan(
+        template_repo.replace_plan(
             self.db,
             self.user.id,
             intention="test",
@@ -1006,7 +1011,7 @@ class HeartbeatGroundingTest(unittest.TestCase):
                 }
             ],
         )
-        repo.add_activity(
+        execution_repo.add_activity(
             self.db,
             user_id=self.user.id,
             source="manual",
@@ -1024,7 +1029,7 @@ class HeartbeatGroundingTest(unittest.TestCase):
             avg_speed=None,
             tss=20.0,
         )
-        repo.upsert_facts(
+        memory_repo.upsert_facts(
             self.db,
             self.user.id,
             [
@@ -1072,7 +1077,7 @@ class HeartbeatGroundingTest(unittest.TestCase):
     def test_weekly_review_prompt_mentions_weekly_health_highlight_from_transcript(self) -> None:
         now = get_local_now(self.user.timezone)
         today_key = DAY_KEYS[now.weekday()]
-        repo.replace_plan(
+        template_repo.replace_plan(
             self.db,
             self.user.id,
             intention="test",
@@ -1098,7 +1103,7 @@ class HeartbeatGroundingTest(unittest.TestCase):
                 }
             ],
         )
-        repo.add_conversation_turn(
+        repo_conversation.add_conversation_turn(
             self.db,
             user_id=self.user.id,
             user_message="Je suis malade comme un chien cette semaine j'ai rien fait",
@@ -1171,7 +1176,7 @@ class HeartbeatGroundingTest(unittest.TestCase):
 
     def test_signal_check_passes_structured_reply_context_to_composer(self) -> None:
         self._create_plan_with_today_session()
-        repo.upsert_facts(
+        memory_repo.upsert_facts(
             self.db,
             self.user.id,
             [
@@ -1291,8 +1296,8 @@ class HeartbeatGroundingTest(unittest.TestCase):
 
     def test_morning_briefing_prefers_scheduled_session_over_legacy_day_plan(self) -> None:
         _, today_session = self._create_plan_with_today_session()
-        plan = repo.get_active_plan(self.db, self.user.id)
-        day_row = repo.get_day_plan(self.db, plan.id, today_session.day)
+        plan = template_repo.get_active_plan(self.db, self.user.id)
+        day_row = template_repo.get_day_plan(self.db, plan.id, today_session.day)
         day_row.session_title = "Legacy footing plan"
         day_row.session_goal = "Legacy goal"
         today_session.session_title = "Natation app truth"
@@ -1341,8 +1346,8 @@ class HeartbeatGroundingTest(unittest.TestCase):
 
     def test_weekly_review_prefers_scheduled_sessions_over_legacy_plan(self) -> None:
         _, today_session = self._create_plan_with_today_session()
-        plan = repo.get_active_plan(self.db, self.user.id)
-        day_row = repo.get_day_plan(self.db, plan.id, today_session.day)
+        plan = template_repo.get_active_plan(self.db, self.user.id)
+        day_row = template_repo.get_day_plan(self.db, plan.id, today_session.day)
         day_row.session_title = "Legacy footing plan"
         today_session.session_title = "Natation app truth"
         today_session.sport_type = "swimming"
@@ -1369,7 +1374,7 @@ class HeartbeatGroundingTest(unittest.TestCase):
         now = get_local_now(self.user.timezone)
         today_key = DAY_KEYS[now.weekday()]
         yesterday_key = DAY_KEYS[(now.weekday() - 1) % 7]
-        repo.replace_plan(
+        template_repo.replace_plan(
             self.db,
             self.user.id,
             intention="test",
@@ -1434,7 +1439,7 @@ class HeartbeatGroundingTest(unittest.TestCase):
         LLM gets the offplan swim by sport+day instead of zero-natation."""
         now = get_local_now(self.user.timezone)
         today_key = DAY_KEYS[now.weekday()]
-        repo.replace_plan(
+        template_repo.replace_plan(
             self.db,
             self.user.id,
             intention="test",
@@ -1461,7 +1466,7 @@ class HeartbeatGroundingTest(unittest.TestCase):
             ],
         )
         # Offplan swim: not linked to any ScheduledSession.
-        repo.add_activity(
+        execution_repo.add_activity(
             self.db,
             user_id=self.user.id,
             source="manual",
@@ -1574,7 +1579,7 @@ class HeartbeatGroundingTest(unittest.TestCase):
     def _create_plan_with_today_session(self) -> tuple[s.WeeklyPlan, s.ScheduledSession]:
         now = get_local_now(self.user.timezone)
         today_key = DAY_KEYS[now.weekday()]
-        plan = repo.replace_plan(
+        plan = template_repo.replace_plan(
             self.db,
             self.user.id,
             intention="test",
@@ -1600,7 +1605,7 @@ class HeartbeatGroundingTest(unittest.TestCase):
                 }
             ],
         )
-        session = repo.get_today_scheduled_session(self.db, self.user.id, timezone_name=self.user.timezone)
+        session = planning_repo.get_today_scheduled_session(self.db, self.user.id, timezone_name=self.user.timezone)
         self.assertIsNotNone(session)
         return plan, session
 

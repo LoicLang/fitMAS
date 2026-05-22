@@ -5,6 +5,8 @@ import tempfile
 import unittest
 from datetime import timedelta
 from types import SimpleNamespace
+from fitmas.domain.execution import repository as execution_repo
+from fitmas.domain.planning import template_repository as template_repo
 
 os.environ.setdefault("FITMAS_DB_PATH", tempfile.mktemp(prefix="fitmas-heartbeat-debug-", suffix=".db"))
 os.environ["FITMAS_ENABLE_DEBUG_ENDPOINTS"] = "1"
@@ -12,7 +14,7 @@ os.environ["FITMAS_ENABLE_DEBUG_ENDPOINTS"] = "1"
 from fastapi.testclient import TestClient
 
 import fitmas.skills.heartbeat.heartbeat as heartbeat
-from fitmas import repository as repo, schema as s
+from fitmas import schema as s
 from fitmas.api import app
 from fitmas.app.telegram.delivery import CoachDraft
 from fitmas.core.db import Base, SessionLocal, engine, init_db
@@ -52,7 +54,7 @@ class HeartbeatDebugEndpointTest(unittest.TestCase):
         now = get_local_now(self.user.timezone)
         today_key = DAY_KEYS[now.weekday()]
         yesterday_key = DAY_KEYS[(now.weekday() - 1) % 7]
-        repo.replace_plan(
+        template_repo.replace_plan(
             self.db,
             self.user.id,
             intention="debug heartbeat",
@@ -95,7 +97,7 @@ class HeartbeatDebugEndpointTest(unittest.TestCase):
                 },
             ],
         )
-        repo.add_activity(
+        execution_repo.add_activity(
             self.db,
             user_id=self.user.id,
             source="manual",

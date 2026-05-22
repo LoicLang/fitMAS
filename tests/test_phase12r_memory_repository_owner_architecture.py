@@ -53,17 +53,7 @@ def test_12r_memory_repository_owns_profile_working_and_pattern_api() -> None:
 
 
 def test_12r_root_repository_keeps_only_facade_for_memory_api() -> None:
-    source = ROOT_REPOSITORY.read_text(encoding="utf-8")
-    assert "from fitmas.domain.memory import repository as memory_repo" in source
-
-    for name in sorted(MEMORY_API):
-        body = _function_source(ROOT_REPOSITORY, name)
-        assert f"memory_repo.{name}" in body
-        assert "db.query" not in body
-        assert "s.UserFact(" not in body
-        assert "s.WorkingMemoryEntry(" not in body
-        assert "s.UserPattern(" not in body
-
+    assert not ROOT_REPOSITORY.exists()
 
 def test_12r_memory_domain_uses_memory_repository_for_memory_storage() -> None:
     offenders: list[str] = []

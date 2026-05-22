@@ -4,10 +4,11 @@ import os
 import tempfile
 import unittest
 from datetime import datetime, timedelta
+from fitmas.domain.planning import repository as planning_repo
 
 os.environ.setdefault("FITMAS_DB_PATH", tempfile.mktemp(prefix="fitmas-memory-service-", suffix=".db"))
 
-from fitmas import repository as repo, schema as s
+from fitmas import schema as s
 from fitmas.core.db import Base, SessionLocal, engine, init_db
 from fitmas.decision.command_actions import (
     AvailabilityConstraintAction,
@@ -320,7 +321,7 @@ class MutationActionServicesTest(unittest.TestCase):
         )
 
         self.db.expire_all()
-        updated = repo.get_scheduled_session(self.db, self.user.id, session.id)
+        updated = planning_repo.get_scheduled_session(self.db, self.user.id, session.id)
         events = self.db.query(s.MemoryMutationEventRecord).order_by(s.MemoryMutationEventRecord.id).all()
 
         self.assertEqual(result.applied_count, 1)
@@ -350,7 +351,7 @@ class MutationActionServicesTest(unittest.TestCase):
         )
 
         self.db.expire_all()
-        updated = repo.get_scheduled_session(self.db, self.user.id, session.id)
+        updated = planning_repo.get_scheduled_session(self.db, self.user.id, session.id)
 
         self.assertEqual(result.applied_count, 1)
         self.assertEqual(result.blocked_count, 0)
@@ -365,7 +366,7 @@ class MutationActionServicesTest(unittest.TestCase):
             f"Renfo 34min ({session.scheduled_date.date().isoformat()})",
         ):
             with self.subTest(target_ref=target_ref):
-                repo.set_scheduled_session_status(self.db, session.id, "planned")
+                planning_repo.set_scheduled_session_status(self.db, session.id, "planned")
                 result = apply_execution_actions_for_user(
                     self.db,
                     user=self.user,
@@ -383,7 +384,7 @@ class MutationActionServicesTest(unittest.TestCase):
                 )
 
                 self.db.expire_all()
-                updated = repo.get_scheduled_session(self.db, self.user.id, session.id)
+                updated = planning_repo.get_scheduled_session(self.db, self.user.id, session.id)
 
                 self.assertEqual(result.applied_count, 1)
                 self.assertEqual(result.blocked_count, 0)
@@ -409,7 +410,7 @@ class MutationActionServicesTest(unittest.TestCase):
         )
 
         self.db.expire_all()
-        updated = repo.get_scheduled_session(self.db, self.user.id, session.id)
+        updated = planning_repo.get_scheduled_session(self.db, self.user.id, session.id)
 
         self.assertEqual(result.applied_count, 1)
         self.assertEqual(updated.completion_status, "done")
@@ -438,8 +439,8 @@ class MutationActionServicesTest(unittest.TestCase):
 
         self.assertEqual(result.applied_count, 0)
         self.assertEqual(result.blocked_count, 1)
-        self.assertEqual(repo.get_scheduled_session(self.db, self.user.id, first.id).completion_status, "planned")
-        self.assertEqual(repo.get_scheduled_session(self.db, self.user.id, second.id).completion_status, "planned")
+        self.assertEqual(planning_repo.get_scheduled_session(self.db, self.user.id, first.id).completion_status, "planned")
+        self.assertEqual(planning_repo.get_scheduled_session(self.db, self.user.id, second.id).completion_status, "planned")
         self.assertEqual(events[0].status, "blocked")
         self.assertEqual(events[0].reason, "ambiguous_target")
         self.assertEqual(len(result.event_ids), 1)
