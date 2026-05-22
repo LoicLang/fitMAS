@@ -10,7 +10,7 @@ from fitmas.conversation_prompt_modules import (
     build_turn_scope_contract_system_text,
     build_tool_workflow_system_text,
 )
-from fitmas.prompt_contracts import get_prompt_contract
+from fitmas.llm.prompt_contracts import get_prompt_contract
 from fitmas.tools.routing import IntentCategory
 
 

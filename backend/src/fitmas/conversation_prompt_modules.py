@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from fitmas.domain.coaching import coach_voice
-from fitmas.prompt_contracts import PromptContract
+from fitmas.llm.prompt_contracts import PromptContract
 
 
 def _render_tuple(values: tuple[str, ...]) -> str:

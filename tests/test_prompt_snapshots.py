@@ -3,7 +3,7 @@ from pathlib import Path
 from fitmas.context_pack import build_conversation_context_pack
 from fitmas.conversation_prompting import select_conversation_prompt_policy
 from fitmas.llm_prompt_builder import build_layered_conversation_prompt
-from fitmas.prompt_contracts import get_prompt_contract
+from fitmas.llm.prompt_contracts import get_prompt_contract
 from fitmas.tools.routing import IntentCategory
 
 

@@ -23,7 +23,7 @@ is allowed only for hotspots that need a separate shrink slice.
 
 ## Summary
 
-- Root files counted: 42
+- Root files counted: 39
 - Permanent root entrypoints allowed: 3
 - First wrapper cuts completed: `heartbeat*.py`, `llm_gateway.py`,
   `telegram_scheduler.py`, `tool_*.py`, `api_messages.py`,
@@ -56,6 +56,8 @@ is allowed only for hotspots that need a separate shrink slice.
   `generated_week_coherence.py`, `repo_conversation.py`, `week_context.py`
 - Core/integration root cut completed: `calendar_resolution.py`, `db.py`,
   `seed.py`, `temporal_resolver.py`, `time_context.py`, `strava.py`
+- LLM support root cut completed: `calibration_llm.py`,
+  `prompt_contracts.py`, `prompt_observability.py`
 - Primary risk: moving files faster than deleting obsolete boundaries
 - Thursday criterion: root is explainable, delete candidates are explicit, and
   new root files fail architecture tests unless classified here
@@ -68,7 +70,6 @@ is allowed only for hotspots that need a separate shrink slice.
 | `adaptation.py` | domain/planning | merge | old adaptation facade overlaps planning runtime | planning simplification |
 | `adaptation_decision.py` | domain/planning | merge | decision value object should live with planning decisions | planning simplification |
 | `api.py` | root-entrypoint | entrypoint | FastAPI app assembly entrypoint | keep until app package owns all routes |
-| `calibration_llm.py` | llm | move | LLM calibration helper | llm package cleanup |
 | `claim_guard.py` | decision | merge | visible claim protection should collapse into OutputVerifier | output verifier shrink |
 | `coach_messages.py` | domain/coaching | merge | message fixtures overlap coach voice and reply composer | coaching package split |
 | `coach_state_bundle.py` | domain/coaching | merge | old bundle should collapse into CoachContext | coach context shrink |
@@ -94,9 +95,7 @@ is allowed only for hotspots that need a separate shrink slice.
 | `planning_decision.py` | domain/planning | move | planning decision model belongs to planning | planning package split |
 | `planning_state.py` | domain/planning | move | planning state belongs to planning | planning package split |
 | `planning_window_resolution.py` | domain/planning | merge | window resolver should merge into ReferenceResolver | planning simplification |
-| `prompt_contracts.py` | llm | move | prompt contracts belong under llm | llm package cleanup |
 | `prompt_layers.py` | llm | merge | prompt layering should collapse into canonical prompt families | prompt shrink |
-| `prompt_observability.py` | llm | move | prompt telemetry belongs under llm | llm package cleanup |
 | `repository.py` | core | keep_root_temporarily | monolithic repository needs domain repository split | repository split |
 | `schema.py` | core | keep_root_temporarily | central Pydantic schema needs bounded API/domain split | schema split |
 | `session_metadata.py` | domain/planning | merge | load band helper belongs with session/timeline models | planning simplification |

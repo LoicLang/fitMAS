@@ -108,6 +108,8 @@ Les cuts physiques recents :
   `core/calendar_resolution.py`, `core/db.py`, `core/seed.py`,
   `core/temporal_resolver.py`, `core/time_context.py`,
   `integrations/strava.py`.
+- Les modules support LLM root ont ete deplaces sous `llm/` :
+  `calibration.py`, `prompt_contracts.py`, `prompt_observability.py`.
 - La resolution pending canonique normalise les aliases d'enum provider
   (`confirm`, `accepted`, etc.) vers `accept_pending` avant application.
   Un type inconnu devient une clarification pending, jamais un trou vers
@@ -127,7 +129,7 @@ Les cuts physiques recents :
 
 Etat chiffre au dernier check local :
 
-- root modules : `42`.
+- root modules : `39`.
 - legacy modules : `0` fichier source actif.
 - backend complet : `1323 passed, 11 skipped, 14 subtests passed`.
 - smoke canonical planning default : OK `10/10`.

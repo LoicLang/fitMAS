@@ -9,9 +9,9 @@ from fitmas.conversation_prompt_modules import (
     build_conversation_system_text,
 )
 from fitmas.conversation_prompting import ConversationPromptPolicy
-from fitmas.prompt_observability import PromptTrace, build_prompt_trace
+from fitmas.llm.prompt_observability import PromptTrace, build_prompt_trace
 from fitmas.prompt_layers import assemble_layered_prompt
-from fitmas.prompt_contracts import get_prompt_contract
+from fitmas.llm.prompt_contracts import get_prompt_contract
 from fitmas.core.time_context import render_time_context
 
 _CONVERSATION_SYSTEM_TEXT = build_conversation_system_text()

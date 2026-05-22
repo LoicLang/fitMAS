@@ -80,6 +80,8 @@ Ce qui n'est plus l'architecture active :
 - root core modules (`calendar_resolution.py`, `db.py`, `seed.py`,
   `temporal_resolver.py`, `time_context.py`)
 - root integration modules (`strava.py`)
+- root LLM support modules (`calibration_llm.py`, `prompt_contracts.py`,
+  `prompt_observability.py`)
 - root `final_reply.py`
 - root `heartbeat.py`
 - root `telegram_scheduler.py`

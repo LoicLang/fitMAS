@@ -1,4 +1,4 @@
-from fitmas.prompt_observability import (
+from fitmas.llm.prompt_observability import (
     DecideFailureReason,
     build_prompt_trace,
     normalize_decide_failure_reason,

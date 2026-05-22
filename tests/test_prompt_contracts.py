@@ -1,4 +1,4 @@
-from fitmas.prompt_contracts import get_prompt_contract, list_prompt_contracts
+from fitmas.llm.prompt_contracts import get_prompt_contract, list_prompt_contracts
 from fitmas.tools.registry import build_tool_registry
 
 

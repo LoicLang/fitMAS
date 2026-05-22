@@ -10,7 +10,7 @@ DECISION = SRC / "decision"
 PIPELINE = SRC / "conversation_pipeline.py"
 
 PIPELINE_CALIBRATION_IMPORTS_TO_REMOVE = {
-    "fitmas.calibration_llm",
+    "fitmas.llm.calibration",
     "fitmas.domain.coaching.calibration_needs",
 }
 

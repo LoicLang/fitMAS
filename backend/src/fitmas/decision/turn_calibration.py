@@ -4,7 +4,7 @@ from dataclasses import dataclass
 
 from sqlalchemy.orm import Session
 
-from fitmas.calibration_llm import extract_calibration_resolution
+from fitmas.llm.calibration import extract_calibration_resolution
 from fitmas.domain.coaching.calibration_needs import (
     build_resolution_memory_updates,
     find_open_calibration_need,
