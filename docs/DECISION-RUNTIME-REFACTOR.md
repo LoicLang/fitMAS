@@ -146,6 +146,7 @@ Etat actuel :
   l'event execution applique si une reply execution composee est invalide.
 - `llm/reply_backend.py` porte les primitives communes de composition/verif
   LLM et re-exporte les owners plus specialises.
+- `llm/reply_close_turn.py` porte la lane terminal social close.
 - `llm/reply_plan_adaptation.py` porte la reply planning-specific
   `AdaptationPolicyDecision -> FinalReplyContext -> verifier`.
 - `llm/reply_decision_backend.py` implemente le backend concret du `DecisionReplyComposer`.
@@ -187,8 +188,8 @@ de `turn_prompt_context.py` et `turn_context_payload.py`.
 de `turn_close_route.py`, `turn_pending_route.py` et
 `turn_pre_understanding_reply_route.py`, puis du post-understanding vers
 `turn_understanding_route.py`. `llm/reply_backend.py` est passe de `367` a
-`276` lignes apres extraction de `llm/reply_plan_adaptation.py`. Les nouveaux
-hotspots sont `decision/turn_understanding_route.py`,
+`206` lignes apres extraction de `llm/reply_plan_adaptation.py` et
+`llm/reply_close_turn.py`. Les nouveaux hotspots sont `decision/turn_understanding_route.py`,
 `decision/turn_planning_route.py` et les replies LLM restantes.
 
 10F a ajoute le census conversationnel et supprime quatre bridges :
