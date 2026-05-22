@@ -144,13 +144,17 @@ Etat actuel :
 - `decision/readonly_reply.py` fallback sur les facts `PlanWindow` si une reply
   plan lookup composee ne cite aucune verite planning, et fallback sur
   l'event execution applique si une reply execution composee est invalide.
-- `llm/reply_backend.py` porte les primitives de composition/verif LLM.
+- `llm/reply_backend.py` porte les primitives communes de composition/verif
+  LLM et re-exporte les owners plus specialises.
+- `llm/reply_plan_adaptation.py` porte la reply planning-specific
+  `AdaptationPolicyDecision -> FinalReplyContext -> verifier`.
 - `llm/reply_decision_backend.py` implemente le backend concret du `DecisionReplyComposer`.
 - `skills/heartbeat/reply_composer.py` porte la reply heartbeat.
 
 Prochaine simplification :
 
 - reduire `llm/reply_backend.py` et pousser plus de verification dans `OutputVerifier`.
+- garder les replies planning-specific hors du backend generaliste.
 - garder `decision/turn_router.py` mince ; ne pas y remettre de logique de decision.
 - continuer le menage des prompts conversationnels anciens encore centres sur
   les artefacts PlanPatch historiques.
@@ -182,9 +186,10 @@ de `turn_prompt_context.py` et `turn_context_payload.py`.
 `decision/turn_router.py` est passe de `361` a `172` lignes apres extraction
 de `turn_close_route.py`, `turn_pending_route.py` et
 `turn_pre_understanding_reply_route.py`, puis du post-understanding vers
-`turn_understanding_route.py`. Les nouveaux hotspots sont
-`decision/turn_understanding_route.py`, `decision/turn_planning_route.py` et
-`llm/reply_backend.py`.
+`turn_understanding_route.py`. `llm/reply_backend.py` est passe de `367` a
+`276` lignes apres extraction de `llm/reply_plan_adaptation.py`. Les nouveaux
+hotspots sont `decision/turn_understanding_route.py`,
+`decision/turn_planning_route.py` et les replies LLM restantes.
 
 10F a ajoute le census conversationnel et supprime quatre bridges :
 
@@ -277,8 +282,8 @@ Objectif suivant :
 
 1. reduire `decision/turn_understanding_route.py` si une responsabilite
    nouvelle apparait ;
-2. reduire `llm/reply_backend.py` en poussant les checks communs vers
-   `OutputVerifier` ;
+2. continuer a reduire les replies LLM restantes en owners explicites, puis
+   pousser les checks communs vers `OutputVerifier` ;
 3. continuer le menage des prompts conversationnels anciens encore centres
    sur les artefacts PlanPatch historiques ;
 4. garder les smokes reels comme arbitre de fiabilite, meme quand le provider

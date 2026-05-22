@@ -166,6 +166,7 @@ Reply actuelle :
 - `decision/readonly_reply.py`
 - `decision/plan_patch_reply.py`
 - `llm/reply_backend.py`
+- `llm/reply_plan_adaptation.py`
 - `llm/reply_decision_backend.py`
 - `decision/output_verifier.py`
 - `skills/heartbeat/reply_composer.py`
