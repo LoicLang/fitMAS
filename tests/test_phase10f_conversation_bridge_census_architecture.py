@@ -77,15 +77,17 @@ def test_10f_decision_artifact_helpers_are_deleted_with_artifact_owner() -> None
     assert "legacy_decision_artifact" not in pipeline
 
 
-def test_10f_coach_decision_reply_helpers_live_in_readonly_reply_owner() -> None:
+def test_10f_coach_decision_reply_helpers_are_not_legacy_or_readonly_owned() -> None:
     pipeline = _source("decision/conversation_pipeline.py")
     readonly = _source("decision/readonly_reply.py")
+    command_reply = _source("decision/command_reply.py")
 
     assert "conversation_coach_decision_reply_bridge" not in pipeline
     assert not (SRC / "legacy/conversation_coach_decision_reply_bridge.py").exists()
     assert "def can_route_coach_decision_reply(" not in readonly
     assert "def compose_coach_decision_reply(" not in readonly
-    assert "def compose_understanding_command_reply(" in readonly
+    assert "def compose_understanding_command_reply(" not in readonly
+    assert "def compose_understanding_command_reply(" in command_reply
 
 
 def test_10h_readonly_reply_lives_in_decision_not_legacy() -> None:

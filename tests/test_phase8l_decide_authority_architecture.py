@@ -37,7 +37,7 @@ def test_8l_conversation_pipeline_does_not_read_fitmas_message_directly() -> Non
     source = _source("decision/turn_understanding_route.py")
 
     assert "decision.fitmas_message" not in source
-    assert "readonly_reply.compose_understanding_command_reply" in source
+    assert "command_reply.compose_understanding_command_reply" in source
 
 
 def test_8l_legacy_provider_boundary_is_removed() -> None:

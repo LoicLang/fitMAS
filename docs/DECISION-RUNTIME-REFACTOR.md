@@ -208,6 +208,7 @@ les replies LLM specialisees restantes.
 - `decision/command_actions.py`
 - `decision/command_mapping.py`
 - `decision/command_application.py`
+- `decision/command_reply.py` pour la reply post-commandes understanding.
 
 Et supprime :
 

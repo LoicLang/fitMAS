@@ -9,6 +9,7 @@ from fitmas.decision.conversation_contract import ConversationTurnOutcome, Conve
 from fitmas.decision.message_models import Extraction
 from fitmas.decision import coach_decision_runtime
 from fitmas.decision import command_application
+from fitmas.decision import command_reply
 from fitmas.decision import pending_resolution
 from fitmas.decision import readonly_reply
 from fitmas.decision import turn_context as turn_context_builder
@@ -216,8 +217,8 @@ def _route_pending_or_command_reply(
     if pending_outcome is not None:
         return pending_outcome
 
-    if readonly_reply.should_compose_understanding_command_reply(understanding_action_result):
-        return readonly_reply.compose_understanding_command_reply(
+    if command_reply.should_compose_understanding_command_reply(understanding_action_result):
+        return command_reply.compose_understanding_command_reply(
             db=db,
             user=user,
             user_text=user_text,

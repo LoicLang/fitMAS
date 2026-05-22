@@ -67,6 +67,8 @@ Etat actuel :
 - `decision/readonly_reply.py` refuse une reply plan lookup non grounded quand
   des facts `PlanWindow` permettent un fallback factuel ; pour une execution
   appliquee, le fallback visible parle depuis l'event machine.
+- `decision/command_reply.py` porte la reply visible apres commandes
+  understanding memoire/execution appliquees ou bloquees.
 - `decision/grounding.py` porte les facts compactes de grounding visibles par
   les reply composers et verifiers.
 - `decision/coach_decision_runtime.py` ne porte plus le provider compat :
