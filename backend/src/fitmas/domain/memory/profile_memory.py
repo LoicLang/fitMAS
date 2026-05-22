@@ -2,7 +2,8 @@ from __future__ import annotations
 
 from sqlalchemy.orm import Session
 
-from fitmas import repository as repo, schema as s
+from fitmas import schema as s
+from fitmas.domain.memory import repository as repo
 
 
 def get_active_profile_memory(db: Session, user_id: int, *, limit: int = 12) -> list[s.UserFact]:

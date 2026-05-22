@@ -109,6 +109,21 @@ Compat seulement :
 - `WeeklyPlan`
 - `DayPlan`
 
+### Memory
+
+Owner :
+
+- `domain/memory/`
+- `domain/memory/repository.py` pour `UserFact`, `WorkingMemoryEntry` et
+  `UserPattern`.
+
+Role :
+
+- stocker facts profile ;
+- stocker signaux courts en working memory ;
+- maintenir patterns observes ;
+- ne pas comprendre le texte utilisateur libre.
+
 ### LLM
 
 Owner :

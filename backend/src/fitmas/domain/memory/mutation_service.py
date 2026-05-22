@@ -8,13 +8,14 @@ from typing import Iterable
 
 from sqlalchemy.orm import Session
 
-from fitmas import repository as repo, schema as s
+from fitmas import schema as s
 from fitmas.decision.command_actions import (
     AvailabilityConstraintAction,
     HealthSignalAction,
     MemoryAction,
     PreferenceSignalAction,
 )
+from fitmas.domain.memory import repository as memory_repo
 from fitmas.domain.memory.routing import split_memory_payloads
 
 
@@ -68,8 +69,8 @@ def apply_memory_actions_for_user(
             availability_resolutions.append(action)
 
     profile_payloads, working_payloads = split_memory_payloads(payloads, now=now)
-    saved_profile = repo.upsert_facts(db, user.id, profile_payloads)
-    saved_working = repo.upsert_working_memory(db, user.id, working_payloads)
+    saved_profile = memory_repo.upsert_facts(db, user.id, profile_payloads)
+    saved_working = memory_repo.upsert_working_memory(db, user.id, working_payloads)
     saved_keys = tuple(
         f"{getattr(row, 'category', '')}:{getattr(row, 'key', '')}"
         for row in [*saved_profile, *saved_working]
