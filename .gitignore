@@ -5,9 +5,12 @@ __pycache__/
 *.egg-info/
 .env
 fitmas.db
+fitmas_v0.db
+fitmas_v0.db-*
 *.bak
 .pytest_cache/
 .tmp-*
+.tmp-v0-*
 
 # Local frontend / browser tooling
 node_modules/
