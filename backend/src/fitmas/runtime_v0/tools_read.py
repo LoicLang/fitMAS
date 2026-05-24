@@ -12,13 +12,11 @@ from fitmas.runtime_v0.snapshot import (
     WorldSnapshot,
 )
 
-
 @dataclass
 class ToolContext:
     db_path: Path
     snapshot: WorldSnapshot
     scratchpad: dict[str, Any] = field(default_factory=dict)
-
 
 def get_current_plan(ctx: ToolContext, days: int = 7) -> dict[str, Any]:
     name = "get_current_plan"
@@ -35,7 +33,6 @@ def get_current_plan(ctx: ToolContext, days: int = 7) -> dict[str, Any]:
         "timezone": ctx.snapshot.timezone,
         "sessions": sessions,
     }
-
 
 def get_plan_day(ctx: ToolContext, date: str) -> dict[str, Any]:
     name = "get_plan_day"
@@ -57,7 +54,6 @@ def get_plan_day(ctx: ToolContext, date: str) -> dict[str, Any]:
     _record(ctx, name, True)
     return {"date": target.isoformat(), "sessions": sessions}
 
-
 def get_session(ctx: ToolContext, session_id: int) -> dict[str, Any]:
     name = "get_session"
     for session in (*ctx.snapshot.recent_plan, *ctx.snapshot.current_plan):
@@ -66,7 +62,6 @@ def get_session(ctx: ToolContext, session_id: int) -> dict[str, Any]:
             return _session_to_dict(session)
     _record(ctx, name, False)
     raise LookupError("session_not_found")
-
 
 def get_recent_execution_events(ctx: ToolContext, limit: int = 5) -> dict[str, Any]:
     name = "get_recent_execution_events"
@@ -95,17 +90,14 @@ def get_recent_execution_events(ctx: ToolContext, limit: int = 5) -> dict[str, A
     _record(ctx, name, True)
     return {"events": events}
 
-
 def get_active_facts(ctx: ToolContext) -> dict[str, Any]:
     name = "get_active_facts"
     _record(ctx, name, True)
     return {"facts": [_fact_to_dict(fact) for fact in ctx.snapshot.active_facts]}
 
-
 def _record(ctx: ToolContext, name: str, ok: bool) -> None:
     calls = ctx.scratchpad.setdefault("calls", [])
     calls.append({"name": name, "ok": ok})
-
 
 def _session_to_dict(session: SessionView) -> dict[str, Any]:
     return {
@@ -114,13 +106,11 @@ def _session_to_dict(session: SessionView) -> dict[str, Any]:
         "priority": session.priority, "status": session.status,
     }
 
-
 def _fact_to_dict(fact: FactView) -> dict[str, Any]:
     return {
         "id": fact.id, "kind": fact.kind, "text": fact.text, "confidence": fact.confidence,
         "created_at": fact.created_at.isoformat(), "expires_at": fact.expires_at.isoformat() if fact.expires_at else None,
     }
-
 
 def _target_session_id(target_type: str, target_id: str) -> int | None:
     if target_type != "session":
@@ -129,7 +119,6 @@ def _target_session_id(target_type: str, target_id: str) -> int | None:
         return int(target_id)
     except ValueError:
         return None
-
 
 def _parse_date(value: str) -> date:
     return date.fromisoformat(value)

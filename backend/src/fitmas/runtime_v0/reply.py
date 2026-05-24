@@ -7,10 +7,8 @@ from fitmas.runtime_v0.llm_clients.base import LLMClient
 from fitmas.runtime_v0.result import RuntimeResult
 from fitmas.runtime_v0.snapshot import WorldSnapshot
 
-
 TECHNICAL_FALLBACK = "Je n'ai pas pu traiter ça proprement. Réessaie dans un instant."
 WEEKDAYS = ("lundi", "mardi", "mercredi", "jeudi", "vendredi", "samedi", "dimanche")
-
 
 class ReplyComposer:
     def __init__(self, llm_client: LLMClient, system_prompt: str):
@@ -55,14 +53,12 @@ def _payload(result: RuntimeResult, snapshot: WorldSnapshot) -> str:
         sort_keys=True,
     )
 
-
 def _fallback(result: RuntimeResult, snapshot: WorldSnapshot) -> str:
     if result.committed_events:
         return _commit_summary(result, snapshot, "") or TECHNICAL_FALLBACK
     if result.policy_action == "answer_only" and result.read_facts:
         return _plan_summary(result) or " ".join(fact.split(".")[0].strip() for fact in result.read_facts[:3] if fact.strip())
     return TECHNICAL_FALLBACK
-
 
 def _commit_summary(result: RuntimeResult, snapshot: WorldSnapshot, reply: str) -> str:
     if not result.committed_events:
@@ -81,16 +77,13 @@ def _commit_summary(result: RuntimeResult, snapshot: WorldSnapshot, reply: str) 
         return "" if "déplacé" in lower and day in lower else f"Déplacé à {day}."
     return ""
 
-
 def _plan_summary(result: RuntimeResult) -> str:
     sessions = _read_sessions(result)
     return " ".join(f"{str(item.get('date'))[-2:]} {item.get('title', 'Séance')}." for item in sessions)
 
-
 def _omits_plan_sessions(reply: str, result: RuntimeResult, snapshot: WorldSnapshot) -> bool:
     lower = reply.lower()
     return any((date_text := str(item.get("date", "")))[-2:] not in lower and not (date_text == snapshot.today.isoformat() and "aujourd" in lower) for item in _read_sessions(result))
-
 
 def _read_sessions(result: RuntimeResult) -> list[dict]:
     sessions: list[dict] = []

@@ -95,7 +95,7 @@ def test_incidental_read_tool_is_not_enough_for_plan_answer_and_gets_retry(tmp_p
     )
     agent = CoachAgent(client, system_prompt="system")
 
-    proposal = agent.run(event, ctx.snapshot.header(), for_event(event, ctx.snapshot), tool_context=ctx)
+    proposal = agent.run(event, ctx.snapshot.header(), for_event(event, ctx.snapshot), tool_context=ctx, max_steps=4)
 
     assert proposal.type == "answer"
     assert proposal.tool_trace == (
@@ -313,6 +313,25 @@ def test_max_steps_without_answer_or_proposal_returns_no_send(tmp_path):
 
     assert proposal.type == "no_send"
     assert proposal.user_intent_summary == "max_steps_reached"
+
+
+def test_agent_default_max_steps_is_three(tmp_path):
+    event = _event()
+    ctx = _context(tmp_path, event)
+    client = FakeLLMClient(
+        [
+            LLMResponse(tool_calls=(ToolCall(name="get_current_plan", args={"days": 7}),)),
+            LLMResponse(tool_calls=(ToolCall(name="get_current_plan", args={"days": 7}),)),
+            LLMResponse(tool_calls=(ToolCall(name="get_current_plan", args={"days": 7}),)),
+            LLMResponse(text="too late"),
+        ]
+    )
+
+    proposal = CoachAgent(client, system_prompt="system").run(event, ctx.snapshot.header(), for_event(event, ctx.snapshot), tool_context=ctx)
+
+    assert proposal.type == "no_send"
+    assert proposal.user_intent_summary == "max_steps_reached"
+    assert len(client.requests) == 3
 
 
 def test_agent_can_run_tools_without_tool_context_for_unit_handlers(tmp_path):

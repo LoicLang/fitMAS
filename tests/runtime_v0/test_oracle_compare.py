@@ -70,6 +70,25 @@ def test_oracle_compare_accepts_session_read_for_tomorrow_answer():
     assert "required_read_tool_missing" not in verdict.failures
 
 
+def test_oracle_compare_allows_today_context_in_tomorrow_reply():
+    scenario = scenario_by_name("tomorrow")
+    verdict = compare_run_to_oracle(
+        {
+            "proposal_type": "answer",
+            "policy_action": "answer_only",
+            "reply": "Aujourd'hui je ne change rien. Demain 23: Endurance facile.",
+            "tool_trace": [{"name": "get_plan_day", "ok": True}],
+            "command_events": [],
+            "guard_ok": True,
+            "proposal": {"type": "answer"},
+        },
+        scenario,
+    )
+
+    assert verdict.reply_must_not_contain_ok is True
+    assert "reply_contains_forbidden_text" not in verdict.failures
+
+
 def test_oracle_compare_counts_wrong_writes_for_answer_only_scenario():
     scenario = scenario_by_name("current_plan")
     verdict = compare_run_to_oracle(

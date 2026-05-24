@@ -4,7 +4,6 @@ import os
 from pathlib import Path
 import sqlite3
 
-
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS v0_input_events (
     id TEXT PRIMARY KEY,
@@ -124,10 +123,8 @@ V0_TABLES = (
     "v0_input_events",
 )
 
-
 def db_path_from_env() -> Path:
     return Path(os.getenv("FITMAS_V0_DB_PATH", "fitmas_v0.db"))
-
 
 def connect(db_path: Path | None = None) -> sqlite3.Connection:
     path = db_path or db_path_from_env()
@@ -137,12 +134,10 @@ def connect(db_path: Path | None = None) -> sqlite3.Connection:
     connection.execute("PRAGMA foreign_keys = ON")
     return connection
 
-
 def init_db(db_path: Path | None = None) -> None:
     with connect(db_path) as connection:
         connection.executescript(SCHEMA)
         connection.commit()
-
 
 def reset_db(db_path: Path | None = None) -> None:
     with connect(db_path) as connection:

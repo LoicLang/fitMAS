@@ -4,7 +4,6 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
 
-
 @dataclass(frozen=True)
 class ConversationState:
     last_unresolved_intent: dict[str, Any] | None

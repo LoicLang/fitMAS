@@ -4,7 +4,6 @@ from typing import Any
 
 from fitmas.runtime_v0.llm_clients.base import LLMResponse, ToolSchema
 
-
 class FakeLLMClient:
     def __init__(self, responses: list[LLMResponse]):
         self._responses = list(responses)

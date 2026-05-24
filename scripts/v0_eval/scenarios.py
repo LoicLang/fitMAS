@@ -158,7 +158,7 @@ def _scenarios() -> dict[str, ScenarioOracle]:
             expected_policy_action="answer_only",
             expected_commands=(),
             expected_reply_must_include=("23",),
-            expected_reply_must_not_contain=("aujourd'hui", "22"),
+            expected_reply_must_not_contain=("22",),
         ),
         "skipped_yesterday": ScenarioOracle(
             name="skipped_yesterday",

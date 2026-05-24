@@ -7,20 +7,17 @@ import re
 from fitmas.runtime_v0.reply import TECHNICAL_FALLBACK
 from fitmas.runtime_v0.result import RuntimeResult
 
-
 CLAIM_PATTERN = re.compile(r"\b(j'ai|j'ai bien|c'est)\s+(déplacé|noté|enregistré|fait|modifié|appliqué)\b", re.IGNORECASE)
 PENDING_ACTION_PATTERN = re.compile(r"\b(c'est fait|appliqué)\b", re.IGNORECASE)
 JARGON_PATTERN = re.compile(r"\b(policy|backend|candidate|mutation|runtime|tool_call|proposal|snapshot)\b", re.IGNORECASE)
 META_PATTERN = re.compile(r"^\s*(l'utilisateur|the user|option valide)\b", re.IGNORECASE)
 DATE_PATTERN = re.compile(r"\b20\d{2}-\d{2}-\d{2}\b")
 
-
 @dataclass(frozen=True)
 class GuardResult:
     ok: bool
     blocked_reasons: tuple[str, ...]
     sanitized_reply: str
-
 
 class OutputGuard:
     def __init__(self, today: date):
@@ -49,10 +46,8 @@ class OutputGuard:
             return GuardResult(False, tuple(reasons), _safe_reply(result, self.today))
         return GuardResult(True, (), reply)
 
-
 def _in_read_facts(value: str, result: RuntimeResult) -> bool:
     return any(value in fact for fact in result.read_facts)
-
 
 def _safe_reply(result: RuntimeResult, today: date) -> str:
     if result.pending is not None:

@@ -9,7 +9,6 @@ from typing import Any, Literal
 from fitmas.runtime_v0.db import connect
 from fitmas.runtime_v0.state import ConversationState
 
-
 @dataclass(frozen=True)
 class SessionView:
     id: int
@@ -21,7 +20,6 @@ class SessionView:
     priority: Literal["key", "secondary", "optional"]
     status: Literal["planned", "done", "skipped", "partial"]
 
-
 @dataclass(frozen=True)
 class ActivityView:
     id: int
@@ -32,7 +30,6 @@ class ActivityView:
     notes: str | None
     source: Literal["strava", "manual"]
 
-
 @dataclass(frozen=True)
 class FactView:
     id: int
@@ -42,14 +39,12 @@ class FactView:
     created_at: datetime
     expires_at: datetime | None
 
-
 @dataclass(frozen=True)
 class PendingView:
     id: int
     type: str
     summary: str
     expires_at: datetime
-
 
 @dataclass(frozen=True)
 class CommandEventView:
@@ -59,7 +54,6 @@ class CommandEventView:
     status: Literal["applied", "blocked"]
     summary: str
     created_at: datetime
-
 
 @dataclass(frozen=True)
 class SnapshotHeader:
@@ -104,7 +98,6 @@ class SnapshotHeader:
         assert len(text.split()) <= 500
         return text
 
-
 @dataclass(frozen=True)
 class WorldSnapshot:
     user_id: int
@@ -137,7 +130,6 @@ class WorldSnapshot:
             last_unresolved_intent=self.conversation_state.last_unresolved_intent,
             last_execution_event=last_execution_event,
         )
-
 
 class SnapshotBuilder:
     def __init__(self, db_path: Path):
@@ -178,7 +170,6 @@ class SnapshotBuilder:
             conversation_state=conversation_state,
         )
 
-
 def _load_sessions(connection, user_id: int, start: date, end: date) -> tuple[SessionView, ...]:
     rows = connection.execute(
         "select * from v0_scheduled_sessions where user_id = ? and date between ? and ? order by date asc, id asc",
@@ -186,14 +177,12 @@ def _load_sessions(connection, user_id: int, start: date, end: date) -> tuple[Se
     ).fetchall()
     return tuple(_session_from_row(row) for row in rows)
 
-
 def _load_activities(connection, user_id: int, start: date, end: date) -> tuple[ActivityView, ...]:
     rows = connection.execute(
         "select * from v0_activities where user_id = ? and date between ? and ? order by date asc, id asc",
         (user_id, _date_text(start), _date_text(end)),
     ).fetchall()
     return tuple(_activity_from_row(row) for row in rows)
-
 
 def _load_active_facts(connection, user_id: int, now: datetime) -> tuple[FactView, ...]:
     rows = connection.execute(
@@ -205,7 +194,6 @@ def _load_active_facts(connection, user_id: int, now: datetime) -> tuple[FactVie
         (user_id, now.isoformat()),
     ).fetchall()
     return tuple(_fact_from_row(row) for row in rows)
-
 
 def _load_pending(connection, user_id: int, now: datetime) -> PendingView | None:
     row = connection.execute(
@@ -221,7 +209,6 @@ def _load_pending(connection, user_id: int, now: datetime) -> PendingView | None
         expires_at=_parse_datetime(row["expires_at"]),
     )
 
-
 def _load_command_events(connection, command_types: tuple[str, ...]) -> tuple[CommandEventView, ...]:
     placeholders = ",".join("?" for _ in command_types)
     rows = connection.execute(
@@ -234,7 +221,6 @@ def _load_command_events(connection, command_types: tuple[str, ...]) -> tuple[Co
         command_types,
     ).fetchall()
     return tuple(_command_event_from_row(row) for row in rows)
-
 
 def _load_conversation_state(connection, user_id: int, now: datetime) -> ConversationState:
     row = connection.execute(
@@ -252,13 +238,11 @@ def _load_conversation_state(connection, user_id: int, now: datetime) -> Convers
     )
     return state.active_at(now)
 
-
 def _session_from_row(row) -> SessionView:
     return SessionView(
         id=row["id"], date=date.fromisoformat(row["date"]), sport=row["sport"], title=row["title"],
         duration_min=row["duration_min"], intensity_label=row["intensity_label"], priority=row["priority"], status=row["status"],
     )
-
 
 def _activity_from_row(row) -> ActivityView:
     return ActivityView(
@@ -266,20 +250,17 @@ def _activity_from_row(row) -> ActivityView:
         distance_km=row["distance_km"], notes=row["notes"], source=row["source"],
     )
 
-
 def _fact_from_row(row) -> FactView:
     return FactView(
         id=row["id"], kind=row["kind"], text=row["text"], confidence=row["confidence"],
         created_at=_parse_datetime(row["created_at"]), expires_at=_parse_optional_datetime(row["expires_at"]),
     )
 
-
 def _command_event_from_row(row) -> CommandEventView:
     return CommandEventView(
         id=row["id"], type=row["command_type"], target_session_id=_target_session_id(row["target_type"], row["target_id"]),
         status=row["status"], summary=row["reason"], created_at=_parse_datetime(row["created_at"]),
     )
-
 
 def _target_session_id(target_type: str, target_id: str) -> int | None:
     if target_type != "session":
@@ -289,10 +270,8 @@ def _target_session_id(target_type: str, target_id: str) -> int | None:
     except ValueError:
         return None
 
-
 def _parse_optional_datetime(value: str | None) -> datetime | None:
     return _parse_datetime(value) if value else None
-
 
 def _parse_datetime(value: str) -> datetime:
     normalized = value.replace("Z", "+00:00")
@@ -301,16 +280,13 @@ def _parse_datetime(value: str) -> datetime:
     parsed = datetime.fromisoformat(normalized)
     return _ensure_timezone(parsed)
 
-
 def _ensure_timezone(value: datetime) -> datetime:
     if value.tzinfo is None:
         return value.replace(tzinfo=timezone.utc)
     return value
 
-
 def _timezone_name(value: datetime) -> str:
     return getattr(value.tzinfo, "key", value.tzname() or "UTC")
-
 
 def _date_text(value: date) -> str:
     return value.isoformat()

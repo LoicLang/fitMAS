@@ -18,7 +18,6 @@ from fitmas.runtime_v0.tools_read import (
     get_session,
 )
 
-
 def for_event(event: InputEvent, snapshot: WorldSnapshot) -> tuple[ToolSchema, ...]:
     if event.type != "user_message":
         return ()
@@ -98,7 +97,6 @@ def for_event(event: InputEvent, snapshot: WorldSnapshot) -> tuple[ToolSchema, .
         allowed = {"get_current_plan", "get_plan_day", "get_session", "propose_plan_patch", "ask_clarification"}
         return tuple(tool for tool in tools if tool.name in allowed)
     return tools
-
 
 def _schema(properties: dict, required: tuple[str, ...] = ()) -> dict:
     return {"type": "object", "properties": properties, "required": list(required)}

@@ -13,7 +13,6 @@ from fitmas.runtime_v0.proposals import (
 )
 from fitmas.runtime_v0.tools_read import ToolContext
 
-
 def propose_execution_update(
     ctx: ToolContext,
     session_id: int,
@@ -37,7 +36,6 @@ def propose_execution_update(
             evidence=evidence,
         ),
     )
-
 
 def propose_execution_correction(
     ctx: ToolContext,
@@ -65,7 +63,6 @@ def propose_execution_correction(
         ),
     )
 
-
 def propose_plan_patch(
     ctx: ToolContext,
     operations: list[dict[str, Any]],
@@ -83,7 +80,6 @@ def propose_plan_patch(
             rationale=rationale,
         ),
     )
-
 
 def propose_memory_update(
     ctx: ToolContext,
@@ -109,7 +105,6 @@ def propose_memory_update(
         ),
     )
 
-
 def ask_clarification(
     ctx: ToolContext,
     question: str,
@@ -126,7 +121,6 @@ def ask_clarification(
         tool_trace=_trace(ctx),
     )
 
-
 def _operation_from_dict(data: dict[str, Any]) -> PlanPatchOperation:
     return PlanPatchOperation(
         kind=data["kind"],
@@ -138,23 +132,19 @@ def _operation_from_dict(data: dict[str, Any]) -> PlanPatchOperation:
         new_duration_min=data.get("new_duration_min"),
     )
 
-
 def _parse_optional_date(value: str | date | None) -> date | None:
     if value is None or isinstance(value, date):
         return value
     return date.fromisoformat(value)
-
 
 def _parse_optional_datetime(value: str | datetime | None) -> datetime | None:
     if value is None or isinstance(value, datetime):
         return value
     return datetime.fromisoformat(value)
 
-
 def _record(ctx: ToolContext, name: str, ok: bool) -> None:
     calls = ctx.scratchpad.setdefault("calls", [])
     calls.append({"name": name, "ok": ok})
-
 
 def _trace(ctx: ToolContext) -> tuple[dict[str, Any], ...]:
     return tuple(dict(item) for item in ctx.scratchpad.get("calls", ()))

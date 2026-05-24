@@ -184,6 +184,31 @@ def test_create_pending_memory_and_state_commands(tmp_path):
     assert all(event.status == "applied" for event in events)
 
 
+def test_user_scoped_commands_use_executor_user_id(tmp_path):
+    db_path = _db(tmp_path)
+    expires_at = datetime(2026, 5, 23, 14, 0, tzinfo=PARIS)
+
+    CommandExecutor(db_path).execute(
+        (
+            CreatePendingConfirmationCommand("plan_patch", "move", "{}", expires_at),
+            UpsertMemoryFactCommand("constraint", "Voyage", 0.9, expires_at),
+            UpdateConversationStateCommand({"type": "move_session"}, None, None),
+        ),
+        turn_id="turn-user-42",
+        user_id=42,
+    )
+
+    with connect(db_path) as connection:
+        pending = connection.execute("select user_id from v0_pending_confirmations").fetchone()
+        fact = connection.execute("select user_id from v0_facts").fetchone()
+        state = connection.execute("select user_id from v0_conversation_state where user_id = 42").fetchone()
+        event = connection.execute("select target_type, target_id from v0_command_events where command_type = 'UpdateConversationStateCommand'").fetchone()
+    assert pending["user_id"] == 42
+    assert fact["user_id"] == 42
+    assert state["user_id"] == 42
+    assert (event["target_type"], event["target_id"]) == ("state", "42")
+
+
 def test_execute_is_transactional_per_command_and_stops_after_block(tmp_path):
     db_path = _db(tmp_path)
 

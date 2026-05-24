@@ -9,9 +9,7 @@ from fitmas.runtime_v0.proposals import ActionProposal
 from fitmas.runtime_v0.snapshot import SnapshotHeader
 from fitmas.runtime_v0.tools_read import ToolContext
 
-
 ANSWER_SUPPORT_TOOLS = {"get_current_plan", "get_plan_day", "get_session", "get_recent_execution_events"}
-
 
 class CoachAgent:
     def __init__(self, llm_client: LLMClient, system_prompt: str):
@@ -23,7 +21,7 @@ class CoachAgent:
         event: InputEvent,
         snapshot_header: SnapshotHeader,
         tools: tuple[ToolSchema, ...] | list[ToolSchema],
-        max_steps: int = 4,
+        max_steps: int = 3,
         tool_context: ToolContext | None = None,
     ) -> ActionProposal:
         tool_by_name = {tool.name: tool for tool in tools}
@@ -102,13 +100,11 @@ class CoachAgent:
                 )
         return _no_send("max_steps_reached", tool_context)
 
-
 def _initial_messages(event: InputEvent, snapshot_header: SnapshotHeader) -> list[dict[str, Any]]:
     return [
         {"role": "system_context", "content": snapshot_header.to_prompt_text()},
         {"role": "user", "content": event.text or ""},
     ]
-
 
 def _first_proposal(
     response: LLMResponse,
@@ -125,12 +121,10 @@ def _first_proposal(
         raise TypeError(f"proposal_tool_returned_{type(proposal).__name__}")
     return None
 
-
 def _call_tool(tool: ToolSchema, args: dict[str, Any], tool_context: ToolContext | None) -> Any:
     if tool_context is None:
         return tool.handler(**args)
     return tool.handler(tool_context, **args)
-
 
 def _tool_error(call: ToolCall, reason: str) -> dict[str, Any]:
     return {
@@ -138,7 +132,6 @@ def _tool_error(call: ToolCall, reason: str) -> dict[str, Any]:
         "tool_name": call.name,
         "content": json.dumps({"error": reason}, ensure_ascii=False),
     }
-
 
 def _runtime_contract_error(reason: str) -> dict[str, Any]:
     payload = {
@@ -152,12 +145,10 @@ def _runtime_contract_error(reason: str) -> dict[str, Any]:
         "content": json.dumps(payload, ensure_ascii=False),
     }
 
-
 def _has_answer_support(read_tool_names: list[str], tool_by_name: dict[str, ToolSchema]) -> bool:
     if not any(name in tool_by_name for name in ANSWER_SUPPORT_TOOLS):
         return bool(read_tool_names)
     return bool(ANSWER_SUPPORT_TOOLS & set(read_tool_names))
-
 
 def _plan_patch_needs_source_retry(proposal: ActionProposal, snapshot_header: SnapshotHeader) -> bool:
     if proposal.type != "plan_patch" or proposal.plan_patch is None:
@@ -170,12 +161,10 @@ def _plan_patch_needs_source_retry(proposal: ActionProposal, snapshot_header: Sn
 def _active_move_intent(intent: dict[str, Any] | None) -> bool:
     return intent is not None and intent.get("type") == "move_session"
 
-
 def _trace(tool_context: ToolContext | None) -> tuple[dict[str, Any], ...]:
     if tool_context is None:
         return ()
     return tuple(dict(item) for item in tool_context.scratchpad.get("calls", ()))
-
 
 def _no_send(reason: str, tool_context: ToolContext | None = None) -> ActionProposal:
     return ActionProposal(type="no_send", confidence=0.0, user_intent_summary=reason, evidence=(reason,), tool_trace=_trace(tool_context))

@@ -18,7 +18,6 @@ from fitmas.runtime_v0.policy import (
 )
 from fitmas.runtime_v0.proposals import PlanPatchOperation
 
-
 @dataclass(frozen=True)
 class CommandEvent:
     id: int
@@ -32,36 +31,36 @@ class CommandEvent:
     reason: str
     created_at: datetime
 
-
 class CommandExecutor:
     def __init__(self, db_path: Path):
         self.db_path = db_path
 
-    def execute(self, commands: tuple[Command, ...], turn_id: str) -> tuple[CommandEvent, ...]:
+    def execute(self, commands: tuple[Command, ...], turn_id: str, user_id: int = 1) -> tuple[CommandEvent, ...]:
         events: list[CommandEvent] = []
         _ensure_turn(self.db_path, turn_id)
         for command in commands:
-            existing = _load_existing_event(self.db_path, turn_id, command)
+            existing = _load_existing_event(self.db_path, turn_id, command, user_id)
             if existing is not None:
                 events.append(existing)
                 continue
             try:
-                event = self._execute_one(command, turn_id)
+                event = self._execute_one(command, turn_id, user_id)
             except Exception as exc:
-                event = _record_blocked_event(self.db_path, turn_id, command, str(exc))
+                event = _record_blocked_event(self.db_path, turn_id, command, str(exc), user_id)
                 events.append(event)
                 break
             events.append(event)
         return tuple(events)
 
-    def _execute_one(self, command: Command, turn_id: str) -> CommandEvent:
+    def _execute_one(self, command: Command, turn_id: str, user_id: int) -> CommandEvent:
         with connect(self.db_path) as connection:
             try:
-                before, after, reason = _apply_command(command, connection)
+                before, after, reason = _apply_command(command, connection, user_id)
                 event_id = _insert_event(
                     connection=connection,
                     turn_id=turn_id,
                     command=command,
+                    user_id=user_id,
                     status="applied",
                     before=before,
                     after=after,
@@ -76,8 +75,7 @@ class CommandExecutor:
             raise RuntimeError("command_event_missing_after_insert")
         return loaded
 
-
-def _apply_command(command: Command, connection) -> tuple[dict[str, Any], dict[str, Any], str]:
+def _apply_command(command: Command, connection, user_id: int) -> tuple[dict[str, Any], dict[str, Any], str]:
     if isinstance(command, SetSessionStatusCommand):
         return _apply_set_session_status(command, connection)
     if isinstance(command, CorrectSessionStatusCommand):
@@ -85,13 +83,12 @@ def _apply_command(command: Command, connection) -> tuple[dict[str, Any], dict[s
     if isinstance(command, ApplyPlanPatchCommand):
         return _apply_plan_patch(command, connection)
     if isinstance(command, CreatePendingConfirmationCommand):
-        return _apply_create_pending(command, connection)
+        return _apply_create_pending(command, connection, user_id)
     if isinstance(command, UpsertMemoryFactCommand):
-        return _apply_upsert_memory_fact(command, connection)
+        return _apply_upsert_memory_fact(command, connection, user_id)
     if isinstance(command, UpdateConversationStateCommand):
-        return _apply_update_conversation_state(command, connection)
+        return _apply_update_conversation_state(command, connection, user_id)
     raise ValueError("unsupported_command")
-
 
 def _apply_set_session_status(command: SetSessionStatusCommand, connection) -> tuple[dict[str, Any], dict[str, Any], str]:
     before = _session_or_raise(connection, command.session_id)
@@ -102,7 +99,6 @@ def _apply_set_session_status(command: SetSessionStatusCommand, connection) -> t
     )
     after = _session(connection, command.session_id)
     return before, after, command.evidence
-
 
 def _apply_correct_session_status(command: CorrectSessionStatusCommand, connection) -> tuple[dict[str, Any], dict[str, Any], str]:
     previous = connection.execute(
@@ -120,7 +116,6 @@ def _apply_correct_session_status(command: CorrectSessionStatusCommand, connecti
     after = _session(connection, command.session_id)
     return before, after, command.evidence
 
-
 def _apply_plan_patch(command: ApplyPlanPatchCommand, connection) -> tuple[dict[str, Any], dict[str, Any], str]:
     before: dict[str, Any] = {}
     after: dict[str, Any] = {}
@@ -129,7 +124,6 @@ def _apply_plan_patch(command: ApplyPlanPatchCommand, connection) -> tuple[dict[
         _apply_operation(connection, operation)
         after[str(operation.source_session_id)] = _session_or_raise(connection, operation.source_session_id)
     return before, after, command.rationale
-
 
 def _apply_operation(connection, operation: PlanPatchOperation) -> None:
     if operation.kind == "move":
@@ -185,27 +179,24 @@ def _apply_operation(connection, operation: PlanPatchOperation) -> None:
         return
     raise ValueError("unsupported_plan_operation")
 
-
-def _apply_create_pending(command: CreatePendingConfirmationCommand, connection) -> tuple[dict[str, Any], dict[str, Any], str]:
+def _apply_create_pending(command: CreatePendingConfirmationCommand, connection, user_id: int) -> tuple[dict[str, Any], dict[str, Any], str]:
     cursor = connection.execute(
         "insert into v0_pending_confirmations (user_id, type, summary, payload_json, expires_at) values (?, ?, ?, ?, ?)",
-        (1, command.type, command.summary, command.payload_json, command.expires_at.isoformat()),
+        (user_id, command.type, command.summary, command.payload_json, command.expires_at.isoformat()),
     )
     row = _pending(connection, cursor.lastrowid)
     return {}, row, command.summary
 
-
-def _apply_upsert_memory_fact(command: UpsertMemoryFactCommand, connection) -> tuple[dict[str, Any], dict[str, Any], str]:
+def _apply_upsert_memory_fact(command: UpsertMemoryFactCommand, connection, user_id: int) -> tuple[dict[str, Any], dict[str, Any], str]:
     cursor = connection.execute(
         "insert into v0_facts (user_id, kind, text, confidence, expires_at) values (?, ?, ?, ?, ?)",
-        (1, command.kind, command.text, command.confidence, command.expires_at.isoformat() if command.expires_at else None),
+        (user_id, command.kind, command.text, command.confidence, command.expires_at.isoformat() if command.expires_at else None),
     )
     row = _fact(connection, cursor.lastrowid)
     return {}, row, command.text
 
-
-def _apply_update_conversation_state(command: UpdateConversationStateCommand, connection) -> tuple[dict[str, Any], dict[str, Any], str]:
-    before = _conversation_state(connection) or {}
+def _apply_update_conversation_state(command: UpdateConversationStateCommand, connection, user_id: int) -> tuple[dict[str, Any], dict[str, Any], str]:
+    before = _conversation_state(connection, user_id) or {}
     intent_json = (
         json.dumps(command.last_unresolved_intent, ensure_ascii=False, sort_keys=True)
         if command.last_unresolved_intent is not None
@@ -218,35 +209,35 @@ def _apply_update_conversation_state(command: UpdateConversationStateCommand, co
         on conflict(user_id) do update set last_unresolved_intent_json = excluded.last_unresolved_intent_json,
         last_execution_event_id = excluded.last_execution_event_id, last_pending_id = excluded.last_pending_id, updated_at = excluded.updated_at
         """,
-        (1, intent_json, command.last_execution_event_id, command.last_pending_id, _now_text()),
+        (user_id, intent_json, command.last_execution_event_id, command.last_pending_id, _now_text()),
     )
-    after = _conversation_state(connection) or {}
+    after = _conversation_state(connection, user_id) or {}
     return before, after, "conversation_state_updated"
-
 
 def _insert_event(
     connection,
     turn_id: str,
     command: Command,
+    user_id: int,
     status: Literal["applied", "blocked"],
     before: dict[str, Any],
     after: dict[str, Any],
     reason: str,
 ) -> int:
-    target_type, target_id = _target(command)
+    target_type, target_id = _target(command, user_id)
     cursor = connection.execute(
         "insert into v0_command_events (turn_id, command_type, target_type, target_id, status, before_json, after_json, reason) values (?, ?, ?, ?, ?, ?, ?, ?)",
         (turn_id, type(command).__name__, target_type, target_id, status, _json(before), _json(after), reason),
     )
     return cursor.lastrowid
 
-
-def _record_blocked_event(db_path: Path, turn_id: str, command: Command, reason: str) -> CommandEvent:
+def _record_blocked_event(db_path: Path, turn_id: str, command: Command, reason: str, user_id: int) -> CommandEvent:
     with connect(db_path) as connection:
         event_id = _insert_event(
             connection=connection,
             turn_id=turn_id,
             command=command,
+            user_id=user_id,
             status="blocked",
             before={},
             after={},
@@ -258,9 +249,8 @@ def _record_blocked_event(db_path: Path, turn_id: str, command: Command, reason:
         raise RuntimeError("blocked_command_event_missing_after_insert")
     return loaded
 
-
-def _load_existing_event(db_path: Path, turn_id: str, command: Command) -> CommandEvent | None:
-    target_type, target_id = _target(command)
+def _load_existing_event(db_path: Path, turn_id: str, command: Command, user_id: int) -> CommandEvent | None:
+    target_type, target_id = _target(command, user_id)
     with connect(db_path) as connection:
         row = connection.execute(
             "select * from v0_command_events where turn_id = ? and command_type = ? and target_id = ?",
@@ -268,16 +258,13 @@ def _load_existing_event(db_path: Path, turn_id: str, command: Command) -> Comma
         ).fetchone()
     return _event_from_row(row) if row else None
 
-
 def _load_event_by_id(db_path: Path, event_id: int) -> CommandEvent | None:
     with connect(db_path) as connection:
         row = connection.execute("select * from v0_command_events where id = ?", (event_id,)).fetchone()
     return _event_from_row(row) if row else None
 
-
 def _json(payload: dict[str, Any]) -> str:
     return json.dumps(payload, ensure_ascii=False, sort_keys=True)
-
 
 def _event_from_row(row) -> CommandEvent:
     return CommandEvent(
@@ -293,14 +280,12 @@ def _event_from_row(row) -> CommandEvent:
         created_at=datetime.fromisoformat(row["created_at"].replace(" ", "T")),
     )
 
-
 def _ensure_turn(db_path: Path, turn_id: str) -> None:
     with connect(db_path) as connection:
         connection.execute("insert or ignore into v0_turns (id) values (?)", (turn_id,))
         connection.commit()
 
-
-def _target(command: Command) -> tuple[str, str]:
+def _target(command: Command, user_id: int) -> tuple[str, str]:
     if isinstance(command, SetSessionStatusCommand):
         return "session", str(command.session_id)
     if isinstance(command, CorrectSessionStatusCommand):
@@ -313,14 +298,12 @@ def _target(command: Command) -> tuple[str, str]:
     if isinstance(command, UpsertMemoryFactCommand):
         return "fact", command.text
     if isinstance(command, UpdateConversationStateCommand):
-        return "state", "1"
+        return "state", str(user_id)
     return "unknown", type(command).__name__
-
 
 def _session(connection, session_id: int) -> dict[str, Any] | None:
     row = connection.execute("select * from v0_scheduled_sessions where id = ?", (session_id,)).fetchone()
     return dict(row) if row else None
-
 
 def _session_or_raise(connection, session_id: int) -> dict[str, Any]:
     row = _session(connection, session_id)
@@ -328,21 +311,17 @@ def _session_or_raise(connection, session_id: int) -> dict[str, Any]:
         raise ValueError("session_not_found")
     return row
 
-
 def _pending(connection, pending_id: int) -> dict[str, Any]:
     row = connection.execute("select * from v0_pending_confirmations where id = ?", (pending_id,)).fetchone()
     return dict(row)
-
 
 def _fact(connection, fact_id: int) -> dict[str, Any]:
     row = connection.execute("select * from v0_facts where id = ?", (fact_id,)).fetchone()
     return dict(row)
 
-
-def _conversation_state(connection) -> dict[str, Any] | None:
-    row = connection.execute("select * from v0_conversation_state where user_id = 1").fetchone()
+def _conversation_state(connection, user_id: int) -> dict[str, Any] | None:
+    row = connection.execute("select * from v0_conversation_state where user_id = ?", (user_id,)).fetchone()
     return dict(row) if row else None
-
 
 def _now_text() -> str:
     return datetime.now(timezone.utc).isoformat()

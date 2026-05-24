@@ -9,14 +9,12 @@ from fitmas.runtime_v0.policy import PolicyDecision
 from fitmas.runtime_v0.proposals import ActionProposal
 from fitmas.runtime_v0.snapshot import PendingView
 
-
 @dataclass(frozen=True)
 class ReplyContract:
     must_include: tuple[str, ...]
     must_not_claim: tuple[str, ...]
     tone: Literal["informative", "confirming", "asking", "explaining_block"]
     max_sentences: int
-
 
 @dataclass(frozen=True)
 class RuntimeResult:
@@ -29,7 +27,6 @@ class RuntimeResult:
     pending: PendingView | None
     read_facts: tuple[str, ...]
     reply_contract: ReplyContract
-
 
 def build_runtime_result(
     event: InputEvent,
@@ -61,13 +58,11 @@ def build_runtime_result(
         ),
     )
 
-
 def _must_include(policy: PolicyDecision, pending: PendingView | None) -> tuple[str, ...]:
     values = list(policy.reply_facts)
     if pending is not None:
         values.append(pending.summary)
     return tuple(values)
-
 
 def _must_not_claim(command_events: tuple[CommandEvent, ...], pending: PendingView | None) -> tuple[str, ...]:
     if pending is not None:
@@ -75,7 +70,6 @@ def _must_not_claim(command_events: tuple[CommandEvent, ...], pending: PendingVi
     if not any(event.status == "applied" for event in command_events):
         return ("j'ai déplacé", "j'ai modifié", "c'est fait")
     return ()
-
 
 def _tone(policy_action: str, blocked: bool, pending: PendingView | None) -> Literal[
     "informative", "confirming", "asking", "explaining_block"

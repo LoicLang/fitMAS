@@ -8,10 +8,8 @@ from typing import Any, Literal
 from fitmas.runtime_v0.proposals import ActionProposal, PlanPatchDraft, PlanPatchOperation, proposal_to_dict
 from fitmas.runtime_v0.snapshot import CommandEventView, SessionView, WorldSnapshot
 
-
 class Command:
     pass
-
 
 @dataclass(frozen=True)
 class SetSessionStatusCommand(Command):
@@ -20,7 +18,6 @@ class SetSessionStatusCommand(Command):
     duration_min: int | None
     intensity_note: str | None
     evidence: str
-
 
 @dataclass(frozen=True)
 class CorrectSessionStatusCommand(Command):
@@ -31,12 +28,10 @@ class CorrectSessionStatusCommand(Command):
     intensity_note: str | None
     evidence: str
 
-
 @dataclass(frozen=True)
 class ApplyPlanPatchCommand(Command):
     operations: tuple[PlanPatchOperation, ...]
     rationale: str
-
 
 @dataclass(frozen=True)
 class CreatePendingConfirmationCommand(Command):
@@ -45,7 +40,6 @@ class CreatePendingConfirmationCommand(Command):
     payload_json: str
     expires_at: datetime
 
-
 @dataclass(frozen=True)
 class UpsertMemoryFactCommand(Command):
     kind: str
@@ -53,13 +47,11 @@ class UpsertMemoryFactCommand(Command):
     confidence: float
     expires_at: datetime | None
 
-
 @dataclass(frozen=True)
 class UpdateConversationStateCommand(Command):
     last_unresolved_intent: dict | None
     last_execution_event_id: int | None
     last_pending_id: int | None
-
 
 @dataclass(frozen=True)
 class PolicyDecision:
@@ -75,7 +67,6 @@ class PolicyDecision:
     risk_level: Literal["low", "medium", "high"]
     commands: tuple[Command, ...]
     reply_facts: tuple[str, ...]
-
 
 class RuntimePolicy:
     def evaluate(self, proposal: ActionProposal, snapshot: WorldSnapshot) -> PolicyDecision:
@@ -225,7 +216,6 @@ class RuntimePolicy:
         )
         return _decision("create_pending", "plan_patch_requires_confirmation", "medium", (pending,), proposal.evidence)
 
-
 def _decision(
     action: Literal["allow_commit", "create_pending", "block", "ask_clarification", "answer_only", "no_send"],
     reason: str,
@@ -235,13 +225,11 @@ def _decision(
 ) -> PolicyDecision:
     return PolicyDecision(action, reason, risk_level, commands, reply_facts)
 
-
 def _find_session(snapshot: WorldSnapshot, session_id: int) -> SessionView | None:
     for session in (*snapshot.recent_plan, *snapshot.current_plan):
         if session.id == session_id:
             return session
     return None
-
 
 def _execution_event_for_session(snapshot: WorldSnapshot, session_id: int) -> CommandEventView | None:
     for event in snapshot.recent_execution_events:
@@ -249,13 +237,11 @@ def _execution_event_for_session(snapshot: WorldSnapshot, session_id: int) -> Co
             return event
     return None
 
-
 def _find_event(events: tuple[CommandEventView, ...], event_id: int) -> CommandEventView | None:
     for event in events:
         if event.id == event_id:
             return event
     return None
-
 
 def _merge_unresolved_intent(existing: dict[str, Any] | None, incoming: dict[str, Any] | None) -> dict[str, Any] | None:
     if existing is None:
@@ -274,7 +260,6 @@ def _merge_unresolved_intent(existing: dict[str, Any] | None, incoming: dict[str
         merged["type"] = existing["type"]
     return _normalize_unresolved_intent(merged)
 
-
 def _normalize_unresolved_intent(intent: dict[str, Any] | None) -> dict[str, Any] | None:
     if intent is None:
         return None
@@ -288,11 +273,9 @@ def _normalize_unresolved_intent(intent: dict[str, Any] | None) -> dict[str, Any
         normalized.pop("missing", None)
     return normalized
 
-
 def _intent_type(intent: dict[str, Any]) -> str | None:
     value = intent.get("type")
     return value if isinstance(value, str) else None
-
 
 def _active_move_target(intent: dict[str, Any] | None) -> date | None:
     if intent is None or intent.get("type") != "move_session":
@@ -305,11 +288,9 @@ def _active_move_target(intent: dict[str, Any] | None) -> date | None:
     except ValueError:
         return None
 
-
 def _plan_patch_source_anchored(proposal: ActionProposal, active_move_target: date | None) -> bool:
     ok_tools = {item.get("name") for item in proposal.tool_trace if item.get("ok", True)}
     return active_move_target is not None or "get_session" in ok_tools
-
 
 def _intent_from_plan_patch(draft: PlanPatchDraft) -> dict[str, Any] | None:
     if len(draft.operations) != 1:

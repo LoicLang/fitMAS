@@ -4,14 +4,12 @@ from dataclasses import asdict, dataclass, is_dataclass
 from datetime import date, datetime
 from typing import Any, Literal
 
-
 @dataclass(frozen=True)
 class MemoryFactDraft:
     kind: Literal["preference", "health", "availability", "constraint"]
     text: str
     confidence: float
     expires_at: datetime | None
-
 
 @dataclass(frozen=True)
 class ExecutionUpdateDraft:
@@ -21,7 +19,6 @@ class ExecutionUpdateDraft:
     intensity_note: str | None = None
     evidence: str = ""
 
-
 @dataclass(frozen=True)
 class ExecutionCorrectionDraft:
     previous_event_id: int
@@ -30,7 +27,6 @@ class ExecutionCorrectionDraft:
     duration_min: int | None = None
     intensity_note: str | None = None
     evidence: str = ""
-
 
 @dataclass(frozen=True)
 class PlanPatchOperation:
@@ -42,12 +38,10 @@ class PlanPatchOperation:
     new_sport: str | None = None
     new_duration_min: int | None = None
 
-
 @dataclass(frozen=True)
 class PlanPatchDraft:
     operations: tuple[PlanPatchOperation, ...]
     rationale: str
-
 
 @dataclass(frozen=True)
 class ActionProposal:
@@ -72,10 +66,8 @@ class ActionProposal:
     unresolved_intent: dict[str, Any] | None = None
     tool_trace: tuple[dict[str, Any], ...] = ()
 
-
 def proposal_to_dict(proposal: ActionProposal) -> dict[str, Any]:
     return _jsonable(asdict(proposal))
-
 
 def proposal_from_dict(data: dict[str, Any]) -> ActionProposal:
     memory_updates = tuple(
@@ -111,7 +103,6 @@ def proposal_from_dict(data: dict[str, Any]) -> ActionProposal:
         tool_trace=tuple(data.get("tool_trace", ())),
     )
 
-
 def _plan_patch_from_dict(data: dict[str, Any]) -> PlanPatchDraft:
     operations = tuple(
         PlanPatchOperation(
@@ -127,7 +118,6 @@ def _plan_patch_from_dict(data: dict[str, Any]) -> PlanPatchDraft:
     )
     return PlanPatchDraft(operations=operations, rationale=data["rationale"])
 
-
 def _jsonable(value: Any) -> Any:
     if is_dataclass(value):
         return _jsonable(asdict(value))
@@ -139,10 +129,8 @@ def _jsonable(value: Any) -> Any:
         return value.isoformat()
     return value
 
-
 def _parse_optional_date(value: str | None) -> date | None:
     return date.fromisoformat(value) if value else None
-
 
 def _parse_optional_datetime(value: str | None) -> datetime | None:
     return datetime.fromisoformat(value) if value else None
