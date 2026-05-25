@@ -34,6 +34,7 @@ class ScenarioOracle:
     expected_reply_must_not_contain: tuple[str, ...]
     expected_reply_any_include: tuple[tuple[str, ...], ...] = ()
     expected_session_dates: tuple[tuple[str, str], ...] = ()
+    forbidden_command_types: tuple[str, ...] = ()
     followup: "ScenarioOracle | None" = None
     max_acceptable_latency_ms: int = 8000
     max_acceptable_tokens: int = 4000
@@ -261,5 +262,6 @@ def _scenarios() -> dict[str, ScenarioOracle]:
             expected_reply_must_not_contain=("déplacé", "c'est fait"),
             expected_reply_any_include=(("confirm", "valid", "on confirme"),),
             expected_session_dates=(("61", "2026-05-23"),),
+            forbidden_command_types=("ApplyPlanPatchCommand",),
         ),
     }

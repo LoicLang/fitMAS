@@ -63,6 +63,40 @@ def test_report_renders_success_table_and_failures():
     assert "turn-2" in markdown
 
 
+def test_report_renders_quality_metrics_and_failure_triage():
+    markdown = render_markdown_report(
+        [
+            MatrixRunRecord(
+                scenario="current_plan",
+                provider="grok",
+                repetition=1,
+                success=False,
+                latency_ms=2200,
+                tokens_in=120,
+                tokens_out=45,
+                failures=("proposal_type",),
+                turn_id="turn-fail",
+                turn_count=2,
+                guard_block_count=1,
+                guard_repair_count=1,
+                sanitized_fallback_count=1,
+                raw_json_block_count=1,
+                wrong_write_count=0,
+                triage=(
+                    "turn=turn-fail proposal=no_send policy=no_send tools=resolve_date_reference",
+                    "reply=Aucune action enregistrée.",
+                ),
+            )
+        ]
+    )
+
+    assert "## Quality Metrics" in markdown
+    assert "| guard_block_rate | 1 | 50.0% |" in markdown
+    assert "| raw_json_block_count | 1 | 50.0% |" in markdown
+    assert "## Failure Triage" in markdown
+    assert "turn=turn-fail proposal=no_send policy=no_send tools=resolve_date_reference" in markdown
+
+
 def test_run_matrix_dry_run_prints_planned_runs_without_provider_calls():
     completed = subprocess.run(
         [

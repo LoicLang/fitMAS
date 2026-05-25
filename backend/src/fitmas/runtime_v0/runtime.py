@@ -11,7 +11,7 @@ from fitmas.runtime_v0.audit import load_turn, persist_turn
 from fitmas.runtime_v0.event import InputEvent
 from fitmas.runtime_v0.executor import CommandExecutor
 from fitmas.runtime_v0.guard import GuardResult, OutputGuard
-from fitmas.runtime_v0.idempotency import acquire_event_lock, mark_event_lock
+from fitmas.runtime_v0.idempotency import acquire_event_lock, lock_allows_retry, mark_event_lock
 from fitmas.runtime_v0.llm_clients.base import LLMClient
 from fitmas.runtime_v0.policy import PolicyDecision, RuntimePolicy
 from fitmas.runtime_v0.prompts.coach_system import COACH_SYSTEM_PROMPT
@@ -45,6 +45,13 @@ def handle_event(event: InputEvent, deps: RuntimeDeps, turn_id: str) -> HandleEv
     if lock.existing and (turn := load_turn(deps.db_path, turn_id)) is not None and _turn_complete(turn):
         return _existing_result(turn)
     if lock.existing:
+        if lock_allows_retry(lock):
+            mark_event_lock(deps.db_path, event.id, "running")
+            try:
+                return _handle_new_event(event, deps, turn_id, started)
+            except Exception:
+                mark_event_lock(deps.db_path, event.id, "failed")
+                raise
         return _processing_result(event, turn_id)
     try:
         return _handle_new_event(event, deps, turn_id, started)

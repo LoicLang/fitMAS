@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timedelta
 import json
 import time
 from zoneinfo import ZoneInfo
@@ -163,6 +163,80 @@ def test_existing_event_lock_with_incomplete_turn_returns_processing_without_llm
     assert result.runtime_result.policy_action == "no_send"
     assert coach_llm.requests == []
     assert reply_llm.requests == []
+
+
+def test_failed_event_lock_retries_same_turn_and_completes(tmp_path):
+    db_path = tmp_path / "fitmas_v0.db"
+    init_db(db_path)
+    _seed_session(db_path)
+    event = _event()
+    with connect(db_path) as connection:
+        connection.execute(
+            "insert into v0_idempotency_locks (event_id, turn_id, status) values (?, ?, ?)",
+            (event.id, "turn-retry", "failed"),
+        )
+        connection.execute("insert into v0_turns (id) values (?)", ("turn-retry",))
+        connection.commit()
+    coach_llm = FakeLLMClient(
+        [
+            LLMResponse(tool_calls=(ToolCall(name="get_current_plan", args={"days": 7}),)),
+            LLMResponse(text="Aujourd'hui: Footing."),
+        ]
+    )
+    deps = RuntimeDeps(
+        db_path=db_path,
+        coach_llm=coach_llm,
+        reply_llm=FakeLLMClient([LLMResponse(text="Aujourd'hui: Footing.")]),
+    )
+
+    result = handle_event(event, deps=deps, turn_id="ignored-turn")
+
+    with connect(db_path) as connection:
+        lock = connection.execute("select status from v0_idempotency_locks where event_id = ?", (event.id,)).fetchone()
+    assert result.turn_id == "turn-retry"
+    assert result.reply == "Aujourd'hui: Footing."
+    assert len(coach_llm.requests) == 2
+    assert lock["status"] == "completed"
+
+
+def test_stale_running_event_lock_retries_same_turn(tmp_path):
+    db_path = tmp_path / "fitmas_v0.db"
+    init_db(db_path)
+    _seed_session(db_path)
+    event = _event()
+    stale_time = (event.occurred_at - timedelta(minutes=20)).replace(tzinfo=None).isoformat(sep=" ")
+    with connect(db_path) as connection:
+        connection.execute(
+            """
+            insert into v0_idempotency_locks (event_id, turn_id, status, updated_at)
+            values (?, ?, ?, ?)
+            """,
+            (event.id, "turn-stale", "running", stale_time),
+        )
+        connection.execute("insert into v0_turns (id) values (?)", ("turn-stale",))
+        connection.commit()
+    coach_llm = FakeLLMClient(
+        [
+            LLMResponse(tool_calls=(ToolCall(name="get_current_plan", args={"days": 7}),)),
+            LLMResponse(text="Aujourd'hui: Footing."),
+        ]
+    )
+    deps = RuntimeDeps(
+        db_path=db_path,
+        coach_llm=coach_llm,
+        reply_llm=FakeLLMClient([LLMResponse(text="Aujourd'hui: Footing.")]),
+    )
+
+    result = handle_event(event, deps=deps, turn_id="ignored-turn")
+
+    with connect(db_path) as connection:
+        lock = connection.execute("select status from v0_idempotency_locks where event_id = ?", (event.id,)).fetchone()
+        turn_count = connection.execute("select count(*) from v0_turns where id = ?", ("turn-stale",)).fetchone()[0]
+    assert result.turn_id == "turn-stale"
+    assert result.reply == "Aujourd'hui: Footing."
+    assert len(coach_llm.requests) == 2
+    assert lock["status"] == "completed"
+    assert turn_count == 1
 
 
 def test_persisted_turn_records_real_latency_and_completes_lock(tmp_path):

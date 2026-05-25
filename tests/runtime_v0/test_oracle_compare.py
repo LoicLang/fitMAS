@@ -173,6 +173,29 @@ def test_oracle_compare_detects_wrong_correction_target_event():
     assert "wrong_correction_target" in verdict.failures
 
 
+def test_oracle_compare_does_not_count_missing_correction_as_wrong_target():
+    scenario = scenario_by_name("execution_correction")
+    verdict = compare_run_to_oracle(
+        {
+            "proposal_type": "execution_update",
+            "policy_action": "ask_clarification",
+            "reply": "Quelle séance ?",
+            "tool_trace": [{"name": "propose_execution_update", "ok": True}],
+            "command_events": [],
+            "guard_ok": True,
+            "proposal": {
+                "type": "execution_update",
+                "execution_update": {"session_id": 66, "status": "done"},
+            },
+        },
+        scenario,
+    )
+
+    assert verdict.success is False
+    assert verdict.wrong_correction_target is False
+    assert "wrong_correction_target" not in verdict.failures
+
+
 def test_oracle_compare_accepts_update_compiled_to_correction_command():
     scenario = scenario_by_name("execution_correction")
     verdict = compare_run_to_oracle(
@@ -248,6 +271,39 @@ def test_oracle_compare_accepts_any_reply_include_group():
 
     assert verdict.reply_must_include_ok is True
     assert "reply_missing_expected_text" not in verdict.failures
+
+
+def test_oracle_compare_rejects_forbidden_pending_plan_apply():
+    scenario = scenario_by_name("key_session_pending")
+    verdict = compare_run_to_oracle(
+        {
+            "proposal_type": "plan_patch",
+            "policy_action": "create_pending",
+            "reply": "Je dois confirmer avant de faire ça: déplacer la VMA à vendredi.",
+            "tool_trace": [{"name": "resolve_date_reference", "ok": True}, {"name": "get_session", "ok": True}],
+            "command_events": [
+                {
+                    "command_type": "CreatePendingConfirmationCommand",
+                    "target_type": "pending",
+                    "target_id": "plan_patch",
+                    "status": "applied",
+                },
+                {
+                    "command_type": "ApplyPlanPatchCommand",
+                    "target_type": "session",
+                    "target_id": "61",
+                    "status": "applied",
+                },
+            ],
+            "final_session_dates": {"61": "2026-05-23"},
+            "guard_ok": True,
+            "proposal": {"type": "plan_patch"},
+        },
+        scenario,
+    )
+
+    assert verdict.forbidden_commands_absent is False
+    assert "forbidden_command_present" in verdict.failures
 
 
 def test_oracle_compare_allows_guard_repaired_reply_when_visible_contract_passes():

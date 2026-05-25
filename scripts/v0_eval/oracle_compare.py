@@ -23,6 +23,7 @@ class OracleVerdict:
     old_plan_date_detected: bool
     wrong_correction_target: bool
     final_session_dates_ok: bool
+    forbidden_commands_absent: bool
     reply_claim_without_event: bool
     reply_must_include_ok: bool
     reply_must_not_contain_ok: bool
@@ -54,6 +55,7 @@ def compare_run_to_oracle(turn_result: Any, oracle: ScenarioOracle) -> OracleVer
     old_plan_date_detected = _old_plan_date_detected(reply_lower, oracle)
     wrong_correction_target = _wrong_correction_target(run["proposal"], command_events, oracle)
     final_session_dates_ok = _final_session_dates_ok(run["final_session_dates"], oracle)
+    forbidden_commands_absent = _forbidden_commands_absent(command_events, oracle)
     reply_claim_without_event = _reply_claim_without_event(reply_lower, command_events)
     reply_must_include_ok = all(
         expected.lower() in reply_lower for expected in oracle.expected_reply_must_include
@@ -75,6 +77,7 @@ def compare_run_to_oracle(turn_result: Any, oracle: ScenarioOracle) -> OracleVer
         old_plan_date_detected=old_plan_date_detected,
         wrong_correction_target=wrong_correction_target,
         final_session_dates_ok=final_session_dates_ok,
+        forbidden_commands_absent=forbidden_commands_absent,
         reply_claim_without_event=reply_claim_without_event,
         reply_must_include_ok=reply_must_include_ok,
         reply_must_not_contain_ok=reply_must_not_contain_ok,
@@ -91,6 +94,7 @@ def compare_run_to_oracle(turn_result: Any, oracle: ScenarioOracle) -> OracleVer
         old_plan_date_detected=old_plan_date_detected,
         wrong_correction_target=wrong_correction_target,
         final_session_dates_ok=final_session_dates_ok,
+        forbidden_commands_absent=forbidden_commands_absent,
         reply_claim_without_event=reply_claim_without_event,
         reply_must_include_ok=reply_must_include_ok,
         reply_must_not_contain_ok=reply_must_not_contain_ok,
@@ -246,11 +250,24 @@ def _wrong_correction_target(
     ):
         return False
     expected_event_id = _expected_previous_event_id(oracle)
+    if any(
+        event.get("command_type") == "CorrectSessionStatusCommand"
+        and event.get("status") == "applied"
+        and not any(_matches_command(event, expected) for expected in oracle.expected_commands)
+        for event in command_events
+    ):
+        return True
     correction = proposal.get("execution_correction") or {}
+    if not correction:
+        return False
     return correction.get("previous_event_id") != expected_event_id
 
 def _final_session_dates_ok(final_session_dates: dict[str, str], oracle: ScenarioOracle) -> bool:
     return all(final_session_dates.get(str(session_id)) == expected for session_id, expected in oracle.expected_session_dates)
+
+def _forbidden_commands_absent(command_events: tuple[dict[str, Any], ...], oracle: ScenarioOracle) -> bool:
+    forbidden = set(oracle.forbidden_command_types)
+    return not any(event.get("command_type") in forbidden and event.get("status") == "applied" for event in command_events)
 
 
 def _expected_previous_event_id(oracle: ScenarioOracle) -> int | None:
@@ -284,6 +301,8 @@ def _failures(**checks: Any) -> tuple[str, ...]:
         failures.append("wrong_correction_target")
     if not checks["final_session_dates_ok"]:
         failures.append("final_session_date_mismatch")
+    if not checks["forbidden_commands_absent"]:
+        failures.append("forbidden_command_present")
     if checks["reply_claim_without_event"]:
         failures.append("reply_claim_without_event")
     if not checks["reply_must_include_ok"]:

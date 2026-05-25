@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import argparse
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 import json
 from pathlib import Path
 import sqlite3
@@ -17,6 +17,7 @@ for path in (ROOT, BACKEND_SRC):
 
 from fitmas.runtime_v0.llm_clients.base import LLMResponse, ToolCall
 from fitmas.runtime_v0.llm_clients.fake import FakeLLMClient
+from fitmas.runtime_v0.reply import TECHNICAL_FALLBACK
 from fitmas.runtime_v0.runtime import RuntimeDeps, handle_event
 from scripts.v0_eval.oracle_compare import OracleVerdict, compare_persisted_turn
 from scripts.v0_eval.provider_clients import MeteredLLMClient, ProviderConfigError, build_provider_client
@@ -132,7 +133,9 @@ def _run_provider_item(item: MatrixPlanItem, db_path: Path, client) -> MatrixRun
         verdicts = _run_provider_scenario(db_path, scenario, turn_id, meter)
         failures = tuple(failure for verdict in verdicts for failure in verdict.failures)
     except Exception as exc:
+        verdicts = ()
         failures = (f"provider_error:{type(exc).__name__}",)
+    metrics = _run_metrics(db_path, verdicts)
     return MatrixRunRecord(
         scenario=item.scenario,
         provider=item.provider,
@@ -145,6 +148,8 @@ def _run_provider_item(item: MatrixPlanItem, db_path: Path, client) -> MatrixRun
         turn_id=turn_id,
         model=meter.model,
         db_path=str(db_path),
+        triage=_triage(db_path, failures) if failures else (),
+        **metrics,
     )
 
 
@@ -156,6 +161,7 @@ def _run_fake_item(item: MatrixPlanItem, db_path: Path) -> MatrixRunRecord:
     verdicts = _run_fake_scenario(db_path, scenario, turn_id)
     latency_ms = round((time.perf_counter() - start) * 1000)
     failures = tuple(failure for verdict in verdicts for failure in verdict.failures)
+    metrics = _run_metrics(db_path, verdicts)
     return MatrixRunRecord(
         scenario=item.scenario,
         provider=item.provider,
@@ -167,6 +173,8 @@ def _run_fake_item(item: MatrixPlanItem, db_path: Path) -> MatrixRunRecord:
         failures=failures,
         turn_id=turn_id,
         db_path=str(db_path),
+        triage=_triage(db_path, failures) if failures else (),
+        **metrics,
     )
 
 
@@ -356,7 +364,61 @@ def _write_export(export_dir: Path, records: list[MatrixRunRecord], report: str)
 
 
 def _record_json(record: MatrixRunRecord) -> dict:
-    return {key: getattr(record, key) for key in ("provider", "scenario", "repetition", "success", "latency_ms", "tokens_in", "tokens_out", "failures", "turn_id", "model", "db_path")}
+    return asdict(record)
+
+
+def _run_metrics(db_path: Path, verdicts: tuple[OracleVerdict, ...]) -> dict:
+    turns = _dump_turns(db_path) if db_path.exists() else []
+    guard_reasons = [reason for turn in turns for reason in turn["guard_reasons"]]
+    return {
+        "turn_count": len(turns),
+        "guard_block_count": sum(1 for turn in turns if not turn["guard_ok"]),
+        "guard_repair_count": sum(1 for turn in turns if turn["result"].get("guard_repair_used")),
+        "sanitized_fallback_count": sum(1 for turn in turns if turn["reply"] == TECHNICAL_FALLBACK),
+        "raw_json_block_count": guard_reasons.count("raw_json_visible"),
+        "truncated_reply_count": guard_reasons.count("truncated_reply"),
+        "technical_id_block_count": guard_reasons.count("technical_id_visible"),
+        "wrong_write_count": sum(verdict.wrong_write_count for verdict in verdicts),
+        "old_plan_date_count": sum(1 for verdict in verdicts if verdict.old_plan_date_detected),
+        "wrong_correction_target_count": sum(1 for verdict in verdicts if verdict.wrong_correction_target),
+        "reply_claim_without_event_count": sum(1 for verdict in verdicts if verdict.reply_claim_without_event),
+    }
+
+
+def _triage(db_path: Path, failures: tuple[str, ...]) -> tuple[str, ...]:
+    turns = _dump_turns(db_path) if db_path.exists() else []
+    commands = _dump_command_events(db_path) if db_path.exists() else []
+    lines = [f"failures={','.join(failures)}", f"probable={','.join(_probable_causes(failures))}"]
+    for turn in turns:
+        proposal_type = turn["result"].get("proposal_type") or turn["proposal"].get("type")
+        policy_action = turn["result"].get("policy_action")
+        tools = ",".join(call.get("name", "?") for call in turn["proposal"].get("tool_trace", [])) or "none"
+        reasons = ",".join(turn["guard_reasons"]) or "none"
+        lines.append(
+            f"turn={turn['turn_id']} proposal={proposal_type} policy={policy_action} "
+            f"tools={tools} guard={turn['guard_ok']} reasons={reasons}"
+        )
+        if turn["reply"]:
+            lines.append(f"reply={turn['reply']}")
+    if commands:
+        lines.append(
+            "commands="
+            + ",".join(f"{event['command_type']}:{event['target_type']}:{event['target_id']}:{event['status']}" for event in commands)
+        )
+    return tuple(lines)
+
+
+def _probable_causes(failures: tuple[str, ...]) -> tuple[str, ...]:
+    causes: list[str] = []
+    if {"proposal_type", "policy_action", "expected_command_missing"} & set(failures):
+        causes.append("provider_missing_expected_artifact")
+    if "reply_missing_expected_text" in failures or "reply_contains_forbidden_text" in failures:
+        causes.append("reply_contract_mismatch")
+    if {"wrong_write", "old_plan_date_detected", "wrong_correction_target", "reply_claim_without_event"} & set(failures):
+        causes.append("runtime_safety_failure")
+    if any(failure.startswith("provider_error:") for failure in failures):
+        causes.append("provider_exception")
+    return tuple(causes or ("unknown",))
 
 
 def _response_record(record: MatrixRunRecord) -> dict:
