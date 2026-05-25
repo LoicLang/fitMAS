@@ -4,13 +4,14 @@ from dataclasses import dataclass
 from datetime import datetime
 import json
 from pathlib import Path
+from time import monotonic
 
 from fitmas.runtime_v0.agent import CoachAgent
 from fitmas.runtime_v0.audit import load_turn, persist_turn
 from fitmas.runtime_v0.event import InputEvent
 from fitmas.runtime_v0.executor import CommandExecutor
 from fitmas.runtime_v0.guard import GuardResult, OutputGuard
-from fitmas.runtime_v0.idempotency import acquire_event_lock
+from fitmas.runtime_v0.idempotency import acquire_event_lock, mark_event_lock
 from fitmas.runtime_v0.llm_clients.base import LLMClient
 from fitmas.runtime_v0.policy import PolicyDecision, RuntimePolicy
 from fitmas.runtime_v0.prompts.coach_system import COACH_SYSTEM_PROMPT
@@ -38,10 +39,20 @@ class HandleEventResult:
     guard: GuardResult
 
 def handle_event(event: InputEvent, deps: RuntimeDeps, turn_id: str) -> HandleEventResult:
+    started = monotonic()
     lock = acquire_event_lock(deps.db_path, event.id, turn_id)
     turn_id = lock.turn_id
     if lock.existing and (turn := load_turn(deps.db_path, turn_id)) is not None and _turn_complete(turn):
         return _existing_result(turn)
+    if lock.existing:
+        return _processing_result(event, turn_id)
+    try:
+        return _handle_new_event(event, deps, turn_id, started)
+    except Exception:
+        mark_event_lock(deps.db_path, event.id, "failed")
+        raise
+
+def _handle_new_event(event: InputEvent, deps: RuntimeDeps, turn_id: str, started: float) -> HandleEventResult:
     snapshot = SnapshotBuilder(deps.db_path).build(event.user_id, event.occurred_at)
     ctx = ToolContext(deps.db_path, snapshot, {})
     if event.type != "user_message":
@@ -49,7 +60,8 @@ def handle_event(event: InputEvent, deps: RuntimeDeps, turn_id: str) -> HandleEv
         policy = RuntimePolicy().evaluate(proposal, snapshot)
         result = build_runtime_result(event, turn_id, proposal, policy, ())
         guard = GuardResult(True, (), "")
-        _persist(deps, turn_id, event, snapshot, proposal, policy, result, "", guard, ctx)
+        _persist(deps, turn_id, event, snapshot, proposal, policy, result, "", guard, ctx, latency_ms=_latency_ms(started))
+        mark_event_lock(deps.db_path, event.id, "completed")
         return HandleEventResult(turn_id, "", proposal, policy, result, guard)
 
     proposal = CoachAgent(deps.coach_llm, COACH_SYSTEM_PROMPT).run(
@@ -74,7 +86,8 @@ def handle_event(event: InputEvent, deps: RuntimeDeps, turn_id: str) -> HandleEv
         retry_guard = guarder.verify(retry, result)
         if retry_guard.ok: reply, guard = retry, retry_guard
     final_reply = reply if guard.ok else guard.sanitized_reply
-    _persist(deps, turn_id, event, snapshot, proposal, policy, result, final_reply, guard, ctx, _calls(deps.reply_llm) - reply_calls, guard_repair_used)
+    _persist(deps, turn_id, event, snapshot, proposal, policy, result, final_reply, guard, ctx, _calls(deps.reply_llm) - reply_calls, guard_repair_used, _latency_ms(started))
+    mark_event_lock(deps.db_path, event.id, "completed")
     return HandleEventResult(turn_id, final_reply, proposal, policy, result, guard)
 
 def _persist(
@@ -90,6 +103,7 @@ def _persist(
     ctx: ToolContext,
     reply_attempts: int = 0,
     guard_repair_used: bool = False,
+    latency_ms: int = 0,
 ) -> None:
     persist_turn(
         deps.db_path,
@@ -105,7 +119,7 @@ def _persist(
         "llm",
         _provider(deps.coach_llm),
         _model(deps.coach_llm),
-        0,
+        latency_ms,
         _tokens(deps, "tokens_in"),
         _tokens(deps, "tokens_out"),
         reply_attempts,
@@ -114,6 +128,13 @@ def _persist(
 
 def _no_send(reason: str) -> ActionProposal:
     return ActionProposal(type="no_send", confidence=0.0, user_intent_summary=reason, evidence=(reason,))
+
+def _processing_result(event: InputEvent, turn_id: str) -> HandleEventResult:
+    proposal = _no_send("processing")
+    policy = PolicyDecision("no_send", "processing", "low", (), ())
+    result = build_runtime_result(event, turn_id, proposal, policy, ())
+    guard = GuardResult(True, (), "")
+    return HandleEventResult(turn_id, "", proposal, policy, result, guard)
 
 def _pending_from_events(events) -> PendingView | None:
     for event in events:
@@ -149,3 +170,6 @@ def _model(client: LLMClient) -> str:
 
 def _tokens(deps: RuntimeDeps, name: str) -> int:
     return int(getattr(deps.coach_llm, name, 0) or 0) + int(getattr(deps.reply_llm, name, 0) or 0)
+
+def _latency_ms(started: float) -> int:
+    return max(1, int((monotonic() - started) * 1000))

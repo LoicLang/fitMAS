@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime
 import json
+import time
 from zoneinfo import ZoneInfo
 
 from fitmas.runtime_v0.audit import load_turn
@@ -13,6 +14,12 @@ from fitmas.runtime_v0.runtime import RuntimeDeps, handle_event
 
 
 PARIS = ZoneInfo("Europe/Paris")
+
+
+class SlowFakeLLMClient(FakeLLMClient):
+    def chat_with_tools(self, system, messages, tools):
+        time.sleep(0.002)
+        return super().chat_with_tools(system, messages, tools)
 
 
 def _event(event_type: str = "user_message", text: str | None = "Plan actuel ?") -> InputEvent:
@@ -82,13 +89,13 @@ def test_user_message_runs_full_fake_flow_and_audits_tool_trace(tmp_path):
     event = _event()
     deps = RuntimeDeps(
         db_path=db_path,
-        coach_llm=FakeLLMClient(
+        coach_llm=SlowFakeLLMClient(
             [
                 LLMResponse(tool_calls=(ToolCall(name="get_current_plan", args={"days": 7}),)),
                 LLMResponse(text="Aujourd'hui: Footing."),
             ]
         ),
-        reply_llm=FakeLLMClient([LLMResponse(text="Aujourd'hui: Footing.")]),
+        reply_llm=SlowFakeLLMClient([LLMResponse(text="Aujourd'hui: Footing.")]),
     )
 
     result = handle_event(event, deps=deps, turn_id="turn-user")
@@ -116,7 +123,7 @@ def test_same_event_id_reuses_existing_turn_and_does_not_write_twice(tmp_path):
     event = _event(text="J'ai pas fait la séance.")
     first_deps = RuntimeDeps(
         db_path=db_path,
-        coach_llm=FakeLLMClient(
+        coach_llm=SlowFakeLLMClient(
             [LLMResponse(tool_calls=(ToolCall(name="propose_execution_update", args={"session_id": 60, "status": "skipped"}),))]
         ),
         reply_llm=FakeLLMClient([LLMResponse(text="Noté pour la séance.")]),
@@ -135,7 +142,7 @@ def test_same_event_id_reuses_existing_turn_and_does_not_write_twice(tmp_path):
     assert command_count == 1
 
 
-def test_existing_event_lock_with_incomplete_turn_continues_processing(tmp_path):
+def test_existing_event_lock_with_incomplete_turn_returns_processing_without_llm(tmp_path):
     db_path = tmp_path / "fitmas_v0.db"
     init_db(db_path)
     _seed_session(db_path)
@@ -144,21 +151,43 @@ def test_existing_event_lock_with_incomplete_turn_continues_processing(tmp_path)
         connection.execute("insert into v0_idempotency_locks (event_id, turn_id) values (?, ?)", (event.id, "turn-locked"))
         connection.execute("insert into v0_turns (id) values (?)", ("turn-locked",))
         connection.commit()
+    coach_llm = FakeLLMClient([])
+    reply_llm = FakeLLMClient([])
+    deps = RuntimeDeps(db_path=db_path, coach_llm=coach_llm, reply_llm=reply_llm)
+
+    result = handle_event(event, deps=deps, turn_id="ignored-turn")
+
+    assert result.turn_id == "turn-locked"
+    assert result.reply == ""
+    assert result.proposal.user_intent_summary == "processing"
+    assert result.runtime_result.policy_action == "no_send"
+    assert coach_llm.requests == []
+    assert reply_llm.requests == []
+
+
+def test_persisted_turn_records_real_latency_and_completes_lock(tmp_path):
+    db_path = tmp_path / "fitmas_v0.db"
+    init_db(db_path)
+    _seed_session(db_path)
+    event = _event()
     deps = RuntimeDeps(
         db_path=db_path,
         coach_llm=FakeLLMClient(
             [
                 LLMResponse(tool_calls=(ToolCall(name="get_current_plan", args={"days": 7}),)),
-                LLMResponse(text=json.dumps({"type": "answer", "answer_facts": ["22 Footing"]})),
+                LLMResponse(text="Aujourd'hui: Footing."),
             ]
         ),
-        reply_llm=FakeLLMClient([LLMResponse(text="Plan lu.")]),
+        reply_llm=SlowFakeLLMClient([LLMResponse(text="Aujourd'hui: Footing.")]),
     )
 
-    result = handle_event(event, deps=deps, turn_id="ignored-turn")
+    handle_event(event, deps=deps, turn_id="turn-latency")
 
-    assert result.turn_id == "turn-locked"
-    assert result.reply == "22 Footing."
+    turn = load_turn(db_path, "turn-latency")
+    with connect(db_path) as connection:
+        lock = connection.execute("select status from v0_idempotency_locks where event_id = ?", (event.id,)).fetchone()
+    assert turn["latency_ms"] > 0
+    assert lock["status"] == "completed"
 
 
 def test_pending_command_is_loaded_into_runtime_result(tmp_path):

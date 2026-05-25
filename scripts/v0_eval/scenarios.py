@@ -32,6 +32,7 @@ class ScenarioOracle:
     expected_commands: tuple[CommandSpec, ...]
     expected_reply_must_include: tuple[str, ...]
     expected_reply_must_not_contain: tuple[str, ...]
+    expected_reply_any_include: tuple[tuple[str, ...], ...] = ()
     expected_session_dates: tuple[tuple[str, str], ...] = ()
     followup: "ScenarioOracle | None" = None
     max_acceptable_latency_ms: int = 8000
@@ -242,5 +243,23 @@ def _scenarios() -> dict[str, ScenarioOracle]:
             expected_reply_must_include=("quelle", "séance"),
             expected_reply_must_not_contain=("déplacé",),
             followup=followup2,
+        ),
+        "key_session_pending": ScenarioOracle(
+            name="key_session_pending",
+            description="User veut deplacer une seance cle; create pending.",
+            initial_db_state={
+                "today": "2026-05-22",
+                "sessions": [
+                    {"id": 61, "date": "2026-05-23", "sport": "run", "title": "VMA", "priority": "key"},
+                ],
+            },
+            input_event=_event("evt-6", "Décale la VMA à vendredi.", 15),
+            expected_proposal_type="plan_patch",
+            expected_policy_action="create_pending",
+            expected_commands=(CommandSpec("CreatePendingConfirmationCommand", "pending", "plan_patch"),),
+            expected_reply_must_include=(),
+            expected_reply_must_not_contain=("déplacé", "c'est fait"),
+            expected_reply_any_include=(("confirm", "valid", "on confirme"),),
+            expected_session_dates=(("61", "2026-05-23"),),
         ),
     }

@@ -5,16 +5,17 @@ from scripts.v0_eval.report import MatrixRunRecord, render_markdown_report
 from scripts.v0_eval.run_matrix import build_run_plan
 
 
-def test_build_run_plan_defaults_to_five_scenarios_four_target_providers():
+def test_build_run_plan_defaults_to_six_scenarios_four_target_providers():
     plan = build_run_plan(repetitions=1)
 
-    assert len(plan) == 20
+    assert len(plan) == 24
     assert {item.scenario for item in plan} == {
         "current_plan",
         "tomorrow",
         "skipped_yesterday",
         "execution_correction",
         "followup_planning_turn1",
+        "key_session_pending",
     }
     assert {item.provider for item in plan} == {"gemini", "grok", "deepseek", "mistral"}
 
@@ -82,6 +83,7 @@ def test_run_matrix_dry_run_prints_planned_runs_without_provider_calls():
     assert "DRY RUN" in completed.stdout
     assert "deepseek/current_plan/1" in completed.stdout
     assert "deepseek/followup_planning_turn1/1" in completed.stdout
+    assert "deepseek/key_session_pending/1" in completed.stdout
     assert "provider calls: 0" in completed.stdout
 
 

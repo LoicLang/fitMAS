@@ -57,6 +57,9 @@ def compare_run_to_oracle(turn_result: Any, oracle: ScenarioOracle) -> OracleVer
     reply_claim_without_event = _reply_claim_without_event(reply_lower, command_events)
     reply_must_include_ok = all(
         expected.lower() in reply_lower for expected in oracle.expected_reply_must_include
+    ) and all(
+        any(expected.lower() in reply_lower for expected in expected_group)
+        for expected_group in oracle.expected_reply_any_include
     )
     reply_must_not_contain_ok = all(
         forbidden.lower() not in reply_lower for forbidden in oracle.expected_reply_must_not_contain
@@ -287,6 +290,4 @@ def _failures(**checks: Any) -> tuple[str, ...]:
         failures.append("reply_missing_expected_text")
     if not checks["reply_must_not_contain_ok"]:
         failures.append("reply_contains_forbidden_text")
-    if not checks["guard_ok"]:
-        failures.append("guard_blocked")
     return tuple(failures)

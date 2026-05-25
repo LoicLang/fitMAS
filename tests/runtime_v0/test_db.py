@@ -41,6 +41,11 @@ def test_init_db_creates_minimal_offline_schema(tmp_path):
             "v0_facts",
             "v0_conversation_state",
         }.issubset(_table_names(connection))
+        lock_columns = {
+            row["name"]
+            for row in connection.execute("pragma table_info(v0_idempotency_locks)").fetchall()
+        }
+        assert {"event_id", "turn_id", "status", "updated_at"} <= lock_columns
 
 
 def test_reset_db_recreates_empty_schema(tmp_path):

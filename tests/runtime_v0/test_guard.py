@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from datetime import date, datetime
 from zoneinfo import ZoneInfo
 
@@ -96,6 +97,47 @@ def test_blocks_internal_jargon_and_meta_opening():
 
     assert "internal_jargon" in jargon.blocked_reasons
     assert "meta_opening" in meta.blocked_reasons
+
+
+def test_blocks_raw_json_and_technical_ids():
+    guard = OutputGuard(today=_event().occurred_at.date())
+    result = _result(read_facts=('{"sessions": [{"date": "2026-05-23"}]}',))
+
+    raw_json = guard.verify('Session planifiée: {"date": "2026-05-23", "sessions": []}', result)
+    technical = guard.verify("La session_id 63 correspond à source_ref.", result)
+
+    assert "raw_json_visible" in raw_json.blocked_reasons
+    assert "technical_id_visible" in technical.blocked_reasons
+
+
+def test_answer_guard_falls_back_to_read_fact_summary_when_reply_is_raw_json():
+    guard = OutputGuard(today=_event().occurred_at.date())
+    result = _result(
+        read_facts=(
+            json.dumps(
+                {
+                    "sessions": [
+                        {"date": "2026-05-22", "title": "Footing recup"},
+                        {"date": "2026-05-24", "title": "VMA courte"},
+                    ]
+                }
+            ),
+        )
+    )
+
+    checked = guard.verify('{"sessions": [{"date": "2026-05-22"}]}', result)
+
+    assert not checked.ok
+    assert "raw_json_visible" in checked.blocked_reasons
+    assert checked.sanitized_reply == "22 Footing recup. 24 VMA courte."
+
+
+def test_blocks_truncated_reply_endings():
+    guard = OutputGuard(today=_event().occurred_at.date())
+
+    checked = guard.verify("Demain tu as une séance avec", _result(read_facts=("demain séance",)))
+
+    assert "truncated_reply" in checked.blocked_reasons
 
 
 def test_sanitizes_meta_reply_with_committed_execution_summary():

@@ -36,7 +36,37 @@ class CoachAgent:
 
         for _ in range(max_steps):
             response = self.llm_client.chat_with_tools(self.system_prompt, messages, list(tools))
-            proposal = _first_proposal(response, tool_by_name, tool_context)
+            proposal: ActionProposal | None = None
+            error_call: ToolCall | None = None
+            error_reason: str | None = None
+            if response.tool_calls and _has_read_tool_call(response, tool_by_name):
+                error_call, error_reason = _execute_read_tool_calls(
+                    response,
+                    tool_by_name,
+                    tool_context,
+                    messages,
+                    read_facts,
+                    read_tool_names,
+                )
+                if error_reason:
+                    if error_reason == "unknown_tool":
+                        if unknown_tool_retry_used:
+                            return _no_send("unknown_tool", tool_context)
+                        unknown_tool_retry_used = True
+                    else:
+                        if invalid_args_retry_used:
+                            return _no_send("invalid_tool_args", tool_context)
+                        invalid_args_retry_used = True
+                    continue
+                proposal, error_call, error_reason = _first_proposal(response, tool_by_name, tool_context)
+            else:
+                proposal, error_call, error_reason = _first_proposal(response, tool_by_name, tool_context)
+            if error_reason:
+                messages.append(_tool_error(error_call, f"invalid_tool_args: {error_reason}"))
+                if invalid_args_retry_used:
+                    return _no_send("invalid_tool_args", tool_context)
+                invalid_args_retry_used = True
+                continue
             if proposal is not None:
                 if _active_move_intent(snapshot_header.last_unresolved_intent) and proposal.type == "execution_update":
                     messages.append(_runtime_contract_error("active_move_intent_requires_plan_patch"))
@@ -58,28 +88,12 @@ class CoachAgent:
                     continue
                 return proposal
             if response.tool_calls:
-                for call in response.tool_calls:
-                    tool = tool_by_name.get(call.name)
-                    if tool is None:
-                        messages.append(_tool_error(call, "unknown_tool"))
-                        if unknown_tool_retry_used:
-                            return _no_send("unknown_tool")
-                        unknown_tool_retry_used = True
-                        break
-                    if tool.is_proposal:
-                        continue
-                    try:
-                        result = _call_tool(tool, call.args, tool_context)
-                    except Exception as exc:
-                        messages.append(_tool_error(call, f"invalid_tool_args: {exc}"))
-                        if invalid_args_retry_used:
-                            return _no_send("invalid_tool_args")
-                        invalid_args_retry_used = True
-                        break
-                    fact = json.dumps(result, ensure_ascii=False, sort_keys=True)
-                    read_facts.append(fact)
-                    read_tool_names.append(call.name)
-                    messages.append({"role": "tool", "tool_name": call.name, "content": fact})
+                unknown_call = next((call for call in response.tool_calls if call.name not in tool_by_name), None)
+                if unknown_call is not None:
+                    messages.append(_tool_error(unknown_call, "unknown_tool"))
+                    if unknown_tool_retry_used:
+                        return _no_send("unknown_tool", tool_context)
+                    unknown_tool_retry_used = True
                 continue
             if response.text:
                 if _active_move_intent(snapshot_header.last_unresolved_intent):
@@ -115,16 +129,51 @@ def _first_proposal(
     response: LLMResponse,
     tool_by_name: dict[str, ToolSchema],
     tool_context: ToolContext | None,
-) -> ActionProposal | None:
+) -> tuple[ActionProposal | None, ToolCall | None, str | None]:
     for call in response.tool_calls:
         tool = tool_by_name.get(call.name)
         if tool is None or not tool.is_proposal:
             continue
-        proposal = _call_tool(tool, call.args, tool_context)
+        try:
+            proposal = _call_tool(tool, call.args, tool_context)
+        except Exception as exc:
+            return None, call, str(exc)
         if isinstance(proposal, ActionProposal):
-            return proposal
-        raise TypeError(f"proposal_tool_returned_{type(proposal).__name__}")
-    return None
+            return proposal, None, None
+        return None, call, f"proposal_tool_returned_{type(proposal).__name__}"
+    return None, None, None
+
+def _has_read_tool_call(response: LLMResponse, tool_by_name: dict[str, ToolSchema]) -> bool:
+    return any(
+        (tool := tool_by_name.get(call.name)) is not None and not tool.is_proposal
+        for call in response.tool_calls
+    )
+
+def _execute_read_tool_calls(
+    response: LLMResponse,
+    tool_by_name: dict[str, ToolSchema],
+    tool_context: ToolContext | None,
+    messages: list[dict[str, Any]],
+    read_facts: list[str],
+    read_tool_names: list[str],
+) -> tuple[ToolCall | None, str | None]:
+    for call in response.tool_calls:
+        tool = tool_by_name.get(call.name)
+        if tool is None:
+            messages.append(_tool_error(call, "unknown_tool"))
+            return call, "unknown_tool"
+        if tool.is_proposal:
+            continue
+        try:
+            result = _call_tool(tool, call.args, tool_context)
+        except Exception as exc:
+            messages.append(_tool_error(call, f"invalid_tool_args: {exc}"))
+            return call, "invalid_tool_args"
+        fact = json.dumps(result, ensure_ascii=False, sort_keys=True)
+        read_facts.append(fact)
+        read_tool_names.append(call.name)
+        messages.append({"role": "tool", "tool_name": call.name, "content": fact})
+    return None, None
 def _call_tool(tool: ToolSchema, args: dict[str, Any], tool_context: ToolContext | None) -> Any:
     if tool_context is None:
         return tool.handler(**args)

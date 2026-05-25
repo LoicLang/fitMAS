@@ -144,6 +144,32 @@ def test_invalid_tool_args_get_one_retry_then_can_answer(tmp_path):
     assert ctx.scratchpad["calls"][1] == {"name": "get_current_plan", "ok": True}
 
 
+def test_invalid_proposal_args_get_one_retry_then_can_commit_proposal(tmp_path):
+    event = _event("J'ai pas fait hier.")
+    ctx = _context(tmp_path, event)
+    client = FakeLLMClient(
+        [
+            LLMResponse(tool_calls=(ToolCall(name="propose_execution_update", args={"session_id": 66}),)),
+            LLMResponse(
+                tool_calls=(
+                    ToolCall(
+                        name="propose_execution_update",
+                        args={"session_id": 66, "status": "skipped", "evidence": "pas fait"},
+                    ),
+                )
+            ),
+        ]
+    )
+    agent = CoachAgent(client, system_prompt="system")
+
+    proposal = agent.run(event, ctx.snapshot.header(), for_event(event, ctx.snapshot), tool_context=ctx)
+
+    assert proposal.type == "execution_update"
+    assert proposal.execution_update is not None
+    assert proposal.execution_update.status == "skipped"
+    assert "invalid_tool_args" in client.requests[1]["messages"][-1]["content"]
+
+
 def test_first_proposal_tool_wins(tmp_path):
     event = _event("J'ai pas fait hier.")
     ctx = _context(tmp_path, event)
@@ -171,6 +197,92 @@ def test_first_proposal_tool_wins(tmp_path):
     assert proposal.execution_update is not None
     assert proposal.execution_update.session_id == 66
     assert len(ctx.scratchpad["calls"]) == 1
+
+
+def test_mixed_read_and_proposal_calls_execute_read_before_proposal(tmp_path):
+    event = _event("Décale ça à vendredi.")
+    ctx = _context(tmp_path, event)
+    client = FakeLLMClient(
+        [
+            LLMResponse(
+                tool_calls=(
+                    ToolCall(name="resolve_date_reference", args={"weekday": "friday", "direction": "future"}),
+                    ToolCall(
+                        name="ask_clarification",
+                        args={
+                            "question": "Quelle séance veux-tu déplacer ?",
+                            "unresolved_intent": {
+                                "type": "move_session",
+                                "target_date": "2026-05-29",
+                                "missing": ["source_ref"],
+                            },
+                        },
+                    ),
+                )
+            ),
+            LLMResponse(
+                tool_calls=(
+                    ToolCall(
+                        name="ask_clarification",
+                        args={
+                            "question": "Quelle séance veux-tu déplacer ?",
+                            "unresolved_intent": {
+                                "type": "move_session",
+                                "target_date": "2026-05-29",
+                                "missing": ["source_ref"],
+                            },
+                        },
+                    ),
+                )
+            ),
+        ]
+    )
+    agent = CoachAgent(client, system_prompt="system")
+
+    proposal = agent.run(event, ctx.snapshot.header(), for_event(event, ctx.snapshot), tool_context=ctx)
+
+    assert proposal.type == "ask_clarification"
+    assert proposal.unresolved_intent["target_date"] == "2026-05-29"
+    assert ctx.scratchpad["calls"] == [
+        {"name": "resolve_date_reference", "ok": True},
+        {"name": "ask_clarification", "ok": True},
+    ]
+    assert len(client.requests) == 1
+
+
+def test_active_move_intent_accepts_get_session_and_plan_patch_in_same_response(tmp_path):
+    event = _event("Je parle de la séance de récup.")
+    ctx = _context(tmp_path, event)
+    header = replace(
+        ctx.snapshot.header(),
+        last_unresolved_intent={"type": "move_session", "target_date": "2026-05-29", "missing": ["source_ref"]},
+    )
+    client = FakeLLMClient(
+        [
+            LLMResponse(
+                tool_calls=(
+                    ToolCall(name="get_session", args={"session_id": 66}),
+                    ToolCall(
+                        name="propose_plan_patch",
+                        args={
+                            "operations": [{"kind": "move", "source_session_id": 66, "target_date": "2026-05-29"}],
+                            "rationale": "déplacer la récup à vendredi",
+                        },
+                    ),
+                )
+            ),
+        ]
+    )
+    agent = CoachAgent(client, system_prompt="system")
+
+    proposal = agent.run(event, header, for_event(event, ctx.snapshot), tool_context=ctx)
+
+    assert proposal.type == "plan_patch"
+    assert proposal.plan_patch is not None
+    assert ctx.scratchpad["calls"] == [
+        {"name": "get_session", "ok": True},
+        {"name": "propose_plan_patch", "ok": True},
+    ]
 
 
 def test_plan_patch_without_exact_source_read_gets_contract_retry(tmp_path):

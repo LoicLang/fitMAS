@@ -17,6 +17,8 @@ class ReplyComposer:
 
     def compose(self, result: RuntimeResult, snapshot: WorldSnapshot, repair: bool = False) -> str:
         if result.policy_action == "ask_clarification" and result.read_facts: return result.read_facts[0]
+        if result.pending is not None:
+            return _pending_confirmation(result)
         try:
             response = self.llm_client.chat_with_tools(
                 self.system_prompt, [{"role": "user", "content": _payload(result, snapshot)}], [],
@@ -56,9 +58,16 @@ def _payload(result: RuntimeResult, snapshot: WorldSnapshot) -> str:
 def _fallback(result: RuntimeResult, snapshot: WorldSnapshot) -> str:
     if result.committed_events:
         return _commit_summary(result, snapshot, "") or TECHNICAL_FALLBACK
+    if result.pending is not None:
+        return _pending_confirmation(result)
     if result.policy_action == "answer_only" and result.read_facts:
         return _plan_summary(result) or " ".join(fact.split(".")[0].strip() for fact in result.read_facts[:3] if fact.strip())
     return TECHNICAL_FALLBACK
+
+def _pending_confirmation(result: RuntimeResult) -> str:
+    if result.pending is None:
+        return TECHNICAL_FALLBACK
+    return f"Je dois confirmer avant de faire ça: {result.pending.summary}."
 
 def _commit_summary(result: RuntimeResult, snapshot: WorldSnapshot, reply: str) -> str:
     if not result.committed_events:

@@ -223,6 +223,53 @@ def test_oracle_compare_detects_reply_claim_without_event():
     assert "reply_claim_without_event" in verdict.failures
 
 
+def test_oracle_compare_accepts_any_reply_include_group():
+    scenario = scenario_by_name("key_session_pending")
+    verdict = compare_run_to_oracle(
+        {
+            "proposal_type": "plan_patch",
+            "policy_action": "create_pending",
+            "reply": "Tu souhaites décaler la VMA à vendredi ? Validez-vous ce changement ?",
+            "tool_trace": [{"name": "resolve_date_reference", "ok": True}, {"name": "get_session", "ok": True}],
+            "command_events": [
+                {
+                    "command_type": "CreatePendingConfirmationCommand",
+                    "target_type": "pending",
+                    "target_id": "plan_patch",
+                    "status": "applied",
+                }
+            ],
+            "final_session_dates": {"61": "2026-05-23"},
+            "guard_ok": True,
+            "proposal": {"type": "plan_patch"},
+        },
+        scenario,
+    )
+
+    assert verdict.reply_must_include_ok is True
+    assert "reply_missing_expected_text" not in verdict.failures
+
+
+def test_oracle_compare_allows_guard_repaired_reply_when_visible_contract_passes():
+    scenario = scenario_by_name("current_plan")
+    verdict = compare_run_to_oracle(
+        {
+            "proposal_type": "answer",
+            "policy_action": "answer_only",
+            "reply": "22 Footing recup. 24 VMA courte. 26 Endurance.",
+            "tool_trace": [{"name": "get_current_plan", "ok": True}],
+            "command_events": [],
+            "guard_ok": False,
+            "proposal": {"type": "answer"},
+        },
+        scenario,
+    )
+
+    assert verdict.guard_ok is False
+    assert "guard_blocked" not in verdict.failures
+    assert verdict.success is True
+
+
 def test_oracle_compare_detects_wrong_final_session_date_for_followup(tmp_path):
     scenario = scenario_by_name("followup_planning_turn1")
     followup = scenario.followup

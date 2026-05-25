@@ -29,6 +29,7 @@ DEFAULT_SCENARIOS = (
     "skipped_yesterday",
     "execution_correction",
     "followup_planning_turn1",
+    "key_session_pending",
 )
 DEFAULT_PROVIDERS = ("gemini", "grok", "deepseek", "mistral")
 ALL_PROVIDERS = (*DEFAULT_PROVIDERS, "fake")
@@ -298,6 +299,24 @@ def _fake_script(scenario_name: str) -> tuple[list[LLMResponse], str]:
                 )
             ],
             "Déplacé à vendredi.",
+        ),
+        "key_session_pending": (
+            [
+                LLMResponse(tool_calls=(ToolCall("resolve_date_reference", {"weekday": "friday", "direction": "future"}),)),
+                LLMResponse(tool_calls=(ToolCall("get_session", {"session_id": 61}),)),
+                LLMResponse(
+                    tool_calls=(
+                        ToolCall(
+                            "propose_plan_patch",
+                            {
+                                "operations": [{"kind": "move", "source_session_id": 61, "target_date": "2026-05-29"}],
+                                "rationale": "déplacer la VMA à vendredi",
+                            },
+                        ),
+                    )
+                ),
+            ],
+            "Je dois confirmer avant de faire ça: déplacer la VMA à vendredi.",
         ),
     }
     return scripts[scenario_name]

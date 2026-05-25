@@ -107,7 +107,9 @@ CREATE TABLE IF NOT EXISTS v0_pending_confirmations (
 CREATE TABLE IF NOT EXISTS v0_idempotency_locks (
     event_id TEXT PRIMARY KEY,
     turn_id TEXT NOT NULL,
-    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    status TEXT NOT NULL DEFAULT 'running',
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 """
 

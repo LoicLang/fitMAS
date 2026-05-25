@@ -189,6 +189,53 @@ def test_reply_composer_returns_clarification_question_without_llm(tmp_path):
     assert ReplyComposer(FakeLLMClient([]), "reply-system").compose(result, snapshot) == "Quelle séance ?"
 
 
+def test_reply_composer_pending_fallback_asks_confirmation(tmp_path):
+    snapshot = _snapshot(tmp_path)
+    event = _event()
+    pending = PendingView(
+        id=2,
+        type="plan_patch",
+        summary="déplacer la VMA à vendredi",
+        expires_at=datetime(2026, 5, 23, 14, 0, tzinfo=PARIS),
+    )
+    result = build_runtime_result(
+        event,
+        "turn-1",
+        ActionProposal(type="plan_patch", confidence=0.8, user_intent_summary="move", evidence=("x",)),
+        PolicyDecision(action="create_pending", reason="needs confirmation", risk_level="medium", commands=(), reply_facts=()),
+        (),
+        pending=pending,
+    )
+
+    reply = ReplyComposer(FakeLLMClient([]), "reply-system").compose(result, snapshot)
+
+    assert reply == "Je dois confirmer avant de faire ça: déplacer la VMA à vendredi."
+
+
+def test_reply_composer_pending_uses_deterministic_confirmation(tmp_path):
+    snapshot = _snapshot(tmp_path)
+    event = _event()
+    pending = PendingView(
+        id=2,
+        type="plan_patch",
+        summary="déplacer la VMA à vendredi",
+        expires_at=datetime(2026, 5, 23, 14, 0, tzinfo=PARIS),
+    )
+    result = build_runtime_result(
+        event,
+        "turn-1",
+        ActionProposal(type="plan_patch", confidence=0.8, user_intent_summary="move", evidence=("x",)),
+        PolicyDecision(action="create_pending", reason="needs confirmation", risk_level="medium", commands=(), reply_facts=()),
+        (),
+        pending=pending,
+    )
+    composer = ReplyComposer(FakeLLMClient([LLMResponse(text="Je n'ai pas pu traiter ça proprement.")]), "reply-system")
+
+    reply = composer.compose(result, snapshot)
+
+    assert reply == "Je dois confirmer avant de faire ça: déplacer la VMA à vendredi."
+
+
 def test_reply_composer_uses_committed_execution_summary(tmp_path):
     snapshot = _snapshot(tmp_path)
     event = _event()

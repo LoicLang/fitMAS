@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import date, timedelta
+import json
 import re
 
 from fitmas.runtime_v0.reply import TECHNICAL_FALLBACK
@@ -12,6 +13,9 @@ PENDING_ACTION_PATTERN = re.compile(r"\b(c'est fait|appliqué)\b", re.IGNORECASE
 JARGON_PATTERN = re.compile(r"\b(policy|backend|candidate|mutation|runtime|tool_call|proposal|snapshot)\b", re.IGNORECASE)
 META_PATTERN = re.compile(r"^\s*(l'utilisateur|the user|option valide)\b", re.IGNORECASE)
 DATE_PATTERN = re.compile(r"\b20\d{2}-\d{2}-\d{2}\b")
+RAW_JSON_PATTERN = re.compile(r"[{}]|\b(sessions|duration_min|target_session_id)\b", re.IGNORECASE)
+TECHNICAL_ID_PATTERN = re.compile(r"\b(session_id|source_ref|target_session_id|ID\s*\d+)\b", re.IGNORECASE)
+TRUNCATED_END_PATTERN = re.compile(r"\b(avec|et|pour|:)\s*$", re.IGNORECASE)
 
 @dataclass(frozen=True)
 class GuardResult:
@@ -33,6 +37,12 @@ class OutputGuard:
             reasons.append("internal_jargon")
         if META_PATTERN.search(reply):
             reasons.append("meta_opening")
+        if RAW_JSON_PATTERN.search(reply):
+            reasons.append("raw_json_visible")
+        if TECHNICAL_ID_PATTERN.search(reply):
+            reasons.append("technical_id_visible")
+        if TRUNCATED_END_PATTERN.search(reply):
+            reasons.append("truncated_reply")
         for date_text in DATE_PATTERN.findall(reply):
             if result.policy_action == "answer_only" and not _in_read_facts(date_text, result):
                 reasons.append("unsupported_date")
@@ -56,6 +66,8 @@ def _safe_reply(result: RuntimeResult, today: date) -> str:
         return "Je ne peux pas valider ça proprement pour l'instant."
     if result.policy_action == "ask_clarification" and result.read_facts:
         return result.read_facts[0]
+    if result.policy_action == "answer_only" and result.read_facts:
+        return _answer_from_read_facts(result) or TECHNICAL_FALLBACK
     if result.committed_events:
         event = result.committed_events[-1]
         if event.command_type == "CorrectSessionStatusCommand":
@@ -63,3 +75,16 @@ def _safe_reply(result: RuntimeResult, today: date) -> str:
         if event.command_type == "SetSessionStatusCommand":
             return f"Noté pour {'hier' if event.after.get('date') == (today - timedelta(days=1)).isoformat() else 'la séance'}."
     return TECHNICAL_FALLBACK
+
+def _answer_from_read_facts(result: RuntimeResult) -> str:
+    sessions: list[dict] = []
+    for fact in result.read_facts:
+        try:
+            payload = json.loads(fact)
+        except Exception:
+            continue
+        if isinstance(payload, dict):
+            sessions.extend(item for item in payload.get("sessions", ()) if isinstance(item, dict))
+    if sessions:
+        return " ".join(f"{str(item.get('date', ''))[-2:]} {item.get('title', 'Séance')}." for item in sessions)
+    return " ".join(fact.split(".")[0].strip() for fact in result.read_facts[:3] if fact.strip())

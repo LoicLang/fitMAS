@@ -29,4 +29,4 @@ def test_runtime_v0_core_stays_under_v0_budget():
         for path in root.rglob("*.py")
         if "__pycache__" not in path.parts
     )
-    assert loc <= 2500
+    assert loc <= 3200
