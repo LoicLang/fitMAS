@@ -1,3 +1,6 @@
+import json
+
+from fitmas.runtime_v0.db import connect
 from fitmas.runtime_v0.llm_clients.base import LLMResponse, ToolCall
 from fitmas.runtime_v0.llm_clients.fake import FakeLLMClient
 from fitmas.runtime_v0.runtime import RuntimeDeps, handle_event
@@ -218,3 +221,42 @@ def test_oracle_compare_detects_reply_claim_without_event():
     assert verdict.success is False
     assert verdict.reply_claim_without_event is True
     assert "reply_claim_without_event" in verdict.failures
+
+
+def test_oracle_compare_detects_wrong_final_session_date_for_followup(tmp_path):
+    scenario = scenario_by_name("followup_planning_turn1")
+    followup = scenario.followup
+    assert followup is not None
+    db_path = tmp_path / "fitmas_v0.db"
+    seed_db(db_path, scenario.initial_db_state)
+    with connect(db_path) as connection:
+        connection.execute(
+            "insert into v0_conversation_state (user_id, last_unresolved_intent_json) values (?, ?)",
+            (1, json.dumps({"type": "move_session", "target_date": "2026-05-23", "missing": ["source_ref"]})),
+        )
+        connection.commit()
+    deps_turn2 = RuntimeDeps(
+        db_path=db_path,
+        coach_llm=FakeLLMClient(
+            [
+                LLMResponse(
+                    tool_calls=(
+                        ToolCall(
+                            "propose_plan_patch",
+                            {
+                                "operations": [{"kind": "move", "source_session_id": 60, "target_date": "2026-05-23"}],
+                                "rationale": "déplacer la séance de récup à vendredi",
+                            },
+                        ),
+                    )
+                )
+            ]
+        ),
+        reply_llm=FakeLLMClient([LLMResponse(text="Déplacé à vendredi.")]),
+    )
+    handle_event(followup.input_event, deps_turn2, turn_id="turn-followup-2")
+
+    verdict = compare_persisted_turn(db_path, "turn-followup-2", followup)
+
+    assert verdict.success is False
+    assert "final_session_date_mismatch" in verdict.failures

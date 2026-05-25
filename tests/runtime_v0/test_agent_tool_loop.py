@@ -178,7 +178,7 @@ def test_plan_patch_without_exact_source_read_gets_contract_retry(tmp_path):
     ctx = _context(tmp_path, event)
     client = FakeLLMClient(
         [
-            LLMResponse(tool_calls=(ToolCall(name="get_plan_day", args={"date": "2026-05-22"}),)),
+            LLMResponse(tool_calls=(ToolCall(name="resolve_date_reference", args={"weekday": "friday", "direction": "future"}),)),
             LLMResponse(
                 tool_calls=(
                     ToolCall(
@@ -224,6 +224,93 @@ def test_plan_patch_without_exact_source_read_gets_contract_retry(tmp_path):
         "missing": ["source_ref"],
     }
     assert client.requests[2]["messages"][-1]["tool_name"] == "runtime_contract"
+
+
+def test_move_clarification_with_target_date_requires_date_resolution_tool(tmp_path):
+    event = _event("Décale ça à vendredi.")
+    ctx = _context(tmp_path, event)
+    client = FakeLLMClient(
+        [
+            LLMResponse(
+                tool_calls=(
+                    ToolCall(
+                        name="ask_clarification",
+                        args={
+                            "question": "Quelle séance veux-tu déplacer ?",
+                            "unresolved_intent": {
+                                "type": "move_session",
+                                "target_date": "2026-05-23",
+                                "missing": ["source_ref"],
+                            },
+                        },
+                    ),
+                )
+            ),
+            LLMResponse(tool_calls=(ToolCall(name="resolve_date_reference", args={"weekday": "friday", "direction": "future"}),)),
+            LLMResponse(
+                tool_calls=(
+                    ToolCall(
+                        name="ask_clarification",
+                        args={
+                            "question": "Quelle séance veux-tu déplacer ?",
+                            "unresolved_intent": {
+                                "type": "move_session",
+                                "target_date": "2026-05-29",
+                                "missing": ["source_ref"],
+                            },
+                        },
+                    ),
+                )
+            ),
+        ]
+    )
+
+    proposal = CoachAgent(client, system_prompt="system").run(
+        event, ctx.snapshot.header(), for_event(event, ctx.snapshot), tool_context=ctx
+    )
+
+    assert proposal.type == "ask_clarification"
+    assert proposal.unresolved_intent["target_date"] == "2026-05-29"
+    assert ctx.scratchpad["calls"] == [
+        {"name": "ask_clarification", "ok": True},
+        {"name": "resolve_date_reference", "ok": True},
+        {"name": "ask_clarification", "ok": True},
+    ]
+    assert client.requests[1]["messages"][-1]["tool_name"] == "runtime_contract"
+
+
+def test_text_after_date_resolution_retries_with_planning_proposal_contract(tmp_path):
+    event = _event("Décale ça à vendredi.")
+    ctx = _context(tmp_path, event)
+    client = FakeLLMClient(
+        [
+            LLMResponse(tool_calls=(ToolCall(name="resolve_date_reference", args={"weekday": "friday", "direction": "future"}),)),
+            LLMResponse(text="Vendredi résolu."),
+            LLMResponse(
+                tool_calls=(
+                    ToolCall(
+                        name="ask_clarification",
+                        args={
+                            "question": "Quelle séance veux-tu déplacer ?",
+                            "unresolved_intent": {
+                                "type": "move_session",
+                                "target_date": "2026-05-29",
+                                "missing": ["source_ref"],
+                            },
+                        },
+                    ),
+                )
+            ),
+        ]
+    )
+
+    proposal = CoachAgent(client, system_prompt="system").run(
+        event, ctx.snapshot.header(), for_event(event, ctx.snapshot), tool_context=ctx
+    )
+
+    assert proposal.type == "ask_clarification"
+    retry_payload = client.requests[2]["messages"][-1]["content"]
+    assert "planning_date_resolution_requires_proposal" in retry_payload
 
 
 def test_active_move_intent_retries_execution_update_as_wrong_contract(tmp_path):

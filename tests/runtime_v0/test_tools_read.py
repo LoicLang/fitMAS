@@ -7,6 +7,7 @@ import pytest
 
 from fitmas.runtime_v0.db import connect, init_db
 from fitmas.runtime_v0.snapshot import SnapshotBuilder
+from fitmas.runtime_v0 import tools_read
 from fitmas.runtime_v0.tools_read import (
     ToolContext,
     get_active_facts,
@@ -66,6 +67,21 @@ def test_get_plan_day_rejects_dates_outside_window(tmp_path):
         get_plan_day(ctx, _date(now, 15))
 
     assert ctx.scratchpad["calls"] == [{"name": "get_plan_day", "ok": False}]
+
+
+def test_resolve_date_reference_returns_next_future_weekday(tmp_path):
+    now = datetime(2026, 5, 22, 14, 0, tzinfo=PARIS)
+    ctx = _context(tmp_path, now)
+
+    result = tools_read.resolve_date_reference(ctx, weekday="friday", direction="future")
+
+    assert result == {
+        "base_date": "2026-05-22",
+        "weekday": "friday",
+        "direction": "future",
+        "date": "2026-05-29",
+    }
+    assert ctx.scratchpad["calls"] == [{"name": "resolve_date_reference", "ok": True}]
 
 
 def test_get_session_returns_detail_or_errors(tmp_path):

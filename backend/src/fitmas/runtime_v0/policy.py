@@ -264,7 +264,7 @@ def _normalize_unresolved_intent(intent: dict[str, Any] | None) -> dict[str, Any
     if intent is None:
         return None
     normalized = dict(intent)
-    if normalized.get("type") == "move":
+    if normalized.get("type") in {"move", "plan_patch_move"}:
         normalized["type"] = "move_session"
     missing = [item for item in normalized.get("missing", ()) if isinstance(item, str) and normalized.get(item) in (None, "")]
     if missing:

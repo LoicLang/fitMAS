@@ -17,6 +17,7 @@ def test_followup_planning_preserves_intent_then_moves_recovery(tmp_path):
         db_path=db_path,
         coach_llm=FakeLLMClient(
             [
+                LLMResponse(tool_calls=(ToolCall("resolve_date_reference", {"weekday": "friday", "direction": "future"}),)),
                 LLMResponse(
                     tool_calls=(
                         ToolCall(

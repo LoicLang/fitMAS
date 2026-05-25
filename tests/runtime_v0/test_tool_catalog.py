@@ -30,7 +30,7 @@ def _event(event_type: str = "user_message") -> InputEvent:
     )
 
 
-def test_user_message_gets_all_ten_v0_tools(tmp_path):
+def test_user_message_gets_all_v0_tools(tmp_path):
     db_path = tmp_path / "fitmas_v0.db"
     init_db(db_path)
     event = _event()
@@ -44,6 +44,7 @@ def test_user_message_gets_all_ten_v0_tools(tmp_path):
         "get_session",
         "get_recent_execution_events",
         "get_active_facts",
+        "resolve_date_reference",
         "propose_execution_update",
         "propose_execution_correction",
         "propose_plan_patch",
@@ -85,6 +86,7 @@ def test_active_move_intent_gets_plan_scoped_tools(tmp_path):
         "get_current_plan",
         "get_plan_day",
         "get_session",
+        "resolve_date_reference",
         "propose_plan_patch",
         "ask_clarification",
     }

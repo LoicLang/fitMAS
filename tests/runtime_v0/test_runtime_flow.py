@@ -170,6 +170,7 @@ def test_pending_command_is_loaded_into_runtime_result(tmp_path):
         db_path=db_path,
         coach_llm=FakeLLMClient(
             [
+                LLMResponse(tool_calls=(ToolCall(name="resolve_date_reference", args={"weekday": "friday", "direction": "future"}),)),
                 LLMResponse(tool_calls=(ToolCall(name="get_session", args={"session_id": 61}),)),
                 LLMResponse(
                     tool_calls=(

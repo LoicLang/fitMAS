@@ -16,6 +16,7 @@ class MatrixRunRecord:
     failures: tuple[str, ...]
     turn_id: str
     model: str | None = None
+    db_path: str | None = None
 
 
 def render_markdown_report(records: list[MatrixRunRecord]) -> str:

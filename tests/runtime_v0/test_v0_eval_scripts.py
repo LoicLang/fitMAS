@@ -110,6 +110,34 @@ def test_run_matrix_fake_provider_executes_offline_and_writes_report(tmp_path):
     assert "No failures." in report
 
 
+def test_run_matrix_export_dir_writes_responses_and_persistent_dbs(tmp_path):
+    export_dir = tmp_path / "export"
+    completed = subprocess.run(
+        [
+            sys.executable,
+            "scripts/v0_eval/run_matrix.py",
+            "--provider",
+            "fake",
+            "--scenario",
+            "tomorrow",
+            "--repetitions",
+            "1",
+            "--export-dir",
+            str(export_dir),
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert completed.returncode == 0
+    assert (export_dir / "matrix-report.md").exists()
+    assert (export_dir / "responses.md").exists()
+    assert (export_dir / "responses.json").exists()
+    assert (export_dir / "db" / "fake-tomorrow-1.db").exists()
+    assert "23 Endurance facile." in (export_dir / "responses.md").read_text(encoding="utf-8")
+
+
 def test_run_matrix_real_provider_reports_missing_api_key(tmp_path):
     env = {key: value for key, value in __import__("os").environ.items() if key != "DEEPSEEK_API_KEY"}
     completed = subprocess.run(

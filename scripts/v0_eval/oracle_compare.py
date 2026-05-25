@@ -22,6 +22,7 @@ class OracleVerdict:
     wrong_write_count: int
     old_plan_date_detected: bool
     wrong_correction_target: bool
+    final_session_dates_ok: bool
     reply_claim_without_event: bool
     reply_must_include_ok: bool
     reply_must_not_contain_ok: bool
@@ -34,7 +35,9 @@ def compare_persisted_turn(db_path: Path, turn_id: str, oracle: ScenarioOracle) 
     if turn is None:
         raise LookupError(f"turn_not_found:{turn_id}")
     command_events = _load_command_events(db_path, turn_id)
-    return compare_run_to_oracle(_turn_row_to_result(turn, command_events), oracle)
+    result = _turn_row_to_result(turn, command_events)
+    result["final_session_dates"] = _load_session_dates(db_path, tuple(session_id for session_id, _ in oracle.expected_session_dates))
+    return compare_run_to_oracle(result, oracle)
 
 
 def compare_run_to_oracle(turn_result: Any, oracle: ScenarioOracle) -> OracleVerdict:
@@ -50,6 +53,7 @@ def compare_run_to_oracle(turn_result: Any, oracle: ScenarioOracle) -> OracleVer
     wrong_write_count = _wrong_write_count(command_events, oracle.expected_commands)
     old_plan_date_detected = _old_plan_date_detected(reply_lower, oracle)
     wrong_correction_target = _wrong_correction_target(run["proposal"], command_events, oracle)
+    final_session_dates_ok = _final_session_dates_ok(run["final_session_dates"], oracle)
     reply_claim_without_event = _reply_claim_without_event(reply_lower, command_events)
     reply_must_include_ok = all(
         expected.lower() in reply_lower for expected in oracle.expected_reply_must_include
@@ -67,6 +71,7 @@ def compare_run_to_oracle(turn_result: Any, oracle: ScenarioOracle) -> OracleVer
         wrong_write_count=wrong_write_count,
         old_plan_date_detected=old_plan_date_detected,
         wrong_correction_target=wrong_correction_target,
+        final_session_dates_ok=final_session_dates_ok,
         reply_claim_without_event=reply_claim_without_event,
         reply_must_include_ok=reply_must_include_ok,
         reply_must_not_contain_ok=reply_must_not_contain_ok,
@@ -82,6 +87,7 @@ def compare_run_to_oracle(turn_result: Any, oracle: ScenarioOracle) -> OracleVer
         wrong_write_count=wrong_write_count,
         old_plan_date_detected=old_plan_date_detected,
         wrong_correction_target=wrong_correction_target,
+        final_session_dates_ok=final_session_dates_ok,
         reply_claim_without_event=reply_claim_without_event,
         reply_must_include_ok=reply_must_include_ok,
         reply_must_not_contain_ok=reply_must_not_contain_ok,
@@ -103,6 +109,14 @@ def _load_command_events(db_path: Path, turn_id: str) -> tuple[dict[str, Any], .
         ).fetchall()
     return tuple(dict(row) for row in rows)
 
+def _load_session_dates(db_path: Path, session_ids: tuple[str, ...]) -> dict[str, str]:
+    if not session_ids:
+        return {}
+    placeholders = ",".join("?" for _ in session_ids)
+    with connect(db_path) as connection:
+        rows = connection.execute(f"select id, date from v0_scheduled_sessions where id in ({placeholders})", session_ids).fetchall()
+    return {str(row["id"]): row["date"] for row in rows}
+
 
 def _turn_row_to_result(turn: Any, command_events: tuple[dict[str, Any], ...]) -> dict[str, Any]:
     proposal = json.loads(turn["proposal_json"])
@@ -113,6 +127,7 @@ def _turn_row_to_result(turn: Any, command_events: tuple[dict[str, Any], ...]) -
         "reply": turn["reply"],
         "tool_trace": proposal.get("tool_trace", []),
         "command_events": command_events,
+        "final_session_dates": {},
         "guard_ok": bool(turn["guard_ok"]),
         "proposal": proposal,
     }
@@ -126,6 +141,7 @@ def _normalize_turn_result(turn_result: Any) -> dict[str, Any]:
             "reply": turn_result.get("reply", ""),
             "tool_trace": tuple(turn_result.get("tool_trace", ())),
             "command_events": tuple(turn_result.get("command_events", ())),
+            "final_session_dates": dict(turn_result.get("final_session_dates", {})),
             "guard_ok": turn_result.get("guard_ok", True),
             "proposal": turn_result.get("proposal", {}),
         }
@@ -146,6 +162,7 @@ def _normalize_turn_result(turn_result: Any) -> dict[str, Any]:
                 }
                 for event in result.committed_events
             ),
+            "final_session_dates": {},
             "guard_ok": turn_result.guard.ok,
             "proposal": proposal,
         }
@@ -229,6 +246,9 @@ def _wrong_correction_target(
     correction = proposal.get("execution_correction") or {}
     return correction.get("previous_event_id") != expected_event_id
 
+def _final_session_dates_ok(final_session_dates: dict[str, str], oracle: ScenarioOracle) -> bool:
+    return all(final_session_dates.get(str(session_id)) == expected for session_id, expected in oracle.expected_session_dates)
+
 
 def _expected_previous_event_id(oracle: ScenarioOracle) -> int | None:
     events = oracle.initial_db_state.get("command_events", ())
@@ -259,6 +279,8 @@ def _failures(**checks: Any) -> tuple[str, ...]:
         failures.append("old_plan_date_detected")
     if checks["wrong_correction_target"]:
         failures.append("wrong_correction_target")
+    if not checks["final_session_dates_ok"]:
+        failures.append("final_session_date_mismatch")
     if checks["reply_claim_without_event"]:
         failures.append("reply_claim_without_event")
     if not checks["reply_must_include_ok"]:

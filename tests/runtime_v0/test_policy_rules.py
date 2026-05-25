@@ -164,7 +164,7 @@ def test_ask_clarification_normalizes_move_intent_alias(tmp_path):
             user_intent_summary="clarify",
             evidence=(),
             clarification_question="Quelle séance ?",
-            unresolved_intent={"type": "move", "target_date": "2026-05-29", "missing": ["source_ref"]},
+            unresolved_intent={"type": "plan_patch_move", "target_date": "2026-05-29", "missing": ["source_ref"]},
         ),
         snapshot,
     )

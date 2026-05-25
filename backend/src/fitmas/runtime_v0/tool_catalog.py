@@ -16,6 +16,7 @@ from fitmas.runtime_v0.tools_read import (
     get_plan_day,
     get_recent_execution_events,
     get_session,
+    resolve_date_reference,
 )
 
 def for_event(event: InputEvent, snapshot: WorldSnapshot) -> tuple[ToolSchema, ...]:
@@ -58,6 +59,13 @@ def for_event(event: InputEvent, snapshot: WorldSnapshot) -> tuple[ToolSchema, .
             is_proposal=False,
         ),
         ToolSchema(
+            name="resolve_date_reference",
+            description="Resolve an LLM-extracted weekday reference to a concrete future ISO date.",
+            parameters=_schema({"weekday": {"type": "string", "enum": ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"]}, "direction": {"type": "string", "enum": ["future"]}}, ("weekday", "direction")),
+            handler=resolve_date_reference,
+            is_proposal=False,
+        ),
+        ToolSchema(
             name="propose_execution_update",
             description="Propose a session status update without committing it.",
             parameters=_schema({"session_id": {"type": "integer"}, "status": {"type": "string", "enum": ["done", "skipped", "partial"]}, "duration_min": {"type": "integer"}, "intensity_note": {"type": "string"}, "evidence": {"type": "string"}}, ("session_id", "status")),
@@ -94,7 +102,7 @@ def for_event(event: InputEvent, snapshot: WorldSnapshot) -> tuple[ToolSchema, .
         ),
     )
     if snapshot.conversation_state.last_unresolved_intent and snapshot.conversation_state.last_unresolved_intent.get("type") == "move_session":
-        allowed = {"get_current_plan", "get_plan_day", "get_session", "propose_plan_patch", "ask_clarification"}
+        allowed = {"get_current_plan", "get_plan_day", "get_session", "resolve_date_reference", "propose_plan_patch", "ask_clarification"}
         return tuple(tool for tool in tools if tool.name in allowed)
     return tools
 

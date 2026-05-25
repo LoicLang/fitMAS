@@ -95,6 +95,17 @@ def get_active_facts(ctx: ToolContext) -> dict[str, Any]:
     _record(ctx, name, True)
     return {"facts": [_fact_to_dict(fact) for fact in ctx.snapshot.active_facts]}
 
+def resolve_date_reference(ctx: ToolContext, weekday: str, direction: str = "future") -> dict[str, Any]:
+    name = "resolve_date_reference"
+    weekdays = {"monday": 0, "tuesday": 1, "wednesday": 2, "thursday": 3, "friday": 4, "saturday": 5, "sunday": 6}
+    if weekday not in weekdays or direction != "future":
+        _record(ctx, name, False)
+        raise ValueError("unsupported_date_reference")
+    delta = (weekdays[weekday] - ctx.snapshot.today.weekday()) % 7
+    target = ctx.snapshot.today + timedelta(days=delta or 7)
+    _record(ctx, name, True)
+    return {"base_date": ctx.snapshot.today.isoformat(), "weekday": weekday, "direction": direction, "date": target.isoformat()}
+
 def _record(ctx: ToolContext, name: str, ok: bool) -> None:
     calls = ctx.scratchpad.setdefault("calls", [])
     calls.append({"name": name, "ok": ok})

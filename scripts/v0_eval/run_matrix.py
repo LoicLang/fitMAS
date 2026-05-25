@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import argparse
 from dataclasses import dataclass
+import json
 from pathlib import Path
+import sqlite3
 import sys
 import tempfile
 import time
@@ -69,6 +71,9 @@ def main(argv: list[str] | None = None) -> int:
         repetitions=args.repetitions,
         db_path=Path(args.db_path) if args.db_path else None,
     )
+    export_dir = Path(args.export_dir) if args.export_dir else None
+    if export_dir:
+        plan = _with_export_dbs(plan, export_dir)
     if args.dry_run:
         _print_dry_run(plan)
         if args.report_path:
@@ -76,13 +81,13 @@ def main(argv: list[str] | None = None) -> int:
         return 0
     if args.provider == "fake":
         records = run_fake_matrix(plan)
-        return _finish(records, args.report_path)
+        return _finish(records, args.report_path, export_dir)
     try:
         records = run_provider_matrix(plan)
     except ProviderConfigError as exc:
         print(str(exc))
         return 2
-    return _finish(records, args.report_path)
+    return _finish(records, args.report_path, export_dir)
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -93,6 +98,7 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--db-path")
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--report-path")
+    parser.add_argument("--export-dir")
     return parser
 
 
@@ -137,6 +143,7 @@ def _run_provider_item(item: MatrixPlanItem, db_path: Path, client) -> MatrixRun
         failures=failures,
         turn_id=turn_id,
         model=meter.model,
+        db_path=str(db_path),
     )
 
 
@@ -158,6 +165,7 @@ def _run_fake_item(item: MatrixPlanItem, db_path: Path) -> MatrixRunRecord:
         tokens_out=0,
         failures=failures,
         turn_id=turn_id,
+        db_path=str(db_path),
     )
 
 
@@ -250,6 +258,7 @@ def _fake_script(scenario_name: str) -> tuple[list[LLMResponse], str]:
         ),
         "followup_planning_turn1": (
             [
+                LLMResponse(tool_calls=(ToolCall("resolve_date_reference", {"weekday": "friday", "direction": "future"}),)),
                 LLMResponse(
                     tool_calls=(
                         ToolCall(
@@ -298,7 +307,13 @@ def _db_name(item: MatrixPlanItem) -> str:
     return f"{item.provider}-{item.scenario}-{item.repetition}.db"
 
 
-def _finish(records: list[MatrixRunRecord], report_path: str | None) -> int:
+def _with_export_dbs(plan: list[MatrixPlanItem], export_dir: Path) -> list[MatrixPlanItem]:
+    db_dir = export_dir / "db"
+    db_dir.mkdir(parents=True, exist_ok=True)
+    return [MatrixPlanItem(item.provider, item.scenario, item.repetition, db_dir / _db_name(item)) for item in plan]
+
+
+def _finish(records: list[MatrixRunRecord], report_path: str | None, export_dir: Path | None = None) -> int:
     for record in records:
         status = "PASS" if record.success else f"FAIL {','.join(record.failures)}"
         print(f"{record.provider}/{record.scenario}/{record.repetition} {status}")
@@ -307,7 +322,92 @@ def _finish(records: list[MatrixRunRecord], report_path: str | None) -> int:
         Path(report_path).write_text(report, encoding="utf-8")
     else:
         print(report)
+    if export_dir:
+        _write_export(export_dir, records, report)
     return 0 if all(record.success for record in records) else 1
+
+
+def _write_export(export_dir: Path, records: list[MatrixRunRecord], report: str) -> None:
+    export_dir.mkdir(parents=True, exist_ok=True)
+    responses = [_response_record(record) for record in records]
+    (export_dir / "matrix-report.md").write_text(report, encoding="utf-8")
+    (export_dir / "records.json").write_text(json.dumps([_record_json(record) for record in records], ensure_ascii=False, indent=2), encoding="utf-8")
+    (export_dir / "responses.json").write_text(json.dumps(responses, ensure_ascii=False, indent=2), encoding="utf-8")
+    (export_dir / "responses.md").write_text(_responses_markdown(export_dir, report, responses), encoding="utf-8")
+
+
+def _record_json(record: MatrixRunRecord) -> dict:
+    return {key: getattr(record, key) for key in ("provider", "scenario", "repetition", "success", "latency_ms", "tokens_in", "tokens_out", "failures", "turn_id", "model", "db_path")}
+
+
+def _response_record(record: MatrixRunRecord) -> dict:
+    db_path = Path(record.db_path) if record.db_path else None
+    return _record_json(record) | {
+        "turns": _dump_turns(db_path) if db_path else [],
+        "command_events": _dump_command_events(db_path) if db_path else [],
+    }
+
+
+def _dump_turns(db_path: Path) -> list[dict]:
+    with sqlite3.connect(db_path) as connection:
+        connection.row_factory = sqlite3.Row
+        rows = connection.execute(
+            """
+            select t.id, t.event_id, e.text as user_text, t.reply, t.provider, t.model, t.guard_ok,
+            t.proposal_json, t.policy_json, t.result_json, t.guard_reasons_json
+            from v0_turns t left join v0_input_events e on e.id = t.event_id
+            where t.event_id is not null order by t.id
+            """
+        ).fetchall()
+    return [
+        {
+            "turn_id": row["id"], "event_id": row["event_id"], "user_text": row["user_text"], "reply": row["reply"],
+            "provider": row["provider"], "model": row["model"], "guard_ok": bool(row["guard_ok"]),
+            "guard_reasons": _loads(row["guard_reasons_json"], []), "proposal": _loads(row["proposal_json"], {}),
+            "policy": _loads(row["policy_json"], {}), "result": _loads(row["result_json"], {}),
+        }
+        for row in rows
+    ]
+
+
+def _dump_command_events(db_path: Path) -> list[dict]:
+    with sqlite3.connect(db_path) as connection:
+        connection.row_factory = sqlite3.Row
+        rows = connection.execute("select * from v0_command_events order by id").fetchall()
+    return [
+        {
+            "id": row["id"], "turn_id": row["turn_id"], "command_type": row["command_type"], "target_type": row["target_type"],
+            "target_id": row["target_id"], "status": row["status"], "reason": row["reason"],
+            "before": _loads(row["before_json"], {}), "after": _loads(row["after_json"], {}), "created_at": row["created_at"],
+        }
+        for row in rows
+    ]
+
+
+def _loads(raw: str | None, fallback):
+    if not raw:
+        return fallback
+    try:
+        return json.loads(raw)
+    except json.JSONDecodeError:
+        return fallback
+
+
+def _responses_markdown(export_dir: Path, report: str, responses: list[dict]) -> str:
+    lines = ["# Runtime V0 Provider Responses", "", f"Export: `{export_dir}`", "", report, "## Responses", ""]
+    for item in responses:
+        status = "PASS" if item["success"] else "FAIL " + ",".join(item["failures"])
+        lines.extend([f"### {item['provider']} / {item['scenario']} - {status}", "", f"DB: `{item['db_path']}`", ""])
+        for turn in item["turns"]:
+            proposal_type = turn["result"].get("proposal_type") or turn["proposal"].get("type")
+            policy_action = turn["result"].get("policy_action")
+            tools = ", ".join(call.get("name", "?") for call in turn["proposal"].get("tool_trace", [])) or "none"
+            lines.extend([f"- turn: `{turn['turn_id']}`", f"- user: {turn['user_text']}", f"- proposal/policy: `{proposal_type}` / `{policy_action}`", f"- tools: {tools}", "- reply:", "", "```text", turn["reply"] or "", "```", ""])
+        if item["command_events"]:
+            lines.append("Commands:")
+            lines.extend(f"- `{event['command_type']}` {event['target_type']}:{event['target_id']} {event['status']} - {event['reason']}" for event in item["command_events"])
+            lines.append("")
+    return "\n".join(lines)
 
 
 def _print_dry_run(plan: list[MatrixPlanItem]) -> None:
