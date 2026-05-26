@@ -117,4 +117,4 @@ Tests importants :
 
 - `tests/test_tool_runtime.py`
 - `tests/test_llm_understanding_service.py`
-- tests d'architecture Decision Runtime.
+- tests d'isolation et de matrix Runtime V0 si le tool touche le nouveau noyau.

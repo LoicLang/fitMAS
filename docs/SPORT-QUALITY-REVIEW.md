@@ -2,7 +2,7 @@
 summary: contrat court de review sportive et coherence semaine
 read_when:
   - modifier week_coherence.py
-  - modifier plan_patch_candidate_reviewer.py
+  - modifier domain/planning/reviewer.py
   - toucher a validate_week_coherence
   - juger une mutation planning significative
   - travailler sur coherence sportive sans ouvrir Phase B prescription
@@ -49,11 +49,9 @@ Il ne cree pas de patch.
 
 ## Modules Actuels
 
-Encore a classer dans l'organisation cible :
-
-- `week_coherence.py` -> cible `domain/planning/`
-- `plan_patch_candidate_reviewer.py` -> cible `domain/planning/` ou `llm/`
-- `generated_week_coherence.py` -> cible `domain/coaching/`
+- `domain/planning/week_coherence.py`
+- `domain/planning/reviewer.py`
+- `domain/coaching/generated_week_coherence.py`
 
 Prompts reviewer :
 
@@ -95,8 +93,8 @@ Phase B future :
 Lane active actuelle :
 
 ```text
-Phase A fiable pour dogfood reel.
-Runtime plus petit avant sophistication.
+Produit V0 dogfoodable.
+Sport Core minimal avant prescription.
 ```
 
 ## Tests

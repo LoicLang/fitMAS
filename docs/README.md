@@ -9,31 +9,22 @@ read_when:
 
 ## Regle
 
-Les docs doivent aider un agent a agir vite.
-Le journal de chantier n'est pas une source de verite active.
-
-Pour tout audit complet :
-
-```bash
-./scripts/docs:list --all
-```
-
-Par defaut :
+Les docs actives doivent aider un agent a agir vite.
+Les journaux de refactor et plans termines vont dans `docs/archive/`.
 
 ```bash
 ./scripts/docs:list
+./scripts/docs:list --all
 ```
-
-liste seulement les docs actives.
 
 ## Lecture Recommandee
 
-1. `PROJECT.md` — entree repo courte.
-2. `docs/BUILD-ORDER.md` — etat actuel et prochaine tranche.
-3. `docs/DECISION-RUNTIME-REFACTOR.md` — architecture canonique.
-4. `docs/DECISION-RUNTIME-LEGACY-KILL-LIST.md` — legacy restant.
-5. `docs/SYSTEM-MAP.md` — carte rapide.
-6. `docs/RUNBOOK.md` — commandes et smokes.
+1. `PROJECT.md` — cap repo court.
+2. `docs/BUILD-ORDER.md` — suite immediate.
+3. `docs/V0-DOGFOOD-SCOPE.md` — produit V0 dogfoodable.
+4. `docs/RUNTIME-V0.md` — noyau runtime prouve.
+5. `docs/RUNTIME-MIGRATION-PLAN.md` — integration progressive.
+6. `docs/RUNBOOK.md` — commandes.
 
 Puis lire seulement le doc domaine utile.
 
@@ -41,51 +32,52 @@ Puis lire seulement le doc domaine utile.
 
 | Doc | Role |
 | --- | --- |
-| `BUILD-ORDER.md` | etat court, prochaine tranche, verification minimale |
-| `DECISION-RUNTIME-REFACTOR.md` | architecture canonique du runtime |
-| `DECISION-RUNTIME-LEGACY-KILL-LIST.md` | surfaces legacy restantes et ordre de coupe |
-| `ROOT-MODULE-CENSUS.md` | ownership des modules root restants |
-| `SYSTEM-MAP.md` | carte d'ensemble du systeme |
-| `RUNBOOK.md` | commandes locales, smokes, debug |
-| `PRODUCT.md` | promesse et scope produit |
-| `ARCHITECTURE.md` | stack et contraintes techniques |
+| `BUILD-ORDER.md` | etat court, prochain chantier, gates |
+| `V0-DOGFOOD-SCOPE.md` | scope produit V0 et Sport Core minimal |
+| `RUNTIME-V0.md` | reference courte du prototype runtime |
+| `RUNTIME-MIGRATION-PLAN.md` | migration vers Telegram/API dogfood |
 | `LLM-FIRST-CONVERSATION.md` | doctrine zero determinisme sur texte user |
-| `PLANNING.md` | contrat planning produit/moteur |
-| `ADAPTATION-CANDIDATE-PIPELINE.md` | adaptation planning par candidats |
-| `SPORT-QUALITY-REVIEW.md` | review sportive et coherence semaine |
 | `RUNTIME-TOOLS.md` | contrat des tools runtime |
-| `CONVERSATION.md` | grounding conversationnel |
+| `CONVERSATION.md` | etat du runtime conversationnel existant |
+| `PRODUCT.md` | promesse et scope produit general |
+| `ARCHITECTURE.md` | stack et frontieres repo |
+| `SYSTEM-MAP.md` | carte d'ensemble du systeme |
+| `PLANNING.md` | contrat planner large, hors prochaine tranche |
+| `ADAPTATION-CANDIDATE-PIPELINE.md` | pipeline planning historique/courant |
+| `SPORT-QUALITY-REVIEW.md` | review sportive, utile mais pas Phase B |
 | `MEMORY-V2.md` | architecture memoire |
 | `APP-UX.md` | contrat UX app |
 | `SOUL.md` | voix et ton FitMAS |
+| `RUNBOOK.md` | commandes locales et smokes |
 | `TESTER-GUIDE.md` | guide testeurs |
 
 ## Archive
 
-`docs/archive/` contient :
+Archive recente :
 
-- anciens cadrages v1 ;
-- longs journaux de refactor ;
-- docs absorbes par le Decision Runtime ;
-- audits historiques.
+```text
+docs/archive/runtime-v0-implementation-spec-2026-05-24.md
+docs/archive/refactor-2026-05-22/
+```
 
-Ces fichiers peuvent expliquer le passe.
-Ils ne tranchent plus l'architecture.
+Ces fichiers expliquent le passe.
+Ils ne tranchent plus le prochain chantier.
 
 ## Hierarchie De Verite
 
 En cas de contradiction :
 
-1. `BUILD-ORDER.md` gagne sur l'etat reel et la suite.
-2. `DECISION-RUNTIME-REFACTOR.md` gagne sur l'architecture runtime.
-3. `DECISION-RUNTIME-LEGACY-KILL-LIST.md` gagne sur la suppression legacy.
-4. `LLM-FIRST-CONVERSATION.md` gagne sur la doctrine user-text.
-5. `PRODUCT.md` gagne sur le scope produit.
+1. `BUILD-ORDER.md` gagne sur l'etat et la prochaine action.
+2. `V0-DOGFOOD-SCOPE.md` gagne sur le scope V0.
+3. `RUNTIME-MIGRATION-PLAN.md` gagne sur l'integration V0.
+4. `RUNTIME-V0.md` gagne sur le noyau prototype.
+5. `LLM-FIRST-CONVERSATION.md` gagne sur la doctrine user-text.
+6. `PRODUCT.md` gagne sur la promesse produit large.
 
 ## Hygiene
 
-- chaque doc doit avoir front matter `summary` + `read_when`;
-- ne pas ajouter de plan daté dans `docs/` sans intention durable ;
-- si un doc devient historique, l'archiver ou le supprimer ;
+- chaque doc active doit avoir front matter `summary` + `read_when` ;
 - garder les docs actives courtes ;
+- archiver les plans termines ;
+- eviter les doublons de statut ;
 - preferer un gate de test a une longue explication.

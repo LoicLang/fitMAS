@@ -220,8 +220,12 @@ FitMAS ne bat personne sur un axe. FitMAS gagne sur l'orchestration, la déléga
 ## Cap produit maintenant
 
 Ordre recommandé :
-1. Rendre le coach plus juste sur le réel, les adaptations et la causalité de semaine
-2. Sortir un substrate partagé `review / adaptation / session drafting / session analysis`
-3. Consolider mémoire utile + weekly reality digest
-4. Rendre le heartbeat plus contextuel et moins cron-dépendant
-5. Ensuite seulement enrichir planner, explainability app et sophistication sport-spécifique
+1. Sortir un V0 dogfoodable Telegram fiable autour de `runtime_v0`.
+2. Lire, noter, corriger et adapter une semaine simple sans vieux contexte.
+3. Ajouter le Sport Core V0 minimal : key/hard/done/fatigue/pending/block.
+4. Brancher la DB actuelle par adapters, sans big-bang.
+5. Ensuite seulement enrichir planner, heartbeat, app explainability et
+   sophistication sport-specifique.
+
+Le scope precis vit dans `V0-DOGFOOD-SCOPE.md`.
+La migration technique vit dans `RUNTIME-MIGRATION-PLAN.md`.

@@ -1,8 +1,8 @@
 ---
-summary: kill list courte des surfaces legacy restantes du Decision Runtime
+summary: surfaces legacy supprimees et gates anti-retour du Decision Runtime
 read_when:
-  - supprimer du legacy
-  - choisir le prochain slice de shrink
+  - verifier qu'une suppression legacy tient encore
+  - choisir si un nouveau bug justifie un shrink
   - verifier qu'une route legacy ne revient pas
 ---
 
@@ -10,9 +10,10 @@ read_when:
 
 ## Etat Court
 
-Le dossier `legacy/` n'a plus de module source actif. Le bloc P0
-planning/pending, la compat `CoachDecision` et `MutationDecision` n'y vivent
-plus.
+Le dossier `legacy/` n'a plus de fichier source suivi.
+
+Le bloc P0 planning/pending, la compat `CoachDecision` et `MutationDecision`
+n'y vivent plus. La kill list est maintenant surtout un gate anti-retour.
 
 Les wrappers deja supprimes :
 
@@ -51,7 +52,8 @@ Le writer PlanPatch vit dans `domain/planning/patch_mutation_service.py`.
 Les executors planning bas niveau vivent dans `domain/planning/`.
 Les helpers de reply PlanPatch conversationnels vivent dans
 `decision/plan_patch_reply.py`.
-Le prochain risque est le reste de `conversation_pipeline.py`.
+Le prochain risque n'est plus un bridge legacy connu. C'est de recréer un
+fallback local dans un owner `decision/turn_*`, `llm/reply_*` ou planning.
 
 ## Priorite De Suppression
 
@@ -87,7 +89,8 @@ Etat :
 
 - l'actif planning/pending est sorti de `legacy/`;
 - les wrappers vides sont supprimes ;
-- le reste du travail est dans `conversation_pipeline.py`, pas dans ces fichiers.
+- le reste du verdict se fait dans les owners `decision/turn_*`, pas dans ces
+  fichiers.
 
 ### P1 — CoachDecision / Understanding Legacy — clos en 10M / 10N
 
@@ -159,7 +162,7 @@ Etat :
 - read-only, activity highlight et clarification ne vivent plus dans des
   wrappers `legacy/conversation_*`;
 - les helpers de reply `CoachDecision` ont ete retires apres 10M ;
-- le dernier risque actif est `conversation_pipeline.py`.
+- le risque actif est de recreer une branche locale hors outcome/verifier.
 
 ### P4 — Conversation Bridge Census — clos en 10J / 10K / 10M
 
@@ -194,22 +197,20 @@ Encore runtime-active :
 - Aucun `MutationDecision` dans le chemin runtime canonique.
 - Aucun texte visible hors reply layer.
 
-## Dernier Cut Conversation
+## Etat De Gel Conversation
 
-Apres 10P : les helpers de reply PlanPatch sont sortis vers
-`decision/plan_patch_reply.py`.
+Les cuts conversationnels ont continue apres 10P.
 
-Resultat :
+Resultat courant :
 
-- `conversation_pipeline.py` : `1819` -> `1248` lignes.
-- Nouveau gate : le pipeline ne peut plus redefinir les helpers de reply
-  PlanPatch.
-- Le dossier `legacy/` reste vide de module source actif.
+- root `conversation_pipeline.py` est supprime ;
+- `decision/conversation_pipeline.py` est un adapter de `80` lignes ;
+- `decision/turn_router.py` est a `172` lignes ;
+- les routes close, pending, pre-understanding, post-understanding et planning
+  vivent dans des owners separes ;
+- le pipeline ne doit pas redefinir les helpers de reply PlanPatch.
 
-## Prochain Slice
-
-Continuer le shrink de `conversation_pipeline.py` sans recréer de fallback
-local : turn state, idempotence, recording.
+## Suite
 
 Commande :
 
@@ -218,16 +219,15 @@ Commande :
   --json-out /tmp/fitmas-10j-conversation-bridge-census.json
 ```
 
-Resultat 10J :
+Verdict a lancer avant nouveau shrink large :
 
-- census conversationnel ajoute ;
-- activity highlight et clarification vivent dans `decision/`;
-- helpers de forme `CoachDecision` supprimes ;
-- readonly/reply vit dans `decision/readonly_reply.py`;
-- understanding runtime vit dans `decision/understanding_runtime.py`;
-- le provider CoachDecision callable est supprime ;
-- `decision/coach_decision_runtime.py` ne garde que la trace
-  `coach_decision_provider_removed` et la clarification canonique ;
-- command mapping/application vit dans `decision/`;
-- dix bridges conversationnels sont supprimes ;
-- aucun bridge `legacy/conversation_*` ne reste actif.
+- backend complet ;
+- smokes A+ reels ;
+- fallback census ;
+- correction dans l'owner responsable seulement.
+
+Invariant :
+
+- aucun bridge `legacy/conversation_*` ne reste actif ;
+- aucun provider `CoachDecision` callable ne revient ;
+- aucun fallback local ne masque une frontiere floue.

@@ -1,7 +1,7 @@
 ---
 summary: doctrine zero determinisme sur texte utilisateur libre
 read_when:
-  - modifier conversation_pipeline.py
+  - modifier decision/conversation_pipeline.py
   - modifier llm/understanding_service.py
   - ajouter une action memoire, sante, disponibilite, execution ou preference
   - toucher aux pending confirmations
@@ -93,13 +93,12 @@ En place :
 - `CoachUnderstanding` existe pour isoler la comprehension ;
 - `DecisionOutcome` existe pour isoler la sortie runtime ;
 - root `final_reply.py` et root `api_messages.py` sont supprimes.
-
-Encore en transition :
-
-- `CoachDecision` legacy est supprime du provider path ;
-- `conversation_pipeline.py` orchestre encore trop ;
+- `CoachDecision` legacy est supprime du provider path et des artifacts runtime ;
+- root `conversation_pipeline.py` est supprime ;
+- `decision/conversation_pipeline.py` est un adapter mince autour des owners
+  `decision/turn_*` ;
 - `MutationDecision` vit dans `domain/planning/mutation_decision.py` pour le
-  vieux writer planning.
+  writer planning historique, pas dans le chemin runtime canonique.
 
 ## Pending
 

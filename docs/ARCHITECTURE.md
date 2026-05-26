@@ -20,8 +20,8 @@ LLM-first pour comprendre le langage humain.
 Determinism-first pour verite, validation, policy, writes et audit.
 ```
 
-Le refactor en cours ne cherche pas un backend plus complet.
-Il cherche un runtime plus petit.
+Le chantier actif cherche maintenant un produit V0 dogfoodable autour du
+Runtime V0, pas un nouveau refactor large de l'ancien pipeline.
 
 ## Stack
 
@@ -32,7 +32,7 @@ Il cherche un runtime plus petit.
 | Frontend | React, Vite, Tailwind, React Router |
 | Bot | Telegram via `python-telegram-bot` |
 | Scheduler | APScheduler in-process |
-| LLM | DeepSeek prioritaire, Anthropic fallback temporaire |
+| LLM | DeepSeek et Mistral candidats dogfood, Gemini/Grok en matrix |
 | Deploy | Fly.io, Docker, volume persistant |
 
 ## Organisation Courante
@@ -55,8 +55,30 @@ backend/src/fitmas/
   skills/
     heartbeat/    heartbeat runtime, reply composer, tool loop
   tools/          contracts, registry, runtime, metrics
-  legacy/         bridges temporaires de migration
+  runtime_v0/     noyau experimental isole et matrix dogfood
+  legacy/         absent du source suivi, ne pas recreer
 ```
+
+## Direction V0
+
+Decision actuelle :
+
+```text
+repo actuel = enveloppe produit
+runtime_v0 = noyau cible prouve
+ancien pipeline = legacy a etrangler
+```
+
+Le prochain travail produit n'est pas de deplacer toute l'arborescence.
+Il est de construire des adapters :
+
+```text
+DB actuelle -> WorldSnapshot
+ActionProposal -> writes actuels audites
+RuntimeResult -> Telegram/API
+```
+
+`runtime_v0` reste isole tant que ces adapters ne sont pas prouves.
 
 Root encore accepte :
 
@@ -173,7 +195,7 @@ Interfaces :
 | `llm/` | provider, prompts, understanding, formulation finale |
 | `tools/` | lecture ou validation bornee pour LLM |
 | `skills/heartbeat/` | workflow proactif borne |
-| `legacy/` | compat temporaire, sortie obligatoire |
+| `legacy/` | absent du source suivi, anti-retour seulement |
 
 Interdits :
 
@@ -185,18 +207,15 @@ Interdits :
 
 ## Risque Actuel
 
-Le root runtime conversationnel est supprime. Les repositories, DTOs Pydantic
-et records ORM ne vivent plus en root. Le risque principal redevient le produit
-lui-meme : continuer a reduire les chemins runtime, pas seulement ranger les
-fichiers.
+Le risque principal n'est plus le rangement des fichiers.
+C'est de contaminer le noyau V0 avec l'ancien pipeline en branchant trop vite
+Telegram ou les writers.
 
-Critere de succes jeudi :
+Critere de verdict :
 
 ```text
-Moins de chemins runtime.
-Moins de legacy appele.
-Moins de branches dans les owners `decision/turn_*`.
-Plus de bugs localisables par couche.
+Un message dogfood passe par une seule boucle runtime,
+avec snapshot borne, proposal typee, policy explicite, write audite et reply gardee.
 ```
 
 ## Verification

@@ -26,8 +26,10 @@ Ordre utile :
 
 1. `PROJECT.md`
 2. `docs/BUILD-ORDER.md`
-3. `docs/DECISION-RUNTIME-REFACTOR.md`
-4. doc domaine concernee
+3. `docs/V0-DOGFOOD-SCOPE.md`
+4. `docs/RUNTIME-V0.md`
+5. `docs/RUNTIME-MIGRATION-PLAN.md`
+6. doc domaine concernee
 
 ## Environnement
 
@@ -36,9 +38,15 @@ Minimum local :
 - `DEEPSEEK_API_KEY`
 - `TELEGRAM_BOT_TOKEN`
 
-Fallback temporaire :
+Smoke provider matrix :
 
-- `ANTHROPIC_API_KEY`
+- `MISTRAL_API_KEY`
+- `GEMINI_API_KEY`
+- `XAI_API_KEY` ou `GROK_API_KEY`
+- `FITMAS_LLM_PROFILE=deepseek|mistral|gemini|grok`
+- override optionnel : `FITMAS_LLM_MODEL`
+- override raisonnement optionnel : `FITMAS_LLM_REASONING_EFFORT`
+- override raisonnement provider : `FITMAS_MISTRAL_REASONING_EFFORT`, `FITMAS_GEMINI_REASONING_EFFORT`, `FITMAS_GROK_REASONING_EFFORT`
 
 Strava :
 
@@ -113,6 +121,22 @@ Compile Python :
 .venv/bin/python -m compileall backend/src/fitmas
 ```
 
+Runtime V0 :
+
+```bash
+pytest tests/runtime_v0
+python3 scripts/v0_eval/run_matrix.py --provider fake --repetitions 1
+python3 scripts/v0_eval/run_matrix.py --repetitions 5
+```
+
+Exporter un run V0 :
+
+```bash
+python3 scripts/v0_eval/run_matrix.py \
+  --repetitions 5 \
+  --export-dir exports/runtime-v0/stability-providers-5x
+```
+
 Frontend :
 
 ```bash
@@ -153,9 +177,66 @@ Smoke conversations reelles :
 ./scripts/smoke-real-conversations
 ```
 
+Matrice provider coach :
+
+```bash
+./scripts/smoke-coach-provider-matrix
+```
+
+Par defaut, lance les 9 scenarios humains contre :
+
+- DeepSeek : `deepseek-v4-pro`
+- Mistral Small 4 : `mistral-small-2603`, `reasoning_effort=high`
+- Gemini Flash 3.5 : `gemini-3.5-flash`, `reasoning_effort=medium`
+- Grok : `grok-4.3`, `reasoning_effort=low`
+
+Collecter les reponses/actions sans bloquer sur les attentes metier :
+
+```bash
+./scripts/smoke-coach-provider-matrix --review-only
+```
+
+Lancer les suites existantes aussi :
+
+```bash
+./scripts/smoke-coach-provider-matrix --review-only --suite all
+```
+
+Suites disponibles :
+
+- `human` : 9 phrases humaines ciblees pour comparaison qualitative ;
+- `core` : suite A+ historique par defaut ;
+- `daily` : batterie conversation quotidienne ;
+- `extended` : batterie etendue legacy/fallback/pending.
+
+Comparer moins cher / plus vite :
+
+```bash
+./scripts/smoke-coach-provider-matrix \
+  --review-only \
+  --scenario ok_without_pending \
+  --scenario fatigue_keep_light \
+  --dry-run
+```
+
+Forcer un slug modele :
+
+```bash
+./scripts/smoke-coach-provider-matrix --model gemini=gemini-3.5-flash
+```
+
+Sorties :
+
+- `.tmp-smoke-provider-matrix-*/summary.md`
+- `.tmp-smoke-provider-matrix-*/summary.json`
+- `.tmp-smoke-provider-matrix-*/<provider>/<suite>/smoke.db`
+- `.tmp-smoke-provider-matrix-*/<provider>/<suite>/stdout.txt`
+- `.tmp-smoke-provider-matrix-*/<provider>/<suite>/stderr.txt`
+- `.tmp-smoke-provider-matrix-*/<provider>/<suite>/run.json`
+
 Usage :
 
-- utilise une DB temporaire ;
+- utilise une DB temporaire separee par provider/suite ;
 - charge `.env` si besoin ;
 - fait des appels LLM reels ;
 - a lancer quand on touche conversation, planning, pending, reply ou provider.

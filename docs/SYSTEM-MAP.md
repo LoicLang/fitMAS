@@ -9,6 +9,21 @@ read_when:
 
 # System Map
 
+## Cap Actif
+
+Le systeme produit actuel reste l'enveloppe.
+Le nouveau noyau cible est `backend/src/fitmas/runtime_v0/`.
+
+```text
+repo actuel = Telegram/API/DB/app/deploy
+runtime_v0 = boucle fiable prouvee
+adapters = pont progressif vers dogfood
+```
+
+La carte ci-dessous decrit l'existant.
+Pour le nouveau chemin V0, lire aussi `RUNTIME-V0.md` et
+`RUNTIME-MIGRATION-PLAN.md`.
+
 ## Boucle Produit
 
 ```text
@@ -22,6 +37,21 @@ Telegram / App / Scheduler / Ops
 -> reply composer/backend
 -> output verifier
 -> delivery
+```
+
+Boucle V0 cible :
+
+```text
+InputEvent
+-> WorldSnapshot
+-> CoachAgent
+-> ActionProposal
+-> Policy
+-> Executor
+-> RuntimeResult
+-> Reply
+-> Guard
+-> Audit
 ```
 
 ## Frontieres
@@ -234,13 +264,13 @@ Etat actuel :
 
 ### Legacy
 
-Owner temporaire :
+Owner :
 
 - `legacy/`
 
 Etat actuel :
 
-- aucun module source actif.
+- aucun fichier source suivi.
 - gros residu de compat sorti de `legacy/` :
   `domain/planning/mutation_decision.py`, encore utilise par le writer
   planning historique.
@@ -253,20 +283,21 @@ Etat actuel :
 Regle :
 
 - aucun nouveau module legacy ;
-- tout fichier legacy doit avoir une sortie ;
-- si une route legacy n'est plus appelee par runtime reel, elle doit etre supprimee.
+- tout retour de `legacy/` doit echouer en review ;
+- si une compat est necessaire, elle doit vivre temporairement chez son owner
+  reel avec une sortie explicite.
 
-## Etat De Gel
+## Etat Actuel
 
-Le repo est en etat de verdict :
+Le repo garde l'ancien runtime comme enveloppe produit pendant que V0 devient
+le noyau dogfood :
 
 - root backend contient seulement `__init__.py`, `api.py`, `main.py` ;
 - `legacy/` ne contient plus de module source actif ;
-- backend complet dernier check : `1462 passed, 11 skipped` ;
-- smoke A+ API court dernier check : `lookup_current_plan` et
-  `create_easy_free_day`, fallback census `0`.
+- le Runtime V0 a une matrix exportee sous `exports/runtime-v0/` ;
+- la prochaine preuve porte sur les adapters DB/executor/Telegram.
 
-Ne pas ouvrir de grand chantier avant une campagne de test reel.
+Ne pas ouvrir de grand chantier hors V0 dogfood avant cette preuve.
 
 ## Verifications
 
