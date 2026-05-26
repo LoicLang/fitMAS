@@ -142,3 +142,27 @@ def test_action_proposal_round_trips_dates_and_datetimes():
     assert restored.plan_patch.operations[0].target_date.isoformat() == "2026-06-05"
     assert restored.memory_updates[0].expires_at == expires_at
     assert restored.unresolved_intent == {"target_date": "2026-05-24"}
+
+
+def test_plan_patch_normalizes_typed_provider_values(tmp_path):
+    ctx = _context(tmp_path)
+
+    proposal = propose_plan_patch(
+        ctx,
+        operations=[
+            {
+                "kind": "replace",
+                "source_session_id": 71,
+                "target_date": "tomorrow",
+                "new_sport": "vélo",
+                "new_intensity_label": "facile",
+            }
+        ],
+        rationale="replace with easy bike",
+    )
+
+    assert proposal.plan_patch is not None
+    operation = proposal.plan_patch.operations[0]
+    assert operation.target_date is None
+    assert operation.new_sport == "bike"
+    assert operation.new_intensity_label == "easy"

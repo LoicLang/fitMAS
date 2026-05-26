@@ -16,9 +16,12 @@ class ReplyComposer:
         self.system_prompt = system_prompt
 
     def compose(self, result: RuntimeResult, snapshot: WorldSnapshot, repair: bool = False) -> str:
-        if result.policy_action == "ask_clarification" and result.read_facts: return result.read_facts[0]
+        if result.policy_action == "ask_clarification" and result.read_facts:
+            return result.read_facts[0]
         if result.pending is not None:
             return _pending_confirmation(result)
+        if result.blocked_reasons:
+            return _blocked_summary(result.blocked_reasons[-1])
         try:
             response = self.llm_client.chat_with_tools(
                 self.system_prompt, [{"role": "user", "content": _payload(result, snapshot)}], [],
@@ -58,11 +61,24 @@ def _payload(result: RuntimeResult, snapshot: WorldSnapshot) -> str:
 def _fallback(result: RuntimeResult, snapshot: WorldSnapshot) -> str:
     if result.committed_events:
         return _commit_summary(result, snapshot, "") or TECHNICAL_FALLBACK
+    if result.blocked_reasons:
+        return _blocked_summary(result.blocked_reasons[-1])
     if result.pending is not None:
         return _pending_confirmation(result)
     if result.policy_action == "answer_only" and result.read_facts:
         return _plan_summary(result) or " ".join(fact.split(".")[0].strip() for fact in result.read_facts[:3] if fact.strip())
     return TECHNICAL_FALLBACK
+
+def _blocked_summary(reason: str) -> str:
+    if reason == "health_fact_blocks_hard":
+        return "Je bloque: trop risqué avec le signal santé actif."
+    if reason == "hard_session_too_dense":
+        return "Je bloque: trop de densité dure autour de cette date."
+    if reason == "done_session_protected":
+        return "Je bloque: cette séance est déjà faite."
+    if reason == "plan_patch_has_no_effect":
+        return "Je bloque: le changement proposé n'est pas assez précis."
+    return "Je bloque: ce changement n'est pas assez sûr."
 
 def _pending_confirmation(result: RuntimeResult) -> str:
     if result.pending is None:
@@ -84,7 +100,7 @@ def _commit_summary(result: RuntimeResult, snapshot: WorldSnapshot, reply: str) 
     if event.command_type == "ApplyPlanPatchCommand":
         if _reply_confirms_plan_patch(reply, event.before, event.after):
             return ""
-        return _plan_patch_summary(event.before, event.after)
+        return _plan_patch_summary(event.before, event.after, snapshot.today)
     return ""
 
 def _plan_summary(result: RuntimeResult) -> str:
@@ -165,7 +181,9 @@ def _reply_confirms_plan_patch(reply: str, before: dict, after: dict) -> bool:
         day = WEEKDAYS[date.fromisoformat(target).weekday()] if target else ""
         return "déplac" in lower and day in lower
     if before_session.get("sport") != after_session.get("sport"):
-        return "remplac" in lower or str(after_session.get("sport", "")).lower() in lower
+        sport = str(after_session.get("sport", "")).lower()
+        sport_label = _sport_label(sport)
+        return "remplac" in lower or bool(sport and sport in lower) or bool(sport_label and sport_label in lower)
     if (
         before_session.get("intensity_label") != after_session.get("intensity_label")
         or before_session.get("duration_min") != after_session.get("duration_min")
@@ -173,7 +191,7 @@ def _reply_confirms_plan_patch(reply: str, before: dict, after: dict) -> bool:
         return "allég" in lower or "facile" in lower
     return "modifi" in lower
 
-def _plan_patch_summary(before: dict, after: dict) -> str:
+def _plan_patch_summary(before: dict, after: dict, today: date) -> str:
     before_session, after_session = _first_patch_pair(before, after)
     if not after_session:
         return "Modification appliquée."
@@ -186,19 +204,54 @@ def _plan_patch_summary(before: dict, after: dict) -> str:
         day = WEEKDAYS[date.fromisoformat(target).weekday()] if target else "la nouvelle date"
         return f"Déplacé à {day}."
     if before_session and before_session.get("sport") != after_session.get("sport"):
-        sport = after_session.get("sport", "la nouvelle séance")
-        intensity = after_session.get("intensity_label")
+        day = _day_label(after_session.get("date"), today)
+        sport = _sport_label(after_session.get("sport"))
+        intensity = _intensity_label(after_session.get("intensity_label"))
         suffix = f" {intensity}" if intensity else ""
-        return f"Remplacé par {sport}{suffix}."
+        return f"Remplacé {day} par {sport}{suffix}."
     if before_session and (
         before_session.get("intensity_label") != after_session.get("intensity_label")
         or before_session.get("duration_min") != after_session.get("duration_min")
     ):
+        day = _day_label(after_session.get("date"), today)
         duration = after_session.get("duration_min")
-        intensity = after_session.get("intensity_label")
+        intensity = _intensity_label(after_session.get("intensity_label"))
         details = ", ".join(str(item) for item in (f"{duration} minutes" if duration else None, intensity) if item)
-        return f"Allégé: {details}." if details else "Allégé."
+        return f"Allégé {day}: {details}." if details else f"Allégé {day}."
     return "Modification appliquée."
+
+def _day_label(value: object, today: date) -> str:
+    if not isinstance(value, str):
+        return "la séance"
+    try:
+        target = date.fromisoformat(value)
+    except ValueError:
+        return "la séance"
+    if target == today:
+        return "aujourd'hui"
+    if target == today + timedelta(days=1):
+        return "demain"
+    return WEEKDAYS[target.weekday()]
+
+def _sport_label(value: object) -> str:
+    labels = {
+        "bike": "vélo",
+        "cycling": "vélo",
+        "run": "course",
+        "running": "course",
+        "swim": "natation",
+        "swimming": "natation",
+        "strength": "renfo",
+        "mobility": "mobilité",
+        "rest": "repos",
+    }
+    text = str(value or "")
+    return labels.get(text, text)
+
+def _intensity_label(value: object) -> str:
+    labels = {"easy": "facile", "moderate": "modéré", "hard": "dur"}
+    text = str(value or "")
+    return labels.get(text, text)
 
 def _first_patch_pair(before: dict, after: dict) -> tuple[dict | None, dict | None]:
     for key, after_item in after.items():

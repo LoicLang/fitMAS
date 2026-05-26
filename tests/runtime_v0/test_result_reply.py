@@ -289,3 +289,72 @@ def test_reply_composer_uses_committed_plan_patch_summary(tmp_path):
     composer = ReplyComposer(FakeLLMClient([LLMResponse(text="Déplacement au 29 mai.")]), "reply-system")
 
     assert composer.compose(result, snapshot) == "Déplacé à vendredi."
+
+
+def test_reply_composer_localizes_committed_lighten_summary(tmp_path):
+    snapshot = _snapshot(tmp_path)
+    event = _event()
+    command = CommandEvent(
+        id=1,
+        turn_id="turn-1",
+        command_type="ApplyPlanPatchCommand",
+        target_type="session",
+        target_id="70",
+        status="applied",
+        before={"70": {"date": "2026-05-23", "duration_min": 50, "intensity_label": "moderate"}},
+        after={"70": {"date": "2026-05-23", "duration_min": 50, "intensity_label": "easy"}},
+        reason="lighten",
+        created_at=datetime(2026, 5, 22, 14, 1, tzinfo=PARIS),
+    )
+    result = build_runtime_result(
+        event,
+        "turn-1",
+        ActionProposal(type="plan_patch", confidence=0.8, user_intent_summary="lighten", evidence=("x",)),
+        PolicyDecision(action="allow_commit", reason="x", risk_level="low", commands=(), reply_facts=("x",)),
+        (command,),
+    )
+    composer = ReplyComposer(FakeLLMClient([LLMResponse(text="Modification appliquée.")]), "reply-system")
+
+    assert composer.compose(result, snapshot) == "Allégé demain: 50 minutes, facile."
+
+
+def test_reply_composer_localizes_committed_replace_summary(tmp_path):
+    snapshot = _snapshot(tmp_path)
+    event = _event()
+    command = CommandEvent(
+        id=1,
+        turn_id="turn-1",
+        command_type="ApplyPlanPatchCommand",
+        target_type="session",
+        target_id="71",
+        status="applied",
+        before={"71": {"date": "2026-05-23", "sport": "run", "intensity_label": "easy"}},
+        after={"71": {"date": "2026-05-23", "sport": "bike", "intensity_label": "easy"}},
+        reason="replace",
+        created_at=datetime(2026, 5, 22, 14, 1, tzinfo=PARIS),
+    )
+    result = build_runtime_result(
+        event,
+        "turn-1",
+        ActionProposal(type="plan_patch", confidence=0.8, user_intent_summary="replace", evidence=("x",)),
+        PolicyDecision(action="allow_commit", reason="x", risk_level="low", commands=(), reply_facts=("x",)),
+        (command,),
+    )
+    composer = ReplyComposer(FakeLLMClient([LLMResponse(text="Modification appliquée.")]), "reply-system")
+
+    assert composer.compose(result, snapshot) == "Remplacé demain par vélo facile."
+
+
+def test_reply_composer_uses_blocked_reason_summary(tmp_path):
+    snapshot = _snapshot(tmp_path)
+    event = _event()
+    result = build_runtime_result(
+        event,
+        "turn-1",
+        ActionProposal(type="plan_patch", confidence=0.8, user_intent_summary="hard", evidence=("hard",)),
+        PolicyDecision(action="block", reason="health_fact_blocks_hard", risk_level="high", commands=(), reply_facts=("hard",)),
+        (),
+    )
+    composer = ReplyComposer(FakeLLMClient([LLMResponse(text="Aucune mise à jour.")]), "reply-system")
+
+    assert composer.compose(result, snapshot) == "Je bloque: trop risqué avec le signal santé actif."

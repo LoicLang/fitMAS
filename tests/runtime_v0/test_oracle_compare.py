@@ -273,6 +273,87 @@ def test_oracle_compare_accepts_any_reply_include_group():
     assert "reply_missing_expected_text" not in verdict.failures
 
 
+def test_oracle_compare_accepts_followup_move_noun_form():
+    scenario = scenario_by_name("followup_planning_turn1").followup
+    assert scenario is not None
+
+    verdict = compare_run_to_oracle(
+        {
+            "proposal_type": "plan_patch",
+            "policy_action": "allow_commit",
+            "reply": "Déplacement de la séance de récup au vendredi 29 mai.",
+            "tool_trace": [{"name": "propose_plan_patch", "ok": True}],
+            "command_events": [
+                {
+                    "command_type": "ApplyPlanPatchCommand",
+                    "target_type": "session",
+                    "target_id": "60",
+                    "status": "applied",
+                }
+            ],
+            "final_session_dates": {"60": "2026-05-29"},
+            "guard_ok": True,
+            "proposal": {"type": "plan_patch"},
+        },
+        scenario,
+    )
+
+    assert verdict.reply_must_include_ok is True
+    assert "reply_missing_expected_text" not in verdict.failures
+
+
+def test_oracle_compare_allows_confirmed_word_after_committed_lighten():
+    scenario = scenario_by_name("explicit_lighten")
+    verdict = compare_run_to_oracle(
+        {
+            "proposal_type": "plan_patch",
+            "policy_action": "allow_commit",
+            "reply": "Séance de demain allégée et confirmée.",
+            "tool_trace": [{"name": "get_session", "ok": True}],
+            "command_events": [
+                {
+                    "command_type": "ApplyPlanPatchCommand",
+                    "target_type": "session",
+                    "target_id": "70",
+                    "status": "applied",
+                }
+            ],
+            "guard_ok": True,
+            "proposal": {"type": "plan_patch"},
+        },
+        scenario,
+    )
+
+    assert verdict.reply_must_not_contain_ok is True
+    assert "reply_contains_forbidden_text" not in verdict.failures
+
+
+def test_oracle_compare_accepts_lighten_noun_form():
+    scenario = scenario_by_name("explicit_lighten")
+    verdict = compare_run_to_oracle(
+        {
+            "proposal_type": "plan_patch",
+            "policy_action": "allow_commit",
+            "reply": "Allègement validé: séance plus facile demain.",
+            "tool_trace": [{"name": "get_session", "ok": True}],
+            "command_events": [
+                {
+                    "command_type": "ApplyPlanPatchCommand",
+                    "target_type": "session",
+                    "target_id": "70",
+                    "status": "applied",
+                }
+            ],
+            "guard_ok": True,
+            "proposal": {"type": "plan_patch"},
+        },
+        scenario,
+    )
+
+    assert verdict.reply_must_include_ok is True
+    assert verdict.reply_must_not_contain_ok is True
+
+
 def test_oracle_compare_rejects_forbidden_pending_plan_apply():
     scenario = scenario_by_name("key_session_pending")
     verdict = compare_run_to_oracle(

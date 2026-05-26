@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import date, datetime, timedelta
 import json
 from typing import Any, Literal
@@ -192,7 +192,6 @@ class RuntimePolicy:
                 if op.target_date < snapshot.today or op.target_date > snapshot.today + timedelta(days=14):
                     return _decision("ask_clarification", "target_date_out_of_range", "medium", (), ())
             touched.append(session)
-        command = ApplyPlanPatchCommand(operations=draft.operations, rationale=draft.rationale)
         if not _plan_patch_source_anchored(proposal, active_move_target):
             return _decision(
                 "ask_clarification",
@@ -207,15 +206,20 @@ class RuntimePolicy:
                 ),
                 ("Quelle séance veux-tu déplacer ?",),
             )
-        sport_decision = evaluate_plan_patch_sport_rules(draft, snapshot)
+        compiled_draft, compile_error = _compile_plan_patch(draft, sessions)
+        if compile_error is not None or compiled_draft is None:
+            return _decision("block", compile_error or "invalid_plan_patch", "medium", (), proposal.evidence)
+        compiled_proposal = replace(proposal, plan_patch=compiled_draft)
+        command = ApplyPlanPatchCommand(operations=compiled_draft.operations, rationale=compiled_draft.rationale)
+        sport_decision = evaluate_plan_patch_sport_rules(compiled_draft, snapshot)
         if sport_decision.action == "block":
             return _decision("block", sport_decision.reason, sport_decision.risk_level, (), proposal.evidence)
         if sport_decision.action == "allow":
             return _decision("allow_commit", sport_decision.reason, sport_decision.risk_level, (command,), proposal.evidence)
         pending = CreatePendingConfirmationCommand(
             type="plan_patch",
-            summary=draft.rationale,
-            payload_json=json.dumps(proposal_to_dict(proposal), ensure_ascii=False, sort_keys=True),
+            summary=compiled_draft.rationale,
+            payload_json=json.dumps(proposal_to_dict(compiled_proposal), ensure_ascii=False, sort_keys=True),
             expires_at=snapshot.now + timedelta(hours=24),
         )
         return _decision("create_pending", sport_decision.reason, sport_decision.risk_level, (pending,), proposal.evidence)
@@ -307,3 +311,51 @@ def _intent_from_plan_patch(draft: PlanPatchDraft) -> dict[str, Any] | None:
         "target_date": operation.target_date.isoformat(),
         "missing": ["source_ref"],
     }
+
+def _compile_plan_patch(
+    draft: PlanPatchDraft,
+    sessions: dict[int, SessionView],
+) -> tuple[PlanPatchDraft | None, str | None]:
+    operations: list[PlanPatchOperation] = []
+    for operation in draft.operations:
+        session = sessions.get(operation.source_session_id)
+        if session is None:
+            return None, "source_session_not_found"
+        compiled = _compile_operation(operation, session)
+        if compiled is None:
+            return None, "plan_patch_has_no_effect"
+        operations.append(compiled)
+    return PlanPatchDraft(operations=tuple(operations), rationale=draft.rationale), None
+
+def _compile_operation(operation: PlanPatchOperation, session: SessionView) -> PlanPatchOperation | None:
+    if operation.kind == "lighten":
+        intensity = operation.new_intensity_label
+        duration = operation.new_duration_min
+        if intensity is None and session.intensity_label != "easy":
+            intensity = "easy"
+        compiled = replace(operation, new_intensity_label=intensity, new_duration_min=duration)
+        return compiled if _operation_has_effect(compiled, session) else None
+    if _operation_has_effect(operation, session):
+        return operation
+    return None
+
+def _operation_has_effect(operation: PlanPatchOperation, session: SessionView) -> bool:
+    if operation.kind == "move":
+        return operation.target_date is not None and operation.target_date != session.date
+    if operation.kind == "swap":
+        return operation.target_session_id is not None and operation.target_session_id != session.id
+    if operation.kind == "lighten":
+        if operation.new_intensity_label is not None and operation.new_intensity_label != session.intensity_label:
+            return True
+        return operation.new_duration_min is not None and operation.new_duration_min < session.duration_min
+    if operation.kind == "replace":
+        return any(
+            (
+                operation.new_sport is not None and operation.new_sport != session.sport,
+                operation.new_intensity_label is not None and operation.new_intensity_label != session.intensity_label,
+                operation.new_duration_min is not None and operation.new_duration_min != session.duration_min,
+            )
+        )
+    if operation.kind == "remove_optional":
+        return session.status != "skipped"
+    return False

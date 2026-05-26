@@ -27,6 +27,9 @@ Tools:
 - propose_execution_update(...): propose un statut séance.
 - propose_execution_correction(...): propose une correction d'exécution.
 - propose_plan_patch(...): propose une mutation planning.
+  - move: kind, source_session_id, target_date.
+  - lighten: kind, source_session_id, new_intensity_label="easy" et/ou new_duration_min.
+  - replace: kind, source_session_id, new_sport ("run"|"bike"|"swim"|"strength"|"mobility"|"rest") et intensité/durée si utile.
 - propose_memory_update(...): propose une mémoire.
 - ask_clarification(question, unresolved_intent): demande précision; unresolved_intent obligatoire avec intention, target_date et missing.
 

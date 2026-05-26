@@ -122,13 +122,14 @@ def ask_clarification(
     )
 
 def _operation_from_dict(data: dict[str, Any]) -> PlanPatchOperation:
+    kind = data["kind"]
     return PlanPatchOperation(
-        kind=data["kind"],
+        kind=kind,
         source_session_id=data["source_session_id"],
-        target_date=_parse_optional_date(data.get("target_date")),
+        target_date=_parse_optional_date(data.get("target_date")) if kind == "move" else None,
         target_session_id=data.get("target_session_id"),
-        new_intensity_label=data.get("new_intensity_label"),
-        new_sport=data.get("new_sport"),
+        new_intensity_label=_normalize_intensity(data.get("new_intensity_label")),
+        new_sport=_normalize_sport(data.get("new_sport")),
         new_duration_min=data.get("new_duration_min"),
     )
 
@@ -141,6 +142,48 @@ def _parse_optional_datetime(value: str | datetime | None) -> datetime | None:
     if value is None or isinstance(value, datetime):
         return value
     return datetime.fromisoformat(value)
+
+def _normalize_intensity(value: Any) -> str | None:
+    if value is None:
+        return None
+    normalized = str(value).strip().lower()
+    aliases = {
+        "facile": "easy",
+        "easy": "easy",
+        "modéré": "moderate",
+        "moderee": "moderate",
+        "modérée": "moderate",
+        "moderate": "moderate",
+        "dur": "hard",
+        "dure": "hard",
+        "hard": "hard",
+    }
+    return aliases.get(normalized, normalized)
+
+def _normalize_sport(value: Any) -> str | None:
+    if value is None:
+        return None
+    normalized = str(value).strip().lower()
+    aliases = {
+        "vélo": "bike",
+        "velo": "bike",
+        "bike": "bike",
+        "cycling": "bike",
+        "cyclisme": "bike",
+        "course": "run",
+        "running": "run",
+        "run": "run",
+        "natation": "swim",
+        "swimming": "swim",
+        "swim": "swim",
+        "renfo": "strength",
+        "strength": "strength",
+        "mobilité": "mobility",
+        "mobility": "mobility",
+        "repos": "rest",
+        "rest": "rest",
+    }
+    return aliases.get(normalized, normalized)
 
 def _record(ctx: ToolContext, name: str, ok: bool) -> None:
     calls = ctx.scratchpad.setdefault("calls", [])

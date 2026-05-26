@@ -58,7 +58,17 @@ def test_user_message_gets_all_v0_tools(tmp_path):
     assert "unresolved_intent" in clarification.parameters["required"]
     plan_patch = next(tool for tool in tools if tool.name == "propose_plan_patch")
     operation = plan_patch.parameters["properties"]["operations"]["items"]
-    assert {"kind", "source_session_id", "target_date"} <= set(operation["properties"])
+    assert {
+        "kind",
+        "source_session_id",
+        "target_date",
+        "target_session_id",
+        "new_intensity_label",
+        "new_sport",
+        "new_duration_min",
+    } <= set(operation["properties"])
+    assert operation["properties"]["new_intensity_label"]["enum"] == ["easy", "moderate", "hard"]
+    assert "bike" in operation["properties"]["new_sport"]["enum"]
 
 
 def test_reserved_events_get_no_tools_in_v0(tmp_path):

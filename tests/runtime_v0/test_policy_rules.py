@@ -668,3 +668,51 @@ def test_plan_patch_blocks_new_hard_when_health_fact_is_active(tmp_path):
     assert decision.action == "block"
     assert decision.reason == "health_fact_blocks_hard"
     assert decision.commands == ()
+
+
+def test_plan_patch_compiles_empty_lighten_to_safe_easy_change(tmp_path):
+    snapshot = _snapshot_for_sport_rules(tmp_path)
+
+    decision = RuntimePolicy().evaluate(
+        ActionProposal(
+            type="plan_patch",
+            confidence=0.8,
+            user_intent_summary="lighten",
+            evidence=("lighten",),
+            tool_trace=({"name": "get_session", "ok": True},),
+            plan_patch=PlanPatchDraft(
+                operations=(PlanPatchOperation(kind="lighten", source_session_id=61),),
+                rationale="lighten",
+            ),
+        ),
+        snapshot,
+    )
+
+    assert decision.action == "allow_commit"
+    assert isinstance(decision.commands[0], ApplyPlanPatchCommand)
+    operation = decision.commands[0].operations[0]
+    assert operation.kind == "lighten"
+    assert operation.new_intensity_label == "easy"
+
+
+def test_plan_patch_blocks_replace_without_effective_payload(tmp_path):
+    snapshot = _snapshot(tmp_path)
+
+    decision = RuntimePolicy().evaluate(
+        ActionProposal(
+            type="plan_patch",
+            confidence=0.8,
+            user_intent_summary="replace",
+            evidence=("replace",),
+            tool_trace=({"name": "get_session", "ok": True},),
+            plan_patch=PlanPatchDraft(
+                operations=(PlanPatchOperation(kind="replace", source_session_id=60),),
+                rationale="replace with no payload",
+            ),
+        ),
+        snapshot,
+    )
+
+    assert decision.action == "block"
+    assert decision.reason == "plan_patch_has_no_effect"
+    assert decision.commands == ()

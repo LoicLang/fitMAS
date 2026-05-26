@@ -37,7 +37,8 @@ def build_runtime_result(
     pending: PendingView | None = None,
     blocked_reasons: tuple[str, ...] = (),
 ) -> RuntimeResult:
-    blocked = blocked_reasons + tuple(
+    policy_blocks = (policy.reason,) if policy.action == "block" else ()
+    blocked = blocked_reasons + policy_blocks + tuple(
         event.reason for event in command_events if event.status == "blocked"
     )
     read_facts = policy.reply_facts or proposal.answer_facts

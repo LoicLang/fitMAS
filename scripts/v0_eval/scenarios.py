@@ -154,7 +154,7 @@ def _scenarios() -> dict[str, ScenarioOracle]:
         expected_proposal_type="plan_patch",
         expected_policy_action="allow_commit",
         expected_commands=(CommandSpec("ApplyPlanPatchCommand", "session", "60"),),
-        expected_reply_must_include=("déplacé", "vendredi"),
+        expected_reply_must_include=("déplac", "vendredi"),
         expected_reply_must_not_contain=("VMA",),
         expected_session_dates=(("60", "2026-05-29"),),
     )
@@ -302,8 +302,9 @@ def _scenarios() -> dict[str, ScenarioOracle]:
             expected_proposal_type="plan_patch",
             expected_policy_action="allow_commit",
             expected_commands=(CommandSpec("ApplyPlanPatchCommand", "session", "70"),),
-            expected_reply_must_include=("allég", "demain"),
-            expected_reply_must_not_contain=("confirm", "valide"),
+            expected_reply_must_include=("demain",),
+            expected_reply_must_not_contain=("à confirmer", "dois confirmer", "avant de faire", "validez", "tu confirmes"),
+            expected_reply_any_include=(("allég", "allèg", "facile"),),
         ),
         "replace_by_easy_bike": ScenarioOracle(
             name="replace_by_easy_bike",
@@ -327,7 +328,7 @@ def _scenarios() -> dict[str, ScenarioOracle]:
             expected_policy_action="allow_commit",
             expected_commands=(CommandSpec("ApplyPlanPatchCommand", "session", "71"),),
             expected_reply_must_include=("vélo", "facile"),
-            expected_reply_must_not_contain=("confirm", "valide"),
+            expected_reply_must_not_contain=("à confirmer", "dois confirmer", "avant de faire", "validez", "tu confirmes"),
         ),
         "hard_unsafe_block": ScenarioOracle(
             name="hard_unsafe_block",

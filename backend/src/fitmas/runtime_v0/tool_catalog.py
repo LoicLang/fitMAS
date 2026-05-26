@@ -81,8 +81,42 @@ def for_event(event: InputEvent, snapshot: WorldSnapshot) -> tuple[ToolSchema, .
         ),
         ToolSchema(
             name="propose_plan_patch",
-            description="Propose a bounded plan patch without committing it.",
-            parameters=_schema({"operations": {"type": "array", "items": {"type": "object", "properties": {"kind": {"type": "string", "enum": ["move", "swap", "lighten", "replace", "remove_optional"]}, "source_session_id": {"type": "integer"}, "target_date": {"type": "string"}, "target_session_id": {"type": "integer"}}, "required": ["kind", "source_session_id"]}}, "rationale": {"type": "string"}}, ("operations", "rationale")),
+            description=(
+                "Propose a bounded plan patch without committing it. "
+                "For lighten, include new_intensity_label and/or new_duration_min. "
+                "For replace, include new_sport and any changed intensity/duration."
+            ),
+            parameters=_schema(
+                {
+                    "operations": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "kind": {
+                                    "type": "string",
+                                    "enum": ["move", "swap", "lighten", "replace", "remove_optional"],
+                                },
+                                "source_session_id": {"type": "integer"},
+                                "target_date": {"type": "string", "format": "date"},
+                                "target_session_id": {"type": "integer"},
+                                "new_intensity_label": {
+                                    "type": "string",
+                                    "enum": ["easy", "moderate", "hard"],
+                                },
+                                "new_sport": {
+                                    "type": "string",
+                                    "enum": ["run", "bike", "swim", "strength", "mobility", "rest"],
+                                },
+                                "new_duration_min": {"type": "integer", "minimum": 1},
+                            },
+                            "required": ["kind", "source_session_id"],
+                        },
+                    },
+                    "rationale": {"type": "string"},
+                },
+                ("operations", "rationale"),
+            ),
             handler=propose_plan_patch,
             is_proposal=True,
         ),
