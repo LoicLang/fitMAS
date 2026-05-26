@@ -72,6 +72,11 @@ skipped_yesterday
 execution_correction
 followup_planning_turn1
 key_session_pending
+explicit_lighten
+replace_by_easy_bike
+hard_unsafe_block
+partial_yesterday
+undo_wrong_status
 ```
 
 Commandes :
@@ -100,7 +105,7 @@ exports/runtime-v0/stability-providers-5x/matrix-report-recomputed.md
 Resultat :
 
 ```text
-fake matrix: 6/6
+fake matrix: 11/11
 provider matrix: 114/120
 wrong_write: 0
 old_plan_date: 0
@@ -124,11 +129,21 @@ zone acceptable: 2500-3200 LOC
 > 4000 LOC: alerte architecture lourde
 ```
 
+## Sport Core V0
+
+`backend/src/fitmas/runtime_v0/sport_rules.py` centralise les premiers
+garde-fous :
+
+- source `done` protegee ;
+- hard proche d'un hard/long bloque ;
+- fact `health` actif bloque une creation de hard ;
+- multi-operation demande confirmation ;
+- seance `key` demande confirmation.
+
 ## Prochaine Evolution Autorisee
 
 Dans le noyau V0 :
 
-- `sport_rules.py` minimal ;
 - scenarios dogfood proches ;
 - guards/retry si prouves par matrix ;
 - pas d'API Telegram directe.

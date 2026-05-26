@@ -94,6 +94,23 @@ def seed_db(db_path: Path, state: dict) -> None:
                     event.get("created_at", "2026-05-22T09:30:00+02:00"),
                 ),
             )
+        for fact in state.get("facts", ()):
+            connection.execute(
+                """
+                insert into v0_facts (
+                    id, user_id, kind, text, confidence, created_at, expires_at
+                ) values (?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    fact["id"],
+                    1,
+                    fact["kind"],
+                    fact["text"],
+                    fact.get("confidence", 0.8),
+                    fact.get("created_at", "2026-05-22T09:00:00+02:00"),
+                    fact.get("expires_at"),
+                ),
+            )
         connection.commit()
 
 
@@ -263,5 +280,139 @@ def _scenarios() -> dict[str, ScenarioOracle]:
             expected_reply_any_include=(("confirm", "valid", "on confirme"),),
             expected_session_dates=(("61", "2026-05-23"),),
             forbidden_command_types=("ApplyPlanPatchCommand",),
+        ),
+        "explicit_lighten": ScenarioOracle(
+            name="explicit_lighten",
+            description="User demande d'alleger une seance secondaire explicite.",
+            initial_db_state={
+                "today": "2026-05-22",
+                "sessions": [
+                    {
+                        "id": 70,
+                        "date": "2026-05-23",
+                        "sport": "run",
+                        "title": "Tempo souple",
+                        "duration_min": 50,
+                        "intensity_label": "moderate",
+                        "priority": "secondary",
+                    },
+                ],
+            },
+            input_event=_event("evt-7", "Allège la séance de demain.", 16),
+            expected_proposal_type="plan_patch",
+            expected_policy_action="allow_commit",
+            expected_commands=(CommandSpec("ApplyPlanPatchCommand", "session", "70"),),
+            expected_reply_must_include=("allég", "demain"),
+            expected_reply_must_not_contain=("confirm", "valide"),
+        ),
+        "replace_by_easy_bike": ScenarioOracle(
+            name="replace_by_easy_bike",
+            description="User remplace une seance secondaire par du velo facile.",
+            initial_db_state={
+                "today": "2026-05-22",
+                "sessions": [
+                    {
+                        "id": 71,
+                        "date": "2026-05-23",
+                        "sport": "run",
+                        "title": "Footing facile",
+                        "duration_min": 45,
+                        "intensity_label": "easy",
+                        "priority": "secondary",
+                    },
+                ],
+            },
+            input_event=_event("evt-8", "Remplace demain par du vélo facile.", 16),
+            expected_proposal_type="plan_patch",
+            expected_policy_action="allow_commit",
+            expected_commands=(CommandSpec("ApplyPlanPatchCommand", "session", "71"),),
+            expected_reply_must_include=("vélo", "facile"),
+            expected_reply_must_not_contain=("confirm", "valide"),
+        ),
+        "hard_unsafe_block": ScenarioOracle(
+            name="hard_unsafe_block",
+            description="User demande une intensite dure alors qu'un fact sante actif existe.",
+            initial_db_state={
+                "today": "2026-05-22",
+                "sessions": [
+                    {
+                        "id": 72,
+                        "date": "2026-05-23",
+                        "sport": "run",
+                        "title": "Footing facile",
+                        "duration_min": 45,
+                        "intensity_label": "easy",
+                        "priority": "secondary",
+                    },
+                ],
+                "facts": [
+                    {
+                        "id": 1,
+                        "kind": "health",
+                        "text": "Fatigue severe active",
+                        "confidence": 0.9,
+                        "expires_at": "2026-05-24T09:00:00+02:00",
+                    },
+                ],
+            },
+            input_event=_event("evt-9", "Remplace demain par une séance dure.", 16),
+            expected_proposal_type="plan_patch",
+            expected_policy_action="block",
+            expected_commands=(),
+            expected_reply_must_include=("bloque",),
+            expected_reply_must_not_contain=("c'est fait", "remplacé", "modifié"),
+            forbidden_command_types=("ApplyPlanPatchCommand",),
+        ),
+        "partial_yesterday": ScenarioOracle(
+            name="partial_yesterday",
+            description="User declare une execution partielle hier.",
+            initial_db_state={
+                "today": "2026-05-22",
+                "sessions": [
+                    {
+                        "id": 73,
+                        "date": "2026-05-21",
+                        "sport": "run",
+                        "title": "Footing",
+                        "status": "planned",
+                    },
+                ],
+            },
+            input_event=_event("evt-10", "Hier j'ai fait seulement 20 minutes, donc partiel.", 9),
+            expected_proposal_type="execution_update",
+            expected_policy_action="allow_commit",
+            expected_commands=(CommandSpec("SetSessionStatusCommand", "session", "73"),),
+            expected_reply_must_include=("partiel", "20"),
+            expected_reply_must_not_contain=("déplacé", "modifié"),
+        ),
+        "undo_wrong_status": ScenarioOracle(
+            name="undo_wrong_status",
+            description="User corrige un mauvais statut skippe en done.",
+            initial_db_state={
+                "today": "2026-05-22",
+                "sessions": [
+                    {
+                        "id": 74,
+                        "date": "2026-05-21",
+                        "sport": "run",
+                        "title": "Footing",
+                        "status": "skipped",
+                    },
+                ],
+                "command_events": [
+                    {
+                        "id": 18,
+                        "command_type": "SetSessionStatusCommand",
+                        "target_id": "74",
+                        "status": "applied",
+                    }
+                ],
+            },
+            input_event=_event("evt-11", "Annule le mauvais statut: en fait je l'ai faite.", 10),
+            expected_proposal_type="execution_correction",
+            expected_policy_action="allow_commit",
+            expected_commands=(CommandSpec("CorrectSessionStatusCommand", "session", "74"),),
+            expected_reply_must_include=("corrigé", "faite"),
+            expected_reply_must_not_contain=("nouvelle séance", "ajouté"),
         ),
     }

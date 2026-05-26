@@ -86,7 +86,7 @@ Regles V0 :
 
 ## Scenarios De Validation
 
-Le noyau Runtime V0 protege deja 6 scenarios :
+Le noyau Runtime V0 protege deja 11 scenarios :
 
 ```text
 current_plan
@@ -95,21 +95,20 @@ skipped_yesterday
 execution_correction
 followup_planning_turn1
 key_session_pending
+explicit_lighten
+replace_by_easy_bike
+hard_unsafe_block
+partial_yesterday
+undo_wrong_status
 ```
 
-Pack produit a ajouter avant dogfood Telegram :
+Pack produit restant avant dogfood Telegram :
 
 ```text
 today
 next_3_days
 week_key_session
 done_yesterday
-partial_yesterday
-undo_wrong_status
-explicit_move_secondary
-explicit_lighten
-replace_by_easy_bike
-hard_unsafe_block
 fatigue_signal
 knee_pain_signal
 sport_unavailable_two_weeks
@@ -121,7 +120,7 @@ cancel_followup
 
 Etat de preuve actuel :
 
-- fake matrix : `6/6` ;
+- fake matrix : `11/11` ;
 - provider matrix 5x : `114/120` correctness ;
 - danger metrics : `0 wrong_write`, `0 old_plan`, `0 wrong_correction_target`,
   `0 claim_without_event`.

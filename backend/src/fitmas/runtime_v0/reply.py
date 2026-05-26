@@ -75,15 +75,16 @@ def _commit_summary(result: RuntimeResult, snapshot: WorldSnapshot, reply: str) 
     lower = reply.lower()
     event = result.committed_events[-1]
     if event.command_type == "CorrectSessionStatusCommand":
-        minutes = str(event.after.get("duration_min"))
-        return "" if "corrig" in lower and minutes in reply else f"Corrigé: {minutes} minutes."
+        if _reply_confirms_correction(reply, event.after):
+            return ""
+        return _correction_summary(event.after)
     if event.command_type == "SetSessionStatusCommand":
         day = "hier" if event.after.get("date") == (snapshot.today - timedelta(days=1)).isoformat() else "la séance"
-        return "" if "noté" in lower and day in lower else f"Noté pour {day}."
+        return "" if "noté" in lower and day in lower else _status_summary(event.after, day)
     if event.command_type == "ApplyPlanPatchCommand":
-        target = next((item.get("date") for item in event.after.values() if isinstance(item, dict)), "")
-        day = WEEKDAYS[date.fromisoformat(target).weekday()] if target else "la nouvelle date"
-        return "" if "déplacé" in lower and day in lower else f"Déplacé à {day}."
+        if _reply_confirms_plan_patch(reply, event.before, event.after):
+            return ""
+        return _plan_patch_summary(event.before, event.after)
     return ""
 
 def _plan_summary(result: RuntimeResult) -> str:
@@ -103,3 +104,105 @@ def _read_sessions(result: RuntimeResult) -> list[dict]:
             continue
         sessions.extend(item for item in payload.get("sessions", ()) if isinstance(item, dict))
     return sessions
+
+def _reply_confirms_correction(reply: str, after: dict) -> bool:
+    lower = reply.lower()
+    if "corrig" not in lower:
+        return False
+    duration = after.get("duration_min")
+    if duration is not None and str(duration) in reply:
+        return True
+    status = after.get("status")
+    if status == "done":
+        return "fait" in lower
+    if status == "partial":
+        return "partiel" in lower
+    if status == "skipped":
+        return "pas fait" in lower or "non faite" in lower
+    if status == "planned":
+        return "prévu" in lower or "planifié" in lower
+    return True
+
+def _correction_summary(after: dict) -> str:
+    status = after.get("status")
+    duration = after.get("duration_min")
+    if status == "done":
+        suffix = f", {duration} minutes" if duration is not None else ""
+        return f"Corrigé: séance faite{suffix}."
+    if status == "partial":
+        suffix = f", {duration} minutes" if duration is not None else ""
+        return f"Corrigé: partiel{suffix}."
+    if status == "skipped":
+        return "Corrigé: séance notée non faite."
+    if status == "planned":
+        return "Corrigé: statut revenu à prévu."
+    return "Corrigé."
+
+def _status_summary(after: dict, day: str) -> str:
+    status = after.get("status")
+    duration = after.get("duration_min")
+    if status == "partial":
+        suffix = f", {duration} minutes" if duration is not None else ""
+        return f"Noté pour {day}: partiel{suffix}."
+    if status == "done":
+        suffix = f", {duration} minutes" if duration is not None else ""
+        return f"Noté pour {day}: fait{suffix}."
+    if status == "skipped":
+        return f"Noté pour {day}."
+    return f"Noté pour {day}."
+
+def _reply_confirms_plan_patch(reply: str, before: dict, after: dict) -> bool:
+    lower = reply.lower()
+    before_session, after_session = _first_patch_pair(before, after)
+    if not after_session:
+        return False
+    if not before_session and after_session.get("date"):
+        target = after_session.get("date", "")
+        day = WEEKDAYS[date.fromisoformat(target).weekday()] if target else ""
+        return "déplac" in lower and day in lower
+    if before_session.get("date") != after_session.get("date"):
+        target = after_session.get("date", "")
+        day = WEEKDAYS[date.fromisoformat(target).weekday()] if target else ""
+        return "déplac" in lower and day in lower
+    if before_session.get("sport") != after_session.get("sport"):
+        return "remplac" in lower or str(after_session.get("sport", "")).lower() in lower
+    if (
+        before_session.get("intensity_label") != after_session.get("intensity_label")
+        or before_session.get("duration_min") != after_session.get("duration_min")
+    ):
+        return "allég" in lower or "facile" in lower
+    return "modifi" in lower
+
+def _plan_patch_summary(before: dict, after: dict) -> str:
+    before_session, after_session = _first_patch_pair(before, after)
+    if not after_session:
+        return "Modification appliquée."
+    if not before_session and after_session.get("date"):
+        target = after_session.get("date", "")
+        day = WEEKDAYS[date.fromisoformat(target).weekday()] if target else "la nouvelle date"
+        return f"Déplacé à {day}."
+    if before_session and before_session.get("date") != after_session.get("date"):
+        target = after_session.get("date", "")
+        day = WEEKDAYS[date.fromisoformat(target).weekday()] if target else "la nouvelle date"
+        return f"Déplacé à {day}."
+    if before_session and before_session.get("sport") != after_session.get("sport"):
+        sport = after_session.get("sport", "la nouvelle séance")
+        intensity = after_session.get("intensity_label")
+        suffix = f" {intensity}" if intensity else ""
+        return f"Remplacé par {sport}{suffix}."
+    if before_session and (
+        before_session.get("intensity_label") != after_session.get("intensity_label")
+        or before_session.get("duration_min") != after_session.get("duration_min")
+    ):
+        duration = after_session.get("duration_min")
+        intensity = after_session.get("intensity_label")
+        details = ", ".join(str(item) for item in (f"{duration} minutes" if duration else None, intensity) if item)
+        return f"Allégé: {details}." if details else "Allégé."
+    return "Modification appliquée."
+
+def _first_patch_pair(before: dict, after: dict) -> tuple[dict | None, dict | None]:
+    for key, after_item in after.items():
+        if isinstance(after_item, dict):
+            before_item = before.get(key)
+            return before_item if isinstance(before_item, dict) else None, after_item
+    return None, None

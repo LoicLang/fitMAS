@@ -45,7 +45,7 @@ Ne pas ouvrir Phase B progression/prescription sans demande explicite.
 Dernier signal exporte :
 
 ```text
-fake matrix: 6/6
+fake matrix: 11/11
 provider matrix 5x: 114/120
 danger metrics: 0 wrong_write, 0 old_plan, 0 wrong_correction_target,
                 0 claim_without_event

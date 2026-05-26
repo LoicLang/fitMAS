@@ -16,7 +16,7 @@ Le plus petit coach Telegram fiable pour 1 a 2 semaines de dogfood.
 
 ## Etat Actuel — 26 mai 2026
 
-Le Runtime V0 a valide le noyau :
+Le Runtime V0 a valide le noyau et le premier Sport Core minimal :
 
 ```text
 InputEvent -> Snapshot -> Agent -> Proposal -> Policy -> Executor
@@ -26,7 +26,7 @@ InputEvent -> Snapshot -> Agent -> Proposal -> Policy -> Executor
 Preuve exportee :
 
 - `tests/runtime_v0`: verts au dernier run local connu ;
-- fake matrix : `6/6` ;
+- fake matrix : `11/11` apres ajout du pack produit proche ;
 - provider matrix 5x : `114/120` ;
 - danger metrics : `0 wrong_write`, `0 old_plan`,
   `0 wrong_correction_target`, `0 claim_without_event`.
@@ -51,12 +51,10 @@ Ne pas supprimer l'ancien pipeline avant preuve sur adapters.
 
 Ordre recommande :
 
-1. Garder les docs actives courtes et coherentes.
-2. Ajouter `sport_rules.py` minimal dans `runtime_v0`.
-3. Ajouter les scenarios produit proches du scope dogfood.
-4. Construire un `WorldSnapshot` depuis une copie DB actuelle.
-5. Construire un executor adapter vers les writers existants.
-6. Brancher Telegram/API sous flag et allowlist user.
+1. Relancer une provider matrix ciblee sur les 11 scenarios.
+2. Construire un `WorldSnapshot` depuis une copie DB actuelle.
+3. Construire un executor adapter vers les writers existants.
+4. Brancher Telegram/API sous flag et allowlist user.
 
 ## Scope Actif
 

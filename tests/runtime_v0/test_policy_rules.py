@@ -44,6 +44,72 @@ def _snapshot(tmp_path):
     return SnapshotBuilder(db_path).build(1, now)
 
 
+def _snapshot_for_sport_rules(tmp_path):
+    db_path = tmp_path / "fitmas_v0_sport_rules.db"
+    now = _now()
+    init_db(db_path)
+    with connect(db_path) as connection:
+        _insert_session(
+            connection,
+            session_id=60,
+            offset=0,
+            priority="secondary",
+            intensity_label="hard",
+            status="planned",
+        )
+        _insert_session(
+            connection,
+            session_id=61,
+            offset=1,
+            priority="secondary",
+            intensity_label="hard",
+            status="planned",
+        )
+        _insert_session(
+            connection,
+            session_id=62,
+            offset=2,
+            priority="secondary",
+            intensity_label="easy",
+            status="done",
+        )
+        connection.commit()
+    return SnapshotBuilder(db_path).build(1, now)
+
+
+def _snapshot_with_health_fact(tmp_path):
+    db_path = tmp_path / "fitmas_v0_health_fact.db"
+    now = _now()
+    init_db(db_path)
+    with connect(db_path) as connection:
+        _insert_session(
+            connection,
+            session_id=60,
+            offset=0,
+            priority="secondary",
+            intensity_label="easy",
+            status="planned",
+        )
+        connection.execute(
+            """
+            insert into v0_facts (
+                id, user_id, kind, text, confidence, created_at, expires_at
+            ) values (?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                1,
+                1,
+                "health",
+                "Fatigue severe active",
+                0.9,
+                now.isoformat(),
+                (now + timedelta(days=2)).isoformat(),
+            ),
+        )
+        connection.commit()
+    return SnapshotBuilder(db_path).build(1, now)
+
+
 def _snapshot_with_execution_event(tmp_path, *, target_id: str = "50", created_offset_hours: int = 1):
     db_path = tmp_path / f"fitmas_v0_event_{target_id}_{created_offset_hours}.db"
     now = _now()
@@ -94,7 +160,16 @@ def _snapshot_with_unresolved_intent(tmp_path, intent: dict):
     return SnapshotBuilder(db_path).build(1, now)
 
 
-def _insert_session(connection, *, session_id: int, offset: int, priority: str):
+def _insert_session(
+    connection,
+    *,
+    session_id: int,
+    offset: int,
+    priority: str,
+    intensity_label: str = "easy",
+    status: str = "planned",
+    duration_min: int = 45,
+):
     date = (_now().date() + timedelta(days=offset)).isoformat()
     connection.execute(
         """
@@ -103,7 +178,7 @@ def _insert_session(connection, *, session_id: int, offset: int, priority: str):
             intensity_label, priority, status
         ) values (?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
-        (session_id, 1, date, "run", f"Session {session_id}", 45, "easy", priority, "planned"),
+        (session_id, 1, date, "run", f"Session {session_id}", duration_min, intensity_label, priority, status),
     )
 
 
@@ -504,4 +579,92 @@ def test_plan_patch_must_respect_active_unresolved_target_date(tmp_path):
 
     assert decision.action == "ask_clarification"
     assert decision.reason == "unresolved_intent_target_mismatch"
+    assert decision.commands == ()
+
+
+def test_plan_patch_blocks_done_session_mutation(tmp_path):
+    snapshot = _snapshot_for_sport_rules(tmp_path)
+
+    decision = RuntimePolicy().evaluate(
+        ActionProposal(
+            type="plan_patch",
+            confidence=0.8,
+            user_intent_summary="move done session",
+            evidence=("move",),
+            tool_trace=({"name": "get_session", "ok": True},),
+            plan_patch=PlanPatchDraft(
+                operations=(
+                    PlanPatchOperation(
+                        kind="move",
+                        source_session_id=62,
+                        target_date=_now().date() + timedelta(days=4),
+                    ),
+                ),
+                rationale="move done",
+            ),
+        ),
+        snapshot,
+    )
+
+    assert decision.action == "block"
+    assert decision.reason == "done_session_protected"
+    assert decision.commands == ()
+
+
+def test_plan_patch_blocks_hard_session_next_to_hard_session(tmp_path):
+    snapshot = _snapshot_for_sport_rules(tmp_path)
+
+    decision = RuntimePolicy().evaluate(
+        ActionProposal(
+            type="plan_patch",
+            confidence=0.8,
+            user_intent_summary="move hard near hard",
+            evidence=("move",),
+            tool_trace=({"name": "get_session", "ok": True},),
+            plan_patch=PlanPatchDraft(
+                operations=(
+                    PlanPatchOperation(
+                        kind="move",
+                        source_session_id=60,
+                        target_date=_now().date() + timedelta(days=2),
+                    ),
+                ),
+                rationale="move hard",
+            ),
+        ),
+        snapshot,
+    )
+
+    assert decision.action == "block"
+    assert decision.reason == "hard_session_too_dense"
+    assert decision.commands == ()
+
+
+def test_plan_patch_blocks_new_hard_when_health_fact_is_active(tmp_path):
+    snapshot = _snapshot_with_health_fact(tmp_path)
+
+    decision = RuntimePolicy().evaluate(
+        ActionProposal(
+            type="plan_patch",
+            confidence=0.8,
+            user_intent_summary="make harder",
+            evidence=("hard",),
+            tool_trace=({"name": "get_session", "ok": True},),
+            plan_patch=PlanPatchDraft(
+                operations=(
+                    PlanPatchOperation(
+                        kind="replace",
+                        source_session_id=60,
+                        new_intensity_label="hard",
+                        new_duration_min=50,
+                    ),
+                ),
+                rationale="make hard",
+            ),
+        ),
+        snapshot,
+    )
+
+    assert decision.action == "block"
+    assert decision.reason == "health_fact_blocks_hard"
     assert decision.commands == ()

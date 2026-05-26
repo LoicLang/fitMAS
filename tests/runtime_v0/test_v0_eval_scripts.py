@@ -5,10 +5,10 @@ from scripts.v0_eval.report import MatrixRunRecord, render_markdown_report
 from scripts.v0_eval.run_matrix import build_run_plan
 
 
-def test_build_run_plan_defaults_to_six_scenarios_four_target_providers():
+def test_build_run_plan_defaults_to_eleven_scenarios_four_target_providers():
     plan = build_run_plan(repetitions=1)
 
-    assert len(plan) == 24
+    assert len(plan) == 44
     assert {item.scenario for item in plan} == {
         "current_plan",
         "tomorrow",
@@ -16,6 +16,11 @@ def test_build_run_plan_defaults_to_six_scenarios_four_target_providers():
         "execution_correction",
         "followup_planning_turn1",
         "key_session_pending",
+        "explicit_lighten",
+        "replace_by_easy_bike",
+        "hard_unsafe_block",
+        "partial_yesterday",
+        "undo_wrong_status",
     }
     assert {item.provider for item in plan} == {"gemini", "grok", "deepseek", "mistral"}
 

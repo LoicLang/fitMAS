@@ -7,6 +7,7 @@ from typing import Any, Literal
 
 from fitmas.runtime_v0.proposals import ActionProposal, PlanPatchDraft, PlanPatchOperation, proposal_to_dict
 from fitmas.runtime_v0.snapshot import CommandEventView, SessionView, WorldSnapshot
+from fitmas.runtime_v0.sport_rules import evaluate_plan_patch_sport_rules
 
 class Command:
     pass
@@ -206,15 +207,18 @@ class RuntimePolicy:
                 ),
                 ("Quelle séance veux-tu déplacer ?",),
             )
-        if len(draft.operations) == 1 and all(session.priority in {"secondary", "optional"} for session in touched):
-            return _decision("allow_commit", "low_risk_plan_patch", "low", (command,), proposal.evidence)
+        sport_decision = evaluate_plan_patch_sport_rules(draft, snapshot)
+        if sport_decision.action == "block":
+            return _decision("block", sport_decision.reason, sport_decision.risk_level, (), proposal.evidence)
+        if sport_decision.action == "allow":
+            return _decision("allow_commit", sport_decision.reason, sport_decision.risk_level, (command,), proposal.evidence)
         pending = CreatePendingConfirmationCommand(
             type="plan_patch",
             summary=draft.rationale,
             payload_json=json.dumps(proposal_to_dict(proposal), ensure_ascii=False, sort_keys=True),
             expires_at=snapshot.now + timedelta(hours=24),
         )
-        return _decision("create_pending", "plan_patch_requires_confirmation", "medium", (pending,), proposal.evidence)
+        return _decision("create_pending", sport_decision.reason, sport_decision.risk_level, (pending,), proposal.evidence)
 
 def _decision(
     action: Literal["allow_commit", "create_pending", "block", "ask_clarification", "answer_only", "no_send"],

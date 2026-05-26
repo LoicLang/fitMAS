@@ -31,6 +31,11 @@ DEFAULT_SCENARIOS = (
     "execution_correction",
     "followup_planning_turn1",
     "key_session_pending",
+    "explicit_lighten",
+    "replace_by_easy_bike",
+    "hard_unsafe_block",
+    "partial_yesterday",
+    "undo_wrong_status",
 )
 DEFAULT_PROVIDERS = ("gemini", "grok", "deepseek", "mistral")
 ALL_PROVIDERS = (*DEFAULT_PROVIDERS, "fake")
@@ -325,6 +330,115 @@ def _fake_script(scenario_name: str) -> tuple[list[LLMResponse], str]:
                 ),
             ],
             "Je dois confirmer avant de faire ça: déplacer la VMA à vendredi.",
+        ),
+        "explicit_lighten": (
+            [
+                LLMResponse(tool_calls=(ToolCall("get_session", {"session_id": 70}),)),
+                LLMResponse(
+                    tool_calls=(
+                        ToolCall(
+                            "propose_plan_patch",
+                            {
+                                "operations": [
+                                    {
+                                        "kind": "lighten",
+                                        "source_session_id": 70,
+                                        "new_intensity_label": "easy",
+                                        "new_duration_min": 30,
+                                    }
+                                ],
+                                "rationale": "alléger la séance de demain",
+                            },
+                        ),
+                    )
+                ),
+            ],
+            "Séance de demain allégée: 30 minutes facile.",
+        ),
+        "replace_by_easy_bike": (
+            [
+                LLMResponse(tool_calls=(ToolCall("get_session", {"session_id": 71}),)),
+                LLMResponse(
+                    tool_calls=(
+                        ToolCall(
+                            "propose_plan_patch",
+                            {
+                                "operations": [
+                                    {
+                                        "kind": "replace",
+                                        "source_session_id": 71,
+                                        "new_sport": "bike",
+                                        "new_intensity_label": "easy",
+                                        "new_duration_min": 45,
+                                    }
+                                ],
+                                "rationale": "remplacer par du vélo facile",
+                            },
+                        ),
+                    )
+                ),
+            ],
+            "Remplacé par vélo facile.",
+        ),
+        "hard_unsafe_block": (
+            [
+                LLMResponse(tool_calls=(ToolCall("get_session", {"session_id": 72}),)),
+                LLMResponse(
+                    tool_calls=(
+                        ToolCall(
+                            "propose_plan_patch",
+                            {
+                                "operations": [
+                                    {
+                                        "kind": "replace",
+                                        "source_session_id": 72,
+                                        "new_intensity_label": "hard",
+                                        "new_duration_min": 50,
+                                    }
+                                ],
+                                "rationale": "remplacer par une séance dure",
+                            },
+                        ),
+                    )
+                ),
+            ],
+            "Je bloque: séance dure trop risquée avec la fatigue active.",
+        ),
+        "partial_yesterday": (
+            [
+                LLMResponse(
+                    tool_calls=(
+                        ToolCall(
+                            "propose_execution_update",
+                            {
+                                "session_id": 73,
+                                "status": "partial",
+                                "duration_min": 20,
+                                "evidence": "partiel hier",
+                            },
+                        ),
+                    )
+                )
+            ],
+            "Noté pour hier: partiel, 20 minutes.",
+        ),
+        "undo_wrong_status": (
+            [
+                LLMResponse(
+                    tool_calls=(
+                        ToolCall(
+                            "propose_execution_correction",
+                            {
+                                "previous_event_id": 18,
+                                "correct_session_id": 74,
+                                "correct_status": "done",
+                                "evidence": "faite finalement",
+                            },
+                        ),
+                    )
+                )
+            ],
+            "Corrigé: séance faite.",
         ),
     }
     return scripts[scenario_name]

@@ -56,7 +56,7 @@ Done quand :
 
 ```text
 tests/runtime_v0 verts
-fake matrix 6/6
+fake matrix 11/11
 provider matrix >= 90%
 danger metrics = 0
 ```
@@ -186,8 +186,7 @@ Ne pas creer `domains/*` par avance si la pression reelle n'existe pas.
 
 ## Prochaine Tranche
 
-1. Ajouter `sport_rules.py` minimal dans `runtime_v0`.
-2. Ajouter les scenarios proches du scope dogfood.
-3. Construire `current_db_snapshot` sur copie DB.
-4. Construire `current_db_executor` sur clone DB.
-5. Brancher Telegram V0 pour user allowlist.
+1. Relancer la provider matrix ciblee sur les 11 scenarios.
+2. Construire `current_db_snapshot` sur copie DB.
+3. Construire `current_db_executor` sur clone DB.
+4. Brancher Telegram V0 pour user allowlist.
