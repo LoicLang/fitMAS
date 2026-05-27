@@ -118,6 +118,21 @@ sanitized_fallback_rate: 0%
 Les echecs restants sont surtout des artifacts provider manquants ou replies
 hors contrat, pas des writes dangereux.
 
+## Evaluation
+
+La matrix separe deux niveaux :
+
+```text
+correctness = proposal, policy, commands, dates finales et danger metrics
+reply quality = wording visible attendu ou interdit
+```
+
+Le wording visible ne fait plus echouer la correctness.
+Il alimente les compteurs `reply_quality_issue_count`,
+`reply_missing_expected_text_count` et `reply_contains_forbidden_text_count`.
+Les claims dangereux restent bloquants, par exemple une reply qui annonce une
+mutation sans event committe.
+
 ## Budget
 
 Budget runtime core, hors tests et scripts :

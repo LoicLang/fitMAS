@@ -484,6 +484,7 @@ def _record_json(record: MatrixRunRecord) -> dict:
 def _run_metrics(db_path: Path, verdicts: tuple[OracleVerdict, ...]) -> dict:
     turns = _dump_turns(db_path) if db_path.exists() else []
     guard_reasons = [reason for turn in turns for reason in turn["guard_reasons"]]
+    reply_quality_failures = [failure for verdict in verdicts for failure in verdict.reply_quality_failures]
     return {
         "turn_count": len(turns),
         "guard_block_count": sum(1 for turn in turns if not turn["guard_ok"]),
@@ -496,6 +497,9 @@ def _run_metrics(db_path: Path, verdicts: tuple[OracleVerdict, ...]) -> dict:
         "old_plan_date_count": sum(1 for verdict in verdicts if verdict.old_plan_date_detected),
         "wrong_correction_target_count": sum(1 for verdict in verdicts if verdict.wrong_correction_target),
         "reply_claim_without_event_count": sum(1 for verdict in verdicts if verdict.reply_claim_without_event),
+        "reply_quality_issue_count": sum(1 for verdict in verdicts if not verdict.reply_quality_ok),
+        "reply_missing_expected_text_count": reply_quality_failures.count("reply_missing_expected_text"),
+        "reply_contains_forbidden_text_count": reply_quality_failures.count("reply_contains_forbidden_text"),
     }
 
 
@@ -526,8 +530,6 @@ def _probable_causes(failures: tuple[str, ...]) -> tuple[str, ...]:
     causes: list[str] = []
     if {"proposal_type", "policy_action", "expected_command_missing"} & set(failures):
         causes.append("provider_missing_expected_artifact")
-    if "reply_missing_expected_text" in failures or "reply_contains_forbidden_text" in failures:
-        causes.append("reply_contract_mismatch")
     if {"wrong_write", "old_plan_date_detected", "wrong_correction_target", "reply_claim_without_event"} & set(failures):
         causes.append("runtime_safety_failure")
     if any(failure.startswith("provider_error:") for failure in failures):

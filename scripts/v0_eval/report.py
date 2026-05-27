@@ -28,6 +28,9 @@ class MatrixRunRecord:
     old_plan_date_count: int = 0
     wrong_correction_target_count: int = 0
     reply_claim_without_event_count: int = 0
+    reply_quality_issue_count: int = 0
+    reply_missing_expected_text_count: int = 0
+    reply_contains_forbidden_text_count: int = 0
     triage: tuple[str, ...] = ()
 
 
@@ -37,7 +40,9 @@ def render_markdown_report(records: list[MatrixRunRecord]) -> str:
         "",
         "## Summary",
         "",
-        "| Scenario | Provider | Success | p50 latency | p95 latency | Avg tokens |",
+        "Correctness excludes reply wording markers; visible reply quality is tracked below.",
+        "",
+        "| Scenario | Provider | Correctness | p50 latency | p95 latency | Avg tokens |",
         "| --- | --- | ---: | ---: | ---: | ---: |",
     ]
     for (scenario, provider), group in sorted(_groups(records).items()):
@@ -100,6 +105,9 @@ def _quality_metrics_lines(records: list[MatrixRunRecord]) -> list[str]:
         ("old_plan_date_count", sum(record.old_plan_date_count for record in records), len(records) or 1),
         ("wrong_correction_target_count", sum(record.wrong_correction_target_count for record in records), len(records) or 1),
         ("reply_claim_without_event_count", sum(record.reply_claim_without_event_count for record in records), len(records) or 1),
+        ("reply_quality_issue_count", sum(record.reply_quality_issue_count for record in records), len(records) or 1),
+        ("reply_missing_expected_text_count", sum(record.reply_missing_expected_text_count for record in records), len(records) or 1),
+        ("reply_contains_forbidden_text_count", sum(record.reply_contains_forbidden_text_count for record in records), len(records) or 1),
     )
     lines = ["| Metric | Count | Rate |", "| --- | ---: | ---: |"]
     lines.extend(f"| {name} | {count} | {_rate(count, denominator)} |" for name, count, denominator in metrics)

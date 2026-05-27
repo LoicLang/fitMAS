@@ -15,6 +15,7 @@ from scripts.v0_eval.scenarios import CommandSpec, ScenarioOracle
 class OracleVerdict:
     scenario: str
     success: bool
+    reply_quality_ok: bool
     proposal_type_ok: bool
     policy_action_ok: bool
     expected_commands_ok: bool
@@ -29,6 +30,7 @@ class OracleVerdict:
     reply_must_not_contain_ok: bool
     guard_ok: bool
     failures: tuple[str, ...]
+    reply_quality_failures: tuple[str, ...]
 
 
 def compare_persisted_turn(db_path: Path, turn_id: str, oracle: ScenarioOracle) -> OracleVerdict:
@@ -67,6 +69,10 @@ def compare_run_to_oracle(turn_result: Any, oracle: ScenarioOracle) -> OracleVer
         forbidden.lower() not in reply_lower for forbidden in oracle.expected_reply_must_not_contain
     )
     guard_ok = bool(run["guard_ok"])
+    reply_quality_failures = _reply_quality_failures(
+        reply_must_include_ok=reply_must_include_ok,
+        reply_must_not_contain_ok=reply_must_not_contain_ok,
+    )
 
     failures = _failures(
         proposal_type_ok=proposal_type_ok,
@@ -79,13 +85,12 @@ def compare_run_to_oracle(turn_result: Any, oracle: ScenarioOracle) -> OracleVer
         final_session_dates_ok=final_session_dates_ok,
         forbidden_commands_absent=forbidden_commands_absent,
         reply_claim_without_event=reply_claim_without_event,
-        reply_must_include_ok=reply_must_include_ok,
-        reply_must_not_contain_ok=reply_must_not_contain_ok,
         guard_ok=guard_ok,
     )
     return OracleVerdict(
         scenario=oracle.name,
         success=failures == (),
+        reply_quality_ok=reply_quality_failures == (),
         proposal_type_ok=proposal_type_ok,
         policy_action_ok=policy_action_ok,
         expected_commands_ok=expected_commands_ok,
@@ -100,6 +105,7 @@ def compare_run_to_oracle(turn_result: Any, oracle: ScenarioOracle) -> OracleVer
         reply_must_not_contain_ok=reply_must_not_contain_ok,
         guard_ok=guard_ok,
         failures=failures,
+        reply_quality_failures=reply_quality_failures,
     )
 
 
@@ -305,6 +311,10 @@ def _failures(**checks: Any) -> tuple[str, ...]:
         failures.append("forbidden_command_present")
     if checks["reply_claim_without_event"]:
         failures.append("reply_claim_without_event")
+    return tuple(failures)
+
+def _reply_quality_failures(**checks: Any) -> tuple[str, ...]:
+    failures: list[str] = []
     if not checks["reply_must_include_ok"]:
         failures.append("reply_missing_expected_text")
     if not checks["reply_must_not_contain_ok"]:

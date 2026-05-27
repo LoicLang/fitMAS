@@ -354,6 +354,34 @@ def test_oracle_compare_accepts_lighten_noun_form():
     assert verdict.reply_must_not_contain_ok is True
 
 
+def test_oracle_compare_keeps_reply_wording_out_of_correctness_failures():
+    scenario = scenario_by_name("explicit_lighten")
+    verdict = compare_run_to_oracle(
+        {
+            "proposal_type": "plan_patch",
+            "policy_action": "allow_commit",
+            "reply": "C'est pris en compte.",
+            "tool_trace": [{"name": "get_session", "ok": True}],
+            "command_events": [
+                {
+                    "command_type": "ApplyPlanPatchCommand",
+                    "target_type": "session",
+                    "target_id": "70",
+                    "status": "applied",
+                }
+            ],
+            "guard_ok": True,
+            "proposal": {"type": "plan_patch"},
+        },
+        scenario,
+    )
+
+    assert verdict.success is True
+    assert verdict.failures == ()
+    assert verdict.reply_quality_ok is False
+    assert verdict.reply_quality_failures == ("reply_missing_expected_text",)
+
+
 def test_oracle_compare_rejects_forbidden_pending_plan_apply():
     scenario = scenario_by_name("key_session_pending")
     verdict = compare_run_to_oracle(
