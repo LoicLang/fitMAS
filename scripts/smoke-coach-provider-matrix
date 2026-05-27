@@ -1,0 +1,14 @@
+#!/usr/bin/env zsh
+
+set -euo pipefail
+
+script_dir="$(cd "$(dirname "$0")" && pwd)"
+repo_root="$(cd "$script_dir/.." && pwd)"
+
+if [ -f "$repo_root/.env" ]; then
+  set -a
+  source "$repo_root/.env" >/dev/null 2>&1 || true
+  set +a
+fi
+
+exec "$repo_root/.venv/bin/python" "$script_dir/smoke_coach_provider_matrix.py" "$@"

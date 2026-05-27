@@ -25,7 +25,7 @@ BACKEND_SRC = ROOT / "backend" / "src"
 Expectation = Literal["guarded_no_commit", "no_plan_write", "coherent_commit_or_pending"]
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True)
 class SmokeScenario:
     name: str
     prompt: str
@@ -34,7 +34,7 @@ class SmokeScenario:
     followups: tuple[str, ...] = ()
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True)
 class DbSnapshot:
     events: tuple[dict[str, Any], ...]
     pending: tuple[dict[str, Any], ...]
@@ -43,7 +43,7 @@ class DbSnapshot:
     turns: tuple[dict[str, Any], ...] = field(default_factory=tuple)
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True)
 class ScenarioCheckResult:
     ok: bool
     reasons: list[str]
@@ -220,6 +220,62 @@ DAILY_SCENARIOS: tuple[SmokeScenario, ...] = (
         prompt="J'ai pas pu faire la seance hier, boulot trop tard",
         expectation="no_plan_write",
         description="Missed-session report should be execution/memory, not a planning mutation.",
+    ),
+    SmokeScenario(
+        name="human_missed_yesterday_short",
+        prompt="J'ai pas fait hier",
+        expectation="no_plan_write",
+        description="Short missed-yesterday report should not invent an execution or planning mutation.",
+    ),
+    SmokeScenario(
+        name="human_done_finally",
+        prompt="J'ai fait la seance finalement",
+        expectation="no_plan_write",
+        description="Elliptical completion report should stay execution-only and avoid planning writes.",
+    ),
+    SmokeScenario(
+        name="ambiguous_this_to_friday",
+        prompt="Decale ca a vendredi",
+        expectation="no_plan_write",
+        description="Ambiguous target 'ca' without active pending should clarify/read, not mutate a plan.",
+    ),
+    SmokeScenario(
+        name="swim_unavailable_two_weeks_human",
+        prompt="Je peux pas nager deux semaines",
+        expectation="coherent_commit_or_pending",
+        description="Human phrasing of a two-week swim constraint should route through canonical planning.",
+    ),
+    SmokeScenario(
+        name="fatigue_keep_light",
+        prompt="Je suis rince, mais garde un truc leger",
+        expectation="coherent_commit_or_pending",
+        description="Fatigue plus light-work request should produce a guarded light candidate or pending.",
+    ),
+    SmokeScenario(
+        name="pending_ok_accept",
+        prompt="Deplace la recuperation mobilite id 3 a lundi prochain",
+        expectation="coherent_commit_or_pending",
+        description="A bare 'ok' with an active pending candidate should resolve through pending_resolution.",
+        followups=("ok",),
+    ),
+    SmokeScenario(
+        name="ok_without_pending",
+        prompt="ok",
+        expectation="no_plan_write",
+        description="Bare ok without pending should close or acknowledge without creating artifacts.",
+    ),
+    SmokeScenario(
+        name="pending_modify_saturday",
+        prompt="Deplace la recuperation mobilite id 3 a lundi prochain",
+        expectation="coherent_commit_or_pending",
+        description="'Non plutot samedi' with pending context should modify/reject structurally, not parse locally.",
+        followups=("non plutot samedi",),
+    ),
+    SmokeScenario(
+        name="add_hard_tomorrow_loaded",
+        prompt="Ajoute une seance dure demain",
+        expectation="guarded_no_commit",
+        description="Human hard-session request in an already loaded week must not commit silently.",
     ),
     SmokeScenario(
         name="future_evening_unavailable",
@@ -443,7 +499,7 @@ EXTENDED_SCENARIOS: tuple[SmokeScenario, ...] = (
 )
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True)
 class GeneratedWeekWorkflow:
     name: str
     payload: dict[str, Any]
@@ -523,8 +579,13 @@ _CANONICAL_PLANNING_PROVIDER_REQUIRED_SCENARIOS = frozenset(
         "swap_by_day",
         "move_hard_close",
         "add_hard_dense",
+        "add_hard_tomorrow_loaded",
+        "fatigue_keep_light",
         "trip_constraint",
+        "pending_modify_saturday",
+        "pending_ok_accept",
         "replace_swim_with_bike",
+        "swim_unavailable_two_weeks_human",
         "swim_unavailable_two_weeks",
     }
 )

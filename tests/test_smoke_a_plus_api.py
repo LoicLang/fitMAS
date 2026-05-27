@@ -818,6 +818,54 @@ def test_reply_placeholders_are_reported_as_warnings_not_artifact_failures():
     assert "assistant reply contains bracket placeholder" in result.warnings
 
 
+def test_daily_smoke_contains_human_realistic_regression_cases():
+    smoke = _load_smoke_module()
+
+    daily_names = {scenario.name for scenario in smoke.DAILY_SCENARIOS}
+
+    assert {
+        "human_missed_yesterday_short",
+        "human_done_finally",
+        "ambiguous_this_to_friday",
+        "swim_unavailable_two_weeks_human",
+        "fatigue_keep_light",
+        "pending_ok_accept",
+        "ok_without_pending",
+        "pending_modify_saturday",
+        "add_hard_tomorrow_loaded",
+    } <= daily_names
+
+
+def test_new_human_planning_cases_require_canonical_planning_trace():
+    smoke = _load_smoke_module()
+
+    assert {
+        "swim_unavailable_two_weeks_human",
+        "fatigue_keep_light",
+        "pending_ok_accept",
+        "pending_modify_saturday",
+        "add_hard_tomorrow_loaded",
+    } <= smoke._CANONICAL_PLANNING_PROVIDER_REQUIRED_SCENARIOS
+
+
+def test_new_human_cases_are_selectable_in_order():
+    smoke = _load_smoke_module()
+
+    selected = smoke._selected_scenarios(
+        [
+            "human_missed_yesterday_short",
+            "ambiguous_this_to_friday",
+            "ok_without_pending",
+        ]
+    )
+
+    assert [scenario.name for scenario in selected] == [
+        "human_missed_yesterday_short",
+        "ambiguous_this_to_friday",
+        "ok_without_pending",
+    ]
+
+
 def test_daily_scenarios_are_opt_in_and_include_multi_turn_cases():
     smoke = _load_smoke_module()
 
