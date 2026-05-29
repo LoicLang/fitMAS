@@ -25,7 +25,7 @@ InputEvent -> Snapshot -> Agent -> Proposal -> Policy -> Executor
 
 Preuve (verifiee offline le 29 mai 2026) :
 
-- `tests/runtime_v0` : 140 passed ;
+- `tests/runtime_v0 + docs` : 149 passed ;
 - fake matrix : `11/11` ;
 - danger metrics : `0 wrong_write`, `0 old_plan`,
   `0 wrong_correction_target`, `0 claim_without_event` ;
@@ -55,11 +55,12 @@ Ne pas supprimer l'ancien pipeline avant preuve sur adapters.
 
 Ordre recommande :
 
-1. Relancer une provider matrix ciblee sur les 11 scenarios.
-2. Construire un `WorldSnapshot` depuis une copie DB actuelle, en distinguant
+1. Lancer `scripts/v0_eval/compare_app_vs_v0.py` sur 20-30 tours reels fiables.
+2. Relancer une provider matrix ciblee sur les 11 scenarios.
+3. Construire un `WorldSnapshot` depuis une copie DB actuelle, en distinguant
    replay fidele (`conversation_context`) et debug approximatif (`current_state`).
-3. Construire un executor adapter vers les writers existants.
-4. Brancher Telegram/API sous flag et allowlist user.
+4. Construire un executor adapter vers les writers existants.
+5. Brancher Telegram/API sous flag et allowlist user.
 
 ## Scope Actif
 
@@ -127,6 +128,7 @@ fiable.
 pytest tests/runtime_v0
 python3 scripts/v0_eval/run_matrix.py --provider fake --repetitions 1
 python3 scripts/v0_eval/run_matrix.py --repetitions 5
+python3 scripts/v0_eval/compare_app_vs_v0.py --turn-ids 151 --dry-run
 ```
 
 Exports utiles :

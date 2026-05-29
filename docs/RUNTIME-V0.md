@@ -102,7 +102,7 @@ python3 scripts/v0_eval/run_matrix.py \
 Verifie offline le 29 mai 2026 :
 
 ```text
-tests/runtime_v0 + docs   : 143 passed
+tests/runtime_v0 + docs   : 149 passed
 fake matrix               : 11/11
 wrong_write               : 0
 old_plan_date             : 0
@@ -139,6 +139,23 @@ Grok et Mistral produisent tous un `plan_patch`. L'ancien diagnostic
 `planning_date_not_resolved` venait du banc de replay, pas des modeles. Le point
 restant est une difference de policy : V0 auto-commit le swap simple, alors que
 l'app legacy demandait confirmation.
+
+Comparaison app-vs-V0 :
+
+```bash
+python3 scripts/v0_eval/compare_app_vs_v0.py \
+  --real-db .tmp-prod-fitmas.db \
+  --turn-ids 151 \
+  --providers deepseek,grok,mistral \
+  --max-steps 6 \
+  --export-dir exports/runtime-v0/app-vs-v0
+```
+
+Le rapport classe chaque run en `v0_better`, `app_better`, `tie_safe`,
+`tie_bad` ou `inconclusive_snapshot`. Il ne considere pas l'app legacy comme
+oracle absolu : il compare les risques (`unsafe_auto_commit`,
+`app_claim_without_event`, `unhelpful_no_send`, etc.) sur le meme snapshot
+capture.
 
 ## Evaluation
 

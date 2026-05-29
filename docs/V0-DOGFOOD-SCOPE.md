@@ -120,7 +120,7 @@ cancel_followup
 
 Etat de preuve (verifie offline le 29 mai 2026) :
 
-- tests runtime + docs : `143 passed` ;
+- tests runtime + docs : `149 passed` ;
 - fake matrix : `11/11` ;
 - danger metrics : `0 wrong_write`, `0 old_plan`, `0 wrong_correction_target`,
   `0 claim_without_event`.
@@ -133,6 +133,10 @@ manuel, mais n'est plus lance par defaut tant que le credit API est absent.
 Les spikes sur tours reels doivent indiquer leur source de snapshot. Seuls les
 runs `conversation_context` sont assez fideles pour juger un provider. Les runs
 `current_state` restent des sondes de debug, car la DB produit est mutable.
+
+Le banc app-vs-V0 vit dans `scripts/v0_eval/compare_app_vs_v0.py`. Il sert a
+decider si on avance vers Telegram V0 : V0 doit gagner ou faire `tie_safe` sur
+les cas fiables, sans `wrong write` ni auto-commit risqué.
 
 Gate dogfood Telegram :
 

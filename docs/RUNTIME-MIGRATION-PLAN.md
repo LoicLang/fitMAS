@@ -186,9 +186,10 @@ Ne pas creer `domains/*` par avance si la pression reelle n'existe pas.
 
 ## Prochaine Tranche
 
-1. Relancer la provider matrix ciblee sur les 11 scenarios.
-2. Construire `current_db_snapshot` sur copie DB, avec une source as-of
+1. Lancer la comparaison app-vs-V0 sur un panel de tours reels fiables.
+2. Relancer la provider matrix ciblee sur les 11 scenarios.
+3. Construire `current_db_snapshot` sur copie DB, avec une source as-of
    explicite (`conversation_context` pour replay, `current_state` seulement
    pour debug basse fidelite).
-3. Construire `current_db_executor` sur clone DB.
-4. Brancher Telegram V0 pour user allowlist.
+4. Construire `current_db_executor` sur clone DB.
+5. Brancher Telegram V0 pour user allowlist.
