@@ -28,6 +28,9 @@ class RuntimeDeps:
     db_path: Path
     coach_llm: LLMClient
     reply_llm: LLMClient
+    # Coach reasoning budget. Default 3 = production behavior; override only for
+    # offline experiments (e.g. the app-vs-V0 spike on fact-heavy real worlds).
+    max_steps: int = 3
 
 @dataclass(frozen=True)
 class HandleEventResult:
@@ -75,7 +78,7 @@ def _handle_new_event(event: InputEvent, deps: RuntimeDeps, turn_id: str, starte
         event,
         snapshot.header(),
         for_event(event, snapshot),
-        max_steps=3,
+        max_steps=deps.max_steps,
         tool_context=ctx,
     )
     policy = RuntimePolicy().evaluate(proposal, snapshot)

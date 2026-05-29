@@ -93,7 +93,7 @@ def _safety_read(result: HandleEventResult) -> str:
     return f"NO-OP ({runtime.policy_action}) — nothing committed"
 
 
-def _run_one(real_db: Path, turn_id: int, provider: str, client, model: str, out_dir: Path) -> None:
+def _run_one(real_db: Path, turn_id: int, provider: str, client, model: str, out_dir: Path, max_steps: int) -> None:
     turn = _load_turn(real_db, turn_id)
     message = turn["user_message"]
     if not message:
@@ -113,7 +113,7 @@ def _run_one(real_db: Path, turn_id: int, provider: str, client, model: str, out
     )
 
     meter = MeteredLLMClient(client, provider=provider, model=model)
-    deps = RuntimeDeps(db_path=shadow_db, coach_llm=meter, reply_llm=meter)
+    deps = RuntimeDeps(db_path=shadow_db, coach_llm=meter, reply_llm=meter, max_steps=max_steps)
     event = InputEvent(
         id=f"spike-{turn_id}",
         user_id=user_id,
@@ -129,7 +129,7 @@ def _run_one(real_db: Path, turn_id: int, provider: str, client, model: str, out
     runtime = result.runtime_result
 
     print("\n" + "=" * 80)
-    print(f"TURN #{turn_id}  |  {as_of.isoformat()}  |  user {user_id}  |  {provider}/{model}")
+    print(f"TURN #{turn_id}  |  {as_of.isoformat()}  |  user {user_id}  |  {provider}/{model}  |  max_steps={max_steps}")
     print("=" * 80)
     print(f"USER: {message}")
     print(f"\nWORLD V0 SAW (as-of, current-state approximation): {len(snapshot.current_plan)} upcoming sessions")
@@ -155,7 +155,7 @@ def _run_one(real_db: Path, turn_id: int, provider: str, client, model: str, out
     print(f"  reply: {turn['assistant_message']}")
 
 
-def run_spike(real_db: Path, turn_ids: list[int], provider: str, out_dir: Path) -> int:
+def run_spike(real_db: Path, turn_ids: list[int], provider: str, out_dir: Path, max_steps: int) -> int:
     out_dir.mkdir(parents=True, exist_ok=True)
     try:
         client = build_provider_client(provider)
@@ -164,9 +164,9 @@ def run_spike(real_db: Path, turn_ids: list[int], provider: str, out_dir: Path) 
         print("Hint: load the provider key first — `set -a && . ./.env && set +a`")
         return 2
     model = getattr(getattr(client, "profile", None), "model", "unknown")
-    print(f"spike: real_db={real_db} provider={provider}/{model} turns={turn_ids} out={out_dir}")
+    print(f"spike: real_db={real_db} provider={provider}/{model} turns={turn_ids} max_steps={max_steps} out={out_dir}")
     for turn_id in turn_ids:
-        _run_one(real_db, turn_id, provider, client, model, out_dir)
+        _run_one(real_db, turn_id, provider, client, model, out_dir, max_steps)
     return 0
 
 
@@ -175,6 +175,7 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--real-db", default=".tmp-prod-fitmas.db", type=Path)
     parser.add_argument("--turn-ids", default="151,129", help="comma-separated conversation_turn ids")
     parser.add_argument("--provider", default="deepseek")
+    parser.add_argument("--max-steps", type=int, default=3, help="coach reasoning budget (prod default is 3; raise to probe real-world convergence)")
     parser.add_argument("--out-dir", default=None, help="where to write shadow DBs (default: a temp dir)")
     return parser
 
@@ -183,7 +184,7 @@ def main(argv: list[str] | None = None) -> int:
     args = _parser().parse_args(argv)
     turn_ids = [int(token) for token in str(args.turn_ids).split(",") if token.strip()]
     out_dir = Path(args.out_dir) if args.out_dir else Path(tempfile.mkdtemp(prefix="v0-spike-"))
-    return run_spike(args.real_db, turn_ids, args.provider, out_dir)
+    return run_spike(args.real_db, turn_ids, args.provider, out_dir, args.max_steps)
 
 
 if __name__ == "__main__":
