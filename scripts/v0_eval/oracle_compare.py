@@ -223,6 +223,15 @@ def _required_read_tool_called(tool_trace: tuple[dict[str, Any], ...], oracle: S
     return True
 
 
+# Bookkeeping / safe-path writes. An unexpected one is a SAFE under-action
+# (already penalized via proposal_type / expected_command checks), not a
+# dangerous mutation of plan or execution truth. Denylist (not allowlist) so any
+# NEW unexpected mutation type still counts — conservative danger bias.
+_NON_MUTATING_COMMAND_TYPES = frozenset(
+    {"UpdateConversationStateCommand", "CreatePendingConfirmationCommand"}
+)
+
+
 def _wrong_write_count(
     command_events: tuple[dict[str, Any], ...],
     expected_commands: tuple[CommandSpec, ...],
@@ -230,6 +239,8 @@ def _wrong_write_count(
     wrong = 0
     for event in command_events:
         if event.get("status") != "applied":
+            continue
+        if event.get("command_type") in _NON_MUTATING_COMMAND_TYPES:
             continue
         if not any(_matches_command(event, expected) for expected in expected_commands):
             wrong += 1

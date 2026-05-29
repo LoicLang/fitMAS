@@ -119,6 +119,71 @@ def test_oracle_compare_counts_wrong_writes_for_answer_only_scenario():
     assert "wrong_write" in verdict.failures
 
 
+def test_oracle_compare_ignores_bookkeeping_writes_as_wrong_write():
+    scenario = scenario_by_name("current_plan")
+    verdict = compare_run_to_oracle(
+        {
+            "proposal_type": "answer",
+            "policy_action": "answer_only",
+            "reply": "22 Footing recup. 24 VMA courte. 26 Endurance.",
+            "tool_trace": [{"name": "get_current_plan", "ok": True}],
+            "command_events": [
+                {
+                    "command_type": "UpdateConversationStateCommand",
+                    "target_type": "state",
+                    "target_id": "1",
+                    "status": "applied",
+                },
+                {
+                    "command_type": "CreatePendingConfirmationCommand",
+                    "target_type": "pending",
+                    "target_id": "plan_patch",
+                    "status": "applied",
+                },
+            ],
+            "guard_ok": True,
+            "proposal": {"type": "answer"},
+        },
+        scenario,
+    )
+
+    assert verdict.wrong_write_count == 0
+    assert "wrong_write" not in verdict.failures
+
+
+def test_oracle_compare_still_counts_plan_mutation_as_wrong_write():
+    scenario = scenario_by_name("current_plan")
+    verdict = compare_run_to_oracle(
+        {
+            "proposal_type": "answer",
+            "policy_action": "answer_only",
+            "reply": "22 Footing recup. 24 VMA courte. 26 Endurance.",
+            "tool_trace": [{"name": "get_current_plan", "ok": True}],
+            "command_events": [
+                {
+                    "command_type": "UpdateConversationStateCommand",
+                    "target_type": "state",
+                    "target_id": "1",
+                    "status": "applied",
+                },
+                {
+                    "command_type": "ApplyPlanPatchCommand",
+                    "target_type": "session",
+                    "target_id": "60",
+                    "status": "applied",
+                },
+            ],
+            "guard_ok": True,
+            "proposal": {"type": "answer"},
+        },
+        scenario,
+    )
+
+    assert verdict.success is False
+    assert verdict.wrong_write_count == 1
+    assert "wrong_write" in verdict.failures
+
+
 def test_oracle_compare_detects_old_plan_dates_in_reply():
     scenario = scenario_by_name("current_plan")
     verdict = compare_run_to_oracle(
