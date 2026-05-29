@@ -146,7 +146,7 @@ def _run_provider_item(item: MatrixPlanItem, db_path: Path, client) -> MatrixRun
         provider=item.provider,
         repetition=item.repetition,
         success=not failures,
-        latency_ms=round((time.perf_counter() - start) * 1000),
+        latency_ms=round(max(time.perf_counter() - start - meter.retry_wait_s, 0.0) * 1000),
         tokens_in=meter.tokens_in,
         tokens_out=meter.tokens_out,
         failures=failures,

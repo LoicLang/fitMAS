@@ -3,9 +3,38 @@ from __future__ import annotations
 from dataclasses import dataclass
 import json
 import os
+import random
+import time
 from typing import Any
 
 from fitmas.runtime_v0.llm_clients.base import LLMResponse, ToolCall, ToolSchema
+
+
+_MAX_RETRIES = int(os.getenv("FITMAS_V0_LLM_MAX_RETRIES") or "6")
+_RETRY_BASE_DELAY = float(os.getenv("FITMAS_V0_LLM_RETRY_BASE_DELAY") or "2.0")
+_RETRY_MAX_DELAY = float(os.getenv("FITMAS_V0_LLM_RETRY_MAX_DELAY") or "60.0")
+_TRANSIENT_ERRORS: tuple[type[BaseException], ...] | None = None
+
+
+def _transient_errors() -> tuple[type[BaseException], ...]:
+    global _TRANSIENT_ERRORS
+    if _TRANSIENT_ERRORS is None:
+        from openai import APIConnectionError, APITimeoutError, InternalServerError, RateLimitError
+
+        _TRANSIENT_ERRORS = (RateLimitError, APITimeoutError, APIConnectionError, InternalServerError)
+    return _TRANSIENT_ERRORS
+
+
+def _retry_after_seconds(exc: Any) -> float:
+    response = getattr(exc, "response", None)
+    headers = getattr(response, "headers", None)
+    if not headers:
+        return 0.0
+    raw = headers.get("retry-after") or headers.get("Retry-After")
+    try:
+        return float(raw) if raw is not None else 0.0
+    except (TypeError, ValueError):
+        return 0.0
 
 
 @dataclass(frozen=True)
@@ -31,6 +60,11 @@ class MeteredLLMClient:
         self.calls = 0
         self.tokens_in = 0
         self.tokens_out = 0
+        self._retry_wait_baseline = float(getattr(client, "total_retry_wait_s", 0.0))
+
+    @property
+    def retry_wait_s(self) -> float:
+        return float(getattr(self.client, "total_retry_wait_s", 0.0)) - self._retry_wait_baseline
 
     def chat_with_tools(self, system: str, messages: list[dict[str, Any]], tools: list[ToolSchema]) -> LLMResponse:
         response = self.client.chat_with_tools(system, messages, tools)
@@ -83,13 +117,14 @@ def build_provider_client(name: str):
         raise ProviderConfigError(f"missing_env:{profile.api_key_env}")
     from openai import OpenAI
 
-    return OpenAICompatibleToolClient(profile, OpenAI(api_key=api_key, base_url=profile.base_url))
+    return OpenAICompatibleToolClient(profile, OpenAI(api_key=api_key, base_url=profile.base_url, max_retries=0))
 
 
 class OpenAICompatibleToolClient:
     def __init__(self, profile: ProviderProfile, client: Any):
         self.profile = profile
         self.client = client
+        self.total_retry_wait_s = 0.0
 
     def chat_with_tools(self, system: str, messages: list[dict[str, Any]], tools: list[ToolSchema]) -> LLMResponse:
         context, provider_messages = _provider_messages(messages)
@@ -105,7 +140,21 @@ class OpenAICompatibleToolClient:
             kwargs["tool_choice"] = "auto"
         if self.profile.reasoning_effort:
             kwargs["reasoning_effort"] = self.profile.reasoning_effort
-        return _openai_response(self.client.chat.completions.create(**kwargs))
+        return _openai_response(self._create(kwargs))
+
+    def _create(self, kwargs: dict[str, Any]) -> Any:
+        attempt = 0
+        while True:
+            try:
+                return self.client.chat.completions.create(**kwargs)
+            except _transient_errors() as exc:
+                attempt += 1
+                if attempt > _MAX_RETRIES:
+                    raise
+                backoff = min(_RETRY_BASE_DELAY * (2 ** (attempt - 1)), _RETRY_MAX_DELAY)
+                wait = max(backoff + random.uniform(0.0, backoff * 0.25), _retry_after_seconds(exc))
+                self.total_retry_wait_s += wait
+                time.sleep(wait)
 
 
 def _provider_messages(messages: list[dict[str, Any]]) -> tuple[str, list[dict[str, str]]]:
