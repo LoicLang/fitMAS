@@ -23,13 +23,17 @@ InputEvent -> Snapshot -> Agent -> Proposal -> Policy -> Executor
 -> Result -> Reply -> Guard -> Audit
 ```
 
-Preuve exportee :
+Preuve (verifiee offline le 29 mai 2026) :
 
-- `tests/runtime_v0`: verts au dernier run local connu ;
-- fake matrix : `11/11` apres ajout du pack produit proche ;
-- provider matrix 5x : `114/120` ;
+- `tests/runtime_v0` : 135 passed ;
+- fake matrix : `11/11` ;
 - danger metrics : `0 wrong_write`, `0 old_plan`,
-  `0 wrong_correction_target`, `0 claim_without_event`.
+  `0 wrong_correction_target`, `0 claim_without_event` ;
+- core : 3053 LOC (zone acceptable).
+
+Provider matrix : `114/120` est une ancienne run a 6 scenarios. La matrix
+compte 11 scenarios aujourd'hui. Export non committe, a rejouer pour un
+chiffre provider a jour.
 
 Le chantier actif n'est plus un shrink de l'ancien runtime historique.
 C'est la preparation d'un **Produit V0 dogfoodable** autour de

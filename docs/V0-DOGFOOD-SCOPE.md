@@ -118,12 +118,15 @@ cancel_followup
 
 ## Gates
 
-Etat de preuve actuel :
+Etat de preuve (verifie offline le 29 mai 2026) :
 
 - fake matrix : `11/11` ;
-- provider matrix 5x : `114/120` correctness ;
 - danger metrics : `0 wrong_write`, `0 old_plan`, `0 wrong_correction_target`,
   `0 claim_without_event`.
+
+Provider matrix : `114/120` est une ancienne run a 6 scenarios (4 x 6 x 5),
+non committe. La matrix compte 11 scenarios aujourd'hui, a rejouer pour un
+chiffre provider a jour.
 
 Gate dogfood Telegram :
 

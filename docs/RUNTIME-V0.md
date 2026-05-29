@@ -79,6 +79,9 @@ partial_yesterday
 undo_wrong_status
 ```
 
+`followup_planning_turn2` existe aussi comme tour de continuation, hors matrix
+par defaut (lancer via `--scenario followup_planning_turn2`).
+
 Commandes :
 
 ```bash
@@ -94,29 +97,32 @@ python3 scripts/v0_eval/run_matrix.py \
   --export-dir exports/runtime-v0/stability-providers-5x
 ```
 
-## Derniere Preuve Exportee
+## Derniere Preuve
 
-Source :
-
-```text
-exports/runtime-v0/stability-providers-5x/matrix-report-recomputed.md
-```
-
-Resultat :
+Verifie offline le 29 mai 2026 :
 
 ```text
-fake matrix: 11/11
-provider matrix: 114/120
-wrong_write: 0
-old_plan_date: 0
-wrong_correction_target: 0
-reply_claim_without_event: 0
-guard_repair_rate: 5.7%
-sanitized_fallback_rate: 0%
+tests/runtime_v0          : 135 passed
+fake matrix               : 11/11
+wrong_write               : 0
+old_plan_date             : 0
+wrong_correction_target   : 0
+reply_claim_without_event : 0
 ```
 
-Les echecs restants sont surtout des artifacts provider manquants ou replies
-hors contrat, pas des writes dangereux.
+Provider matrix : le chiffre historique `114/120` vient d'une run a
+6 scenarios (4 providers x 6 x 5 reps = 120). La matrix par defaut compte
+aujourd'hui 11 scenarios (220 runs en 5x). L'export
+`exports/runtime-v0/stability-providers-5x/` n'est pas committe. A rejouer
+pour un chiffre provider a jour :
+
+```bash
+python3 scripts/v0_eval/run_matrix.py --repetitions 5 \
+  --export-dir exports/runtime-v0/stability-providers-5x
+```
+
+Les echecs provider restants observes etaient surtout des artifacts manquants
+ou replies hors contrat, pas des writes dangereux.
 
 ## Evaluation
 
@@ -143,6 +149,8 @@ zone acceptable: 2500-3200 LOC
 > 3200 LOC: justification obligatoire
 > 4000 LOC: alerte architecture lourde
 ```
+
+Mesure 29 mai 2026 : 3053 LOC (zone acceptable, plus dans l'objectif sain).
 
 ## Sport Core V0
 

@@ -42,14 +42,20 @@ Ne pas ouvrir Phase B progression/prescription sans demande explicite.
 
 ## Preuve Runtime V0
 
-Dernier signal exporte :
+Verifie offline le 29 mai 2026 :
 
 ```text
-fake matrix: 11/11
-provider matrix 5x: 114/120
-danger metrics: 0 wrong_write, 0 old_plan, 0 wrong_correction_target,
-                0 claim_without_event
+tests/runtime_v0 : 135 passed
+fake matrix      : 11/11
+danger metrics   : 0 wrong_write, 0 old_plan, 0 wrong_correction_target,
+                   0 claim_without_event
+core             : 3053 LOC (zone acceptable 2500-3200)
 ```
+
+Provider matrix : le `114/120` historique vient d'une run a 6 scenarios
+(4 providers x 6 x 5 reps = 120). La matrix par defaut compte aujourd'hui
+11 scenarios (220 runs en 5x) et l'export n'est pas committe. A rejouer
+avant de citer un chiffre provider a jour.
 
 Providers cibles :
 
