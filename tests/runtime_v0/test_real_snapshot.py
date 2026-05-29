@@ -37,21 +37,27 @@ def _seed_real_db(path) -> None:
     Base.metadata.create_all(engine)
     try:
         with Session(engine) as session:
-            # Plan: a French "Protection" key session tomorrow + a "Normal"
-            # secondary session in 3 days, both inside the current-plan window.
+            # Plan: four real-shaped sessions inside the current-plan window, one
+            # per importance tier under the structured mapping:
+            #   "Séance clé" label -> key (label wins)
+            #   stable + load 3 (long run, no "clé") -> key (structured rule)
+            #   flexible + load 2 -> secondary
+            #   flexible + load 1 (recovery) -> optional
             session.add(
                 ScheduledSession(
                     id=60,
                     user_id=USER_ID,
-                    day="friday",
+                    day="thursday",
                     label="J+1",
                     scheduled_date=AS_OF + timedelta(days=1),
                     sport_type="running",
-                    session_title="Footing récup",
-                    session_goal="Récupération active",
-                    duration_min=45,
-                    intensity="easy",
-                    priority="Protection",
+                    session_title="Fractionné côtes",
+                    session_goal="Séance clé trail",
+                    duration_min=55,
+                    intensity="hard",
+                    load_score=3,
+                    priority="Séance clé",
+                    flexibility="stable",
                     completion_status="planned",
                 )
             )
@@ -60,14 +66,52 @@ def _seed_real_db(path) -> None:
                     id=61,
                     user_id=USER_ID,
                     day="sunday",
+                    label="J+2",
+                    scheduled_date=AS_OF + timedelta(days=2),
+                    sport_type="running",
+                    session_title="Sortie longue trail",
+                    session_goal="Volume en terrain trail",
+                    duration_min=85,
+                    intensity="moderate",
+                    load_score=3,
+                    priority="Sortie longue",
+                    flexibility="stable",
+                    completion_status="planned",
+                )
+            )
+            session.add(
+                ScheduledSession(
+                    id=62,
+                    user_id=USER_ID,
+                    day="monday",
                     label="J+3",
                     scheduled_date=AS_OF + timedelta(days=3),
                     sport_type="cycling",
-                    session_title="Sortie vélo",
-                    session_goal="Endurance",
-                    duration_min=90,
-                    intensity="moderate",
-                    priority="Normal",
+                    session_title="Sortie vélo endurance",
+                    session_goal="Volume aérobie sans forcer",
+                    duration_min=60,
+                    intensity="easy",
+                    load_score=2,
+                    priority="Socle aérobie",
+                    flexibility="flexible",
+                    completion_status="planned",
+                )
+            )
+            session.add(
+                ScheduledSession(
+                    id=63,
+                    user_id=USER_ID,
+                    day="friday",
+                    label="J+4",
+                    scheduled_date=AS_OF + timedelta(days=4),
+                    sport_type="swimming",
+                    session_title="Natation technique",
+                    session_goal="Récupération active",
+                    duration_min=45,
+                    intensity="easy",
+                    load_score=1,
+                    priority="Récup active",
+                    flexibility="flexible",
                     completion_status="planned",
                 )
             )
@@ -76,7 +120,7 @@ def _seed_real_db(path) -> None:
                 ScheduledSession(
                     id=70,
                     user_id=OTHER_USER_ID,
-                    day="friday",
+                    day="thursday",
                     label="J+1",
                     scheduled_date=AS_OF + timedelta(days=1),
                     sport_type="running",
@@ -84,7 +128,9 @@ def _seed_real_db(path) -> None:
                     session_goal="Autre user",
                     duration_min=60,
                     intensity="hard",
-                    priority="Normal",
+                    load_score=3,
+                    priority="Séance clé",
+                    flexibility="stable",
                     completion_status="planned",
                 )
             )
@@ -143,18 +189,19 @@ def test_materialize_v0_db_reflects_real_app_state(tmp_path):
 
     snapshot = SnapshotBuilder(v0_db).build(USER_ID, AS_OF)
 
-    # Plan: both of this user's sessions land in the current-plan window, ordered
-    # by date; the other user's session never leaks in.
-    assert [s.id for s in snapshot.current_plan] == [60, 61]
+    # Plan: all four of this user's sessions land in the current-plan window,
+    # ordered by date; the other user's session never leaks in.
+    assert [s.id for s in snapshot.current_plan] == [60, 61, 62, 63]
     key_session = snapshot.current_plan[0]
     assert key_session.sport == "running"
-    assert key_session.title == "Footing récup"
-    assert key_session.duration_min == 45
-    assert key_session.intensity_label == "easy"
-    assert key_session.priority == "key"  # "Protection" -> key tier
+    assert key_session.title == "Fractionné côtes"
+    assert key_session.duration_min == 55
+    assert key_session.intensity_label == "hard"
     assert key_session.status == "planned"
-    # "Normal" has no clean V0 tier and falls back to secondary (the documented heuristic).
-    assert snapshot.current_plan[1].priority == "secondary"
+    # Tier comes from the structured mapping, not the free-text label: "Séance clé"
+    # -> key (label), stable+load3 long run -> key (structured), flexible+load2 ->
+    # secondary, flexible+load1 recovery -> optional.
+    assert [s.priority for s in snapshot.current_plan] == ["key", "key", "secondary", "optional"]
 
     # Activity: the Strava run is in the recent window, meters converted to km.
     assert [a.id for a in snapshot.recent_activities] == [7]

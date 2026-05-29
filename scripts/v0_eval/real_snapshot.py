@@ -16,10 +16,13 @@ Deferred (documented follow-ups, kept empty for now):
   - command history (plan_mutation_events -> v0_command_events): last_execution
     /last_plan event context, needed for execution-correction style turns.
 
-Vocab note: the real app's `priority` is a free French label (Normal, Ajustable,
-Protection, Leger, ...) that does not cleanly map to V0's key/secondary/optional
-importance tier. `_v0_priority` is a documented heuristic, not ground truth, and
-is the main fairness knob to revisit before scoring key-session scenarios.
+Importance mapping (the agreed fairness knob): the real app's `priority` is a
+free-text *theme* label (Socle aerobie, Sortie longue, Seance cle, Recup active,
+...), not an importance tier, so `_v0_priority` reads the structured fields
+instead. An explicit "cle" (key) label always wins; otherwise a stable, high-load
+session is the week's anchor (key) and a flexible, low-load session is droppable
+(optional); everything else is secondary. This keeps key-session comparisons fair
+without trusting the free-text label.
 """
 
 from __future__ import annotations
@@ -42,8 +45,11 @@ from fitmas.runtime_v0.db import connect, reset_db
 _VALID_FACT_KINDS = frozenset({"preference", "health", "availability", "constraint", "goal"})
 _VALID_ACTIVITY_SOURCES = frozenset({"strava", "manual"})
 
-_PRIORITY_KEY = frozenset({"key", "high", "protection", "reprise cadrée", "reprise cadree"})
-_PRIORITY_OPTIONAL = frozenset({"optional", "low", "ajustable", "leger", "léger"})
+# Importance is read from flexibility + load_score (see module docstring). These
+# thresholds match the app's 1-3 load scale: a stable session at the top of the
+# scale anchors the week; a flexible session at the bottom is droppable.
+_KEY_LOAD_FLOOR = 3
+_OPTIONAL_LOAD_CEILING = 1
 
 _STATUS_MAP = {
     "done": "done",
@@ -108,7 +114,7 @@ def _insert_session(connection, row: ScheduledSession) -> None:
             row.session_title or row.label or "",
             int(row.duration_min or 0),
             row.intensity or "easy",
-            _v0_priority(row.priority),
+            _v0_priority(row.priority, row.flexibility, row.load_score),
             _v0_status(row.completion_status),
             _datetime_text(row.updated_at),
         ),
@@ -163,11 +169,21 @@ def _fact_is_active(fact: UserFact, as_of: datetime) -> bool:
     return True
 
 
-def _v0_priority(real_priority: str | None) -> str:
-    value = (real_priority or "").strip().lower()
-    if value in _PRIORITY_KEY:
+def _v0_priority(priority: str | None, flexibility: str | None, load_score: int | None) -> str:
+    """Map a real session to V0's key/secondary/optional importance tier.
+
+    The free-text `priority` label is only trusted for an explicit "cle" (key)
+    marker; the tier otherwise comes from the structured fields. See the module
+    docstring for why this is the agreed fairness mapping.
+    """
+    label = (priority or "").strip().lower()
+    if "clé" in label or "cle" in label.split():
         return "key"
-    if value in _PRIORITY_OPTIONAL:
+    movability = (flexibility or "stable").strip().lower()
+    load = int(load_score or 0)
+    if movability == "stable" and load >= _KEY_LOAD_FLOOR:
+        return "key"
+    if movability == "flexible" and load <= _OPTIONAL_LOAD_CEILING:
         return "optional"
     return "secondary"
 
