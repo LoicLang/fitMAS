@@ -120,6 +120,7 @@ cancel_followup
 
 Etat de preuve (verifie offline le 29 mai 2026) :
 
+- tests runtime + docs : `143 passed` ;
 - fake matrix : `11/11` ;
 - danger metrics : `0 wrong_write`, `0 old_plan`, `0 wrong_correction_target`,
   `0 claim_without_event`.
@@ -128,6 +129,10 @@ Provider matrix : `114/120` est une ancienne run a 6 scenarios (4 x 6 x 5),
 non committe. La matrix compte 11 scenarios et 3 providers cibles aujourd'hui,
 a rejouer pour un chiffre provider a jour. Gemini reste disponible en opt-in
 manuel, mais n'est plus lance par defaut tant que le credit API est absent.
+
+Les spikes sur tours reels doivent indiquer leur source de snapshot. Seuls les
+runs `conversation_context` sont assez fideles pour juger un provider. Les runs
+`current_state` restent des sondes de debug, car la DB produit est mutable.
 
 Gate dogfood Telegram :
 

@@ -56,7 +56,8 @@ Ne pas supprimer l'ancien pipeline avant preuve sur adapters.
 Ordre recommande :
 
 1. Relancer une provider matrix ciblee sur les 11 scenarios.
-2. Construire un `WorldSnapshot` depuis une copie DB actuelle.
+2. Construire un `WorldSnapshot` depuis une copie DB actuelle, en distinguant
+   replay fidele (`conversation_context`) et debug approximatif (`current_state`).
 3. Construire un executor adapter vers les writers existants.
 4. Brancher Telegram/API sous flag et allowlist user.
 

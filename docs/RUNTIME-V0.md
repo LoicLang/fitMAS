@@ -102,7 +102,7 @@ python3 scripts/v0_eval/run_matrix.py \
 Verifie offline le 29 mai 2026 :
 
 ```text
-tests/runtime_v0          : 140 passed
+tests/runtime_v0 + docs   : 143 passed
 fake matrix               : 11/11
 wrong_write               : 0
 old_plan_date             : 0
@@ -125,6 +125,20 @@ python3 scripts/v0_eval/run_matrix.py --repetitions 5 \
 
 Les echecs provider restants observes etaient surtout des artifacts manquants
 ou replies hors contrat, pas des writes dangereux.
+
+Real-turn spike : `scripts/v0_eval/spike_real_turn.py` reconstruit maintenant
+les sessions depuis les lignes de grounding capturees dans
+`conversation_turns.context_json` quand elles existent. Cela evite de juger un
+provider sur `scheduled_sessions` deja mute apres le tour. Les facts, sessions
+et activites crees apres `as_of` sont exclus. Si aucun grounding capture n'est
+disponible, le spike retombe sur `current_state` et ce resultat ne doit pas
+servir a blamer un provider.
+
+Cas #151 (`Echange aujourd'hui et demain`) : avec le contexte capture, DeepSeek,
+Grok et Mistral produisent tous un `plan_patch`. L'ancien diagnostic
+`planning_date_not_resolved` venait du banc de replay, pas des modeles. Le point
+restant est une difference de policy : V0 auto-commit le swap simple, alors que
+l'app legacy demandait confirmation.
 
 ## Evaluation
 

@@ -29,7 +29,11 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import date, datetime, timezone
+import json
 from pathlib import Path
+import re
+import sqlite3
+from typing import Literal
 
 from sqlalchemy import create_engine, select
 from sqlalchemy.orm import Session
@@ -60,6 +64,37 @@ _STATUS_MAP = {
     "adapted": "planned",
 }
 
+_APP_GROUNDING_SESSION_RE = re.compile(
+    r"^- (?P<date>\d{4}-\d{2}-\d{2}) \([^)]+\) "
+    r"id=(?P<id>\d+) (?P<sport>\S+) "
+    r'"(?P<title>.*?)"'
+    r"(?: (?P<duration>\d+)min)? "
+    r"intensity=(?P<intensity>\S+) "
+    r"\[(?P<status>[^\]]+)\] "
+    r"slot=(?P<slot>\S+)"
+)
+
+
+@dataclass(frozen=True)
+class MaterializedV0Snapshot:
+    path: Path
+    source: Literal["conversation_context", "current_state"]
+    session_count: int
+
+
+@dataclass(frozen=True)
+class CapturedSession:
+    id: int
+    user_id: int
+    date: str
+    sport: str
+    title: str
+    duration_min: int
+    intensity_label: str
+    priority: str
+    status: str
+    updated_at: str | None = None
+
 
 def materialize_v0_db(
     real_db_path: Path,
@@ -78,8 +113,16 @@ def materialize_v0_db(
     engine = create_engine(f"sqlite:///{real_db_path}")
     try:
         with Session(engine) as session:
-            sessions = list(session.scalars(select(ScheduledSession).where(ScheduledSession.user_id == user_id)))
-            activities = list(session.scalars(select(Activity).where(Activity.user_id == user_id)))
+            sessions = [
+                session_row
+                for session_row in session.scalars(select(ScheduledSession).where(ScheduledSession.user_id == user_id))
+                if _row_exists_at(getattr(session_row, "created_at", None), as_of)
+            ]
+            activities = [
+                activity
+                for activity in session.scalars(select(Activity).where(Activity.user_id == user_id))
+                if _activity_exists_at(activity, as_of)
+            ]
             facts = [
                 fact
                 for fact in session.scalars(select(UserFact).where(UserFact.user_id == user_id))
@@ -97,6 +140,35 @@ def materialize_v0_db(
             _insert_fact(connection, fact)
         connection.commit()
     return out_db_path
+
+
+def materialize_v0_db_for_turn(
+    real_db_path: Path,
+    turn_id: int,
+    out_db_path: Path,
+) -> MaterializedV0Snapshot:
+    """Materialize the V0 DB for a specific real conversation turn.
+
+    Real `scheduled_sessions` is mutable. For app-vs-V0 replay, provider
+    judgment must use the plan that was in the app prompt at the turn, not the
+    table after later confirmations. When the turn stores app grounding lines,
+    this function uses those machine-generated plan rows as the session source.
+    If no captured plan is available, it falls back to the current DB snapshot
+    and labels the source accordingly.
+    """
+    turn = _load_turn_context(real_db_path, turn_id)
+    as_of = _parse_datetime(turn["created_at"])
+    path = materialize_v0_db(real_db_path, int(turn["user_id"]), as_of, out_db_path)
+
+    captured = _captured_sessions_from_context(
+        _loads_json_object(turn["context_json"]),
+        user_id=int(turn["user_id"]),
+    )
+    if not captured:
+        return MaterializedV0Snapshot(path=path, source="current_state", session_count=0)
+
+    count = _replace_sessions_with_captured_context(path, int(turn["user_id"]), captured)
+    return MaterializedV0Snapshot(path=path, source="conversation_context", session_count=count)
 
 
 def _insert_session(connection, row: ScheduledSession) -> None:
@@ -118,6 +190,123 @@ def _insert_session(connection, row: ScheduledSession) -> None:
             _v0_status(row.completion_status),
             _datetime_text(row.updated_at),
         ),
+    )
+
+
+def _insert_captured_session(connection, row: CapturedSession) -> None:
+    connection.execute(
+        """
+        insert into v0_scheduled_sessions
+            (id, user_id, date, sport, title, duration_min, intensity_label, priority, status, updated_at)
+        values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        (
+            row.id,
+            row.user_id,
+            row.date,
+            row.sport,
+            row.title,
+            row.duration_min,
+            row.intensity_label,
+            row.priority,
+            row.status,
+            row.updated_at or f"{row.date}T00:00:00+00:00",
+        ),
+    )
+
+
+def _load_turn_context(real_db_path: Path, turn_id: int) -> dict:
+    connection = sqlite3.connect(real_db_path)
+    connection.row_factory = sqlite3.Row
+    try:
+        row = connection.execute(
+            """
+            select id, user_id, created_at, context_json
+            from conversation_turns
+            where id = ?
+            """,
+            (turn_id,),
+        ).fetchone()
+    finally:
+        connection.close()
+    if row is None:
+        raise LookupError(f"conversation_turn_not_found:{turn_id}")
+    return dict(row)
+
+
+def _replace_sessions_with_captured_context(
+    db_path: Path,
+    user_id: int,
+    captured: tuple[CapturedSession, ...],
+) -> int:
+    with connect(db_path) as connection:
+        defaults = {
+            int(row["id"]): {
+                "updated_at": row["updated_at"],
+            }
+            for row in connection.execute(
+                "select id, updated_at from v0_scheduled_sessions where user_id = ?",
+                (user_id,),
+            ).fetchall()
+        }
+        connection.execute("delete from v0_scheduled_sessions where user_id = ?", (user_id,))
+        for row in captured:
+            default = defaults.get(row.id, {})
+            _insert_captured_session(
+                connection,
+                CapturedSession(
+                    id=row.id,
+                    user_id=row.user_id,
+                    date=row.date,
+                    sport=row.sport,
+                    title=row.title,
+                    duration_min=row.duration_min,
+                    intensity_label=row.intensity_label,
+                    priority=row.priority,
+                    status=row.status,
+                    updated_at=default.get("updated_at") or row.updated_at,
+                ),
+            )
+        connection.commit()
+    return len(captured)
+
+
+def _captured_sessions_from_context(context: dict, user_id: int) -> tuple[CapturedSession, ...]:
+    grounding = context.get("grounding")
+    if not isinstance(grounding, dict):
+        return ()
+    lines = grounding.get("lines")
+    if not isinstance(lines, list):
+        return ()
+    rows: list[CapturedSession] = []
+    for line in lines:
+        if not isinstance(line, str):
+            continue
+        parsed = _captured_session_from_grounding_line(line, user_id)
+        if parsed is not None:
+            rows.append(parsed)
+    rows.sort(key=lambda row: (row.date, row.id))
+    return tuple(rows)
+
+
+def _captured_session_from_grounding_line(line: str, user_id: int) -> CapturedSession | None:
+    # This parses app-generated grounding rows, never free user text. It is an
+    # eval adapter so the benchmark can replay the exact world the app prompted.
+    match = _APP_GROUNDING_SESSION_RE.match(line.strip())
+    if match is None:
+        return None
+    values = match.groupdict()
+    slot = values["slot"]
+    return CapturedSession(
+        id=int(values["id"]),
+        user_id=user_id,
+        date=values["date"],
+        sport=_v0_sport(values["sport"]),
+        title=values["title"],
+        duration_min=int(values["duration"] or 0),
+        intensity_label=values["intensity"],
+        priority=_priority_from_slot(slot),
+        status=_v0_status(values["status"]),
     )
 
 
@@ -159,14 +348,36 @@ def _insert_fact(connection, row: UserFact) -> None:
 
 
 def _fact_is_active(fact: UserFact, as_of: datetime) -> bool:
-    if not bool(fact.active):
+    if not _row_exists_at(fact.created_at, as_of):
         return False
-    if (fact.status or "open").strip().lower() == "resolved":
+    valid_from = getattr(fact, "valid_from", None)
+    if valid_from is not None and _ensure_tz(valid_from) > as_of:
+        return False
+    valid_until = getattr(fact, "valid_until", None)
+    if valid_until is not None and _ensure_tz(valid_until) <= as_of:
         return False
     expires_at = fact.expires_at
     if expires_at is not None and _ensure_tz(expires_at) <= as_of:
         return False
+    resolved_at = getattr(fact, "resolved_at", None)
+    if resolved_at is not None:
+        return _ensure_tz(resolved_at) > as_of
+    if not bool(fact.active):
+        return False
+    if (fact.status or "open").strip().lower() == "resolved":
+        return False
     return True
+
+
+def _activity_exists_at(activity: Activity, as_of: datetime) -> bool:
+    reference = activity.started_at or activity.created_at
+    return _row_exists_at(reference, as_of)
+
+
+def _row_exists_at(created_at: datetime | None, as_of: datetime) -> bool:
+    if created_at is None:
+        return True
+    return _ensure_tz(created_at) <= as_of
 
 
 def _v0_priority(priority: str | None, flexibility: str | None, load_score: int | None) -> str:
@@ -192,6 +403,19 @@ def _v0_status(real_status: str | None) -> str:
     return _STATUS_MAP.get((real_status or "planned").strip().lower(), "planned")
 
 
+def _v0_sport(value: str | None) -> str:
+    sport = (value or "running").strip().lower()
+    aliases = {"run": "running", "bike": "cycling", "velo": "cycling", "vélo": "cycling"}
+    return aliases.get(sport, sport)
+
+
+def _priority_from_slot(slot: str | None) -> str:
+    value = (slot or "").strip().lower()
+    if value == "free_flexible":
+        return "optional"
+    return "secondary"
+
+
 def _v0_fact_kind(category: str | None) -> str:
     value = (category or "").strip().lower()
     return value if value in _VALID_FACT_KINDS else "constraint"
@@ -215,3 +439,22 @@ def _ensure_tz(value: datetime) -> datetime:
     if value.tzinfo is None:
         return value.replace(tzinfo=timezone.utc)
     return value
+
+
+def _parse_datetime(value: str | datetime) -> datetime:
+    if isinstance(value, datetime):
+        return _ensure_tz(value)
+    normalized = str(value).replace("Z", "+00:00")
+    if "T" not in normalized and " " in normalized:
+        normalized = normalized.replace(" ", "T", 1)
+    return _ensure_tz(datetime.fromisoformat(normalized))
+
+
+def _loads_json_object(raw: str | None) -> dict:
+    if not raw:
+        return {}
+    try:
+        value = json.loads(raw)
+    except json.JSONDecodeError:
+        return {}
+    return value if isinstance(value, dict) else {}

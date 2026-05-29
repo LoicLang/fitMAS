@@ -1,18 +1,17 @@
 """Spike: replay a real conversation turn through Runtime V0 and compare to the app.
 
 Reads one (or more) real `conversation_turns` from a snapshot of the production
-FitMAS DB, materializes an isolated V0 world as-of the turn, runs V0 on the real
+FitMAS DB, materializes an isolated V0 world for the turn, runs V0 on the real
 `user_message` with a real provider, and prints V0's decision (proposal / policy
 / committed commands / reply) side-by-side with what the app actually did
 (`assistant_message` + `mutation_applied` / `pending_confirmation` flags).
 
 This is a feasibility spike for the app-vs-V0 comparison, NOT the full harness.
 
-Fidelity caveat: the world is snapshotted from the *current* mutable
-`scheduled_sessions` table with `as_of = turn.created_at`; sessions created or
-re-mutated after the turn are not un-applied, so the plan V0 sees approximates
-(does not exactly reproduce) the plan at turn time. Faithful as-of reconstruction
-is the next step if the spike looks promising.
+Fidelity rule: when the turn stores app grounding rows, the world is rebuilt
+from that captured prompt context so later mutable `scheduled_sessions` changes
+do not get blamed on the provider. If no captured plan rows exist, the harness
+falls back to the current DB snapshot and labels the output as lower-fidelity.
 
 Doctrine: this harness never branches on the free `user_message` text. It passes
 the message verbatim to V0 and reads only V0's *structured* output to summarize
@@ -48,7 +47,7 @@ from scripts.v0_eval.provider_clients import (  # noqa: E402
     ProviderConfigError,
     build_provider_client,
 )
-from scripts.v0_eval.real_snapshot import materialize_v0_db  # noqa: E402
+from scripts.v0_eval.real_snapshot import materialize_v0_db_for_turn  # noqa: E402
 
 
 def _parse_dt(value: str) -> datetime:
@@ -103,7 +102,7 @@ def _run_one(real_db: Path, turn_id: int, provider: str, client, model: str, out
     user_id = int(turn["user_id"])
 
     shadow_db = out_dir / f"spike-turn-{turn_id}.db"
-    materialize_v0_db(real_db, user_id, as_of, shadow_db)
+    materialized = materialize_v0_db_for_turn(real_db, turn_id, shadow_db)
 
     # Show the world V0 actually sees, so fidelity is auditable.
     snapshot = SnapshotBuilder(shadow_db).build(user_id, as_of)
@@ -132,7 +131,7 @@ def _run_one(real_db: Path, turn_id: int, provider: str, client, model: str, out
     print(f"TURN #{turn_id}  |  {as_of.isoformat()}  |  user {user_id}  |  {provider}/{model}  |  max_steps={max_steps}")
     print("=" * 80)
     print(f"USER: {message}")
-    print(f"\nWORLD V0 SAW (as-of, current-state approximation): {len(snapshot.current_plan)} upcoming sessions")
+    print(f"\nWORLD V0 SAW ({materialized.source}, {materialized.session_count} captured sessions): {len(snapshot.current_plan)} upcoming sessions")
     print(f"  {plan_preview or '(none in current-plan window)'}")
     if snapshot.active_facts:
         print("  facts: " + " ; ".join(fact.text[:60] for fact in snapshot.active_facts[:4]))

@@ -10,6 +10,7 @@ normalization (priority tier, status, fact kind, meters -> km).
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
+import json
 
 import pytest
 from sqlalchemy import create_engine
@@ -18,12 +19,13 @@ from sqlalchemy.orm import Session
 # Importing the orm package registers every model on Base before create_all.
 from fitmas.core import orm  # noqa: F401
 from fitmas.core.db import Base
+from fitmas.core.orm.coaching import ConversationTurnRecord
 from fitmas.core.orm.execution import Activity
 from fitmas.core.orm.memory import UserFact
 from fitmas.core.orm.planning import ScheduledSession
 from fitmas.runtime_v0.snapshot import SnapshotBuilder
 
-from scripts.v0_eval.real_snapshot import materialize_v0_db
+from scripts.v0_eval.real_snapshot import materialize_v0_db, materialize_v0_db_for_turn
 
 USER_ID = 42
 OTHER_USER_ID = 99
@@ -59,6 +61,7 @@ def _seed_real_db(path) -> None:
                     priority="Séance clé",
                     flexibility="stable",
                     completion_status="planned",
+                    created_at=AS_OF - timedelta(days=7),
                 )
             )
             session.add(
@@ -77,6 +80,7 @@ def _seed_real_db(path) -> None:
                     priority="Sortie longue",
                     flexibility="stable",
                     completion_status="planned",
+                    created_at=AS_OF - timedelta(days=7),
                 )
             )
             session.add(
@@ -95,6 +99,7 @@ def _seed_real_db(path) -> None:
                     priority="Socle aérobie",
                     flexibility="flexible",
                     completion_status="planned",
+                    created_at=AS_OF - timedelta(days=7),
                 )
             )
             session.add(
@@ -113,6 +118,27 @@ def _seed_real_db(path) -> None:
                     priority="Récup active",
                     flexibility="flexible",
                     completion_status="planned",
+                    created_at=AS_OF - timedelta(days=7),
+                )
+            )
+            # A future-created session must not leak into an as-of replay.
+            session.add(
+                ScheduledSession(
+                    id=64,
+                    user_id=USER_ID,
+                    day="tuesday",
+                    label="future",
+                    scheduled_date=AS_OF + timedelta(days=5),
+                    sport_type="running",
+                    session_title="Future session",
+                    session_goal="Should not exist yet",
+                    duration_min=30,
+                    intensity="easy",
+                    load_score=1,
+                    priority="Récup active",
+                    flexibility="flexible",
+                    completion_status="planned",
+                    created_at=AS_OF + timedelta(minutes=1),
                 )
             )
             # A session belonging to another user must never leak in.
@@ -132,6 +158,7 @@ def _seed_real_db(path) -> None:
                     priority="Séance clé",
                     flexibility="stable",
                     completion_status="planned",
+                    created_at=AS_OF - timedelta(days=7),
                 )
             )
 
@@ -149,6 +176,17 @@ def _seed_real_db(path) -> None:
                     started_at=AS_OF - timedelta(days=1),
                 )
             )
+            session.add(
+                Activity(
+                    id=8,
+                    user_id=USER_ID,
+                    source="manual",
+                    sport_type="running",
+                    title="Future same-day activity",
+                    duration_min=20,
+                    started_at=AS_OF + timedelta(minutes=10),
+                )
+            )
 
             # Facts: one active health fact survives; an inactive one is dropped.
             session.add(
@@ -161,6 +199,20 @@ def _seed_real_db(path) -> None:
                     confidence=0.9,
                     active=True,
                     status="open",
+                    created_at=AS_OF - timedelta(days=1),
+                )
+            )
+            session.add(
+                UserFact(
+                    id=5,
+                    user_id=USER_ID,
+                    category="health",
+                    key="future_fatigue",
+                    value="Fatigue déclarée après le tour",
+                    confidence=0.9,
+                    active=True,
+                    status="open",
+                    created_at=AS_OF + timedelta(minutes=10),
                 )
             )
             session.add(
@@ -172,6 +224,7 @@ def _seed_real_db(path) -> None:
                     value="préférence obsolète",
                     active=False,
                     status="open",
+                    created_at=AS_OF - timedelta(days=1),
                 )
             )
             session.commit()
@@ -218,3 +271,96 @@ def test_materialize_v0_db_reflects_real_app_state(tmp_path):
     assert fact.kind == "health"
     assert fact.text == "Douleur genou droit en descente"
     assert fact.confidence == pytest.approx(0.9)
+
+
+def test_materialize_v0_db_for_turn_uses_captured_app_context_over_current_mutable_plan(tmp_path):
+    real_db = tmp_path / "real.db"
+    v0_db = tmp_path / "v0.db"
+    engine = create_engine(f"sqlite:///{real_db}")
+    Base.metadata.create_all(engine)
+    try:
+        with Session(engine) as session:
+            # Current mutable state after a later confirmation: this is NOT what
+            # the coach saw at turn #151 time and must not drive provider judgment.
+            session.add(
+                ScheduledSession(
+                    id=67,
+                    user_id=USER_ID,
+                    day="monday",
+                    label="J+0",
+                    scheduled_date=datetime(2026, 5, 25, 5, 50, tzinfo=timezone.utc),
+                    sport_type="strength",
+                    session_title="Mobilite facile",
+                    session_goal="Garder le mouvement",
+                    duration_min=36,
+                    intensity="easy",
+                    load_score=1,
+                    priority="Recup active",
+                    flexibility="flexible",
+                    completion_status="planned",
+                )
+            )
+            session.add(
+                ScheduledSession(
+                    id=68,
+                    user_id=USER_ID,
+                    day="tuesday",
+                    label="J+1",
+                    scheduled_date=datetime(2026, 5, 26, 5, 50, tzinfo=timezone.utc),
+                    sport_type="running",
+                    session_title="Footing endurance 40min zone 1 - version facile",
+                    session_goal="Endurance facile",
+                    duration_min=40,
+                    intensity="easy",
+                    load_score=2,
+                    priority="Socle aérobie",
+                    flexibility="stable",
+                    completion_status="done",
+                )
+            )
+            session.add(
+                ConversationTurnRecord(
+                    id=151,
+                    user_id=USER_ID,
+                    user_message="Échange aujourd’hui et demain s’il te plaît",
+                    assistant_message="Tu confirmes ?",
+                    response_mode="plan_adaptation_pending_confirmation",
+                    mutation_type="plan_change",
+                    mutation_applied=False,
+                    pending_confirmation=True,
+                    pending_confirmation_id=13,
+                    context_json=json.dumps(
+                        {
+                            "grounding": {
+                                "lines": [
+                                    "LocalDate: 2026-05-25 (lundi) timezone=Europe/Paris",
+                                    "PlanWindow:",
+                                    '- 2026-05-25 (lundi) id=67 running "Footing endurance 40min zone 1 - version facile" 40min intensity=easy [planned] slot=training',
+                                    '- 2026-05-26 (mardi) id=68 strength "Mobilite facile" 36min intensity=easy [planned] slot=free_flexible',
+                                ],
+                            },
+                        },
+                        ensure_ascii=False,
+                    ),
+                    decision_json="{}",
+                    memory_writes_json="[]",
+                    created_at=datetime(2026, 5, 25, 5, 50, tzinfo=timezone.utc),
+                )
+            )
+            session.commit()
+    finally:
+        engine.dispose()
+
+    result = materialize_v0_db_for_turn(real_db, 151, v0_db)
+
+    assert result.source == "conversation_context"
+    assert result.session_count == 2
+
+    snapshot = SnapshotBuilder(v0_db).build(USER_ID, datetime(2026, 5, 25, 5, 50, tzinfo=timezone.utc))
+    assert [
+        (s.id, s.date.isoformat(), s.sport, s.title, s.duration_min, s.priority, s.status)
+        for s in snapshot.current_plan
+    ] == [
+        (67, "2026-05-25", "running", "Footing endurance 40min zone 1 - version facile", 40, "secondary", "planned"),
+        (68, "2026-05-26", "strength", "Mobilite facile", 36, "optional", "planned"),
+    ]
