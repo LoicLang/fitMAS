@@ -95,8 +95,25 @@ def get_active_facts(ctx: ToolContext) -> dict[str, Any]:
     _record(ctx, name, True)
     return {"facts": [_fact_to_dict(fact) for fact in ctx.snapshot.active_facts]}
 
-def resolve_date_reference(ctx: ToolContext, weekday: str, direction: str = "future") -> dict[str, Any]:
+def resolve_date_reference(
+    ctx: ToolContext,
+    weekday: str | None = None,
+    direction: str = "future",
+    relative_day: str | None = None,
+) -> dict[str, Any]:
     name = "resolve_date_reference"
+    if relative_day is not None:
+        if weekday is not None or relative_day not in {"today", "tomorrow"}:
+            _record(ctx, name, False)
+            raise ValueError("unsupported_date_reference")
+        offset = 0 if relative_day == "today" else 1
+        target = ctx.snapshot.today + timedelta(days=offset)
+        _record(ctx, name, True)
+        return {
+            "base_date": ctx.snapshot.today.isoformat(),
+            "relative_day": relative_day,
+            "date": target.isoformat(),
+        }
     weekdays = {"monday": 0, "tuesday": 1, "wednesday": 2, "thursday": 3, "friday": 4, "saturday": 5, "sunday": 6}
     if weekday not in weekdays or direction != "future":
         _record(ctx, name, False)

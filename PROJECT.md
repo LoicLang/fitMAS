@@ -45,7 +45,7 @@ Ne pas ouvrir Phase B progression/prescription sans demande explicite.
 Verifie offline le 29 mai 2026 :
 
 ```text
-tests/runtime_v0 : 135 passed
+tests/runtime_v0 : 140 passed
 fake matrix      : 11/11
 danger metrics   : 0 wrong_write, 0 old_plan, 0 wrong_correction_target,
                    0 claim_without_event
@@ -54,7 +54,7 @@ core             : 3053 LOC (zone acceptable 2500-3200)
 
 Provider matrix : le `114/120` historique vient d'une run a 6 scenarios
 (4 providers x 6 x 5 reps = 120). La matrix par defaut compte aujourd'hui
-11 scenarios (220 runs en 5x) et l'export n'est pas committe. A rejouer
+11 scenarios x 3 providers cibles (165 runs en 5x) et l'export n'est pas committe. A rejouer
 avant de citer un chiffre provider a jour.
 
 Providers cibles :
@@ -62,11 +62,11 @@ Providers cibles :
 ```text
 DeepSeek
 Mistral
-Gemini
 Grok
 ```
 
-Pas d'autre provider cible dans la matrice V0 actuelle.
+Gemini reste disponible en opt-in manuel, mais n'est plus dans la matrix par
+defaut tant que le credit API est absent.
 
 ## Architecture De Travail
 

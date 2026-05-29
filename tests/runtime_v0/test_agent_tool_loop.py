@@ -391,6 +391,58 @@ def test_move_clarification_with_target_date_requires_date_resolution_tool(tmp_p
     assert client.requests[1]["messages"][-1]["tool_name"] == "runtime_contract"
 
 
+def test_move_clarification_can_anchor_to_typed_relative_day(tmp_path):
+    event = _event("Échange aujourd'hui et demain.")
+    ctx = _context(tmp_path, event)
+    client = FakeLLMClient(
+        [
+            LLMResponse(
+                tool_calls=(
+                    ToolCall(
+                        name="ask_clarification",
+                        args={
+                            "question": "Quelle séance veux-tu déplacer ?",
+                            "unresolved_intent": {
+                                "type": "move_session",
+                                "target_date": "2026-05-23",
+                                "missing": ["source_ref"],
+                            },
+                        },
+                    ),
+                )
+            ),
+            LLMResponse(tool_calls=(ToolCall(name="resolve_date_reference", args={"relative_day": "tomorrow"}),)),
+            LLMResponse(
+                tool_calls=(
+                    ToolCall(
+                        name="ask_clarification",
+                        args={
+                            "question": "Quelle séance veux-tu déplacer ?",
+                            "unresolved_intent": {
+                                "type": "move_session",
+                                "target_date": "2026-05-23",
+                                "missing": ["source_ref"],
+                            },
+                        },
+                    ),
+                )
+            ),
+        ]
+    )
+
+    proposal = CoachAgent(client, system_prompt="system").run(
+        event, ctx.snapshot.header(), for_event(event, ctx.snapshot), tool_context=ctx
+    )
+
+    assert proposal.type == "ask_clarification"
+    assert proposal.unresolved_intent["target_date"] == "2026-05-23"
+    assert ctx.scratchpad["calls"] == [
+        {"name": "ask_clarification", "ok": True},
+        {"name": "resolve_date_reference", "ok": True},
+        {"name": "ask_clarification", "ok": True},
+    ]
+
+
 def test_text_after_date_resolution_retries_with_planning_proposal_contract(tmp_path):
     event = _event("Décale ça à vendredi.")
     ctx = _context(tmp_path, event)

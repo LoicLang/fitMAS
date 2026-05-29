@@ -84,6 +84,29 @@ def test_resolve_date_reference_returns_next_future_weekday(tmp_path):
     assert ctx.scratchpad["calls"] == [{"name": "resolve_date_reference", "ok": True}]
 
 
+def test_resolve_date_reference_returns_typed_relative_day(tmp_path):
+    now = datetime(2026, 5, 22, 14, 0, tzinfo=PARIS)
+    ctx = _context(tmp_path, now)
+
+    today = tools_read.resolve_date_reference(ctx, relative_day="today")
+    tomorrow = tools_read.resolve_date_reference(ctx, relative_day="tomorrow")
+
+    assert today == {
+        "base_date": "2026-05-22",
+        "relative_day": "today",
+        "date": "2026-05-22",
+    }
+    assert tomorrow == {
+        "base_date": "2026-05-22",
+        "relative_day": "tomorrow",
+        "date": "2026-05-23",
+    }
+    assert ctx.scratchpad["calls"] == [
+        {"name": "resolve_date_reference", "ok": True},
+        {"name": "resolve_date_reference", "ok": True},
+    ]
+
+
 def test_get_session_returns_detail_or_errors(tmp_path):
     now = datetime(2026, 5, 22, 14, 0, tzinfo=PARIS)
     ctx = _context(tmp_path, now)

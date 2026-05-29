@@ -32,7 +32,7 @@ Runtime V0, pas un nouveau refactor large de l'ancien pipeline.
 | Frontend | React, Vite, Tailwind, React Router |
 | Bot | Telegram via `python-telegram-bot` |
 | Scheduler | APScheduler in-process |
-| LLM | DeepSeek et Mistral candidats dogfood, Gemini/Grok en matrix |
+| LLM | DeepSeek et Mistral candidats dogfood, Grok en matrix, Gemini opt-in manuel |
 | Deploy | Fly.io, Docker, volume persistant |
 
 ## Organisation Courante

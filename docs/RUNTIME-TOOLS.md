@@ -29,6 +29,10 @@ Un tool ne doit pas :
 - parser le texte utilisateur libre ;
 - remplacer la policy backend.
 
+Exemple V0 : `resolve_date_reference` peut convertir une reference deja
+extraite par le LLM (`relative_day=today|tomorrow` ou `weekday=friday`) en date
+ISO. Il ne parse pas lui-meme le texte utilisateur libre.
+
 ## Modules
 
 ```text

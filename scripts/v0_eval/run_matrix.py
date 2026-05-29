@@ -37,8 +37,8 @@ DEFAULT_SCENARIOS = (
     "partial_yesterday",
     "undo_wrong_status",
 )
-DEFAULT_PROVIDERS = ("gemini", "grok", "deepseek", "mistral")
-ALL_PROVIDERS = (*DEFAULT_PROVIDERS, "fake")
+DEFAULT_PROVIDERS = ("deepseek", "grok", "mistral")
+ALL_PROVIDERS = (*DEFAULT_PROVIDERS, "gemini", "fake")
 
 
 @dataclass(frozen=True)

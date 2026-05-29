@@ -102,7 +102,7 @@ python3 scripts/v0_eval/run_matrix.py \
 Verifie offline le 29 mai 2026 :
 
 ```text
-tests/runtime_v0          : 135 passed
+tests/runtime_v0          : 140 passed
 fake matrix               : 11/11
 wrong_write               : 0
 old_plan_date             : 0
@@ -112,7 +112,9 @@ reply_claim_without_event : 0
 
 Provider matrix : le chiffre historique `114/120` vient d'une run a
 6 scenarios (4 providers x 6 x 5 reps = 120). La matrix par defaut compte
-aujourd'hui 11 scenarios (220 runs en 5x). L'export
+aujourd'hui 11 scenarios x 3 providers cibles (165 runs en 5x). Gemini reste
+disponible en opt-in manuel, mais n'est plus lance par defaut tant que le
+credit API est absent. L'export
 `exports/runtime-v0/stability-providers-5x/` n'est pas committe. A rejouer
 pour un chiffre provider a jour :
 

@@ -60,8 +60,17 @@ def for_event(event: InputEvent, snapshot: WorldSnapshot) -> tuple[ToolSchema, .
         ),
         ToolSchema(
             name="resolve_date_reference",
-            description="Resolve an LLM-extracted weekday reference to a concrete future ISO date.",
-            parameters=_schema({"weekday": {"type": "string", "enum": ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"]}, "direction": {"type": "string", "enum": ["future"]}}, ("weekday", "direction")),
+            description=(
+                "Resolve an LLM-extracted date reference to a concrete ISO date. "
+                "Use relative_day for today/tomorrow, or weekday plus direction=future for named weekdays."
+            ),
+            parameters=_schema(
+                {
+                    "relative_day": {"type": "string", "enum": ["today", "tomorrow"]},
+                    "weekday": {"type": "string", "enum": ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"]},
+                    "direction": {"type": "string", "enum": ["future"]},
+                }
+            ),
             handler=resolve_date_reference,
             is_proposal=False,
         ),

@@ -125,8 +125,9 @@ Etat de preuve (verifie offline le 29 mai 2026) :
   `0 claim_without_event`.
 
 Provider matrix : `114/120` est une ancienne run a 6 scenarios (4 x 6 x 5),
-non committe. La matrix compte 11 scenarios aujourd'hui, a rejouer pour un
-chiffre provider a jour.
+non committe. La matrix compte 11 scenarios et 3 providers cibles aujourd'hui,
+a rejouer pour un chiffre provider a jour. Gemini reste disponible en opt-in
+manuel, mais n'est plus lance par defaut tant que le credit API est absent.
 
 Gate dogfood Telegram :
 

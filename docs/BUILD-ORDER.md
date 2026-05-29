@@ -25,15 +25,15 @@ InputEvent -> Snapshot -> Agent -> Proposal -> Policy -> Executor
 
 Preuve (verifiee offline le 29 mai 2026) :
 
-- `tests/runtime_v0` : 135 passed ;
+- `tests/runtime_v0` : 140 passed ;
 - fake matrix : `11/11` ;
 - danger metrics : `0 wrong_write`, `0 old_plan`,
   `0 wrong_correction_target`, `0 claim_without_event` ;
 - core : 3053 LOC (zone acceptable).
 
 Provider matrix : `114/120` est une ancienne run a 6 scenarios. La matrix
-compte 11 scenarios aujourd'hui. Export non committe, a rejouer pour un
-chiffre provider a jour.
+compte 11 scenarios et 3 providers cibles aujourd'hui. Export non committe,
+a rejouer pour un chiffre provider a jour.
 
 Le chantier actif n'est plus un shrink de l'ancien runtime historique.
 C'est la preparation d'un **Produit V0 dogfoodable** autour de
@@ -99,11 +99,11 @@ Providers a tester en V0 :
 ```text
 DeepSeek
 Mistral
-Gemini
 Grok
 ```
 
-Pas d'autre provider cible dans la matrice V0 actuelle.
+Gemini reste disponible en opt-in manuel, mais n'est plus dans la matrix par
+defaut tant que le credit API est absent.
 
 ## Gates Dogfood
 
