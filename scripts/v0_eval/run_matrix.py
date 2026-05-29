@@ -72,6 +72,11 @@ def build_run_plan(
 
 def main(argv: list[str] | None = None) -> int:
     args = _parser().parse_args(argv)
+    if args.rescore:
+        if not args.export_dir:
+            print("rescore_requires_export_dir")
+            return 2
+        return rescore_export(Path(args.export_dir), args.report_path)
     plan = build_run_plan(
         provider=args.provider,
         scenario=args.scenario,
@@ -106,6 +111,11 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--report-path")
     parser.add_argument("--export-dir")
+    parser.add_argument(
+        "--rescore",
+        action="store_true",
+        help="Re-score the persisted DBs in --export-dir with the current oracle (no provider calls) and re-render the report.",
+    )
     return parser
 
 
@@ -452,6 +462,55 @@ def _with_export_dbs(plan: list[MatrixPlanItem], export_dir: Path) -> list[Matri
     db_dir = export_dir / "db"
     db_dir.mkdir(parents=True, exist_ok=True)
     return [MatrixPlanItem(item.provider, item.scenario, item.repetition, db_dir / _db_name(item)) for item in plan]
+
+
+def rescore_export(export_dir: Path, report_path: str | None) -> int:
+    """Re-score the persisted DBs in an export dir with the CURRENT oracle.
+
+    No provider calls: runtime measurements (latency/tokens/model) are carried
+    over from the existing records.json; everything verdict-derived (failures,
+    success, danger/quality counts, triage) is recomputed from the persisted DB.
+    """
+    records_path = export_dir / "records.json"
+    if not records_path.exists():
+        print(f"rescore_missing_records:{records_path}")
+        return 2
+    old_records = json.loads(records_path.read_text(encoding="utf-8"))
+    records = [_rescore_record(old, export_dir) for old in old_records]
+    return _finish(records, report_path, export_dir)
+
+
+def _rescore_record(old: dict, export_dir: Path) -> MatrixRunRecord:
+    scenario = scenario_by_name(old["scenario"])
+    turn_id = old["turn_id"]
+    db_path = export_dir / "db" / f"{turn_id}.db"
+    if not db_path.exists():
+        db_path = Path(old.get("db_path") or db_path)
+    verdicts = _score_persisted(db_path, scenario, turn_id)
+    failures = tuple(failure for verdict in verdicts for failure in verdict.failures)
+    metrics = _run_metrics(db_path, verdicts)
+    return MatrixRunRecord(
+        scenario=old["scenario"],
+        provider=old["provider"],
+        repetition=old["repetition"],
+        success=not failures,
+        latency_ms=old["latency_ms"],
+        tokens_in=old["tokens_in"],
+        tokens_out=old["tokens_out"],
+        failures=failures,
+        turn_id=turn_id,
+        model=old.get("model", "unknown"),
+        db_path=str(db_path),
+        triage=_triage(db_path, failures) if failures else (),
+        **metrics,
+    )
+
+
+def _score_persisted(db_path: Path, scenario: ScenarioOracle, turn_id: str) -> tuple[OracleVerdict, ...]:
+    verdicts = [compare_persisted_turn(db_path, turn_id, scenario)]
+    if scenario.followup is not None:
+        verdicts.append(compare_persisted_turn(db_path, f"{turn_id}-followup", scenario.followup))
+    return tuple(verdicts)
 
 
 def _finish(records: list[MatrixRunRecord], report_path: str | None, export_dir: Path | None = None) -> int:
