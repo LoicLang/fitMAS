@@ -160,3 +160,45 @@ def test_key_and_multi_operation_require_confirmation():
     assert key.reason == "key_session_requires_confirmation"
     assert multi.action == "pending"
     assert multi.reason == "multi_operation_requires_confirmation"
+
+
+def test_single_swap_requires_confirmation():
+    sport_rules = _sport_rules()
+    snapshot = _snapshot(
+        (
+            _session(60, offset=0, priority="secondary"),
+            _session(61, offset=1, priority="secondary"),
+        )
+    )
+
+    decision = sport_rules.evaluate_plan_patch_sport_rules(
+        PlanPatchDraft(
+            operations=(PlanPatchOperation(kind="swap", source_session_id=60, target_session_id=61),),
+            rationale="échanger les deux séances faciles",
+        ),
+        snapshot,
+    )
+
+    assert decision.action == "pending"
+    assert decision.reason == "swap_requires_confirmation"
+
+
+def test_single_secondary_move_still_auto_commits():
+    sport_rules = _sport_rules()
+    snapshot = _snapshot(
+        (
+            _session(60, offset=0, priority="secondary"),
+            _session(61, offset=1, priority="secondary"),
+        )
+    )
+
+    decision = sport_rules.evaluate_plan_patch_sport_rules(
+        PlanPatchDraft(
+            operations=(PlanPatchOperation(kind="move", source_session_id=60, target_date=TODAY + timedelta(days=2)),),
+            rationale="déplacer une séance secondaire",
+        ),
+        snapshot,
+    )
+
+    assert decision.action == "allow"
+    assert decision.reason == "low_risk_plan_patch"

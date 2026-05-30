@@ -494,6 +494,30 @@ def test_plan_patch_commits_low_risk_and_pends_key_or_multi_ops(tmp_path):
     assert multi_pending.action == "create_pending"
 
 
+def test_plan_patch_swap_routes_to_pending_never_auto_commits(tmp_path):
+    snapshot = _snapshot(tmp_path)
+    swap = ActionProposal(
+        type="plan_patch",
+        confidence=0.8,
+        user_intent_summary="swap two sessions",
+        evidence=("swap",),
+        tool_trace=({"name": "get_session", "ok": True},),
+        plan_patch=PlanPatchDraft(
+            operations=(
+                PlanPatchOperation(kind="swap", source_session_id=60, target_session_id=61),
+            ),
+            rationale="échanger les deux séances",
+        ),
+    )
+
+    decision = RuntimePolicy().evaluate(swap, snapshot)
+
+    assert decision.action == "create_pending"
+    assert decision.reason == "swap_requires_confirmation"
+    assert isinstance(decision.commands[0], CreatePendingConfirmationCommand)
+    assert not any(isinstance(command, ApplyPlanPatchCommand) for command in decision.commands)
+
+
 def test_plan_patch_missing_source_asks_clarification(tmp_path):
     snapshot = _snapshot(tmp_path)
 

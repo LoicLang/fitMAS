@@ -40,6 +40,12 @@ def evaluate_plan_patch_sport_rules(
     if any(session.priority == "key" for session in touched):
         return _pending("key_session_requires_confirmation")
 
+    # A swap exchanges two sessions across the calendar. Like the app, V0 must
+    # never auto-commit that restructuring: propose then confirm. (Single-session
+    # in-place edits — lighten/replace/remove_optional — still auto-commit.)
+    if any(operation.kind == "swap" for operation in operations):
+        return _pending("swap_requires_confirmation")
+
     return SportRuleDecision(action="allow", reason="low_risk_plan_patch", risk_level="low")
 
 
