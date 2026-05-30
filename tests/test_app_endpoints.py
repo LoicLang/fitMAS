@@ -6,6 +6,8 @@ import unittest
 from datetime import datetime, timedelta
 from fitmas.domain.coaching import repository as coaching_repo
 from fitmas.domain.execution import repository as execution_repo
+from fitmas.integrations import repository as integration_repo
+from fitmas.integrations import strava as strava_service
 from fitmas.domain.planning import repository as planning_repo
 from fitmas.domain.planning import template_repository as template_repo
 
@@ -183,6 +185,58 @@ class AppEndpointsTest(unittest.TestCase):
         self.assertIn("14d", evolution.json()["recent_reality"]["periods"])
         self.assertEqual(evolution.json()["last_adaptation"]["trajectory_impact"], "low")
         self.assertEqual(len(evolution.json()["recent_adaptations"]), 1)
+
+    def test_strava_sync_imports_activity_through_execution_repository(self) -> None:
+        integration_repo.upsert_strava_connection(
+            self.db,
+            user_id=self.user.id,
+            athlete_id=123,
+            access_token="access-token",
+            refresh_token="refresh-token",
+            expires_at=int((datetime.now() + timedelta(hours=1)).timestamp()),
+            scopes="read,activity:read_all",
+        )
+
+        original_client_id = os.environ.get("STRAVA_CLIENT_ID")
+        original_client_secret = os.environ.get("STRAVA_CLIENT_SECRET")
+        original_fetch = strava_service.fetch_recent_activities
+        os.environ["STRAVA_CLIENT_ID"] = "test-client"
+        os.environ["STRAVA_CLIENT_SECRET"] = "test-secret"
+        strava_service.fetch_recent_activities = lambda _token, *, per_page=20: [
+            {
+                "id": 987654,
+                "sport_type": "Ride",
+                "name": "Sortie test",
+                "moving_time": 1800,
+                "start_date_local": "2026-05-30T08:00:00",
+                "distance": 12000.0,
+                "total_elevation_gain": 120.0,
+                "average_heartrate": 128,
+                "max_heartrate": 155,
+                "average_speed": 6.6,
+                "map": {"summary_polyline": "abc"},
+                "start_latlng": [48.8566, 2.3522],
+            }
+        ]
+        try:
+            response = self.client.post("/api/v0/strava/sync")
+        finally:
+            strava_service.fetch_recent_activities = original_fetch
+            if original_client_id is None:
+                os.environ.pop("STRAVA_CLIENT_ID", None)
+            else:
+                os.environ["STRAVA_CLIENT_ID"] = original_client_id
+            if original_client_secret is None:
+                os.environ.pop("STRAVA_CLIENT_SECRET", None)
+            else:
+                os.environ["STRAVA_CLIENT_SECRET"] = original_client_secret
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json(), {"synced": True, "imported": 1})
+        activities = execution_repo.get_activities(self.db, self.user.id)
+        self.assertEqual(len(activities), 1)
+        self.assertEqual(activities[0].source, "strava")
+        self.assertEqual(activities[0].external_id, "987654")
 
     def test_session_detail_handles_linked_activity_and_coach_block(self) -> None:
         session = self._seed_plan()

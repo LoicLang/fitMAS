@@ -90,7 +90,7 @@ def create_manual_activity(payload: ManualActivityPayload, db: Session = Depends
         timezone_name=user.timezone,
     )
 
-    activity = execution_execution_repo.add_activity(
+    activity = execution_repo.add_activity(
         db,
         user_id=user.id,
         source="manual",
@@ -120,7 +120,7 @@ def create_manual_activity(payload: ManualActivityPayload, db: Session = Depends
             source="manual_activity",
         )
 
-    return execution_execution_repo.to_pydantic_activity(activity)
+    return execution_repo.to_pydantic_activity(activity)
 
 
 @router.post("/api/v0/strava/sync")

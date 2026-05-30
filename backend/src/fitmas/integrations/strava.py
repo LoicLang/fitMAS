@@ -115,7 +115,7 @@ def import_recent_activities(
     scheduled_sessions = planning_repo.get_scheduled_sessions(db, user_id, limit=84)
     imported = 0
     for raw_activity in fetch_recent_activities(access_token, per_page=30):
-        existing = execution_execution_repo.get_activity_by_external_id(db, user_id, str(raw_activity["id"]))
+        existing = execution_repo.get_activity_by_external_id(db, user_id, str(raw_activity["id"]))
         if existing:
             # Backfill map data for activities imported before polyline support
             estimated_tss = estimate_tss(
@@ -176,7 +176,7 @@ def import_recent_activities(
             timezone_name=user.timezone,
         )
 
-        activity = execution_execution_repo.add_activity(
+        activity = execution_repo.add_activity(
             db,
             user_id=user_id,
             source="strava",
