@@ -81,8 +81,9 @@ Regles V0 :
 - modifier une seance `done` est bloque, sauf correction de statut ;
 - fatigue severe, maladie ou douleur active bloque l'ajout de `hard` ;
 - apres long/hard recent, privilegier easy/rest et bloquer le hard opportuniste ;
-- move/lighten/replace easy sur `secondary` ou `optional` peut commit si la cible est claire ;
-- multi-operation, seance cle ou risque sportif moyen passe en `pending`.
+- move/lighten/replace easy en place sur `secondary` ou `optional` peut commit si la cible est claire ;
+- un `swap` qui restructure le calendrier ne s'auto-commit jamais : il passe en `pending` ;
+- multi-operation, swap, seance cle ou risque sportif moyen passe en `pending`.
 
 ## Scenarios De Validation
 
@@ -118,9 +119,9 @@ cancel_followup
 
 ## Gates
 
-Etat de preuve (verifie offline le 29 mai 2026) :
+Etat de preuve (verifie offline le 30 mai 2026) :
 
-- tests runtime + docs : `149 passed` ;
+- tests runtime + docs : `152 passed` ;
 - fake matrix : `11/11` ;
 - danger metrics : `0 wrong_write`, `0 old_plan`, `0 wrong_correction_target`,
   `0 claim_without_event`.
@@ -136,7 +137,9 @@ runs `conversation_context` sont assez fideles pour juger un provider. Les runs
 
 Le banc app-vs-V0 vit dans `scripts/v0_eval/compare_app_vs_v0.py`. Il sert a
 decider si on avance vers Telegram V0 : V0 doit gagner ou faire `tie_safe` sur
-les cas fiables, sans `wrong write` ni auto-commit risqué.
+les cas fiables, sans `wrong write` ni auto-commit risqué. Premier passage : il
+a revele un `swap` auto-committe par V0 la ou l'app confirmait, depuis corrige
+en `pending`.
 
 Gate dogfood Telegram :
 

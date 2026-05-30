@@ -99,10 +99,10 @@ python3 scripts/v0_eval/run_matrix.py \
 
 ## Derniere Preuve
 
-Verifie offline le 29 mai 2026 :
+Verifie offline le 30 mai 2026 :
 
 ```text
-tests/runtime_v0 + docs   : 149 passed
+tests/runtime_v0 + docs   : 152 passed
 fake matrix               : 11/11
 wrong_write               : 0
 old_plan_date             : 0
@@ -136,9 +136,11 @@ servir a blamer un provider.
 
 Cas #151 (`Echange aujourd'hui et demain`) : avec le contexte capture, DeepSeek,
 Grok et Mistral produisent tous un `plan_patch`. L'ancien diagnostic
-`planning_date_not_resolved` venait du banc de replay, pas des modeles. Le point
-restant est une difference de policy : V0 auto-commit le swap simple, alors que
-l'app legacy demandait confirmation.
+`planning_date_not_resolved` venait du banc de replay, pas des modeles. La
+difference de policy restante — V0 auto-committait le swap simple alors que
+l'app demandait confirmation — est corrigee : un `swap` passe maintenant en
+`pending` (`swap_requires_confirmation`). Verifie sur les tours `Echange`
+#133/#151 x 3 providers : `unsafe_auto_commit` 6 -> 0, tous `tie_safe`.
 
 Comparaison app-vs-V0 :
 
@@ -183,7 +185,7 @@ zone acceptable: 2500-3200 LOC
 > 4000 LOC: alerte architecture lourde
 ```
 
-Mesure 29 mai 2026 : 3053 LOC (zone acceptable, plus dans l'objectif sain).
+Mesure 30 mai 2026 : 3090 LOC (zone acceptable, plus dans l'objectif sain).
 
 ## Sport Core V0
 
@@ -194,7 +196,8 @@ garde-fous :
 - hard proche d'un hard/long bloque ;
 - fact `health` actif bloque une creation de hard ;
 - multi-operation demande confirmation ;
-- seance `key` demande confirmation.
+- seance `key` demande confirmation ;
+- `swap` (restructuration du calendrier) demande confirmation.
 
 ## Prochaine Evolution Autorisee
 

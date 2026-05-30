@@ -14,7 +14,7 @@ read_when:
 Le plus petit coach Telegram fiable pour 1 a 2 semaines de dogfood.
 ```
 
-## Etat Actuel — 26 mai 2026
+## Etat Actuel — 30 mai 2026
 
 Le Runtime V0 a valide le noyau et le premier Sport Core minimal :
 
@@ -23,13 +23,13 @@ InputEvent -> Snapshot -> Agent -> Proposal -> Policy -> Executor
 -> Result -> Reply -> Guard -> Audit
 ```
 
-Preuve (verifiee offline le 29 mai 2026) :
+Preuve (verifiee offline le 30 mai 2026) :
 
-- `tests/runtime_v0 + docs` : 149 passed ;
+- `tests/runtime_v0 + docs` : 152 passed ;
 - fake matrix : `11/11` ;
 - danger metrics : `0 wrong_write`, `0 old_plan`,
   `0 wrong_correction_target`, `0 claim_without_event` ;
-- core : 3053 LOC (zone acceptable).
+- core : 3090 LOC (zone acceptable).
 
 Provider matrix : `114/120` est une ancienne run a 6 scenarios. La matrix
 compte 11 scenarios et 3 providers cibles aujourd'hui. Export non committe,
@@ -53,14 +53,24 @@ Ne pas supprimer l'ancien pipeline avant preuve sur adapters.
 
 ## Prochaine Tranche
 
+Fait :
+
+- comparaison app-vs-V0 sur 30 tours reels x 3 providers (`compare_app_vs_v0.py`).
+  Resultat clef : V0 auto-committait un `swap` la ou l'app demandait
+  confirmation. Corrige : le `swap` passe maintenant en `pending`
+  (`swap_requires_confirmation`). Re-run panel : `tie_safe` 73 -> 76,
+  `app_better` 17 -> 14, et la classe swap (#133/#151) passe de 6
+  `unsafe_auto_commit` a 0. Reste 1 unsafe residuel non-swap (#129, tour
+  multi-intention, non deterministe), detaille dans
+  `RUNTIME-V0-APP-COMPARISON.md`.
+
 Ordre recommande :
 
-1. Lancer `scripts/v0_eval/compare_app_vs_v0.py` sur 20-30 tours reels fiables.
-2. Relancer une provider matrix ciblee sur les 11 scenarios.
-3. Construire un `WorldSnapshot` depuis une copie DB actuelle, en distinguant
+1. Relancer une provider matrix ciblee sur les 11 scenarios.
+2. Construire un `WorldSnapshot` depuis une copie DB actuelle, en distinguant
    replay fidele (`conversation_context`) et debug approximatif (`current_state`).
-4. Construire un executor adapter vers les writers existants.
-5. Brancher Telegram/API sous flag et allowlist user.
+3. Construire un executor adapter vers les writers existants.
+4. Brancher Telegram/API sous flag et allowlist user.
 
 ## Scope Actif
 
@@ -76,8 +86,8 @@ Le V0 couvre :
 - plan actuel / aujourd'hui / demain ;
 - execution `done`, `skipped`, `partial` ;
 - correction d'execution ;
-- move/lighten/replace simple ;
-- pending pour seance cle ;
+- move/lighten/replace simple en place (auto-commit si cible claire) ;
+- pending pour seance cle, swap ou multi-operation ;
 - block pour risque sportif clair ;
 - heartbeat read-only ou question courte seulement.
 

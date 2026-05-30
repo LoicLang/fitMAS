@@ -36,6 +36,7 @@ Puis lire seulement le doc domaine utile.
 | `V0-DOGFOOD-SCOPE.md` | scope produit V0 et Sport Core minimal |
 | `RUNTIME-V0.md` | reference courte du prototype runtime |
 | `RUNTIME-MIGRATION-PLAN.md` | migration vers Telegram/API dogfood |
+| `RUNTIME-V0-APP-COMPARISON.md` | resultats app-vs-V0 sur tours reels |
 | `LLM-FIRST-CONVERSATION.md` | doctrine zero determinisme sur texte user |
 | `RUNTIME-TOOLS.md` | contrat des tools runtime |
 | `CONVERSATION.md` | etat du runtime conversationnel existant |
