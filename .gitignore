@@ -21,3 +21,6 @@ frontend/dist/
 
 # Generated design scratchpads
 design-system.md
+
+# Runtime V0 generated shadow databases
+exports/runtime-v0/**/db/
