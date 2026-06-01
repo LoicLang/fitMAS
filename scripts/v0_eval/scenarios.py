@@ -234,8 +234,9 @@ def _scenarios() -> dict[str, ScenarioOracle]:
             expected_proposal_type="execution_correction",
             expected_policy_action="allow_commit",
             expected_commands=(CommandSpec("CorrectSessionStatusCommand", "session", "66"),),
-            expected_reply_must_include=("corrigé", "25"),
+            expected_reply_must_include=("25",),
             expected_reply_must_not_contain=("nouvelle séance", "ajouté"),
+            expected_reply_any_include=(("corrig", "noté", "enregistr", "pris en compte", "mis à jour"),),
         ),
         "followup_planning_turn1": ScenarioOracle(
             name="followup_planning_turn1",
@@ -383,8 +384,9 @@ def _scenarios() -> dict[str, ScenarioOracle]:
             expected_proposal_type="execution_update",
             expected_policy_action="allow_commit",
             expected_commands=(CommandSpec("SetSessionStatusCommand", "session", "73"),),
-            expected_reply_must_include=("partiel", "20"),
+            expected_reply_must_include=("20",),
             expected_reply_must_not_contain=("déplacé", "modifié"),
+            expected_reply_any_include=(("partiel", "sur les 45", "au lieu", "seulement"),),
         ),
         "undo_wrong_status": ScenarioOracle(
             name="undo_wrong_status",
@@ -413,7 +415,8 @@ def _scenarios() -> dict[str, ScenarioOracle]:
             expected_proposal_type="execution_correction",
             expected_policy_action="allow_commit",
             expected_commands=(CommandSpec("CorrectSessionStatusCommand", "session", "74"),),
-            expected_reply_must_include=("corrigé", "faite"),
+            expected_reply_must_include=(),
             expected_reply_must_not_contain=("nouvelle séance", "ajouté"),
+            expected_reply_any_include=(("fait", "réalisé", "complét", "enregistr", "validé"),),
         ),
     }

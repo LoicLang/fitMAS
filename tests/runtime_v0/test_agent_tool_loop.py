@@ -391,6 +391,84 @@ def test_move_clarification_with_target_date_requires_date_resolution_tool(tmp_p
     assert client.requests[1]["messages"][-1]["tool_name"] == "runtime_contract"
 
 
+def test_move_clarification_with_null_target_date_gets_resolution_retry(tmp_path):
+    # deepseek bug: it marked only ["source_ref"] missing but left target_date
+    # null -> turn 2 it re-asked the date. The contract retry forces resolution.
+    event = _event("Décale ça à vendredi.")
+    ctx = _context(tmp_path, event)
+    client = FakeLLMClient(
+        [
+            LLMResponse(
+                tool_calls=(
+                    ToolCall(
+                        name="ask_clarification",
+                        args={
+                            "question": "Quelle séance veux-tu déplacer ?",
+                            "unresolved_intent": {
+                                "type": "move_session",
+                                "target_date": None,
+                                "missing": ["source_ref"],
+                            },
+                        },
+                    ),
+                )
+            ),
+            LLMResponse(tool_calls=(ToolCall(name="resolve_date_reference", args={"weekday": "friday", "direction": "future"}),)),
+            LLMResponse(
+                tool_calls=(
+                    ToolCall(
+                        name="ask_clarification",
+                        args={
+                            "question": "Quelle séance veux-tu déplacer ?",
+                            "unresolved_intent": {
+                                "type": "move_session",
+                                "target_date": "2026-05-29",
+                                "missing": ["source_ref"],
+                            },
+                        },
+                    ),
+                )
+            ),
+        ]
+    )
+
+    proposal = CoachAgent(client, system_prompt="system").run(
+        event, ctx.snapshot.header(), for_event(event, ctx.snapshot), tool_context=ctx
+    )
+
+    assert proposal.type == "ask_clarification"
+    assert proposal.unresolved_intent["target_date"] == "2026-05-29"
+    assert client.requests[1]["messages"][-1]["tool_name"] == "runtime_contract"
+
+
+def test_move_clarification_null_target_date_unresolved_twice_is_no_send(tmp_path):
+    event = _event("Décale ça à vendredi.")
+    ctx = _context(tmp_path, event)
+    null_clarification = LLMResponse(
+        tool_calls=(
+            ToolCall(
+                name="ask_clarification",
+                args={
+                    "question": "Quelle séance veux-tu déplacer ?",
+                    "unresolved_intent": {
+                        "type": "move_session",
+                        "target_date": None,
+                        "missing": ["source_ref"],
+                    },
+                },
+            ),
+        )
+    )
+    client = FakeLLMClient([null_clarification, null_clarification, null_clarification])
+
+    proposal = CoachAgent(client, system_prompt="system").run(
+        event, ctx.snapshot.header(), for_event(event, ctx.snapshot), tool_context=ctx
+    )
+
+    assert proposal.type == "no_send"
+    assert proposal.user_intent_summary == "clarification_target_date_unresolved"
+
+
 def test_move_clarification_can_anchor_to_typed_relative_day(tmp_path):
     event = _event("Échange aujourd'hui et demain.")
     ctx = _context(tmp_path, event)

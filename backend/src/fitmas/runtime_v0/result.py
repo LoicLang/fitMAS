@@ -55,7 +55,7 @@ def build_runtime_result(
             must_include=_must_include(policy, pending),
             must_not_claim=_must_not_claim(command_events, pending),
             tone=_tone(policy.action, bool(blocked), pending),
-            max_sentences=3,
+            max_sentences=5,
         ),
     )
 

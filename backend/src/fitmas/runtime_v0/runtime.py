@@ -28,9 +28,13 @@ class RuntimeDeps:
     db_path: Path
     coach_llm: LLMClient
     reply_llm: LLMClient
-    # Coach reasoning budget. Default 3 = production behavior; override only for
-    # offline experiments (e.g. the app-vs-V0 spike on fact-heavy real worlds).
-    max_steps: int = 3
+    # Coach reasoning budget (LLM round-trips). The 5x provider matrix showed 3
+    # was the dominant failure cause: serial-reading models (deepseek esp.) spend
+    # every round on reads and never reach the propose step -> forced no_send
+    # (max_steps_reached). 6 gives headroom for ~4-5 reads + a contract retry +
+    # the proposal. Raising it is monotonic-safe: passing runs already finalize
+    # before the cap, so only timed-out runs change.
+    max_steps: int = 6
 
 @dataclass(frozen=True)
 class HandleEventResult:

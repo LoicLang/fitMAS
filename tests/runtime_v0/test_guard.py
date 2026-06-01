@@ -178,3 +178,29 @@ def test_blocks_old_plan_date_unless_present_in_read_facts():
 
     assert "old_plan_date" in blocked.blocked_reasons
     assert allowed.ok
+
+
+def test_blocks_meta_third_person_mid_sentence():
+    # META n'est plus ancré en début de phrase: une fuite "l'utilisateur" au
+    # milieu d'une réponse chaleureuse doit aussi être attrapée.
+    guard = OutputGuard(today=_event().occurred_at.date())
+
+    checked = guard.verify("Bien noté, je vois que l'utilisateur veut décaler.", _result(committed=(_committed_event(),)))
+
+    assert "meta_opening" in checked.blocked_reasons
+
+
+def test_blocks_leaked_tool_names():
+    guard = OutputGuard(today=_event().occurred_at.date())
+
+    checked = guard.verify("Je vérifie avec get_session puis propose_plan_patch.", _result(committed=(_committed_event(),)))
+
+    assert "internal_jargon" in checked.blocked_reasons
+
+
+def test_blocks_english_leak():
+    guard = OutputGuard(today=_event().occurred_at.date())
+
+    checked = guard.verify("Let me move your session to friday.", _result(committed=(_committed_event(),)))
+
+    assert "english_leak" in checked.blocked_reasons

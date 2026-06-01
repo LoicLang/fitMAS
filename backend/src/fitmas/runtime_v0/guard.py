@@ -11,7 +11,9 @@ from fitmas.runtime_v0.result import RuntimeResult
 CLAIM_PATTERN = re.compile(r"\b(j'ai|j'ai bien|c'est)\s+(déplacé|noté|enregistré|fait|modifié|appliqué)\b", re.IGNORECASE)
 PENDING_ACTION_PATTERN = re.compile(r"\b(c'est fait|appliqué)\b", re.IGNORECASE)
 JARGON_PATTERN = re.compile(r"\b(policy|backend|candidate|mutation|runtime|tool_call|proposal|snapshot)\b", re.IGNORECASE)
-META_PATTERN = re.compile(r"^\s*(l'utilisateur|the user|option valide)\b", re.IGNORECASE)
+TOOL_LEAK_PATTERN = re.compile(r"\b(get_\w+|propose_\w+|resolve_date_reference|runtime_contract|ask_clarification|plan_patch|swap_sessions)\b", re.IGNORECASE)
+ENGLISH_LEAK_PATTERN = re.compile(r"\b(i'?ll|i'?ve|i will|let me|here'?s|please confirm|do you want|your (?:session|plan|workout)|the (?:session|plan|workout))\b", re.IGNORECASE)
+META_PATTERN = re.compile(r"\b(l'utilisateur|the user|option valide)\b", re.IGNORECASE)
 DATE_PATTERN = re.compile(r"\b20\d{2}-\d{2}-\d{2}\b")
 RAW_JSON_PATTERN = re.compile(r"[{}]|\b(sessions|duration_min|target_session_id)\b", re.IGNORECASE)
 TECHNICAL_ID_PATTERN = re.compile(r"\b(session_id|source_ref|target_session_id|ID\s*\d+)\b", re.IGNORECASE)
@@ -33,10 +35,12 @@ class OutputGuard:
             reasons.append("claim_without_event")
         if result.pending is not None and PENDING_ACTION_PATTERN.search(reply):
             reasons.append("pending_action_claim")
-        if JARGON_PATTERN.search(reply):
+        if JARGON_PATTERN.search(reply) or TOOL_LEAK_PATTERN.search(reply):
             reasons.append("internal_jargon")
         if META_PATTERN.search(reply):
             reasons.append("meta_opening")
+        if ENGLISH_LEAK_PATTERN.search(reply):
+            reasons.append("english_leak")
         if RAW_JSON_PATTERN.search(reply):
             reasons.append("raw_json_visible")
         if TECHNICAL_ID_PATTERN.search(reply):

@@ -10,6 +10,7 @@ from fitmas.runtime_v0.snapshot import SnapshotHeader
 from fitmas.runtime_v0.tools_read import ToolContext
 
 ANSWER_SUPPORT_TOOLS = {"get_current_plan", "get_plan_day", "get_session", "get_recent_execution_events"}
+_MOVE_DIRECTIVE_BUDGET = 2
 class CoachAgent:
     def __init__(self, llm_client: LLMClient, system_prompt: str):
         self.llm_client = llm_client
@@ -31,8 +32,9 @@ class CoachAgent:
         invalid_args_retry_used = False
         answer_support_retry_used = False
         plan_patch_support_retry_used = False
-        active_intent_retry_used = False
+        move_directive_retries = 0
         date_resolution_retry_used = False
+        clarification_date_retry_used = False
 
         for _ in range(max_steps):
             response = self.llm_client.chat_with_tools(self.system_prompt, messages, list(tools))
@@ -69,10 +71,10 @@ class CoachAgent:
                 continue
             if proposal is not None:
                 if _active_move_intent(snapshot_header.last_unresolved_intent) and proposal.type == "execution_update":
-                    messages.append(_runtime_contract_error("active_move_intent_requires_plan_patch"))
-                    if active_intent_retry_used:
+                    if move_directive_retries >= _MOVE_DIRECTIVE_BUDGET:
                         return _no_send("active_move_intent_requires_plan_patch", tool_context)
-                    active_intent_retry_used = True
+                    messages.append(_active_move_directive(snapshot_header))
+                    move_directive_retries += 1
                     continue
                 if _plan_patch_needs_source_retry(proposal, snapshot_header):
                     messages.append(_runtime_contract_error("plan_patch_source_not_anchored"))
@@ -86,7 +88,23 @@ class CoachAgent:
                         return _no_send("planning_date_not_resolved", tool_context)
                     date_resolution_retry_used = True
                     continue
+                if _clarification_date_inconsistent(proposal):
+                    messages.append(_runtime_contract_error("clarification_target_date_unresolved"))
+                    if clarification_date_retry_used:
+                        return _no_send("clarification_target_date_unresolved", tool_context)
+                    clarification_date_retry_used = True
+                    continue
                 return proposal
+            if (
+                response.tool_calls
+                and _active_move_intent(snapshot_header.last_unresolved_intent)
+                and read_tool_names
+                and move_directive_retries < _MOVE_DIRECTIVE_BUDGET
+            ):
+                # Move actif + lecture faite: pousse vers propose_plan_patch (deepseek sur-lit jusqu'à max_steps -> no_send).
+                messages.append(_active_move_directive(snapshot_header))
+                move_directive_retries += 1
+                continue
             if response.tool_calls:
                 unknown_call = next((call for call in response.tool_calls if call.name not in tool_by_name), None)
                 if unknown_call is not None:
@@ -97,10 +115,10 @@ class CoachAgent:
                 continue
             if response.text:
                 if _active_move_intent(snapshot_header.last_unresolved_intent):
-                    messages.append(_runtime_contract_error("active_move_intent_requires_plan_patch"))
-                    if active_intent_retry_used:
+                    if move_directive_retries >= _MOVE_DIRECTIVE_BUDGET:
                         return _no_send("active_move_intent_requires_plan_patch", tool_context)
-                    active_intent_retry_used = True
+                    messages.append(_active_move_directive(snapshot_header))
+                    move_directive_retries += 1
                     continue
                 if not read_facts:
                     return _no_send("missing_read_support", tool_context)
@@ -197,6 +215,25 @@ def _runtime_contract_error(reason: str) -> dict[str, Any]:
         "content": json.dumps(payload, ensure_ascii=False),
     }
 
+def _active_move_directive(snapshot_header: SnapshotHeader) -> dict[str, Any]:
+    # Nudge follow-up move: nomme l'appel exact + date cible (sans ça deepseek répond en prose/sur-lit -> no_send).
+    intent = snapshot_header.last_unresolved_intent or {}
+    payload = {
+        "error": "active_move_intent_requires_plan_patch",
+        "directive": (
+            "Intention de déplacement active. Identifie la séance source nommée par "
+            "l'utilisateur (get_current_plan/get_session si besoin), puis appelle "
+            "propose_plan_patch. N'émets aucun texte libre, ne redemande pas la date."
+        ),
+        "required_call": {
+            "tool": "propose_plan_patch",
+            "operations": [
+                {"kind": "move", "source_session_id": "<id de la séance source>", "target_date": intent.get("target_date")}
+            ],
+        },
+    }
+    return {"role": "tool", "tool_name": "runtime_contract", "content": json.dumps(payload, ensure_ascii=False)}
+
 def _has_answer_support(read_tool_names: list[str], tool_by_name: dict[str, ToolSchema]) -> bool:
     if not any(name in tool_by_name for name in ANSWER_SUPPORT_TOOLS):
         return bool(read_tool_names)
@@ -217,6 +254,19 @@ def _planning_date_needs_resolution_retry(proposal: ActionProposal, snapshot_hea
         return False
     ok_tools = {item.get("name") for item in proposal.tool_trace if item.get("ok", True)}
     return "resolve_date_reference" not in ok_tools
+def _clarification_date_inconsistent(proposal: ActionProposal) -> bool:
+    # A move-session clarification that left target_date null while NOT listing it
+    # in `missing` is self-contradictory: the model claims the date is known but
+    # never resolved it. Observed on deepseek followup_planning (target_date=null,
+    # missing=["source_ref"]) -> turn 2 it re-asks the date instead of committing.
+    # Force a resolve_date_reference retry. Reads only the model's own output.
+    if proposal.type != "ask_clarification" or not proposal.unresolved_intent:
+        return False
+    intent = proposal.unresolved_intent
+    if intent.get("type") != "move_session":
+        return False
+    missing = intent.get("missing") or []
+    return intent.get("target_date") is None and "target_date" not in missing
 def _proposal_target_dates(proposal: ActionProposal) -> tuple[str, ...]:
     if proposal.type == "ask_clarification" and proposal.unresolved_intent:
         target = proposal.unresolved_intent.get("target_date")

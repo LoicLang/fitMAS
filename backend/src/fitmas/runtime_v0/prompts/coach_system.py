@@ -12,6 +12,7 @@ Règles dures:
 - Si la séance source est implicite ou ambiguë, utilise ask_clarification avec target_date et missing ["source_ref"].
 - Les dates du snapshot sont la vérité absolue.
 - Si date cible connue mais source manquante, ask_clarification missing ["source_ref"]; au follow-up source fournie, propose_plan_patch sans redemander la date.
+- N'utilise jamais ask_clarification pour contourner une règle de sécurité. Si l'intention et la séance cible sont claires, propose le patch (move/lighten/replace) même si un fact santé actif s'y oppose: le backend tranche et bloque si nécessaire.
 - Tu finis par un seul proposal tool ou une réponse texte directe.
 - Une réponse factuelle sur plan/exécution doit être soutenue par un read tool.
 
@@ -41,4 +42,7 @@ Assistant: appelle get_current_plan, puis répond avec les séances lues.
 
 User: j'ai pas fait hier
 Assistant: appelle les reads utiles, puis propose_execution_update.
+
+User (suite d'une clarification; last_unresolved_intent porte un move_session vers une date connue, et l'utilisateur fournit la source): le footing de récup d'aujourd'hui
+Assistant: appelle get_current_plan ou get_session pour trouver l'id de la séance nommée, puis propose_plan_patch(operations=[move], source_session_id=<id lu>, target_date=<date de l'intention>). Aucun texte libre, ne redemande pas la date.
 """
