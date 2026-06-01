@@ -47,6 +47,49 @@ InputEvent
 -> Audit
 ```
 
+## Voix Et Garde
+
+Le partage est strict : la voix vit dans le reply LLM, la verite dans le guard.
+
+`ReplyComposer` fait passer tous les cas par le LLM — confirmation, question,
+blocage, reponse plan, commit d'execution. Les templates ne servent plus de
+reponse par defaut. Ils restent seulement :
+
+- comme filet `_fallback` quand le LLM echoue ou se tait. Le filet rend la
+  meilleure verite disponible (mutation resumable, puis pending, blocage,
+  clarification, plan), jamais le message technique sec tant qu'on a mieux. Il
+  ignore les commandes de bookkeeping (etat conversation, creation de pending)
+  qui n'ont pas de resume utilisateur ;
+- pour reformuler une reponse plan qui omet une seance lue (re-prompt une fois) ;
+- pour garantir qu'un commit reel enonce son fait porteur (`_commit_summary`).
+
+Le commit d'execution suit la meme doctrine que le plan : on ne verifie plus un
+verbe template ("note", "corrige") mais le **fait qui porte la verite** du
+commit — la duree (nombre), le jour cible (jour de semaine) ou le sport. Si la
+voix du LLM enonce ce fait, on la garde telle quelle. Sinon on re-prompte une
+fois, puis on retombe sur le resume deterministe. Quand aucun fait robuste n'est
+exigible (un `skipped` sans duree), on fait confiance a la voix : le guard reste
+seul juge qu'elle ne ment pas sur le commit.
+
+`OutputGuard` lit la sortie du modele, jamais le texte utilisateur, et rend un
+oui/non. Sur non, il bloque et retombe sur `_safe_reply`. Raisons actuelles :
+
+```text
+claim_without_event     reply annonce un write alors que committed_events vide
+pending_action_claim    reply dit "c'est fait" sur un simple pending
+internal_jargon          fuite policy/backend/runtime ou nom de tool (get_/propose_)
+meta_opening             fuite "l'utilisateur"/"the user" (debut ou milieu)
+english_leak             fuite anglaise (let me, your session, i'll...)
+raw_json_visible         accolades ou cles machine visibles
+technical_id_visible     session_id/source_ref visibles
+truncated_reply          reply coupee net (finit par avec/et/pour/:)
+unsupported_date         date hors read_facts sur un answer_only
+old_plan_date            date > 7 jours dans le passe et hors read_facts
+```
+
+`guard fallback rate` est une gate dogfood (< 15 %) : il mesure le cout de la
+verite sur le naturel. Sur la fake matrix il reste a 0 %.
+
 ## Isolation
 
 Le noyau V0 ne doit pas importer :
@@ -99,16 +142,30 @@ python3 scripts/v0_eval/run_matrix.py \
 
 ## Derniere Preuve
 
-Verifie offline le 30 mai 2026 :
+Verifie offline le 31 mai 2026 :
 
 ```text
-tests/runtime_v0 + docs   : 152 passed
+tests/runtime_v0 + docs   : 160 passed
 fake matrix               : 11/11
+guard fallback rate       : 0 %
 wrong_write               : 0
 old_plan_date             : 0
 wrong_correction_target   : 0
 reply_claim_without_event : 0
 ```
+
+Sonde DeepSeek 1x (voix libre, 31 mai 2026) : les commits d'execution passent
+desormais par la voix du LLM (`execution_correction`, `undo_wrong_status`,
+`partial_yesterday` rendus chaleureux et porteurs du fait ; `skipped` parfois
+terse, choix du modele et non override). Aucun write dangereux, aucun
+`claim_without_event` sur les sondes. Un bug de filet a ete corrige : sur un
+tour pending/clarification, un echec du reply LLM tombait sur le message
+technique sec a cause de la commande de bookkeeping committee ; le filet rend
+maintenant la confirmation pending ou la clarification (`sanitized_fallback`
+2 -> 0). En 1x DeepSeek reste non-deterministe sur quelques tours
+(`skipped_yesterday`, `followup_planning_turn1`) : il echoue alors en **under-
+action sure** (`no_send`/`answer` au lieu d'une mutation), jamais en write
+errone. Pour un chiffre de correctness stable, lancer la matrix en 5x.
 
 Provider matrix : le chiffre historique `114/120` vient d'une run a
 6 scenarios (4 providers x 6 x 5 reps = 120). La matrix par defaut compte
@@ -161,6 +218,10 @@ capture.
 
 ## Evaluation
 
+La doctrine de test (deux couches) vit dans `docs/V0-TEST-DOCTRINE.md` : la
+matrix est le filet mecanique (couche 1), la simulation sous-agent juge la
+qualite reelle (couche 2). Ci-dessous le detail du scoring matrix.
+
 La matrix separe deux niveaux :
 
 ```text
@@ -174,6 +235,13 @@ Il alimente les compteurs `reply_quality_issue_count`,
 Les claims dangereux restent bloquants, par exemple une reply qui annonce une
 mutation sans event committe.
 
+Depuis la liberation de la voix, les oracles de wording ciblent le **fait
+porteur** (la duree, le jour, le sport) en `must_include` et un jeu d'accuses de
+reception en `any_include`, pas le verbe template ("corrige", "partiel"). Exiger
+un mot que la voix libre n'emploie plus reviendrait a tester un artefact mort.
+Les garde-fous dangereux (`nouvelle seance`, `ajoute`) restent en
+`must_not_contain`.
+
 ## Budget
 
 Budget runtime core, hors tests et scripts :
@@ -185,7 +253,7 @@ zone acceptable: 2500-3200 LOC
 > 4000 LOC: alerte architecture lourde
 ```
 
-Mesure 30 mai 2026 : 3090 LOC (zone acceptable, plus dans l'objectif sain).
+Mesure 1 juin 2026 : 3198 LOC (zone acceptable, plus dans l'objectif sain).
 
 ## Sport Core V0
 

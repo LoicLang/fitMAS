@@ -36,7 +36,8 @@ Puis lire seulement le doc domaine utile.
 | `V0-DOGFOOD-SCOPE.md` | scope produit V0 et Sport Core minimal |
 | `RUNTIME-V0.md` | reference courte du prototype runtime |
 | `RUNTIME-MIGRATION-PLAN.md` | migration vers Telegram/API dogfood |
-| `RUNTIME-V0-APP-COMPARISON.md` | resultats app-vs-V0 sur tours reels |
+| `RUNTIME-V0-APP-COMPARISON.md` | resultats app-vs-V0 sur tours reels (legacy, voir doctrine) |
+| `V0-TEST-DOCTRINE.md` | doctrine de test : matrice mecanique + simulation live |
 | `LLM-FIRST-CONVERSATION.md` | doctrine zero determinisme sur texte user |
 | `RUNTIME-TOOLS.md` | contrat des tools runtime |
 | `CONVERSATION.md` | etat du runtime conversationnel existant |
@@ -74,6 +75,7 @@ En cas de contradiction :
 4. `RUNTIME-V0.md` gagne sur le noyau prototype.
 5. `LLM-FIRST-CONVERSATION.md` gagne sur la doctrine user-text.
 6. `PRODUCT.md` gagne sur la promesse produit large.
+7. `V0-TEST-DOCTRINE.md` gagne sur la methodologie de test.
 
 ## Hygiene
 

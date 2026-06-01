@@ -23,13 +23,14 @@ InputEvent -> Snapshot -> Agent -> Proposal -> Policy -> Executor
 -> Result -> Reply -> Guard -> Audit
 ```
 
-Preuve (verifiee offline le 30 mai 2026) :
+Preuve (verifiee offline le 31 mai 2026) :
 
-- `tests/runtime_v0 + docs` : 152 passed ;
+- `tests/runtime_v0 + docs` : 160 passed ;
 - fake matrix : `11/11` ;
 - danger metrics : `0 wrong_write`, `0 old_plan`,
   `0 wrong_correction_target`, `0 claim_without_event` ;
-- core : 3090 LOC (zone acceptable).
+- guard fallback rate : `0 %` ;
+- core : 3121 LOC (zone acceptable).
 
 Provider matrix : `114/120` est une ancienne run a 6 scenarios. La matrix
 compte 11 scenarios et 3 providers cibles aujourd'hui. Export non committe,
@@ -55,6 +56,12 @@ Ne pas supprimer l'ancien pipeline avant preuve sur adapters.
 
 Fait :
 
+- liberation de la voix : la reply layer ne sert plus de template sur le chemin
+  nominal (pending, blocage, clarification passent par le LLM). Les templates
+  restent en filet `_fallback` seulement. Guard durci en parallele
+  (`english_leak`, fuite de noms de tools, meta mid-phrase). Doctrine ecrite
+  dans `LLM-FIRST-CONVERSATION.md` (Voix Vs Verite). Fake matrix toujours
+  `11/11`, guard fallback `0 %`.
 - comparaison app-vs-V0 sur 30 tours reels x 3 providers (`compare_app_vs_v0.py`).
   Resultat clef : V0 auto-committait un `swap` la ou l'app demandait
   confirmation. Corrige : le `swap` passe maintenant en `pending`
@@ -63,6 +70,17 @@ Fait :
   `unsafe_auto_commit` a 0. Reste 1 unsafe residuel non-swap (#129, tour
   multi-intention, non deterministe), detaille dans
   `RUNTIME-V0-APP-COMPARISON.md`.
+- liberation des commits d'execution (skipped/partial/done/correction). Le
+  verrou par verbe template (`_commit_summary`) est remplace par un gate sur le
+  **fait porteur** (duree, jour, sport) : la voix libre passe si elle enonce le
+  fait, sinon re-prompt une fois, sinon filet deterministe. Sonde DeepSeek :
+  `execution_correction`, `undo_wrong_status`, `partial_yesterday` rendus
+  chaleureux et porteurs du fait, `0 claim_without_event`, `0 wrong_write`. Bug
+  de filet corrige au passage : un echec du reply LLM sur un tour
+  pending/clarification tombait sur le message technique sec (la commande de
+  bookkeeping committee masquait la confirmation) ; le filet rend desormais la
+  meilleure verite disponible (`sanitized_fallback` 2 -> 0). Oracles de wording
+  re-cibles sur le fait + accuses de reception, plus sur le verbe mort.
 
 Ordre recommande :
 
@@ -119,7 +137,9 @@ defaut tant que le credit API est absent.
 
 ## Gates Dogfood
 
-Avant Telegram V0 :
+Avant Telegram V0, deux couches de test (doctrine : `docs/V0-TEST-DOCTRINE.md`).
+
+Couche 1 — matrice, filet mecanique :
 
 ```text
 >= 90% correctness sur scenarios V0 produit
@@ -127,6 +147,10 @@ Avant Telegram V0 :
 0 duplicate command sur retry
 guard fallback rate < 15%
 ```
+
+Couche 2 — simulation live sous-agent : une vraie conversation non scriptee
+tient sur les scenarios dogfood. Un chiffre matrice ne suffit pas a ouvrir le
+dogfood.
 
 La latence est mesuree, mais ne bloque pas le dogfood tant que la reponse est
 fiable.
