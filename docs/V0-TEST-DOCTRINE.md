@@ -14,10 +14,13 @@ La vraie qualite ne se juge que dans la simulation live.
 
 ## Pourquoi
 
-Barre de preuve : prouver le potentiel, pas battre l'app. Le profil d'echec
-prime sur le taux brut : V0 doit echouer en **securite** la ou l'app echoue en
-**danger**. Le verdict de verite se **prouve** (danger metrics a 0, guard
-fallback < 15 %), il ne s'affirme pas.
+Barre de preuve (milestone courant) : le potentiel est **montre**. La barre est
+maintenant de **prouver V0 meilleur que l'app legacy sur simulation reelle non
+scriptee** (couche 2) — pas sur la matrice scriptee, pas sur le replay legacy.
+"Meilleur" reste profil-d'echec-first : V0 doit echouer en **securite** la ou
+l'app echoue en **danger**, et au moins egaler l'utilite sur les scenarios que
+V0 couvre. Jamais farmer un taux brut. Le verdict de verite se **prouve**
+(danger metrics a 0, guard fallback < 15 %), il ne s'affirme pas.
 
 ## Couche 1 — Matrice Deterministe
 
@@ -56,6 +59,32 @@ L'etat (pending, `last_unresolved_intent`) persiste entre tours via la shadow DB
 est reproductible.
 
 A trouve le `no_send` au premier run aveugle, la ou la matrice scorait 5/5.
+
+### Scenario derive d'un echec reel
+
+`move_today_open_week` (dans `scenarios.py`, hors `DEFAULT_SCENARIOS` donc hors
+matrice) rejoue l'echec app du 1 juin 2026 : user pas dispo, demande de deplacer
+la seance du jour, semaine et week-end ouverts. L'app a **fabrique** un blocage
+"fin de semaine saturee" puis a **faussement cloture** ("ca roule") sans rien
+deplacer.
+
+```bash
+python3 scripts/v0_eval/drive_turn.py seed --scenario move_today_open_week --db .tmp-v0-couche2/move_today.db
+python3 scripts/v0_eval/drive_turn.py turn --db .tmp-v0-couche2/move_today.db \
+  --text "Salut, je suis pas dispo aujourd'hui, tu peux déplacer ma séance ?" \
+  --turn-id c2t1 --date 2026-06-01 --hour 11 --minute 24
+python3 scripts/v0_eval/drive_turn.py state --db .tmp-v0-couche2/move_today.db
+```
+
+Run DeepSeek (3 tours, 1 juin 2026) : tour 1 demande le jour cible sans inventer
+de calendrier et **persiste** `last_unresolved_intent = move_session`; tour 3 le
+move est **committe** (`ApplyPlanPatchCommand`, seance #81 du 1 -> 2 juin), reply
+porteuse du fait et soutenue par l'event. Zero write errone, zero cloture
+mensongere : V0 echoue/agit **safe + utile** la ou l'app echoue **dangereux +
+incapable**. Friction honnete relevee par la couche 2 : une clarification de
+trop (le `source_ref` "seance d'aujourd'hui", deja verbalise au tour 1, n'est pas
+porte quand la date se resout). Notee, non patchee — c'est sur, pas dangereux,
+et un fix reflexe trahirait la doctrine anti-reactive.
 
 ### Mecanisme d'honnetete (le coeur)
 
