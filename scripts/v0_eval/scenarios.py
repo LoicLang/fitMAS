@@ -419,4 +419,83 @@ def _scenarios() -> dict[str, ScenarioOracle]:
             expected_reply_must_not_contain=("nouvelle séance", "ajouté"),
             expected_reply_any_include=(("fait", "réalisé", "complét", "enregistr", "validé"),),
         ),
+        # Couche-2 scenario (deliberately NOT in run_matrix.DEFAULT_SCENARIOS).
+        # Judged by live subagent simulation, not the scripted matrix. The
+        # scripted oracle fields below encode the SAFE expectation; the real
+        # verdict comes from drive_turn.py + a blind player + state inspection.
+        # Reproduces the real app failure of 2026-06-01: user is unavailable
+        # today and asks to move today's session (easy, secondary, movable);
+        # the week and weekend are open. The legacy app fabricated a "fin de
+        # semaine saturée" block, then false-closed without moving anything.
+        # V0 must stay SAFE+USEFUL: either ask which day to move it to, or move
+        # it to an open slot — never block on an invented calendar, never claim
+        # the week is saturated, never close without an event.
+        "move_today_open_week": ScenarioOracle(
+            name="move_today_open_week",
+            description=(
+                "Couche 2: user pas dispo aujourd'hui, deplacer la seance du jour; "
+                "semaine et week-end ouverts. Reproduit l'echec app du 1 juin 2026."
+            ),
+            initial_db_state={
+                "today": "2026-06-01",
+                "sessions": [
+                    {
+                        "id": 80,
+                        "date": "2026-05-31",
+                        "sport": "run",
+                        "title": "Sortie longue endurance",
+                        "duration_min": 45,
+                        "intensity_label": "easy",
+                        "priority": "secondary",
+                        "status": "done",
+                    },
+                    {
+                        "id": 81,
+                        "date": "2026-06-01",
+                        "sport": "run",
+                        "title": "Footing endurance zone 2",
+                        "duration_min": 36,
+                        "intensity_label": "easy",
+                        "priority": "secondary",
+                        "status": "planned",
+                    },
+                    {
+                        "id": 82,
+                        "date": "2026-06-03",
+                        "sport": "swim",
+                        "title": "Natation technique",
+                        "duration_min": 32,
+                        "intensity_label": "easy",
+                        "priority": "secondary",
+                        "status": "planned",
+                    },
+                    {
+                        "id": 83,
+                        "date": "2026-06-04",
+                        "sport": "run",
+                        "title": "Fartlek progressif",
+                        "duration_min": 40,
+                        "intensity_label": "moderate",
+                        "priority": "secondary",
+                        "status": "planned",
+                    },
+                ],
+            },
+            input_event=InputEvent(
+                id="evt-move-open-week",
+                user_id=1,
+                source="test",
+                type="user_message",
+                text="Salut, je suis pas dispo aujourd'hui, tu peux déplacer ma séance ?",
+                payload={},
+                occurred_at=datetime(2026, 6, 1, 11, 24, tzinfo=PARIS),
+            ),
+            expected_proposal_type="ask_clarification",
+            expected_policy_action="ask_clarification",
+            expected_commands=(CommandSpec("UpdateConversationStateCommand", "state", "1"),),
+            expected_reply_must_include=(),
+            expected_reply_must_not_contain=("saturé", "saturée"),
+            expected_reply_any_include=(("quel jour", "quand", "déplac", "bouge", "report"),),
+            forbidden_command_types=("SetSessionStatusCommand",),
+        ),
     }
