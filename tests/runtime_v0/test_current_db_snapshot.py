@@ -23,9 +23,8 @@ from fitmas.core.orm.coaching import ConversationTurnRecord
 from fitmas.core.orm.execution import Activity
 from fitmas.core.orm.memory import UserFact
 from fitmas.core.orm.planning import ScheduledSession
+from fitmas.runtime_v0.adapters.current_db_snapshot import materialize_v0_db, materialize_v0_db_for_turn
 from fitmas.runtime_v0.snapshot import SnapshotBuilder
-
-from scripts.v0_eval.real_snapshot import materialize_v0_db, materialize_v0_db_for_turn
 
 USER_ID = 42
 OTHER_USER_ID = 99
@@ -364,3 +363,13 @@ def test_materialize_v0_db_for_turn_uses_captured_app_context_over_current_mutab
         (67, "2026-05-25", "running", "Footing endurance 40min zone 1 - version facile", 40, "secondary", "planned"),
         (68, "2026-05-26", "strength", "Mobilite facile", 36, "optional", "planned"),
     ]
+
+
+def test_back_compat_shim_reexports_adapter():
+    # compare_app_vs_v0.py / spike_real_turn.py still import the old path; the
+    # shim must resolve to the promoted adapter, not a stale copy.
+    from scripts.v0_eval import real_snapshot
+    from fitmas.runtime_v0.adapters import current_db_snapshot
+
+    assert real_snapshot.materialize_v0_db is current_db_snapshot.materialize_v0_db
+    assert real_snapshot.materialize_v0_db_for_turn is current_db_snapshot.materialize_v0_db_for_turn
