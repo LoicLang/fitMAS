@@ -13,6 +13,14 @@ Subcommands:
   seed  --scenario followup_planning_turn1 --db /tmp/shadow.db
         Reset a shadow DB and seed it from a scenario's initial_db_state. No LLM.
 
+  seed  --from-real-db copy.db --user 1 [--as-of 2026-06-01T08:00:00+02:00]
+        --db /tmp/shadow.db
+        Reset a shadow DB and materialize it from a (read-only) copy of the real
+        app DB for one user, as of an instant (default: now). A couche-2 sim then
+        starts from the real world (plan / history / facts) instead of a synthetic
+        seed. Source is the live `current_state` adapter, not a faithful past
+        replay. No LLM.
+
   turn  --db /tmp/shadow.db --text "Décale ça à vendredi" --turn-id t1
         [--provider deepseek] [--date 2026-05-22] [--hour 15] [--minute 0]
         Run ONE real coach turn. Prints `RESULT <json>` (single line) with the
@@ -29,7 +37,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
@@ -60,6 +68,7 @@ def _load_env(root: Path) -> None:
 
 _load_env(ROOT)
 
+from fitmas.runtime_v0.adapters.current_db_snapshot import materialize_v0_db  # noqa: E402
 from fitmas.runtime_v0.db import connect  # noqa: E402
 from fitmas.runtime_v0.event import InputEvent  # noqa: E402
 from fitmas.runtime_v0.runtime import RuntimeDeps, handle_event  # noqa: E402
@@ -73,16 +82,63 @@ def _emit(payload: dict) -> None:
     print("RESULT " + json.dumps(payload, ensure_ascii=False))
 
 
-def cmd_seed(args: argparse.Namespace) -> int:
+def _seeded_sessions(db_path: Path) -> list[dict]:
+    with connect(db_path) as conn:
+        return [dict(row) for row in conn.execute(
+            "select id, date, sport, title, status, priority from v0_scheduled_sessions order by date, id"
+        )]
+
+
+def _parse_as_of(value: str | None) -> datetime:
+    """Reference instant for the snapshot. Defaults to now (UTC) when omitted."""
+    if not value:
+        return datetime.now(timezone.utc)
+    parsed = datetime.fromisoformat(value)
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed
+
+
+def _seed_from_scenario(args: argparse.Namespace) -> int:
     scenario = scenario_by_name(args.scenario)
     db_path = Path(args.db)
     seed_db(db_path, scenario.initial_db_state)
-    with connect(db_path) as conn:
-        sessions = [dict(row) for row in conn.execute(
-            "select id, date, sport, title, status, priority from v0_scheduled_sessions order by date, id"
-        )]
-    _emit({"seeded": str(db_path), "scenario": scenario.name, "today": scenario.initial_db_state.get("today"), "sessions": sessions})
+    _emit({
+        "seeded": str(db_path),
+        "source": "scenario",
+        "scenario": scenario.name,
+        "today": scenario.initial_db_state.get("today"),
+        "sessions": _seeded_sessions(db_path),
+    })
     return 0
+
+
+def _seed_from_real_db(args: argparse.Namespace) -> int:
+    if args.user is None:
+        _emit({"error": "missing_user:--user is required with --from-real-db"})
+        return 1
+    real_db = Path(args.from_real_db)
+    if not real_db.exists():
+        _emit({"error": f"real_db_not_found:{real_db}"})
+        return 1
+    as_of = _parse_as_of(args.as_of)
+    db_path = Path(args.db)
+    materialize_v0_db(real_db, args.user, as_of, db_path)
+    _emit({
+        "seeded": str(db_path),
+        "source": "current_state",
+        "from_real_db": str(real_db),
+        "user_id": args.user,
+        "as_of": as_of.isoformat(),
+        "sessions": _seeded_sessions(db_path),
+    })
+    return 0
+
+
+def cmd_seed(args: argparse.Namespace) -> int:
+    if args.from_real_db:
+        return _seed_from_real_db(args)
+    return _seed_from_scenario(args)
 
 
 def cmd_turn(args: argparse.Namespace) -> int:
@@ -175,8 +231,12 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="One-turn live driver for V0 multi-turn testing.")
     sub = parser.add_subparsers(dest="command", required=True)
 
-    p_seed = sub.add_parser("seed", help="Reset + seed a shadow DB from a scenario.")
-    p_seed.add_argument("--scenario", required=True)
+    p_seed = sub.add_parser("seed", help="Reset + seed a shadow DB from a scenario or a real-DB copy.")
+    p_seed_src = p_seed.add_mutually_exclusive_group(required=True)
+    p_seed_src.add_argument("--scenario", help="Seed from a named synthetic scenario.")
+    p_seed_src.add_argument("--from-real-db", help="Materialize from a (read-only) copy of the real app DB.")
+    p_seed.add_argument("--user", type=int, help="User id to snapshot (required with --from-real-db).")
+    p_seed.add_argument("--as-of", help="Snapshot reference instant (ISO 8601). Default: now.")
     p_seed.add_argument("--db", required=True)
     p_seed.set_defaults(func=cmd_seed)
 
