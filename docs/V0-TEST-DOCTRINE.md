@@ -114,6 +114,29 @@ regression du fix (DeepSeek 8/8 `guard_ok`).
 Lecon : la matrice scorait ces tours verts (elle scripte les tool-calls du coach,
 donc ne voit jamais le coach muet). Seul un seed reel en couche 2 l'a expose.
 
+### Discrimination skip-vs-move + arc multi-tours (2 juin 2026)
+
+Mesure skip-vs-move (probes ×4, vrai monde) : seance **passee** -> `execution_update`
+(skip) 4/4 ; **future empechee** -> `plan_patch` (move) 4/4. Discrimination des cas clairs
+solide, sans code. Ambigu ("j'ai pas fait ma seance") : 2/4 `ask_clarification`, 2/4 devine
+un skip — **safe** (reversible, event-backed) et coherent avec le fact "l'user prefere que
+le coach decide". Laisse au LLM, pas de regle imposee (forcer "demande" entrerait en conflit
+avec la preference + sur-correction).
+
+Arc joueur aveugle 3 tours (vrai monde) : T1 "pas dispo jeudi" -> move fartlek jeu->ven ;
+T2 "mercredi non plus" -> move natation mer->jeu **en se calant sur le fartlek deja deplace**
+(raisonnement explicite). **Coherence cross-tour prouvee SANS transcript** : c'est le monde
+persiste (la mutation T1) qui porte le fil, pas l'historique de conversation — exactement le
+design. T3 cloture sociale ("merci, t'es au top") -> `no_send` : safe (zero write fabrique
+sur un simple merci) mais **froid** (reply non-sequitur "je n'ai aucune information..."). Minceur
+Groupe B (rapport sans action) confirmee en reel — a traiter plus tard, jamais en relachant
+l'anti-hallucination.
+
+Audit filet backend (probe directe policy) : un move vers une date **passee** est bloque
+(`target_date_out_of_range`), mais marquer une seance **future** "done" passe (`allow_commit`)
+— **trou de validation temporelle latent** (le coach ne l'a jamais declenche, mais le backend
+devrait le netter ; fix doctrine-aligne = validation d'un artefact LLM, pas du texte user).
+
 ### Mecanisme d'honnetete (le coeur)
 
 Separation **joueur / juge** :
