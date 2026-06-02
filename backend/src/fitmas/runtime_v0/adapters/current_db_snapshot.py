@@ -33,11 +33,11 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import date, datetime, timezone
+from enum import StrEnum
 import json
 from pathlib import Path
 import re
 import sqlite3
-from typing import Literal
 
 from sqlalchemy import create_engine, select
 from sqlalchemy.orm import Session
@@ -79,10 +79,29 @@ _APP_GROUNDING_SESSION_RE = re.compile(
 )
 
 
+class SnapshotSource(StrEnum):
+    """How a materialized V0 DB was produced — provenance, not core state.
+
+    The V0 core is blind to this: it just reads a v0_* DB and cannot tell where
+    the rows came from. Only the eval / benchmark layer cares, because it decides
+    whether a past-turn comparison is a *faithful* replay or merely approximate.
+
+    Single source of truth for the constant so the benchmark's faithfulness guard
+    can never drift from a duplicated string literal.
+    """
+
+    # Faithful as-of replay: the plan rows the app actually had in its prompt at
+    # the turn (captured grounding lines). Safe to score a past turn against.
+    CONVERSATION_CONTEXT = "conversation_context"
+    # Live snapshot of the mutable DB now. Fine for "start a sim from the real
+    # world today"; NOT a faithful replay of a past turn — do not score against it.
+    CURRENT_STATE = "current_state"
+
+
 @dataclass(frozen=True)
 class MaterializedV0Snapshot:
     path: Path
-    source: Literal["conversation_context", "current_state"]
+    source: SnapshotSource
     session_count: int
 
 
@@ -169,10 +188,10 @@ def materialize_v0_db_for_turn(
         user_id=int(turn["user_id"]),
     )
     if not captured:
-        return MaterializedV0Snapshot(path=path, source="current_state", session_count=0)
+        return MaterializedV0Snapshot(path=path, source=SnapshotSource.CURRENT_STATE, session_count=0)
 
     count = _replace_sessions_with_captured_context(path, int(turn["user_id"]), captured)
-    return MaterializedV0Snapshot(path=path, source="conversation_context", session_count=count)
+    return MaterializedV0Snapshot(path=path, source=SnapshotSource.CONVERSATION_CONTEXT, session_count=count)
 
 
 def _insert_session(connection, row: ScheduledSession) -> None:

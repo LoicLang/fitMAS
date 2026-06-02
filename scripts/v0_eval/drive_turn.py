@@ -68,7 +68,7 @@ def _load_env(root: Path) -> None:
 
 _load_env(ROOT)
 
-from fitmas.runtime_v0.adapters.current_db_snapshot import materialize_v0_db  # noqa: E402
+from fitmas.runtime_v0.adapters.current_db_snapshot import SnapshotSource, materialize_v0_db  # noqa: E402
 from fitmas.runtime_v0.db import connect  # noqa: E402
 from fitmas.runtime_v0.event import InputEvent  # noqa: E402
 from fitmas.runtime_v0.runtime import RuntimeDeps, handle_event  # noqa: E402
@@ -126,7 +126,7 @@ def _seed_from_real_db(args: argparse.Namespace) -> int:
     materialize_v0_db(real_db, args.user, as_of, db_path)
     _emit({
         "seeded": str(db_path),
-        "source": "current_state",
+        "source": SnapshotSource.CURRENT_STATE,
         "from_real_db": str(real_db),
         "user_id": args.user,
         "as_of": as_of.isoformat(),

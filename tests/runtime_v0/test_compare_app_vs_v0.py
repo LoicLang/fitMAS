@@ -2,7 +2,9 @@ import sqlite3
 
 from scripts.v0_eval.compare_app_vs_v0 import (
     AppOutcome,
+    SnapshotSource,
     V0Outcome,
+    _refusal_banner,
     judge_comparison,
     render_report,
     select_turn_ids,
@@ -105,6 +107,72 @@ def test_select_turn_ids_ignores_empty_user_messages(tmp_path):
         )
 
     assert select_turn_ids(db_path, limit=10, user_id=1) == [4, 2]
+
+
+def test_snapshot_source_enum_is_single_source_of_truth():
+    # StrEnum members ARE their string value, so the faithfulness guard, the JSON
+    # export and the report can share one constant without magic-string drift.
+    assert SnapshotSource.CONVERSATION_CONTEXT == "conversation_context"
+    assert SnapshotSource.CURRENT_STATE == "current_state"
+    # A faithful snapshot is scored; an approximate one is refused.
+    faithful = judge_comparison(
+        _app(reply="C'est fait, j'ai déplacé la séance.", plan_event_count=0),
+        _v0(snapshot_source=SnapshotSource.CONVERSATION_CONTEXT, policy_action="ask_clarification"),
+    )
+    assert faithful.winner != "inconclusive_snapshot"
+    approximate = judge_comparison(
+        _app(plan_event_count=0),
+        _v0(snapshot_source=SnapshotSource.CURRENT_STATE),
+    )
+    assert approximate.winner == "inconclusive_snapshot"
+
+
+def test_refusal_banner_present_only_when_a_turn_is_inconclusive():
+    faithful = [{"turn_id": 1, "winner": "v0_better"}, {"turn_id": 2, "winner": "tie_safe"}]
+    assert _refusal_banner(faithful) is None
+
+    mixed = faithful + [{"turn_id": 3, "winner": "inconclusive_snapshot"}]
+    banner = _refusal_banner(mixed)
+    assert banner is not None
+    assert "REFUSED" in banner
+    assert "current_state" in banner
+    assert "1/3" in banner  # 1 of 3 distinct turns refused
+    assert "Turns: 3" in banner
+
+
+def test_render_report_leads_with_refusal_banner_above_winners():
+    records = [
+        {"turn_id": 10, "provider": "deepseek", "snapshot_source": "conversation_context",
+         "winner": "v0_better", "risk_flags": [], "app": {}, "v0": {}, "notes": []},
+        {"turn_id": 11, "provider": "deepseek", "snapshot_source": "current_state",
+         "winner": "inconclusive_snapshot", "risk_flags": ["snapshot_inconclusive"],
+         "app": {}, "v0": {}, "notes": ["current_state_replay"]},
+    ]
+
+    report = render_report(records)
+
+    # A skim cannot miss it: the refusal sits above the Winners table.
+    assert "REFUSED" in report
+    assert report.index("REFUSED") < report.index("## Winners")
+
+
+def test_main_strict_refuses_with_nonzero_exit_when_a_turn_is_inconclusive(tmp_path, monkeypatch):
+    import scripts.v0_eval.compare_app_vs_v0 as mod
+
+    records = [
+        {"turn_id": 5, "provider": "deepseek", "snapshot_source": "current_state",
+         "winner": "inconclusive_snapshot", "risk_flags": ["snapshot_inconclusive"],
+         "app": {}, "v0": {}, "notes": ["current_state_replay"]},
+    ]
+    # Patch the run so no LLM/real DB is touched; we only exercise the exit policy.
+    monkeypatch.setattr(mod, "run_comparison", lambda *a, **k: records)
+    base = ["--real-db", str(tmp_path / "x.db"), "--turn-ids", "5", "--providers", "deepseek"]
+
+    strict_code = mod.main([*base, "--export-dir", str(tmp_path / "out"), "--strict"])
+    lenient_code = mod.main([*base, "--export-dir", str(tmp_path / "out2")])
+
+    assert strict_code == 3   # refuses loudly: a benchmark can't green-light an unfaithful world
+    assert lenient_code == 0  # without --strict it still runs, banner only
 
 
 def _app(

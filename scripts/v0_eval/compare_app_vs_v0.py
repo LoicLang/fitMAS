@@ -35,7 +35,7 @@ from scripts.v0_eval.provider_clients import (  # noqa: E402
     ProviderConfigError,
     build_provider_client,
 )
-from scripts.v0_eval.real_snapshot import materialize_v0_db_for_turn  # noqa: E402
+from scripts.v0_eval.real_snapshot import SnapshotSource, materialize_v0_db_for_turn  # noqa: E402
 from scripts.v0_eval.run_matrix import DEFAULT_PROVIDERS  # noqa: E402
 
 Winner = Literal["v0_better", "app_better", "tie_safe", "tie_bad", "inconclusive_snapshot"]
@@ -84,7 +84,7 @@ def judge_comparison(app: AppOutcome, v0: V0Outcome) -> ComparisonVerdict:
     risk_flags: list[str] = []
     notes: list[str] = []
 
-    if v0.snapshot_source != "conversation_context":
+    if v0.snapshot_source != SnapshotSource.CONVERSATION_CONTEXT:
         return ComparisonVerdict("inconclusive_snapshot", ("snapshot_inconclusive",), ("current_state_replay",))
 
     app_risks = _app_risks(app)
@@ -224,16 +224,18 @@ def run_v0_turn(real_db: Path, app: AppOutcome, provider: str, client: Any, out_
 def render_report(records: list[dict[str, Any]]) -> str:
     winners = Counter(str(record["winner"]) for record in records)
     risks = Counter(flag for record in records for flag in record.get("risk_flags", ()))
-    lines = [
-        "# Runtime V0 App Comparison",
-        "",
+    lines = ["# Runtime V0 App Comparison", ""]
+    banner = _refusal_banner(records)
+    if banner:
+        lines.extend([banner, ""])
+    lines.extend([
         "Correctness is not 'matches legacy'. The report asks which path is safer/useful on the same captured world.",
         "",
         "## Winners",
         "",
         "| Winner | Count |",
         "| --- | ---: |",
-    ]
+    ])
     for winner in ("v0_better", "app_better", "tie_safe", "tie_bad", "inconclusive_snapshot"):
         lines.append(f"| {winner} | {winners.get(winner, 0)} |")
     lines.extend(["", "## Risk Flags", "", "| Flag | Count |", "| --- | ---: |"])
@@ -278,6 +280,29 @@ def render_report(records: list[dict[str, Any]]) -> str:
     return "\n".join(lines)
 
 
+def _inconclusive_turn_ids(records: list[dict[str, Any]]) -> list[int]:
+    return sorted({int(record["turn_id"]) for record in records if record.get("winner") == "inconclusive_snapshot"})
+
+
+def _refusal_banner(records: list[dict[str, Any]]) -> str | None:
+    """Loud notice that some turns could not be faithfully replayed.
+
+    A past-turn benchmark must never let an approximate `current_state` snapshot
+    pass as a faithful comparison. When any turn is inconclusive we say so at the
+    top of the report; `--strict` turns the same condition into a non-zero exit.
+    """
+    inconclusive = _inconclusive_turn_ids(records)
+    if not inconclusive:
+        return None
+    total = len({int(record["turn_id"]) for record in records})
+    ids = ", ".join(str(turn_id) for turn_id in inconclusive)
+    return (
+        f"> ⚠ REFUSED {len(inconclusive)}/{total} turn(s): snapshot=current_state "
+        "(live DB, not an as-of replay) — NOT scored, comparing V0 here would judge "
+        f"it against the wrong world. Turns: {ids}."
+    )
+
+
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Compare real app turns against Runtime V0.")
     parser.add_argument("--real-db", default=".tmp-prod-fitmas.db", type=Path)
@@ -289,6 +314,11 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--export-dir")
     parser.add_argument("--report-path")
     parser.add_argument("--dry-run", action="store_true")
+    parser.add_argument(
+        "--strict",
+        action="store_true",
+        help="exit non-zero if any turn could not be faithfully replayed (snapshot=current_state)",
+    )
     return parser
 
 
@@ -315,6 +345,10 @@ def main(argv: list[str] | None = None) -> int:
     else:
         print(report)
     _write_export(out_dir, records, report)
+    refusal = _refusal_banner(records)
+    if args.strict and refusal:
+        print(refusal, file=sys.stderr)
+        return 3
     return 0
 
 

@@ -9,6 +9,7 @@ Import the adapter directly in new code.
 from fitmas.runtime_v0.adapters.current_db_snapshot import (  # noqa: F401
     CapturedSession,
     MaterializedV0Snapshot,
+    SnapshotSource,
     materialize_v0_db,
     materialize_v0_db_for_turn,
 )
@@ -16,6 +17,7 @@ from fitmas.runtime_v0.adapters.current_db_snapshot import (  # noqa: F401
 __all__ = [
     "CapturedSession",
     "MaterializedV0Snapshot",
+    "SnapshotSource",
     "materialize_v0_db",
     "materialize_v0_db_for_turn",
 ]
