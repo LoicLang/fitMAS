@@ -86,6 +86,34 @@ trop (le `source_ref` "seance d'aujourd'hui", deja verbalise au tour 1, n'est pa
 porte quand la date se resout). Notee, non patchee — c'est sur, pas dangereux,
 et un fix reflexe trahirait la doctrine anti-reactive.
 
+### Trou d'utilite revele par seed reel (2 juin 2026)
+
+Depuis que la couche 2 peut partir du vrai monde (`drive_turn.py seed
+--from-real-db`, tranche #2 S2), un run seede sur une vraie DB a revele un trou
+que la matrice ne voit pas : sur une demande de deplacement claire ou l'user **ne
+nomme pas le jour** ("pas dispo aujourd'hui, decale-le"), le coach restait muet —
+DeepSeek `no_send` 3/4, Grok 4/4. Safe (zero write, zero fausse cloture) mais
+inutile.
+
+Racine : `propose_plan_patch` exige une `target_date` blanchie par
+`resolve_date_reference`, mais le prompt ne declenchait ce chemin que pour un jour
+**nomme par l'user**. Sans jour nomme, le coach posait une date brute -> rejet
+`planning_date_not_resolved` -> `no_send`. Contre-epreuve : un jour nomme committe
+4/4 (`resolve_date_reference` appele a chaque fois).
+
+Fix (LLM-first, commit `8ff5dc8`) : principe general d'adaptation a une contrainte
+— l'user donne une contrainte, pas une solution ; le coach choisit l'adaptation,
+choisit lui-meme un jour ouvert, le ground via `resolve_date_reference`, puis
+`propose_plan_patch`. Zero keyword sur le texte user ; la policy garde
+commit/pending ; le choix reste celui du LLM. Post-fix couche 2 (DeepSeek x4) :
+`no_send` 4/8 -> 0/8, move committe CLEAR 1/4 -> 4/4, OPEN 1/4 -> 3/4, 100 % safe.
+Cross-provider : Grok post-fix 4/4 commit (etait 0/4), dont 1 reply rattrapee par
+le guard (`guard_ok` false, write correct) — flakiness reply Grok, pas une
+regression du fix (DeepSeek 8/8 `guard_ok`).
+
+Lecon : la matrice scorait ces tours verts (elle scripte les tool-calls du coach,
+donc ne voit jamais le coach muet). Seul un seed reel en couche 2 l'a expose.
+
 ### Mecanisme d'honnetete (le coeur)
 
 Separation **joueur / juge** :
