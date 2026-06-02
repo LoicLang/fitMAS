@@ -740,3 +740,50 @@ def test_plan_patch_blocks_replace_without_effective_payload(tmp_path):
     assert decision.action == "block"
     assert decision.reason == "plan_patch_has_no_effect"
     assert decision.commands == ()
+
+
+def test_execution_update_blocks_future_done_but_allows_skip_today_and_past(tmp_path):
+    # Sessions seeded by _snapshot: 50 = yesterday, 60 = today, 61 = tomorrow.
+    # Marking a not-yet-happened session "done"/"partial" is an incoherent state
+    # the OutputGuard can't catch (the claim is backed by a real-but-wrong event),
+    # so the policy must net it here. Pre-emptive "skipped" stays legitimate.
+    snapshot = _snapshot(tmp_path)
+    policy = RuntimePolicy()
+
+    def _eval(session_id: int, status: str):
+        return policy.evaluate(
+            ActionProposal(
+                type="execution_update",
+                confidence=0.9,
+                user_intent_summary="execution",
+                evidence=("user reported",),
+                execution_update=ExecutionUpdateDraft(
+                    session_id=session_id, status=status, evidence="user reported"
+                ),
+            ),
+            snapshot,
+        )
+
+    future_done = _eval(61, "done")
+    future_partial = _eval(61, "partial")
+    future_skipped = _eval(61, "skipped")
+    today_done = _eval(60, "done")
+    past_done = _eval(50, "done")
+    past_skipped = _eval(50, "skipped")
+
+    assert future_done.action == "ask_clarification"
+    assert future_done.reason == "future_session_not_completable"
+    assert future_done.commands == ()
+    assert future_partial.action == "ask_clarification"
+    assert future_partial.reason == "future_session_not_completable"
+
+    assert future_skipped.action == "allow_commit"
+    assert isinstance(future_skipped.commands[0], SetSessionStatusCommand)
+    assert future_skipped.commands[0].status == "skipped"
+
+    assert today_done.action == "allow_commit"
+    assert isinstance(today_done.commands[0], SetSessionStatusCommand)
+    assert past_done.action == "allow_commit"
+    assert isinstance(past_done.commands[0], SetSessionStatusCommand)
+    assert past_skipped.action == "allow_commit"
+    assert isinstance(past_skipped.commands[0], SetSessionStatusCommand)

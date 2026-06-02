@@ -133,9 +133,12 @@ Groupe B (rapport sans action) confirmee en reel — a traiter plus tard, jamais
 l'anti-hallucination.
 
 Audit filet backend (probe directe policy) : un move vers une date **passee** est bloque
-(`target_date_out_of_range`), mais marquer une seance **future** "done" passe (`allow_commit`)
-— **trou de validation temporelle latent** (le coach ne l'a jamais declenche, mais le backend
-devrait le netter ; fix doctrine-aligne = validation d'un artefact LLM, pas du texte user).
+(`target_date_out_of_range`) ; marquer une seance **future** "done"/"partial" l'est desormais
+aussi (`ask_clarification` / `future_session_not_completable`, net pose le 2 juin 2026 dans
+`_execution_update`). Un skip pre-emptif futur et un "done"/"partial" du jour restent valides.
+Le coach ne l'avait jamais declenche, mais l'etat etait incoherent et l'OutputGuard ne pouvait
+pas l'attraper (la fausse claim est portee par un event reel committe) — fix doctrine-aligne =
+validation d'un artefact LLM, pas du texte user.
 
 ### Mecanisme d'honnetete (le coeur)
 

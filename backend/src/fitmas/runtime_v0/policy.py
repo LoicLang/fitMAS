@@ -127,16 +127,12 @@ class RuntimePolicy:
         session = _find_session(snapshot, draft.session_id)
         if session is None:
             return _decision("ask_clarification", "session_not_found", "low", (), ())
+        if session.date > snapshot.today and draft.status in {"done", "partial"}:
+            return _decision("ask_clarification", "future_session_not_completable", "medium", (), ())
         event = _execution_event_for_session(snapshot, draft.session_id)
         if event is not None:
             if event.created_at < snapshot.now - timedelta(hours=48):
-                return _decision(
-                    "ask_clarification",
-                    "execution_event_conflict",
-                    "low",
-                    (),
-                    ("Tu veux corriger l'événement précédent ?",),
-                )
+                return _decision("ask_clarification", "execution_event_conflict", "low", (), ("Tu veux corriger l'événement précédent ?",))
             return _decision(
                 "allow_commit",
                 "execution_update_compiled_to_correction",

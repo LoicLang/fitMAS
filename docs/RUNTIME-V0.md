@@ -253,7 +253,7 @@ zone acceptable: 2500-3200 LOC
 > 4000 LOC: alerte architecture lourde
 ```
 
-Mesure 1 juin 2026 : 3198 LOC (zone acceptable, plus dans l'objectif sain).
+Mesure 2 juin 2026 : 3194 LOC (zone acceptable, plus dans l'objectif sain).
 
 ## Sport Core V0
 
