@@ -90,6 +90,27 @@ Ordre recommande :
 3. Construire un executor adapter vers les writers existants.
 4. Brancher Telegram/API sous flag et allowlist user.
 
+## Chantier Moteur Sport (co-evolue avec le runtime)
+
+Doctrine : le moteur sport et le runtime se construisent **imbriques**, jamais en
+deux chantiers separes (`docs/PLANNING-V0.md`). Le moteur = des **tools
+coach-callables** (intention -> moteur deterministe -> proposition typee -> policy),
+grandis **un tool a la fois**, chacun prouve en couche 2.
+
+Principe : le LLM genere et personnalise ; un **verificateur deterministe tient
+l'autorite**. La coherence (progression, arc long-terme) est portee par la
+**gestion de contexte**, pas par un generateur deterministe.
+
+Premier livrable : le **context-pack running minimal + le verificateur** (mode
+continuite, hook transition). Test : generer 4-6 semaines running -> verif a la
+main de la coherence/progression -> comparer au vecu app (cas TSS qui chute). Spec
+a produire en premier : les 4-5 proprietes d'une semaine running saine, dont
+l'anti-TSS-drop.
+
+Contraintes : running-only d'abord ; tout Meso en `pending` ; le cut
+LLM<->deterministe se decouvre empiriquement ; l'usine planning de l'app est a
+**strangler, pas a brancher**. Questions ouvertes listees dans `docs/PLANNING-V0.md`.
+
 ## Scope Actif
 
 Lire :
@@ -97,7 +118,8 @@ Lire :
 - `docs/V0-DOGFOOD-SCOPE.md` pour le produit V0 ;
 - `docs/RUNTIME-V0.md` pour le noyau actuel ;
 - `docs/RUNTIME-MIGRATION-PLAN.md` pour l'integration ;
-- `docs/LLM-FIRST-CONVERSATION.md` pour la doctrine texte utilisateur.
+- `docs/LLM-FIRST-CONVERSATION.md` pour la doctrine texte utilisateur ;
+- `docs/PLANNING-V0.md` pour l'architecture moteur sport co-evolue.
 
 Le V0 couvre :
 

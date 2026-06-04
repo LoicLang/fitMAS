@@ -34,6 +34,7 @@ Puis lire seulement le doc domaine utile.
 | --- | --- |
 | `BUILD-ORDER.md` | etat court, prochain chantier, gates |
 | `V0-DOGFOOD-SCOPE.md` | scope produit V0 et Sport Core minimal |
+| `PLANNING-V0.md` | architecture moteur sport V0 : LLM genere, verif tient l'autorite, co-evolue runtime |
 | `RUNTIME-V0.md` | reference courte du prototype runtime |
 | `RUNTIME-MIGRATION-PLAN.md` | migration vers Telegram/API dogfood |
 | `RUNTIME-V0-APP-COMPARISON.md` | resultats app-vs-V0 sur tours reels (legacy, voir doctrine) |

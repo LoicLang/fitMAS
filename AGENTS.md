@@ -67,7 +67,7 @@ Current durable direction:
 
 - The active build is a **dogfoodable Product V0** around `backend/src/fitmas/runtime_v0/`. We are no longer finishing the legacy app.
 - Architecture decision: the repo is the **product envelope**, `runtime_v0` is the **proven target core**, the old pipeline is **legacy to strangle**. No new repo, no big-bang Telegram migration, do not delete the old pipeline before adapters are proven.
-- Sources of truth: next steps `docs/BUILD-ORDER.md`; product scope `docs/V0-DOGFOOD-SCOPE.md`; core reference `docs/RUNTIME-V0.md`; test method `docs/V0-TEST-DOCTRINE.md`; user-text doctrine `docs/LLM-FIRST-CONVERSATION.md`.
+- Sources of truth: next steps `docs/BUILD-ORDER.md`; product scope `docs/V0-DOGFOOD-SCOPE.md`; core reference `docs/RUNTIME-V0.md`; test method `docs/V0-TEST-DOCTRINE.md`; user-text doctrine `docs/LLM-FIRST-CONVERSATION.md`; planning engine architecture `docs/PLANNING-V0.md`.
 
 V0 status (1 juin 2026):
 
@@ -96,6 +96,14 @@ V0 product scope (`docs/V0-DOGFOOD-SCOPE.md`):
 Out of scope — do not open without an explicit ask:
 
 - Phase B progression / prescription, full long-term replan, multi-month periodization, nutrition, multi-agent, vector / reflexive memory, a heartbeat that auto-commits a mutation, complex decision UI.
+
+Sport engine <-> runtime co-evolution (`docs/PLANNING-V0.md`):
+
+- Build the sport planning engine and the runtime **together, intertwined** — never two separate tracks bolted together later, or they will never link cleanly. The engine is a **coach-callable toolbox** (high-level intent -> deterministic engine -> typed proposal -> policy gate), same tool-calling paradigm as the runtime. Grow one tool at a time, each proven on couche 2.
+- Planning principle: **the LLM generates and personalizes; a deterministic verifier holds authority.** Reliability comes from the verifier, not from constraining the LLM. This extends the user-text rule to plan generation: determinism is verification / validation / commit / audit, **never** understanding or imposed generation (verifying is easier than generating — keep determinism on the tractable side). This is the opposite of the legacy app (a deterministic generator with the LLM in a narrow role), which is exactly why the app is rigid/buggy.
+- Coherence (progression, long-term arc) is carried by **context management** — a hierarchical context-pack (block intent + last-week actuals + constraints + signals), not by a deterministic generator. The LLM never manages the long term (its documented weakness).
+- The verifier is **bi-mode**: continuity (smooth progression within a cycle) vs transition (a declared, justified cycle break — allow the discontinuity, enforce safety, always pending). The LLM's declared intent selects the mode. The key session type/progression is prescribed, not LLM free choice; the verifier rejects type-drift even at equal load.
+- **Running-only first** (load verifiable by hand). The exact LLM/deterministic cut is **discovered empirically** — start ~100% LLM + a minimal safety verifier; determinism only grows on proof of drift. The legacy planning engine is **to strangle, not to bridge** (buggy / over-built). Open questions are tracked in `docs/PLANNING-V0.md`.
 
 Next tranche (`docs/BUILD-ORDER.md`):
 
