@@ -44,6 +44,11 @@ class PlanPatchDraft:
     rationale: str
 
 @dataclass(frozen=True)
+class FactResolutionDraft:
+    fact_id: int
+    reason: str = ""
+
+@dataclass(frozen=True)
 class ActionProposal:
     type: Literal[
         "answer",
@@ -52,6 +57,7 @@ class ActionProposal:
         "execution_update",
         "execution_correction",
         "plan_patch",
+        "fact_resolution",
         "no_send",
     ]
     confidence: float
@@ -63,6 +69,7 @@ class ActionProposal:
     execution_update: ExecutionUpdateDraft | None = None
     execution_correction: ExecutionCorrectionDraft | None = None
     plan_patch: PlanPatchDraft | None = None
+    fact_resolution: FactResolutionDraft | None = None
     unresolved_intent: dict[str, Any] | None = None
     tool_trace: tuple[dict[str, Any], ...] = ()
 
@@ -82,6 +89,7 @@ def proposal_from_dict(data: dict[str, Any]) -> ActionProposal:
     execution_update = data.get("execution_update")
     execution_correction = data.get("execution_correction")
     plan_patch = data.get("plan_patch")
+    fact_resolution = data.get("fact_resolution")
     return ActionProposal(
         type=data["type"],
         confidence=data["confidence"],
@@ -99,6 +107,14 @@ def proposal_from_dict(data: dict[str, Any]) -> ActionProposal:
             else None
         ),
         plan_patch=_plan_patch_from_dict(plan_patch) if plan_patch is not None else None,
+        fact_resolution=(
+            FactResolutionDraft(
+                fact_id=fact_resolution["fact_id"],
+                reason=fact_resolution.get("reason", ""),
+            )
+            if fact_resolution is not None
+            else None
+        ),
         unresolved_intent=data.get("unresolved_intent"),
         tool_trace=tuple(data.get("tool_trace", ())),
     )

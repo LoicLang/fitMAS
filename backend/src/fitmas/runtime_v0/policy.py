@@ -49,6 +49,11 @@ class UpsertMemoryFactCommand(Command):
     expires_at: datetime | None
 
 @dataclass(frozen=True)
+class ResolveMemoryFactCommand(Command):
+    fact_id: int
+    reason: str
+
+@dataclass(frozen=True)
 class UpdateConversationStateCommand(Command):
     last_unresolved_intent: dict | None
     last_execution_event_id: int | None
@@ -96,6 +101,8 @@ class RuntimePolicy:
             )
         if proposal.type == "memory_update":
             decision = self._memory_update(proposal)
+        elif proposal.type == "fact_resolution":
+            decision = self._fact_resolution(proposal, snapshot)
         elif proposal.type == "execution_update":
             decision = self._execution_update(proposal, snapshot)
         elif proposal.type == "execution_correction":
@@ -119,6 +126,22 @@ class RuntimePolicy:
                 return _decision("block", "empty_fact_text", "low", (), ())
             commands.append(UpsertMemoryFactCommand(fact.kind, fact.text, fact.confidence, fact.expires_at))
         return _decision("allow_commit", "memory_update", "low", tuple(commands), proposal.evidence)
+
+    def _fact_resolution(self, proposal: ActionProposal, snapshot: WorldSnapshot) -> PolicyDecision:
+        draft = proposal.fact_resolution
+        if draft is None:
+            return _decision("block", "missing_fact_resolution", "low", (), ())
+        # Ground the LLM-supplied fact id against DB truth before retracting.
+        if draft.fact_id not in {fact.id for fact in snapshot.active_facts}:
+            return _decision("ask_clarification", "fact_not_active", "low", (), ("De quelle contrainte tu parles ?",))
+        reply_facts = proposal.evidence or ((draft.reason,) if draft.reason else ())
+        return _decision(
+            "allow_commit",
+            "fact_resolution",
+            "low",
+            (ResolveMemoryFactCommand(draft.fact_id, draft.reason),),
+            reply_facts,
+        )
 
     def _execution_update(self, proposal: ActionProposal, snapshot: WorldSnapshot) -> PolicyDecision:
         draft = proposal.execution_update

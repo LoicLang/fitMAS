@@ -7,6 +7,7 @@ from fitmas.runtime_v0.tools_proposal import (
     ask_clarification,
     propose_execution_correction,
     propose_execution_update,
+    propose_fact_resolution,
     propose_memory_update,
     propose_plan_patch,
 )
@@ -134,6 +135,17 @@ def for_event(event: InputEvent, snapshot: WorldSnapshot) -> tuple[ToolSchema, .
             description="Propose a user memory fact update without committing it.",
             parameters=_schema({"kind": {"type": "string", "enum": ["preference", "health", "availability", "constraint"]}, "text": {"type": "string"}, "confidence": {"type": "number"}, "expires_at": {"type": "string"}}, ("kind", "text", "confidence")),
             handler=propose_memory_update,
+            is_proposal=True,
+        ),
+        ToolSchema(
+            name="propose_fact_resolution",
+            description=(
+                "Resolve (retract) an active user fact the user reports is over "
+                "(e.g. a pain that has passed). Call get_active_facts first to find "
+                "the fact_id. Do not create a new contradicting fact."
+            ),
+            parameters=_schema({"fact_id": {"type": "integer"}, "reason": {"type": "string"}}, ("fact_id",)),
+            handler=propose_fact_resolution,
             is_proposal=True,
         ),
         ToolSchema(

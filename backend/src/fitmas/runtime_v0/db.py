@@ -80,7 +80,8 @@ CREATE TABLE IF NOT EXISTS v0_facts (
     text TEXT NOT NULL,
     confidence REAL NOT NULL,
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    expires_at TEXT
+    expires_at TEXT,
+    resolved_at TEXT
 );
 
 CREATE TABLE IF NOT EXISTS v0_conversation_state (
@@ -139,7 +140,15 @@ def connect(db_path: Path | None = None) -> sqlite3.Connection:
 def init_db(db_path: Path | None = None) -> None:
     with connect(db_path) as connection:
         connection.executescript(SCHEMA)
+        _ensure_fact_columns(connection)
         connection.commit()
+
+def _ensure_fact_columns(connection: sqlite3.Connection) -> None:
+    # Idempotent migration: older v0 DBs predate resolved_at. CREATE TABLE IF NOT
+    # EXISTS won't add the column, so add it here when missing.
+    columns = {row["name"] for row in connection.execute("PRAGMA table_info(v0_facts)")}
+    if "resolved_at" not in columns:
+        connection.execute("ALTER TABLE v0_facts ADD COLUMN resolved_at TEXT")
 
 def reset_db(db_path: Path | None = None) -> None:
     with connect(db_path) as connection:

@@ -7,6 +7,7 @@ from fitmas.runtime_v0.proposals import (
     ActionProposal,
     ExecutionCorrectionDraft,
     ExecutionUpdateDraft,
+    FactResolutionDraft,
     MemoryFactDraft,
     PlanPatchDraft,
     PlanPatchOperation,
@@ -103,6 +104,21 @@ def propose_memory_update(
                 expires_at=_parse_optional_datetime(expires_at),
             ),
         ),
+    )
+
+def propose_fact_resolution(
+    ctx: ToolContext,
+    fact_id: int,
+    reason: str = "",
+) -> ActionProposal:
+    _record(ctx, "propose_fact_resolution", True)
+    return ActionProposal(
+        type="fact_resolution",
+        confidence=0.9,
+        user_intent_summary="fact resolution",
+        evidence=(reason,) if reason else (),
+        tool_trace=_trace(ctx),
+        fact_resolution=FactResolutionDraft(fact_id=fact_id, reason=reason),
     )
 
 def ask_clarification(

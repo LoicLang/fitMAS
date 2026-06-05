@@ -189,6 +189,7 @@ def _load_active_facts(connection, user_id: int, now: datetime) -> tuple[FactVie
         """
         select * from v0_facts
         where user_id = ? and (expires_at is null or expires_at > ?)
+        and resolved_at is null
         order by created_at desc, id desc limit 10
         """,
         (user_id, now.isoformat()),

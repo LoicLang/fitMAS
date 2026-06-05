@@ -12,6 +12,7 @@ from fitmas.runtime_v0.policy import (
     Command,
     CorrectSessionStatusCommand,
     CreatePendingConfirmationCommand,
+    ResolveMemoryFactCommand,
     SetSessionStatusCommand,
     UpdateConversationStateCommand,
     UpsertMemoryFactCommand,
@@ -86,6 +87,8 @@ def _apply_command(command: Command, connection, user_id: int) -> tuple[dict[str
         return _apply_create_pending(command, connection, user_id)
     if isinstance(command, UpsertMemoryFactCommand):
         return _apply_upsert_memory_fact(command, connection, user_id)
+    if isinstance(command, ResolveMemoryFactCommand):
+        return _apply_resolve_memory_fact(command, connection, user_id)
     if isinstance(command, UpdateConversationStateCommand):
         return _apply_update_conversation_state(command, connection, user_id)
     raise ValueError("unsupported_command")
@@ -195,6 +198,20 @@ def _apply_upsert_memory_fact(command: UpsertMemoryFactCommand, connection, user
     row = _fact(connection, cursor.lastrowid)
     return {}, row, command.text
 
+def _apply_resolve_memory_fact(command: ResolveMemoryFactCommand, connection, user_id: int) -> tuple[dict[str, Any], dict[str, Any], str]:
+    before_row = connection.execute(
+        "select * from v0_facts where id = ? and user_id = ?", (command.fact_id, user_id)
+    ).fetchone()
+    if before_row is None:
+        raise ValueError("fact_not_found")
+    before = dict(before_row)
+    connection.execute(
+        "update v0_facts set resolved_at = ? where id = ? and user_id = ?",
+        (_now_text(), command.fact_id, user_id),
+    )
+    after = _fact(connection, command.fact_id)
+    return before, after, command.reason
+
 def _apply_update_conversation_state(command: UpdateConversationStateCommand, connection, user_id: int) -> tuple[dict[str, Any], dict[str, Any], str]:
     before = _conversation_state(connection, user_id) or {}
     intent_json = (
@@ -297,6 +314,8 @@ def _target(command: Command, user_id: int) -> tuple[str, str]:
         return "pending", command.type
     if isinstance(command, UpsertMemoryFactCommand):
         return "fact", command.text
+    if isinstance(command, ResolveMemoryFactCommand):
+        return "fact", str(command.fact_id)
     if isinstance(command, UpdateConversationStateCommand):
         return "state", str(user_id)
     return "unknown", type(command).__name__
