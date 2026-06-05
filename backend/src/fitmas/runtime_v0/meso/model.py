@@ -98,6 +98,28 @@ class TypedConstraint:
     active: bool = True  # already filtered for expiry/resolution upstream
 
 
+@dataclass(frozen=True)
+class Signal:
+    """A recent fact as an advisory hint for the generator (never a gate)."""
+
+    kind: str  # "fatigue" | "soreness" | "preference" — non sur-enumé en V0
+    text: str
+
+
+@dataclass(frozen=True)
+class ContextPack:
+    """The layered Meso context-pack the generator/verifier consume.
+
+    target/last_week_actuals are None at cold-start (no prior typed week).
+    signals is a typed slot left empty in Slice 2.0 (filled in 2.1).
+    """
+
+    target: WeekTarget | None
+    last_week_actuals: WeekActuals | None
+    constraints: tuple[TypedConstraint, ...]
+    signals: tuple[Signal, ...] = ()
+
+
 def derive_continuity_target(actuals: WeekActuals, phase: Phase = "build") -> WeekTarget:
     low, high = _PHASE_BANDS[phase]
     base = actuals.total_load

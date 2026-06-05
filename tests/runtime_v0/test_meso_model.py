@@ -4,7 +4,9 @@ import pytest
 from datetime import date, timedelta
 
 from fitmas.runtime_v0.meso.model import (
+    ContextPack,
     PlannedWeek,
+    Signal,
     TypedSession,
     WeekActuals,
     actuals_from_week,
@@ -118,3 +120,20 @@ def test_actuals_from_week_rejects_multiple_keys():
     )
     with pytest.raises(ValueError):
         actuals_from_week(week)
+
+
+def test_signal_holds_kind_and_text():
+    sig = Signal(kind="fatigue", text="jambes lourdes")
+    assert sig.kind == "fatigue"
+    assert sig.text == "jambes lourdes"
+
+
+def test_context_pack_defaults_signals_empty():
+    pack = ContextPack(
+        target=None,
+        last_week_actuals=None,
+        constraints=(),
+    )
+    assert pack.signals == ()
+    assert pack.target is None
+    assert pack.last_week_actuals is None
