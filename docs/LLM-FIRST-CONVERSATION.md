@@ -1,7 +1,7 @@
 ---
 summary: doctrine zero determinisme sur texte utilisateur libre
 read_when:
-  - modifier conversation_pipeline.py
+  - modifier decision/conversation_pipeline.py
   - modifier llm/understanding_service.py
   - ajouter une action memoire, sante, disponibilite, execution ou preference
   - toucher aux pending confirmations
@@ -62,7 +62,35 @@ Interdit en runtime conversation :
 - choisir des tools depuis des keywords utilisateur ;
 - ecrire une memoire depuis un pattern lexical ;
 - declencher une mutation planning depuis une phrase libre ;
+- servir une reply visible par template sur le chemin nominal ;
 - faire un fallback reply canned pour masquer un trou d'architecture.
+
+## Voix Vs Verite
+
+Deux determinismes existent. Ne pas les confondre.
+
+```text
+determinisme de voix   = interdit  (templates de reply visibles, override
+                                     deterministe du texte, dump brut)
+determinisme de verite = autorise  (veto read-only sur la sortie du modele)
+```
+
+Le determinisme de voix est ce qui a tue le naturel dans l'app : des reponses
+visibles fabriquees par le code, pas par le modele. Il est banni du chemin
+nominal. La voix vit dans le reply LLM.
+
+Le determinisme de verite ne fabrique jamais la voix. Il lit la sortie du
+modele et la compare a l'etat verifie (committed_events, pending, read_facts).
+Il rend un oui/non. Sur non, il bloque ou retombe sur un filet.
+
+Regle :
+
+```text
+La voix vit dans le LLM.
+La verite vit dans le guard.
+Le guard juge le texte du modele, jamais le texte utilisateur.
+Un template n'est qu'un filet de secours, pas la reponse par defaut.
+```
 
 ## Flux Cible
 
@@ -93,13 +121,12 @@ En place :
 - `CoachUnderstanding` existe pour isoler la comprehension ;
 - `DecisionOutcome` existe pour isoler la sortie runtime ;
 - root `final_reply.py` et root `api_messages.py` sont supprimes.
-
-Encore en transition :
-
-- `CoachDecision` legacy est supprime du provider path ;
-- `conversation_pipeline.py` orchestre encore trop ;
+- `CoachDecision` legacy est supprime du provider path et des artifacts runtime ;
+- root `conversation_pipeline.py` est supprime ;
+- `decision/conversation_pipeline.py` est un adapter mince autour des owners
+  `decision/turn_*` ;
 - `MutationDecision` vit dans `domain/planning/mutation_decision.py` pour le
-  vieux writer planning.
+  writer planning historique, pas dans le chemin runtime canonique.
 
 ## Pending
 

@@ -8,7 +8,6 @@ ROOT = Path(__file__).resolve().parents[1]
 SRC = ROOT / "backend" / "src" / "fitmas"
 TESTS = ROOT / "tests"
 SCRIPTS = ROOT / "scripts"
-CENSUS = ROOT / "docs" / "ROOT-MODULE-CENSUS.md"
 
 DELETED_ROOT_MODULES = {
     "api_messages.py",
@@ -48,16 +47,6 @@ def _imports(path: Path) -> set[str]:
     return modules
 
 
-def _census_row_files() -> set[str]:
-    row_files: set[str] = set()
-    for line in CENSUS.read_text(encoding="utf-8").splitlines():
-        if not line.startswith("| `"):
-            continue
-        cells = [cell.strip() for cell in line.strip().strip("|").split("|")]
-        row_files.add(cells[0].strip("`"))
-    return row_files
-
-
 def test_10a_deletes_simple_root_delete_candidates() -> None:
     existing = sorted(filename for filename in DELETED_ROOT_MODULES if (SRC / filename).exists())
     assert existing == []
@@ -75,8 +64,3 @@ def test_10a_no_imports_target_deleted_root_candidates() -> None:
 def test_10a_rehomes_remaining_useful_code_outside_root() -> None:
     assert (SRC / "domain" / "planning" / "session_actions.py").exists()
     assert (SRC / "tools" / "replan_proposal.py").exists()
-
-
-def test_10a_root_census_drops_deleted_rows() -> None:
-    stale_rows = sorted(DELETED_ROOT_MODULES & _census_row_files())
-    assert stale_rows == []

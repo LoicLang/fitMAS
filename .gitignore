@@ -5,9 +5,12 @@ __pycache__/
 *.egg-info/
 .env
 fitmas.db
+fitmas_v0.db
+fitmas_v0.db-*
 *.bak
 .pytest_cache/
 .tmp-*
+.tmp-v0-*
 
 # Local frontend / browser tooling
 node_modules/
@@ -18,3 +21,8 @@ frontend/dist/
 
 # Generated design scratchpads
 design-system.md
+
+# Runtime V0 eval outputs: regenerable (re-run for fresh numbers) and the
+# app-vs-v0 dumps replay real prod turns (PII). Don't commit; -f to curate a
+# specific report. Already-tracked comparison records stay tracked.
+exports/runtime-v0/

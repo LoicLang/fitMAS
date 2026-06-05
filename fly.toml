@@ -5,6 +5,8 @@ primary_region = "cdg"  # Paris
 
 [env]
   FITMAS_DB_PATH = "/data/fitmas.db"
+  FITMAS_LLM_PROFILE = "deepseek"
+  FITMAS_DEEPSEEK_MODEL = "deepseek-v4-pro"
 
 [http_service]
   internal_port = 8000

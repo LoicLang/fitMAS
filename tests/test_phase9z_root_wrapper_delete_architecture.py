@@ -8,7 +8,6 @@ ROOT = Path(__file__).resolve().parents[1]
 SRC = ROOT / "backend" / "src" / "fitmas"
 TESTS = ROOT / "tests"
 SCRIPTS = ROOT / "scripts"
-CENSUS = ROOT / "docs" / "ROOT-MODULE-CENSUS.md"
 
 DELETED_ROOT_WRAPPERS = {
     "heartbeat.py",
@@ -65,15 +64,4 @@ def test_9z_no_imports_target_deleted_root_wrappers() -> None:
         hit = _imports(path) & FORBIDDEN_IMPORTS
         if hit:
             offenders.append(f"{path.relative_to(ROOT)}: {sorted(hit)}")
-    assert offenders == []
-
-
-def test_9z_root_census_removes_deleted_wrapper_rows() -> None:
-    row_files: set[str] = set()
-    for line in CENSUS.read_text(encoding="utf-8").splitlines():
-        if not line.startswith("| `"):
-            continue
-        cells = [cell.strip() for cell in line.strip().strip("|").split("|")]
-        row_files.add(cells[0].strip("`"))
-    offenders = sorted(DELETED_ROOT_WRAPPERS & row_files)
     assert offenders == []

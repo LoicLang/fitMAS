@@ -60,8 +60,8 @@ backend/src/fitmas/
   legacy/
 ```
 
-`legacy/` est temporaire.
-Il ne doit pas devenir une seconde architecture stable.
+`legacy/` n'a plus de fichier source suivi.
+Il ne doit pas etre recree.
 
 ## Etat Actuel
 
@@ -75,7 +75,7 @@ En place :
 
 Encore actif :
 
-- `decision/conversation_pipeline.py` est maintenant un adapter de 78 lignes.
+- `decision/conversation_pipeline.py` est maintenant un adapter de 80 lignes.
   Il garde l'entree API historique, puis delegue aux owners `decision/turn_*`.
   Le root `conversation_pipeline.py` est supprime.
 - La responsabilite conversationnelle restante est concentree dans

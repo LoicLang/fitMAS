@@ -89,8 +89,7 @@ Sinon : `no_send`.
 
 Voix partagee :
 
-- `coach_voice.py` tant que le module reste root.
-- cible future : `domain/coaching/coach_voice.py`.
+- `domain/coaching/coach_voice.py`.
 
 Replies :
 

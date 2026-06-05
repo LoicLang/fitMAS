@@ -10,15 +10,25 @@ import logging
 import os
 from dataclasses import dataclass
 from time import perf_counter
+from types import SimpleNamespace
 from typing import Any
 
 logger = logging.getLogger(__name__)
 
 DEEPSEEK_ANTHROPIC_BASE_URL = "https://api.deepseek.com/anthropic"
 DEEPSEEK_OPENAI_BASE_URL = "https://api.deepseek.com"
+MISTRAL_OPENAI_BASE_URL = "https://api.mistral.ai/v1"
+GEMINI_OPENAI_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/openai/"
+GROK_OPENAI_BASE_URL = "https://api.x.ai/v1"
 DEFAULT_FAST_MODEL = "deepseek-v4-flash"
 DEFAULT_STRONG_MODEL = "deepseek-v4-pro"
 DEFAULT_MODEL = DEFAULT_STRONG_MODEL
+DEFAULT_MISTRAL_MODEL = "mistral-small-2603"
+DEFAULT_GEMINI_MODEL = "gemini-3.5-flash"
+DEFAULT_GROK_MODEL = "grok-4.3"
+DEFAULT_MISTRAL_REASONING_EFFORT = "high"
+DEFAULT_GEMINI_REASONING_EFFORT = "medium"
+DEFAULT_GROK_REASONING_EFFORT = "low"
 _CLAUDE_FAST_MODELS = {"claude-haiku-4-5-20251001"}
 _CLAUDE_STRONG_MODELS = {"claude-sonnet-4-6"}
 CLAUDE_FALLBACK_MODEL = "claude-haiku-4-5-20251001"
@@ -26,7 +36,7 @@ DEEPSEEK_STRUCTURED_MIN_TOKENS = 3072
 DEEPSEEK_STRUCTURED_ATTEMPTS = 3
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True)
 class StructuredJSONResult:
     data: dict | None
     provider: str
@@ -37,12 +47,23 @@ class StructuredJSONResult:
     provider_fallback_used: bool = False
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True)
 class HeartbeatTextGeneration:
     raw_text: str | None
     text: str | None
     reason: str
     allow_no_send: bool
+
+
+@dataclass(frozen=True)
+class LLMProviderProfile:
+    name: str
+    api_key_env: str
+    base_url: str
+    model: str
+    api_style: str = "openai"
+    reasoning_effort: str | None = None
+    api_key_env_aliases: tuple[str, ...] = ()
 
 
 # ---------------------------------------------------------------------------
@@ -63,6 +84,81 @@ def client():
         return anthropic.Anthropic(api_key=api_key)
     except ImportError:
         return None
+
+
+def active_llm_profile(profile_name: str | None = None) -> LLMProviderProfile:
+    """Return the active provider profile for smoke/model comparisons.
+
+    Default runtime behavior stays DeepSeek-first. Explicit FITMAS_LLM_PROFILE
+    pins the provider so smoke comparisons do not silently fall through to a
+    different model family.
+    """
+    raw = (profile_name or os.getenv("FITMAS_LLM_PROFILE") or "").strip().lower()
+    aliases = {
+        "": "deepseek" if os.getenv("DEEPSEEK_API_KEY") or not os.getenv("ANTHROPIC_API_KEY") else "claude",
+        "auto": "deepseek" if os.getenv("DEEPSEEK_API_KEY") or not os.getenv("ANTHROPIC_API_KEY") else "claude",
+        "xai": "grok",
+        "grok4": "grok",
+    }
+    name = aliases.get(raw, raw)
+    generic_model = os.getenv("FITMAS_LLM_MODEL")
+    if name == "claude":
+        return LLMProviderProfile(
+            name="claude",
+            api_key_env="ANTHROPIC_API_KEY",
+            base_url="",
+            model=generic_model or os.getenv("FITMAS_CLAUDE_MODEL") or CLAUDE_FALLBACK_MODEL,
+            api_style="anthropic",
+        )
+    if name == "mistral":
+        return LLMProviderProfile(
+            name="mistral",
+            api_key_env="MISTRAL_API_KEY",
+            base_url=os.getenv("FITMAS_MISTRAL_BASE_URL") or MISTRAL_OPENAI_BASE_URL,
+            model=generic_model or os.getenv("FITMAS_MISTRAL_MODEL") or DEFAULT_MISTRAL_MODEL,
+            reasoning_effort=_reasoning_effort_for_profile("mistral", DEFAULT_MISTRAL_REASONING_EFFORT),
+        )
+    if name == "gemini":
+        return LLMProviderProfile(
+            name="gemini",
+            api_key_env="GEMINI_API_KEY",
+            base_url=os.getenv("FITMAS_GEMINI_BASE_URL") or GEMINI_OPENAI_BASE_URL,
+            model=generic_model or os.getenv("FITMAS_GEMINI_MODEL") or DEFAULT_GEMINI_MODEL,
+            reasoning_effort=_reasoning_effort_for_profile("gemini", DEFAULT_GEMINI_REASONING_EFFORT),
+        )
+    if name == "grok":
+        return LLMProviderProfile(
+            name="grok",
+            api_key_env="XAI_API_KEY",
+            base_url=os.getenv("FITMAS_GROK_BASE_URL") or GROK_OPENAI_BASE_URL,
+            model=generic_model or os.getenv("FITMAS_GROK_MODEL") or DEFAULT_GROK_MODEL,
+            reasoning_effort=_reasoning_effort_for_profile("grok", DEFAULT_GROK_REASONING_EFFORT),
+            api_key_env_aliases=("GROK_API_KEY",),
+        )
+    return LLMProviderProfile(
+        name="deepseek",
+        api_key_env="DEEPSEEK_API_KEY",
+        base_url=os.getenv("FITMAS_DEEPSEEK_BASE_URL") or DEEPSEEK_OPENAI_BASE_URL,
+        model=generic_model or os.getenv("FITMAS_DEEPSEEK_MODEL") or DEFAULT_STRONG_MODEL,
+    )
+
+
+def _reasoning_effort_for_profile(profile_name: str, default: str | None) -> str | None:
+    raw = (
+        os.getenv(f"FITMAS_{profile_name.upper()}_REASONING_EFFORT")
+        or os.getenv("FITMAS_LLM_REASONING_EFFORT")
+        or default
+    )
+    normalized = str(raw or "").strip().lower()
+    return normalized or None
+
+
+def _explicit_llm_profile() -> bool:
+    return bool(str(os.getenv("FITMAS_LLM_PROFILE") or "").strip())
+
+
+def _profile_uses_openai_chat(profile: LLMProviderProfile) -> bool:
+    return profile.api_style == "openai" and profile.name in {"mistral", "gemini", "grok"}
 
 
 def anthropic_client(*, provider: str = "auto"):
@@ -87,14 +183,28 @@ def anthropic_client(*, provider: str = "auto"):
 
 def deepseek_openai_client():
     """Return a DeepSeek OpenAI-compatible client or None."""
-    deepseek_key = os.getenv("DEEPSEEK_API_KEY")
-    if not deepseek_key:
+    return openai_compatible_client(active_llm_profile("deepseek"))
+
+
+def openai_compatible_client(profile: LLMProviderProfile | None = None):
+    """Return an OpenAI-compatible client for the selected profile or None."""
+    selected = profile or active_llm_profile()
+    api_key = _api_key_for_profile(selected)
+    if not api_key:
         return None
     try:
         from openai import OpenAI
     except ImportError:
         return None
-    return OpenAI(api_key=deepseek_key, base_url=DEEPSEEK_OPENAI_BASE_URL)
+    return OpenAI(api_key=api_key, base_url=selected.base_url)
+
+
+def _api_key_for_profile(profile: LLMProviderProfile) -> str | None:
+    for env_name in (profile.api_key_env, *profile.api_key_env_aliases):
+        value = os.getenv(env_name)
+        if value:
+            return value
+    return None
 
 
 def _normalize_model_for_provider(model: str) -> str:
@@ -106,6 +216,16 @@ def _normalize_model_for_provider(model: str) -> str:
     if model in _CLAUDE_STRONG_MODELS:
         return DEFAULT_STRONG_MODEL
     return model
+
+
+def _effective_model_for_profile(model: str, profile: LLMProviderProfile) -> str:
+    if profile.name == "deepseek":
+        if model == DEFAULT_MODEL:
+            return profile.model
+        return _normalize_model_for_provider(model)
+    if profile.name == "claude":
+        return model if model not in {DEFAULT_FAST_MODEL, DEFAULT_STRONG_MODEL, DEFAULT_MODEL} else profile.model
+    return profile.model
 
 
 def _using_deepseek() -> bool:
@@ -129,12 +249,27 @@ def request_message(
     output_config: dict[str, Any] | None = None,
 ):
     """Send a message to the Anthropic API. Returns response or None."""
-    c = client()
+    profile = active_llm_profile()
+    if _profile_uses_openai_chat(profile):
+        return _request_openai_compatible_message(
+            profile=profile,
+            system=system,
+            messages=messages,
+            model=model,
+            max_tokens=max_tokens,
+            tools=tools,
+            tool_choice=tool_choice,
+        )
+    if _explicit_llm_profile() and profile.name in {"deepseek", "claude"}:
+        c = anthropic_client(provider=profile.name)
+    else:
+        c = client()
     if not c:
         return None
+    anthropic_profile = profile if profile.name in {"deepseek", "claude"} else active_llm_profile("deepseek")
     try:
         kwargs: dict[str, Any] = {
-            "model": _normalize_model_for_provider(model),
+            "model": _effective_model_for_profile(model, anthropic_profile),
             "max_tokens": max_tokens,
             "system": system,
             "messages": messages,
@@ -147,13 +282,48 @@ def request_message(
             kwargs["cache_control"] = cache_control
         if thinking is not None:
             kwargs["thinking"] = thinking
-        elif _using_deepseek():
+        elif anthropic_profile.name == "deepseek" and _using_deepseek():
             kwargs["thinking"] = {"type": "disabled"}
         if output_config is not None:
             kwargs["output_config"] = output_config
         return c.messages.create(**kwargs)
     except Exception:
         logger.exception("LLM message call failed")
+        return None
+
+
+def _request_openai_compatible_message(
+    *,
+    profile: LLMProviderProfile,
+    system: Any,
+    messages: list[dict[str, Any]],
+    model: str,
+    max_tokens: int,
+    tools: list[dict[str, Any]] | None = None,
+    tool_choice: dict[str, Any] | None = None,
+):
+    client_obj = openai_compatible_client(profile)
+    if client_obj is None:
+        return None
+    try:
+        chat_messages = _openai_chat_messages(system=system, messages=messages)
+        kwargs: dict[str, Any] = {
+            "model": _effective_model_for_profile(model, profile),
+            "temperature": 0,
+            "max_tokens": max_tokens,
+            "messages": chat_messages,
+        }
+        openai_tools = _openai_tools(tools)
+        if openai_tools:
+            kwargs["tools"] = openai_tools
+        openai_tool_choice = _openai_tool_choice(tool_choice)
+        if openai_tool_choice is not None:
+            kwargs["tool_choice"] = openai_tool_choice
+        _apply_openai_compatible_provider_params(kwargs, profile)
+        response = client_obj.chat.completions.create(**kwargs)
+        return _as_anthropic_compatible_response(response)
+    except Exception:
+        logger.exception("%s_openai_message_call_failed", profile.name)
         return None
 
 
@@ -185,7 +355,8 @@ def request_json(
 
     Parsing goes through _json_parse_candidates() so truncated tails and
     trailing noise from the model don't drop otherwise valid payloads."""
-    if os.getenv("DEEPSEEK_API_KEY") and request_text is _DEFAULT_REQUEST_TEXT:
+    profile = active_llm_profile()
+    if profile.api_style == "openai" and request_text is _DEFAULT_REQUEST_TEXT:
         result = request_structured_json(
             system=system,
             messages=[{"role": "user", "content": prompt}],
@@ -229,6 +400,35 @@ def request_structured_json(
             max_tokens=max_tokens,
             schema_hint=schema_hint,
         )
+    if provider in {"mistral", "gemini", "grok"}:
+        return _request_openai_compatible_json(
+            profile=active_llm_profile(provider),
+            system=system,
+            messages=messages,
+            model=model,
+            max_tokens=max_tokens,
+            schema_hint=schema_hint,
+        )
+
+    active_profile = active_llm_profile()
+    if provider == "auto" and active_profile.name in {"mistral", "gemini", "grok"}:
+        return _request_openai_compatible_json(
+            profile=active_profile,
+            system=system,
+            messages=messages,
+            model=model,
+            max_tokens=max_tokens,
+            schema_hint=schema_hint,
+        )
+    if provider == "auto" and active_profile.name == "claude":
+        return _request_claude_json(
+            system=system,
+            messages=messages,
+            model=active_profile.model,
+            max_tokens=max_tokens,
+            schema_hint=schema_hint,
+        )
+
     deepseek_result: StructuredJSONResult | None = None
     if provider in {"auto", "deepseek_openai"} and os.getenv("DEEPSEEK_API_KEY"):
         deepseek_result = _request_deepseek_openai_json(
@@ -240,6 +440,8 @@ def request_structured_json(
         )
         if deepseek_result.data is not None:
             return deepseek_result
+    if _explicit_llm_profile() and active_profile.name == "deepseek":
+        return deepseek_result or StructuredJSONResult(data=None, provider="deepseek_openai", model=model, error="client_unavailable")
     if provider == "deepseek_openai":
         return deepseek_result or StructuredJSONResult(data=None, provider="deepseek_openai", model=model, error="client_unavailable")
 
@@ -305,25 +507,48 @@ def _request_deepseek_openai_json(
     max_tokens: int,
     schema_hint: str | None = None,
 ) -> StructuredJSONResult:
-    client_obj = deepseek_openai_client()
+    return _request_openai_compatible_json(
+        profile=active_llm_profile("deepseek"),
+        system=system,
+        messages=messages,
+        model=model,
+        max_tokens=max_tokens,
+        schema_hint=schema_hint,
+        provider_label="deepseek_openai",
+    )
+
+
+def _request_openai_compatible_json(
+    *,
+    profile: LLMProviderProfile,
+    system: Any,
+    messages: list[dict[str, Any]],
+    model: str,
+    max_tokens: int,
+    schema_hint: str | None = None,
+    provider_label: str | None = None,
+) -> StructuredJSONResult:
+    client_obj = openai_compatible_client(profile)
+    label = provider_label or f"{profile.name}_openai"
     if client_obj is None:
-        return StructuredJSONResult(data=None, provider="deepseek_openai", model=model, error="client_unavailable")
+        return StructuredJSONResult(data=None, provider=label, model=_effective_model_for_profile(model, profile), error="client_unavailable")
     effective_max_tokens = max(max_tokens, DEEPSEEK_STRUCTURED_MIN_TOKENS)
     last_raw: str | None = None
     last_error: str | None = None
     for attempt in range(1, DEEPSEEK_STRUCTURED_ATTEMPTS + 1):
         try:
             response = client_obj.chat.completions.create(
-                model=model,
+                model=_effective_model_for_profile(model, profile),
                 temperature=0,
                 max_tokens=effective_max_tokens,
                 response_format={"type": "json_object"},
-                messages=_deepseek_json_messages(
+                messages=_openai_json_messages(
                     system=system,
                     messages=messages,
                     attempt=attempt,
                     schema_hint=schema_hint,
                 ),
+                **_openai_compatible_provider_params(profile),
             )
             raw = _openai_message_text(response)
             last_raw = raw
@@ -334,21 +559,21 @@ def _request_deepseek_openai_json(
             if data is not None:
                 return StructuredJSONResult(
                     data=data,
-                    provider="deepseek_openai",
-                    model=model,
+                    provider=label,
+                    model=_effective_model_for_profile(model, profile),
                     raw_text=raw,
                     error=None,
                     json_repair_used=attempt > 1,
                 )
             last_error = "json_parse_failed" if raw else "empty_response"
         except Exception as exc:
-            logger.warning("deepseek_openai_structured_json_failed: %s", str(exc)[:200])
+            logger.warning("%s_structured_json_failed: %s", label, str(exc)[:200])
             last_error = f"{type(exc).__name__}: {str(exc)[:200]}"
             break
     return StructuredJSONResult(
         data=None,
-        provider="deepseek_openai",
-        model=model,
+        provider=label,
+        model=_effective_model_for_profile(model, profile),
         raw_text=last_raw,
         error=last_error,
         json_repair_used=DEEPSEEK_STRUCTURED_ATTEMPTS > 1,
@@ -403,10 +628,224 @@ def _deepseek_json_messages(
     schema_hint: str | None = None,
 ) -> list[dict[str, Any]]:
     """Wrap prompts for DeepSeek JSON mode according to provider guidance."""
+    return _openai_json_messages(
+        system=system,
+        messages=messages,
+        attempt=attempt,
+        schema_hint=schema_hint,
+    )
+
+
+def _openai_json_messages(
+    *,
+    system: Any,
+    messages: list[dict[str, Any]],
+    attempt: int,
+    schema_hint: str | None = None,
+) -> list[dict[str, Any]]:
+    """Wrap prompts for OpenAI-compatible JSON mode."""
     system_text = render_system_text(system)
     json_contract = _structured_json_contract(schema_hint=schema_hint, attempt=attempt)
     content = "\n\n".join(part for part in (system_text, json_contract) if part.strip())
     return [{"role": "system", "content": content}, *messages]
+
+
+def _openai_chat_messages(*, system: Any, messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    system_text = render_system_text(system)
+    converted: list[dict[str, Any]] = []
+    if system_text:
+        converted.append({"role": "system", "content": system_text})
+    for message in messages:
+        converted.extend(_openai_messages_from_anthropic_message(message))
+    return converted
+
+
+def _openai_messages_from_anthropic_message(message: dict[str, Any]) -> list[dict[str, Any]]:
+    role = str(message.get("role") or "user")
+    content = message.get("content")
+    if isinstance(content, list):
+        if role == "assistant":
+            return [_openai_assistant_message_from_blocks(content)]
+        if role == "user":
+            return _openai_user_messages_from_blocks(content)
+    return [{"role": role, "content": "" if content is None else str(content)}]
+
+
+def _openai_assistant_message_from_blocks(blocks: list[Any]) -> dict[str, Any]:
+    text_parts: list[str] = []
+    tool_calls: list[dict[str, Any]] = []
+    for block in blocks:
+        block_type = _block_value(block, "type")
+        if block_type == "text":
+            text = str(_block_value(block, "text") or "").strip()
+            if text:
+                text_parts.append(text)
+        elif block_type == "tool_use":
+            name = str(_block_value(block, "name") or "")
+            if not name:
+                continue
+            tool_calls.append(
+                {
+                    "id": str(_block_value(block, "id") or ""),
+                    "type": "function",
+                    "function": {
+                        "name": name,
+                        "arguments": json.dumps(_block_value(block, "input") or {}, ensure_ascii=False),
+                    },
+                }
+            )
+    message: dict[str, Any] = {"role": "assistant", "content": "\n".join(text_parts) or None}
+    if tool_calls:
+        message["tool_calls"] = tool_calls
+    return message
+
+
+def _openai_user_messages_from_blocks(blocks: list[Any]) -> list[dict[str, Any]]:
+    messages: list[dict[str, Any]] = []
+    text_parts: list[str] = []
+
+    def flush_text() -> None:
+        if not text_parts:
+            return
+        messages.append({"role": "user", "content": "\n".join(text_parts)})
+        text_parts.clear()
+
+    for block in blocks:
+        block_type = _block_value(block, "type")
+        if block_type == "text":
+            text = str(_block_value(block, "text") or "").strip()
+            if text:
+                text_parts.append(text)
+            continue
+        if block_type == "tool_result":
+            flush_text()
+            messages.append(
+                {
+                    "role": "tool",
+                    "tool_call_id": str(_block_value(block, "tool_use_id") or ""),
+                    "content": str(_block_value(block, "content") or ""),
+                }
+            )
+    flush_text()
+    return messages or [{"role": "user", "content": ""}]
+
+
+def _openai_tools(tools: list[dict[str, Any]] | None) -> list[dict[str, Any]] | None:
+    if not tools:
+        return None
+    converted: list[dict[str, Any]] = []
+    for tool in tools:
+        name = str(tool.get("name") or "")
+        if not name:
+            continue
+        parameters = dict(tool.get("input_schema") or {})
+        if not parameters:
+            parameters = {"type": "object", "properties": {}}
+        converted.append(
+            {
+                "type": "function",
+                "function": {
+                    "name": name,
+                    "description": str(tool.get("description") or ""),
+                    "parameters": parameters,
+                },
+            }
+        )
+    return converted or None
+
+
+def _openai_tool_choice(tool_choice: dict[str, Any] | None) -> Any | None:
+    if not tool_choice:
+        return None
+    choice_type = str(tool_choice.get("type") or "")
+    if choice_type in {"auto", "none", "required"}:
+        return choice_type
+    if choice_type == "any":
+        return "required"
+    if choice_type == "tool":
+        name = str(tool_choice.get("name") or "")
+        if name:
+            return {"type": "function", "function": {"name": name}}
+    return "auto"
+
+
+def _openai_compatible_provider_params(profile: LLMProviderProfile) -> dict[str, Any]:
+    if not profile.reasoning_effort:
+        return {}
+    return {"reasoning_effort": profile.reasoning_effort}
+
+
+def _apply_openai_compatible_provider_params(kwargs: dict[str, Any], profile: LLMProviderProfile) -> None:
+    kwargs.update(_openai_compatible_provider_params(profile))
+
+
+def _as_anthropic_compatible_response(response: Any) -> Any:
+    choices = getattr(response, "choices", None) or []
+    if not choices:
+        return SimpleNamespace(content=[], stop_reason="end_turn", raw_response=response)
+    choice = choices[0]
+    message = getattr(choice, "message", None)
+    content_blocks: list[Any] = []
+    if message is not None:
+        text = _openai_content_text(getattr(message, "content", None))
+        if text:
+            content_blocks.append(SimpleNamespace(type="text", text=text))
+        for tool_call in getattr(message, "tool_calls", None) or []:
+            function = getattr(tool_call, "function", None)
+            name = str(getattr(function, "name", "") or "")
+            if not name:
+                continue
+            content_blocks.append(
+                SimpleNamespace(
+                    type="tool_use",
+                    id=str(getattr(tool_call, "id", "") or ""),
+                    name=name,
+                    input=_json_object_or_raw(getattr(function, "arguments", "") or ""),
+                )
+            )
+    finish_reason = str(getattr(choice, "finish_reason", "") or "")
+    stop_reason = "tool_use" if any(getattr(block, "type", None) == "tool_use" for block in content_blocks) else finish_reason
+    return SimpleNamespace(
+        content=content_blocks,
+        stop_reason=stop_reason or "end_turn",
+        raw_response=response,
+    )
+
+
+def _json_object_or_raw(raw: str) -> dict[str, Any]:
+    try:
+        loaded = json.loads(raw or "{}")
+    except Exception:
+        return {"_raw_arguments": raw}
+    if isinstance(loaded, dict):
+        return loaded
+    return {"_raw_arguments": raw}
+
+
+def _openai_content_text(content: Any) -> str | None:
+    if content is None:
+        return None
+    if isinstance(content, str):
+        text = content.strip()
+        return text or None
+    if isinstance(content, list):
+        texts: list[str] = []
+        for item in content:
+            item_type = _block_value(item, "type")
+            if item_type not in {"text", "output_text"}:
+                continue
+            text = str(_block_value(item, "text") or "").strip()
+            if text:
+                texts.append(text)
+        return "\n".join(texts).strip() or None
+    text = str(content).strip()
+    return text or None
+
+
+def _block_value(block: Any, key: str) -> Any:
+    if isinstance(block, dict):
+        return block.get(key)
+    return getattr(block, key, None)
 
 
 def _request_claude_json(
@@ -463,6 +902,9 @@ def message_text(response: Any) -> str | None:
     """Extract concatenated text blocks from a response."""
     if response is None:
         return None
+    openai_text = _openai_message_text(response)
+    if openai_text:
+        return openai_text
     texts: list[str] = []
     for block in getattr(response, "content", []) or []:
         if getattr(block, "type", None) == "text":
@@ -493,11 +935,7 @@ def _openai_message_text(response: Any) -> str | None:
     message = getattr(choices[0], "message", None)
     if message is None:
         return None
-    content = getattr(message, "content", None)
-    if content is None:
-        return None
-    text = str(content).strip()
-    return text or None
+    return _openai_content_text(getattr(message, "content", None))
 
 
 def first_tool_use_block(response: Any) -> Any | None:

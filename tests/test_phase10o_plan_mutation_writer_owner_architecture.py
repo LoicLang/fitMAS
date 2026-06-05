@@ -55,9 +55,3 @@ def test_10o_planning_command_service_calls_domain_writer_not_root_wrapper() -> 
 
     assert "fitmas.plan_mutation_service" not in source
     assert "patch_mutation_service" in source
-
-
-def test_10o_root_module_census_no_longer_tracks_plan_mutation_service() -> None:
-    census = (ROOT / "docs" / "ROOT-MODULE-CENSUS.md").read_text(encoding="utf-8")
-
-    assert "| `plan_mutation_service.py` |" not in census

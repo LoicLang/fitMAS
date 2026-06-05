@@ -3,291 +3,222 @@ summary: source de verite courte sur l'etat actuel et le prochain chantier
 read_when:
   - commencer un chantier
   - verifier la suite immediate
-  - recadrer le refactor avant de coder
+  - recadrer le scope avant de coder
 ---
 
 # Build Order
 
 ## Phrase Guide
 
-Je ne veux pas un refactor plus complet.
-Je veux un runtime plus petit.
+```text
+Le plus petit coach Telegram fiable pour 1 a 2 semaines de dogfood.
+```
 
-## Etat Actuel — 22 mai 2026
+## Etat Actuel — 5 juin 2026
 
-FitMAS est en refactor Decision Runtime.
-
-Le cap produit reste :
-
-- Telegram = coach conversationnel et proactif.
-- App = cockpit de lecture.
-- `ScheduledSession + Activity + Events` = verite runtime.
-- Le LLM comprend le langage utilisateur.
-- Le backend arbitre, valide, commit et audite.
-- Les replies visibles doivent venir d'un outcome/verdict, pas d'un helper qui improvise.
-
-## Ce Qui Est Vraiment En Place
-
-Le repo contient maintenant :
-
-- `decision/` : types centraux, `DecisionOutcome`, `DecisionReplyComposer`, `OutputVerifier`, `CommandBus`.
-- `domain/planning/` : reference resolver, candidates, evaluator, policy, mutation service canonique.
-- `llm/` : gateway, prompts, compat legacy LLM isolee, reply backend LLM.
-- `skills/heartbeat/` : heartbeat runtime, reply composer, tool loop et generation proactive.
-- `app/api/` et `app/telegram/` : deplacement progressif des entrypoints.
-- `legacy/` : plus aucun module source actif.
-
-Les cuts physiques recents :
-
-- root wrappers supprimes : `api_messages.py`, `telegram_scheduler.py`, `llm_gateway.py`, `tool_*`, `plan_patch_tools.py`, `state.py`.
-- root `final_reply.py` supprime.
-- `legacy/conversation_reply_adapter.py` supprime.
-- `legacy/final_reply_backend.py` supprime.
-- `legacy/heartbeat_runtime_adapter.py` supprime.
-- `legacy/heartbeat_skill_bridge.py` supprime.
-- `legacy/conversation_command_bridge.py` supprime.
-- `legacy/conversation_command_bus.py` supprime.
-- `legacy/conversation_canonical_readonly_bridge.py` supprime.
-- `legacy/conversation_readonly_reply_bridge.py` supprime.
-- `legacy/conversation_understanding_bridge.py` supprime.
-- `legacy/conversation_decide_bridge.py` supprime.
-- `legacy/coach_decision_provider.py` supprime : plus de provider
-  `CoachDecision` callable depuis la conversation.
-- `legacy/coach_command_adapter.py` supprime.
-- `legacy/coach_decision_artifact.py` supprime.
-- `legacy/coach_understanding_adapter.py` supprime.
-- `legacy/understanding_shadow.py` supprime.
-- `llm/decision_legacy.py` supprime.
-- `llm/legacy_{parser,prompt,action_compile,provider,schema_repair,tool_loop}.py`
-  supprimes.
-- `legacy/decision_contracts.py` supprime.
-- `MutationDecision` vit temporairement dans `domain/planning/mutation_decision.py`
-  tant que le vieux writer planning racine existe.
-- `plan_mutation_service.py` racine supprime.
-- Le writer PlanPatch vit dans `domain/planning/patch_mutation_service.py`.
-- `mutations.py`, `mutation_hooks.py`, `mutation_permissions.py` racine
-  supprimes.
-- Les executors planning vivent dans `domain/planning/`.
-- Les helpers de reply PlanPatch conversationnels sont sortis de
-  `conversation_pipeline.py` vers `decision/plan_patch_reply.py`.
-- `decision/conversation_pipeline.py` est passe de `1819` a `78` lignes et
-  delegue aux owners `decision/turn_*`; root `conversation_pipeline.py` est
-  supprime.
-- `decision/turn_router.py` est passe de `444` a `361` lignes : la route
-  planning canonique vit maintenant dans `decision/turn_planning_route.py`.
-- Les anciens modules root du pipeline candidat planning ont disparu :
-  `plan_patch_candidates.py`, `plan_patch_candidate_evaluator.py`,
-  `plan_patch_candidate_reviewer.py`, `plan_patch_adaptation_policy.py`.
-  Le code actif vit sous `domain/planning/`.
-- Le generateur root mort `plan_patch_backend_candidates.py` et ses tests
-  dedies ont ete supprimes.
-- Les routes et helpers API root ont ete deplaces sous `app/api/` :
-  `routes_activities.py`, `routes_app.py`, `routes_debug.py`,
-  `routes_onboarding.py`, `routes_ops.py`, `routes_plan.py`,
-  `routes_read.py`, `routes_static.py`, `routes_stats.py`, `payloads.py`,
-  `support.py`, `app_views.py`, `onboarding_contract.py`.
-- Les modules Telegram root ont ete deplaces sous `app/telegram/` :
-  `api.py`, `bot.py`, `channel.py`, `commands.py`, `debounce.py`,
-  `onboarding.py`, `shared.py`, plus `scheduler.py`.
-- Les modules execution root ont ete deplaces sous `domain/execution/` :
-  `activities.py`, `claims.py`, `helpers.py`, `clarification.py`,
-  `context.py`, `evidence.py`, `mutation_service.py`, `recent_reality.py`.
-- Les modules memory root ont ete deplaces sous `domain/memory/` :
-  `availability_constraints.py`, `fact_memory.py`, `maintenance.py`,
-  `mutation_service.py`, `patterns.py`, `profile_memory.py`, `routing.py`,
-  `profile_summary.py`.
-- Les modules athlete root ont ete deplaces sous `domain/athlete/` :
-  `profile.py`, `zones.py`, `fitness_snapshot.py`, `load_projection.py`,
-  `performance_overview.py`, `performance_stats.py`, `readiness.py`,
-  `strength_engine.py`, `strength_exercise_bank.py`, `strength_signals.py`,
-  `threshold_estimation.py`, `training_load.py`.
-- Les modules coaching root ont ete deplaces sous `domain/coaching/` :
-  `adaptation_log.py`, `calibration_needs.py`, `calibration_status.py`,
-  `coach_reading_digest.py`, `coach_voice.py`,
-  `generated_week_coherence.py`, `repo_conversation.py`, `week_context.py`.
-- Les modules core/integrations root ont ete deplaces :
-  `core/calendar_resolution.py`, `core/db.py`, `core/seed.py`,
-  `core/temporal_resolver.py`, `core/time_context.py`,
-  `integrations/strava.py`.
-- Les modules support LLM root ont ete deplaces sous `llm/` :
-  `calibration.py`, `prompt_contracts.py`, `prompt_observability.py`.
-- Les primitives planning root ont ete deplacees sous `domain/planning/` :
-  `intensity_distribution.py`, `interference.py`, `periodization.py`,
-  `planner.py`, `planning_config.py`, `planning_decision.py`,
-  `planning_state.py`, `session_similarity.py`, `session_templates.py`,
-  `workout_content.py`.
-- Le langage de mutation et la review qualite semaine vivent maintenant sous
-  `domain/planning/` : `plan_patch.py`, `week_coherence.py`.
-- Le routeur d'intention de tour vit maintenant sous `decision/turn_planner.py`
-  et recoit le provider LLM par injection depuis l'API.
-- Les mini-modules metadata planning root ont ete absorbes :
-  `compute_load_band` dans `domain/planning/models.py`,
-  `build_week_label` dans `domain/planning/periodization.py`.
-- La resolution de fenetre planning pour tools vit maintenant dans
-  `domain/planning/window_resolution.py`.
-- Le grounding visible des replies vit maintenant dans `decision/grounding.py`.
-- La detection anti-claim d'action non committee vit maintenant dans
-  `decision/output_verifier.py`; root `claim_guard.py` est supprime.
-- Les contrats de tour conversationnel vivent maintenant dans
-  `decision/conversation_contract.py`; root `conversation_contract.py` est
-  supprime.
-- Le context pack d'observabilite prompt vit maintenant dans
-  `decision/context_pack.py`; root `context_pack.py` est supprime.
-- Le contexte de tour conversationnel vit maintenant dans
-  `decision/conversation_context.py`; root `conversation_context.py` est
-  supprime.
-- La policy de prompt conversationnel vit maintenant dans
-  `llm/prompts/conversation_policy.py`; root `conversation_prompting.py` est
-  supprime.
-- Les couches de prompt vivent maintenant dans `llm/prompts/layers.py`;
-  root `prompt_layers.py` est supprime.
-- Le system prompt conversationnel vit maintenant dans
-  `llm/prompts/conversation_system.py`; root
-  `conversation_prompt_modules.py` est supprime.
-- Le builder de prompt conversationnel vit maintenant dans
-  `llm/prompts/conversation_builder.py`; root `llm_prompt_builder.py` est
-  supprime.
-- Les value objects de decision d'adaptation vivent maintenant dans
-  `domain/planning/adaptation_decision.py`; root `adaptation_decision.py`
-  est supprime.
-- Le planning contract vit maintenant dans `domain/planning/contract.py`;
-  root `planning_contract.py` est supprime.
-- Le validateur de plan vit maintenant dans `domain/planning/validator.py`;
-  root `plan_validator.py` est supprime.
-- La persistence/livraison des brouillons coach vit maintenant dans
-  `app/telegram/delivery.py`; root `coach_messages.py` est supprime.
-- Le bundle de contexte coach vit maintenant dans
-  `domain/coaching/coach_state.py`; root `coach_state_bundle.py` est
-  supprime.
-- Les signaux coach runtime vivent maintenant dans
-  `domain/coaching/signals.py`; root `signals.py` est supprime.
-- L'ancien systeme d'adaptation proactive vit maintenant dans
-  `domain/planning/adaptation.py`; root `adaptation.py` est supprime.
-- L'adapter conversationnel vit maintenant dans
-  `decision/conversation_pipeline.py`; root `conversation_pipeline.py` est
-  supprime.
-- La resolution pending canonique normalise les aliases d'enum provider
-  (`confirm`, `accepted`, etc.) vers `accept_pending` avant application.
-  Un type inconnu devient une clarification pending, jamais un trou vers
-  `llm_unavailable`.
-- La route planning canonique tolere maintenant les signaux preference
-  sidecar sans scope : une demande planning supportee ne retombe plus en
-  clarification provider parce que le LLM a varie la forme metadata.
-- Le readonly plan lookup remplace maintenant une reply LLM non grounded par
-  le fallback construit depuis les facts `PlanWindow`.
-- Le fallback execution parle depuis l'event machine applique quand le
-  composer LLM sort une reply invalide.
-- Le planning canonique prend maintenant l'autorite sur un
-  `CoachUnderstanding` actionable meme si l'ancien `turn_plan` a rate
-  `plan_mutation`; les refs insuffisantes finissent en `planning_runtime_block`,
-  pas en clarification provider.
-- `docs/superpowers/plans/` supprime : l'historique d'execution reste dans git, pas dans la memoire active.
-
-Etat chiffre au dernier check local :
-
-- root modules : `3` (`__init__.py`, `api.py`, `main.py`).
-- legacy modules : `0` fichier source actif.
-- backend complet : `1462 passed, 11 skipped`.
-- smoke A+ API court : OK `lookup_current_plan`, `create_easy_free_day`.
-- fallback census court : `0` scenario fallback, `0` turn fallback.
-
-## Etat De Gel
-
-Le refactor structurel est maintenant assez avance pour arreter les gros cuts
-avant le verdict produit.
-
-Ce qui est ferme :
-
-- aucun bridge `legacy/conversation_*` runtime-active ;
-- aucun provider ou artifact `CoachDecision` callable ;
-- aucun root `conversation_pipeline.py`, `final_reply.py`, `repository.py`,
-  `models.py` ou `schema.py` ;
-- root backend reduit aux entrypoints `__init__.py`, `api.py`, `main.py` ;
-- root `legacy/` sans module source actif ;
-- repositories explicites par domaine : planning, execution, memory, athlete,
-  coaching, integration et template planning ;
-- `decision/conversation_pipeline.py` adapter mince ;
-- `decision/turn_router.py` routeur mince ;
-- replies conversationnelles reparties entre owners :
-  `command_reply.py`, `no_change_reply.py`, `readonly_reply.py`,
-  `readonly_grounding.py`, `plan_patch_reply.py`.
-
-La prochaine etape n'est pas un nouveau refactor large.
-C'est une campagne de verdict.
-
-## Verdict A Lancer
-
-Objectif :
+Le Runtime V0 a valide le noyau et le premier Sport Core minimal :
 
 ```text
-Decider froidement si le runtime est devenu plus petit, plus fiable et plus
-expliquable, ou s'il reste une usine a gaz mieux rangee.
+InputEvent -> Snapshot -> Agent -> Proposal -> Policy -> Executor
+-> Result -> Reply -> Guard -> Audit
 ```
 
-Commandes minimales :
+Preuve (verifiee offline le 5 juin 2026) :
 
-```bash
-./scripts/test-backend
+- `tests/runtime_v0 + docs` : 201 passed ;
+- fake matrix : `11/11` ;
+- danger metrics : `0 wrong_write`, `0 old_plan`,
+  `0 wrong_correction_target`, `0 claim_without_event` ;
+- guard fallback rate : `0 %` ;
+- core : 3646 LOC (cap 3700, justifie par le moteur Meso).
 
-./scripts/smoke-a-plus-api --skip-generated-week \
-  --scenario lookup_current_plan \
-  --scenario create_easy_free_day \
-  --fallback-census-json /tmp/fitmas-verdict-core-census.json \
-  --timeout 420
+Provider matrix : `114/120` est une ancienne run a 6 scenarios. La matrix
+compte 11 scenarios et 3 providers cibles aujourd'hui. Export non committe,
+a rejouer pour un chiffre provider a jour.
 
-./scripts/decision-runtime-fallback-census-summary \
-  /tmp/fitmas-verdict-core-census.json \
-  --json-out /tmp/fitmas-verdict-core-summary.json
+Le chantier actif n'est plus un shrink de l'ancien runtime historique.
+C'est la preparation d'un **Produit V0 dogfoodable** autour de
+`backend/src/fitmas/runtime_v0/`.
+
+## Decision D'Architecture
+
+```text
+repo actuel = enveloppe produit
+runtime_v0 = noyau cible prouve
+ancien pipeline = legacy a etrangler
 ```
 
-Questions de verdict :
+Ne pas creer de nouveau repo.
+Ne pas migrer Telegram en big-bang.
+Ne pas supprimer l'ancien pipeline avant preuve sur adapters.
 
-- Le coach ment-il moins sur les mutations appliquees ?
-- Les bugs tombent-ils dans une couche identifiable ?
-- Les smokes reels passent-ils sans fallback legacy ?
-- Le repo est-il comprehensible en lisant `PROJECT.md`, `docs/` puis les owners
-  `app/`, `decision/`, `domain/`, `llm/`, `integrations/` ?
-- Le prochain changement produit peut-il etre ajoute sans regonfler
-  `conversation_pipeline.py` ou recreer un bridge compat ?
+## Prochaine Tranche
 
-## Ordre De Lecture Pour Un Agent
+Fait :
 
-1. `PROJECT.md`
-2. `docs/README.md`
-3. `docs/BUILD-ORDER.md`
-4. `docs/DECISION-RUNTIME-REFACTOR.md`
-5. `docs/DECISION-RUNTIME-LEGACY-KILL-LIST.md`
-6. `docs/SYSTEM-MAP.md`
-7. doc domaine pertinent
+- liberation de la voix : la reply layer ne sert plus de template sur le chemin
+  nominal (pending, blocage, clarification passent par le LLM). Les templates
+  restent en filet `_fallback` seulement. Guard durci en parallele
+  (`english_leak`, fuite de noms de tools, meta mid-phrase). Doctrine ecrite
+  dans `LLM-FIRST-CONVERSATION.md` (Voix Vs Verite). Fake matrix toujours
+  `11/11`, guard fallback `0 %`.
+- comparaison app-vs-V0 sur 30 tours reels x 3 providers (`compare_app_vs_v0.py`).
+  Resultat clef : V0 auto-committait un `swap` la ou l'app demandait
+  confirmation. Corrige : le `swap` passe maintenant en `pending`
+  (`swap_requires_confirmation`). Re-run panel : `tie_safe` 73 -> 76,
+  `app_better` 17 -> 14, et la classe swap (#133/#151) passe de 6
+  `unsafe_auto_commit` a 0. Reste 1 unsafe residuel non-swap (#129, tour
+  multi-intention, non deterministe), detaille dans
+  `RUNTIME-V0-APP-COMPARISON.md`.
+- liberation des commits d'execution (skipped/partial/done/correction). Le
+  verrou par verbe template (`_commit_summary`) est remplace par un gate sur le
+  **fait porteur** (duree, jour, sport) : la voix libre passe si elle enonce le
+  fait, sinon re-prompt une fois, sinon filet deterministe. Sonde DeepSeek :
+  `execution_correction`, `undo_wrong_status`, `partial_yesterday` rendus
+  chaleureux et porteurs du fait, `0 claim_without_event`, `0 wrong_write`. Bug
+  de filet corrige au passage : un echec du reply LLM sur un tour
+  pending/clarification tombait sur le message technique sec (la commande de
+  bookkeeping committee masquait la confirmation) ; le filet rend desormais la
+  meilleure verite disponible (`sanitized_fallback` 2 -> 0). Oracles de wording
+  re-cibles sur le fait + accuses de reception, plus sur le verbe mort.
 
-## Regles De Travail
+Ordre recommande :
 
-- Ne pas ouvrir Phase B progression/prescription sans demande explicite.
-- Ne pas ajouter de fallback local.
-- Ne pas ajouter de prompt long pour compenser une frontiere floue.
-- Ne pas parser le texte utilisateur libre par regex/keywords.
-- Ne pas faire de write hors command/writer service.
-- Ne pas faire parler un helper hors composer/reply layer.
-- Tout nouveau module doit avoir un owner clair dans l'organisation cible.
+1. Relancer une provider matrix ciblee sur les 11 scenarios.
+2. Construire un `WorldSnapshot` depuis une copie DB actuelle, en distinguant
+   replay fidele (`conversation_context`) et debug approximatif (`current_state`).
+3. Construire un executor adapter vers les writers existants.
+4. Brancher Telegram/API sous flag et allowlist user.
+
+## Chantier Moteur Sport (co-evolue avec le runtime)
+
+Doctrine : le moteur sport et le runtime se construisent **imbriques**, jamais en
+deux chantiers separes (`docs/PLANNING-V0.md`). Le moteur = des **tools
+coach-callables** (intention -> moteur deterministe -> proposition typee -> policy),
+grandis **un tool a la fois**, chacun prouve en couche 2.
+
+Principe : le LLM genere et personnalise ; un **verificateur deterministe tient
+l'autorite**. La coherence (progression, arc long-terme) est portee par la
+**gestion de contexte**, pas par un generateur deterministe.
+
+Premier livrable : le **context-pack running minimal + le verificateur** (mode
+continuite, hook transition). Test : generer 4-6 semaines running -> verif a la
+main de la coherence/progression -> comparer au vecu app (cas TSS qui chute). Spec
+a produire en premier : les 4-5 proprietes d'une semaine running saine, dont
+l'anti-TSS-drop.
+
+Avancement (5 juin 2026) : **Slice 0+1 codee** = modele type Meso +
+verificateur deterministe (5 proprietes), prouve en fixtures dont le rejeu
+"TSS qui chute" (`backend/src/fitmas/runtime_v0/meso/`). **Slice 1.5 codee** =
+resolution de fact LLM-first (`propose_fact_resolution` -> `resolved_at`), trou
+"douleur passee" ferme, prouve couche 2 (DeepSeek 4/4). Plan + spec :
+`docs/superpowers/specs/2026-06-05-moteur-sport-*`. **Bridge fact->TypedConstraint
+codé** (Slice 2.0, conservateur). **Slice 1.6 codée** = ingestion fiable des facts +
+fact-rider (noter un fait durable + agir dans le même tour) ; couche 2 : indispo
+enfin **notée**, note+act prouvé sur la douleur. Deux follow-ups ouverts (note+act
+inconsistant sur l'indispo ; reply qui sur-promet) — voir
+`2026-06-05-fact-ingestion-slice-1-6-spec.md`. Suite immediate : finir **Slice 2.0** = le **context-pack en couches**
+`ContextPack{target, last_week_actuals, constraints[], signals[]}` + son builder
+depuis le snapshot. Fait : contraintes (bridge), `target` (`derive_continuity_target`).
+Restent : `signals` et `last_week_actuals`. Decision actee : **voie (b) forward-only**
+pour le typage des seances (actuals depuis des semaines deja typees ; typage du legacy
+differe — `2026-06-05-moteur-sport-plan.md` Decisions #4). Puis **Slice 2.1**
+(generateur LLM `propose_week` ; mode contrainte-aware ; resout 1.6 #1/#2 + TSS-vs-
+contrainte). Le moteur de contexte profond (couches, accumulation) reste un chantier
+dedie APRES le moteur (`PLANNING-V0.md` Q5).
+
+Contraintes : running-only d'abord ; tout Meso en `pending` ; le cut
+LLM<->deterministe se decouvre empiriquement ; l'usine planning de l'app est a
+**strangler, pas a brancher**. Questions ouvertes listees dans `docs/PLANNING-V0.md`.
+
+## Scope Actif
+
+Lire :
+
+- `docs/V0-DOGFOOD-SCOPE.md` pour le produit V0 ;
+- `docs/RUNTIME-V0.md` pour le noyau actuel ;
+- `docs/RUNTIME-MIGRATION-PLAN.md` pour l'integration ;
+- `docs/LLM-FIRST-CONVERSATION.md` pour la doctrine texte utilisateur ;
+- `docs/PLANNING-V0.md` pour l'architecture moteur sport co-evolue.
+
+Le V0 couvre :
+
+- plan actuel / aujourd'hui / demain ;
+- execution `done`, `skipped`, `partial` ;
+- correction d'execution ;
+- move/lighten/replace simple en place (auto-commit si cible claire) ;
+- pending pour seance cle, swap ou multi-operation ;
+- block pour risque sportif clair ;
+- heartbeat read-only ou question courte seulement.
+
+## Hors Scope
+
+Ne pas ouvrir sans demande explicite :
+
+- Phase B progression/prescription ;
+- replan complet long terme ;
+- periodisation multi-mois ;
+- nutrition ;
+- multi-agent ;
+- memoire vectorielle/reflexive ;
+- heartbeat qui auto-commit une mutation ;
+- UI de decision complexe.
+
+## Providers
+
+Providers a tester en V0 :
+
+```text
+DeepSeek
+Mistral
+Grok
+```
+
+Gemini reste disponible en opt-in manuel, mais n'est plus dans la matrix par
+defaut tant que le credit API est absent.
+
+## Gates Dogfood
+
+Avant Telegram V0, deux couches de test (doctrine : `docs/V0-TEST-DOCTRINE.md`).
+
+Couche 1 — matrice, filet mecanique :
+
+```text
+>= 90% correctness sur scenarios V0 produit
+0 danger metrics
+0 duplicate command sur retry
+guard fallback rate < 15%
+```
+
+Couche 2 — simulation live sous-agent : une vraie conversation non scriptee
+tient sur les scenarios dogfood. Un chiffre matrice ne suffit pas a ouvrir le
+dogfood.
+
+La latence est mesuree, mais ne bloque pas le dogfood tant que la reponse est
+fiable.
 
 ## Verification Minimale
 
-Pour un changement backend :
-
 ```bash
-./scripts/test-backend
+./scripts/docs:list
+pytest tests/runtime_v0
+python3 scripts/v0_eval/run_matrix.py --provider fake --repetitions 1
+python3 scripts/v0_eval/run_matrix.py --repetitions 5
+python3 scripts/v0_eval/compare_app_vs_v0.py --turn-ids 151 --dry-run
 ```
 
-Pour un changement runtime conversation/planning :
+Exports utiles :
 
-```bash
-./scripts/smoke-a-plus-api --skip-generated-week \
-  --scenario lookup_current_plan \
-  --scenario create_easy_free_day \
-  --fallback-census-json /tmp/fitmas-core-census.json \
-  --timeout 420
-
-./scripts/decision-runtime-fallback-census-summary \
-  /tmp/fitmas-core-census.json \
-  --json-out /tmp/fitmas-core-summary.json
+```text
+exports/runtime-v0/stability-fake-final
+exports/runtime-v0/stability-providers-5x
 ```
+
+## Regles Dures
+
+- Le LLM comprend le texte utilisateur et produit des artefacts structures.
+- Le backend valide, autorise, commit et audite.
+- Aucun regex/keyword sur texte utilisateur libre.
+- Aucun write DB hors executor/writer officiel.
+- Aucune reply visible ne doit mentir sur un write.
+- `runtime_v0` reste isole tant que les adapters ne sont pas prouves.

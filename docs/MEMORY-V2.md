@@ -16,11 +16,11 @@ Gros chantier memoire : pas maintenant.
 La priorite reste :
 
 ```text
-Decision Runtime plus petit.
-Planning/pending legacy a supprimer.
+Produit V0 dogfoodable autour du Runtime V0.
+Pas de gros chantier memoire avant preuve Telegram.
 ```
 
-On garde ce contrat pour ne pas salir la memoire pendant le refactor.
+On garde ce contrat pour ne pas salir la memoire pendant l'integration V0.
 
 ## Couches
 
@@ -95,19 +95,22 @@ Interdit :
 - promotion sur un seul message ;
 - pattern sans evidence temporelle.
 
-## Sortie Cible
+## Organisation Actuelle
 
-La memoire devrait finir sous :
+La memoire vit sous :
 
 ```text
 domain/memory/
-  models.py
-  repository.py
-  memory_service.py
-  profile_memory.py
-  working_memory.py
-  patterns.py
+  availability_constraints.py
+  fact_memory.py
   maintenance.py
+  mutation_service.py
+  patterns.py
+  profile_memory.py
+  profile_summary.py
+  repository.py
+  routing.py
+  view_models.py
 ```
 
-Jusque-la, tout deplacement doit reduire le runtime, pas seulement renommer.
+Tout nouveau deplacement doit reduire le runtime, pas seulement renommer.

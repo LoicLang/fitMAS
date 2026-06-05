@@ -39,27 +39,34 @@ RequestedPlanChange
 
 ```text
 backend/src/fitmas/domain/planning/
+  adaptation_decision.py
+  candidate_builder.py
+  candidates.py
+  contract.py
+  decision_service.py
+  evaluator.py
   models.py
+  mutation_decision.py
+  mutation_service.py
+  patch_mutation_service.py
+  patch_summary.py
+  plan_patch.py
+  policy.py
   reference_resolver.py
   reference_tokens.py
-  candidates.py
-  candidate_builder.py
-  evaluator.py
   reviewer.py
-  policy.py
-  decision_service.py
-  mutation_service.py
-  patch_summary.py
   session_actions.py
+  validator.py
+  week_coherence.py
 ```
 
-Compat encore surveillee :
+Planning/pending legacy est clos :
 
-- `legacy/conversation_canonical_planning_bridge.py`
-- `legacy/conversation_planning_bridge.py`
-- `legacy/planning_runtime_adapter.py`
-- `legacy/planning_outcome_adapter.py`
-- `legacy/plan_patch_reply_adapter.py`
+- les bridges `legacy/conversation_*planning*` sont supprimes ;
+- `decision/turn_planning_route.py` porte la route conversationnelle ;
+- `decision/planning_runtime.py` et `decision/planning_outcomes.py` portent
+  l'adaptation runtime ;
+- `decision/plan_patch_reply.py` porte les replies PlanPatch historiques.
 
 ## Verites
 
@@ -88,16 +95,18 @@ La reply ne peut claim qu'un commit prouve par event.
 - Creer une pending duplicate pour la meme intention.
 - Faire parler un adapter planning directement au user.
 
-## Prochain Chantier
+## Etat Actuel
 
-10E doit reduire planning/pending legacy :
+La route planning observable est unique pour les lanes couvertes.
 
-1. mesurer les callers reels ;
-2. extraire l'actif vers `domain/planning/` ou `decision/` ;
-3. supprimer les bridges vides ;
-4. shrinker `conversation_pipeline.py`.
+Avant de modifier ce pipeline :
 
-Critere :
+- verifier si le cas appartient au scope V0 dogfood ;
+- lancer les scenarios Runtime V0 utiles ;
+- classer les bugs par couche ;
+- corriger dans l'owner responsable, sans fallback local.
+
+Critere stable :
 
 ```text
 Une adaptation planning suit une seule route observable.

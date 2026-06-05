@@ -535,6 +535,189 @@ class LLMGatewayProviderTest(unittest.TestCase):
         self.assertEqual(result.data["rationale"], "fallback")
         self.assertEqual(anthropic_calls[0]["model"], "claude-haiku-4-5-20251001")
 
+    def test_active_llm_profile_resolves_mistral(self) -> None:
+        with patch.dict(os.environ, {"FITMAS_LLM_PROFILE": "mistral"}, clear=True):
+            profile = gw.active_llm_profile()
+
+        self.assertEqual(profile.name, "mistral")
+        self.assertEqual(profile.api_key_env, "MISTRAL_API_KEY")
+        self.assertEqual(profile.base_url, "https://api.mistral.ai/v1")
+        self.assertEqual(profile.model, "mistral-small-2603")
+        self.assertEqual(profile.reasoning_effort, "high")
+
+    def test_active_llm_profile_resolves_gemini_flash_35(self) -> None:
+        with patch.dict(os.environ, {"FITMAS_LLM_PROFILE": "gemini"}, clear=True):
+            profile = gw.active_llm_profile()
+
+        self.assertEqual(profile.name, "gemini")
+        self.assertEqual(profile.api_key_env, "GEMINI_API_KEY")
+        self.assertEqual(profile.base_url, "https://generativelanguage.googleapis.com/v1beta/openai/")
+        self.assertEqual(profile.model, "gemini-3.5-flash")
+        self.assertEqual(profile.reasoning_effort, "medium")
+
+    def test_request_structured_json_uses_active_mistral_profile(self) -> None:
+        created: dict[str, object] = {}
+        calls: list[dict[str, object]] = []
+
+        class FakeOpenAIClient:
+            def __init__(self, **kwargs):
+                created.update(kwargs)
+                self.chat = SimpleNamespace(completions=self)
+
+            def create(self, **kwargs):
+                calls.append(kwargs)
+                return SimpleNamespace(
+                    choices=[SimpleNamespace(message=SimpleNamespace(content='{"intent":"general_answer"}'))]
+                )
+
+        fake_openai_module = SimpleNamespace(OpenAI=FakeOpenAIClient)
+
+        with patch.dict(sys.modules, {"openai": fake_openai_module}):
+            with patch.dict(
+                os.environ,
+                {"FITMAS_LLM_PROFILE": "mistral", "MISTRAL_API_KEY": "sk-mistral-test"},
+                clear=True,
+            ):
+                result = gw.request_structured_json(
+                    system="system",
+                    messages=[{"role": "user", "content": "hello"}],
+                    max_tokens=128,
+                )
+
+        self.assertEqual(created["api_key"], "sk-mistral-test")
+        self.assertEqual(created["base_url"], "https://api.mistral.ai/v1")
+        self.assertEqual(calls[0]["model"], "mistral-small-2603")
+        self.assertEqual(calls[0]["reasoning_effort"], "high")
+        self.assertEqual(calls[0]["response_format"], {"type": "json_object"})
+        self.assertEqual(result.provider, "mistral_openai")
+        self.assertEqual(result.data["intent"], "general_answer")
+
+    def test_request_message_maps_tools_for_openai_compatible_profile(self) -> None:
+        calls: list[dict[str, object]] = []
+
+        class FakeOpenAIClient:
+            def __init__(self, **kwargs):
+                self.chat = SimpleNamespace(completions=self)
+
+            def create(self, **kwargs):
+                calls.append(kwargs)
+                return SimpleNamespace(
+                    choices=[
+                        SimpleNamespace(
+                            finish_reason="tool_calls",
+                            message=SimpleNamespace(
+                                content=None,
+                                tool_calls=[
+                                    SimpleNamespace(
+                                        id="call_1",
+                                        function=SimpleNamespace(
+                                            name="get_plan_window",
+                                            arguments='{"start_date":"2026-05-04"}',
+                                        ),
+                                    )
+                                ],
+                            ),
+                        )
+                    ]
+                )
+
+        fake_openai_module = SimpleNamespace(OpenAI=FakeOpenAIClient)
+
+        with patch.dict(sys.modules, {"openai": fake_openai_module}):
+            with patch.dict(
+                os.environ,
+                {"FITMAS_LLM_PROFILE": "mistral", "MISTRAL_API_KEY": "sk-mistral-test"},
+                clear=True,
+            ):
+                response = gw.request_message(
+                    system="system",
+                    messages=[{"role": "user", "content": "redonne le plan"}],
+                    tools=[
+                        {
+                            "name": "get_plan_window",
+                            "description": "Read the plan.",
+                            "input_schema": {"type": "object", "properties": {"start_date": {"type": "string"}}},
+                        }
+                    ],
+                    tool_choice={"type": "auto"},
+                )
+
+        self.assertEqual(calls[0]["tool_choice"], "auto")
+        self.assertEqual(calls[0]["reasoning_effort"], "high")
+        self.assertEqual(calls[0]["tools"][0]["type"], "function")
+        self.assertEqual(calls[0]["tools"][0]["function"]["name"], "get_plan_window")
+        self.assertEqual(response.stop_reason, "tool_use")
+        self.assertEqual(response.content[0].type, "tool_use")
+        self.assertEqual(response.content[0].name, "get_plan_window")
+        self.assertEqual(response.content[0].input, {"start_date": "2026-05-04"})
+
+    def test_request_text_uses_active_grok_profile(self) -> None:
+        created: dict[str, object] = {}
+        calls: list[dict[str, object]] = []
+
+        class FakeOpenAIClient:
+            def __init__(self, **kwargs):
+                created.update(kwargs)
+                self.chat = SimpleNamespace(completions=self)
+
+            def create(self, **kwargs):
+                calls.append(kwargs)
+                return SimpleNamespace(
+                    choices=[SimpleNamespace(message=SimpleNamespace(content="OK grok"))]
+                )
+
+        fake_openai_module = SimpleNamespace(OpenAI=FakeOpenAIClient)
+
+        with patch.dict(sys.modules, {"openai": fake_openai_module}):
+            with patch.dict(
+                os.environ,
+                {"FITMAS_LLM_PROFILE": "grok", "XAI_API_KEY": "sk-xai-test"},
+                clear=True,
+            ):
+                text = gw.request_text(system="system", prompt="hello", max_tokens=64)
+
+        self.assertEqual(text, "OK grok")
+        self.assertEqual(created["api_key"], "sk-xai-test")
+        self.assertEqual(created["base_url"], "https://api.x.ai/v1")
+        self.assertEqual(calls[0]["model"], "grok-4.3")
+        self.assertEqual(calls[0]["reasoning_effort"], "low")
+
+    def test_grok_profile_accepts_grok_api_key_alias(self) -> None:
+        created: dict[str, object] = {}
+
+        class FakeOpenAIClient:
+            def __init__(self, **kwargs):
+                created.update(kwargs)
+
+        fake_openai_module = SimpleNamespace(OpenAI=FakeOpenAIClient)
+
+        with patch.dict(sys.modules, {"openai": fake_openai_module}):
+            with patch.dict(
+                os.environ,
+                {"FITMAS_LLM_PROFILE": "grok", "GROK_API_KEY": "sk-grok-test"},
+                clear=True,
+            ):
+                client = gw.openai_compatible_client()
+
+        self.assertIsNotNone(client)
+        self.assertEqual(created["api_key"], "sk-grok-test")
+
+    def test_openai_message_text_extracts_list_content_chunks(self) -> None:
+        response = SimpleNamespace(
+            choices=[
+                SimpleNamespace(
+                    message=SimpleNamespace(
+                        content=[
+                            {"type": "thinking", "text": "private"},
+                            {"type": "text", "text": "Visible reply."},
+                        ]
+                    )
+                )
+            ]
+        )
+
+        self.assertEqual(gw.message_text(response), "Visible reply.")
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -1,7 +1,7 @@
 ---
 summary: contrat actuel du runtime conversationnel et du grounding coach
 read_when:
-  - modifier conversation_pipeline.py
+  - modifier decision/conversation_pipeline.py
   - modifier app/api/routes_messages.py
   - toucher aux pending confirmations
   - corriger une hallucination de planning ou d'execution
@@ -50,7 +50,7 @@ message Telegram / app
 
 Etat actuel :
 
-- `decision/conversation_pipeline.py` est devenu un adapter mince de 78 lignes :
+- `decision/conversation_pipeline.py` est devenu un adapter mince de 80 lignes :
   user, idempotence, calibration, contexte, puis delegation au router. Le root
   `conversation_pipeline.py` est supprime.
 - `decision/` porte deja les types et l'outcome canonique.
@@ -113,7 +113,7 @@ Actions structurees encore acceptees :
 Le backend ne lit pas ces actions comme du texte humain.
 Il les resout contre DB, schemas, IDs, dates, permissions et policies.
 
-Interdit depuis 10M :
+Interdit actif :
 
 ```text
 api_messages.decide
@@ -202,8 +202,15 @@ rejouer LLM/mutation.
 - `j'ai mal au genou`
 - `j'ai fait la seance hier`
 - `pas eu le temps`
+- `j'ai pas fait hier`
+- `j'ai fait la seance finalement`
 - `oui`
+- `ok`
 - `non finalement vendredi`
+- `decale ca a vendredi`
+- `non plutot samedi`
+- `je suis rince, mais garde un truc leger`
+- `ajoute une seance dure demain`
 
 Pour chaque scenario, verifier :
 
