@@ -107,17 +107,28 @@ Sonde DeepSeek (indispo ×2, douleur ×2, fatigue, rétablissement) :
   honnête). La fusion marche end-to-end.
 - `pytest` 201 vert ; matrice fake 11/11, danger metrics 0 (pas de régression).
 
-Deux trous restants (ouverts) :
+Deux trous — **racine commune, résolus par 2.1** :
 
-1. **note+act inconsistant sur l'indispo** : le modèle **note** mais n'émet pas
-   toujours le `plan_patch` (il promet verbalement). Variance LLM ; l'archi est OK,
-   le déclenchement flotte. → nudge prompt à affiner, **sur preuve** (pas de règle
-   déterministe).
-2. **Reply qui sur-promet** (danger de confiance) : "agenda protégé, aucune séance
-   ne viendra s'y glisser" alors que les séances sont toujours là — le guard ne
-   l'attrape pas (promesse future, pas claim de write passé). → durcir guard/prompt
-   pour ne jamais annoncer une adaptation non émise.
+1. **note+act inconsistant (indispo)** + 2. **reply qui sur-promet** = même cause :
+   aujourd'hui le coach n'a **aucun acte propre** pour adapter une fenêtre d'indispo
+   (multi-op trop dur → no_send / note-only), donc il **fabrique l'adaptation en mots**
+   ("agenda protégé"). Preuve que c'est l'acte, pas le wording : genou #2 (acte simple)
+   → reply honnête ; indispo (pas d'acte) → fabrication.
+   - Fix prompt tenté le 5 juin (forcer `plan_patch` + clause anti-promesse) =
+     **échoué** : dégradé en `no_send` 2/4, sur-promesse persistante. **Reverté.** Leçon
+     doctrine : forcer par le prompt = invisible en test, fragile en réel.
+   - Guard : la sur-promesse est **inattrapable** aujourd'hui (`claim_without_event`
+     désactivé dès qu'un event existe — le write mémoire compte ; et `CLAIM_PATTERN`
+     ne couvre que le passé). Netter les formulations futures = regex fragile → refusé.
+   - **Résolution = 2.1** : `propose_week` donne un **acte unique** (contrainte respectée
+     par construction → pending) → le coach agit au lieu d'inventer, la reply décrit le
+     réel. Résidu note-only → reply honnête "noté, je réadapte ?" (acte réel à proposer).
 3. (mineur) **fatigue** non capturée (`no_send`) — couche signaux, plus tard.
 
-Statut : **socle livré et prouvé** (note fiable + note+act marche). Les deux trous =
-follow-ups, à traiter **délibérément** (anti-réactif), pas en réflexe.
+Lié : **TSS-vs-contrainte** (relevé Loïc) — une réadaptation sous grosse contrainte fait
+légitimement chuter la charge ; l'anti-drop devient **contrainte-aware** (n'attrape que
+les chutes inexpliquées ; mode validé déterministe contre les contraintes ; anti-gaming).
+Détail dans `PLANNING-V0.md`. À câbler en 2.1.
+
+Statut : **socle livré et prouvé** (ingestion fiable + note+act marche sur acte simple).
+Les trous se règlent **à la racine en 2.1** (capacité d'acte), pas en nettant le symptôme.

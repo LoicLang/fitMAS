@@ -97,6 +97,27 @@ Le verif a deux modes ; l'**intention declaree** par le LLM choisit lequel.
 
 La declaration distingue le week-end choc justifie du spike accidentel.
 
+## Anti-Drop = Catcher De Chute INEXPLIQUEE (contrainte-aware)
+
+[releve 5 juin 2026, Loic] L'anti-TSS-drop existe pour attraper une chute
+**inexpliquee** (le bug app : la charge tombe sans raison). Une chute **expliquee
+par une contrainte active** (indispo fenetre, blessure) est **legitime** — ce n'est
+pas le bug. Le verif est donc **contrainte-aware** :
+
+- une contrainte active qui limite materiellement la semaine (jours bloques,
+  intensite interdite) **relache l'anti-drop** pour cette semaine ; on enforce alors
+  **securite + structure de ce qui reste** + pending.
+- une indispo-fenetre n'est ni continuite ni transition-de-cycle : c'est un **3e cas,
+  reduction-sous-contrainte**. En V0 on **reutilise le hook transition** (skip
+  load_drop) ; un mode dedie ne se code que **sur preuve** que transition ne suffit pas.
+- **anti-gaming (deterministe, cote verif)** : le mode "reduit/transition" declare par
+  le LLM est **valide contre les contraintes actives** du context-pack — pas de
+  contrainte limitante reelle => mode rejete => on retombe en continuite (anti-drop
+   re-enforce). Le LLM ne peut pas declarer "reduit" pour esquiver l'anti-drop sans
+  justification. Determinisme sur la **verification**, jamais sur la generation.
+
+A cabler en **Slice 2.1** (quand la generation choisit et justifie le mode).
+
 ## Continuite De Stimulus (le piege du 20x30sec)
 
 La charge-equivalence n'est PAS l'identite de seance. La cible porte le **type**
