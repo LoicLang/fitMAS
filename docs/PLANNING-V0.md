@@ -162,7 +162,11 @@ progresse ou tient vs N-1 ; type de seance cle == type prescrit").
    (resolu/expire), jamais evinces par la troncature. A mesure que les facts
    s'accumulent, definir une strategie de contexte long-terme (distillation /
    couches) qui ne fasse ni exploser le snapshot ni perdre un fact de securite.
-   Pas urgent (peu de facts aujourd'hui), a concevoir avec le context-pack (Slice 2).
+   Pas urgent (peu de facts aujourd'hui). Slice 2 ne fait que le **context-pack
+   minimal** pour generer une semaine ; le **rework profond du contexte (couches,
+   accumulation long-terme) = chantier DEDIE apres le moteur V0**, a penser en
+   profondeur — c'est la fondation sur laquelle tout se construit (decision Loic,
+   5 juin 2026).
 
 ## Scope V0 (rester simple)
 

@@ -117,8 +117,9 @@ Fait le 5 juin : **Slice 0, 1, 1.5** (specs `2026-06-05-moteur-sport-*`). Suite 
   contexte coach en **couches**, pas une liste plate tronquée à 5 par récence. Les
   **facts santé = couche dédiée, toujours en contexte jusqu'à suppression**
   (résolu/expiré). Penser le contexte long-terme quand les facts s'accumulent
-  (distillation / couches, sans jamais perdre un fact sécurité). Pas urgent ;
-  à intégrer au context-pack Slice 2. (`PLANNING-V0.md` Q5)
+  (distillation / couches, sans jamais perdre un fact sécurité). Slice 2 ne fait
+  que le **context-pack minimal** ; le **rework profond du contexte = chantier
+  dédié APRÈS le moteur V0** (fondation, à penser en profondeur). (`PLANNING-V0.md` Q5)
 - Résolution de fact (Slice 1.5) : tranché → **auto-commit + accusé** (l'utilisateur
   est l'autorité sur son corps qui va mieux). Revisitable si dérive observée.
 - Jusqu'où le contexte seul porte la cohérence sur 6 semaines avant un ancrage
