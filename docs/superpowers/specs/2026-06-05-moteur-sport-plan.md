@@ -116,6 +116,14 @@ Fait le 5 juin : **Slice 0, 1, 1.5** (specs `2026-06-05-moteur-sport-*`). Suite 
 
 ## Questions Ouvertes (à trancher EMPIRIQUEMENT)
 
+- **note+act inconsistant (indispo)** — relevé 5 juin (Slice 1.6). Le coach **note**
+  l'indispo mais n'émet pas toujours le `plan_patch` (promesse verbale). L'archi
+  note+act marche (prouvée sur la douleur), c'est le déclenchement qui flotte. →
+  affiner le prompt **sur preuve**, jamais une règle déterministe.
+- **Reply qui sur-promet** — relevé 5 juin (danger confiance). "Agenda protégé /
+  je vais adapter" alors qu'aucun `plan_patch` n'est émis ; le guard ne l'attrape pas
+  (promesse future). → durcir guard/prompt : ne jamais annoncer une adaptation non
+  émise dans le tour.
 - **Couches de contexte (santé toujours présent)** — relevé 5 juin. Stratifier le
   contexte coach en **couches**, pas une liste plate tronquée à 5 par récence. Les
   **facts santé = couche dédiée, toujours en contexte jusqu'à suppression**

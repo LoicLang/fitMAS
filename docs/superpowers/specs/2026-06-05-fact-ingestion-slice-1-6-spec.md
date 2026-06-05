@@ -94,3 +94,30 @@ Couche 2 (DeepSeek, le juge) :
 - `pytest tests/runtime_v0` vert (dont non-régression agent/policy).
 - Couche 2 : indispo 3j note + adapte de façon répétée.
 - Docs à jour.
+
+## Résultats couche 2 (5 juin 2026) — partiellement atteint
+
+Sonde DeepSeek (indispo ×2, douleur ×2, fatigue, rétablissement) :
+
+- ✅ **Ingestion fiabilisée** : l'indispo est enfin **notée** (`availability`, conf 0.9,
+  `expires_at` en fin de fenêtre) — c'était `rien` avant. Douleur notée `health`,
+  bridge → `(moderate, intensity)`. Rétablissement résolu.
+- ✅ **Archi note+act prouvée** : douleur #2 → `UpsertMemoryFactCommand` +
+  `CreatePendingConfirmationCommand` (fact noté **ET** plan_patch en pending, reply
+  honnête). La fusion marche end-to-end.
+- `pytest` 201 vert ; matrice fake 11/11, danger metrics 0 (pas de régression).
+
+Deux trous restants (ouverts) :
+
+1. **note+act inconsistant sur l'indispo** : le modèle **note** mais n'émet pas
+   toujours le `plan_patch` (il promet verbalement). Variance LLM ; l'archi est OK,
+   le déclenchement flotte. → nudge prompt à affiner, **sur preuve** (pas de règle
+   déterministe).
+2. **Reply qui sur-promet** (danger de confiance) : "agenda protégé, aucune séance
+   ne viendra s'y glisser" alors que les séances sont toujours là — le guard ne
+   l'attrape pas (promesse future, pas claim de write passé). → durcir guard/prompt
+   pour ne jamais annoncer une adaptation non émise.
+3. (mineur) **fatigue** non capturée (`no_send`) — couche signaux, plus tard.
+
+Statut : **socle livré et prouvé** (note fiable + note+act marche). Les deux trous =
+follow-ups, à traiter **délibérément** (anti-réactif), pas en réflexe.
