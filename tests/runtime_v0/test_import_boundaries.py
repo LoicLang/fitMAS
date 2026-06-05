@@ -53,5 +53,8 @@ def test_runtime_v0_core_does_not_import_adapters():
 
 
 def test_runtime_v0_core_stays_under_v0_budget():
+    # Cap raised 3200 -> 3500 (5 juin 2026) for the Meso sport engine (meso/):
+    # a deliberate, planned capability growth, not creep. Bump per real growth
+    # only; keep watching the ratchet (healthy target stays 2500).
     loc = sum(len(path.read_text().splitlines()) for path in _core_files())
-    assert loc <= 3200
+    assert loc <= 3500
