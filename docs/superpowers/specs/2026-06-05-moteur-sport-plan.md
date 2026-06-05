@@ -76,6 +76,12 @@ continuerait de bloquer sur une blessure résolue. → **Slice 1.5** (tool de r�
 LLM-first + `resolved_at`). Indépendant du moteur (bug latent du runtime), ramassé au
 passage. Ne bloque pas le vérif (testé en fixtures).
 
+**Statut : FAIT (5 juin 2026).** `propose_fact_resolution(fact_id, reason)` →
+`ResolveMemoryFactCommand` → `resolved_at` ; le snapshot droppe les facts résolus ; la
+policy ground l'id contre les facts actifs (`ask_clarification` si inconnu). Prouvé
+couche 2 (DeepSeek ×4 formulations) : 4/4 résolus, 0 fact contradictoire empilé,
+`guard_ok`, replies justes.
+
 ## Le Socle : le modèle typé partagé
 
 Vérif **et** context-pack consomment le même modèle. Donc on pose **le modèle typé
@@ -86,13 +92,13 @@ d'abord** (Slice 0). Quatre types : `WeekTarget`, `TypedSession`, `TypedConstrai
 
 | Slice | Quoi | Preuve (gate) |
 |---|---|---|
-| **0 — Socle** | modèle typé Meso + dérivation de cible (continuité). Pur, pas de LLM, pas de DB. | tests unitaires modèle + dérivation |
-| **1 — Vérificateur** | les 5 propriétés (anti-TSS-drop, type-clé, ramp borné, espacement, santé). Déterministe, maigre. | fixtures écrites main **+ rejeu de la semaine "TSS qui chute" de l'app → doit l'attraper** |
-| **1.5 — Résolution de fact** | tool `resolve` LLM-first + colonne `resolved_at`. Prérequis dogfood, pas le vérif. | sonde : "c'est bon douleur passée" → fact cesse d'être actif, audité |
+| **0 — Socle** ✅ | modèle typé Meso + dérivation de cible (continuité). Pur, pas de LLM, pas de DB. | tests unitaires modèle + dérivation |
+| **1 — Vérificateur** ✅ | les 5 propriétés (anti-TSS-drop, type-clé, ramp borné, espacement, santé). Déterministe, maigre. | fixtures écrites main **+ rejeu de la semaine "TSS qui chute" de l'app → doit l'attraper** |
+| **1.5 — Résolution de fact** ✅ | tool `resolve` LLM-first + colonne `resolved_at`. Prérequis dogfood, pas le vérif. | sonde : "c'est bon douleur passée" → fact cesse d'être actif, audité |
 | **2 — Context-pack + générateur** | distillation snapshot→pack, LLM génère semaine typée, boucle generate→verify (max ~3, filet template). | **générer 4-6 semaines offline → vérif à la main de la progression vs app** |
 | **3 — Tool runtime** | `propose_week` coach-callable → moteur → vérif → policy → **pending**. | **couche 2** live sous-agent |
 
-Aujourd'hui : **Slice 0 + 1** (spec : `2026-06-05-moteur-sport-slice-0-1-spec.md`).
+Fait le 5 juin : **Slice 0, 1, 1.5** (specs `2026-06-05-moteur-sport-*`). Suite : Slice 2.
 
 ## Décisions Arrêtées (defaults V0, révisables empiriquement)
 
