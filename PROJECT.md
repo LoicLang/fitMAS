@@ -2,7 +2,7 @@
 
 Coach IA multisport proactif qui ajuste l'entrainement selon la vraie vie.
 
-## Statut — 26 mai 2026
+## Statut — 5 juin 2026
 
 FitMAS sort du chantier "prototype runtime" et entre dans le chantier
 **Produit V0 dogfoodable**.
@@ -42,15 +42,21 @@ Ne pas ouvrir Phase B progression/prescription sans demande explicite.
 
 ## Preuve Runtime V0
 
-Verifie offline le 29 mai 2026 :
+Verifie offline le 5 juin 2026 :
 
 ```text
-tests/runtime_v0 : 140 passed
+tests/runtime_v0 : 201 passed
 fake matrix      : 11/11
 danger metrics   : 0 wrong_write, 0 old_plan, 0 wrong_correction_target,
                    0 claim_without_event
-core             : 3053 LOC (zone acceptable 2500-3200)
+core             : 3646 LOC (cap 3700, justifie par le moteur Meso)
 ```
+
+Construit depuis : moteur Meso (`runtime_v0/meso/` — modele type + verificateur
+5 proprietes dont anti-TSS-drop, bridge fact->TypedConstraint), resolution de fact
+(douleur passee), fact-rider (noter un fait durable ET agir dans le meme tour).
+Detail : `docs/PLANNING-V0.md`, `docs/BUILD-ORDER.md`,
+`docs/superpowers/specs/2026-06-05-*`.
 
 Provider matrix : le `114/120` historique vient d'une run a 6 scenarios
 (4 providers x 6 x 5 reps = 120). La matrix par defaut compte aujourd'hui

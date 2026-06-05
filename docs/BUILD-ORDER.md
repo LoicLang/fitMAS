@@ -14,7 +14,7 @@ read_when:
 Le plus petit coach Telegram fiable pour 1 a 2 semaines de dogfood.
 ```
 
-## Etat Actuel — 30 mai 2026
+## Etat Actuel — 5 juin 2026
 
 Le Runtime V0 a valide le noyau et le premier Sport Core minimal :
 
@@ -23,14 +23,14 @@ InputEvent -> Snapshot -> Agent -> Proposal -> Policy -> Executor
 -> Result -> Reply -> Guard -> Audit
 ```
 
-Preuve (verifiee offline le 31 mai 2026) :
+Preuve (verifiee offline le 5 juin 2026) :
 
-- `tests/runtime_v0 + docs` : 160 passed ;
+- `tests/runtime_v0 + docs` : 201 passed ;
 - fake matrix : `11/11` ;
 - danger metrics : `0 wrong_write`, `0 old_plan`,
   `0 wrong_correction_target`, `0 claim_without_event` ;
 - guard fallback rate : `0 %` ;
-- core : 3121 LOC (zone acceptable).
+- core : 3646 LOC (cap 3700, justifie par le moteur Meso).
 
 Provider matrix : `114/120` est une ancienne run a 6 scenarios. La matrix
 compte 11 scenarios et 3 providers cibles aujourd'hui. Export non committe,

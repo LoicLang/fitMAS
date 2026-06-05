@@ -69,10 +69,10 @@ Current durable direction:
 - Architecture decision: the repo is the **product envelope**, `runtime_v0` is the **proven target core**, the old pipeline is **legacy to strangle**. No new repo, no big-bang Telegram migration, do not delete the old pipeline before adapters are proven.
 - Sources of truth: next steps `docs/BUILD-ORDER.md`; product scope `docs/V0-DOGFOOD-SCOPE.md`; core reference `docs/RUNTIME-V0.md`; test method `docs/V0-TEST-DOCTRINE.md`; user-text doctrine `docs/LLM-FIRST-CONVERSATION.md`; planning engine architecture `docs/PLANNING-V0.md`.
 
-V0 status (1 juin 2026):
+V0 status (5 juin 2026):
 
-- Core proven offline: 160 tests pass, fake matrix 11/11, danger metrics 0, guard fallback 0 %, core 3198 LOC (acceptable zone, past the 2500 healthy target — watch the ratchet).
-- Recently shipped: LLM-first visible voice (templates only as `_fallback`), execution commit gated on the carrying fact, no_send budget fix (`max_steps` 3->6 + agent coercion), guard hardened (tool-name / english / meta leaks).
+- Core proven offline: 201 tests pass, fake matrix 11/11, danger metrics 0, guard fallback 0 %, core 3646 LOC (cap 3700, justified by the Meso engine; healthy target stays 2500 — watch the ratchet).
+- Recently shipped: Meso sport engine (`runtime_v0/meso/` — typed week model + deterministic verifier with anti-TSS-drop, fact->TypedConstraint bridge), fact resolution (retract a healed health fact), fact rider (note a durable fact + act in one turn). Earlier: LLM-first visible voice, execution commit gated on the carrying fact, guard hardened.
 - Provider matrix: 11 scenarios x 3 providers (DeepSeek main path, + Mistral, Grok; Gemini opt-in, no credit). DeepSeek may emit prose after tool-use; repair the artifact, never accept an invalid final decision silently. Re-run for a fresh number; exports are not committed.
 
 Proof bar (current milestone):

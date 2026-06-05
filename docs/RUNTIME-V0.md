@@ -125,6 +125,10 @@ undo_wrong_status
 `followup_planning_turn2` existe aussi comme tour de continuation, hors matrix
 par defaut (lancer via `--scenario followup_planning_turn2`).
 
+Scenarios couche 2 (hors matrix, juges par sonde live + etat DB) :
+`move_today_open_week` (indispo + deplacement) et `health_resolution` (douleur
+passee -> resolution de fact).
+
 Commandes :
 
 ```bash
@@ -142,10 +146,10 @@ python3 scripts/v0_eval/run_matrix.py \
 
 ## Derniere Preuve
 
-Verifie offline le 31 mai 2026 :
+Verifie offline le 5 juin 2026 :
 
 ```text
-tests/runtime_v0 + docs   : 160 passed
+tests/runtime_v0 + docs   : 201 passed
 fake matrix               : 11/11
 guard fallback rate       : 0 %
 wrong_write               : 0
@@ -153,6 +157,11 @@ old_plan_date             : 0
 wrong_correction_target   : 0
 reply_claim_without_event : 0
 ```
+
+Construit depuis le 31 mai : moteur Meso (`meso/`, voir plus bas), resolution de
+fact (`propose_fact_resolution` -> `resolved_at`, retracte une douleur passee),
+fact-rider (un tour note un fait durable ET agit). Couche 2 : indispo enfin notee,
+note+act prouve sur la douleur, resolution 4/4 (DeepSeek).
 
 Sonde DeepSeek 1x (voix libre, 31 mai 2026) : les commits d'execution passent
 desormais par la voix du LLM (`execution_correction`, `undo_wrong_status`,
@@ -253,7 +262,10 @@ zone acceptable: 2500-3200 LOC
 > 4000 LOC: alerte architecture lourde
 ```
 
-Mesure 2 juin 2026 : 3194 LOC (zone acceptable, plus dans l'objectif sain).
+Mesure 5 juin 2026 : 3646 LOC. Le cap du test (`test_import_boundaries`) est passe
+de 3200 a 3700, justifie par le moteur Meso + resolution de fact + fact-rider
+(croissance de capacite planifiee, pas du creep). Objectif sain inchange (2500) :
+surveiller le ratchet.
 
 ## Sport Core V0
 
@@ -266,6 +278,25 @@ garde-fous :
 - multi-operation demande confirmation ;
 - seance `key` demande confirmation ;
 - `swap` (restructuration du calendrier) demande confirmation.
+
+## Moteur Meso (Slice 0/1/2.0)
+
+`backend/src/fitmas/runtime_v0/meso/` co-evolue avec le runtime (doctrine et
+ordre : `docs/PLANNING-V0.md`, `docs/BUILD-ORDER.md`). Le LLM genere/personnalise,
+un verificateur deterministe tient l'autorite ; tout Meso reste `pending`.
+
+- `model.py` : modele type d'une semaine (`TypedSession` / `PlannedWeek` /
+  `WeekTarget` / `WeekActuals` / `TypedConstraint`), charge ponderee
+  (duree x intensite), derivation de cible continuite depuis la semaine passee.
+- `verifier.py` : `verify_week` deterministe, 5 proprietes (type-cle, anti-TSS-drop,
+  ramp borne, espacement, sante) ; modes continuite / transition (hook), anti-drop
+  contrainte-aware a venir en 2.1.
+- `context.py` : bridge `fact -> TypedConstraint` (sante toujours incluse,
+  conservateur d'abord). Seam du context-pack (Slice 2.0).
+
+Pur domaine (pas de DB/LLM), prouve en fixtures dont le rejeu du "TSS qui chute"
+de l'app. Suite : context-pack en couches (2.0) puis generateur `propose_week`
+(2.1, ou se reglent note+act indispo + sur-promesse + TSS-vs-contrainte).
 
 ## Prochaine Evolution Autorisee
 

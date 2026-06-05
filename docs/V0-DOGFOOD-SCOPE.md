@@ -34,6 +34,9 @@ V0 fait peu, mais proprement :
 5. Demander confirmation pour une seance cle ou une mutation risquee.
 6. Bloquer une mutation sportivement douteuse.
 7. Garder une coherence sportive minimale de semaine.
+8. Noter une contrainte durable (indispo, douleur) ET agir dans le meme tour
+   (fact-rider) ; lever une contrainte resolue ("douleur passee") sans empiler un
+   fait contradictoire (resolution de fact).
 
 Heartbeat V0 autorise seulement :
 
@@ -119,9 +122,9 @@ cancel_followup
 
 ## Gates
 
-Etat de preuve (verifie offline le 30 mai 2026) :
+Etat de preuve (verifie offline le 5 juin 2026) :
 
-- tests runtime + docs : `152 passed` ;
+- tests runtime + docs : `201 passed` ;
 - fake matrix : `11/11` ;
 - danger metrics : `0 wrong_write`, `0 old_plan`, `0 wrong_correction_target`,
   `0 claim_without_event`.
