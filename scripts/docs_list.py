@@ -6,7 +6,11 @@ from pathlib import Path
 
 
 DOCS_DIR = Path(__file__).resolve().parent.parent / "docs"
-DEFAULT_EXCLUDED_DIRS = {"archive", "research", "superpowers"}
+# superpowers/ is the skills working area (specs/plans), never project docs:
+# excluded in BOTH modes. archive/ + research/ are historical: shown with --all.
+ALWAYS_EXCLUDED_DIRS = {"superpowers"}
+HISTORICAL_DIRS = {"archive", "research"}
+DEFAULT_EXCLUDED_DIRS = ALWAYS_EXCLUDED_DIRS | HISTORICAL_DIRS
 
 
 def walk_markdown_files(root: Path, *, include_all: bool = False) -> list[Path]:
@@ -15,7 +19,9 @@ def walk_markdown_files(root: Path, *, include_all: bool = False) -> list[Path]:
         rel = path.relative_to(root)
         if any(part.startswith(".") for part in rel.parts):
             continue
-        if not include_all and any(part in DEFAULT_EXCLUDED_DIRS for part in rel.parts):
+        if any(part in ALWAYS_EXCLUDED_DIRS for part in rel.parts):
+            continue
+        if not include_all and any(part in HISTORICAL_DIRS for part in rel.parts):
             continue
         files.append(path)
     return sorted(files, key=lambda item: str(item.relative_to(root)))
