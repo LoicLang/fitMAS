@@ -117,9 +117,15 @@ codé** (Slice 2.0, conservateur). **Slice 1.6 codée** = ingestion fiable des f
 fact-rider (noter un fait durable + agir dans le même tour) ; couche 2 : indispo
 enfin **notée**, note+act prouvé sur la douleur. Deux follow-ups ouverts (note+act
 inconsistant sur l'indispo ; reply qui sur-promet) — voir
-`2026-06-05-fact-ingestion-slice-1-6-spec.md`. Suite : finir **Slice 2.0** (pack en
-couches + builder) puis **Slice 2.1** (generateur LLM). Le moteur de contexte profond
-(couches, accumulation) reste un chantier dedie APRES le moteur (`PLANNING-V0.md` Q5).
+`2026-06-05-fact-ingestion-slice-1-6-spec.md`. Suite immediate : finir **Slice 2.0** = le **context-pack en couches**
+`ContextPack{target, last_week_actuals, constraints[], signals[]}` + son builder
+depuis le snapshot. Fait : contraintes (bridge), `target` (`derive_continuity_target`).
+Restent : `signals` et `last_week_actuals`. Decision actee : **voie (b) forward-only**
+pour le typage des seances (actuals depuis des semaines deja typees ; typage du legacy
+differe — `2026-06-05-moteur-sport-plan.md` Decisions #4). Puis **Slice 2.1**
+(generateur LLM `propose_week` ; mode contrainte-aware ; resout 1.6 #1/#2 + TSS-vs-
+contrainte). Le moteur de contexte profond (couches, accumulation) reste un chantier
+dedie APRES le moteur (`PLANNING-V0.md` Q5).
 
 Contraintes : running-only d'abord ; tout Meso en `pending` ; le cut
 LLM<->deterministe se decouvre empiriquement ; l'usine planning de l'app est a

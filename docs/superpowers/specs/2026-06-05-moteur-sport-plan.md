@@ -113,6 +113,12 @@ Fait le 5 juin : **Slice 0, 1, 1.5** (specs `2026-06-05-moteur-sport-*`). Suite 
    Le LLM ne **déclare** qu'une **transition** (changement de phase) → mode transition
    + pending.
 3. **Vérif d'abord** (Slice 0→1 avant le contexte) = premier chantier.
+4. **Typage des séances = voie (b) forward-only** (décidé 5 juin). Les séances runtime
+   n'ont pas de `SessionType` typé. Pour `WeekActuals.key_type` et le mapping séance→
+   `TypedSession`, on part en **forward-only** : les actuals viennent de **semaines déjà
+   typées** (générées), le test 4-6 semaines chaîne du typé. Typer l'historique legacy
+   à la source (voie a, schéma) = **différé** jusqu'au branchement du vrai historique
+   (Slice 3 / dogfood).
 
 ## Questions Ouvertes (à trancher EMPIRIQUEMENT)
 
