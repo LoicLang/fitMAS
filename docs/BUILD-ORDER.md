@@ -112,8 +112,11 @@ verificateur deterministe (5 proprietes), prouve en fixtures dont le rejeu
 "TSS qui chute" (`backend/src/fitmas/runtime_v0/meso/`). **Slice 1.5 codee** =
 resolution de fact LLM-first (`propose_fact_resolution` -> `resolved_at`), trou
 "douleur passee" ferme, prouve couche 2 (DeepSeek 4/4). Plan + spec :
-`docs/superpowers/specs/2026-06-05-moteur-sport-*`. Suite : Slice 2 (context-pack
-+ generateur, premiere boucle generate->verify).
+`docs/superpowers/specs/2026-06-05-moteur-sport-*`. Suite : **Slice 2.0** (contrat
+contexte = pack en couches + bridge fact->TypedConstraint, conservateur d'abord,
+sante toujours incluse ; seam stable) puis **Slice 2.1** (generateur LLM, boucle
+generate->verify). Le moteur de contexte profond (couches, accumulation) reste un
+chantier dedie APRES le moteur (`PLANNING-V0.md` Q5).
 
 Contraintes : running-only d'abord ; tout Meso en `pending` ; le cut
 LLM<->deterministe se decouvre empiriquement ; l'usine planning de l'app est a

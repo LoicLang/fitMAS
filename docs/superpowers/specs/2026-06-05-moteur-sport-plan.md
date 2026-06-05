@@ -95,10 +95,13 @@ d'abord** (Slice 0). Quatre types : `WeekTarget`, `TypedSession`, `TypedConstrai
 | **0 — Socle** ✅ | modèle typé Meso + dérivation de cible (continuité). Pur, pas de LLM, pas de DB. | tests unitaires modèle + dérivation |
 | **1 — Vérificateur** ✅ | les 5 propriétés (anti-TSS-drop, type-clé, ramp borné, espacement, santé). Déterministe, maigre. | fixtures écrites main **+ rejeu de la semaine "TSS qui chute" de l'app → doit l'attraper** |
 | **1.5 — Résolution de fact** ✅ | tool `resolve` LLM-first + colonne `resolved_at`. Prérequis dogfood, pas le vérif. | sonde : "c'est bon douleur passée" → fact cesse d'être actif, audité |
-| **2 — Context-pack + générateur** | distillation snapshot→pack, LLM génère semaine typée, boucle generate→verify (max ~3, filet template). | **générer 4-6 semaines offline → vérif à la main de la progression vs app** |
+| **2.0 — Contrat contexte** | context-pack en **couches** (slots `target / actuals / constraints[] / signals[]`) + bridge `fact→TypedConstraint` (santé **toujours** incluse). **Seam stable** : le moteur de contexte profond (Q5) se branche derrière sans toucher au reste. | tests unitaires bridge + pack |
+| **2.1 — Générateur** | LLM génère une semaine typée depuis le pack, boucle generate→verify (max ~3, filet template). | **générer 4-6 semaines offline → vérif main vs app** + couche 2 |
 | **3 — Tool runtime** | `propose_week` coach-callable → moteur → vérif → policy → **pending**. | **couche 2** live sous-agent |
 
-Fait le 5 juin : **Slice 0, 1, 1.5** (specs `2026-06-05-moteur-sport-*`). Suite : Slice 2.
+Fait le 5 juin : **Slice 0, 1, 1.5** (specs `2026-06-05-moteur-sport-*`). Suite : **Slice 2.0** (contrat contexte) → **2.1** (générateur).
+
+**Pourquoi 2.0 avant le générateur** : Slice 2 s'appuie sur les facts utilisateurs. On fige donc d'abord le **contrat de consommation** (pack en couches typées) comme un **seam stable**, pas le moteur de contexte profond (Q5, post-moteur). Bridge `fact→TypedConstraint` **conservateur d'abord** : tout fact santé actif (confiance ≥ 0.5) → contrainte qui bloque le dur (= comportement runtime actuel, zéro régression). Enrichissement vers un **typage à l'ingestion** (le LLM émet `restricts` impact/intensité car il comprend le texte) **sur preuve de dérive** — même seam, rien de jeté.
 
 ## Décisions Arrêtées (defaults V0, révisables empiriquement)
 
