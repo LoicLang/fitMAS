@@ -11,10 +11,13 @@ read_when:
 
 ## Statut
 
-Vue d'architecture arretee (discussion 2 juin 2026), **pas encore codee**. Le Sport
-Core V0 actuel (`V0-DOGFOOD-SCOPE.md`) est un garde-fou de seance ; ce doc decrit
-son evolution vers un moteur de **semaine** (Meso) puis de **bloc** (Macro),
-construit **en meme temps que le runtime**, pas a cote.
+Vue d'architecture arretee (discussion 2 juin 2026). **Slice 0+1 codee** (5 juin
+2026) : modele type Meso + vérificateur deterministe (5 proprietes), prouve en
+fixtures dont le rejeu "TSS qui chute" de l'app (`backend/src/fitmas/runtime_v0/meso/`,
+plan + spec dans `docs/superpowers/specs/2026-06-05-*`). Le Sport Core V0 actuel
+(`V0-DOGFOOD-SCOPE.md`) reste un garde-fou de seance ; ce doc decrit son evolution
+vers un moteur de **semaine** (Meso) puis de **bloc** (Macro), construit **en meme
+temps que le runtime**, pas a cote.
 
 ## Doctrine De Co-Evolution (non negociable)
 

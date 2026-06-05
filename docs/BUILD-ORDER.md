@@ -107,6 +107,12 @@ main de la coherence/progression -> comparer au vecu app (cas TSS qui chute). Sp
 a produire en premier : les 4-5 proprietes d'une semaine running saine, dont
 l'anti-TSS-drop.
 
+Avancement : **Slice 0+1 codee** (5 juin 2026) = modele type Meso +
+verificateur deterministe (5 proprietes), prouve en fixtures dont le rejeu
+"TSS qui chute" (`backend/src/fitmas/runtime_v0/meso/`). Plan + spec :
+`docs/superpowers/specs/2026-06-05-moteur-sport-*`. Suite : Slice 1.5 (resolution
+de fact LLM-first) ou Slice 2 (context-pack + generateur), selon couche 2.
+
 Contraintes : running-only d'abord ; tout Meso en `pending` ; le cut
 LLM<->deterministe se decouvre empiriquement ; l'usine planning de l'app est a
 **strangler, pas a brancher**. Questions ouvertes listees dans `docs/PLANNING-V0.md`.
