@@ -53,9 +53,9 @@ def test_runtime_v0_core_does_not_import_adapters():
 
 
 def test_runtime_v0_core_stays_under_v0_budget():
-    # Cap raised 3200 -> 3600 (5 juin 2026): Meso sport engine (meso/) + fact
-    # resolution path (resolve a healed health constraint). Deliberate, planned
-    # capability growth, not creep. Bump per real growth only; keep watching the
-    # ratchet (healthy target stays 2500).
+    # Cap raised 3200 -> 3700 (5 juin 2026): Meso sport engine (meso/), fact
+    # resolution, and the fact-rider (note a durable fact + act in one turn).
+    # Deliberate, planned capability growth, not creep. Bump per real growth
+    # only; keep watching the ratchet (healthy target stays 2500).
     loc = sum(len(path.read_text().splitlines()) for path in _core_files())
-    assert loc <= 3600
+    assert loc <= 3700

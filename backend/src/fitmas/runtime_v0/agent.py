@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import replace
 import json
 from typing import Any
 
@@ -60,9 +61,9 @@ class CoachAgent:
                             return _no_send("invalid_tool_args", tool_context)
                         invalid_args_retry_used = True
                     continue
-                proposal, error_call, error_reason = _first_proposal(response, tool_by_name, tool_context)
+                proposal, error_call, error_reason = _merged_proposal(response, tool_by_name, tool_context)
             else:
-                proposal, error_call, error_reason = _first_proposal(response, tool_by_name, tool_context)
+                proposal, error_call, error_reason = _merged_proposal(response, tool_by_name, tool_context)
             if error_reason:
                 messages.append(_tool_error(error_call, f"invalid_tool_args: {error_reason}"))
                 if invalid_args_retry_used:
@@ -143,23 +144,59 @@ def _initial_messages(event: InputEvent, snapshot_header: SnapshotHeader) -> lis
         {"role": "system_context", "content": snapshot_header.to_prompt_text()},
         {"role": "user", "content": event.text or ""},
     ]
-def _first_proposal(
+def _merged_proposal(
     response: LLMResponse,
     tool_by_name: dict[str, ToolSchema],
     tool_context: ToolContext | None,
 ) -> tuple[ActionProposal | None, ToolCall | None, str | None]:
+    """Merge a durable-fact note with an action in one turn (fact rider).
+
+    Build every propose_memory_update (cumulate drafts) and the FIRST action
+    proposal (later actions ignored — first-action-wins, no extra build). The
+    memory drafts ride on the action proposal; with no action, they form a
+    standalone memory_update. Noting never blocks acting.
+    """
+    action: ActionProposal | None = None
+    memory_base: ActionProposal | None = None
+    memory_drafts: list = []
     for call in response.tool_calls:
         tool = tool_by_name.get(call.name)
         if tool is None or not tool.is_proposal:
             continue
-        try:
-            proposal = _call_tool(tool, call.args, tool_context)
-        except Exception as exc:
-            return None, call, str(exc)
-        if isinstance(proposal, ActionProposal):
-            return proposal, None, None
-        return None, call, f"proposal_tool_returned_{type(proposal).__name__}"
+        if call.name == "propose_memory_update":
+            built, error_call, error_reason = _build_proposal(tool, call, tool_context)
+            if error_reason is not None:
+                return None, error_call, error_reason
+            memory_drafts.extend(built.memory_updates)
+            if memory_base is None:
+                memory_base = built
+            continue
+        if action is None:
+            built, error_call, error_reason = _build_proposal(tool, call, tool_context)
+            if error_reason is not None:
+                return None, error_call, error_reason
+            action = built
+    if action is not None:
+        if memory_drafts and action.type != "memory_update":
+            action = replace(action, memory_updates=tuple(memory_drafts) + action.memory_updates)
+        return action, None, None
+    if memory_base is not None:
+        return replace(memory_base, memory_updates=tuple(memory_drafts)), None, None
     return None, None, None
+
+
+def _build_proposal(
+    tool: ToolSchema,
+    call: ToolCall,
+    tool_context: ToolContext | None,
+) -> tuple[ActionProposal | None, ToolCall | None, str | None]:
+    try:
+        proposal = _call_tool(tool, call.args, tool_context)
+    except Exception as exc:
+        return None, call, str(exc)
+    if isinstance(proposal, ActionProposal):
+        return proposal, None, None
+    return None, call, f"proposal_tool_returned_{type(proposal).__name__}"
 
 def _has_read_tool_call(response: LLMResponse, tool_by_name: dict[str, ToolSchema]) -> bool:
     return any(

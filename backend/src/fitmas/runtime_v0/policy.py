@@ -76,6 +76,20 @@ class PolicyDecision:
 
 class RuntimePolicy:
     def evaluate(self, proposal: ActionProposal, snapshot: WorldSnapshot) -> PolicyDecision:
+        decision = self._evaluate_type(proposal, snapshot)
+        # Fact rider: a note can ride on any action. Commit the fact(s) alongside
+        # whatever the action decides — noting never blocks acting, and an action
+        # that ends in pending/clarification/block still records the fact.
+        if proposal.memory_updates and proposal.type not in {"memory_update", "no_send"}:
+            fact_commands, reason = _validate_fact_commands(proposal.memory_updates)
+            if fact_commands is None:
+                return _decision("block", reason, "low", (), ())
+            decision = replace(decision, commands=fact_commands + decision.commands)
+        if len(decision.commands) > 3:
+            return _decision("block", "too_many_commands", "high", (), ())
+        return decision
+
+    def _evaluate_type(self, proposal: ActionProposal, snapshot: WorldSnapshot) -> PolicyDecision:
         if proposal.type == "answer":
             return _decision("answer_only", "answer", "low", (), proposal.answer_facts)
         if proposal.type == "no_send":
@@ -111,21 +125,13 @@ class RuntimePolicy:
             decision = self._plan_patch(proposal, snapshot)
         else:
             decision = _decision("block", "unknown_proposal_type", "high", (), ())
-        if len(decision.commands) > 3:
-            return _decision("block", "too_many_commands", "high", (), ())
         return decision
 
     def _memory_update(self, proposal: ActionProposal) -> PolicyDecision:
-        commands: list[Command] = []
-        for fact in proposal.memory_updates:
-            if fact.kind not in {"preference", "health", "availability", "constraint"}:
-                return _decision("block", "invalid_fact_kind", "low", (), ())
-            if not (0 <= fact.confidence <= 1):
-                return _decision("block", "invalid_fact_confidence", "low", (), ())
-            if not fact.text.strip():
-                return _decision("block", "empty_fact_text", "low", (), ())
-            commands.append(UpsertMemoryFactCommand(fact.kind, fact.text, fact.confidence, fact.expires_at))
-        return _decision("allow_commit", "memory_update", "low", tuple(commands), proposal.evidence)
+        commands, reason = _validate_fact_commands(proposal.memory_updates)
+        if commands is None:
+            return _decision("block", reason, "low", (), ())
+        return _decision("allow_commit", "memory_update", "low", commands, proposal.evidence)
 
     def _fact_resolution(self, proposal: ActionProposal, snapshot: WorldSnapshot) -> PolicyDecision:
         draft = proposal.fact_resolution
@@ -242,6 +248,21 @@ class RuntimePolicy:
             expires_at=snapshot.now + timedelta(hours=24),
         )
         return _decision("create_pending", sport_decision.reason, sport_decision.risk_level, (pending,), proposal.evidence)
+
+def _validate_fact_commands(
+    memory_updates: tuple,
+) -> tuple[tuple[Command, ...] | None, str]:
+    commands: list[Command] = []
+    for fact in memory_updates:
+        if fact.kind not in {"preference", "health", "availability", "constraint"}:
+            return None, "invalid_fact_kind"
+        if not (0 <= fact.confidence <= 1):
+            return None, "invalid_fact_confidence"
+        if not fact.text.strip():
+            return None, "empty_fact_text"
+        commands.append(UpsertMemoryFactCommand(fact.kind, fact.text, fact.confidence, fact.expires_at))
+    return tuple(commands), ""
+
 
 def _decision(
     action: Literal["allow_commit", "create_pending", "block", "ask_clarification", "answer_only", "no_send"],
