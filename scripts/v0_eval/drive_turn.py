@@ -210,6 +210,9 @@ def cmd_state(args: argparse.Namespace) -> int:
         commands = [dict(row) for row in conn.execute(
             "select turn_id, command_type, target_id, status from v0_command_events order by id"
         )]
+        facts = [dict(row) for row in conn.execute(
+            "select id, kind, text, confidence, expires_at, resolved_at from v0_facts order by id"
+        )]
     intent = None
     if state_row and state_row["last_unresolved_intent_json"]:
         try:
@@ -223,6 +226,7 @@ def cmd_state(args: argparse.Namespace) -> int:
         "last_unresolved_intent": intent,
         "last_pending_id": (state_row["last_pending_id"] if state_row else None),
         "commands": commands,
+        "facts": facts,
     })
     return 0
 

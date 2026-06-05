@@ -498,4 +498,68 @@ def _scenarios() -> dict[str, ScenarioOracle]:
             expected_reply_any_include=(("quel jour", "quand", "déplac", "bouge", "report"),),
             forbidden_command_types=("SetSessionStatusCommand",),
         ),
+        # Couche-2 scenario (NOT in run_matrix.DEFAULT_SCENARIOS). Verifies the
+        # fact-retraction gap found 5 juin 2026: an active health constraint
+        # ("douleur au genou") that the user reports is over. The coach must
+        # RESOLVE it (propose_fact_resolution -> ResolveMemoryFactCommand), not
+        # stack a contradicting fact. Mechanical oracle: the fact has resolved_at
+        # set and drops out of the active snapshot; no UpsertMemoryFactCommand.
+        "health_resolution": ScenarioOracle(
+            name="health_resolution",
+            description=(
+                "Couche 2: contrainte sante active 'douleur au genou'; l'user dit "
+                "qu'elle est passee. Le coach doit la lever, pas empiler un fact."
+            ),
+            initial_db_state={
+                "today": "2026-06-04",
+                "sessions": [
+                    {
+                        "id": 90,
+                        "date": "2026-06-05",
+                        "sport": "run",
+                        "title": "Footing endurance",
+                        "duration_min": 40,
+                        "intensity_label": "easy",
+                        "priority": "secondary",
+                        "status": "planned",
+                    },
+                    {
+                        "id": 91,
+                        "date": "2026-06-07",
+                        "sport": "run",
+                        "title": "Seuil 3x8",
+                        "duration_min": 55,
+                        "intensity_label": "hard",
+                        "priority": "key",
+                        "status": "planned",
+                    },
+                ],
+                "facts": [
+                    {
+                        "id": 1,
+                        "kind": "health",
+                        "text": "douleur au genou",
+                        "confidence": 0.9,
+                        "created_at": "2026-06-01T09:00:00+02:00",
+                        "expires_at": "2026-06-20T09:00:00+02:00",
+                    },
+                ],
+            },
+            input_event=InputEvent(
+                id="evt-health-resolution",
+                user_id=1,
+                source="test",
+                type="user_message",
+                text="C'est bon, ma douleur au genou est passée, plus mal du tout.",
+                payload={},
+                occurred_at=datetime(2026, 6, 4, 9, 0, tzinfo=PARIS),
+            ),
+            expected_proposal_type="fact_resolution",
+            expected_policy_action="allow_commit",
+            expected_commands=(CommandSpec("ResolveMemoryFactCommand", "fact", "1"),),
+            expected_reply_must_include=(),
+            expected_reply_must_not_contain=("bloque", "j'ai noté une douleur"),
+            expected_reply_any_include=(("noté", "compris", "super", "génial", "content", "ok", "top"),),
+            forbidden_command_types=("UpsertMemoryFactCommand",),
+        ),
     }
