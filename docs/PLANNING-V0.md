@@ -155,6 +155,14 @@ progresse ou tient vs N-1 ; type de seance cle == type prescrit").
    4-6 semaines, pas decidee d'avance).
 4. Le **plan de bloc** est-il LLM-declare (et tenu en contexte) ou ancre
    deterministe ? (lie a Q1).
+5. **Couches de contexte (sante toujours presente)** — releve 5 juin 2026. Le
+   contexte coach doit etre **stratifie en couches**, pas une liste plate tronquee
+   par recence (aujourd'hui le header ne montre que les 5 facts les plus recents).
+   Les **facts sante = couche a part, TOUJOURS en contexte jusqu'a suppression**
+   (resolu/expire), jamais evinces par la troncature. A mesure que les facts
+   s'accumulent, definir une strategie de contexte long-terme (distillation /
+   couches) qui ne fasse ni exploser le snapshot ni perdre un fact de securite.
+   Pas urgent (peu de facts aujourd'hui), a concevoir avec le context-pack (Slice 2).
 
 ## Scope V0 (rester simple)
 

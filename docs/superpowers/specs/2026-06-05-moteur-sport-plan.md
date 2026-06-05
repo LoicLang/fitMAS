@@ -113,7 +113,14 @@ Fait le 5 juin : **Slice 0, 1, 1.5** (specs `2026-06-05-moteur-sport-*`). Suite 
 
 ## Questions Ouvertes (à trancher EMPIRIQUEMENT)
 
-- Résolution de fact (Slice 1.5) : **auto-commit + accusé** (penchant) ou pending ?
+- **Couches de contexte (santé toujours présent)** — relevé 5 juin. Stratifier le
+  contexte coach en **couches**, pas une liste plate tronquée à 5 par récence. Les
+  **facts santé = couche dédiée, toujours en contexte jusqu'à suppression**
+  (résolu/expiré). Penser le contexte long-terme quand les facts s'accumulent
+  (distillation / couches, sans jamais perdre un fact sécurité). Pas urgent ;
+  à intégrer au context-pack Slice 2. (`PLANNING-V0.md` Q5)
+- Résolution de fact (Slice 1.5) : tranché → **auto-commit + accusé** (l'utilisateur
+  est l'autorité sur son corps qui va mieux). Revisitable si dérive observée.
 - Jusqu'où le contexte seul porte la cohérence sur 6 semaines avant un ancrage
   déterministe sur la charge **cumulée** ? (`PLANNING-V0.md` Q1)
 - Mix génération templates-vs-LLM par type de séance. (Q2)
