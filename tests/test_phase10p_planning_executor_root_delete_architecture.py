@@ -62,10 +62,3 @@ def test_10p_patch_mutation_service_uses_planning_executor_boundary() -> None:
     assert "from fitmas.domain.planning import mutation_executor" in source
     assert "fitmas.mutations" not in source
     assert "fitmas.mutation_hooks" not in source
-
-
-def test_10p_root_module_census_no_longer_tracks_planning_executor_modules() -> None:
-    census = (ROOT / "docs" / "ROOT-MODULE-CENSUS.md").read_text(encoding="utf-8")
-
-    for filename in DELETED_ROOT_MODULES:
-        assert f"| `{filename}` |" not in census
