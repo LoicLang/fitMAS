@@ -33,10 +33,19 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Offline Meso week-generation harness")
     parser.add_argument("--provider", default="deepseek", help="Provider name (deepseek/mistral/grok/gemini)")
     parser.add_argument("--weeks", type=int, default=5, help="Number of weeks to chain (4-6 recommended)")
+    parser.add_argument(
+        "--max-tokens",
+        type=int,
+        default=4096,
+        help="Per-call output budget. Week generation needs far more than the 1024 chat "
+        "default: a reasoning model (deepseek-v4-pro) spends tokens before the tool call "
+        "and truncates (finish_reason=length). Measured couche 2: 1024 -> 0/5 LLM, "
+        "2048 -> 3/5 (marginal, ~1959 tok/call), 4096 -> 5/5 (~2432 tok/call). 4096 robust.",
+    )
     args = parser.parse_args()
 
     try:
-        raw_client = build_provider_client(args.provider)
+        raw_client = build_provider_client(args.provider, max_tokens=args.max_tokens)
     except ProviderConfigError as exc:
         print(f"ERROR: {exc}")
         sys.exit(1)

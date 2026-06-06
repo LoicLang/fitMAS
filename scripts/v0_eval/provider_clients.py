@@ -110,20 +110,27 @@ def provider_profile(name: str) -> ProviderProfile:
     raise ProviderConfigError(f"unknown_provider:{name}")
 
 
-def build_provider_client(name: str):
+def build_provider_client(name: str, max_tokens: int = 1024):
     profile = provider_profile(name)
     api_key = next((os.getenv(env_name) for env_name in (profile.api_key_env, *profile.api_key_env_aliases) if os.getenv(env_name)), None)
     if not api_key:
         raise ProviderConfigError(f"missing_env:{profile.api_key_env}")
     from openai import OpenAI
 
-    return OpenAICompatibleToolClient(profile, OpenAI(api_key=api_key, base_url=profile.base_url, max_retries=0))
+    return OpenAICompatibleToolClient(
+        profile, OpenAI(api_key=api_key, base_url=profile.base_url, max_retries=0), max_tokens=max_tokens
+    )
 
 
 class OpenAICompatibleToolClient:
-    def __init__(self, profile: ProviderProfile, client: Any):
+    def __init__(self, profile: ProviderProfile, client: Any, max_tokens: int = 1024):
         self.profile = profile
         self.client = client
+        # Default 1024 fits short conversational replies. Week generation emits a
+        # whole typed week as a tool call (and reasoning models like deepseek-v4-pro
+        # spend tokens before the call), so callers raise this — else the response is
+        # truncated (finish_reason=length) before the tool call ever lands.
+        self.max_tokens = max_tokens
         self.total_retry_wait_s = 0.0
 
     def chat_with_tools(self, system: str, messages: list[dict[str, Any]], tools: list[ToolSchema]) -> LLMResponse:
@@ -132,7 +139,7 @@ class OpenAICompatibleToolClient:
             "model": self.profile.model,
             "temperature": 0,
             "top_p": 1,
-            "max_tokens": 1024,
+            "max_tokens": self.max_tokens,
             "messages": [{"role": "system", "content": _join(system, context)}, *provider_messages],
         }
         if tools:

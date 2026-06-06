@@ -127,9 +127,20 @@ laissé **vide** (rempli en 2.1, quand le générateur le consomme). Design :
 générateur LLM-first + boucle generate→verify (max 3) + template filet + anti-drop
 contrainte-aware (Tier 2), offline. Harness couche 2 :
 `scripts/v0_eval/generate_weeks.py`. Spec :
-`docs/superpowers/specs/2026-06-06-slice-2-1-generator-design.md`. Suite immediate :
-**Slice 3** (tool runtime `propose_week` coach-callable). Le moteur de contexte profond
-(couches, accumulation) reste un chantier dedie APRES le moteur (`PLANNING-V0.md` Q5).
+`docs/superpowers/specs/2026-06-06-slice-2-1-generator-design.md`.
+**Couche 2 prouvee (6 juin, DeepSeek v4-pro)** : 5/5 semaines generees par le LLM,
+progression saine et in-band, sereine cle seuil portee ; filet rattrape proprement
+quand le LLM echoue. Deux releves : (1) la generation a besoin d'un budget tokens
+>> 1024 (un modele a raisonnement crame 1024 avant le tool-call -> `finish_reason=length`
+-> 0/5 ; 2048 marginal 3/5 ; **4096 robuste 5/5**) -> `max_tokens` rendu configurable
+(`provider_clients`, defaut 1024 inchange ; harness a 4096). **A reprendre en Slice 3** :
+le runtime conversationnel utilise le meme client a 1024, donc `propose_week` y tronquera
+si on ne donne pas a la generation son propre budget. (2) le LLM met la cle seuil en
+`moderate` (pas `hard`) pour charger en volume : le verif ne gate pas l'intensite de la
+cle -> **observation qualite, pas encore preuve de derive**, a surveiller (pas de regle
+reactive). Suite immediate : **Slice 3** (tool runtime `propose_week` coach-callable). Le
+moteur de contexte profond (couches, accumulation) reste un chantier dedie APRES le
+moteur (`PLANNING-V0.md` Q5).
 
 Contraintes : running-only d'abord ; tout Meso en `pending` ; le cut
 LLM<->deterministe se decouvre empiriquement ; l'usine planning de l'app est a
