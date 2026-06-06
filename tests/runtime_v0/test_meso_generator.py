@@ -113,3 +113,33 @@ def test_generate_week_repairs_prose():
     assert proposal.attempts == 2
     second_messages = llm.requests[1]["messages"]
     assert any("emit_week" in m.get("content", "") for m in second_messages)
+
+
+def test_generate_week_falls_back_to_template():
+    # LLM always emits an invalid (low, key-less) week -> 3 attempts -> template fallback.
+    llm = FakeLLMClient([_emit(_LOW_WEEK), _emit(_LOW_WEEK), _emit(_LOW_WEEK)])
+    proposal = generate_week(llm, _pack(), MONDAY)
+    assert proposal.source == "template_fallback"
+    assert proposal.attempts == 3
+    assert proposal.verdict.ok  # the template is a verifiable standard week
+    assert proposal.week.sessions  # non-empty
+
+
+def test_template_respects_intensity_constraint():
+    # Under an active intensity constraint the template emits no hard key (relaxed) and verifies.
+    # Use a spiking week (load > band max 330) — invalid even under a relaxed constraint.
+    _SPIKE_WEEK = [
+        {"date": "2026-06-09", "type": "easy_run", "duration_min": 340, "intensity": "easy"},
+    ]
+    constraint = TypedConstraint(severity="moderate", restricts=("intensity",), active=True)
+    llm = FakeLLMClient([_emit(_SPIKE_WEEK), _emit(_SPIKE_WEEK), _emit(_SPIKE_WEEK)])
+    proposal = generate_week(llm, _pack((constraint,)), MONDAY)
+    assert proposal.source == "template_fallback"
+    assert proposal.verdict.ok
+    assert all(not s.is_hard for s in proposal.week.sessions)
+
+
+def test_generate_week_requires_target():
+    bare = ContextPack(target=None, last_week_actuals=None, constraints=(), signals=())
+    with pytest.raises(ValueError):
+        generate_week(FakeLLMClient([]), bare, MONDAY)

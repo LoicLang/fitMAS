@@ -120,6 +120,39 @@ def generate_week(
     return WeekProposal(week=week, verdict=verdict, source="template_fallback", attempts=max_attempts)
 
 
+def _template_week(
+    target: WeekTarget, constraints: tuple[TypedConstraint, ...], week_start: date
+) -> PlannedWeek:
+    """A deterministic standard running week sized to the band — the safety-net fallback.
+
+    Targets the band midpoint across a fixed shape (key + long + 2 easy), spaced so the
+    two high-stress days aren't adjacent. Under an active intensity/all constraint the
+    key becomes an easy run (no hard work), matching the verifier's relaxation.
+    """
+    low, high = target.load_band
+    mid = (low + high) / 2
+    blocked = limits_intensity(constraints)
+
+    def session(offset: int, kind: str, frac: float, intensity: str, weight: float) -> TypedSession:
+        return TypedSession(
+            date=week_start + timedelta(days=offset),
+            type=kind,
+            duration_min=max(10, round(mid * frac / weight)),
+            intensity=intensity,
+            detail="template fallback",
+        )
+
+    sessions = [
+        session(1, "easy_run", 0.30, "easy", 1.0)
+        if blocked
+        else session(1, target.key_type, 0.30, "hard", 2.0),
+        session(3, "easy_run", 0.20, "easy", 1.0),
+        session(5, "easy_run", 0.15, "easy", 1.0),
+        session(6, "long_run", 0.35, "moderate", 1.5),
+    ]
+    return PlannedWeek(sessions=tuple(sessions))
+
+
 def _emit_call(response: LLMResponse) -> ToolCall | None:
     for call in response.tool_calls:
         if call.name == "emit_week":
