@@ -98,6 +98,28 @@ class TypedConstraint:
     active: bool = True  # already filtered for expiry/resolution upstream
 
 
+@dataclass(frozen=True)
+class Signal:
+    """A recent fact as an advisory hint for the generator (never a gate)."""
+
+    kind: str  # "fatigue" | "soreness" | "preference" — non sur-enumé en V0
+    text: str
+
+
+@dataclass(frozen=True)
+class ContextPack:
+    """The layered Meso context-pack the generator/verifier consume.
+
+    target/last_week_actuals are None at cold-start (no prior typed week).
+    signals is a typed slot left empty in Slice 2.0 (filled in 2.1).
+    """
+
+    target: WeekTarget | None
+    last_week_actuals: WeekActuals | None
+    constraints: tuple[TypedConstraint, ...]
+    signals: tuple[Signal, ...] = ()
+
+
 def derive_continuity_target(actuals: WeekActuals, phase: Phase = "build") -> WeekTarget:
     low, high = _PHASE_BANDS[phase]
     base = actuals.total_load
@@ -107,3 +129,18 @@ def derive_continuity_target(actuals: WeekActuals, phase: Phase = "build") -> We
         load_band=(round(base * low, 1), round(base * high, 1)),
         progression_axis="volume",
     )
+
+
+def actuals_from_week(week: PlannedWeek) -> WeekActuals:
+    """Reduce a typed week to last-week actuals (forward-only chaining).
+
+    A generated, verified build week has exactly one quality key; the precondition
+    holds by construction. Recovery/taper (legitimately 0 key) is out of scope for
+    Slice 2.0 — the generator decides the carried key_type then.
+    """
+    keys = [session for session in week.sessions if session.is_quality_key]
+    if len(keys) != 1:
+        raise ValueError(
+            f"forward-only actuals need exactly one quality key, got {len(keys)}"
+        )
+    return WeekActuals(total_load=week.week_load, key_type=keys[0].type)

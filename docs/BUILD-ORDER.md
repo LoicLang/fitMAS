@@ -25,12 +25,12 @@ InputEvent -> Snapshot -> Agent -> Proposal -> Policy -> Executor
 
 Preuve (verifiee offline le 5 juin 2026) :
 
-- `tests/runtime_v0 + docs` : 201 passed ;
+- `tests/runtime_v0` : 209 passed ;
 - fake matrix : `11/11` ;
 - danger metrics : `0 wrong_write`, `0 old_plan`,
   `0 wrong_correction_target`, `0 claim_without_event` ;
 - guard fallback rate : `0 %` ;
-- core : 3646 LOC (cap 3700, justifie par le moteur Meso).
+- core : 3711 LOC (cap 3720, justifie par le moteur Meso + le context-pack Slice 2.0).
 
 Provider matrix : `114/120` est une ancienne run a 6 scenarios. La matrix
 compte 11 scenarios et 3 providers cibles aujourd'hui. Export non committe,
@@ -117,15 +117,16 @@ codé** (Slice 2.0, conservateur). **Slice 1.6 codée** = ingestion fiable des f
 fact-rider (noter un fait durable + agir dans le même tour) ; couche 2 : indispo
 enfin **notée**, note+act prouvé sur la douleur. Deux follow-ups ouverts (note+act
 inconsistant sur l'indispo ; reply qui sur-promet) — voir
-`2026-06-05-fact-ingestion-slice-1-6-spec.md`. Suite immediate : finir **Slice 2.0** = le **context-pack en couches**
-`ContextPack{target, last_week_actuals, constraints[], signals[]}` + son builder
-depuis le snapshot. Fait : contraintes (bridge), `target` (`derive_continuity_target`).
-Restent : `signals` et `last_week_actuals`. Decision actee : **voie (b) forward-only**
-pour le typage des seances (actuals depuis des semaines deja typees ; typage du legacy
-differe — `2026-06-05-moteur-sport-plan.md` Decisions #4). Puis **Slice 2.1**
-(generateur LLM `propose_week` ; mode contrainte-aware ; resout 1.6 #1/#2 + TSS-vs-
-contrainte). Le moteur de contexte profond (couches, accumulation) reste un chantier
-dedie APRES le moteur (`PLANNING-V0.md` Q5).
+`2026-06-05-fact-ingestion-slice-1-6-spec.md`. **Slice 2.0 codée** = le **context-pack
+en couches** `ContextPack{target, last_week_actuals, constraints[], signals[]}` + son
+builder `build_context_pack`. `last_week_actuals` via **voie (b) forward-only**
+(`actuals_from_week` réduit une semaine déjà typée ; cold-start = `None` ; typage du
+legacy différé — `2026-06-05-moteur-sport-plan.md` Decisions #4). `signals` = slot typé
+laissé **vide** (rempli en 2.1, quand le générateur le consomme). Design :
+`docs/superpowers/specs/2026-06-05-slice-2-0-voie-b-design.md`. Suite immediate :
+**Slice 2.1** (generateur LLM `propose_week` ; mode contrainte-aware ; boucle
+generate->verify ; resout 1.6 #1/#2 + TSS-vs-contrainte). Le moteur de contexte profond
+(couches, accumulation) reste un chantier dedie APRES le moteur (`PLANNING-V0.md` Q5).
 
 Contraintes : running-only d'abord ; tout Meso en `pending` ; le cut
 LLM<->deterministe se decouvre empiriquement ; l'usine planning de l'app est a

@@ -1,11 +1,15 @@
 from __future__ import annotations
 
+import pytest
 from datetime import date, timedelta
 
 from fitmas.runtime_v0.meso.model import (
+    ContextPack,
     PlannedWeek,
+    Signal,
     TypedSession,
     WeekActuals,
+    actuals_from_week,
     derive_continuity_target,
 )
 
@@ -81,3 +85,55 @@ def test_derive_continuity_target_recovery_band():
     )
     assert target.key_type == "intervals"
     assert target.load_band == (200.0, 280.0)        # 50% -> 70%
+
+
+def test_actuals_from_week_reduces_build_week():
+    week = PlannedWeek(
+        sessions=(
+            _s(1, "easy_run", 45, "easy"),      # 45
+            _s(3, "threshold", 60, "hard"),     # 120  <- la clé qualité
+            _s(6, "long_run", 90, "moderate"),  # 135
+        )
+    )
+    actuals = actuals_from_week(week)
+    assert actuals.total_load == 300.0
+    assert actuals.key_type == "threshold"
+
+
+def test_actuals_from_week_rejects_zero_key():
+    week = PlannedWeek(
+        sessions=(
+            _s(1, "easy_run", 45, "easy"),
+            _s(6, "long_run", 90, "moderate"),
+        )
+    )
+    with pytest.raises(ValueError):
+        actuals_from_week(week)
+
+
+def test_actuals_from_week_rejects_multiple_keys():
+    week = PlannedWeek(
+        sessions=(
+            _s(2, "threshold", 60, "hard"),
+            _s(5, "intervals", 50, "hard"),
+        )
+    )
+    with pytest.raises(ValueError):
+        actuals_from_week(week)
+
+
+def test_signal_holds_kind_and_text():
+    sig = Signal(kind="fatigue", text="jambes lourdes")
+    assert sig.kind == "fatigue"
+    assert sig.text == "jambes lourdes"
+
+
+def test_context_pack_defaults_signals_empty():
+    pack = ContextPack(
+        target=None,
+        last_week_actuals=None,
+        constraints=(),
+    )
+    assert pack.signals == ()
+    assert pack.target is None
+    assert pack.last_week_actuals is None

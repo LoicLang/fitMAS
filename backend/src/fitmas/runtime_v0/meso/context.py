@@ -9,7 +9,14 @@ deep context engine (PLANNING-V0 Q5) will later plug in.
 """
 from __future__ import annotations
 
-from fitmas.runtime_v0.meso.model import TypedConstraint
+from fitmas.runtime_v0.meso.model import (
+    ContextPack,
+    Phase,
+    PlannedWeek,
+    TypedConstraint,
+    actuals_from_week,
+    derive_continuity_target,
+)
 from fitmas.runtime_v0.snapshot import FactView, WorldSnapshot
 
 # Mirror sport_rules: only a confident health fact gates.
@@ -33,4 +40,25 @@ def constraints_from_snapshot(snapshot: WorldSnapshot) -> tuple[TypedConstraint,
         constraint
         for fact in snapshot.active_facts
         if (constraint := fact_to_constraint(fact)) is not None
+    )
+
+
+def build_context_pack(
+    snapshot: WorldSnapshot,
+    prev_week: PlannedWeek | None = None,
+    phase: Phase = "build",
+) -> ContextPack:
+    """Assemble the layered context-pack from a loaded snapshot (pure, no I/O).
+
+    Forward-only: actuals enter by chaining the previous typed week. prev_week is
+    None at cold-start -> target/actuals are None (the generator seeds in 2.1).
+    signals stays empty in Slice 2.0.
+    """
+    actuals = actuals_from_week(prev_week) if prev_week is not None else None
+    target = derive_continuity_target(actuals, phase) if actuals is not None else None
+    return ContextPack(
+        target=target,
+        last_week_actuals=actuals,
+        constraints=constraints_from_snapshot(snapshot),
+        signals=(),
     )

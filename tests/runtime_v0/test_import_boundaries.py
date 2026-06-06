@@ -23,7 +23,9 @@ def _core_files() -> list[Path]:
     return [
         path
         for path in ROOT.rglob("*.py")
-        if "__pycache__" not in path.parts and "adapters" not in path.parts
+        if "__pycache__" not in path.parts
+        and "adapters" not in path.parts
+        and " 2" not in path.name  # ignore macOS/sync duplicate copies ("foo 2.py")
     ]
 
 
@@ -55,7 +57,9 @@ def test_runtime_v0_core_does_not_import_adapters():
 def test_runtime_v0_core_stays_under_v0_budget():
     # Cap raised 3200 -> 3700 (5 juin 2026): Meso sport engine (meso/), fact
     # resolution, and the fact-rider (note a durable fact + act in one turn).
+    # 3700 -> 3720 (5 juin 2026): Slice 2.0 context-pack (ContextPack +
+    # build_context_pack + actuals_from_week, voie b forward-only).
     # Deliberate, planned capability growth, not creep. Bump per real growth
     # only; keep watching the ratchet (healthy target stays 2500).
     loc = sum(len(path.read_text().splitlines()) for path in _core_files())
-    assert loc <= 3700
+    assert loc <= 3720
