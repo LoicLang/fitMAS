@@ -2,8 +2,12 @@ from __future__ import annotations
 
 from datetime import date
 
+import pytest
+
+from fitmas.runtime_v0.meso.generator import EMIT_WEEK_TOOL, _build_week
 from fitmas.runtime_v0.meso.model import (
     ContextPack,
+    PlannedWeek,
     TypedConstraint,
     WeekActuals,
     derive_continuity_target,
@@ -37,3 +41,31 @@ def test_render_prompt_includes_target_and_constraint():
     assert "300.0" in text and "330.0" in text  # load band
     assert "2026-06-08" in text         # week start
     assert "intensity" in text          # active constraint surfaced
+
+
+def test_build_week_parses_typed_sessions():
+    week = _build_week(
+        [
+            {"date": "2026-06-09", "type": "threshold", "duration_min": 60, "intensity": "hard", "detail": "3x8"},
+            {"date": "2026-06-13", "type": "easy_run", "duration_min": 40, "intensity": "easy"},
+        ]
+    )
+    assert isinstance(week, PlannedWeek)
+    assert week.week_load == 160.0  # 120 + 40
+    assert week.sessions[0].type == "threshold"
+    assert week.sessions[0].detail == "3x8"
+
+
+def test_build_week_rejects_bad_type():
+    with pytest.raises(ValueError):
+        _build_week([{"date": "2026-06-09", "type": "sprint", "duration_min": 30, "intensity": "hard"}])
+
+
+def test_build_week_rejects_bad_intensity():
+    with pytest.raises(ValueError):
+        _build_week([{"date": "2026-06-09", "type": "easy_run", "duration_min": 30, "intensity": "brutal"}])
+
+
+def test_emit_week_tool_shape():
+    assert EMIT_WEEK_TOOL.name == "emit_week"
+    assert "sessions" in EMIT_WEEK_TOOL.parameters["properties"]
