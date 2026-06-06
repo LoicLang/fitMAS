@@ -14,7 +14,7 @@ read_when:
 Le plus petit coach Telegram fiable pour 1 a 2 semaines de dogfood.
 ```
 
-## Etat Actuel — 5 juin 2026
+## Etat Actuel — 6 juin 2026
 
 Le Runtime V0 a valide le noyau et le premier Sport Core minimal :
 
@@ -23,14 +23,14 @@ InputEvent -> Snapshot -> Agent -> Proposal -> Policy -> Executor
 -> Result -> Reply -> Guard -> Audit
 ```
 
-Preuve (verifiee offline le 5 juin 2026) :
+Preuve (verifiee offline le 6 juin 2026) :
 
-- `tests/runtime_v0` : 209 passed ;
+- `tests/runtime_v0` : 224 passed ;
 - fake matrix : `11/11` ;
 - danger metrics : `0 wrong_write`, `0 old_plan`,
   `0 wrong_correction_target`, `0 claim_without_event` ;
 - guard fallback rate : `0 %` ;
-- core : 3711 LOC (cap 3720, justifie par le moteur Meso + le context-pack Slice 2.0).
+- core : 3941 LOC (cap 3960, justifie par le moteur Meso + le context-pack Slice 2.0 + le generateur Slice 2.1).
 
 Provider matrix : `114/120` est une ancienne run a 6 scenarios. La matrix
 compte 11 scenarios et 3 providers cibles aujourd'hui. Export non committe,
@@ -107,7 +107,7 @@ main de la coherence/progression -> comparer au vecu app (cas TSS qui chute). Sp
 a produire en premier : les 4-5 proprietes d'une semaine running saine, dont
 l'anti-TSS-drop.
 
-Avancement (5 juin 2026) : **Slice 0+1 codee** = modele type Meso +
+Avancement (6 juin 2026) : **Slice 0+1 codee** = modele type Meso +
 verificateur deterministe (5 proprietes), prouve en fixtures dont le rejeu
 "TSS qui chute" (`backend/src/fitmas/runtime_v0/meso/`). **Slice 1.5 codee** =
 resolution de fact LLM-first (`propose_fact_resolution` -> `resolved_at`), trou
@@ -123,9 +123,12 @@ builder `build_context_pack`. `last_week_actuals` via **voie (b) forward-only**
 (`actuals_from_week` réduit une semaine déjà typée ; cold-start = `None` ; typage du
 legacy différé — `2026-06-05-moteur-sport-plan.md` Decisions #4). `signals` = slot typé
 laissé **vide** (rempli en 2.1, quand le générateur le consomme). Design :
-`docs/superpowers/specs/2026-06-05-slice-2-0-voie-b-design.md`. Suite immediate :
-**Slice 2.1** (generateur LLM `propose_week` ; mode contrainte-aware ; boucle
-generate->verify ; resout 1.6 #1/#2 + TSS-vs-contrainte). Le moteur de contexte profond
+`docs/superpowers/specs/2026-06-05-slice-2-0-voie-b-design.md`. **Slice 2.1 codée** =
+générateur LLM-first + boucle generate→verify (max 3) + template filet + anti-drop
+contrainte-aware (Tier 2), offline. Harness couche 2 :
+`scripts/v0_eval/generate_weeks.py`. Spec :
+`docs/superpowers/specs/2026-06-06-slice-2-1-generator-design.md`. Suite immediate :
+**Slice 3** (tool runtime `propose_week` coach-callable). Le moteur de contexte profond
 (couches, accumulation) reste un chantier dedie APRES le moteur (`PLANNING-V0.md` Q5).
 
 Contraintes : running-only d'abord ; tout Meso en `pending` ; le cut
