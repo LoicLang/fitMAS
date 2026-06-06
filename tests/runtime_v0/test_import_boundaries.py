@@ -59,7 +59,10 @@ def test_runtime_v0_core_stays_under_v0_budget():
     # resolution, and the fact-rider (note a durable fact + act in one turn).
     # 3700 -> 3720 (5 juin 2026): Slice 2.0 context-pack (ContextPack +
     # build_context_pack + actuals_from_week, voie b forward-only).
+    # 3720 -> 3950 (6 juin 2026): Slice 2.1 generator (generator.py, week_generation
+    # prompt, constraint-aware relaxation) — interim ceiling, tightened to the real
+    # measured value when the slice lands.
     # Deliberate, planned capability growth, not creep. Bump per real growth
     # only; keep watching the ratchet (healthy target stays 2500).
     loc = sum(len(path.read_text().splitlines()) for path in _core_files())
-    assert loc <= 3720
+    assert loc <= 3950
