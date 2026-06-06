@@ -185,3 +185,31 @@ def test_transition_mode_flags_unsafe_jump():
     assert "unsafe_jump" in _codes(verdict)
     jump = next(v for v in verdict.violations if v.code == "unsafe_jump")
     assert jump.severity == "high"
+
+
+def test_active_intensity_constraint_relaxes_load_drop_and_key():
+    # A low, key-less week is legitimate under an active intensity restriction:
+    # load_drop + key checks are relaxed; nothing hard -> no health_conflict.
+    target = _target(band=(300.0, 330.0), key_type="threshold")
+    week = PlannedWeek(sessions=(_s(1, "easy_run", 30, "easy"), _s(3, "easy_run", 30, "easy")))
+    constraint = TypedConstraint(severity="moderate", restricts=("intensity",), active=True)
+    verdict = verify_week(week, target, (constraint,))
+    assert verdict.ok
+    assert verdict.requires_pending is True
+
+
+def test_low_keyless_week_without_constraint_fails():
+    target = _target(band=(300.0, 330.0), key_type="threshold")
+    week = PlannedWeek(sessions=(_s(1, "easy_run", 30, "easy"), _s(3, "easy_run", 30, "easy")))
+    verdict = verify_week(week, target)
+    codes = {v.code for v in verdict.violations}
+    assert "load_drop" in codes
+    assert "key_session_count" in codes
+
+
+def test_inactive_constraint_does_not_relax():
+    target = _target(band=(300.0, 330.0), key_type="threshold")
+    week = PlannedWeek(sessions=(_s(1, "easy_run", 30, "easy"),))
+    constraint = TypedConstraint(severity="moderate", restricts=("intensity",), active=False)
+    verdict = verify_week(week, target, (constraint,))
+    assert "load_drop" in {v.code for v in verdict.violations}

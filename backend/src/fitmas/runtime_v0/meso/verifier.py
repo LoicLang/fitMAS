@@ -29,6 +29,19 @@ class WeekVerdict:
     requires_pending: bool = True  # Meso never auto-commits
 
 
+def limits_intensity(constraints: tuple[TypedConstraint, ...]) -> bool:
+    """True if an active constraint forbids hard work (restricts intensity or all).
+
+    Such a constraint materially limits the week: the load drop is *explained*, and a
+    hard key session can't be prescribed. Driven by pack constraints (typed by the
+    runtime at ingestion), not by the generator -> anti-gaming by construction.
+    """
+    return any(
+        constraint.active and ({"intensity", "all"} & set(constraint.restricts))
+        for constraint in constraints
+    )
+
+
 def verify_week(
     week: PlannedWeek,
     target: WeekTarget,
@@ -36,10 +49,11 @@ def verify_week(
     mode: Mode = "continuity",
 ) -> WeekVerdict:
     violations: list[Violation] = []
+    relaxed = limits_intensity(constraints)
     if mode == "continuity":
-        if target.phase == "build":
+        if target.phase == "build" and not relaxed:
             violations.extend(_check_key(week, target))
-        violations.extend(_check_load_continuity(week, target))
+        violations.extend(_check_load_continuity(week, target, drop_relaxed=relaxed))
     else:  # transition: discontinuity + type change allowed, safety enforced
         violations.extend(_check_load_transition(week, target))
     violations.extend(_check_spacing(week))
@@ -72,11 +86,13 @@ def _check_key(week: PlannedWeek, target: WeekTarget) -> list[Violation]:
     return []
 
 
-def _check_load_continuity(week: PlannedWeek, target: WeekTarget) -> list[Violation]:
+def _check_load_continuity(
+    week: PlannedWeek, target: WeekTarget, drop_relaxed: bool = False
+) -> list[Violation]:
     low, high = target.load_band
     load = week.week_load
     out: list[Violation] = []
-    if load < low:
+    if load < low and not drop_relaxed:
         out.append(
             Violation("load_drop", f"week load {load} below band min {low}", "high")
         )
