@@ -4,7 +4,9 @@ from datetime import date
 
 import pytest
 
-from fitmas.runtime_v0.meso.generator import EMIT_WEEK_TOOL, _build_week
+from fitmas.runtime_v0.llm_clients.base import LLMResponse, ToolCall
+from fitmas.runtime_v0.llm_clients.fake import FakeLLMClient
+from fitmas.runtime_v0.meso.generator import EMIT_WEEK_TOOL, _build_week, generate_week
 from fitmas.runtime_v0.meso.model import (
     ContextPack,
     PlannedWeek,
@@ -69,3 +71,45 @@ def test_build_week_rejects_bad_intensity():
 def test_emit_week_tool_shape():
     assert EMIT_WEEK_TOOL.name == "emit_week"
     assert "sessions" in EMIT_WEEK_TOOL.parameters["properties"]
+
+
+def _emit(sessions):
+    return LLMResponse(tool_calls=(ToolCall(name="emit_week", args={"sessions": sessions}),))
+
+
+# A healthy build week for band (300, 330): key threshold Tue + easy + easy + long.
+# load = 100 + 60 + 50 + 105 = 315 (in band); Tue/Sun stress not adjacent.
+_GOOD_WEEK = [
+    {"date": "2026-06-09", "type": "threshold", "duration_min": 50, "intensity": "hard"},   # 100
+    {"date": "2026-06-11", "type": "easy_run", "duration_min": 60, "intensity": "easy"},     # 60
+    {"date": "2026-06-13", "type": "easy_run", "duration_min": 50, "intensity": "easy"},     # 50
+    {"date": "2026-06-14", "type": "long_run", "duration_min": 70, "intensity": "moderate"}, # 105
+]
+_LOW_WEEK = [{"date": "2026-06-09", "type": "easy_run", "duration_min": 30, "intensity": "easy"}]
+
+
+def test_generate_week_passes_first_try():
+    llm = FakeLLMClient([_emit(_GOOD_WEEK)])
+    proposal = generate_week(llm, _pack(), MONDAY)
+    assert proposal.source == "llm"
+    assert proposal.attempts == 1
+    assert proposal.verdict.ok
+    assert proposal.verdict.requires_pending is True
+
+
+def test_generate_week_retries_then_passes():
+    llm = FakeLLMClient([_emit(_LOW_WEEK), _emit(_GOOD_WEEK)])
+    proposal = generate_week(llm, _pack(), MONDAY)
+    assert proposal.source == "llm"
+    assert proposal.attempts == 2
+    # the 2nd request carried the verifier violations from attempt 1
+    second_messages = llm.requests[1]["messages"]
+    assert any("load_drop" in m.get("content", "") for m in second_messages)
+
+
+def test_generate_week_repairs_prose():
+    llm = FakeLLMClient([LLMResponse(text="voici ta semaine ..."), _emit(_GOOD_WEEK)])
+    proposal = generate_week(llm, _pack(), MONDAY)
+    assert proposal.attempts == 2
+    second_messages = llm.requests[1]["messages"]
+    assert any("emit_week" in m.get("content", "") for m in second_messages)

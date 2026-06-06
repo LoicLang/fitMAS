@@ -74,3 +74,63 @@ EMIT_WEEK_TOOL = ToolSchema(
     handler=_build_week,
     is_proposal=True,
 )
+
+
+@dataclass(frozen=True)
+class WeekProposal:
+    week: PlannedWeek
+    verdict: WeekVerdict
+    source: Literal["llm", "template_fallback"]
+    attempts: int
+
+
+def generate_week(
+    llm: LLMClient,
+    pack: ContextPack,
+    week_start: date,
+    mode: Mode = "continuity",
+    max_attempts: int = 3,
+) -> WeekProposal:
+    """Generate one typed week from the pack, looping generate->verify, then fallback.
+
+    Requires pack.target (continuity); cold-start seed is out of scope (Slice 3).
+    """
+    if pack.target is None:
+        raise ValueError("generate_week requires a target (continuity); cold-start is Slice 3")
+    messages: list[dict[str, Any]] = [
+        {"role": "user", "content": render_generation_prompt(pack, week_start, mode)}
+    ]
+    for attempt in range(1, max_attempts + 1):
+        response = llm.chat_with_tools(GENERATION_SYSTEM, messages, [EMIT_WEEK_TOOL])
+        call = _emit_call(response)
+        if call is None:
+            messages.append(_contract_msg("emit the week via the emit_week tool, no prose"))
+            continue
+        try:
+            week = _build_week(call.args.get("sessions", []))
+        except (ValueError, KeyError, TypeError) as exc:
+            messages.append(_contract_msg(f"invalid week: {exc}"))
+            continue
+        verdict = verify_week(week, pack.target, pack.constraints, mode)
+        if verdict.ok:
+            return WeekProposal(week=week, verdict=verdict, source="llm", attempts=attempt)
+        messages.append(_violations_msg(verdict.violations))
+    week = _template_week(pack.target, pack.constraints, week_start)
+    verdict = verify_week(week, pack.target, pack.constraints, mode)
+    return WeekProposal(week=week, verdict=verdict, source="template_fallback", attempts=max_attempts)
+
+
+def _emit_call(response: LLMResponse) -> ToolCall | None:
+    for call in response.tool_calls:
+        if call.name == "emit_week":
+            return call
+    return None
+
+
+def _contract_msg(error: str) -> dict[str, Any]:
+    return {"role": "tool", "tool_name": "contract", "content": json.dumps({"error": error}, ensure_ascii=False)}
+
+
+def _violations_msg(violations: tuple[Any, ...]) -> dict[str, Any]:
+    payload = [{"code": v.code, "detail": v.detail, "severity": v.severity} for v in violations]
+    return {"role": "tool", "tool_name": "verifier", "content": json.dumps(payload, ensure_ascii=False)}
