@@ -6,6 +6,7 @@ from fitmas.runtime_v0.event import InputEvent
 from fitmas.runtime_v0.llm_clients.base import LLMResponse, ToolCall
 from fitmas.runtime_v0.llm_clients.fake import FakeLLMClient
 from fitmas.runtime_v0.meso.runtime_tool import propose_week
+from fitmas.runtime_v0.policy import RuntimePolicy
 from fitmas.runtime_v0.tool_catalog import for_event
 from fitmas.runtime_v0.proposals import (
     ActionProposal,
@@ -81,6 +82,16 @@ def test_propose_week_generates_and_returns_week_proposal():
     assert proposal.week_proposal.week_start == "2026-06-08"  # next Monday after Thu 06-04
     assert len(proposal.week_proposal.sessions) == 4
     assert proposal.answer_facts  # week summary lines for the reply
+
+
+def test_policy_shows_week_proposal_without_commit():
+    generation_llm = FakeLLMClient([_emit(_GOOD_WEEK)])
+    ctx = ToolContext(db_path=None, snapshot=_snapshot(), generation_llm=generation_llm)
+    proposal = propose_week(ctx, last_week_load=300.0, key_type="threshold")
+    decision = RuntimePolicy().evaluate(proposal, _snapshot())
+    assert decision.action == "answer_only"
+    assert decision.commands == ()  # 3a never writes
+    assert decision.reply_facts == proposal.answer_facts
 
 
 def test_propose_week_registered_for_user_message():

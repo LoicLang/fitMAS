@@ -113,6 +113,11 @@ class RuntimePolicy:
                 commands,
                 (proposal.clarification_question,) if proposal.clarification_question else (),
             )
+        if proposal.type == "week_proposal":
+            # 3a: show the proposed week, never write. The week rides in answer_facts;
+            # _must_not_claim already blocks "c'est fait" since no command is applied.
+            # (3b will route this to create_pending + confirmation -> commit.)
+            return _decision("answer_only", "week_proposal", "low", (), proposal.answer_facts)
         if proposal.type == "memory_update":
             decision = self._memory_update(proposal)
         elif proposal.type == "fact_resolution":
