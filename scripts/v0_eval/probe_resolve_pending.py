@@ -32,8 +32,6 @@ for _path in (ROOT, ROOT / "backend" / "src"):
 from fitmas.runtime_v0.db import connect, init_db  # noqa: E402
 from fitmas.runtime_v0.event import InputEvent  # noqa: E402
 from fitmas.runtime_v0.runtime import HandleEventResult, RuntimeDeps, handle_event  # noqa: E402
-from fitmas.runtime_v0.snapshot import ActivityView, SessionView, WorldSnapshot  # noqa: E402
-from fitmas.runtime_v0.state import ConversationState  # noqa: E402
 
 from scripts.v0_eval.provider_clients import (  # noqa: E402
     MeteredLLMClient,
@@ -227,7 +225,7 @@ def main() -> int:
         print(f"provider_config_error: {exc}\nHint: set -a && . ./.env && set +a")
         return 2
 
-    now = datetime(2026, 6, 9, 18, 0, tzinfo=timezone.utc)  # Monday evening
+    now = datetime(2026, 6, 9, 18, 0, tzinfo=timezone.utc)  # a Tuesday evening
 
     results = []
 

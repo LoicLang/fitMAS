@@ -1,10 +1,11 @@
-"""Coach-callable `propose_week` tool — the engine entry point in the runtime (Slice 3a).
+"""Coach-callable `propose_week` tool — the Meso engine entry point in the runtime.
 
-The coach declares a seed (last week's load + key type, read from real recent training);
-this builds a ContextPack from the snapshot and runs the Meso generator with the
-injected generation_llm (bigger token budget than the chat loop). It only PROPOSES:
-the returned week_proposal carries the week as answer_facts and triggers no write
-(the policy routes it to answer_only). Commit/store/chaining is Slice 3b.
+The seed is the last committed week (forward chaining via snapshot.last_planned_week);
+at cold-start it falls back to a seed the coach declares from real recent training.
+This builds a ContextPack and runs the Meso generator with the injected generation_llm
+(bigger token budget than the chat loop). The verified week is PROPOSED: the policy
+routes a week_proposal to create_pending, and a user confirmation commits it to the
+typed store on the next turn (Slice 3b).
 """
 from __future__ import annotations
 
