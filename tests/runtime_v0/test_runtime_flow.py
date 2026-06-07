@@ -331,3 +331,91 @@ def test_guarded_reply_gets_one_llm_repair_retry(tmp_path):
     result_json = json.loads(turn["result_json"])
     assert result_json["reply_attempts"] == 2
     assert result_json["guard_repair_used"] is True
+
+
+def test_propose_then_confirm_commits_week(tmp_path):
+    from datetime import datetime, timezone
+    from fitmas.runtime_v0.db import connect, init_db
+    from fitmas.runtime_v0.event import InputEvent
+    from fitmas.runtime_v0.llm_clients.base import LLMResponse, ToolCall
+    from fitmas.runtime_v0.llm_clients.fake import FakeLLMClient
+    from fitmas.runtime_v0.runtime import RuntimeDeps, handle_event
+
+    db_path = tmp_path / "fitmas_v0.db"
+    init_db(db_path)
+    now = datetime(2026, 6, 4, 9, 0, tzinfo=timezone.utc)  # Thursday
+    good_week = [
+        {"date": "2026-06-09", "type": "threshold", "duration_min": 50, "intensity": "hard"},
+        {"date": "2026-06-11", "type": "easy_run", "duration_min": 60, "intensity": "easy"},
+        {"date": "2026-06-13", "type": "easy_run", "duration_min": 50, "intensity": "easy"},
+        {"date": "2026-06-14", "type": "long_run", "duration_min": 70, "intensity": "moderate"},
+    ]
+    coach = FakeLLMClient([
+        LLMResponse(tool_calls=(ToolCall(name="propose_week", args={"last_week_load": 300.0, "key_type": "threshold"}),)),
+        LLMResponse(tool_calls=(ToolCall(name="resolve_pending", args={"pending_id": 1, "decision": "accept"}),)),
+    ])
+    generation = FakeLLMClient([LLMResponse(tool_calls=(ToolCall(name="emit_week", args={"sessions": good_week}),))])
+    reply = FakeLLMClient([
+        LLMResponse(text="Voici ta semaine du 8 juin, je cale ?"),
+        LLMResponse(text="C'est calé, ta semaine du 8 juin est validée."),
+    ])
+    deps = RuntimeDeps(db_path=db_path, coach_llm=coach, reply_llm=reply, generation_llm=generation)
+
+    e1 = InputEvent(id="e1", user_id=1, source="test", type="user_message", text="fais-moi ma semaine prochaine", payload={}, occurred_at=now)
+    r1 = handle_event(e1, deps, turn_id="turn-1")
+    assert r1.policy.action == "create_pending"
+    with connect(db_path) as connection:
+        pending = connection.execute("select id, status from v0_pending_confirmations").fetchone()
+        week_count = connection.execute("select count(*) from v0_planned_weeks").fetchone()[0]
+    assert pending["status"] == "open"
+    assert week_count == 0  # nothing committed yet
+
+    e2 = InputEvent(id="e2", user_id=1, source="test", type="user_message", text="oui", payload={}, occurred_at=now)
+    r2 = handle_event(e2, deps, turn_id="turn-2")
+    assert r2.policy.action == "allow_commit"
+    with connect(db_path) as connection:
+        week = connection.execute("select * from v0_planned_weeks").fetchone()
+        pending = connection.execute("select status from v0_pending_confirmations where id = 1").fetchone()
+    assert week["week_start"] == "2026-06-08"
+    assert week["key_type"] == "threshold"
+    assert pending["status"] == "accepted"
+    assert r2.guard.ok
+
+
+def test_propose_then_reject_drops_week(tmp_path):
+    from datetime import datetime, timezone
+    from fitmas.runtime_v0.db import connect, init_db
+    from fitmas.runtime_v0.event import InputEvent
+    from fitmas.runtime_v0.llm_clients.base import LLMResponse, ToolCall
+    from fitmas.runtime_v0.llm_clients.fake import FakeLLMClient
+    from fitmas.runtime_v0.runtime import RuntimeDeps, handle_event
+
+    db_path = tmp_path / "fitmas_v0.db"
+    init_db(db_path)
+    now = datetime(2026, 6, 4, 9, 0, tzinfo=timezone.utc)
+    good_week = [
+        {"date": "2026-06-09", "type": "threshold", "duration_min": 50, "intensity": "hard"},
+        {"date": "2026-06-11", "type": "easy_run", "duration_min": 60, "intensity": "easy"},
+        {"date": "2026-06-13", "type": "easy_run", "duration_min": 50, "intensity": "easy"},
+        {"date": "2026-06-14", "type": "long_run", "duration_min": 70, "intensity": "moderate"},
+    ]
+    coach = FakeLLMClient([
+        LLMResponse(tool_calls=(ToolCall(name="propose_week", args={"last_week_load": 300.0, "key_type": "threshold"}),)),
+        LLMResponse(tool_calls=(ToolCall(name="resolve_pending", args={"pending_id": 1, "decision": "reject"}),)),
+    ])
+    generation = FakeLLMClient([LLMResponse(tool_calls=(ToolCall(name="emit_week", args={"sessions": good_week}),))])
+    reply = FakeLLMClient([
+        LLMResponse(text="Voici ta semaine du 8 juin, je cale ?"),
+        LLMResponse(text="Ok, je laisse tomber cette semaine."),
+    ])
+    deps = RuntimeDeps(db_path=db_path, coach_llm=coach, reply_llm=reply, generation_llm=generation)
+
+    handle_event(InputEvent(id="e1", user_id=1, source="test", type="user_message", text="fais-moi ma semaine", payload={}, occurred_at=now), deps, turn_id="turn-1")
+    r2 = handle_event(InputEvent(id="e2", user_id=1, source="test", type="user_message", text="non", payload={}, occurred_at=now), deps, turn_id="turn-2")
+
+    with connect(db_path) as connection:
+        week_count = connection.execute("select count(*) from v0_planned_weeks").fetchone()[0]
+        pending = connection.execute("select status from v0_pending_confirmations where id = 1").fetchone()
+    assert week_count == 0
+    assert pending["status"] == "rejected"
+    assert r2.guard.ok
