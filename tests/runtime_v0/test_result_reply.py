@@ -522,3 +522,32 @@ def test_reply_composer_blocked_fallback_explains_when_llm_fails(tmp_path):
     composer = ReplyComposer(FakeLLMClient([]), "reply-system")
 
     assert composer.compose(result, snapshot) == "Je bloque: trop risqué avec le signal santé actif."
+
+
+def _snapshot_for_reply():
+    from datetime import datetime, timezone
+    from fitmas.runtime_v0.snapshot import WorldSnapshot
+    from fitmas.runtime_v0.state import ConversationState
+    now = datetime(2026, 6, 4, 9, 0, tzinfo=timezone.utc)
+    return WorldSnapshot(
+        user_id=1, today=now.date(), now=now, timezone="UTC", objective=None,
+        current_plan=(), recent_plan=(), recent_activities=(), active_facts=(),
+        active_pending=None, recent_execution_events=(), recent_plan_events=(),
+        conversation_state=ConversationState(None, None, None, None, None),
+    )
+
+
+def test_pending_resolution_fallback_uses_read_facts():
+    from datetime import date
+    from fitmas.runtime_v0.guard import _safe_reply
+    from fitmas.runtime_v0.reply import _fallback
+    from fitmas.runtime_v0.result import ReplyContract, RuntimeResult
+
+    result = RuntimeResult(
+        event_id="e1", turn_id="t1", proposal_type="pending_resolution",
+        policy_action="allow_commit", committed_events=(), blocked_reasons=(),
+        pending=None, read_facts=("semaine du 8 juin validée",),
+        reply_contract=ReplyContract((), (), "confirming", 5),
+    )
+    assert _fallback(result, _snapshot_for_reply()) == "semaine du 8 juin validée"
+    assert _safe_reply(result, date(2026, 6, 4)) == "semaine du 8 juin validée"
