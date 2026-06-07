@@ -11,6 +11,7 @@ from fitmas.runtime_v0.tools_proposal import (
     propose_fact_resolution,
     propose_memory_update,
     propose_plan_patch,
+    resolve_pending,
 )
 from fitmas.runtime_v0.tools_read import (
     get_active_facts,
@@ -180,6 +181,27 @@ def for_event(event: InputEvent, snapshot: WorldSnapshot) -> tuple[ToolSchema, .
             is_proposal=True,
         ),
     )
+    if snapshot.active_pending is not None:
+        tools = tools + (
+            ToolSchema(
+                name="resolve_pending",
+                description=(
+                    "Resolve the open pending confirmation shown in the header. "
+                    "Use when the user accepts or declines it. decision=accept commits "
+                    "it; decision=reject drops it. Pass the pending id from the header."
+                ),
+                parameters=_schema(
+                    {
+                        "pending_id": {"type": "integer"},
+                        "decision": {"type": "string", "enum": ["accept", "reject"]},
+                        "note": {"type": "string"},
+                    },
+                    ("pending_id", "decision"),
+                ),
+                handler=resolve_pending,
+                is_proposal=True,
+            ),
+        )
     if snapshot.conversation_state.last_unresolved_intent and snapshot.conversation_state.last_unresolved_intent.get("type") == "move_session":
         allowed = {"get_current_plan", "get_plan_day", "get_session", "resolve_date_reference", "propose_plan_patch", "ask_clarification"}
         return tuple(tool for tool in tools if tool.name in allowed)

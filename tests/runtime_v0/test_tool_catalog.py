@@ -118,6 +118,33 @@ def test_fake_llm_client_returns_scripted_responses_and_records_calls():
         client.chat_with_tools("system", [], [])
 
 
+def test_resolve_pending_exposed_only_when_pending_open():
+    from datetime import datetime, timezone
+    from fitmas.runtime_v0.event import InputEvent
+    from fitmas.runtime_v0.snapshot import PendingView, WorldSnapshot
+    from fitmas.runtime_v0.state import ConversationState
+    from fitmas.runtime_v0.tool_catalog import for_event
+
+    now = datetime(2026, 6, 4, 9, 0, tzinfo=timezone.utc)
+    base = dict(
+        user_id=1, today=now.date(), now=now, timezone="UTC", objective=None,
+        current_plan=(), recent_plan=(), recent_activities=(), active_facts=(),
+        recent_execution_events=(), recent_plan_events=(),
+        conversation_state=ConversationState(None, None, None, None, None),
+    )
+    event = InputEvent(id="e1", user_id=1, source="test", type="user_message",
+                       text="oui", payload={}, occurred_at=now)
+
+    no_pending = WorldSnapshot(active_pending=None, **base)
+    names = {tool.name for tool in for_event(event, no_pending)}
+    assert "resolve_pending" not in names
+
+    pending = PendingView(id=3, type="week_proposal", summary="semaine proposée", expires_at=now)
+    with_pending = WorldSnapshot(active_pending=pending, **base)
+    names = {tool.name for tool in for_event(event, with_pending)}
+    assert "resolve_pending" in names
+
+
 def test_coach_prompt_keeps_followup_target_date_without_reconfirming():
     assert "source_ref" in COACH_SYSTEM_PROMPT
     assert "propose_plan_patch sans redemander la date" in COACH_SYSTEM_PROMPT
