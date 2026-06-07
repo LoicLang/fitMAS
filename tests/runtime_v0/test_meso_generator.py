@@ -36,13 +36,21 @@ def test_generation_system_mentions_emit_tool():
     assert "emit_week" in GENERATION_SYSTEM
 
 
-def test_render_prompt_includes_target_and_constraint():
+def test_render_prompt_unconstrained_keeps_prescribed_key():
+    pack = _pack()
+    text = render_generation_prompt(pack, MONDAY, "continuity")
+    assert "seance cle prescrite: threshold" in text  # prescribed key kept
+    assert "300.0" in text and "330.0" in text        # load band
+    assert "2026-06-08" in text                       # week start
+
+
+def test_render_prompt_constrained_drops_prescribed_key():
     pack = _pack((TypedConstraint(severity="moderate", restricts=("intensity",), active=True),))
     text = render_generation_prompt(pack, MONDAY, "continuity")
-    assert "threshold" in text          # prescribed key type
-    assert "300.0" in text and "330.0" in text  # load band
-    assert "2026-06-08" in text         # week start
-    assert "intensity" in text          # active constraint surfaced
+    assert "supprimee" in text                       # key dropped this week
+    assert "seance cle prescrite" not in text        # no hard key prescribed under the constraint
+    assert "intensity" in text                       # active constraint surfaced
+    assert "300.0" in text and "330.0" in text  # load band still present
 
 
 def test_build_week_parses_typed_sessions():

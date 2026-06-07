@@ -213,3 +213,31 @@ def test_inactive_constraint_does_not_relax():
     constraint = TypedConstraint(severity="moderate", restricts=("intensity",), active=False)
     verdict = verify_week(week, target, (constraint,))
     assert "load_drop" in {v.code for v in verdict.violations}
+
+
+def test_empty_week_rejected_even_under_relaxed_constraint():
+    # Under an intensity restriction the key + load-floor checks are relaxed, so the
+    # structural floor must still reject a degenerate (empty / all-rest) week.
+    constraint = (TypedConstraint(severity="moderate", restricts=("intensity",), active=True),)
+    empty = PlannedWeek(sessions=())
+    verdict = verify_week(empty, _target(), constraint, "continuity")
+    assert not verdict.ok
+    assert "empty_week" in _codes(verdict)
+
+    all_rest = PlannedWeek(sessions=(_s(0, "rest", 0, "easy"), _s(3, "rest", 0, "easy")))
+    assert "empty_week" in _codes(verify_week(all_rest, _target(), constraint, "continuity"))
+
+
+def test_reduced_constraint_week_still_passes_after_non_empty_check():
+    # A real reduced week under the constraint (easy volume only) stays valid: it is
+    # non-empty, key check relaxed, no health conflict.
+    constraint = (TypedConstraint(severity="moderate", restricts=("intensity",), active=True),)
+    week = PlannedWeek(
+        sessions=(
+            _s(1, "easy_run", 40, "easy"),
+            _s(3, "easy_run", 35, "easy"),
+            _s(6, "long_run", 60, "moderate"),
+        )
+    )  # load = 40 + 35 + 90 = 165, in a generous band
+    verdict = verify_week(week, _target(band=(50.0, 250.0)), constraint, "continuity")
+    assert verdict.ok, _codes(verdict)

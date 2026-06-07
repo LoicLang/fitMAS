@@ -80,5 +80,10 @@ def test_runtime_v0_core_stays_under_v0_budget():
     # 4100 -> 4280 (7 juin 2026): Slice 3b landed — pending_resolution mechanism,
     # resolve_pending tool, v0_planned_weeks store, week commit handler, forward
     # chaining. Proven capability, not creep (see RUNTIME-V0.md Budget).
+    # 4280 -> 4300 (7 juin 2026): reliable constrained-week generation — the prompt
+    # drops the prescribed hard key when intensity is restricted (réduction-sous-
+    # contrainte), and the verifier rejects degenerate empty/all-rest weeks in every
+    # mode. Closes the generator/verifier asymmetry. Proven couche 2 (probe_constrained_week
+    # 4/4, source=llm, constraint respected, commit ok).
     loc = sum(len(path.read_text().splitlines()) for path in _core_files())
-    assert loc <= 4280
+    assert loc <= 4300

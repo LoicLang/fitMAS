@@ -50,6 +50,10 @@ def verify_week(
 ) -> WeekVerdict:
     violations: list[Violation] = []
     relaxed = limits_intensity(constraints)
+    # Structural floor in EVERY mode: a degenerate week slips through otherwise —
+    # under a relaxed constraint the key + load-floor checks are both dropped, so an
+    # empty (or all-rest) week would pass with no other gate.
+    violations.extend(_check_non_empty(week))
     if mode == "continuity":
         if target.phase == "build" and not relaxed:
             violations.extend(_check_key(week, target))
@@ -63,6 +67,12 @@ def verify_week(
         violations=tuple(violations),
         requires_pending=True,
     )
+
+
+def _check_non_empty(week: PlannedWeek) -> list[Violation]:
+    if not any(session.type != "rest" for session in week.sessions):
+        return [Violation("empty_week", "a week needs at least one training session", "high")]
+    return []
 
 
 def _check_key(week: PlannedWeek, target: WeekTarget) -> list[Violation]:
