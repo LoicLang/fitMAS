@@ -225,7 +225,8 @@ def _apply_resolve_pending(command: ResolvePendingConfirmationCommand, connectio
     before = dict(row)
     if command.decision == "reject":
         connection.execute(
-            "update v0_pending_confirmations set status = 'rejected' where id = ?", (command.pending_id,)
+            "update v0_pending_confirmations set status = 'rejected' where id = ? and user_id = ?",
+            (command.pending_id, user_id),
         )
         after = _pending(connection, command.pending_id)
         return before, after, command.note or "rejected"
@@ -235,8 +236,11 @@ def _apply_resolve_pending(command: ResolvePendingConfirmationCommand, connectio
     else:
         raise ValueError(f"pending_commit_not_supported_for_type:{before['type']}")
     connection.execute(
-        "update v0_pending_confirmations set status = 'accepted' where id = ?", (command.pending_id,)
+        "update v0_pending_confirmations set status = 'accepted' where id = ? and user_id = ?",
+        (command.pending_id, user_id),
     )
+    # Intentional asymmetry: `before` is the pending row, `after` is the committed
+    # week row — the audit event shows what was actually committed on accept.
     return before, after, command.note or "accepted"
 
 
