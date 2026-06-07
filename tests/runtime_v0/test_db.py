@@ -71,6 +71,28 @@ def test_reset_db_recreates_empty_schema(tmp_path):
         assert "v0_turns" in _table_names(connection)
 
 
+def test_planned_weeks_table_exists_and_resets(tmp_path):
+    from fitmas.runtime_v0.db import connect, init_db, reset_db
+
+    db_path = tmp_path / "fitmas_v0.db"
+    init_db(db_path)
+    with connect(db_path) as connection:
+        connection.execute(
+            "insert into v0_planned_weeks (user_id, week_start, source, week_load, key_type, sessions_json) "
+            "values (?, ?, ?, ?, ?, ?)",
+            (1, "2026-06-15", "llm", 350.0, "threshold", "[]"),
+        )
+        connection.commit()
+        row = connection.execute("select * from v0_planned_weeks").fetchone()
+    assert row["status"] == "committed"
+    assert row["week_start"] == "2026-06-15"
+
+    reset_db(db_path)
+    with connect(db_path) as connection:
+        count = connection.execute("select count(*) from v0_planned_weeks").fetchone()[0]
+    assert count == 0
+
+
 def test_input_event_is_frozen_and_matches_contract():
     event = InputEvent(
         id="evt-1",

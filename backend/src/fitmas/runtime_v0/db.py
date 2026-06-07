@@ -62,6 +62,18 @@ CREATE TABLE IF NOT EXISTS v0_scheduled_sessions (
     updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
+CREATE TABLE IF NOT EXISTS v0_planned_weeks (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    week_start TEXT NOT NULL,
+    source TEXT NOT NULL,
+    week_load REAL NOT NULL,
+    key_type TEXT NOT NULL,
+    sessions_json TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'committed',
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
 CREATE TABLE IF NOT EXISTS v0_activities (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     user_id INTEGER NOT NULL,
@@ -118,6 +130,7 @@ V0_TABLES = (
     "v0_idempotency_locks",
     "v0_pending_confirmations",
     "v0_conversation_state",
+    "v0_planned_weeks",
     "v0_facts",
     "v0_activities",
     "v0_scheduled_sessions",
