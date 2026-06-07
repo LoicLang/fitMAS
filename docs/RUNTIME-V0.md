@@ -268,14 +268,14 @@ serres (chaque piece est utilisee ou est un seam documente pour 3b / 2.1 / Macro
 ```text
 noyau conversationnel V0 (boucle, hors meso/): cible ~2500, garder la pression
 moteur Meso (meso/ + cablage week_proposal): enveloppe dediee, acquise
-cap dur (test_import_boundaries): 4100
+cap dur (test_import_boundaries): 4280
 > cap: justification de CAPACITE obligatoire (jamais du creep), bump au landing
 ```
 
-Mesure 7 juin 2026 : ~4087 LOC. Discipline maintenue : le cap ne monte que sur
-capacite prouvee, justification loggee dans `test_import_boundaries`. Slice 3b
-(confirmation -> commit + store type + chainage forward) le fera monter **a son
-arrivee**, avec son chiffre reel — pas avant.
+Mesure 7 juin 2026 (Slice 3b landing) : ~4273 LOC. Discipline maintenue : le cap
+ne monte que sur capacite prouvee, justification loggee dans `test_import_boundaries`.
+Slice 3b (pending_resolution, resolve_pending tool, v0_planned_weeks store, week
+commit handler, forward chaining) = capacite prouvee, pas du creep.
 
 ## Sport Core V0
 

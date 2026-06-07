@@ -30,12 +30,12 @@ Preuve (verifiee offline le 6 juin 2026) :
 - danger metrics : `0 wrong_write`, `0 old_plan`,
   `0 wrong_correction_target`, `0 claim_without_event` ;
 - guard fallback rate : `0 %` ;
-- core : ~4087 LOC (cap 4100 ; noyau conversationnel + moteur Meso + context-pack 2.0
-  + generateur 2.1 + cablage runtime 3a). **Re-baseline 7 juin** (decision Loic) : le
-  moteur Meso est une enveloppe **acquise, pas du creep** ; la passe de simplification
-  pre-3b est resolue **en re-baseline** (`meso/`+cablage deja serres). Cible ~2500 =
-  ratchet du noyau conversationnel nu ; discipline = le cap ne monte que sur capacite
-  prouvee. Detail : `docs/RUNTIME-V0.md` Budget.
+- core : ~4273 LOC (cap 4280 ; noyau conversationnel + moteur Meso + context-pack 2.0
+  + generateur 2.1 + cablage runtime 3a + Slice 3b). **Re-baseline 7 juin** (decision
+  Loic) : le moteur Meso est une enveloppe **acquise, pas du creep** ; la passe de
+  simplification pre-3b est resolue **en re-baseline** (`meso/`+cablage deja serres).
+  Cible ~2500 = ratchet du noyau conversationnel nu ; discipline = le cap ne monte que
+  sur capacite prouvee. Detail : `docs/RUNTIME-V0.md` Budget.
 
 Provider matrix : `114/120` est une ancienne run a 6 scenarios. La matrix
 compte 11 scenarios et 3 providers cibles aujourd'hui. Export non committe,
@@ -89,11 +89,15 @@ Fait :
 
 Ordre recommande :
 
-1. Relancer une provider matrix ciblee sur les 11 scenarios.
-2. Construire un `WorldSnapshot` depuis une copie DB actuelle, en distinguant
+1. **Lancer la couche-2 de Slice 3b** : `scripts/v0_eval/probe_resolve_pending.py` avec
+   creds DeepSeek — valider accept->commit et reject sur une vraie conversation.
+2. Follow-ups differes Slice 3b : materialisation semaine->plan executable
+   (`v0_scheduled_sessions`) ; handler commit `plan_patch`.
+3. Relancer une provider matrix ciblee sur les 11 scenarios.
+4. Construire un `WorldSnapshot` depuis une copie DB actuelle, en distinguant
    replay fidele (`conversation_context`) et debug approximatif (`current_state`).
-3. Construire un executor adapter vers les writers existants.
-4. Brancher Telegram/API sous flag et allowlist user.
+5. Construire un executor adapter vers les writers existants.
+6. Brancher Telegram/API sous flag et allowlist user.
 
 ## Chantier Moteur Sport (co-evolue avec le runtime)
 
@@ -155,12 +159,22 @@ honnete (« je te propose », jamais « j'ai cree »). Trois fiabilisations requ
 (1) **enseigner `propose_week` au coach** (prompt) — sinon il ne le declenche pas ;
 (2) **surfacer `recent_training` dans le header** — sinon le coach ne peut pas ancrer le
 seed ; (3) **budget reply >1024** (un modele a raisonnement tronque le rendu de la semaine
-a 1024) — config du `reply_llm` cote wiring (Slice 4), pas un changement core. Suite
-immediate : **Slice 3b** (confirmation -> commit + store typé + chaînage forward) — la
-passe de simplification pre-3b est resolue **en re-baseline** (7 juin, `RUNTIME-V0.md`
-Budget : moteur Meso = enveloppe acquise, pas du creep ; `meso/`+cablage deja serres). Le
-moteur de contexte profond (couches, accumulation) reste un chantier dedie APRES le
-moteur (`PLANNING-V0.md` Q5).
+a 1024) — config du `reply_llm` cote wiring (Slice 4), pas un changement core.
+
+**Slice 3b codee** (7 juin) : mecanisme `pending_resolution` general (LLM-first, ancre) —
+`week_proposal` cree un pending, l'utilisateur accepte/rejette au tour suivant via
+`resolve_pending`, l'executor commit dans `v0_planned_weeks` (accept) ou marque rejected
+(reject), le chainage forward expose `resolve_pending` uniquement quand un pending est
+ouvert. **Couche 1 prouvee** (245 tests runtime_v0 ; e2e propose->confirm->commit +
+reject passent offline). **Couche 2 a lancer** :
+`scripts/v0_eval/probe_resolve_pending.py` — run manuel avec creds, non encore execute.
+Follow-ups differes : materialisation semaine->plan executable (sessions dans
+`v0_scheduled_sessions`) ; handler commit `plan_patch`.
+
+La passe de simplification pre-3b est resolue **en re-baseline** (7 juin,
+`RUNTIME-V0.md` Budget : moteur Meso = enveloppe acquise, pas du creep ;
+`meso/`+cablage deja serres). Le moteur de contexte profond (couches, accumulation)
+reste un chantier dedie APRES le moteur (`PLANNING-V0.md` Q5).
 
 Contraintes : running-only d'abord ; tout Meso en `pending` ; le cut
 LLM<->deterministe se decouvre empiriquement ; l'usine planning de l'app est a
