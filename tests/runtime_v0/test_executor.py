@@ -244,6 +244,86 @@ def test_execute_is_transactional_per_command_and_stops_after_block(tmp_path):
     assert "session_not_found" in event_rows[-1]["reason"]
 
 
+def _open_week_pending(db_path, pending_id=1, ptype="week_proposal"):
+    payload = {
+        "type": "week_proposal",
+        "week_proposal": {
+            "week_start": "2026-06-15",
+            "source": "llm",
+            "week_load": 350.0,
+            "key_type": "threshold",
+            "sessions": [
+                {"date": "2026-06-16", "type": "threshold", "duration_min": 50, "intensity": "hard", "detail": "3x8"},
+            ],
+        },
+    }
+    with connect(db_path) as connection:
+        connection.execute(
+            "insert into v0_pending_confirmations (id, user_id, type, summary, payload_json, status, expires_at) "
+            "values (?, ?, ?, ?, ?, 'open', ?)",
+            (pending_id, 1, ptype, "semaine du 15 juin", json.dumps(payload), "2026-06-30T00:00:00+00:00"),
+        )
+        connection.commit()
+
+
+def test_resolve_pending_accept_commits_week(tmp_path):
+    from fitmas.runtime_v0.policy import ResolvePendingConfirmationCommand
+
+    db_path = _db(tmp_path)
+    _open_week_pending(db_path, pending_id=1)
+
+    events = CommandExecutor(db_path).execute(
+        (ResolvePendingConfirmationCommand(pending_id=1, decision="accept", note=""),),
+        turn_id="turn-accept",
+    )
+
+    with connect(db_path) as connection:
+        week = connection.execute("select * from v0_planned_weeks").fetchone()
+        pending = connection.execute("select status from v0_pending_confirmations where id = 1").fetchone()
+    assert events[0].status == "applied"
+    assert week["week_start"] == "2026-06-15"
+    assert week["key_type"] == "threshold"
+    assert json.loads(week["sessions_json"])[0]["type"] == "threshold"
+    assert pending["status"] == "accepted"
+
+
+def test_resolve_pending_reject_drops_without_store_write(tmp_path):
+    from fitmas.runtime_v0.policy import ResolvePendingConfirmationCommand
+
+    db_path = _db(tmp_path)
+    _open_week_pending(db_path, pending_id=1)
+
+    events = CommandExecutor(db_path).execute(
+        (ResolvePendingConfirmationCommand(pending_id=1, decision="reject", note="pas cette semaine"),),
+        turn_id="turn-reject",
+    )
+
+    with connect(db_path) as connection:
+        week_count = connection.execute("select count(*) from v0_planned_weeks").fetchone()[0]
+        pending = connection.execute("select status from v0_pending_confirmations where id = 1").fetchone()
+    assert events[0].status == "applied"
+    assert week_count == 0
+    assert pending["status"] == "rejected"
+
+
+def test_resolve_pending_accept_unsupported_type_fails_loud(tmp_path):
+    from fitmas.runtime_v0.policy import ResolvePendingConfirmationCommand
+
+    db_path = _db(tmp_path)
+    _open_week_pending(db_path, pending_id=1, ptype="plan_patch")
+
+    events = CommandExecutor(db_path).execute(
+        (ResolvePendingConfirmationCommand(pending_id=1, decision="accept", note=""),),
+        turn_id="turn-bad",
+    )
+
+    with connect(db_path) as connection:
+        pending = connection.execute("select status from v0_pending_confirmations where id = 1").fetchone()
+    assert events[0].status == "blocked"
+    assert "pending_commit_not_supported_for_type" in events[0].reason
+    assert pending["status"] == "open"  # rolled back, not lost
+
+
 def test_execute_is_idempotent_by_turn_command_and_target(tmp_path):
     db_path = _db(tmp_path)
     command = SetSessionStatusCommand(

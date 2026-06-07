@@ -13,6 +13,7 @@ from fitmas.runtime_v0.policy import (
     CorrectSessionStatusCommand,
     CreatePendingConfirmationCommand,
     ResolveMemoryFactCommand,
+    ResolvePendingConfirmationCommand,
     SetSessionStatusCommand,
     UpdateConversationStateCommand,
     UpsertMemoryFactCommand,
@@ -89,6 +90,8 @@ def _apply_command(command: Command, connection, user_id: int) -> tuple[dict[str
         return _apply_upsert_memory_fact(command, connection, user_id)
     if isinstance(command, ResolveMemoryFactCommand):
         return _apply_resolve_memory_fact(command, connection, user_id)
+    if isinstance(command, ResolvePendingConfirmationCommand):
+        return _apply_resolve_pending(command, connection, user_id)
     if isinstance(command, UpdateConversationStateCommand):
         return _apply_update_conversation_state(command, connection, user_id)
     raise ValueError("unsupported_command")
@@ -212,6 +215,51 @@ def _apply_resolve_memory_fact(command: ResolveMemoryFactCommand, connection, us
     after = _fact(connection, command.fact_id)
     return before, after, command.reason
 
+def _apply_resolve_pending(command: ResolvePendingConfirmationCommand, connection, user_id: int) -> tuple[dict[str, Any], dict[str, Any], str]:
+    row = connection.execute(
+        "select * from v0_pending_confirmations where id = ? and user_id = ? and status = 'open'",
+        (command.pending_id, user_id),
+    ).fetchone()
+    if row is None:
+        raise ValueError("pending_not_open")
+    before = dict(row)
+    if command.decision == "reject":
+        connection.execute(
+            "update v0_pending_confirmations set status = 'rejected' where id = ?", (command.pending_id,)
+        )
+        after = _pending(connection, command.pending_id)
+        return before, after, command.note or "rejected"
+    payload = json.loads(before["payload_json"])
+    if before["type"] == "week_proposal":
+        after = _apply_commit_week(payload, connection, user_id)
+    else:
+        raise ValueError(f"pending_commit_not_supported_for_type:{before['type']}")
+    connection.execute(
+        "update v0_pending_confirmations set status = 'accepted' where id = ?", (command.pending_id,)
+    )
+    return before, after, command.note or "accepted"
+
+
+def _apply_commit_week(payload: dict[str, Any], connection, user_id: int) -> dict[str, Any]:
+    week = payload.get("week_proposal")
+    if not week:
+        raise ValueError("pending_week_payload_missing")
+    cursor = connection.execute(
+        "insert into v0_planned_weeks (user_id, week_start, source, week_load, key_type, sessions_json) "
+        "values (?, ?, ?, ?, ?, ?)",
+        (
+            user_id,
+            week["week_start"],
+            week["source"],
+            week["week_load"],
+            week["key_type"],
+            json.dumps(week["sessions"], ensure_ascii=False),
+        ),
+    )
+    row = connection.execute("select * from v0_planned_weeks where id = ?", (cursor.lastrowid,)).fetchone()
+    return dict(row)
+
+
 def _apply_update_conversation_state(command: UpdateConversationStateCommand, connection, user_id: int) -> tuple[dict[str, Any], dict[str, Any], str]:
     before = _conversation_state(connection, user_id) or {}
     intent_json = (
@@ -316,6 +364,8 @@ def _target(command: Command, user_id: int) -> tuple[str, str]:
         return "fact", command.text
     if isinstance(command, ResolveMemoryFactCommand):
         return "fact", str(command.fact_id)
+    if isinstance(command, ResolvePendingConfirmationCommand):
+        return "pending", str(command.pending_id)
     if isinstance(command, UpdateConversationStateCommand):
         return "state", str(user_id)
     return "unknown", type(command).__name__
