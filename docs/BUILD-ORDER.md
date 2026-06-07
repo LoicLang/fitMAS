@@ -143,9 +143,18 @@ cle -> **observation qualite, pas encore preuve de derive**, a surveiller (pas d
 reactive). **Slice 3a codee** (6 juin) : `propose_week` coach-callable cable dans le
 runtime — seed LLM-declare depuis le reel, generation avec budget tokens dedie
 (`generation_llm` 4096), la semaine verifiee est **montree** (preview, zero write,
-`answer_only`). Design `2026-06-06-slice-3a-propose-week-design.md`. Suite immediate :
-**passe de simplification** (meso/ + cablage, ratchet) **puis Slice 3b** (confirmation
--> commit + store typé + chaînage forward). Le
+`answer_only`). Design `2026-06-06-slice-3a-propose-week-design.md`.
+**Couche 2 prouvee (6 juin, DeepSeek v4-pro, `scripts/v0_eval/probe_propose_week.py`)** :
+sur « fais-moi ma semaine prochaine », le coach declenche `propose_week`, **ancre le seed
+dans le reel** (calcule last_week_load=350 pondere depuis recent_training, key=threshold),
+le moteur sort une semaine coherente in-band, `answer_only` (zero write), guard ok, reply
+honnete (« je te propose », jamais « j'ai cree »). Trois fiabilisations requises et faites :
+(1) **enseigner `propose_week` au coach** (prompt) — sinon il ne le declenche pas ;
+(2) **surfacer `recent_training` dans le header** — sinon le coach ne peut pas ancrer le
+seed ; (3) **budget reply >1024** (un modele a raisonnement tronque le rendu de la semaine
+a 1024) — config du `reply_llm` cote wiring (Slice 4), pas un changement core. Suite
+immediate : **passe de simplification** (meso/ + cablage, ratchet) **puis Slice 3b**
+(confirmation -> commit + store typé + chaînage forward). Le
 moteur de contexte profond (couches, accumulation) reste un chantier dedie APRES le
 moteur (`PLANNING-V0.md` Q5).
 

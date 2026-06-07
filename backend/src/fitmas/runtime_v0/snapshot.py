@@ -65,6 +65,7 @@ class SnapshotHeader:
     pending: PendingView | None
     last_unresolved_intent: dict[str, Any] | None
     last_execution_event: CommandEventView | None
+    recent_training: tuple[SessionView, ...] = ()
 
     def to_prompt_text(self) -> str:
         lines = [
@@ -80,6 +81,15 @@ class SnapshotHeader:
                     f"{session.id} {session.date.isoformat()} {session.sport} "
                     f"{session.title} {session.duration_min}min "
                     f"{session.intensity_label} {session.priority} {session.status}"
+                )
+        if self.recent_training:
+            lines.append("recent_training (last week, for week-planning seed):")
+            for session in self.recent_training:
+                lines.append(
+                    "- "
+                    f"{session.date.isoformat()} {session.sport} {session.title} "
+                    f"{session.duration_min}min {session.intensity_label} "
+                    f"{session.priority} {session.status}"
                 )
         if self.active_facts_summary:
             lines.append("active_facts:")
@@ -129,6 +139,7 @@ class WorldSnapshot:
             pending=self.active_pending,
             last_unresolved_intent=self.conversation_state.last_unresolved_intent,
             last_execution_event=last_execution_event,
+            recent_training=self.recent_plan[:6],
         )
 
 class SnapshotBuilder:

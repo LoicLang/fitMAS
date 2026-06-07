@@ -66,8 +66,11 @@ def test_runtime_v0_core_stays_under_v0_budget():
     # ToolContext.generation_llm, tool_catalog registration, policy answer_only branch,
     # RuntimeDeps.generation_llm threading. Real core 4070.
     # Deliberate, planned capability growth, not creep. Bump per real growth only.
-    # RATCHET WATCH: 4070 is 63% over the healthy target (2500). A DEDICATED
+    # 4080 -> 4100 (6 juin 2026): Slice 3a couche-2 reliabilization — teach the coach
+    # propose_week (coach_system prompt) + surface last-week training in the header
+    # (recent_training) so the coach can ground the seed.
+    # RATCHET WATCH: ~4090 is 64% over the healthy target (2500). A DEDICATED
     # simplification pass on meso/ + the wiring is scheduled BEFORE Slice 3b
     # (decision Loïc, 6 juin) — claw back toward 2500 without losing capability.
     loc = sum(len(path.read_text().splitlines()) for path in _core_files())
-    assert loc <= 4080
+    assert loc <= 4100
