@@ -49,6 +49,15 @@ class FactResolutionDraft:
     reason: str = ""
 
 @dataclass(frozen=True)
+class WeekProposalDraft:
+    week_start: str  # ISO date of the Monday the week anchors on
+    source: str  # "llm" | "template_fallback"
+    week_load: float
+    band: tuple[float, float]
+    key_type: str
+    sessions: tuple[dict[str, Any], ...]  # {date, type, duration_min, intensity, detail}
+
+@dataclass(frozen=True)
 class ActionProposal:
     type: Literal[
         "answer",
@@ -58,6 +67,7 @@ class ActionProposal:
         "execution_correction",
         "plan_patch",
         "fact_resolution",
+        "week_proposal",
         "no_send",
     ]
     confidence: float
@@ -70,6 +80,7 @@ class ActionProposal:
     execution_correction: ExecutionCorrectionDraft | None = None
     plan_patch: PlanPatchDraft | None = None
     fact_resolution: FactResolutionDraft | None = None
+    week_proposal: WeekProposalDraft | None = None
     unresolved_intent: dict[str, Any] | None = None
     tool_trace: tuple[dict[str, Any], ...] = ()
 
@@ -90,6 +101,7 @@ def proposal_from_dict(data: dict[str, Any]) -> ActionProposal:
     execution_correction = data.get("execution_correction")
     plan_patch = data.get("plan_patch")
     fact_resolution = data.get("fact_resolution")
+    week_proposal = data.get("week_proposal")
     return ActionProposal(
         type=data["type"],
         confidence=data["confidence"],
@@ -115,6 +127,7 @@ def proposal_from_dict(data: dict[str, Any]) -> ActionProposal:
             if fact_resolution is not None
             else None
         ),
+        week_proposal=_week_proposal_from_dict(week_proposal) if week_proposal is not None else None,
         unresolved_intent=data.get("unresolved_intent"),
         tool_trace=tuple(data.get("tool_trace", ())),
     )
@@ -133,6 +146,16 @@ def _plan_patch_from_dict(data: dict[str, Any]) -> PlanPatchDraft:
         for item in data.get("operations", ())
     )
     return PlanPatchDraft(operations=operations, rationale=data["rationale"])
+
+def _week_proposal_from_dict(data: dict[str, Any]) -> WeekProposalDraft:
+    return WeekProposalDraft(
+        week_start=data["week_start"],
+        source=data["source"],
+        week_load=data["week_load"],
+        band=tuple(data["band"]),
+        key_type=data["key_type"],
+        sessions=tuple(dict(item) for item in data.get("sessions", ())),
+    )
 
 def _jsonable(value: Any) -> Any:
     if is_dataclass(value):

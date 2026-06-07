@@ -61,7 +61,9 @@ def test_runtime_v0_core_stays_under_v0_budget():
     # build_context_pack + actuals_from_week, voie b forward-only).
     # 3720 -> 3960 (6 juin 2026): Slice 2.1 generator (generator.py, week_generation
     # prompt, constraint-aware relaxation).
+    # 3960 -> 3970 (7 juin 2026): Slice 3a week_proposal type + WeekProposalDraft
+    # + _week_proposal_from_dict in proposals.py.
     # Deliberate, planned capability growth, not creep. Bump per real growth
     # only; keep watching the ratchet (healthy target stays 2500).
     loc = sum(len(path.read_text().splitlines()) for path in _core_files())
-    assert loc <= 3960
+    assert loc <= 3970
