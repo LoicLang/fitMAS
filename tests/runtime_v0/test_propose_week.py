@@ -87,13 +87,25 @@ def test_propose_week_generates_and_returns_week_proposal():
     assert proposal.answer_facts  # week summary lines for the reply
 
 
-def test_policy_shows_week_proposal_without_commit():
+def test_policy_routes_week_proposal_to_pending():
+    from fitmas.runtime_v0.policy import CreatePendingConfirmationCommand
+    from fitmas.runtime_v0.proposals import proposal_from_dict
+    import json
+
     generation_llm = FakeLLMClient([_emit(_GOOD_WEEK)])
     ctx = ToolContext(db_path=None, snapshot=_snapshot(), generation_llm=generation_llm)
     proposal = propose_week(ctx, last_week_load=300.0, key_type="threshold")
     decision = RuntimePolicy().evaluate(proposal, _snapshot())
-    assert decision.action == "answer_only"
-    assert decision.commands == ()  # 3a never writes
+
+    assert decision.action == "create_pending"
+    assert len(decision.commands) == 1
+    command = decision.commands[0]
+    assert isinstance(command, CreatePendingConfirmationCommand)
+    assert command.type == "week_proposal"
+    # the full verified week rides in the payload for the commit handler
+    restored = proposal_from_dict(json.loads(command.payload_json))
+    assert restored.week_proposal.sessions[0]["type"] == "threshold"
+    # the reply still shows the proposed week
     assert decision.reply_facts == proposal.answer_facts
 
 

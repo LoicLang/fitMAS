@@ -120,10 +120,17 @@ class RuntimePolicy:
                 (proposal.clarification_question,) if proposal.clarification_question else (),
             )
         if proposal.type == "week_proposal":
-            # 3a: show the proposed week, never write. The week rides in answer_facts;
-            # _must_not_claim already blocks "c'est fait" since no command is applied.
-            # (3b will route this to create_pending + confirmation -> commit.)
-            return _decision("answer_only", "week_proposal", "low", (), proposal.answer_facts)
+            draft = proposal.week_proposal
+            if draft is None:
+                return _decision("block", "missing_week_proposal", "low", (), ())
+            summary = proposal.answer_facts[0] if proposal.answer_facts else f"semaine proposée du {draft.week_start}"
+            pending = CreatePendingConfirmationCommand(
+                type="week_proposal",
+                summary=summary,
+                payload_json=json.dumps(proposal_to_dict(proposal), ensure_ascii=False, sort_keys=True),
+                expires_at=snapshot.now + timedelta(hours=24),
+            )
+            return _decision("create_pending", "week_proposal", "low", (pending,), proposal.answer_facts)
         if proposal.type == "memory_update":
             decision = self._memory_update(proposal)
         elif proposal.type == "fact_resolution":
