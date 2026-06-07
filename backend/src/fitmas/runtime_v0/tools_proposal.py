@@ -128,6 +128,8 @@ def resolve_pending(
     decision: str,
     note: str = "",
 ) -> ActionProposal:
+    if decision not in {"accept", "reject"}:
+        raise ValueError(f"invalid decision: {decision!r}")
     _record(ctx, "resolve_pending", True)
     return ActionProposal(
         type="pending_resolution",

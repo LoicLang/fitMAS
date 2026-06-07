@@ -157,6 +157,16 @@ def test_resolve_pending_builds_pending_resolution_proposal():
     assert proposal.tool_trace[-1]["name"] == "resolve_pending"
 
 
+def test_resolve_pending_rejects_invalid_decision():
+    import pytest
+    from fitmas.runtime_v0.tools_proposal import resolve_pending
+    from fitmas.runtime_v0.tools_read import ToolContext
+
+    ctx = ToolContext(db_path=None, snapshot=None, scratchpad={})
+    with pytest.raises(ValueError):
+        resolve_pending(ctx, pending_id=1, decision="oui")
+
+
 def test_plan_patch_normalizes_typed_provider_values(tmp_path):
     ctx = _context(tmp_path)
 

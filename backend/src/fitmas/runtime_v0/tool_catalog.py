@@ -203,7 +203,7 @@ def for_event(event: InputEvent, snapshot: WorldSnapshot) -> tuple[ToolSchema, .
             ),
         )
     if snapshot.conversation_state.last_unresolved_intent and snapshot.conversation_state.last_unresolved_intent.get("type") == "move_session":
-        allowed = {"get_current_plan", "get_plan_day", "get_session", "resolve_date_reference", "propose_plan_patch", "ask_clarification"}
+        allowed = {"get_current_plan", "get_plan_day", "get_session", "resolve_date_reference", "propose_plan_patch", "ask_clarification", "resolve_pending"}
         return tuple(tool for tool in tools if tool.name in allowed)
     return tools
 

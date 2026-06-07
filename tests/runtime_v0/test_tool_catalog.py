@@ -145,6 +145,26 @@ def test_resolve_pending_exposed_only_when_pending_open():
     assert "resolve_pending" in names
 
 
+def test_resolve_pending_survives_active_move_intent():
+    from datetime import datetime, timezone
+    from fitmas.runtime_v0.event import InputEvent
+    from fitmas.runtime_v0.snapshot import PendingView, WorldSnapshot
+    from fitmas.runtime_v0.state import ConversationState
+    from fitmas.runtime_v0.tool_catalog import for_event
+
+    now = datetime(2026, 6, 4, 9, 0, tzinfo=timezone.utc)
+    pending = PendingView(id=3, type="week_proposal", summary="semaine proposée", expires_at=now)
+    snapshot = WorldSnapshot(
+        user_id=1, today=now.date(), now=now, timezone="UTC", objective=None,
+        current_plan=(), recent_plan=(), recent_activities=(), active_facts=(),
+        active_pending=pending, recent_execution_events=(), recent_plan_events=(),
+        conversation_state=ConversationState({"type": "move_session"}, None, None, None, None),
+    )
+    event = InputEvent(id="e1", user_id=1, source="test", type="user_message", text="oui", payload={}, occurred_at=now)
+    names = {tool.name for tool in for_event(event, snapshot)}
+    assert "resolve_pending" in names
+
+
 def test_coach_prompt_keeps_followup_target_date_without_reconfirming():
     assert "source_ref" in COACH_SYSTEM_PROMPT
     assert "propose_plan_patch sans redemander la date" in COACH_SYSTEM_PROMPT
