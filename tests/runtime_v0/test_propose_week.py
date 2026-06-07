@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
+import pytest
+
 from fitmas.runtime_v0.agent import CoachAgent
 from fitmas.runtime_v0.event import InputEvent
 from fitmas.runtime_v0.llm_clients.base import LLMResponse, ToolCall
@@ -129,3 +131,11 @@ def test_coach_calls_propose_week_end_to_end():
     assert proposal.week_proposal.source == "llm"
     # the generation client was used, not the coach client
     assert len(generation_llm.requests) == 1
+
+
+def test_propose_week_requires_generation_llm():
+    # Misconfiguration (no generation_llm injected) must fail loud, not crash deep
+    # inside generate_week on a None client.
+    ctx = ToolContext(db_path=None, snapshot=_snapshot(), generation_llm=None)
+    with pytest.raises(ValueError):
+        propose_week(ctx, last_week_load=300.0, key_type="threshold")

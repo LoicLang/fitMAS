@@ -28,6 +28,10 @@ def propose_week(
     key_type: str,
     phase: str = "build",
 ) -> ActionProposal:
+    if ctx.generation_llm is None:
+        # Fail loud on misconfiguration rather than crashing deep in generate_week
+        # (a None client would AttributeError before the template fallback).
+        raise ValueError("propose_week requires generation_llm; inject it via RuntimeDeps")
     snapshot = ctx.snapshot
     actuals = WeekActuals(total_load=float(last_week_load), key_type=key_type)
     target = derive_continuity_target(actuals, phase)
