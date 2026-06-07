@@ -191,7 +191,20 @@ sur « oui mais [indispo] » il committait inchange en pretendant « avec les aj
 LLM-first) : une reponse a un pending qui souleve une nouvelle contrainte/objection n'est
 **pas un accept** — noter le fait, ne pas committer la semaine inchangee, ne jamais
 affirmer une adaptation non faite. Re-probe : blessure et indispo echouent desormais
-**safe** (note + hold, zero commit dangereux/menteur). **Residuels (follow-ups)** :
+**safe** (note + hold, zero commit dangereux/menteur).
+
+**Comportement actuel sur « okay mais [contrainte] » (a savoir)** : le coach **tient** — il
+note le fait et **ne committe pas** la semaine inchangee — mais il **ne re-propose pas
+encore** de semaine adaptee. Deux raisons : (a) il ne peut pas re-proposer au **meme tour**
+(`propose_week` lit le snapshot construit en debut de tour, **avant** que le fait soit
+committe -> une re-proposition same-turn ignorerait la contrainte) ; (b) il ne relance pas
+**proactivement** au tour suivant (sur la blessure il a conseille le repos ; sur l'indispo
+il est parti en `no_send`). **Cible** : au tour N noter + tenir ; au tour **N+1 re-proposer
+proactivement** une semaine adaptee pour les contraintes **typees** (blessure -> semaine sans
+intensite, deja supportee par le moteur) ; pour l'indispo, **typer d'abord l'availability**.
+Etat net aujourd'hui : **safe, mais pas encore re-adapte**.
+
+**Residuels (follow-ups)** :
 l'**availability n'est pas une contrainte typee** (`fact_to_constraint` ne mappe que
 `health`) donc le coach ne sait pas re-planifier autour de jours precis -> degrade en
 `no_send` benin ; et le **chemin preference/modify** (« fais plus varie ») reste a concevoir
