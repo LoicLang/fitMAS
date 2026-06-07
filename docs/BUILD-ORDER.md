@@ -182,8 +182,24 @@ le LLM echouait toujours, repli template 3/3 (sur, mais generique) ; le prompt e
 relaxes) ; le verif rejette desormais une semaine degeneree (vide/tout-repos) dans **tous
 les modes**. Re-probe : **4/4, source=llm** a chaque rep, contrainte respectee, commit ok.
 
-Follow-ups differes : materialisation semaine->plan executable (sessions dans
-`v0_scheduled_sessions`) ; handler commit `plan_patch`.
+**Couche 2 live multi-tour (7 juin, DeepSeek, `scripts/v0_eval/probe_live_simulation.py`)** :
+un LLM joue un athlete non scripte (indispo / blessure / lassitude) face au vrai coach.
+Trois reels : (1) **danger** — sur « oui mais [blessure] » le coach committait la semaine
+**dure inchangee** (seuil) sous blessure = profil d'echec de l'app ; (2) **malhonnetete** —
+sur « oui mais [indispo] » il committait inchange en pretendant « avec les ajustements » ;
+(3) **inutilite** — une demande de variete partait en non-sequitur. **Fix P1** (prompt coach,
+LLM-first) : une reponse a un pending qui souleve une nouvelle contrainte/objection n'est
+**pas un accept** — noter le fait, ne pas committer la semaine inchangee, ne jamais
+affirmer une adaptation non faite. Re-probe : blessure et indispo echouent desormais
+**safe** (note + hold, zero commit dangereux/menteur). **Residuels (follow-ups)** :
+l'**availability n'est pas une contrainte typee** (`fact_to_constraint` ne mappe que
+`health`) donc le coach ne sait pas re-planifier autour de jours precis -> degrade en
+`no_send` benin ; et le **chemin preference/modify** (« fais plus varie ») reste a concevoir
+(rouvre la decision modify de 3b).
+
+Follow-ups differes : availability typee (contrainte fenetre-jours) ; chemin modify/preference ;
+materialisation semaine->plan executable (sessions dans `v0_scheduled_sessions`) ; handler
+commit `plan_patch`.
 
 La passe de simplification pre-3b est resolue **en re-baseline** (7 juin,
 `RUNTIME-V0.md` Budget : moteur Meso = enveloppe acquise, pas du creep ;
