@@ -2,9 +2,11 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
+from fitmas.runtime_v0.event import InputEvent
 from fitmas.runtime_v0.llm_clients.base import LLMResponse, ToolCall
 from fitmas.runtime_v0.llm_clients.fake import FakeLLMClient
 from fitmas.runtime_v0.meso.runtime_tool import propose_week
+from fitmas.runtime_v0.tool_catalog import for_event
 from fitmas.runtime_v0.proposals import (
     ActionProposal,
     WeekProposalDraft,
@@ -79,3 +81,21 @@ def test_propose_week_generates_and_returns_week_proposal():
     assert proposal.week_proposal.week_start == "2026-06-08"  # next Monday after Thu 06-04
     assert len(proposal.week_proposal.sessions) == 4
     assert proposal.answer_facts  # week summary lines for the reply
+
+
+def test_propose_week_registered_for_user_message():
+    event = InputEvent(
+        id="e1",
+        user_id=1,
+        source="test",
+        type="user_message",
+        text="fais-moi ma semaine",
+        payload={},
+        occurred_at=NOW,
+    )
+    tools = {tool.name: tool for tool in for_event(event, _snapshot())}
+    assert "propose_week" in tools
+    schema = tools["propose_week"]
+    assert schema.is_proposal is True
+    assert "last_week_load" in schema.parameters["properties"]
+    assert "key_type" in schema.parameters["properties"]

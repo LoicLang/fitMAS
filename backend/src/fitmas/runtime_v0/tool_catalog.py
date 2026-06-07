@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from fitmas.runtime_v0.event import InputEvent
 from fitmas.runtime_v0.llm_clients.base import ToolSchema
+from fitmas.runtime_v0.meso.runtime_tool import propose_week
 from fitmas.runtime_v0.snapshot import WorldSnapshot
 from fitmas.runtime_v0.tools_proposal import (
     ask_clarification,
@@ -128,6 +129,29 @@ def for_event(event: InputEvent, snapshot: WorldSnapshot) -> tuple[ToolSchema, .
                 ("operations", "rationale"),
             ),
             handler=propose_plan_patch,
+            is_proposal=True,
+        ),
+        ToolSchema(
+            name="propose_week",
+            description=(
+                "Propose a full running week (Meso). First read the user's recent real "
+                "training, then declare the seed: last_week_load (total minutes-weighted "
+                "load of the last real week) and key_type (the prescribed key session "
+                "type). The engine generates and verifies the week; it is only proposed, "
+                "never committed."
+            ),
+            parameters=_schema(
+                {
+                    "last_week_load": {"type": "number", "minimum": 0},
+                    "key_type": {
+                        "type": "string",
+                        "enum": ["easy_run", "long_run", "threshold", "intervals", "recovery_run"],
+                    },
+                    "phase": {"type": "string", "enum": ["build", "recovery", "taper"]},
+                },
+                ("last_week_load", "key_type"),
+            ),
+            handler=propose_week,
             is_proposal=True,
         ),
         ToolSchema(

@@ -48,6 +48,7 @@ def test_user_message_gets_all_v0_tools(tmp_path):
         "propose_execution_update",
         "propose_execution_correction",
         "propose_plan_patch",
+        "propose_week",
         "propose_memory_update",
         "propose_fact_resolution",
         "ask_clarification",
