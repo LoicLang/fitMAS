@@ -63,7 +63,9 @@ def test_runtime_v0_core_stays_under_v0_budget():
     # prompt, constraint-aware relaxation).
     # 3960 -> 3970 (7 juin 2026): Slice 3a week_proposal type + WeekProposalDraft
     # + _week_proposal_from_dict in proposals.py.
+    # 3970 -> 4045 (7 juin 2026): Slice 3a propose_week handler (meso/runtime_tool.py)
+    # + ToolContext.generation_llm field.
     # Deliberate, planned capability growth, not creep. Bump per real growth
     # only; keep watching the ratchet (healthy target stays 2500).
     loc = sum(len(path.read_text().splitlines()) for path in _core_files())
-    assert loc <= 3970
+    assert loc <= 4045

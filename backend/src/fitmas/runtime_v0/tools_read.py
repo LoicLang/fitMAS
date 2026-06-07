@@ -17,6 +17,7 @@ class ToolContext:
     db_path: Path
     snapshot: WorldSnapshot
     scratchpad: dict[str, Any] = field(default_factory=dict)
+    generation_llm: Any = None  # injected LLMClient for the Meso generator (bigger token budget)
 
 def get_current_plan(ctx: ToolContext, days: int = 7) -> dict[str, Any]:
     name = "get_current_plan"

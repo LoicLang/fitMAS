@@ -1,11 +1,19 @@
 from __future__ import annotations
 
+from datetime import datetime, timezone
+
+from fitmas.runtime_v0.llm_clients.base import LLMResponse, ToolCall
+from fitmas.runtime_v0.llm_clients.fake import FakeLLMClient
+from fitmas.runtime_v0.meso.runtime_tool import propose_week
 from fitmas.runtime_v0.proposals import (
     ActionProposal,
     WeekProposalDraft,
     proposal_from_dict,
     proposal_to_dict,
 )
+from fitmas.runtime_v0.snapshot import WorldSnapshot
+from fitmas.runtime_v0.state import ConversationState
+from fitmas.runtime_v0.tools_read import ToolContext
 
 
 def _draft() -> WeekProposalDraft:
@@ -36,3 +44,38 @@ def test_week_proposal_roundtrips():
     assert restored.week_proposal == _draft()
     assert restored.week_proposal.band == (300.0, 330.0)
     assert restored.week_proposal.sessions[0]["type"] == "threshold"
+
+
+NOW = datetime(2026, 6, 4, 9, 0, tzinfo=timezone.utc)  # a Thursday
+
+_GOOD_WEEK = [
+    {"date": "2026-06-09", "type": "threshold", "duration_min": 50, "intensity": "hard"},   # 100
+    {"date": "2026-06-11", "type": "easy_run", "duration_min": 60, "intensity": "easy"},     # 60
+    {"date": "2026-06-13", "type": "easy_run", "duration_min": 50, "intensity": "easy"},     # 50
+    {"date": "2026-06-14", "type": "long_run", "duration_min": 70, "intensity": "moderate"}, # 105
+]
+
+
+def _snapshot(facts=()):
+    return WorldSnapshot(
+        user_id=1, today=NOW.date(), now=NOW, timezone="UTC", objective=None,
+        current_plan=(), recent_plan=(), recent_activities=(), active_facts=facts,
+        active_pending=None, recent_execution_events=(), recent_plan_events=(),
+        conversation_state=ConversationState(None, None, None, None, None),
+    )
+
+
+def _emit(sessions):
+    return LLMResponse(tool_calls=(ToolCall(name="emit_week", args={"sessions": sessions}),))
+
+
+def test_propose_week_generates_and_returns_week_proposal():
+    generation_llm = FakeLLMClient([_emit(_GOOD_WEEK)])
+    ctx = ToolContext(db_path=None, snapshot=_snapshot(), generation_llm=generation_llm)
+    proposal = propose_week(ctx, last_week_load=300.0, key_type="threshold")
+    assert proposal.type == "week_proposal"
+    assert proposal.week_proposal.source == "llm"
+    assert proposal.week_proposal.band == (300.0, 330.0)  # build 100->110% of 300
+    assert proposal.week_proposal.week_start == "2026-06-08"  # next Monday after Thu 06-04
+    assert len(proposal.week_proposal.sessions) == 4
+    assert proposal.answer_facts  # week summary lines for the reply
