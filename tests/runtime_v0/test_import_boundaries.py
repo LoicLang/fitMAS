@@ -67,7 +67,8 @@ def test_runtime_v0_core_stays_under_v0_budget():
     # + ToolContext.generation_llm field.
     # 4045 -> 4064 (7 juin 2026): Slice 3a register propose_week in tool_catalog.py.
     # 4064 -> 4069 (7 juin 2026): Slice 3a policy routes week_proposal -> answer_only.
+    # 4069 -> 4070 (7 juin 2026): Slice 3a thread generation_llm through RuntimeDeps.
     # Deliberate, planned capability growth, not creep. Bump per real growth
     # only; keep watching the ratchet (healthy target stays 2500).
     loc = sum(len(path.read_text().splitlines()) for path in _core_files())
-    assert loc <= 4069
+    assert loc <= 4070

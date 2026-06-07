@@ -28,6 +28,7 @@ class RuntimeDeps:
     db_path: Path
     coach_llm: LLMClient
     reply_llm: LLMClient
+    generation_llm: LLMClient | None = None
     # Coach reasoning budget (LLM round-trips). The 5x provider matrix showed 3
     # was the dominant failure cause: serial-reading models (deepseek esp.) spend
     # every round on reads and never reach the propose step -> forced no_send
@@ -68,7 +69,7 @@ def handle_event(event: InputEvent, deps: RuntimeDeps, turn_id: str) -> HandleEv
 
 def _handle_new_event(event: InputEvent, deps: RuntimeDeps, turn_id: str, started: float) -> HandleEventResult:
     snapshot = SnapshotBuilder(deps.db_path).build(event.user_id, event.occurred_at)
-    ctx = ToolContext(deps.db_path, snapshot, {})
+    ctx = ToolContext(deps.db_path, snapshot, {}, generation_llm=deps.generation_llm)
     if event.type != "user_message":
         proposal = _no_send("event_type_not_supported_in_v0")
         policy = RuntimePolicy().evaluate(proposal, snapshot)

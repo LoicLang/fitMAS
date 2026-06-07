@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
+from fitmas.runtime_v0.agent import CoachAgent
 from fitmas.runtime_v0.event import InputEvent
 from fitmas.runtime_v0.llm_clients.base import LLMResponse, ToolCall
 from fitmas.runtime_v0.llm_clients.fake import FakeLLMClient
@@ -110,3 +111,21 @@ def test_propose_week_registered_for_user_message():
     assert schema.is_proposal is True
     assert "last_week_load" in schema.parameters["properties"]
     assert "key_type" in schema.parameters["properties"]
+
+
+def test_coach_calls_propose_week_end_to_end():
+    # Coach LLM asks for a week; generation LLM emits the typed week.
+    coach_llm = FakeLLMClient([
+        LLMResponse(tool_calls=(ToolCall(name="propose_week", args={"last_week_load": 300.0, "key_type": "threshold"}),)),
+    ])
+    generation_llm = FakeLLMClient([_emit(_GOOD_WEEK)])
+    snapshot = _snapshot()
+    ctx = ToolContext(db_path=None, snapshot=snapshot, generation_llm=generation_llm)
+    event = InputEvent(id="e1", user_id=1, source="test", type="user_message", text="fais-moi ma semaine", payload={}, occurred_at=NOW)
+    proposal = CoachAgent(coach_llm, "sys").run(
+        event, snapshot.header(), for_event(event, snapshot), max_steps=3, tool_context=ctx
+    )
+    assert proposal.type == "week_proposal"
+    assert proposal.week_proposal.source == "llm"
+    # the generation client was used, not the coach client
+    assert len(generation_llm.requests) == 1
