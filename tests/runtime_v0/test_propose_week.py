@@ -133,6 +133,21 @@ def test_coach_calls_propose_week_end_to_end():
     assert len(generation_llm.requests) == 1
 
 
+def test_pending_resolution_roundtrips():
+    from fitmas.runtime_v0.proposals import PendingResolutionDraft
+
+    proposal = ActionProposal(
+        type="pending_resolution",
+        confidence=1.0,
+        user_intent_summary="resolve pending",
+        evidence=(),
+        pending_resolution=PendingResolutionDraft(pending_id=7, decision="accept", note="ok"),
+    )
+    restored = proposal_from_dict(proposal_to_dict(proposal))
+    assert restored.type == "pending_resolution"
+    assert restored.pending_resolution == PendingResolutionDraft(pending_id=7, decision="accept", note="ok")
+
+
 def test_propose_week_requires_generation_llm():
     # Misconfiguration (no generation_llm injected) must fail loud, not crash deep
     # inside generate_week on a None client.

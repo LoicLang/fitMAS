@@ -58,6 +58,12 @@ class WeekProposalDraft:
     sessions: tuple[dict[str, Any], ...]  # {date, type, duration_min, intensity, detail}
 
 @dataclass(frozen=True)
+class PendingResolutionDraft:
+    pending_id: int
+    decision: Literal["accept", "reject"]
+    note: str = ""
+
+@dataclass(frozen=True)
 class ActionProposal:
     type: Literal[
         "answer",
@@ -68,6 +74,7 @@ class ActionProposal:
         "plan_patch",
         "fact_resolution",
         "week_proposal",
+        "pending_resolution",
         "no_send",
     ]
     confidence: float
@@ -81,6 +88,7 @@ class ActionProposal:
     plan_patch: PlanPatchDraft | None = None
     fact_resolution: FactResolutionDraft | None = None
     week_proposal: WeekProposalDraft | None = None
+    pending_resolution: PendingResolutionDraft | None = None
     unresolved_intent: dict[str, Any] | None = None
     tool_trace: tuple[dict[str, Any], ...] = ()
 
@@ -102,6 +110,7 @@ def proposal_from_dict(data: dict[str, Any]) -> ActionProposal:
     plan_patch = data.get("plan_patch")
     fact_resolution = data.get("fact_resolution")
     week_proposal = data.get("week_proposal")
+    pending_resolution = data.get("pending_resolution")
     return ActionProposal(
         type=data["type"],
         confidence=data["confidence"],
@@ -128,6 +137,15 @@ def proposal_from_dict(data: dict[str, Any]) -> ActionProposal:
             else None
         ),
         week_proposal=_week_proposal_from_dict(week_proposal) if week_proposal is not None else None,
+        pending_resolution=(
+            PendingResolutionDraft(
+                pending_id=pending_resolution["pending_id"],
+                decision=pending_resolution["decision"],
+                note=pending_resolution.get("note", ""),
+            )
+            if pending_resolution is not None
+            else None
+        ),
         unresolved_intent=data.get("unresolved_intent"),
         tool_trace=tuple(data.get("tool_trace", ())),
     )
