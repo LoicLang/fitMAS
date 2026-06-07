@@ -89,15 +89,13 @@ Fait :
 
 Ordre recommande :
 
-1. **Lancer la couche-2 de Slice 3b** : `scripts/v0_eval/probe_resolve_pending.py` avec
-   creds DeepSeek — valider accept->commit et reject sur une vraie conversation.
-2. Follow-ups differes Slice 3b : materialisation semaine->plan executable
-   (`v0_scheduled_sessions`) ; handler commit `plan_patch`.
-3. Relancer une provider matrix ciblee sur les 11 scenarios.
-4. Construire un `WorldSnapshot` depuis une copie DB actuelle, en distinguant
+1. Follow-ups differes Slice 3b : materialisation semaine->plan executable
+   (sessions dans `v0_scheduled_sessions`) ; handler commit `plan_patch`.
+2. Relancer une provider matrix ciblee sur les 11 scenarios.
+3. Construire un `WorldSnapshot` depuis une copie DB actuelle, en distinguant
    replay fidele (`conversation_context`) et debug approximatif (`current_state`).
-5. Construire un executor adapter vers les writers existants.
-6. Brancher Telegram/API sous flag et allowlist user.
+4. Construire un executor adapter vers les writers existants.
+5. Brancher Telegram/API sous flag et allowlist user.
 
 ## Chantier Moteur Sport (co-evolue avec le runtime)
 
@@ -166,9 +164,13 @@ a 1024) — config du `reply_llm` cote wiring (Slice 4), pas un changement core.
 `resolve_pending`, l'executor commit dans `v0_planned_weeks` (accept) ou marque rejected
 (reject), le chainage forward expose `resolve_pending` uniquement quand un pending est
 ouvert. **Couche 1 prouvee** (245 tests runtime_v0 ; e2e propose->confirm->commit +
-reject passent offline). **Couche 2 a lancer** :
-`scripts/v0_eval/probe_resolve_pending.py` — run manuel avec creds, non encore execute.
-Follow-ups differes : materialisation semaine->plan executable (sessions dans
+reject passent offline). **Couche 2 prouvee (7 juin, DeepSeek,
+`scripts/v0_eval/probe_resolve_pending.py`)** : 2/2 sur un vrai tour non scripte —
+ACCEPT (« oui, valide ») commit 1 semaine (`pending=accepted`, reply « la semaine du
+15 juin est calee »), REJECT (« non, pas cette semaine ») 0 commit (`pending=rejected`,
+reply « j'annule la semaine du 15 juin »), guard ok partout. Point de vigilance leve :
+sur reject le LLM honore bien l'annulation (pas de faux « c'est fait » malgre l'event
+d'audit). Follow-ups differes : materialisation semaine->plan executable (sessions dans
 `v0_scheduled_sessions`) ; handler commit `plan_patch`.
 
 La passe de simplification pre-3b est resolue **en re-baseline** (7 juin,
