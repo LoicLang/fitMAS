@@ -25,12 +25,14 @@ InputEvent -> Snapshot -> Agent -> Proposal -> Policy -> Executor
 
 Preuve (verifiee offline le 6 juin 2026) :
 
-- `tests/runtime_v0` : 224 passed ;
+- `tests/runtime_v0` : 229 passed ;
 - fake matrix : `11/11` ;
 - danger metrics : `0 wrong_write`, `0 old_plan`,
   `0 wrong_correction_target`, `0 claim_without_event` ;
 - guard fallback rate : `0 %` ;
-- core : 3941 LOC (cap 3960, justifie par le moteur Meso + le context-pack Slice 2.0 + le generateur Slice 2.1).
+- core : 4070 LOC (cap 4080 ; moteur Meso + context-pack 2.0 + generateur 2.1 + cablage
+  runtime 3a). **Ratchet** : 63 % au-dessus de la cible saine 2500 -> passe de
+  simplification dediee meso/+cablage **avant Slice 3b** (decision Loic, 6 juin).
 
 Provider matrix : `114/120` est une ancienne run a 6 scenarios. La matrix
 compte 11 scenarios et 3 providers cibles aujourd'hui. Export non committe,
@@ -138,7 +140,12 @@ le runtime conversationnel utilise le meme client a 1024, donc `propose_week` y 
 si on ne donne pas a la generation son propre budget. (2) le LLM met la cle seuil en
 `moderate` (pas `hard`) pour charger en volume : le verif ne gate pas l'intensite de la
 cle -> **observation qualite, pas encore preuve de derive**, a surveiller (pas de regle
-reactive). Suite immediate : **Slice 3** (tool runtime `propose_week` coach-callable). Le
+reactive). **Slice 3a codee** (6 juin) : `propose_week` coach-callable cable dans le
+runtime — seed LLM-declare depuis le reel, generation avec budget tokens dedie
+(`generation_llm` 4096), la semaine verifiee est **montree** (preview, zero write,
+`answer_only`). Design `2026-06-06-slice-3a-propose-week-design.md`. Suite immediate :
+**passe de simplification** (meso/ + cablage, ratchet) **puis Slice 3b** (confirmation
+-> commit + store typé + chaînage forward). Le
 moteur de contexte profond (couches, accumulation) reste un chantier dedie APRES le
 moteur (`PLANNING-V0.md` Q5).
 
