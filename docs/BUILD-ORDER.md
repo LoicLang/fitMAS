@@ -170,7 +170,19 @@ ACCEPT (« oui, valide ») commit 1 semaine (`pending=accepted`, reply « la sem
 15 juin est calee »), REJECT (« non, pas cette semaine ») 0 commit (`pending=rejected`,
 reply « j'annule la semaine du 15 juin »), guard ok partout. Point de vigilance leve :
 sur reject le LLM honore bien l'annulation (pas de faux « c'est fait » malgre l'event
-d'audit). Follow-ups differes : materialisation semaine->plan executable (sessions dans
+d'audit).
+
+**Couche 2 sous contrainte (7 juin, DeepSeek, `scripts/v0_eval/probe_constrained_week.py`)** :
+fait sante actif (intensite restreinte) -> la semaine proposee ET committee ne contient
+aucune seance dure/seuil/fractionne. La sonde a debusque deux trous, tous deux corriges :
+(1) le prompt de generation se contredisait (« garde le seuil » + « pas d'intensite ») ->
+le LLM echouait toujours, repli template 3/3 (sur, mais generique) ; le prompt est rendu
+**constraint-aware** (la cle prescrite saute sous restriction, comme le fait deja le verif).
+(2) une semaine **vide** passait le verif relache (cle + plancher de charge tous deux
+relaxes) ; le verif rejette desormais une semaine degeneree (vide/tout-repos) dans **tous
+les modes**. Re-probe : **4/4, source=llm** a chaque rep, contrainte respectee, commit ok.
+
+Follow-ups differes : materialisation semaine->plan executable (sessions dans
 `v0_scheduled_sessions`) ; handler commit `plan_patch`.
 
 La passe de simplification pre-3b est resolue **en re-baseline** (7 juin,
