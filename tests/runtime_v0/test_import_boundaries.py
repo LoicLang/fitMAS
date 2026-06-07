@@ -85,5 +85,9 @@ def test_runtime_v0_core_stays_under_v0_budget():
     # contrainte), and the verifier rejects degenerate empty/all-rest weeks in every
     # mode. Closes the generator/verifier asymmetry. Proven couche 2 (probe_constrained_week
     # 4/4, source=llm, constraint respected, commit ok).
+    # 4300 -> 4320 (7 juin 2026): coach taught to resolve a pending correctly — a
+    # "oui mais [constraint/injury/indispo]" is NOT a clean accept (note the fact, don't
+    # commit the unchanged week). Found by probe_live_simulation (committed a hard week
+    # under a fresh injury / claimed false adjustments). Coach-prompt teaching only.
     loc = sum(len(path.read_text().splitlines()) for path in _core_files())
-    assert loc <= 4300
+    assert loc <= 4320
