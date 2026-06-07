@@ -9,6 +9,7 @@ from fitmas.runtime_v0.proposals import (
     ExecutionUpdateDraft,
     FactResolutionDraft,
     MemoryFactDraft,
+    PendingResolutionDraft,
     PlanPatchDraft,
     PlanPatchOperation,
 )
@@ -119,6 +120,26 @@ def propose_fact_resolution(
         evidence=(reason,) if reason else (),
         tool_trace=_trace(ctx),
         fact_resolution=FactResolutionDraft(fact_id=fact_id, reason=reason),
+    )
+
+def resolve_pending(
+    ctx: ToolContext,
+    pending_id: int,
+    decision: str,
+    note: str = "",
+) -> ActionProposal:
+    _record(ctx, "resolve_pending", True)
+    return ActionProposal(
+        type="pending_resolution",
+        confidence=1.0,
+        user_intent_summary="pending resolution",
+        evidence=(note,) if note else (),
+        tool_trace=_trace(ctx),
+        pending_resolution=PendingResolutionDraft(
+            pending_id=pending_id,
+            decision=decision,
+            note=note,
+        ),
     )
 
 def ask_clarification(

@@ -144,6 +144,19 @@ def test_action_proposal_round_trips_dates_and_datetimes():
     assert restored.unresolved_intent == {"target_date": "2026-05-24"}
 
 
+def test_resolve_pending_builds_pending_resolution_proposal():
+    from fitmas.runtime_v0.tools_proposal import resolve_pending
+    from fitmas.runtime_v0.tools_read import ToolContext
+
+    ctx = ToolContext(db_path=None, snapshot=None, scratchpad={})
+    proposal = resolve_pending(ctx, pending_id=7, decision="reject", note="pas cette semaine")
+    assert proposal.type == "pending_resolution"
+    assert proposal.pending_resolution.pending_id == 7
+    assert proposal.pending_resolution.decision == "reject"
+    assert proposal.pending_resolution.note == "pas cette semaine"
+    assert proposal.tool_trace[-1]["name"] == "resolve_pending"
+
+
 def test_plan_patch_normalizes_typed_provider_values(tmp_path):
     ctx = _context(tmp_path)
 
