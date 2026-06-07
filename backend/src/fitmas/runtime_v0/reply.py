@@ -92,6 +92,8 @@ def _fallback(result: RuntimeResult, snapshot: WorldSnapshot) -> str:
         return result.read_facts[0]
     if result.policy_action == "answer_only" and result.read_facts:
         return _plan_summary(result) or " ".join(fact.split(".")[0].strip() for fact in result.read_facts[:3] if fact.strip())
+    # allow_commit after a pending accept/reject: the committed ResolvePendingConfirmationCommand
+    # has no summarizable change, so we fall through to the policy summary in read_facts.
     if result.proposal_type == "pending_resolution" and result.read_facts:
         return result.read_facts[0]
     return TECHNICAL_FALLBACK

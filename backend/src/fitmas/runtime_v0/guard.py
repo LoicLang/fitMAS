@@ -78,6 +78,8 @@ def _safe_reply(result: RuntimeResult, today: date) -> str:
             return f"Corrigé: {event.after.get('duration_min')} minutes."
         if event.command_type == "SetSessionStatusCommand":
             return f"Noté pour {'hier' if event.after.get('date') == (today - timedelta(days=1)).isoformat() else 'la séance'}."
+    # allow_commit after a pending accept/reject: the committed ResolvePendingConfirmationCommand
+    # is not one of the summarizable types above, so we surface the policy summary honestly.
     if result.proposal_type == "pending_resolution" and result.read_facts:
         return result.read_facts[0]
     return TECHNICAL_FALLBACK

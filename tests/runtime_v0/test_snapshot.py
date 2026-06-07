@@ -199,6 +199,13 @@ def test_snapshot_loads_last_committed_week(tmp_path):
             "values (?, ?, ?, ?, ?, ?)",
             (1, "2026-06-08", "llm", 330.0, "intervals", "[]"),
         )
+        # A later but non-committed week must be excluded by the status filter:
+        # if the filter regressed, this latest-week_start row would be picked.
+        connection.execute(
+            "insert into v0_planned_weeks (user_id, week_start, source, week_load, key_type, sessions_json, status) "
+            "values (?, ?, ?, ?, ?, ?, ?)",
+            (1, "2026-06-15", "llm", 999.0, "easy_run", "[]", "superseded"),
+        )
         connection.commit()
 
     snapshot = SnapshotBuilder(db_path).build(1, datetime(2026, 6, 12, 9, 0, tzinfo=timezone.utc))
