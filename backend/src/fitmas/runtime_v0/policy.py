@@ -54,6 +54,12 @@ class ResolveMemoryFactCommand(Command):
     reason: str
 
 @dataclass(frozen=True)
+class ResolvePendingConfirmationCommand(Command):
+    pending_id: int
+    decision: Literal["accept", "reject"]
+    note: str
+
+@dataclass(frozen=True)
 class UpdateConversationStateCommand(Command):
     last_unresolved_intent: dict | None
     last_execution_event_id: int | None
@@ -122,6 +128,8 @@ class RuntimePolicy:
             decision = self._memory_update(proposal)
         elif proposal.type == "fact_resolution":
             decision = self._fact_resolution(proposal, snapshot)
+        elif proposal.type == "pending_resolution":
+            decision = self._pending_resolution(proposal, snapshot)
         elif proposal.type == "execution_update":
             decision = self._execution_update(proposal, snapshot)
         elif proposal.type == "execution_correction":
@@ -153,6 +161,21 @@ class RuntimePolicy:
             (ResolveMemoryFactCommand(draft.fact_id, draft.reason),),
             reply_facts,
         )
+
+    def _pending_resolution(self, proposal: ActionProposal, snapshot: WorldSnapshot) -> PolicyDecision:
+        draft = proposal.pending_resolution
+        if draft is None:
+            return _decision("block", "missing_pending_resolution", "low", (), ())
+        pending = snapshot.active_pending
+        # Ground the LLM-supplied id against the open pending before committing.
+        if pending is None or draft.pending_id != pending.id:
+            return _decision("ask_clarification", "pending_not_active", "low", (), ("De quelle proposition tu parles ?",))
+        command = ResolvePendingConfirmationCommand(
+            pending_id=pending.id, decision=draft.decision, note=draft.note
+        )
+        if draft.decision == "reject":
+            return _decision("allow_commit", "pending_rejected", "low", (command,), (f"annulé : {pending.summary}",))
+        return _decision("allow_commit", "pending_accepted", "low", (command,), (pending.summary,))
 
     def _execution_update(self, proposal: ActionProposal, snapshot: WorldSnapshot) -> PolicyDecision:
         draft = proposal.execution_update

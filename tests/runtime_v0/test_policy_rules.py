@@ -742,6 +742,51 @@ def test_plan_patch_blocks_replace_without_effective_payload(tmp_path):
     assert decision.commands == ()
 
 
+def test_pending_resolution_grounds_against_open_pending():
+    from datetime import datetime, timezone
+    from fitmas.runtime_v0.policy import ResolvePendingConfirmationCommand, RuntimePolicy
+    from fitmas.runtime_v0.proposals import ActionProposal, PendingResolutionDraft
+    from fitmas.runtime_v0.snapshot import PendingView, WorldSnapshot
+    from fitmas.runtime_v0.state import ConversationState
+
+    now = datetime(2026, 6, 4, 9, 0, tzinfo=timezone.utc)
+    base = dict(
+        user_id=1, today=now.date(), now=now, timezone="UTC", objective=None,
+        current_plan=(), recent_plan=(), recent_activities=(), active_facts=(),
+        recent_execution_events=(), recent_plan_events=(),
+        conversation_state=ConversationState(None, None, None, None, None),
+    )
+    pending = PendingView(id=5, type="week_proposal", summary="semaine du 8 juin", expires_at=now)
+    snapshot = WorldSnapshot(active_pending=pending, **base)
+
+    def _proposal(pid, decision):
+        return ActionProposal(
+            type="pending_resolution", confidence=1.0, user_intent_summary="r",
+            evidence=(), pending_resolution=PendingResolutionDraft(pending_id=pid, decision=decision),
+        )
+
+    # wrong id -> clarification, no command
+    wrong = RuntimePolicy().evaluate(_proposal(99, "accept"), snapshot)
+    assert wrong.action == "ask_clarification"
+    assert wrong.commands == ()
+
+    # accept -> allow_commit + resolve command, reply carries the week summary
+    accept = RuntimePolicy().evaluate(_proposal(5, "accept"), snapshot)
+    assert accept.action == "allow_commit"
+    assert accept.commands == (ResolvePendingConfirmationCommand(pending_id=5, decision="accept", note=""),)
+    assert "semaine du 8 juin" in accept.reply_facts[0]
+
+    # reject -> allow_commit + resolve command
+    reject = RuntimePolicy().evaluate(_proposal(5, "reject"), snapshot)
+    assert reject.action == "allow_commit"
+    assert reject.commands == (ResolvePendingConfirmationCommand(pending_id=5, decision="reject", note=""),)
+
+    # no open pending -> clarification
+    no_pending = WorldSnapshot(active_pending=None, **base)
+    none = RuntimePolicy().evaluate(_proposal(5, "accept"), no_pending)
+    assert none.action == "ask_clarification"
+
+
 def test_execution_update_blocks_future_done_but_allows_skip_today_and_past(tmp_path):
     # Sessions seeded by _snapshot: 50 = yesterday, 60 = today, 61 = tomorrow.
     # Marking a not-yet-happened session "done"/"partial" is an incoherent state
