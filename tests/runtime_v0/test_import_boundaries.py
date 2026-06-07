@@ -83,5 +83,7 @@ def test_runtime_v0_core_stays_under_v0_budget():
     # 4170 -> 4250 (7 juin 2026): Slice 3b Tasks 5-7 interim — ResolvePendingConfirmationCommand,
     # _pending_resolution policy branch, week_proposal -> create_pending, executor
     # _apply_resolve_pending + _apply_commit_week handlers. Final cap set at Task 12.
+    # 4250 -> 4270 (7 juin 2026): Slice 3b Task 8 interim — last_planned_week field +
+    # _load_last_planned_week in snapshot.py, forward chaining in meso/runtime_tool.py.
     loc = sum(len(path.read_text().splitlines()) for path in _core_files())
-    assert loc <= 4250
+    assert loc <= 4270

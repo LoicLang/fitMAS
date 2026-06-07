@@ -178,3 +178,28 @@ def test_expired_conversation_state_is_omitted_from_header(tmp_path):
 
     assert snapshot.conversation_state.last_unresolved_intent is None
     assert snapshot.header().last_unresolved_intent is None
+
+
+def test_snapshot_loads_last_committed_week(tmp_path):
+    from datetime import datetime, timezone
+    from fitmas.runtime_v0.db import connect, init_db
+    from fitmas.runtime_v0.meso.model import WeekActuals
+    from fitmas.runtime_v0.snapshot import SnapshotBuilder
+
+    db_path = tmp_path / "fitmas_v0.db"
+    init_db(db_path)
+    with connect(db_path) as connection:
+        connection.execute(
+            "insert into v0_planned_weeks (user_id, week_start, source, week_load, key_type, sessions_json) "
+            "values (?, ?, ?, ?, ?, ?)",
+            (1, "2026-06-01", "llm", 300.0, "threshold", "[]"),
+        )
+        connection.execute(
+            "insert into v0_planned_weeks (user_id, week_start, source, week_load, key_type, sessions_json) "
+            "values (?, ?, ?, ?, ?, ?)",
+            (1, "2026-06-08", "llm", 330.0, "intervals", "[]"),
+        )
+        connection.commit()
+
+    snapshot = SnapshotBuilder(db_path).build(1, datetime(2026, 6, 12, 9, 0, tzinfo=timezone.utc))
+    assert snapshot.last_planned_week == WeekActuals(total_load=330.0, key_type="intervals")

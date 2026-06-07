@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any, Literal
 
 from fitmas.runtime_v0.db import connect
+from fitmas.runtime_v0.meso.model import WeekActuals
 from fitmas.runtime_v0.state import ConversationState
 
 @dataclass(frozen=True)
@@ -123,6 +124,7 @@ class WorldSnapshot:
     recent_execution_events: tuple[CommandEventView, ...]
     recent_plan_events: tuple[CommandEventView, ...]
     conversation_state: ConversationState
+    last_planned_week: WeekActuals | None = None
 
     def header(self) -> SnapshotHeader:
         next_sessions = self.current_plan[:3]
@@ -161,6 +163,7 @@ class SnapshotBuilder:
             )
             recent_plan_events = _load_command_events(connection, ("ApplyPlanPatchCommand",))
             conversation_state = _load_conversation_state(connection, user_id, now)
+            last_planned_week = _load_last_planned_week(connection, user_id)
 
         assert len(active_facts) <= 10
         assert len(recent_execution_events) <= 5
@@ -179,6 +182,7 @@ class SnapshotBuilder:
             recent_execution_events=recent_execution_events,
             recent_plan_events=recent_plan_events,
             conversation_state=conversation_state,
+            last_planned_week=last_planned_week,
         )
 
 def _load_sessions(connection, user_id: int, start: date, end: date) -> tuple[SessionView, ...]:
@@ -220,6 +224,16 @@ def _load_pending(connection, user_id: int, now: datetime) -> PendingView | None
         summary=row["summary"],
         expires_at=_parse_datetime(row["expires_at"]),
     )
+
+def _load_last_planned_week(connection, user_id: int) -> WeekActuals | None:
+    row = connection.execute(
+        "select week_load, key_type from v0_planned_weeks "
+        "where user_id = ? and status = 'committed' order by week_start desc, id desc limit 1",
+        (user_id,),
+    ).fetchone()
+    if row is None:
+        return None
+    return WeekActuals(total_load=row["week_load"], key_type=row["key_type"])
 
 def _load_command_events(connection, command_types: tuple[str, ...]) -> tuple[CommandEventView, ...]:
     placeholders = ",".join("?" for _ in command_types)

@@ -160,6 +160,37 @@ def test_pending_resolution_roundtrips():
     assert restored.pending_resolution == PendingResolutionDraft(pending_id=7, decision="accept", note="ok")
 
 
+_HEAVY_WEEK = [
+    # load: 90*2 + 90*2 + 80*1 + 80*1 + 80*1.5 = 180 + 180 + 80 + 80 + 120 = 640 -> within 400-440? no.
+    # build target for 400: band (400, 440). Use: 100*2 + 80*1 + 80*1 + 80*1.5 = 200+80+80+120=480, still over.
+    # 70*2 + 60*1 + 60*1 + 70*1.5 = 140+60+60+105 = 365. Still under.
+    # 80*2 + 60*1 + 60*1 + 80*1.5 = 160+60+60+120 = 400. Exactly at band min.
+    {"date": "2026-06-09", "type": "intervals", "duration_min": 80, "intensity": "hard"},   # 160
+    {"date": "2026-06-11", "type": "easy_run", "duration_min": 60, "intensity": "easy"},     # 60
+    {"date": "2026-06-13", "type": "easy_run", "duration_min": 60, "intensity": "easy"},     # 60
+    {"date": "2026-06-14", "type": "long_run", "duration_min": 80, "intensity": "moderate"}, # 120
+]  # total load = 400, within band (400, 440)
+
+
+def test_propose_week_chains_from_last_committed_week():
+    from fitmas.runtime_v0.meso.model import WeekActuals
+
+    # snapshot carries a committed prior week at load 400, key intervals.
+    chained = WorldSnapshot(
+        user_id=1, today=NOW.date(), now=NOW, timezone="UTC", objective=None,
+        current_plan=(), recent_plan=(), recent_activities=(), active_facts=(),
+        active_pending=None, recent_execution_events=(), recent_plan_events=(),
+        conversation_state=ConversationState(None, None, None, None, None),
+        last_planned_week=WeekActuals(total_load=400.0, key_type="intervals"),
+    )
+    generation_llm = FakeLLMClient([_emit(_HEAVY_WEEK)])
+    ctx = ToolContext(db_path=None, snapshot=chained, generation_llm=generation_llm)
+    # declared seed is deliberately different; chaining must win.
+    proposal = propose_week(ctx, last_week_load=300.0, key_type="threshold")
+    assert proposal.week_proposal.band == (400.0, 440.0)  # build 100->110% of 400
+    assert proposal.week_proposal.key_type == "intervals"
+
+
 def test_propose_week_requires_generation_llm():
     # Misconfiguration (no generation_llm injected) must fail loud, not crash deep
     # inside generate_week on a None client.
