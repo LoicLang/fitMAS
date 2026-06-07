@@ -69,8 +69,13 @@ def test_runtime_v0_core_stays_under_v0_budget():
     # 4080 -> 4100 (6 juin 2026): Slice 3a couche-2 reliabilization — teach the coach
     # propose_week (coach_system prompt) + surface last-week training in the header
     # (recent_training) so the coach can ground the seed.
-    # RATCHET WATCH: ~4090 is 64% over the healthy target (2500). A DEDICATED
-    # simplification pass on meso/ + the wiring is scheduled BEFORE Slice 3b
-    # (decision Loïc, 6 juin) — claw back toward 2500 without losing capability.
+    # RE-BASELINE (7 juin 2026, decision Loïc): the pre-3b simplification pass is
+    # resolved as a re-baseline, NOT a LOC clawback. meso/ + wiring are already
+    # tight — every piece is used or a documented seam (3b / 2.1 / Macro). The Meso
+    # engine is a deliberate second envelope: earned capability, not creep (see
+    # RUNTIME-V0.md Budget). The ~2500 ideal stays the ratchet for the bare
+    # conversational loop; discipline = bump only on proven capability. Slice 3b
+    # (confirmation -> commit + typed store + forward chaining) bumps this cap ON
+    # LANDING with its real number, not before.
     loc = sum(len(path.read_text().splitlines()) for path in _core_files())
     assert loc <= 4100

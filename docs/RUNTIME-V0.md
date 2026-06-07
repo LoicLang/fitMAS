@@ -253,19 +253,29 @@ Les garde-fous dangereux (`nouvelle seance`, `ajoute`) restent en
 
 ## Budget
 
-Budget runtime core, hors tests et scripts :
+Budget runtime core (hors `adapters/`, tests et scripts). Le budget est un
+**filet de danger contre le creep, pas une boussole** : il bloque l'accumulation
+de regles, jamais une capacite gagnee et prouvee.
+
+Re-baseline 7 juin 2026 (decision Loic). Le `<= 2500` historique visait le
+**noyau conversationnel nu**. Depuis, le **moteur Meso** (semaine typee +
+verificateur + generateur + `propose_week`) est une **seconde enveloppe
+deliberee** qui co-evolue avec le runtime (`PLANNING-V0.md`). Ces LOC sont
+**acquises, pas du creep** ; on ne les gratte pas. La passe de simplification
+prevue avant Slice 3b est resolue **en re-baseline** : `meso/` + cablage sont deja
+serres (chaque piece est utilisee ou est un seam documente pour 3b / 2.1 / Macro).
 
 ```text
-objectif sain: <= 2500 LOC
-zone acceptable: 2500-3200 LOC
-> 3200 LOC: justification obligatoire
-> 4000 LOC: alerte architecture lourde
+noyau conversationnel V0 (boucle, hors meso/): cible ~2500, garder la pression
+moteur Meso (meso/ + cablage week_proposal): enveloppe dediee, acquise
+cap dur (test_import_boundaries): 4100
+> cap: justification de CAPACITE obligatoire (jamais du creep), bump au landing
 ```
 
-Mesure 5 juin 2026 : 3646 LOC. Le cap du test (`test_import_boundaries`) est passe
-de 3200 a 3700, justifie par le moteur Meso + resolution de fact + fact-rider
-(croissance de capacite planifiee, pas du creep). Objectif sain inchange (2500) :
-surveiller le ratchet.
+Mesure 7 juin 2026 : ~4087 LOC. Discipline maintenue : le cap ne monte que sur
+capacite prouvee, justification loggee dans `test_import_boundaries`. Slice 3b
+(confirmation -> commit + store type + chainage forward) le fera monter **a son
+arrivee**, avec son chiffre reel — pas avant.
 
 ## Sport Core V0
 

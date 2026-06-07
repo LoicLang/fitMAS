@@ -30,9 +30,12 @@ Preuve (verifiee offline le 6 juin 2026) :
 - danger metrics : `0 wrong_write`, `0 old_plan`,
   `0 wrong_correction_target`, `0 claim_without_event` ;
 - guard fallback rate : `0 %` ;
-- core : 4070 LOC (cap 4080 ; moteur Meso + context-pack 2.0 + generateur 2.1 + cablage
-  runtime 3a). **Ratchet** : 63 % au-dessus de la cible saine 2500 -> passe de
-  simplification dediee meso/+cablage **avant Slice 3b** (decision Loic, 6 juin).
+- core : ~4087 LOC (cap 4100 ; noyau conversationnel + moteur Meso + context-pack 2.0
+  + generateur 2.1 + cablage runtime 3a). **Re-baseline 7 juin** (decision Loic) : le
+  moteur Meso est une enveloppe **acquise, pas du creep** ; la passe de simplification
+  pre-3b est resolue **en re-baseline** (`meso/`+cablage deja serres). Cible ~2500 =
+  ratchet du noyau conversationnel nu ; discipline = le cap ne monte que sur capacite
+  prouvee. Detail : `docs/RUNTIME-V0.md` Budget.
 
 Provider matrix : `114/120` est une ancienne run a 6 scenarios. La matrix
 compte 11 scenarios et 3 providers cibles aujourd'hui. Export non committe,
@@ -153,8 +156,9 @@ honnete (« je te propose », jamais « j'ai cree »). Trois fiabilisations requ
 (2) **surfacer `recent_training` dans le header** — sinon le coach ne peut pas ancrer le
 seed ; (3) **budget reply >1024** (un modele a raisonnement tronque le rendu de la semaine
 a 1024) — config du `reply_llm` cote wiring (Slice 4), pas un changement core. Suite
-immediate : **passe de simplification** (meso/ + cablage, ratchet) **puis Slice 3b**
-(confirmation -> commit + store typé + chaînage forward). Le
+immediate : **Slice 3b** (confirmation -> commit + store typé + chaînage forward) — la
+passe de simplification pre-3b est resolue **en re-baseline** (7 juin, `RUNTIME-V0.md`
+Budget : moteur Meso = enveloppe acquise, pas du creep ; `meso/`+cablage deja serres). Le
 moteur de contexte profond (couches, accumulation) reste un chantier dedie APRES le
 moteur (`PLANNING-V0.md` Q5).
 

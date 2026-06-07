@@ -42,14 +42,15 @@ Ne pas ouvrir Phase B progression/prescription sans demande explicite.
 
 ## Preuve Runtime V0
 
-Verifie offline le 5 juin 2026 :
+Verifie offline le 6 juin 2026 :
 
 ```text
-tests/runtime_v0 : 201 passed
+tests/runtime_v0 : 229 passed
 fake matrix      : 11/11
 danger metrics   : 0 wrong_write, 0 old_plan, 0 wrong_correction_target,
                    0 claim_without_event
-core             : 3646 LOC (cap 3700, justifie par le moteur Meso)
+core             : ~4087 LOC (cap 4100 ; noyau conversationnel + moteur Meso —
+                   enveloppe acquise, pas du creep, voir docs/RUNTIME-V0.md Budget)
 ```
 
 Construit depuis : moteur Meso (`runtime_v0/meso/` — modele type + verificateur
