@@ -17,6 +17,7 @@ from fitmas.runtime_v0.tools_read import (
     get_active_facts,
     get_current_plan,
     get_plan_day,
+    get_planned_week,
     get_recent_execution_events,
     get_session,
     resolve_date_reference,
@@ -59,6 +60,13 @@ def for_event(event: InputEvent, snapshot: WorldSnapshot) -> tuple[ToolSchema, .
             description="Return active non-expired user facts.",
             parameters=_schema({}),
             handler=get_active_facts,
+            is_proposal=False,
+        ),
+        ToolSchema(
+            name="get_planned_week",
+            description="Return the most recent committed running week (Meso) with its sessions. Use when the user asks to see or re-read their planned week.",
+            parameters=_schema({}),
+            handler=get_planned_week,
             is_proposal=False,
         ),
         ToolSchema(

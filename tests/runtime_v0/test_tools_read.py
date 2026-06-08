@@ -13,6 +13,7 @@ from fitmas.runtime_v0.tools_read import (
     get_active_facts,
     get_current_plan,
     get_plan_day,
+    get_planned_week,
     get_recent_execution_events,
     get_session,
 )
@@ -152,6 +153,38 @@ def test_get_recent_execution_events_clips_limit_to_ten(tmp_path):
 
     assert len(result["events"]) == 10
     assert result["events"][0]["summary"] == "event 0"
+
+
+def test_get_planned_week_returns_latest_committed_week(tmp_path):
+    import json
+    db_path = tmp_path / "fitmas_v0.db"
+    init_db(db_path)
+    with connect(db_path) as conn:
+        conn.execute(
+            "insert into v0_planned_weeks (user_id, week_start, source, week_load, key_type, sessions_json) "
+            "values (?,?,?,?,?,?)",
+            (1, "2026-06-15", "llm", 375.0, "threshold",
+             json.dumps([{"date": "2026-06-16", "type": "threshold", "duration_min": 50, "intensity": "hard", "detail": ""}])),
+        )
+        conn.commit()
+    now = datetime(2026, 6, 8, 10, 0, tzinfo=PARIS)
+    ctx = ToolContext(db_path=db_path, snapshot=SnapshotBuilder(db_path).build(1, now), scratchpad={})
+
+    result = get_planned_week(ctx)
+
+    assert result["planned_week"]["week_start"] == "2026-06-15"
+    assert result["planned_week"]["key_type"] == "threshold"
+    assert len(result["planned_week"]["sessions"]) == 1
+    assert result["planned_week"]["sessions"][0]["type"] == "threshold"
+
+
+def test_get_planned_week_none_when_empty(tmp_path):
+    db_path = tmp_path / "fitmas_v0.db"
+    init_db(db_path)
+    now = datetime(2026, 6, 8, 10, 0, tzinfo=PARIS)
+    ctx = ToolContext(db_path=db_path, snapshot=SnapshotBuilder(db_path).build(1, now), scratchpad={})
+
+    assert get_planned_week(ctx)["planned_week"] is None
 
 
 def test_get_active_facts_returns_non_expired_facts(tmp_path):
