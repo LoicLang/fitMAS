@@ -53,16 +53,21 @@ _WEEKDAY_INDEX = {
 }
 
 
-def _check_blocked_days(
-    week: PlannedWeek, constraints: tuple[TypedConstraint, ...]
-) -> list[Violation]:
-    blocked = {
+def blocked_weekday_indices(constraints: tuple[TypedConstraint, ...]) -> set[int]:
+    """Weekday ints (Mon=0..Sun=6) blocked by active availability constraints."""
+    return {
         _WEEKDAY_INDEX[day]
         for constraint in constraints
         if constraint.active
         for day in constraint.blocked_days
         if day in _WEEKDAY_INDEX
     }
+
+
+def _check_blocked_days(
+    week: PlannedWeek, constraints: tuple[TypedConstraint, ...]
+) -> list[Violation]:
+    blocked = blocked_weekday_indices(constraints)
     if not blocked:
         return []
     bad = [s for s in week.sessions if s.type != "rest" and s.date.weekday() in blocked]

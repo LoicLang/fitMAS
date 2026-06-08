@@ -287,10 +287,11 @@ def test_blocked_days_relax_load_floor():
     # A below-band-load week WITH a blocked-days constraint → no load_drop.
     # The same week WITHOUT the constraint → load_drop fires.
     target = _target(band=(300.0, 330.0), key_type="threshold")
+    # Both sessions on Mon (day 0) and Tue (day 1) — neither is in the blocked set.
     low_week = PlannedWeek(
         sessions=(
-            _s(1, "threshold", 50, "hard"),    # 100 — key present
-            _s(3, "easy_run", 30, "easy"),     # 30
+            _s(0, "threshold", 50, "hard"),    # 100 — key present, Monday
+            _s(1, "easy_run", 30, "easy"),     # 30 — Tuesday
         )
     )  # load = 130 < 300 (well below floor)
     constraint = TypedConstraint(

@@ -29,7 +29,7 @@ def propose_week(
     key_type: str,
     phase: str = "build",
     intensity_restricted: bool = False,
-    blocked_days: list[str] = (),
+    blocked_days: tuple[str, ...] = (),
 ) -> ActionProposal:
     if ctx.generation_llm is None:
         # Fail loud on misconfiguration rather than crashing deep in generate_week

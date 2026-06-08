@@ -19,7 +19,7 @@ from fitmas.runtime_v0.meso.model import (
     TypedSession,
     WeekTarget,
 )
-from fitmas.runtime_v0.meso.verifier import Mode, WeekVerdict, limits_intensity, verify_week
+from fitmas.runtime_v0.meso.verifier import Mode, WeekVerdict, blocked_weekday_indices, limits_intensity, verify_week
 from fitmas.runtime_v0.prompts.week_generation import GENERATION_SYSTEM, render_generation_prompt
 
 _SESSION_TYPES = {"rest", "easy_run", "long_run", "threshold", "intervals", "recovery_run"}
@@ -125,13 +125,17 @@ def _template_week(
 ) -> PlannedWeek:
     """A deterministic standard running week sized to the band — the safety-net fallback.
 
-    Targets the band midpoint across a fixed shape (key + long + 2 easy), spaced so the
-    two high-stress days aren't adjacent. Under an active intensity/all constraint the
-    key becomes an easy run (no hard work), matching the verifier's relaxation.
+    Targets the band midpoint across a fixed shape (key + long + easies), spaced so the
+    two high-stress days aren't adjacent. Under an active intensity/all constraint the key
+    becomes an easy run (no hard work). Under an availability constraint, sessions are
+    placed only on available weekdays (blocked days carry no session), matching the verifier.
     """
     low, high = target.load_band
     mid = (low + high) / 2
-    blocked = limits_intensity(constraints)
+    intensity_blocked = limits_intensity(constraints)
+    blocked = blocked_weekday_indices(constraints)
+    available = [offset for offset in range(7) if offset not in blocked] or [0]
+    offsets = _spread(available, 4)
 
     def session(offset: int, kind: str, frac: float, intensity: str, weight: float) -> TypedSession:
         return TypedSession(
@@ -142,15 +146,25 @@ def _template_week(
             detail="template fallback",
         )
 
-    sessions = [
-        session(1, "easy_run", 0.30, "easy", 1.0)
-        if blocked
-        else session(1, target.key_type, 0.30, "hard", 2.0),
-        session(3, "easy_run", 0.20, "easy", 1.0),
-        session(5, "easy_run", 0.15, "easy", 1.0),
-        session(6, "long_run", 0.35, "moderate", 1.5),
+    # role specs in order; trimmed to the number of available offsets (degenerate weeks)
+    specs = [
+        ("easy_run", 0.30, "easy", 1.0) if intensity_blocked else (target.key_type, 0.30, "hard", 2.0),
+        ("easy_run", 0.20, "easy", 1.0),
+        ("easy_run", 0.15, "easy", 1.0),
+        ("long_run", 0.35, "moderate", 1.5),
     ]
+    specs = specs[: len(offsets)]
+    # put long_run last (most spaced from the key) when we have >= 2 sessions
+    sessions = [session(offset, *spec) for offset, spec in zip(offsets, specs)]
     return PlannedWeek(sessions=tuple(sessions))
+
+
+def _spread(days: list[int], n: int) -> list[int]:
+    """Up to n evenly-spread distinct offsets from `days` (already sorted ascending)."""
+    if len(days) <= n:
+        return days
+    step = (len(days) - 1) / (n - 1)
+    return [days[round(i * step)] for i in range(n)]
 
 
 def _emit_call(response: LLMResponse) -> ToolCall | None:
