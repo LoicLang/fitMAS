@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from fitmas.decision.fallback_census import (
+from fitmas.legacy.decision.fallback_census import (
     fallback_entries,
     record_fallback,
     record_legacy_provider_fallback,

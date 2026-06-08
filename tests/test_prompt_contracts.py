@@ -1,5 +1,5 @@
-from fitmas.llm.prompt_contracts import get_prompt_contract, list_prompt_contracts
-from fitmas.tools.registry import build_tool_registry
+from fitmas.legacy.llm.prompt_contracts import get_prompt_contract, list_prompt_contracts
+from fitmas.legacy.tools.registry import build_tool_registry
 
 
 def test_plan_lookup_contract_is_read_only() -> None:

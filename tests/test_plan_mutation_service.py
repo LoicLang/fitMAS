@@ -6,9 +6,9 @@ from types import SimpleNamespace
 
 import pytest
 
-from fitmas.domain.planning.mutation_decision import MutationDecision
-from fitmas.domain.planning.plan_patch import PlanPatch, PlanPatchOperation
-from fitmas.domain.planning.patch_mutation_service import (
+from fitmas.legacy.domain.planning.mutation_decision import MutationDecision
+from fitmas.legacy.domain.planning.plan_patch import PlanPatch, PlanPatchOperation
+from fitmas.legacy.domain.planning.patch_mutation_service import (
     apply_decisions_for_user,
     apply_patch_for_user,
     complete_session_for_user,
@@ -18,17 +18,17 @@ from fitmas.domain.planning.patch_mutation_service import (
     move_session_for_user,
     skip_session_for_user,
 )
-from fitmas.domain.planning.week_coherence import WeekCoherenceFinding, WeekCoherenceReview
+from fitmas.legacy.domain.planning.week_coherence import WeekCoherenceFinding, WeekCoherenceReview
 
 
 @pytest.fixture(autouse=True)
 def _default_week_review(monkeypatch) -> None:
     monkeypatch.setattr(
-        "fitmas.domain.planning.patch_mutation_service.review_week_coherence_with_llm",
+        "fitmas.legacy.domain.planning.patch_mutation_service.review_week_coherence_with_llm",
         lambda *args, **kwargs: _week_review("valid", "commit_original"),
     )
-    monkeypatch.setattr("fitmas.domain.planning.patch_mutation_service.execution_repo.get_activities", lambda *args, **kwargs: [])
-    monkeypatch.setattr("fitmas.domain.planning.patch_mutation_service.memory_repo.get_active_memory_items", lambda *args, **kwargs: [])
+    monkeypatch.setattr("fitmas.legacy.domain.planning.patch_mutation_service.execution_repo.get_activities", lambda *args, **kwargs: [])
+    monkeypatch.setattr("fitmas.legacy.domain.planning.patch_mutation_service.memory_repo.get_active_memory_items", lambda *args, **kwargs: [])
 
 
 def test_apply_decisions_for_user_returns_none_when_empty() -> None:
@@ -55,13 +55,13 @@ def test_apply_patch_for_user_commits_only_valid_patch(monkeypatch) -> None:
     )
 
     monkeypatch.setattr(
-        "fitmas.domain.planning.patch_mutation_service.repo.get_scheduled_sessions",
+        "fitmas.legacy.domain.planning.patch_mutation_service.repo.get_scheduled_sessions",
         lambda *args, **kwargs: [SimpleNamespace(id=22, intensity="easy", completion_status="planned")],
     )
-    monkeypatch.setattr("fitmas.domain.planning.patch_mutation_service.repo.get_scheduled_session", lambda *args, **kwargs: None)
-    monkeypatch.setattr("fitmas.domain.planning.patch_mutation_service.repo.add_plan_mutation_event", lambda *args, **kwargs: None)
+    monkeypatch.setattr("fitmas.legacy.domain.planning.patch_mutation_service.repo.get_scheduled_session", lambda *args, **kwargs: None)
+    monkeypatch.setattr("fitmas.legacy.domain.planning.patch_mutation_service.repo.add_plan_mutation_event", lambda *args, **kwargs: None)
     monkeypatch.setattr(
-        "fitmas.domain.planning.patch_mutation_service.mutation_executor.apply",
+        "fitmas.legacy.domain.planning.patch_mutation_service.mutation_executor.apply",
         lambda db, plan_id, decision, **kwargs: (SimpleNamespace(allowed=True, warnings=[]), SimpleNamespace()),
     )
 
@@ -87,18 +87,18 @@ def test_apply_patch_for_user_week_review_requires_confirmation_prevents_commit(
     )
 
     monkeypatch.setattr(
-        "fitmas.domain.planning.patch_mutation_service.repo.get_scheduled_sessions",
+        "fitmas.legacy.domain.planning.patch_mutation_service.repo.get_scheduled_sessions",
         lambda *args, **kwargs: [SimpleNamespace(id=22, scheduled_date=date(2099, 4, 29), intensity="easy", completion_status="planned")],
     )
     monkeypatch.setattr(
-        "fitmas.domain.planning.patch_mutation_service.review_week_coherence_with_llm",
+        "fitmas.legacy.domain.planning.patch_mutation_service.review_week_coherence_with_llm",
         lambda *args, **kwargs: _week_review("requires_confirmation", "confirm_original"),
     )
 
     def _apply(*args, **kwargs):
         raise AssertionError("week review requires_confirmation must not commit")
 
-    monkeypatch.setattr("fitmas.domain.planning.patch_mutation_service.mutation_executor.apply", _apply)
+    monkeypatch.setattr("fitmas.legacy.domain.planning.patch_mutation_service.mutation_executor.apply", _apply)
 
     result = apply_patch_for_user(object(), user=user, patch=patch)
 
@@ -124,18 +124,18 @@ def test_apply_patch_for_user_week_review_blocked_prevents_commit(monkeypatch) -
     )
 
     monkeypatch.setattr(
-        "fitmas.domain.planning.patch_mutation_service.repo.get_scheduled_sessions",
+        "fitmas.legacy.domain.planning.patch_mutation_service.repo.get_scheduled_sessions",
         lambda *args, **kwargs: [SimpleNamespace(id=22, scheduled_date=date(2099, 4, 29), intensity="easy", completion_status="planned")],
     )
     monkeypatch.setattr(
-        "fitmas.domain.planning.patch_mutation_service.review_week_coherence_with_llm",
+        "fitmas.legacy.domain.planning.patch_mutation_service.review_week_coherence_with_llm",
         lambda *args, **kwargs: _week_review("blocked", "block_original"),
     )
 
     def _apply(*args, **kwargs):
         raise AssertionError("week review blocked must not commit")
 
-    monkeypatch.setattr("fitmas.domain.planning.patch_mutation_service.mutation_executor.apply", _apply)
+    monkeypatch.setattr("fitmas.legacy.domain.planning.patch_mutation_service.mutation_executor.apply", _apply)
 
     result = apply_patch_for_user(object(), user=user, patch=patch)
 
@@ -162,13 +162,13 @@ def test_apply_patch_for_user_confirmed_week_review_can_commit(monkeypatch) -> N
     calls: list[str] = []
 
     monkeypatch.setattr(
-        "fitmas.domain.planning.patch_mutation_service.repo.get_scheduled_sessions",
+        "fitmas.legacy.domain.planning.patch_mutation_service.repo.get_scheduled_sessions",
         lambda *args, **kwargs: [SimpleNamespace(id=22, scheduled_date=date(2099, 4, 29), intensity="easy", completion_status="planned")],
     )
-    monkeypatch.setattr("fitmas.domain.planning.patch_mutation_service.repo.get_scheduled_session", lambda *args, **kwargs: None)
-    monkeypatch.setattr("fitmas.domain.planning.patch_mutation_service.repo.add_plan_mutation_event", lambda *args, **kwargs: None)
+    monkeypatch.setattr("fitmas.legacy.domain.planning.patch_mutation_service.repo.get_scheduled_session", lambda *args, **kwargs: None)
+    monkeypatch.setattr("fitmas.legacy.domain.planning.patch_mutation_service.repo.add_plan_mutation_event", lambda *args, **kwargs: None)
     monkeypatch.setattr(
-        "fitmas.domain.planning.patch_mutation_service.review_week_coherence_with_llm",
+        "fitmas.legacy.domain.planning.patch_mutation_service.review_week_coherence_with_llm",
         lambda *args, **kwargs: _week_review("requires_confirmation", "confirm_original"),
     )
 
@@ -176,7 +176,7 @@ def test_apply_patch_for_user_confirmed_week_review_can_commit(monkeypatch) -> N
         calls.append(decision.mutation_type)
         return SimpleNamespace(allowed=True, warnings=[]), SimpleNamespace()
 
-    monkeypatch.setattr("fitmas.domain.planning.patch_mutation_service.mutation_executor.apply", _apply)
+    monkeypatch.setattr("fitmas.legacy.domain.planning.patch_mutation_service.mutation_executor.apply", _apply)
 
     result = apply_patch_for_user(object(), user=user, patch=patch, allow_requires_confirmation=True)
 
@@ -210,7 +210,7 @@ def test_apply_patch_for_user_passes_loaded_context_to_week_review(monkeypatch) 
     captured = []
 
     monkeypatch.setattr(
-        "fitmas.domain.planning.patch_mutation_service.repo.get_scheduled_sessions",
+        "fitmas.legacy.domain.planning.patch_mutation_service.repo.get_scheduled_sessions",
         lambda *args, **kwargs: [SimpleNamespace(id=22, scheduled_date=date(2099, 4, 29), intensity="easy", completion_status="planned")],
     )
 
@@ -218,7 +218,7 @@ def test_apply_patch_for_user_passes_loaded_context_to_week_review(monkeypatch) 
         captured.append(context)
         return _week_review("requires_confirmation", "confirm_original")
 
-    monkeypatch.setattr("fitmas.domain.planning.patch_mutation_service.review_week_coherence_with_llm", _review)
+    monkeypatch.setattr("fitmas.legacy.domain.planning.patch_mutation_service.review_week_coherence_with_llm", _review)
 
     result = apply_patch_for_user(
         object(),
@@ -251,12 +251,12 @@ def test_apply_patch_for_user_runtime_block_skips_week_review(monkeypatch) -> No
         coach_message="Je deplace.",
     )
 
-    monkeypatch.setattr("fitmas.domain.planning.patch_mutation_service.repo.get_scheduled_sessions", lambda *args, **kwargs: [])
+    monkeypatch.setattr("fitmas.legacy.domain.planning.patch_mutation_service.repo.get_scheduled_sessions", lambda *args, **kwargs: [])
 
     def _review(*args, **kwargs):
         raise AssertionError("week review must not run after runtime hard block")
 
-    monkeypatch.setattr("fitmas.domain.planning.patch_mutation_service.review_week_coherence_with_llm", _review)
+    monkeypatch.setattr("fitmas.legacy.domain.planning.patch_mutation_service.review_week_coherence_with_llm", _review)
 
     result = apply_patch_for_user(object(), user=user, patch=patch)
 
@@ -290,12 +290,12 @@ def test_apply_patch_for_user_does_not_commit_patch_requiring_confirmation(monke
         SimpleNamespace(id=22, intensity="easy", completion_status="planned"),
     ]
 
-    monkeypatch.setattr("fitmas.domain.planning.patch_mutation_service.repo.get_scheduled_sessions", lambda *args, **kwargs: sessions)
+    monkeypatch.setattr("fitmas.legacy.domain.planning.patch_mutation_service.repo.get_scheduled_sessions", lambda *args, **kwargs: sessions)
 
     def _apply(*args, **kwargs):
         raise AssertionError("patch requiring confirmation must not be committed")
 
-    monkeypatch.setattr("fitmas.domain.planning.patch_mutation_service.mutation_executor.apply", _apply)
+    monkeypatch.setattr("fitmas.legacy.domain.planning.patch_mutation_service.mutation_executor.apply", _apply)
 
     result = apply_patch_for_user(object(), user=user, patch=patch)
 
@@ -322,11 +322,11 @@ def test_apply_patch_for_user_uses_runtime_sessions_without_active_plan(monkeypa
     )
 
     monkeypatch.setattr(
-        "fitmas.domain.planning.patch_mutation_service.repo.get_scheduled_sessions",
+        "fitmas.legacy.domain.planning.patch_mutation_service.repo.get_scheduled_sessions",
         lambda *args, **kwargs: [SimpleNamespace(id=22, intensity="easy", completion_status="planned")],
     )
-    monkeypatch.setattr("fitmas.domain.planning.patch_mutation_service.repo.get_scheduled_session", lambda *args, **kwargs: None)
-    monkeypatch.setattr("fitmas.domain.planning.patch_mutation_service.repo.add_plan_mutation_event", lambda *args, **kwargs: None)
+    monkeypatch.setattr("fitmas.legacy.domain.planning.patch_mutation_service.repo.get_scheduled_session", lambda *args, **kwargs: None)
+    monkeypatch.setattr("fitmas.legacy.domain.planning.patch_mutation_service.repo.add_plan_mutation_event", lambda *args, **kwargs: None)
 
     captured: list[int] = []
 
@@ -334,7 +334,7 @@ def test_apply_patch_for_user_uses_runtime_sessions_without_active_plan(monkeypa
         captured.append(plan_id)
         return SimpleNamespace(allowed=True, warnings=[]), SimpleNamespace()
 
-    monkeypatch.setattr("fitmas.domain.planning.patch_mutation_service.mutation_executor.apply", _apply)
+    monkeypatch.setattr("fitmas.legacy.domain.planning.patch_mutation_service.mutation_executor.apply", _apply)
 
     result = apply_patch_for_user(object(), user=user, patch=patch)
 
@@ -374,9 +374,9 @@ def test_apply_patch_for_user_normalizes_targetless_replace_to_create_without_ac
     )
     events: list[dict] = []
 
-    monkeypatch.setattr("fitmas.domain.planning.patch_mutation_service.repo.get_scheduled_sessions", lambda *args, **kwargs: [])
-    monkeypatch.setattr("fitmas.domain.planning.patch_mutation_service.plan_actions.create_session", lambda *args, **kwargs: created_session)
-    monkeypatch.setattr("fitmas.domain.planning.patch_mutation_service.repo.add_plan_mutation_event", lambda *args, **kwargs: events.append(kwargs) or SimpleNamespace(id=124))
+    monkeypatch.setattr("fitmas.legacy.domain.planning.patch_mutation_service.repo.get_scheduled_sessions", lambda *args, **kwargs: [])
+    monkeypatch.setattr("fitmas.legacy.domain.planning.patch_mutation_service.plan_actions.create_session", lambda *args, **kwargs: created_session)
+    monkeypatch.setattr("fitmas.legacy.domain.planning.patch_mutation_service.repo.add_plan_mutation_event", lambda *args, **kwargs: events.append(kwargs) or SimpleNamespace(id=124))
 
     result = apply_patch_for_user(object(), user=user, patch=patch)
 
@@ -411,11 +411,11 @@ def test_apply_patch_for_user_can_commit_confirmed_patch_requiring_confirmation(
         SimpleNamespace(id=22, intensity="easy", completion_status="planned"),
     ]
 
-    monkeypatch.setattr("fitmas.domain.planning.patch_mutation_service.repo.get_scheduled_sessions", lambda *args, **kwargs: sessions)
-    monkeypatch.setattr("fitmas.domain.planning.patch_mutation_service.repo.get_scheduled_session", lambda *args, **kwargs: None)
-    monkeypatch.setattr("fitmas.domain.planning.patch_mutation_service.repo.add_plan_mutation_event", lambda *args, **kwargs: None)
+    monkeypatch.setattr("fitmas.legacy.domain.planning.patch_mutation_service.repo.get_scheduled_sessions", lambda *args, **kwargs: sessions)
+    monkeypatch.setattr("fitmas.legacy.domain.planning.patch_mutation_service.repo.get_scheduled_session", lambda *args, **kwargs: None)
+    monkeypatch.setattr("fitmas.legacy.domain.planning.patch_mutation_service.repo.add_plan_mutation_event", lambda *args, **kwargs: None)
     monkeypatch.setattr(
-        "fitmas.domain.planning.patch_mutation_service.mutation_executor.apply",
+        "fitmas.legacy.domain.planning.patch_mutation_service.mutation_executor.apply",
         lambda db, plan_id, decision, **kwargs: (
             SimpleNamespace(allowed=True, warnings=[SimpleNamespace(message="Charge dense.")]),
             SimpleNamespace(),
@@ -458,12 +458,12 @@ def test_apply_patch_for_user_creates_session_from_create_operation(monkeypatch)
         completion_status="planned",
     )
 
-    monkeypatch.setattr("fitmas.domain.planning.patch_mutation_service.repo.get_scheduled_sessions", lambda *args, **kwargs: [])
-    monkeypatch.setattr("fitmas.domain.planning.patch_mutation_service.plan_actions.create_session", lambda *args, **kwargs: created_session)
+    monkeypatch.setattr("fitmas.legacy.domain.planning.patch_mutation_service.repo.get_scheduled_sessions", lambda *args, **kwargs: [])
+    monkeypatch.setattr("fitmas.legacy.domain.planning.patch_mutation_service.plan_actions.create_session", lambda *args, **kwargs: created_session)
 
     events: list[dict] = []
     monkeypatch.setattr(
-        "fitmas.domain.planning.patch_mutation_service.repo.add_plan_mutation_event",
+        "fitmas.legacy.domain.planning.patch_mutation_service.repo.add_plan_mutation_event",
         lambda db, **kwargs: events.append(kwargs) or SimpleNamespace(id=501),
     )
 
@@ -492,10 +492,10 @@ def test_apply_decisions_for_user_routes_all_decisions_through_mutations(monkeyp
         calls.append((plan_id, decision.mutation_type))
         return SimpleNamespace(allowed=True), SimpleNamespace()
 
-    monkeypatch.setattr("fitmas.domain.planning.patch_mutation_service.mutation_executor.apply", _fake_apply)
-    monkeypatch.setattr("fitmas.domain.planning.patch_mutation_service.repo.add_plan_mutation_event", lambda *args, **kwargs: None)
-    monkeypatch.setattr("fitmas.domain.planning.patch_mutation_service.repo.get_scheduled_sessions", lambda *args, **kwargs: [])
-    monkeypatch.setattr("fitmas.domain.planning.patch_mutation_service.repo.get_scheduled_session", lambda *args, **kwargs: None)
+    monkeypatch.setattr("fitmas.legacy.domain.planning.patch_mutation_service.mutation_executor.apply", _fake_apply)
+    monkeypatch.setattr("fitmas.legacy.domain.planning.patch_mutation_service.repo.add_plan_mutation_event", lambda *args, **kwargs: None)
+    monkeypatch.setattr("fitmas.legacy.domain.planning.patch_mutation_service.repo.get_scheduled_sessions", lambda *args, **kwargs: [])
+    monkeypatch.setattr("fitmas.legacy.domain.planning.patch_mutation_service.repo.get_scheduled_session", lambda *args, **kwargs: None)
 
     result = apply_decisions_for_user(
         object(),
@@ -536,12 +536,12 @@ def test_apply_decisions_for_user_routes_create_session_through_patch_path(monke
         completion_status="planned",
     )
 
-    monkeypatch.setattr("fitmas.domain.planning.patch_mutation_service.repo.get_scheduled_sessions", lambda *args, **kwargs: [])
-    monkeypatch.setattr("fitmas.domain.planning.patch_mutation_service.plan_actions.create_session", lambda *args, **kwargs: created_session)
+    monkeypatch.setattr("fitmas.legacy.domain.planning.patch_mutation_service.repo.get_scheduled_sessions", lambda *args, **kwargs: [])
+    monkeypatch.setattr("fitmas.legacy.domain.planning.patch_mutation_service.plan_actions.create_session", lambda *args, **kwargs: created_session)
 
     events: list[dict] = []
     monkeypatch.setattr(
-        "fitmas.domain.planning.patch_mutation_service.repo.add_plan_mutation_event",
+        "fitmas.legacy.domain.planning.patch_mutation_service.repo.add_plan_mutation_event",
         lambda db, **kwargs: events.append(kwargs) or SimpleNamespace(id=502),
     )
 
@@ -564,15 +564,15 @@ def test_apply_decisions_for_user_uses_runtime_sessions_without_active_plan(monk
     )
 
     monkeypatch.setattr(
-        "fitmas.domain.planning.patch_mutation_service.repo.get_scheduled_sessions",
+        "fitmas.legacy.domain.planning.patch_mutation_service.repo.get_scheduled_sessions",
         lambda *args, **kwargs: [],
     )
     monkeypatch.setattr(
-        "fitmas.domain.planning.patch_mutation_service.repo.get_scheduled_session",
+        "fitmas.legacy.domain.planning.patch_mutation_service.repo.get_scheduled_session",
         lambda *args, **kwargs: None,
     )
     monkeypatch.setattr(
-        "fitmas.domain.planning.patch_mutation_service.repo.add_plan_mutation_event",
+        "fitmas.legacy.domain.planning.patch_mutation_service.repo.add_plan_mutation_event",
         lambda *args, **kwargs: None,
     )
 
@@ -582,7 +582,7 @@ def test_apply_decisions_for_user_uses_runtime_sessions_without_active_plan(monk
         captured.append(plan_id)
         return SimpleNamespace(allowed=True), SimpleNamespace()
 
-    monkeypatch.setattr("fitmas.domain.planning.patch_mutation_service.mutation_executor.apply", _fake_apply)
+    monkeypatch.setattr("fitmas.legacy.domain.planning.patch_mutation_service.mutation_executor.apply", _fake_apply)
 
     result = apply_decisions_for_user(
         object(),
@@ -608,10 +608,10 @@ def test_apply_decisions_for_user_counts_only_successful_applies(monkeypatch) ->
             return SimpleNamespace(allowed=True), SimpleNamespace()
         return SimpleNamespace(allowed=True), None
 
-    monkeypatch.setattr("fitmas.domain.planning.patch_mutation_service.mutation_executor.apply", _fake_apply)
-    monkeypatch.setattr("fitmas.domain.planning.patch_mutation_service.repo.add_plan_mutation_event", lambda *args, **kwargs: None)
-    monkeypatch.setattr("fitmas.domain.planning.patch_mutation_service.repo.get_scheduled_sessions", lambda *args, **kwargs: [])
-    monkeypatch.setattr("fitmas.domain.planning.patch_mutation_service.repo.get_scheduled_session", lambda *args, **kwargs: None)
+    monkeypatch.setattr("fitmas.legacy.domain.planning.patch_mutation_service.mutation_executor.apply", _fake_apply)
+    monkeypatch.setattr("fitmas.legacy.domain.planning.patch_mutation_service.repo.add_plan_mutation_event", lambda *args, **kwargs: None)
+    monkeypatch.setattr("fitmas.legacy.domain.planning.patch_mutation_service.repo.get_scheduled_sessions", lambda *args, **kwargs: [])
+    monkeypatch.setattr("fitmas.legacy.domain.planning.patch_mutation_service.repo.get_scheduled_session", lambda *args, **kwargs: None)
 
     result = apply_decisions_for_user(
         object(),
@@ -639,14 +639,14 @@ def test_apply_decisions_for_user_exposes_blocked_events_with_reason(monkeypatch
     )
 
     monkeypatch.setattr(
-        "fitmas.domain.planning.patch_mutation_service.mutation_executor.apply",
+        "fitmas.legacy.domain.planning.patch_mutation_service.mutation_executor.apply",
         lambda db, plan_id, decision, **kwargs: (
             SimpleNamespace(allowed=False, block_reason="protected_recovery_target", warnings=[]),
             None,
         ),
     )
-    monkeypatch.setattr("fitmas.domain.planning.patch_mutation_service.repo.get_scheduled_sessions", lambda *args, **kwargs: [])
-    monkeypatch.setattr("fitmas.domain.planning.patch_mutation_service.repo.add_plan_mutation_event", lambda *args, **kwargs: None)
+    monkeypatch.setattr("fitmas.legacy.domain.planning.patch_mutation_service.repo.get_scheduled_sessions", lambda *args, **kwargs: [])
+    monkeypatch.setattr("fitmas.legacy.domain.planning.patch_mutation_service.repo.add_plan_mutation_event", lambda *args, **kwargs: None)
 
     result = apply_decisions_for_user(
         object(),
@@ -675,15 +675,15 @@ def test_apply_decisions_for_user_does_not_event_noop_move(monkeypatch) -> None:
     )
 
     monkeypatch.setattr(
-        "fitmas.domain.planning.patch_mutation_service.mutation_executor.apply",
+        "fitmas.legacy.domain.planning.patch_mutation_service.mutation_executor.apply",
         lambda db, plan_id, decision, **kwargs: (SimpleNamespace(allowed=True), None),
     )
-    monkeypatch.setattr("fitmas.domain.planning.patch_mutation_service.repo.get_scheduled_sessions", lambda *args, **kwargs: [])
+    monkeypatch.setattr("fitmas.legacy.domain.planning.patch_mutation_service.repo.get_scheduled_sessions", lambda *args, **kwargs: [])
 
     def _add_event(*args, **kwargs):
         raise AssertionError("no-op move should not create a mutation event")
 
-    monkeypatch.setattr("fitmas.domain.planning.patch_mutation_service.repo.add_plan_mutation_event", _add_event)
+    monkeypatch.setattr("fitmas.legacy.domain.planning.patch_mutation_service.repo.add_plan_mutation_event", _add_event)
 
     result = apply_decisions_for_user(object(), user=user, decisions=[decision])
 
@@ -705,11 +705,11 @@ def test_apply_decisions_for_user_passes_runtime_sessions_to_mutation_hooks(monk
     )
 
     monkeypatch.setattr(
-        "fitmas.domain.planning.patch_mutation_service.repo.get_scheduled_sessions",
+        "fitmas.legacy.domain.planning.patch_mutation_service.repo.get_scheduled_sessions",
         lambda db, user_id, limit: sessions,
     )
-    monkeypatch.setattr("fitmas.domain.planning.patch_mutation_service.repo.get_scheduled_session", lambda *args, **kwargs: None)
-    monkeypatch.setattr("fitmas.domain.planning.patch_mutation_service.repo.add_plan_mutation_event", lambda *args, **kwargs: None)
+    monkeypatch.setattr("fitmas.legacy.domain.planning.patch_mutation_service.repo.get_scheduled_session", lambda *args, **kwargs: None)
+    monkeypatch.setattr("fitmas.legacy.domain.planning.patch_mutation_service.repo.add_plan_mutation_event", lambda *args, **kwargs: None)
 
     captured: dict[str, object] = {}
 
@@ -717,7 +717,7 @@ def test_apply_decisions_for_user_passes_runtime_sessions_to_mutation_hooks(monk
         captured.update(kwargs)
         return SimpleNamespace(allowed=True), SimpleNamespace()
 
-    monkeypatch.setattr("fitmas.domain.planning.patch_mutation_service.mutation_executor.apply", _fake_apply)
+    monkeypatch.setattr("fitmas.legacy.domain.planning.patch_mutation_service.mutation_executor.apply", _fake_apply)
 
     result = apply_decisions_for_user(object(), user=user, decisions=[decision])
 
@@ -736,7 +736,7 @@ def test_apply_decisions_for_user_records_event_for_successful_apply(monkeypatch
     )
 
     monkeypatch.setattr(
-        "fitmas.domain.planning.patch_mutation_service.mutation_executor.apply",
+        "fitmas.legacy.domain.planning.patch_mutation_service.mutation_executor.apply",
         lambda db, plan_id, decision, **kwargs: (SimpleNamespace(allowed=True), SimpleNamespace(delta_weekly_load=-2)),
     )
 
@@ -746,9 +746,9 @@ def test_apply_decisions_for_user_records_event_for_successful_apply(monkeypatch
         events.append(kwargs)
         return SimpleNamespace(id=99)
 
-    monkeypatch.setattr("fitmas.domain.planning.patch_mutation_service.repo.add_plan_mutation_event", _add_event)
-    monkeypatch.setattr("fitmas.domain.planning.patch_mutation_service.repo.get_scheduled_sessions", lambda *args, **kwargs: [])
-    monkeypatch.setattr("fitmas.domain.planning.patch_mutation_service.repo.get_scheduled_session", lambda *args, **kwargs: None)
+    monkeypatch.setattr("fitmas.legacy.domain.planning.patch_mutation_service.repo.add_plan_mutation_event", _add_event)
+    monkeypatch.setattr("fitmas.legacy.domain.planning.patch_mutation_service.repo.get_scheduled_sessions", lambda *args, **kwargs: [])
+    monkeypatch.setattr("fitmas.legacy.domain.planning.patch_mutation_service.repo.get_scheduled_session", lambda *args, **kwargs: None)
 
     result = apply_decisions_for_user(
         object(),
@@ -790,15 +790,15 @@ def test_multi_session_decision_records_one_event_with_both_targets(monkeypatch)
     )
 
     monkeypatch.setattr(
-        "fitmas.domain.planning.patch_mutation_service.mutation_executor.apply",
+        "fitmas.legacy.domain.planning.patch_mutation_service.mutation_executor.apply",
         lambda db, plan_id, decision, **kwargs: (SimpleNamespace(allowed=True), SimpleNamespace()),
     )
-    monkeypatch.setattr("fitmas.domain.planning.patch_mutation_service.repo.get_scheduled_session", lambda *args, **kwargs: None)
-    monkeypatch.setattr("fitmas.domain.planning.patch_mutation_service.repo.get_scheduled_sessions", lambda *args, **kwargs: [])
+    monkeypatch.setattr("fitmas.legacy.domain.planning.patch_mutation_service.repo.get_scheduled_session", lambda *args, **kwargs: None)
+    monkeypatch.setattr("fitmas.legacy.domain.planning.patch_mutation_service.repo.get_scheduled_sessions", lambda *args, **kwargs: [])
 
     events: list[dict] = []
     monkeypatch.setattr(
-        "fitmas.domain.planning.patch_mutation_service.repo.add_plan_mutation_event",
+        "fitmas.legacy.domain.planning.patch_mutation_service.repo.add_plan_mutation_event",
         lambda db, **kwargs: events.append(kwargs) or SimpleNamespace(id=202),
     )
 
@@ -846,18 +846,18 @@ def test_swap_session_event_summary_uses_committed_session_not_llm_text(monkeypa
     )
 
     monkeypatch.setattr(
-        "fitmas.domain.planning.patch_mutation_service.mutation_executor.apply",
+        "fitmas.legacy.domain.planning.patch_mutation_service.mutation_executor.apply",
         lambda db, plan_id, decision, **kwargs: (SimpleNamespace(allowed=True), SimpleNamespace()),
     )
     monkeypatch.setattr(
-        "fitmas.domain.planning.patch_mutation_service.repo.get_scheduled_session",
+        "fitmas.legacy.domain.planning.patch_mutation_service.repo.get_scheduled_session",
         lambda db, user_id, session_id: {10: first_after, 11: second_after}.get(session_id),
     )
-    monkeypatch.setattr("fitmas.domain.planning.patch_mutation_service.repo.get_scheduled_sessions", lambda *args, **kwargs: [])
+    monkeypatch.setattr("fitmas.legacy.domain.planning.patch_mutation_service.repo.get_scheduled_sessions", lambda *args, **kwargs: [])
 
     events: list[dict] = []
     monkeypatch.setattr(
-        "fitmas.domain.planning.patch_mutation_service.repo.add_plan_mutation_event",
+        "fitmas.legacy.domain.planning.patch_mutation_service.repo.add_plan_mutation_event",
         lambda db, **kwargs: events.append(kwargs) or SimpleNamespace(id=203),
     )
 
@@ -899,11 +899,11 @@ def test_apply_decisions_for_user_returns_event_summary_for_replace(monkeypatch)
     )
 
     monkeypatch.setattr(
-        "fitmas.domain.planning.patch_mutation_service.mutation_executor.apply",
+        "fitmas.legacy.domain.planning.patch_mutation_service.mutation_executor.apply",
         lambda db, plan_id, decision, **kwargs: (SimpleNamespace(allowed=True), SimpleNamespace()),
     )
     monkeypatch.setattr(
-        "fitmas.domain.planning.patch_mutation_service.repo.get_scheduled_session",
+        "fitmas.legacy.domain.planning.patch_mutation_service.repo.get_scheduled_session",
         lambda db, user_id, session_id: updated_session,
     )
 
@@ -913,8 +913,8 @@ def test_apply_decisions_for_user_returns_event_summary_for_replace(monkeypatch)
         events.append(kwargs)
         return SimpleNamespace(id=101)
 
-    monkeypatch.setattr("fitmas.domain.planning.patch_mutation_service.repo.add_plan_mutation_event", _add_event)
-    monkeypatch.setattr("fitmas.domain.planning.patch_mutation_service.repo.get_scheduled_sessions", lambda *args, **kwargs: [])
+    monkeypatch.setattr("fitmas.legacy.domain.planning.patch_mutation_service.repo.add_plan_mutation_event", _add_event)
+    monkeypatch.setattr("fitmas.legacy.domain.planning.patch_mutation_service.repo.get_scheduled_sessions", lambda *args, **kwargs: [])
 
     result = apply_decisions_for_user(
         object(),
@@ -950,11 +950,11 @@ def test_session_action_helpers_route_through_low_level_actions(monkeypatch) -> 
         calls.append(("move", session_id))
         return session
 
-    monkeypatch.setattr("fitmas.domain.planning.patch_mutation_service.plan_actions.complete_session", _complete)
-    monkeypatch.setattr("fitmas.domain.planning.patch_mutation_service.plan_actions.skip_session", _skip)
-    monkeypatch.setattr("fitmas.domain.planning.patch_mutation_service.plan_actions.move_session", _move)
-    monkeypatch.setattr("fitmas.domain.planning.patch_mutation_service.repo.get_scheduled_session", lambda *args, **kwargs: session)
-    monkeypatch.setattr("fitmas.domain.planning.patch_mutation_service.repo.add_plan_mutation_event", lambda *args, **kwargs: None)
+    monkeypatch.setattr("fitmas.legacy.domain.planning.patch_mutation_service.plan_actions.complete_session", _complete)
+    monkeypatch.setattr("fitmas.legacy.domain.planning.patch_mutation_service.plan_actions.skip_session", _skip)
+    monkeypatch.setattr("fitmas.legacy.domain.planning.patch_mutation_service.plan_actions.move_session", _move)
+    monkeypatch.setattr("fitmas.legacy.domain.planning.patch_mutation_service.repo.get_scheduled_session", lambda *args, **kwargs: session)
+    monkeypatch.setattr("fitmas.legacy.domain.planning.patch_mutation_service.repo.add_plan_mutation_event", lambda *args, **kwargs: None)
 
     completed = complete_session_for_user(object(), user=user, session_id=10, source="app")
     skipped = skip_session_for_user(object(), user=user, session_id=10, source="app")
@@ -989,8 +989,8 @@ def test_move_session_for_user_blocks_same_sport_proximity_before_action(monkeyp
     )
     called = {"move": False, "event": False}
 
-    monkeypatch.setattr("fitmas.domain.planning.patch_mutation_service.repo.get_scheduled_session", lambda *args, **kwargs: target)
-    monkeypatch.setattr("fitmas.domain.planning.patch_mutation_service.repo.get_scheduled_sessions", lambda *args, **kwargs: [target, neighbor])
+    monkeypatch.setattr("fitmas.legacy.domain.planning.patch_mutation_service.repo.get_scheduled_session", lambda *args, **kwargs: target)
+    monkeypatch.setattr("fitmas.legacy.domain.planning.patch_mutation_service.repo.get_scheduled_sessions", lambda *args, **kwargs: [target, neighbor])
 
     def _move(*args, **kwargs):
         called["move"] = True
@@ -1000,8 +1000,8 @@ def test_move_session_for_user_blocks_same_sport_proximity_before_action(monkeyp
         called["event"] = True
         raise AssertionError("blocked move should not create event")
 
-    monkeypatch.setattr("fitmas.domain.planning.patch_mutation_service.plan_actions.move_session", _move)
-    monkeypatch.setattr("fitmas.domain.planning.patch_mutation_service.repo.add_plan_mutation_event", _event)
+    monkeypatch.setattr("fitmas.legacy.domain.planning.patch_mutation_service.plan_actions.move_session", _move)
+    monkeypatch.setattr("fitmas.legacy.domain.planning.patch_mutation_service.repo.add_plan_mutation_event", _event)
 
     result = move_session_for_user(
         object(),
@@ -1020,11 +1020,11 @@ def test_activity_completion_helper_records_activity_source(monkeypatch) -> None
     session = SimpleNamespace(id=10)
 
     monkeypatch.setattr(
-        "fitmas.domain.planning.patch_mutation_service.plan_actions.complete_session",
+        "fitmas.legacy.domain.planning.patch_mutation_service.plan_actions.complete_session",
         lambda db, *, user, session_id: session,
     )
-    monkeypatch.setattr("fitmas.domain.planning.patch_mutation_service.repo.get_scheduled_session", lambda *args, **kwargs: session)
-    monkeypatch.setattr("fitmas.domain.planning.patch_mutation_service.repo.add_plan_mutation_event", lambda *args, **kwargs: None)
+    monkeypatch.setattr("fitmas.legacy.domain.planning.patch_mutation_service.repo.get_scheduled_session", lambda *args, **kwargs: session)
+    monkeypatch.setattr("fitmas.legacy.domain.planning.patch_mutation_service.repo.add_plan_mutation_event", lambda *args, **kwargs: None)
 
     result = mark_session_completed_for_user(
         object(),
@@ -1054,16 +1054,16 @@ def test_activity_completion_does_not_sync_legacy_day_plan(monkeypatch) -> None:
     events: list[dict] = []
 
     monkeypatch.setattr(
-        "fitmas.domain.planning.patch_mutation_service.plan_actions.complete_session",
+        "fitmas.legacy.domain.planning.patch_mutation_service.plan_actions.complete_session",
         lambda db, *, user, session_id: session,
     )
-    monkeypatch.setattr("fitmas.domain.planning.patch_mutation_service.repo.get_scheduled_session", lambda *args, **kwargs: session)
+    monkeypatch.setattr("fitmas.legacy.domain.planning.patch_mutation_service.repo.get_scheduled_session", lambda *args, **kwargs: session)
 
     def _mark_day_completed(*args, **kwargs):
         raise AssertionError("runtime activity completion must not mutate DayPlan")
 
     monkeypatch.setattr(
-        "fitmas.domain.planning.patch_mutation_service.repo.add_plan_mutation_event",
+        "fitmas.legacy.domain.planning.patch_mutation_service.repo.add_plan_mutation_event",
         lambda db, **kwargs: events.append(kwargs) or SimpleNamespace(id=201),
     )
 
@@ -1098,12 +1098,12 @@ def test_activity_completion_records_matched_day_without_legacy_sync(monkeypatch
     events: list[dict] = []
 
     monkeypatch.setattr(
-        "fitmas.domain.planning.patch_mutation_service.plan_actions.complete_session",
+        "fitmas.legacy.domain.planning.patch_mutation_service.plan_actions.complete_session",
         lambda db, *, user, session_id: session,
     )
-    monkeypatch.setattr("fitmas.domain.planning.patch_mutation_service.repo.get_scheduled_session", lambda *args, **kwargs: session)
+    monkeypatch.setattr("fitmas.legacy.domain.planning.patch_mutation_service.repo.get_scheduled_session", lambda *args, **kwargs: session)
     monkeypatch.setattr(
-        "fitmas.domain.planning.patch_mutation_service.repo.add_plan_mutation_event",
+        "fitmas.legacy.domain.planning.patch_mutation_service.repo.add_plan_mutation_event",
         lambda db, **kwargs: events.append(kwargs) or SimpleNamespace(id=201),
     )
 
@@ -1133,7 +1133,7 @@ def test_day_completion_helper_is_noop_compat(monkeypatch) -> None:
     def _add_event(*args, **kwargs):
         raise AssertionError("compat helper must not emit legacy day events")
 
-    monkeypatch.setattr("fitmas.domain.planning.patch_mutation_service.repo.add_plan_mutation_event", _add_event)
+    monkeypatch.setattr("fitmas.legacy.domain.planning.patch_mutation_service.repo.add_plan_mutation_event", _add_event)
 
     result = mark_day_completed_for_user(
         object(),
@@ -1174,9 +1174,9 @@ def test_only_patch_mutation_service_imports_low_level_mutation_executor() -> No
     root = Path(__file__).resolve().parents[1] / "backend/src/fitmas"
     offenders: list[str] = []
     forbidden = (
-        "from fitmas.domain.planning import mutation_executor",
-        "import fitmas.domain.planning.mutation_executor",
-        "from fitmas.domain.planning.mutation_executor",
+        "from fitmas.legacy.domain.planning import mutation_executor",
+        "import fitmas.legacy.domain.planning.mutation_executor",
+        "from fitmas.legacy.domain.planning.mutation_executor",
     )
     for path in root.rglob("*.py"):
         if path.name == "patch_mutation_service.py":

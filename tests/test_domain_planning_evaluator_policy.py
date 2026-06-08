@@ -2,13 +2,13 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
-from fitmas.domain.planning.evaluator import PlanCandidateEvaluator
-from fitmas.domain.planning.models import PlanningCandidateSet
-from fitmas.domain.planning.policy import SportPolicy
-from fitmas.domain.planning.plan_patch import PlanPatch, PlanPatchOperation, PlanPatchValidation
-from fitmas.domain.planning.evaluator import EvaluatedPlanPatchCandidate
-from fitmas.domain.planning.candidates import PlanPatchCandidate, PlanPatchCandidateValidation
-from fitmas.domain.planning.week_coherence import WeekCoherenceScore
+from fitmas.legacy.domain.planning.evaluator import PlanCandidateEvaluator
+from fitmas.legacy.domain.planning.models import PlanningCandidateSet
+from fitmas.legacy.domain.planning.policy import SportPolicy
+from fitmas.legacy.domain.planning.plan_patch import PlanPatch, PlanPatchOperation, PlanPatchValidation
+from fitmas.legacy.domain.planning.evaluator import EvaluatedPlanPatchCandidate
+from fitmas.legacy.domain.planning.candidates import PlanPatchCandidate, PlanPatchCandidateValidation
+from fitmas.legacy.domain.planning.week_coherence import WeekCoherenceScore
 
 
 def _candidate() -> PlanPatchCandidate:
@@ -91,7 +91,7 @@ def test_evaluator_delegates_to_existing_candidate_evaluator(monkeypatch) -> Non
             evaluation_summary="ok",
         )
 
-    monkeypatch.setattr("fitmas.domain.planning.evaluator.evaluate_plan_patch_candidate", fake_evaluate)
+    monkeypatch.setattr("fitmas.legacy.domain.planning.evaluator.evaluate_plan_patch_candidate", fake_evaluate)
     patch = PlanPatch(
         coach_message="Candidate backend.",
         operations=[

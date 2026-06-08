@@ -68,13 +68,13 @@ sys.path.insert(0, str(ROOT / "backend" / "src"))
 from fastapi.testclient import TestClient
 from sqlalchemy import text
 
-from fitmas.api import app
-from fitmas.core import orm as s
-from fitmas.core.db import SessionLocal, engine, init_db
-from fitmas.domain.athlete import repository as athlete_repo
-from fitmas.domain.coaching import repo_conversation
-from fitmas.domain.memory import repository as memory_repo
-from fitmas.domain.planning import repository as planning_repo
+from fitmas.legacy.api import app
+from fitmas.legacy.core import orm as s
+from fitmas.legacy.core.db import SessionLocal, engine, init_db
+from fitmas.legacy.domain.athlete import repository as athlete_repo
+from fitmas.legacy.domain.coaching import repo_conversation
+from fitmas.legacy.domain.memory import repository as memory_repo
+from fitmas.legacy.domain.planning import repository as planning_repo
 
 
 @dataclass(slots=True)

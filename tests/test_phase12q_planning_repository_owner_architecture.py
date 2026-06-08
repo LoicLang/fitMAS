@@ -65,7 +65,7 @@ def test_12q_planning_runtime_uses_planning_repository_for_scheduled_sessions() 
     offenders: list[str] = []
     for name, path in sources.items():
         source = path.read_text(encoding="utf-8")
-        if "fitmas.domain.planning import repository" not in source:
+        if "fitmas.legacy.domain.planning import repository" not in source:
             offenders.append(f"{name}: missing planning repository import")
         if "root_repo.get_scheduled" in source:
             offenders.append(f"{name}: scheduled session read still goes through root repository")

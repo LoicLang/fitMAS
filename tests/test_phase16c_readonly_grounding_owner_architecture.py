@@ -49,7 +49,7 @@ def test_16c_readonly_reply_uses_grounding_owner() -> None:
     source = _source(READONLY_REPLY)
     imports = _imports(READONLY_REPLY)
 
-    assert "fitmas.decision.readonly_grounding" in imports
+    assert "fitmas.legacy.decision.readonly_grounding" in imports
     assert "readonly_grounding.answer_outcome_from_understanding(" in source
     assert "readonly_grounding.grounded_readonly_fallback(" in source
     assert "readonly_grounding.plan_lookup_reply_mentions_plan_truth(" in source
@@ -63,7 +63,7 @@ def test_16c_readonly_reply_no_longer_owns_grounding_fallbacks() -> None:
     assert "def _grounded_readonly_fallback(" not in source
     assert "def _humanize_plan_window_line(" not in source
     assert "def _plan_lookup_reply_mentions_plan_truth(" not in source
-    assert "fitmas.domain.coaching.coach_voice" not in imports
+    assert "fitmas.legacy.domain.coaching.coach_voice" not in imports
     assert "DecisionOutcome" not in source
     assert "ReplyContract" not in source
 

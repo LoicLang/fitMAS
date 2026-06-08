@@ -7,13 +7,13 @@ from datetime import date
 
 os.environ.setdefault("FITMAS_DB_PATH", tempfile.mktemp(prefix="fitmas-planning-repo-", suffix=".db"))
 
-from fitmas.core import orm as s
-from fitmas.core.db import Base, SessionLocal, engine, init_db
-from fitmas.domain.athlete import repository as athlete_repo
-from fitmas.domain.athlete.fitness_snapshot import FitnessSnapshot
-from fitmas.domain.planning.planning_decision import PlanningDecision
-from fitmas.domain.athlete.readiness import ReadinessState
-from fitmas.domain.planning import repository as planning_repo
+from fitmas.legacy.core import orm as s
+from fitmas.legacy.core.db import Base, SessionLocal, engine, init_db
+from fitmas.legacy.domain.athlete import repository as athlete_repo
+from fitmas.legacy.domain.athlete.fitness_snapshot import FitnessSnapshot
+from fitmas.legacy.domain.planning.planning_decision import PlanningDecision
+from fitmas.legacy.domain.athlete.readiness import ReadinessState
+from fitmas.legacy.domain.planning import repository as planning_repo
 
 
 class PlanningRepositoryTest(unittest.TestCase):

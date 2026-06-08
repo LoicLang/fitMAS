@@ -63,7 +63,7 @@ def test_8g_pending_bridge_owns_pending_application_boundary() -> None:
     assert "pending_resolution_from_sources" in source
     assert "FITMAS_PENDING_FROM_UNDERSTANDING" in source
     assert "fitmas.conversation_pipeline" not in imports
-    assert "fitmas.decision" in imports
+    assert "fitmas.legacy.decision" in imports
     assert "fitmas.plan_mutation_service" not in imports
 
 
@@ -81,7 +81,7 @@ def test_8g_pending_bridge_does_not_parse_free_user_text_deterministically() -> 
 def test_8g_decision_package_stays_pure() -> None:
     forbidden = {
         "fitmas.legacy",
-        "fitmas.llm",
+        "fitmas.legacy.llm",
         "fitmas.conversation_pipeline",
     }
     for path in (SRC / "decision").glob("*.py"):

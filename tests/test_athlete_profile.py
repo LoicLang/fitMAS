@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import unittest
 
-from fitmas.domain.athlete.profile import build_athlete_profile
-from fitmas.core import orm as s
+from fitmas.legacy.domain.athlete.profile import build_athlete_profile
+from fitmas.legacy.core import orm as s
 
 
 class AthleteProfileTest(unittest.TestCase):

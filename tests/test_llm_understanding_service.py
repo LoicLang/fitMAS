@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from fitmas.decision import CoachUnderstanding
-from fitmas.llm.understanding_service import (
+from fitmas.legacy.decision import CoachUnderstanding
+from fitmas.legacy.llm.understanding_service import (
     LLMUnderstandingService,
     UnderstandingRequest,
     parse_coach_understanding_payload,

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import unittest
 
-from fitmas.domain.planning.periodization import (
+from fitmas.legacy.domain.planning.periodization import (
     adjust_planning_mode,
     compute_mesocycle_state,
     get_reps_multiplier,

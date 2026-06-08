@@ -1,0 +1,220 @@
+from __future__ import annotations
+
+import logging
+from datetime import date, datetime
+
+from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy.orm import Session
+
+from fitmas.legacy.domain.planning.adaptation import check_and_adapt_health_facts
+from fitmas.legacy.domain.execution.helpers import claimed_activities_last_days
+from fitmas.legacy.app.api.payloads import IncomingMessage
+from fitmas.legacy.domain.memory.availability_constraints import parse_availability_fact_key
+from fitmas.legacy.decision.conversation_contract import ConversationPipelineDependencies, ConversationTurnInput, ConversationUserNotFoundError
+from fitmas.legacy.decision import turn_planner
+from fitmas.legacy.core.db import get_db
+from fitmas.legacy.domain.execution.clarification import (
+    ExecutionClarification,
+    build_execution_clarification,
+    looks_like_execution_clarification_prompt,
+)
+import fitmas.legacy.llm.gateway as gw
+from fitmas.legacy.llm.calibration import extract_calibration_resolution
+import fitmas.legacy.llm.legacy_fact_memory as legacy_fact_memory
+from fitmas.legacy.llm.legacy_summaries import make_timeline_summary
+from fitmas.legacy.domain.memory.profile_memory import upsert_profile_memory
+from fitmas.legacy.domain.memory.routing import split_memory_payloads
+from fitmas.legacy.decision.message_models import MessageReply
+from fitmas.legacy.domain.planning.view_models import DayId
+from fitmas.legacy.core.time_context import get_timezone
+from fitmas.legacy.domain.execution import repository as execution_repo
+from fitmas.legacy.domain.memory import repository as memory_repo
+from fitmas.legacy.domain.planning import repository as planning_repo
+
+logger = logging.getLogger(__name__)
+
+router = APIRouter()
+
+_DAY_VALUES = {d.value for d in DayId}
+
+
+def extract_facts(user_text: str, assistant_text: str, existing_facts: list[dict]) -> list[dict]:
+    return legacy_fact_memory.extract_facts(
+        user_text,
+        assistant_text,
+        existing_facts,
+        request_json_fn=gw.request_json,
+    )
+
+
+def select_prompt_facts(facts: list[dict]) -> list[str]:
+    return legacy_fact_memory.select_prompt_facts(facts)
+
+
+def plan_conversation_turn(**kwargs):
+    return turn_planner.plan_conversation_turn(
+        request_json_fn=gw.request_json,
+        **kwargs,
+    )
+
+
+def _resolve_day_updated(decision) -> DayId | None:
+    """Extract the affected day from a structured mutation decision."""
+    target = decision.to_day or decision.from_day
+    if target and target in _DAY_VALUES:
+        return DayId(target)
+    return None
+
+
+def _active_memory_payloads(db: Session, user_id: int) -> tuple[list[object], list[dict]]:
+    rows = memory_repo.get_active_memory_items(
+        db,
+        user_id,
+        profile_limit=24,
+        working_limit=24,
+        include_patterns=True,
+        pattern_limit=6,
+        total_limit=36,
+    )
+    return rows, [memory_repo.to_pydantic_fact(row).model_dump() for row in rows]
+
+
+def _persist_memory_updates(db: Session, user_id: int, payloads: list[dict]) -> None:
+    profile_payloads, working_payloads = split_memory_payloads(payloads)
+    if profile_payloads:
+        upsert_profile_memory(db, user_id, profile_payloads)
+    if working_payloads:
+        memory_repo.upsert_working_memory(db, user_id, working_payloads)
+
+
+def _value(obj, key: str):
+    if obj is None:
+        return None
+    if isinstance(obj, dict):
+        return obj.get(key)
+    return getattr(obj, key, None)
+
+
+def _coerce_local_date(value, *, timezone_name: str | None) -> date | None:
+    if value is None:
+        return None
+    if isinstance(value, date) and not isinstance(value, datetime):
+        return value
+    if isinstance(value, datetime):
+        if value.tzinfo is None:
+            return value.date()
+        return value.astimezone(get_timezone(timezone_name)).date()
+    if isinstance(value, str):
+        try:
+            parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+        except ValueError:
+            try:
+                return date.fromisoformat(value[:10])
+            except ValueError:
+                return None
+        if parsed.tzinfo is None:
+            return parsed.date()
+        return parsed.astimezone(get_timezone(timezone_name)).date()
+    return None
+
+
+def _targeted_execution_clarification(
+    *,
+    db: Session,
+    user,
+    conversation_context,
+    previous_agent_text: str | None,
+) -> ExecutionClarification | None:
+    if looks_like_execution_clarification_prompt(previous_agent_text):
+        return None
+
+    today = conversation_context.temporal_resolution.local_date
+    yesterday = today.fromordinal(today.toordinal() - 1)
+
+    recent_sessions = planning_repo.get_scheduled_sessions_between_dates(
+        db,
+        user.id,
+        start_date=today.fromordinal(today.toordinal() - 13),
+        end_date=today,
+        limit=42,
+    )
+    yesterday_sessions = [
+        session
+        for session in recent_sessions
+        if _coerce_local_date(_value(session, "scheduled_date"), timezone_name=user.timezone) == yesterday
+        and str(_value(session, "sport_type") or "").lower() != "rest"
+    ]
+    if not yesterday_sessions:
+        return None
+
+    if _yesterday_session_covered_by_active_constraint(
+        db=db,
+        user=user,
+        yesterday_session=yesterday_sessions[0],
+        yesterday=yesterday,
+    ):
+        return None
+
+    recent_claims = claimed_activities_last_days(db, user, days=14)
+    return build_execution_clarification(
+        today=today,
+        target_session=yesterday_sessions[0],
+        target_date=yesterday,
+        scheduled_sessions=recent_sessions,
+        activities=execution_repo.get_activities(db, user.id, limit=120),
+        claims=list(recent_claims),
+    )
+
+
+def _yesterday_session_covered_by_active_constraint(
+    *,
+    db: Session,
+    user,
+    yesterday_session,
+    yesterday: date,
+) -> bool:
+    active_facts = memory_repo.get_active_facts(db, user.id, limit=60)
+    session_sport = str(_value(yesterday_session, "sport_type") or "").strip().lower() or None
+    for fact in active_facts:
+        if str(_value(fact, "category") or "").lower() != "availability":
+            continue
+        parsed = parse_availability_fact_key(_value(fact, "key"))
+        if parsed is None:
+            continue
+        if not (parsed.start_date <= yesterday <= parsed.end_date):
+            continue
+        if parsed.sport_type is None:
+            return True
+        if session_sport is not None and parsed.sport_type == session_sport:
+            return True
+    return False
+
+
+def _latest_agent_text(conversation_history: list[dict]) -> str | None:
+    for msg in reversed(conversation_history):
+        if msg.get("role") == "agent":
+            return str(msg.get("text") or "")
+    return None
+
+
+@router.post("/api/v0/messages", response_model=MessageReply)
+def post_message(payload: IncomingMessage, db: Session = Depends(get_db)) -> MessageReply:
+    from fitmas.legacy.decision.conversation_pipeline import run_conversation_turn
+
+    try:
+        return run_conversation_turn(
+            ConversationTurnInput(
+                text=payload.text,
+                client_message_key=payload.client_message_key,
+                source=payload.source,
+            ),
+            db=db,
+            dependencies=ConversationPipelineDependencies(
+                extract_facts=extract_facts,
+                check_and_adapt_health_facts=check_and_adapt_health_facts,
+                plan_turn=plan_conversation_turn,
+                resolve_calibration_need=extract_calibration_resolution,
+            ),
+        )
+    except ConversationUserNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc

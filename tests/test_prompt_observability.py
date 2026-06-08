@@ -1,12 +1,12 @@
-from fitmas.llm.prompt_observability import (
+from fitmas.legacy.llm.prompt_observability import (
     DecideFailureReason,
     build_prompt_trace,
     normalize_decide_failure_reason,
 )
-from fitmas.decision.context_pack import build_conversation_context_pack
-from fitmas.llm.prompts.conversation_policy import select_conversation_prompt_policy
-from fitmas.llm.prompts.conversation_builder import build_layered_conversation_prompt
-from fitmas.tools.routing import IntentCategory
+from fitmas.legacy.decision.context_pack import build_conversation_context_pack
+from fitmas.legacy.llm.prompts.conversation_policy import select_conversation_prompt_policy
+from fitmas.legacy.llm.prompts.conversation_builder import build_layered_conversation_prompt
+from fitmas.legacy.tools.routing import IntentCategory
 
 
 def test_build_prompt_trace_counts_system_and_user_chars() -> None:

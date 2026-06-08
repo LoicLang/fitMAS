@@ -47,7 +47,7 @@ def test_15b_reply_backend_reexports_close_turn_without_owning_it() -> None:
     source = _source(REPLY_BACKEND)
     imports = _imports(REPLY_BACKEND)
 
-    assert "fitmas.llm.reply_close_turn" in imports
+    assert "fitmas.legacy.llm.reply_close_turn" in imports
     assert "def compose_close_turn_reply(" not in source
     assert "def _close_turn_context(" not in source
     assert "Intent: terminal_close" not in source
@@ -59,8 +59,8 @@ def test_15b_close_turn_owner_stays_terminal_social_specific() -> None:
 
     assert "Intent: terminal_close" in source
     assert "verify_close_turn_reply" in source
-    assert "fitmas.domain.planning.policy" not in imports
-    assert "fitmas.decision.output_verifier" not in imports
+    assert "fitmas.legacy.domain.planning.policy" not in imports
+    assert "fitmas.legacy.decision.output_verifier" not in imports
 
 
 def test_15b_reply_backend_shrinks_below_close_turn_slice_budget() -> None:

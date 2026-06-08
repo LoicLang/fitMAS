@@ -59,6 +59,6 @@ def test_10p_no_backend_imports_root_planning_executor_modules() -> None:
 def test_10p_patch_mutation_service_uses_planning_executor_boundary() -> None:
     source = (PLANNING / "patch_mutation_service.py").read_text(encoding="utf-8")
 
-    assert "from fitmas.domain.planning import mutation_executor" in source
+    assert "from fitmas.legacy.domain.planning import mutation_executor" in source
     assert "fitmas.mutations" not in source
     assert "fitmas.mutation_hooks" not in source

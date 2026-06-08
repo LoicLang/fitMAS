@@ -60,10 +60,10 @@ def test_8j_retired_planning_cutover_flag_is_not_read() -> None:
 def test_8j_decision_package_stays_pure() -> None:
     forbidden = {
         "fitmas.legacy",
-        "fitmas.llm",
+        "fitmas.legacy.llm",
         "fitmas.conversation_pipeline",
-        "fitmas.domain.memory.mutation_service",
-        "fitmas.domain.execution.mutation_service",
+        "fitmas.legacy.domain.memory.mutation_service",
+        "fitmas.legacy.domain.execution.mutation_service",
         "fitmas.plan_mutation_service",
     }
     for path in (SRC / "decision").glob("*.py"):

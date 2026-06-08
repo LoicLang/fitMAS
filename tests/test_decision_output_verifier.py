@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from fitmas.decision import CommandResult, DecisionExplanation, DecisionOutcome, ReplyContract
-from fitmas.decision.output_verifier import DecisionOutputVerifier
+from fitmas.legacy.decision import CommandResult, DecisionExplanation, DecisionOutcome, ReplyContract
+from fitmas.legacy.decision.output_verifier import DecisionOutputVerifier
 
 
 def _outcome(kind: str, *, applied: bool) -> DecisionOutcome:

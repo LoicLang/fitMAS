@@ -1,6 +1,6 @@
 from datetime import date
 
-from fitmas.domain.execution.clarification import build_execution_clarification
+from fitmas.legacy.domain.execution.clarification import build_execution_clarification
 
 
 def test_execution_clarification_asks_when_uncertainty_changes_recent_week() -> None:

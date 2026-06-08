@@ -5,10 +5,10 @@ from datetime import datetime
 from types import SimpleNamespace
 from unittest.mock import patch
 
-import fitmas.skills.heartbeat.heartbeat as heartbeat
-from fitmas.skills.heartbeat import tool_loop
-from fitmas.tools.contract import ToolContext
-from fitmas.domain.planning.week_coherence import WeekCoherenceFinding, WeekCoherenceReview
+import fitmas.legacy.skills.heartbeat.heartbeat as heartbeat
+from fitmas.legacy.skills.heartbeat import tool_loop
+from fitmas.legacy.tools.contract import ToolContext
+from fitmas.legacy.domain.planning.week_coherence import WeekCoherenceFinding, WeekCoherenceReview
 
 
 class HeartbeatToolLoopTest(unittest.TestCase):
@@ -223,7 +223,7 @@ class HeartbeatToolLoopTest(unittest.TestCase):
         try:
             tool_loop.gw.request_message = fake_request_message
             heartbeat.request_text = lambda **_kwargs: "ALLOW"
-            with patch("fitmas.tools.registry.review_week_coherence_with_llm", return_value=review, create=True):
+            with patch("fitmas.legacy.tools.registry.review_week_coherence_with_llm", return_value=review, create=True):
                 text = heartbeat._llm_generate(
                     "system",
                     "prompt",

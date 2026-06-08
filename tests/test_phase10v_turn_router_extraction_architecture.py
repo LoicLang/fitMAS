@@ -10,17 +10,17 @@ DECISION = SRC / "decision"
 PIPELINE = SRC / "decision" / "conversation_pipeline.py"
 
 PIPELINE_ROUTER_IMPORTS_TO_REMOVE = {
-    "fitmas.decision.activity_highlight",
-    "fitmas.decision.clarification_reply",
-    "fitmas.decision.coach_decision_runtime",
-    "fitmas.decision.command_application",
-    "fitmas.decision.pending_resolution",
-    "fitmas.decision.planning_runtime",
-    "fitmas.decision.readonly_reply",
-    "fitmas.decision.understanding_runtime",
-    "fitmas.llm.gateway",
-    "fitmas.llm.reply_backend",
-    "fitmas.llm.reply_decision_backend",
+    "fitmas.legacy.decision.activity_highlight",
+    "fitmas.legacy.decision.clarification_reply",
+    "fitmas.legacy.decision.coach_decision_runtime",
+    "fitmas.legacy.decision.command_application",
+    "fitmas.legacy.decision.pending_resolution",
+    "fitmas.legacy.decision.planning_runtime",
+    "fitmas.legacy.decision.readonly_reply",
+    "fitmas.legacy.decision.understanding_runtime",
+    "fitmas.legacy.llm.gateway",
+    "fitmas.legacy.llm.reply_backend",
+    "fitmas.legacy.llm.reply_decision_backend",
 }
 
 
@@ -45,7 +45,7 @@ def test_10v_turn_router_owner_exists_under_decision() -> None:
 
 
 def test_10v_conversation_pipeline_imports_turn_router_owner() -> None:
-    assert "fitmas.decision.turn_router" in _imports(PIPELINE)
+    assert "fitmas.legacy.decision.turn_router" in _imports(PIPELINE)
 
 
 def test_10v_conversation_pipeline_no_longer_imports_router_dependencies_directly() -> None:

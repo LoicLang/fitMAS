@@ -3,7 +3,7 @@ from __future__ import annotations
 import unittest
 from datetime import datetime
 
-from fitmas.domain.execution.context import build_today_execution_context
+from fitmas.legacy.domain.execution.context import build_today_execution_context
 
 
 class ExecutionContextTest(unittest.TestCase):

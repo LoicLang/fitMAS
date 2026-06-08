@@ -1,6 +1,6 @@
 """Tests for Strava threshold estimation."""
 
-from fitmas.domain.athlete.threshold_estimation import estimate_vma_from_activity
+from fitmas.legacy.domain.athlete.threshold_estimation import estimate_vma_from_activity
 
 
 class FakeActivity:

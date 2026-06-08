@@ -2,12 +2,12 @@ from pathlib import Path
 
 
 FORBIDDEN = (
-    "fitmas.decision",
-    "fitmas.domain",
-    "fitmas.llm",
-    "fitmas.skills",
-    "fitmas.tools",
-    "fitmas.app",
+    "fitmas.legacy.decision",
+    "fitmas.legacy.domain",
+    "fitmas.legacy.llm",
+    "fitmas.legacy.skills",
+    "fitmas.legacy.tools",
+    "fitmas.legacy.app",
 )
 
 ROOT = Path("backend/src/fitmas/runtime_v0")

@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-from fitmas.decision import CommandResult, DecisionExplanation, DecisionOutcome, ReplyContract
-from fitmas.decision.output_verifier import DecisionOutputVerifier
-from fitmas.decision.reply_composer import DecisionReplyComposer
-from fitmas.decision.reply_request import ReplyRequest, ReplyResult
+from fitmas.legacy.decision import CommandResult, DecisionExplanation, DecisionOutcome, ReplyContract
+from fitmas.legacy.decision.output_verifier import DecisionOutputVerifier
+from fitmas.legacy.decision.reply_composer import DecisionReplyComposer
+from fitmas.legacy.decision.reply_request import ReplyRequest, ReplyResult
 
 
 def test_reply_request_carries_machine_truth_not_legacy_objects() -> None:

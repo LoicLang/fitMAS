@@ -44,7 +44,7 @@ def test_14d_turn_router_delegates_post_understanding_route() -> None:
     imports = _imports(ROUTER)
     source = _source(ROUTER)
 
-    assert "fitmas.decision.turn_understanding_route" in imports
+    assert "fitmas.legacy.decision.turn_understanding_route" in imports
     assert "route_post_pre_understanding_decision(" in source
 
 
@@ -53,12 +53,12 @@ def test_14d_turn_router_no_longer_owns_post_understanding_branches() -> None:
     source = _source(ROUTER)
 
     forbidden_imports = {
-        "fitmas.decision.coach_decision_runtime",
-        "fitmas.decision.command_application",
-        "fitmas.decision.pending_resolution",
-        "fitmas.decision.readonly_reply",
-        "fitmas.decision.turn_idempotency",
-        "fitmas.decision.understanding_runtime",
+        "fitmas.legacy.decision.coach_decision_runtime",
+        "fitmas.legacy.decision.command_application",
+        "fitmas.legacy.decision.pending_resolution",
+        "fitmas.legacy.decision.readonly_reply",
+        "fitmas.legacy.decision.turn_idempotency",
+        "fitmas.legacy.decision.understanding_runtime",
     }
     assert forbidden_imports.isdisjoint(imports)
     for token in (

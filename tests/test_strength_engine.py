@@ -1,4 +1,4 @@
-from fitmas.domain.athlete.strength_engine import build_strength_workout
+from fitmas.legacy.domain.athlete.strength_engine import build_strength_workout
 
 
 def test_strength_engine_protects_legs_when_run_support_is_detected() -> None:

@@ -60,6 +60,6 @@ def test_11o_no_python_imports_use_root_grounding_contract() -> None:
 def test_11o_decision_grounding_has_no_llm_or_db_imports() -> None:
     imports = _imports(SRC / "decision" / "grounding.py")
 
-    assert not any(module.startswith("fitmas.llm") for module in imports)
-    assert "fitmas.core.db" not in imports
+    assert not any(module.startswith("fitmas.legacy.llm") for module in imports)
+    assert "fitmas.legacy.core.db" not in imports
     assert "sqlalchemy.orm" not in imports

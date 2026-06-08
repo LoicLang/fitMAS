@@ -27,9 +27,9 @@ os.environ.setdefault(
     tempfile.mktemp(prefix="fitmas-proactive-ttl-", suffix=".db"),
 )
 
-from fitmas.core import orm as s
-from fitmas.core.db import Base, SessionLocal, engine, init_db
-from fitmas.skills.heartbeat.heartbeat import (
+from fitmas.legacy.core import orm as s
+from fitmas.legacy.core.db import Base, SessionLocal, engine, init_db
+from fitmas.legacy.skills.heartbeat.heartbeat import (
     RECENT_PROACTIVE_TTL_HOURS,
     _recent_proactive_context,
 )

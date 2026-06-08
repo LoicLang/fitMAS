@@ -52,10 +52,10 @@ def test_8l_legacy_provider_boundary_is_removed() -> None:
 def test_8l_decision_package_stays_pure() -> None:
     forbidden = {
         "fitmas.legacy",
-        "fitmas.llm",
+        "fitmas.legacy.llm",
         "fitmas.conversation_pipeline",
-        "fitmas.domain.memory.mutation_service",
-        "fitmas.domain.execution.mutation_service",
+        "fitmas.legacy.domain.memory.mutation_service",
+        "fitmas.legacy.domain.execution.mutation_service",
         "fitmas.plan_mutation_service",
     }
     for path in (SRC / "decision").glob("*.py"):

@@ -1,4 +1,4 @@
-from fitmas.decision.context_pack import (
+from fitmas.legacy.decision.context_pack import (
     ActiveThreadContext,
     CoachProfileContext,
     ConversationContextPack,

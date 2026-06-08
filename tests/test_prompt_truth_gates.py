@@ -2,9 +2,9 @@ from __future__ import annotations
 
 import unittest
 
-from fitmas.llm.prompts.conversation_policy import select_conversation_prompt_policy
-from fitmas.llm.prompts.conversation_builder import build_conversation_prompt_bundle, build_layered_conversation_prompt
-from fitmas.tools.routing import IntentCategory
+from fitmas.legacy.llm.prompts.conversation_policy import select_conversation_prompt_policy
+from fitmas.legacy.llm.prompts.conversation_builder import build_conversation_prompt_bundle, build_layered_conversation_prompt
+from fitmas.legacy.tools.routing import IntentCategory
 
 
 class PromptTruthGatesTest(unittest.TestCase):

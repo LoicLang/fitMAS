@@ -44,7 +44,7 @@ def test_14c_turn_router_delegates_pre_understanding_reply_route() -> None:
     imports = _imports(ROUTER)
     source = _source(ROUTER)
 
-    assert "fitmas.decision.turn_pre_understanding_reply_route" in imports
+    assert "fitmas.legacy.decision.turn_pre_understanding_reply_route" in imports
     assert "route_pre_understanding_replies(" in source
 
 
@@ -52,8 +52,8 @@ def test_14c_turn_router_no_longer_owns_early_reply_composers() -> None:
     imports = _imports(ROUTER)
     source = _source(ROUTER)
 
-    assert "fitmas.decision.activity_highlight" not in imports
-    assert "fitmas.decision.clarification_reply" not in imports
+    assert "fitmas.legacy.decision.activity_highlight" not in imports
+    assert "fitmas.legacy.decision.clarification_reply" not in imports
     assert "compose_canonical_clarification_reply(" not in source
     assert "compose_activity_highlight_reply(" not in source
 

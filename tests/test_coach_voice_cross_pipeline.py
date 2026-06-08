@@ -12,9 +12,9 @@ from __future__ import annotations
 import inspect
 import unittest
 
-from fitmas.domain.coaching import coach_voice
-from fitmas.llm.prompts.conversation_builder import _CONVERSATION_SYSTEM_TEXT
-from fitmas.skills.heartbeat import roles as heartbeat_roles
+from fitmas.legacy.domain.coaching import coach_voice
+from fitmas.legacy.llm.prompts.conversation_builder import _CONVERSATION_SYSTEM_TEXT
+from fitmas.legacy.skills.heartbeat import roles as heartbeat_roles
 
 
 class ConversationPromptHasSharedVoiceTest(unittest.TestCase):

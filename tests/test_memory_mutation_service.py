@@ -4,21 +4,21 @@ import os
 import tempfile
 import unittest
 from datetime import datetime, timedelta
-from fitmas.domain.planning import repository as planning_repo
+from fitmas.legacy.domain.planning import repository as planning_repo
 
 os.environ.setdefault("FITMAS_DB_PATH", tempfile.mktemp(prefix="fitmas-memory-service-", suffix=".db"))
 
-from fitmas.core import orm as s
-from fitmas.core.db import Base, SessionLocal, engine, init_db
-from fitmas.decision.command_actions import (
+from fitmas.legacy.core import orm as s
+from fitmas.legacy.core.db import Base, SessionLocal, engine, init_db
+from fitmas.legacy.decision.command_actions import (
     AvailabilityConstraintAction,
     ExecutionUpdateAction,
     HealthSignalAction,
     PreferenceSignalAction,
 )
-from fitmas.domain.execution.mutation_service import apply_execution_actions_for_user
-from fitmas.domain.memory.mutation_service import apply_memory_actions_for_user
-from fitmas.core.time_context import DAY_KEYS, day_label_fr
+from fitmas.legacy.domain.execution.mutation_service import apply_execution_actions_for_user
+from fitmas.legacy.domain.memory.mutation_service import apply_memory_actions_for_user
+from fitmas.legacy.core.time_context import DAY_KEYS, day_label_fr
 
 
 class MutationActionServicesTest(unittest.TestCase):

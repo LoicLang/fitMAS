@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
-from fitmas.domain.planning.mutation_decision import MutationDecision
-from fitmas.domain.planning import mutation_executor as mutations
+from fitmas.legacy.domain.planning.mutation_decision import MutationDecision
+from fitmas.legacy.domain.planning import mutation_executor as mutations
 
 
 def test_noop_move_session_does_not_run_post_hooks(monkeypatch) -> None:
@@ -16,12 +16,12 @@ def test_noop_move_session_does_not_run_post_hooks(monkeypatch) -> None:
         fitmas_message="OK. Je deplace.",
     )
 
-    monkeypatch.setattr("fitmas.domain.planning.mutation_executor.run_pre_mutation_hooks", lambda *args, **kwargs: SimpleNamespace(allowed=True))
+    monkeypatch.setattr("fitmas.legacy.domain.planning.mutation_executor.run_pre_mutation_hooks", lambda *args, **kwargs: SimpleNamespace(allowed=True))
 
     def _post_hook(*args, **kwargs):
         raise AssertionError("no-op mutation must not run post hooks")
 
-    monkeypatch.setattr("fitmas.domain.planning.mutation_executor.run_post_mutation_hooks", _post_hook)
+    monkeypatch.setattr("fitmas.legacy.domain.planning.mutation_executor.run_post_mutation_hooks", _post_hook)
 
     pre_result, post_result = mutations.apply(object(), 42, decision)
 

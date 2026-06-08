@@ -3,9 +3,9 @@ from __future__ import annotations
 import unittest
 from datetime import datetime
 
-from fitmas.domain.athlete.profile import AthleteProfileSnapshot
-from fitmas.core import orm as s
-from fitmas.domain.planning.contract import (
+from fitmas.legacy.domain.athlete.profile import AthleteProfileSnapshot
+from fitmas.legacy.core import orm as s
+from fitmas.legacy.domain.planning.contract import (
     AvailabilityConfidence,
     PlanConfidence,
     SessionRole,

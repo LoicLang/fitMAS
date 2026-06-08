@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
-from fitmas.decision.reply_request import ReplyResult
-from fitmas.decision.pending_reply import compose_pending_reply, pending_reply_outcome
+from fitmas.legacy.decision.reply_request import ReplyResult
+from fitmas.legacy.decision.pending_reply import compose_pending_reply, pending_reply_outcome
 
 
 class SpyComposer:

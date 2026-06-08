@@ -3,10 +3,10 @@ from __future__ import annotations
 from pathlib import Path
 from types import SimpleNamespace
 
-from fitmas.decision import CoachUnderstanding, RequestedPlanChange
-from fitmas.decision import planning_outcomes as conversation_planning_bridge
-from fitmas.decision.planning_runtime import run_planning_runtime_attempt_from_understanding
-from fitmas.domain.planning.models import PlanningCommandResult, PlanningDecisionResult
+from fitmas.legacy.decision import CoachUnderstanding, RequestedPlanChange
+from fitmas.legacy.decision import planning_outcomes as conversation_planning_bridge
+from fitmas.legacy.decision.planning_runtime import run_planning_runtime_attempt_from_understanding
+from fitmas.legacy.domain.planning.models import PlanningCommandResult, PlanningDecisionResult
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -62,7 +62,7 @@ def test_planning_runtime_attempt_marks_requested_change_as_applicable(monkeypat
         return SimpleNamespace(kind="block", reason="blocked")
 
     monkeypatch.setattr(
-        "fitmas.decision.planning_runtime.decide_plan_change",
+        "fitmas.legacy.decision.planning_runtime.decide_plan_change",
         fake_decide_plan_change,
     )
 

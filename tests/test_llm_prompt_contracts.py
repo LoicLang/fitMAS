@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from fitmas.llm.prompts.contracts import (
+from fitmas.legacy.llm.prompts.contracts import (
     REPLY_PROMPT_CONTRACT,
     REVIEWER_PROMPT_CONTRACT,
     UNDERSTANDING_PROMPT_CONTRACT,

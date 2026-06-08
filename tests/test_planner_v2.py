@@ -3,9 +3,9 @@ from __future__ import annotations
 import unittest
 from datetime import date
 
-from fitmas.domain.athlete.profile import AthleteProfileSnapshot
-from fitmas.domain.planning.planner import build_week_plan
-from fitmas.domain.planning.planning_decision import PlanningDecision
+from fitmas.legacy.domain.athlete.profile import AthleteProfileSnapshot
+from fitmas.legacy.domain.planning.planner import build_week_plan
+from fitmas.legacy.domain.planning.planning_decision import PlanningDecision
 
 
 class PlannerV2Test(unittest.TestCase):

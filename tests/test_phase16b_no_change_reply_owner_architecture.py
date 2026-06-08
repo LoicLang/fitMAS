@@ -50,7 +50,7 @@ def test_16b_turn_understanding_route_uses_no_change_reply_owner() -> None:
     source = _source(UNDERSTANDING_ROUTE)
     imports = _imports(UNDERSTANDING_ROUTE)
 
-    assert "fitmas.decision.no_change_reply" in imports
+    assert "fitmas.legacy.decision.no_change_reply" in imports
     assert "compose_no_change_reply_for_turn_fn=no_change_reply.compose_no_change_reply_for_turn" in source
     assert "compose_no_change_reply_for_turn_fn=readonly_reply.compose_no_change_reply_for_turn" not in source
 
@@ -64,8 +64,8 @@ def test_16b_readonly_reply_no_longer_owns_no_change_reply() -> None:
     assert "def execution_action_phrases_for_final_reply(" not in source
     assert "def turn_context_primary_intent(" not in source
     assert "def _safe_no_change_fallback(" not in source
-    assert "fitmas.llm.reply_backend" not in imports
-    assert "fitmas.domain.planning.repository" not in imports
+    assert "fitmas.legacy.llm.reply_backend" not in imports
+    assert "fitmas.legacy.domain.planning.repository" not in imports
 
 
 def test_16b_readonly_reply_shrinks_below_no_change_cut_budget() -> None:

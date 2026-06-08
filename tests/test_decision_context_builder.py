@@ -5,20 +5,20 @@ import tempfile
 from datetime import datetime, timezone
 
 import pytest
-from fitmas.domain.planning import repository as planning_repo
-from fitmas.domain.planning import template_repository as template_repo
+from fitmas.legacy.domain.planning import repository as planning_repo
+from fitmas.legacy.domain.planning import template_repository as template_repo
 
 os.environ.setdefault("FITMAS_DB_PATH", tempfile.mktemp(prefix="fitmas-decision-context-", suffix=".db"))
 
-from fitmas.core.db import Base, SessionLocal, engine, init_db
-from fitmas.core import orm as s
-from fitmas.decision import InputEvent
-from fitmas.decision.context_builder import (
+from fitmas.legacy.core.db import Base, SessionLocal, engine, init_db
+from fitmas.legacy.core import orm as s
+from fitmas.legacy.decision import InputEvent
+from fitmas.legacy.decision.context_builder import (
     ContextBuilderInput,
     DecisionContextBuilder,
     DecisionContextUserNotFoundError,
 )
-from fitmas.core.time_context import DAY_KEYS, day_label_fr, get_local_now
+from fitmas.legacy.core.time_context import DAY_KEYS, day_label_fr, get_local_now
 
 
 def setup_function() -> None:

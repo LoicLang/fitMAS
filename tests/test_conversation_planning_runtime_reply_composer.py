@@ -2,14 +2,14 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
-from fitmas.decision import plan_patch_reply
-from fitmas.decision import DecisionExplanation, DecisionReplyComposer, ReplyContract
-from fitmas.decision import planning_outcomes as conversation_planning_bridge
-from fitmas.decision.reply_request import ReplyRequest, ReplyResult
-from fitmas.domain.planning.models import PlanningCommandResult, PlanningDecisionResult
-from fitmas.llm.reply_decision_backend import LLMReplyBackend
-from fitmas.domain.planning.patch_mutation_service import PlanPatchServiceResult
-from fitmas.domain.planning.plan_patch import PlanPatch, PlanPatchOperation, PlanPatchValidation
+from fitmas.legacy.decision import plan_patch_reply
+from fitmas.legacy.decision import DecisionExplanation, DecisionReplyComposer, ReplyContract
+from fitmas.legacy.decision import planning_outcomes as conversation_planning_bridge
+from fitmas.legacy.decision.reply_request import ReplyRequest, ReplyResult
+from fitmas.legacy.domain.planning.models import PlanningCommandResult, PlanningDecisionResult
+from fitmas.legacy.llm.reply_decision_backend import LLMReplyBackend
+from fitmas.legacy.domain.planning.patch_mutation_service import PlanPatchServiceResult
+from fitmas.legacy.domain.planning.plan_patch import PlanPatch, PlanPatchOperation, PlanPatchValidation
 
 
 def _planning_result(kind: str) -> PlanningDecisionResult:

@@ -1,10 +1,10 @@
 from pathlib import Path
 
-from fitmas.decision.context_pack import build_conversation_context_pack
-from fitmas.llm.prompts.conversation_policy import select_conversation_prompt_policy
-from fitmas.llm.prompts.conversation_builder import build_layered_conversation_prompt
-from fitmas.llm.prompt_contracts import get_prompt_contract
-from fitmas.tools.routing import IntentCategory
+from fitmas.legacy.decision.context_pack import build_conversation_context_pack
+from fitmas.legacy.llm.prompts.conversation_policy import select_conversation_prompt_policy
+from fitmas.legacy.llm.prompts.conversation_builder import build_layered_conversation_prompt
+from fitmas.legacy.llm.prompt_contracts import get_prompt_contract
+from fitmas.legacy.tools.routing import IntentCategory
 
 
 SNAPSHOT_DIR = Path(__file__).parent / "snapshots" / "prompts"

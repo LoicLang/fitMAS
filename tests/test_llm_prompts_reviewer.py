@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from fitmas.llm.prompts.reviewer import ReviewerPromptCandidate, build_reviewer_prompt
+from fitmas.legacy.llm.prompts.reviewer import ReviewerPromptCandidate, build_reviewer_prompt
 
 
 def test_reviewer_prompt_only_allows_candidate_id_selection() -> None:

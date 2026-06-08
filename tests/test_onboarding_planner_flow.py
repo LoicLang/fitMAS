@@ -10,9 +10,9 @@ os.environ.setdefault("FITMAS_DB_PATH", tempfile.mktemp(prefix="fitmas-onboardin
 
 from fastapi.testclient import TestClient
 
-from fitmas.api import app
-import fitmas.app.api.routes_onboarding as api_onboarding
-from fitmas.core.db import Base, engine, init_db
+from fitmas.legacy.api import app
+import fitmas.legacy.app.api.routes_onboarding as api_onboarding
+from fitmas.legacy.core.db import Base, engine, init_db
 
 
 class OnboardingPlannerFlowTest(unittest.TestCase):

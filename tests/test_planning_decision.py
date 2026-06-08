@@ -3,11 +3,11 @@ from __future__ import annotations
 import unittest
 from datetime import date
 
-from fitmas.domain.athlete.profile import AthleteProfileSnapshot
-from fitmas.domain.athlete.fitness_snapshot import FitnessSnapshot
-from fitmas.domain.planning.planning_decision import build_planning_decision
-from fitmas.domain.execution.recent_reality import RecentRealityWindow
-from fitmas.domain.athlete.readiness import ReadinessState, build_readiness_state
+from fitmas.legacy.domain.athlete.profile import AthleteProfileSnapshot
+from fitmas.legacy.domain.athlete.fitness_snapshot import FitnessSnapshot
+from fitmas.legacy.domain.planning.planning_decision import build_planning_decision
+from fitmas.legacy.domain.execution.recent_reality import RecentRealityWindow
+from fitmas.legacy.domain.athlete.readiness import ReadinessState, build_readiness_state
 
 
 def _profile() -> AthleteProfileSnapshot:

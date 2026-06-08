@@ -159,7 +159,7 @@ def test_13a_orm_owner_modules_export_expected_records() -> None:
 
 
 def test_13a_schema_registers_expected_table_names() -> None:
-    from fitmas.core.db import Base
-    from fitmas.core import orm  # noqa: F401
+    from fitmas.legacy.core.db import Base
+    from fitmas.legacy.core import orm  # noqa: F401
 
     assert set(Base.metadata.tables) == EXPECTED_TABLES

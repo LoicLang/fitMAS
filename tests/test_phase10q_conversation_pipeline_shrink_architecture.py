@@ -64,17 +64,17 @@ def test_10q_conversation_pipeline_does_not_import_plan_patch_reply_internals() 
     imports = _imports("decision/conversation_pipeline.py")
     prompt_context_imports = _imports("decision/turn_prompt_context.py")
 
-    assert "fitmas.decision.plan_patch_reply" in prompt_context_imports
-    assert "fitmas.decision.plan_patch_reply" not in imports
-    assert "fitmas.domain.planning.patch_mutation_service.PlanPatchServiceResult" not in imports
-    assert "fitmas.domain.planning.plan_patch.PlanPatch" not in imports
+    assert "fitmas.legacy.decision.plan_patch_reply" in prompt_context_imports
+    assert "fitmas.legacy.decision.plan_patch_reply" not in imports
+    assert "fitmas.legacy.domain.planning.patch_mutation_service.PlanPatchServiceResult" not in imports
+    assert "fitmas.legacy.domain.planning.plan_patch.PlanPatch" not in imports
     assert "re" not in imports
 
 
 def test_10q_plan_patch_reply_owner_does_not_depend_on_conversation_pipeline() -> None:
     imports = _imports("decision/plan_patch_reply.py")
 
-    assert "fitmas.decision.conversation_pipeline" not in imports
+    assert "fitmas.legacy.decision.conversation_pipeline" not in imports
 
 
 def test_10q_conversation_pipeline_shrinks_below_next_budget() -> None:

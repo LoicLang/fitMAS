@@ -3,7 +3,7 @@ from __future__ import annotations
 import unittest
 from datetime import datetime, timedelta, timezone
 
-from fitmas.domain.memory.fact_memory import (
+from fitmas.legacy.domain.memory.fact_memory import (
     derive_fact_memory_policy,
     fact_is_current,
     normalize_fact_payload,

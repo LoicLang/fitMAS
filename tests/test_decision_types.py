@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 
 import pytest
 
-from fitmas.decision import (
+from fitmas.legacy.decision import (
     AthleteContext,
     CoachContext,
     CoachUnderstanding,
@@ -152,7 +152,7 @@ def test_coach_understanding_cannot_carry_visible_reply_or_plan_patch() -> None:
 
 
 def test_user_signal_pending_resolution_and_clarification_need_are_typed() -> None:
-    from fitmas.decision import ClarificationNeed, PendingResolution, UserSignal
+    from fitmas.legacy.decision import ClarificationNeed, PendingResolution, UserSignal
 
     signal = UserSignal(
         type="health",
@@ -183,7 +183,7 @@ def test_user_signal_pending_resolution_and_clarification_need_are_typed() -> No
 
 
 def test_coach_understanding_accepts_typed_signals_and_rejects_bad_confidence() -> None:
-    from fitmas.decision import ClarificationNeed, CoachUnderstanding, UserSignal
+    from fitmas.legacy.decision import ClarificationNeed, CoachUnderstanding, UserSignal
 
     signal = UserSignal(
         type="availability",

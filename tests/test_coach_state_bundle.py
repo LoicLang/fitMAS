@@ -3,16 +3,16 @@ from __future__ import annotations
 import os
 import tempfile
 import unittest
-from fitmas.domain.execution import repository as execution_repo
-from fitmas.domain.planning import repository as planning_repo
-from fitmas.domain.planning import template_repository as template_repo
+from fitmas.legacy.domain.execution import repository as execution_repo
+from fitmas.legacy.domain.planning import repository as planning_repo
+from fitmas.legacy.domain.planning import template_repository as template_repo
 
 os.environ.setdefault("FITMAS_DB_PATH", tempfile.mktemp(prefix="fitmas-bundle-tests-", suffix=".db"))
 
-from fitmas.core import orm as s
-from fitmas.domain.coaching.coach_state import build_coach_state_bundle
-from fitmas.core.db import Base, SessionLocal, engine, init_db
-from fitmas.core.time_context import DAY_KEYS, day_label_fr, get_local_now
+from fitmas.legacy.core import orm as s
+from fitmas.legacy.domain.coaching.coach_state import build_coach_state_bundle
+from fitmas.legacy.core.db import Base, SessionLocal, engine, init_db
+from fitmas.legacy.core.time_context import DAY_KEYS, day_label_fr, get_local_now
 
 
 class CoachStateBundleTest(unittest.TestCase):

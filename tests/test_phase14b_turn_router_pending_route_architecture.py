@@ -50,7 +50,7 @@ def test_14b_turn_router_delegates_pending_route() -> None:
     imports = _imports(ROUTER)
     source = _source(ROUTER)
 
-    assert "fitmas.decision.turn_pending_route" in imports
+    assert "fitmas.legacy.decision.turn_pending_route" in imports
     assert "route_pending_confirmation(" in source
 
 

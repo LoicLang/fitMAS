@@ -2,9 +2,9 @@
 
 from types import SimpleNamespace
 
-import fitmas.domain.planning.adaptation as adaptation
+import fitmas.legacy.domain.planning.adaptation as adaptation
 
-from fitmas.domain.planning.adaptation import (
+from fitmas.legacy.domain.planning.adaptation import (
     _HIGH_URGENCY_KEYWORDS,
     _build_conservative_health_fallback,
     _model_for_trigger,
@@ -195,7 +195,7 @@ class TestRunAdaptationFreeze:
         user = SimpleNamespace(id=1, timezone="Europe/Paris")
 
         monkeypatch.setattr(
-            "fitmas.llm.gateway.request_json",
+            "fitmas.legacy.llm.gateway.request_json",
             lambda **kwargs: {
                 "adaptations": [
                     {"session_id": 7, "action": "lighten", "rationale": "charge haute"}
@@ -209,7 +209,7 @@ class TestRunAdaptationFreeze:
             called["apply"] = True
             raise AssertionError("mutations.apply should stay off by default")
 
-        monkeypatch.setattr("fitmas.domain.planning.mutation_executor.apply", _fail_apply)
+        monkeypatch.setattr("fitmas.legacy.domain.planning.mutation_executor.apply", _fail_apply)
 
         result = adaptation.run_adaptation(object(), user=user, trigger=trigger)
 
@@ -234,7 +234,7 @@ class TestRunAdaptationFreeze:
         user = SimpleNamespace(id=1, timezone="Europe/Paris")
 
         monkeypatch.setattr(
-            "fitmas.llm.gateway.request_json",
+            "fitmas.legacy.llm.gateway.request_json",
             lambda **kwargs: {
                 "adaptations": [
                     {"session_id": 7, "action": "lighten", "rationale": "charge haute"}
@@ -248,7 +248,7 @@ class TestRunAdaptationFreeze:
             calls["apply"] += 1
             raise AssertionError("adaptation.py must not apply mutations directly")
 
-        monkeypatch.setattr("fitmas.domain.planning.mutation_executor.apply", _record_apply)
+        monkeypatch.setattr("fitmas.legacy.domain.planning.mutation_executor.apply", _record_apply)
 
         result = adaptation.run_adaptation(object(), user=user, trigger=trigger)
 

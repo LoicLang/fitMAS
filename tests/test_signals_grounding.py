@@ -4,16 +4,16 @@ import os
 import tempfile
 import unittest
 from datetime import datetime, timedelta
-from fitmas.domain.execution import repository as execution_repo
-from fitmas.domain.memory import repository as memory_repo
-from fitmas.domain.planning import template_repository as template_repo
+from fitmas.legacy.domain.execution import repository as execution_repo
+from fitmas.legacy.domain.memory import repository as memory_repo
+from fitmas.legacy.domain.planning import template_repository as template_repo
 
 os.environ.setdefault("FITMAS_DB_PATH", tempfile.mktemp(prefix="fitmas-signals-", suffix=".db"))
 
-from fitmas.core import orm as s
-from fitmas.core.db import Base, SessionLocal, engine, init_db
-from fitmas.domain.coaching.signals import collect_signals, format_signals_for_prompt
-from fitmas.core.time_context import DAY_KEYS, day_label_fr, get_local_now
+from fitmas.legacy.core import orm as s
+from fitmas.legacy.core.db import Base, SessionLocal, engine, init_db
+from fitmas.legacy.domain.coaching.signals import collect_signals, format_signals_for_prompt
+from fitmas.legacy.core.time_context import DAY_KEYS, day_label_fr, get_local_now
 
 
 class SignalsGroundingTest(unittest.TestCase):

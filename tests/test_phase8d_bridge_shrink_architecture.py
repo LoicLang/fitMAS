@@ -69,7 +69,7 @@ def test_8d_no_active_heartbeat_skill_imports_outside_legacy() -> None:
         if relative in allowed_files or any(relative.startswith(prefix) for prefix in allowed_prefixes):
             continue
         imports = _imports(path)
-        if any(module.startswith("fitmas.skills.heartbeat") for module in imports):
+        if any(module.startswith("fitmas.legacy.skills.heartbeat") for module in imports):
             offenders.append(relative)
 
     assert offenders == []

@@ -50,6 +50,6 @@ def test_13e_no_code_imports_root_schema_module() -> None:
 def test_13e_core_db_registers_tables_from_core_orm() -> None:
     source = (ROOT / "backend" / "src" / "fitmas" / "core" / "db.py").read_text(encoding="utf-8")
 
-    assert "from fitmas.core import orm" in source
+    assert "from fitmas.legacy.core import orm" in source
     assert "from fitmas import schema" not in source
     assert "import fitmas.schema" not in source

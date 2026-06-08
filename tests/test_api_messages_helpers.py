@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from fitmas.app.api import routes_messages as api_messages
+from fitmas.legacy.app.api import routes_messages as api_messages
 
 
 def test_future_confirmation_helper_removed_from_runtime() -> None:

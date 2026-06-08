@@ -10,8 +10,8 @@ DECISION = SRC / "decision"
 PIPELINE = SRC / "decision" / "conversation_pipeline.py"
 
 PIPELINE_CALIBRATION_IMPORTS_TO_REMOVE = {
-    "fitmas.llm.calibration",
-    "fitmas.domain.coaching.calibration_needs",
+    "fitmas.legacy.llm.calibration",
+    "fitmas.legacy.domain.coaching.calibration_needs",
 }
 
 
@@ -36,7 +36,7 @@ def test_10t_turn_calibration_owner_exists_under_decision() -> None:
 
 
 def test_10t_conversation_pipeline_imports_calibration_owner() -> None:
-    assert "fitmas.decision.turn_calibration" in _imports(PIPELINE)
+    assert "fitmas.legacy.decision.turn_calibration" in _imports(PIPELINE)
 
 
 def test_10t_conversation_pipeline_no_longer_imports_calibration_builders_directly() -> None:

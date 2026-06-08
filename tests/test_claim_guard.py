@@ -1,6 +1,6 @@
 """Tests for the anti-claim helpers owned by decision/output_verifier.py."""
 
-from fitmas.decision.output_verifier import (
+from fitmas.legacy.decision.output_verifier import (
     looks_like_action_claim,
     safe_rewrite_for_claim_without_mutation,
 )

@@ -2,12 +2,12 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
-from fitmas.decision import RequestedPlanChange
-from fitmas.domain.planning.decision_service import decide_plan_change
-from fitmas.domain.planning.plan_patch import PlanPatchValidation
-from fitmas.domain.planning.evaluator import EvaluatedPlanPatchCandidate
-from fitmas.domain.planning.candidates import PlanPatchCandidateValidation
-from fitmas.domain.planning.week_coherence import WeekCoherenceScore
+from fitmas.legacy.decision import RequestedPlanChange
+from fitmas.legacy.domain.planning.decision_service import decide_plan_change
+from fitmas.legacy.domain.planning.plan_patch import PlanPatchValidation
+from fitmas.legacy.domain.planning.evaluator import EvaluatedPlanPatchCandidate
+from fitmas.legacy.domain.planning.candidates import PlanPatchCandidateValidation
+from fitmas.legacy.domain.planning.week_coherence import WeekCoherenceScore
 
 
 def _context():
@@ -183,7 +183,7 @@ def test_decide_plan_change_builds_and_policies_resolved_change(monkeypatch) -> 
             calls.append(candidate_set)
             return ()
 
-    monkeypatch.setattr("fitmas.domain.planning.decision_service.PlanCandidateEvaluator", FakeEvaluator)
+    monkeypatch.setattr("fitmas.legacy.domain.planning.decision_service.PlanCandidateEvaluator", FakeEvaluator)
 
     requested = RequestedPlanChange(
         kind="move",
@@ -218,7 +218,7 @@ def test_decide_plan_change_blocks_hard_create_on_dense_day_before_evaluator(mon
         def evaluate(self, candidate_set, **kwargs):
             raise AssertionError("dense hard create should be blocked before candidate evaluation")
 
-    monkeypatch.setattr("fitmas.domain.planning.decision_service.PlanCandidateEvaluator", FailingEvaluator)
+    monkeypatch.setattr("fitmas.legacy.domain.planning.decision_service.PlanCandidateEvaluator", FailingEvaluator)
     requested = RequestedPlanChange(
         kind="create",
         source_ref=None,
@@ -255,7 +255,7 @@ def test_decide_plan_change_blocks_hard_create_without_inferred_sport(monkeypatc
         def evaluate(self, candidate_set, **kwargs):
             raise AssertionError("hard create without sport should not infer a candidate")
 
-    monkeypatch.setattr("fitmas.domain.planning.decision_service.PlanCandidateEvaluator", FailingEvaluator)
+    monkeypatch.setattr("fitmas.legacy.domain.planning.decision_service.PlanCandidateEvaluator", FailingEvaluator)
     requested = RequestedPlanChange(
         kind="create",
         source_ref=None,
@@ -292,7 +292,7 @@ def test_decide_plan_change_treats_high_create_intensity_as_hard(monkeypatch) ->
         def evaluate(self, candidate_set, **kwargs):
             raise AssertionError("high intensity create should be normalized before evaluation")
 
-    monkeypatch.setattr("fitmas.domain.planning.decision_service.PlanCandidateEvaluator", FailingEvaluator)
+    monkeypatch.setattr("fitmas.legacy.domain.planning.decision_service.PlanCandidateEvaluator", FailingEvaluator)
     requested = RequestedPlanChange(
         kind="create",
         source_ref=None,
@@ -328,7 +328,7 @@ def test_decide_plan_change_blocks_target_only_create_on_occupied_day(monkeypatc
         def evaluate(self, candidate_set, **kwargs):
             raise AssertionError("target-only create on occupied day should block before evaluation")
 
-    monkeypatch.setattr("fitmas.domain.planning.decision_service.PlanCandidateEvaluator", FailingEvaluator)
+    monkeypatch.setattr("fitmas.legacy.domain.planning.decision_service.PlanCandidateEvaluator", FailingEvaluator)
     requested = RequestedPlanChange(
         kind="create",
         source_ref=None,
@@ -396,7 +396,7 @@ def test_decide_plan_change_builds_swap_from_date_refs(monkeypatch) -> None:
             calls.append(candidate_set)
             return ()
 
-    monkeypatch.setattr("fitmas.domain.planning.decision_service.PlanCandidateEvaluator", FakeEvaluator)
+    monkeypatch.setattr("fitmas.legacy.domain.planning.decision_service.PlanCandidateEvaluator", FakeEvaluator)
 
     requested = RequestedPlanChange(
         kind="swap",
@@ -437,7 +437,7 @@ def test_decide_plan_change_builds_swap_when_move_targets_occupied_day(monkeypat
             calls.append(candidate_set)
             return ()
 
-    monkeypatch.setattr("fitmas.domain.planning.decision_service.PlanCandidateEvaluator", FakeEvaluator)
+    monkeypatch.setattr("fitmas.legacy.domain.planning.decision_service.PlanCandidateEvaluator", FakeEvaluator)
 
     requested = RequestedPlanChange(
         kind="move",
@@ -532,7 +532,7 @@ def test_decide_plan_change_routes_general_window_to_forced_pending(monkeypatch)
                 ),
             )
 
-    monkeypatch.setattr("fitmas.domain.planning.decision_service.PlanCandidateEvaluator", FakeEvaluator)
+    monkeypatch.setattr("fitmas.legacy.domain.planning.decision_service.PlanCandidateEvaluator", FakeEvaluator)
     requested = RequestedPlanChange(
         kind="constraint_window",
         source_ref="availability_window:unavailable:general:2026-05-20:2026-05-22",

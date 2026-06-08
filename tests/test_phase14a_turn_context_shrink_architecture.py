@@ -72,8 +72,8 @@ def test_14a_turn_context_no_longer_defines_extracted_helpers() -> None:
 def test_14a_turn_context_imports_extracted_context_owners() -> None:
     imports = _imports(DECISION / "turn_context.py")
 
-    assert "fitmas.decision.turn_prompt_context" in imports
-    assert "fitmas.decision.turn_context_payload" in imports
+    assert "fitmas.legacy.decision.turn_prompt_context" in imports
+    assert "fitmas.legacy.decision.turn_context_payload" in imports
 
 
 def test_14a_turn_context_stays_under_next_shrink_budget() -> None:

@@ -7,7 +7,7 @@ sync is the SINGLE writer of `v0_activities`, so keying by the Strava id makes e
 re-sync idempotent (INSERT OR IGNORE).
 
 Lives under `runtime_v0/adapters/` (the legacy bridge): it MAY import the legacy app
-(`fitmas.integrations.strava`, the ORM); the V0 core never imports it
+(`fitmas.legacy.integrations.strava`, the ORM); the V0 core never imports it
 (see tests/runtime_v0/test_import_boundaries).
 """
 from __future__ import annotations
@@ -18,10 +18,10 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
 
 # Importing the orm package registers every ORM model so the mappers resolve.
-from fitmas.core import orm  # noqa: F401
-from fitmas.domain.execution.activities import normalize_activity_sport
-from fitmas.integrations import repository as integration_repo
-from fitmas.integrations import strava
+from fitmas.legacy.core import orm  # noqa: F401
+from fitmas.legacy.domain.execution.activities import normalize_activity_sport
+from fitmas.legacy.integrations import repository as integration_repo
+from fitmas.legacy.integrations import strava
 from fitmas.runtime_v0.db import connect
 
 

@@ -4,10 +4,10 @@ import unittest
 from datetime import datetime
 from unittest.mock import patch
 
-from fitmas.tools.contract import ToolCall, ToolContext
-from fitmas.tools.registry import build_tool_registry, list_tools_for_pipeline
-from fitmas.tools.runtime import execute_tool_call, execute_tool_calls
-from fitmas.domain.planning.week_coherence import WeekCoherenceFinding, WeekCoherenceReview
+from fitmas.legacy.tools.contract import ToolCall, ToolContext
+from fitmas.legacy.tools.registry import build_tool_registry, list_tools_for_pipeline
+from fitmas.legacy.tools.runtime import execute_tool_call, execute_tool_calls
+from fitmas.legacy.domain.planning.week_coherence import WeekCoherenceFinding, WeekCoherenceReview
 
 
 class ToolRuntimeTest(unittest.TestCase):
@@ -577,7 +577,7 @@ class ToolRuntimeTest(unittest.TestCase):
             recommended_policy="commit_original",
         )
 
-        with patch("fitmas.tools.registry.review_week_coherence_with_llm", return_value=review, create=True):
+        with patch("fitmas.legacy.tools.registry.review_week_coherence_with_llm", return_value=review, create=True):
             result = registry["validate_week_coherence"].handler(context, {"patch": patch_payload})
 
         self.assertEqual(result.status, "ok")

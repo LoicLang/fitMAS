@@ -48,7 +48,7 @@ def test_13f_root_contains_only_entrypoints() -> None:
 
 
 def test_13f_core_orm_remains_the_metadata_registry() -> None:
-    from fitmas.core import orm  # noqa: F401
-    from fitmas.core.db import Base
+    from fitmas.legacy.core import orm  # noqa: F401
+    from fitmas.legacy.core.db import Base
 
     assert set(Base.metadata.tables) == EXPECTED_TABLES

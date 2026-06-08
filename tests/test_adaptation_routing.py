@@ -3,7 +3,7 @@ from __future__ import annotations
 import unittest
 from types import SimpleNamespace
 
-from fitmas.decision.turn_prompt_context import should_route_adaptation_context_to_llm
+from fitmas.legacy.decision.turn_prompt_context import should_route_adaptation_context_to_llm
 
 
 def _turn_plan(primary: str, *, has_plan_mutation: bool = False) -> SimpleNamespace:

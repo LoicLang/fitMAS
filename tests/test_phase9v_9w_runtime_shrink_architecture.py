@@ -64,13 +64,13 @@ def test_9v_tests_do_not_import_legacy_contracts_from_fitmas_llm() -> None:
         relative = _relative(path)
         tree = ast.parse(path.read_text())
         for node in ast.walk(tree):
-            if isinstance(node, ast.ImportFrom) and node.module == "fitmas.llm":
+            if isinstance(node, ast.ImportFrom) and node.module == "fitmas.legacy.llm":
                 imported = {alias.name for alias in node.names}
                 if imported & contract_names:
                     offenders.append(f"{relative}:{node.lineno}")
             if isinstance(node, ast.Import):
                 for alias in node.names:
-                    if alias.name == "fitmas.llm" and relative not in allowed_broad_import_tests:
+                    if alias.name == "fitmas.legacy.llm" and relative not in allowed_broad_import_tests:
                         offenders.append(f"{relative}:{node.lineno}")
 
     assert offenders == []

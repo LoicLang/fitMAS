@@ -3,14 +3,14 @@ from __future__ import annotations
 import unittest
 from types import SimpleNamespace
 
-from fitmas.llm.prompts.conversation_policy import ConversationPromptPolicy, select_conversation_prompt_policy
-from fitmas.llm.legacy_summaries import make_timeline_summary
-from fitmas.llm.prompts.conversation_builder import (
+from fitmas.legacy.llm.prompts.conversation_policy import ConversationPromptPolicy, select_conversation_prompt_policy
+from fitmas.legacy.llm.legacy_summaries import make_timeline_summary
+from fitmas.legacy.llm.prompts.conversation_builder import (
     build_conversation_prompt_bundle,
     build_layered_conversation_prompt,
     detect_open_question,
 )
-from fitmas.tools.routing import IntentCategory
+from fitmas.legacy.tools.routing import IntentCategory
 
 
 class ConversationPromptBuilderTest(unittest.TestCase):

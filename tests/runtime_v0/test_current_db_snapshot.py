@@ -17,12 +17,12 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
 
 # Importing the orm package registers every model on Base before create_all.
-from fitmas.core import orm  # noqa: F401
-from fitmas.core.db import Base
-from fitmas.core.orm.coaching import ConversationTurnRecord
-from fitmas.core.orm.execution import Activity
-from fitmas.core.orm.memory import UserFact
-from fitmas.core.orm.planning import ScheduledSession
+from fitmas.legacy.core import orm  # noqa: F401
+from fitmas.legacy.core.db import Base
+from fitmas.legacy.core.orm.coaching import ConversationTurnRecord
+from fitmas.legacy.core.orm.execution import Activity
+from fitmas.legacy.core.orm.memory import UserFact
+from fitmas.legacy.core.orm.planning import ScheduledSession
 from fitmas.runtime_v0.adapters.current_db_snapshot import materialize_v0_db, materialize_v0_db_for_turn
 from fitmas.runtime_v0.snapshot import SnapshotBuilder
 

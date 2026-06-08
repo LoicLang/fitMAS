@@ -5,13 +5,13 @@ import tempfile
 import unittest
 from datetime import datetime
 from types import SimpleNamespace
-from fitmas.domain.planning import repository as planning_repo
+from fitmas.legacy.domain.planning import repository as planning_repo
 
 os.environ.setdefault("FITMAS_DB_PATH", tempfile.mktemp(prefix="fitmas-matching-", suffix=".db"))
 
-from fitmas.core import orm as s
-from fitmas.domain.execution.activities import match_activity_to_day
-from fitmas.core.db import Base, SessionLocal, engine, init_db
+from fitmas.legacy.core import orm as s
+from fitmas.legacy.domain.execution.activities import match_activity_to_day
+from fitmas.legacy.core.db import Base, SessionLocal, engine, init_db
 
 
 class ActivityMatchingTruthTest(unittest.TestCase):

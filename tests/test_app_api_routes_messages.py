@@ -12,7 +12,7 @@ def test_root_api_messages_wrapper_is_deleted() -> None:
 
 
 def test_routes_messages_keeps_post_endpoint_registered() -> None:
-    from fitmas.app.api.routes_messages import router
+    from fitmas.legacy.app.api.routes_messages import router
 
     routes = {(route.path, tuple(sorted(route.methods))) for route in router.routes}
 

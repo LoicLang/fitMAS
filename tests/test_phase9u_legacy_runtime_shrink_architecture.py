@@ -50,11 +50,11 @@ def test_9u_runtime_modules_do_not_import_broad_fitmas_llm() -> None:
             continue
         tree = ast.parse(path.read_text())
         for node in ast.walk(tree):
-            if isinstance(node, ast.ImportFrom) and node.module == "fitmas.llm":
+            if isinstance(node, ast.ImportFrom) and node.module == "fitmas.legacy.llm":
                 offenders.append(f"{relative}:{node.lineno}")
             if isinstance(node, ast.Import):
                 for alias in node.names:
-                    if alias.name == "fitmas.llm":
+                    if alias.name == "fitmas.legacy.llm":
                         offenders.append(f"{relative}:{node.lineno}")
 
     assert offenders == []

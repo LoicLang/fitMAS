@@ -3,7 +3,7 @@ from __future__ import annotations
 import unittest
 from datetime import datetime, timezone
 
-from fitmas.domain.memory.routing import split_memory_payloads
+from fitmas.legacy.domain.memory.routing import split_memory_payloads
 
 
 class MemoryRoutingTest(unittest.TestCase):

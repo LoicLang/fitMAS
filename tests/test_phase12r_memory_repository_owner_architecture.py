@@ -70,7 +70,7 @@ def test_12r_memory_domain_uses_memory_repository_for_memory_storage() -> None:
     )
     for name, path in MEMORY_DOMAIN_MODULES.items():
         source = path.read_text(encoding="utf-8")
-        if "fitmas.domain.memory import repository" not in source:
+        if "fitmas.legacy.domain.memory import repository" not in source:
             offenders.append(f"{name}: missing memory repository import")
         offenders.extend(f"{name}: {token}" for token in forbidden_root_calls if token in source)
 

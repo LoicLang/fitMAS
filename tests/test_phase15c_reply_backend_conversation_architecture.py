@@ -48,7 +48,7 @@ def test_15c_reply_backend_reexports_conversation_replies_without_owning_them() 
     source = _source(REPLY_BACKEND)
     imports = _imports(REPLY_BACKEND)
 
-    assert "fitmas.llm.reply_conversation" in imports
+    assert "fitmas.legacy.llm.reply_conversation" in imports
     assert "def compose_no_change_reply(" not in source
     assert "def compose_execution_report_reply(" not in source
     assert "def compose_plan_lookup_reply(" not in source
@@ -64,8 +64,8 @@ def test_15c_conversation_reply_owner_stays_conversation_specific() -> None:
     assert "Response type: no_change" in source
     assert "Response type: execution_report" in source
     assert "Response type: plan_lookup" in source
-    assert "fitmas.decision.grounding" in imports
-    assert "fitmas.domain.planning.policy" not in imports
+    assert "fitmas.legacy.decision.grounding" in imports
+    assert "fitmas.legacy.domain.planning.policy" not in imports
 
 
 def test_15c_reply_backend_shrinks_below_core_facade_budget() -> None:

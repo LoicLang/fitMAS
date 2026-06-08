@@ -36,11 +36,11 @@ def test_13b_pydantic_contracts_live_in_owner_modules() -> None:
 
 
 def test_13b_owner_imports_resolve_without_root_models_facade() -> None:
-    from fitmas.app.api.onboarding_models import OnboardResult
-    from fitmas.app.api.read_models import TodayView
-    from fitmas.decision.message_models import Extraction, MessageReply
-    from fitmas.domain.execution.view_models import Activity
-    from fitmas.domain.planning.view_models import DayId
+    from fitmas.legacy.app.api.onboarding_models import OnboardResult
+    from fitmas.legacy.app.api.read_models import TodayView
+    from fitmas.legacy.decision.message_models import Extraction, MessageReply
+    from fitmas.legacy.domain.execution.view_models import Activity
+    from fitmas.legacy.domain.planning.view_models import DayId
 
     assert Activity.__name__ == "Activity"
     assert DayId.MONDAY.value == "monday"

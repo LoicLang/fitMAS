@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from fitmas.llm.prompts.understanding import UnderstandingPromptInput, build_understanding_prompt
+from fitmas.legacy.llm.prompts.understanding import UnderstandingPromptInput, build_understanding_prompt
 
 
 def test_understanding_prompt_outputs_coach_understanding_only() -> None:

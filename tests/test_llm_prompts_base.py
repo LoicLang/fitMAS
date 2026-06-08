@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from fitmas.llm.prompts.base import PromptRender, join_sections, render_json_block
+from fitmas.legacy.llm.prompts.base import PromptRender, join_sections, render_json_block
 
 
 def test_join_sections_drops_empty_sections() -> None:

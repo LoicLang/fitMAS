@@ -3,7 +3,7 @@ from __future__ import annotations
 import unittest
 from datetime import date, datetime
 
-from fitmas.domain.execution.claims import (
+from fitmas.legacy.domain.execution.claims import (
     build_claim_correction_payloads,
     build_claim_fact_payloads,
     build_non_completion_fact_payloads,

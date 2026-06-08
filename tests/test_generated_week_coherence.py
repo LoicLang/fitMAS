@@ -4,7 +4,7 @@ from datetime import datetime
 
 import pytest
 
-from fitmas.domain.coaching.generated_week_coherence import (
+from fitmas.legacy.domain.coaching.generated_week_coherence import (
     GeneratedWeekCoherenceBlocked,
     guard_generated_week_coherence,
 )

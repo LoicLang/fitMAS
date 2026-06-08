@@ -3,10 +3,10 @@ from __future__ import annotations
 from datetime import datetime
 from types import SimpleNamespace
 
-from fitmas.domain.planning.plan_patch import PlanPatch, PlanPatchOperation
-from fitmas.domain.planning.evaluator import evaluate_plan_patch_candidate
-from fitmas.domain.planning.candidates import PlanPatchCandidate
-from fitmas.domain.planning.week_coherence import WeekCoherenceScore
+from fitmas.legacy.domain.planning.plan_patch import PlanPatch, PlanPatchOperation
+from fitmas.legacy.domain.planning.evaluator import evaluate_plan_patch_candidate
+from fitmas.legacy.domain.planning.candidates import PlanPatchCandidate
+from fitmas.legacy.domain.planning.week_coherence import WeekCoherenceScore
 
 
 def test_candidate_evaluator_validates_simulates_scores_and_returns_score_delta() -> None:

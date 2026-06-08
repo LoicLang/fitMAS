@@ -21,7 +21,7 @@ def _imports(path: Path) -> set[str]:
 
 def test_reference_resolver_does_not_import_llm_or_tools() -> None:
     imports = _imports(PLANNING / "reference_resolver.py")
-    forbidden = {"fitmas.llm", "fitmas.tools", "fitmas.tools.registry"}
+    forbidden = {"fitmas.legacy.llm", "fitmas.legacy.tools", "fitmas.legacy.tools.registry"}
 
     assert imports.isdisjoint(forbidden)
 

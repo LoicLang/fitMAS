@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from fitmas.domain.planning.patch_summary import summarize_plan_patch_for_user
-from fitmas.domain.planning.plan_patch import PlanPatch, PlanPatchOperation
+from fitmas.legacy.domain.planning.patch_summary import summarize_plan_patch_for_user
+from fitmas.legacy.domain.planning.plan_patch import PlanPatch, PlanPatchOperation
 
 
 def test_summarizes_multi_move_patch_without_single_target_language() -> None:

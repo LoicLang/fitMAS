@@ -3,9 +3,9 @@ from __future__ import annotations
 from datetime import datetime
 from types import SimpleNamespace
 
-from fitmas.decision import CoachUnderstanding, PendingResolution, RequestedPlanChange, UserSignal
-from fitmas.decision import no_change_reply
-from fitmas.decision import readonly_reply as bridge
+from fitmas.legacy.decision import CoachUnderstanding, PendingResolution, RequestedPlanChange, UserSignal
+from fitmas.legacy.decision import no_change_reply
+from fitmas.legacy.decision import readonly_reply as bridge
 
 
 def _understanding(

@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-from fitmas.decision import DecisionExplanation, ReplyContract
-from fitmas.decision.reply_request import ReplyRequest
-from fitmas.llm.reply_decision_backend import LLMReplyBackend
+from fitmas.legacy.decision import DecisionExplanation, ReplyContract
+from fitmas.legacy.decision.reply_request import ReplyRequest
+from fitmas.legacy.llm.reply_decision_backend import LLMReplyBackend
 
 
 def _request(kind: str) -> ReplyRequest:
@@ -78,11 +78,11 @@ def test_backend_uses_committed_events_for_legacy_plan_patch_commit(monkeypatch)
         ),
     )
     monkeypatch.setattr(
-        "fitmas.llm.reply_decision_backend.final_reply.compose_final_reply",
+        "fitmas.legacy.llm.reply_decision_backend.final_reply.compose_final_reply",
         lambda *_args, **_kwargs: "Je deplace la seance dans le mauvais sens.",
     )
     monkeypatch.setattr(
-        "fitmas.llm.reply_decision_backend.final_reply.verify_post_event_reply",
+        "fitmas.legacy.llm.reply_decision_backend.final_reply.verify_post_event_reply",
         lambda *_args, **_kwargs: "Je deplace la seance dans le mauvais sens.",
     )
 

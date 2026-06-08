@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import asyncio
 
-from fitmas.app.telegram import api as telegram_api
+from fitmas.legacy.app.telegram import api as telegram_api
 
 
 def test_api_post_uses_long_default_timeout_for_slow_coach_turns(monkeypatch) -> None:

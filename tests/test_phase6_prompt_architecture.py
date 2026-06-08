@@ -28,11 +28,11 @@ def test_prompt_package_has_canonical_prompt_modules() -> None:
 def test_new_prompt_modules_do_not_import_runtime_or_writers() -> None:
     forbidden_exact = {
         "fitmas.conversation_pipeline",
-        "fitmas.core.db",
+        "fitmas.legacy.core.db",
         "fitmas.models",
         "fitmas.plan_mutation_service",
-        "fitmas.domain.memory.mutation_service",
-        "fitmas.domain.execution.mutation_service",
+        "fitmas.legacy.domain.memory.mutation_service",
+        "fitmas.legacy.domain.execution.mutation_service",
         "fitmas.legacy",
     }
     offenders: list[str] = []

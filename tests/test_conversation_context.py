@@ -3,7 +3,7 @@ from __future__ import annotations
 import unittest
 from datetime import datetime
 
-from fitmas.decision.conversation_context import (
+from fitmas.legacy.decision.conversation_context import (
     activity_claim_summary_for_prompt,
     build_claim_memory_updates,
     build_conversation_context,

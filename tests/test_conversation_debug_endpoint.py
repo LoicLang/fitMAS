@@ -4,19 +4,19 @@ import os
 import tempfile
 import unittest
 from types import SimpleNamespace
-from fitmas.domain.planning import repository as planning_repo
-from fitmas.domain.planning import template_repository as template_repo
+from fitmas.legacy.domain.planning import repository as planning_repo
+from fitmas.legacy.domain.planning import template_repository as template_repo
 
 os.environ.setdefault("FITMAS_DB_PATH", tempfile.mktemp(prefix="fitmas-conversation-debug-", suffix=".db"))
 os.environ["FITMAS_ENABLE_DEBUG_ENDPOINTS"] = "1"
 
 from fastapi.testclient import TestClient
 
-from fitmas.app.api import routes_messages as api_messages
-from fitmas.core import orm as s
-from fitmas.api import app
-from fitmas.core.db import Base, SessionLocal, engine, init_db
-from fitmas.core.time_context import DAY_KEYS, day_label_fr, get_local_now
+from fitmas.legacy.app.api import routes_messages as api_messages
+from fitmas.legacy.core import orm as s
+from fitmas.legacy.api import app
+from fitmas.legacy.core.db import Base, SessionLocal, engine, init_db
+from fitmas.legacy.core.time_context import DAY_KEYS, day_label_fr, get_local_now
 
 
 class FakeReplyComposer:
@@ -53,7 +53,7 @@ class ConversationDebugEndpointTest(unittest.TestCase):
         self._original_extract_facts = api_messages.extract_facts
         self._original_plan_turn = api_messages.plan_conversation_turn
 
-        from fitmas.decision import turn_router
+        from fitmas.legacy.decision import turn_router
 
         self._turn_router = turn_router
         self._original_reply_composer = turn_router._decision_reply_composer
@@ -120,8 +120,8 @@ class ConversationDebugEndpointTest(unittest.TestCase):
         self.assertEqual(debug["flow"]["final"]["message"], "Redis-moi le changement voulu en une phrase.")
 
     def test_debug_endpoint_exposes_canonical_understanding_before_removed_provider_trace(self) -> None:
-        from fitmas.decision import CoachUnderstanding, ClarificationNeed
-        from fitmas.decision import understanding_runtime
+        from fitmas.legacy.decision import CoachUnderstanding, ClarificationNeed
+        from fitmas.legacy.decision import understanding_runtime
 
         api_messages.plan_conversation_turn = lambda *args, **kwargs: None
         api_messages.extract_facts = lambda *args, **kwargs: []

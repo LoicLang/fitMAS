@@ -62,13 +62,13 @@ def test_9s_no_direct_decision_legacy_decide_import_outside_llm_package() -> Non
             continue
         tree = ast.parse(path.read_text(encoding="utf-8"))
         for node in ast.walk(tree):
-            if isinstance(node, ast.ImportFrom) and node.module == "fitmas.llm.decision_legacy":
+            if isinstance(node, ast.ImportFrom) and node.module == "fitmas.legacy.llm.decision_legacy":
                 names = {alias.name for alias in node.names}
                 if "decide" in names:
                     offenders.append(relative)
             if isinstance(node, ast.Import):
                 for alias in node.names:
-                    if alias.name == "fitmas.llm.decision_legacy":
+                    if alias.name == "fitmas.legacy.llm.decision_legacy":
                         offenders.append(relative)
 
     assert offenders == []

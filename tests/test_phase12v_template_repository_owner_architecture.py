@@ -76,7 +76,7 @@ def test_12v_onboarding_uses_template_repository_for_week_templates() -> None:
     )
     for name, path in TEMPLATE_CONSUMERS.items():
         source = path.read_text(encoding="utf-8")
-        if "fitmas.domain.planning import template_repository as template_repo" not in source:
+        if "fitmas.legacy.domain.planning import template_repository as template_repo" not in source:
             offenders.append(f"{name}: missing template repository import")
         offenders.extend(
             f"{name}: {pattern}"

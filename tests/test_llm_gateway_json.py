@@ -6,7 +6,7 @@ import sys
 from types import SimpleNamespace
 from unittest.mock import patch
 
-import fitmas.llm.gateway as gw
+import fitmas.legacy.llm.gateway as gw
 
 
 def _fake_text_response(text: str) -> SimpleNamespace:

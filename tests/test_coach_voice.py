@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import unittest
 
-from fitmas.domain.coaching.coach_voice import (
+from fitmas.legacy.domain.coaching.coach_voice import (
     COACH_VOICE_FEW_SHOTS_BAD,
     COACH_VOICE_FEW_SHOTS_GOOD,
     COACH_VOICE_RULES,

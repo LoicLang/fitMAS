@@ -108,7 +108,7 @@ def test_decision_runtime_phase1_modules_exist() -> None:
 def test_pure_decision_modules_have_no_database_or_legacy_imports() -> None:
     forbidden_exact = {
         "sqlalchemy",
-        "fitmas.core.db",
+        "fitmas.legacy.core.db",
         "fitmas.repository",
         "fitmas.schema",
         "fitmas.models",
@@ -138,8 +138,8 @@ def test_context_builder_is_the_only_decision_module_allowed_to_read_repository(
         "sqlalchemy.orm",
         "fitmas.repository",
         "fitmas.schema",
-        "fitmas.domain.coaching.coach_state",
-        "fitmas.core.time_context",
+        "fitmas.legacy.domain.coaching.coach_state",
+        "fitmas.legacy.core.time_context",
     }
     imports = _imports(builder)
     read_imports = {module for module in imports if module in allowed}
@@ -163,8 +163,8 @@ def test_context_builder_is_read_only_and_not_runtime_wired() -> None:
         "ExecutionCommandService",
         "conversation_pipeline",
         "final_reply",
-        "fitmas.llm",
-        "fitmas.tools",
+        "fitmas.legacy.llm",
+        "fitmas.legacy.tools",
         "PlanPatch",
         "MutationDecision",
         "WeeklyPlan",
@@ -189,7 +189,7 @@ def test_phase2_does_not_wire_existing_runtime_to_context_builder() -> None:
     offenders: list[str] = []
     for path in files:
         source = path.read_text(encoding="utf-8")
-        if "DecisionContextBuilder" in source or "fitmas.decision.context_builder" in source:
+        if "DecisionContextBuilder" in source or "fitmas.legacy.decision.context_builder" in source:
             offenders.append(path.name)
 
     assert offenders == []
@@ -205,14 +205,14 @@ def test_decision_package_stays_free_of_legacy_understanding_adapter() -> None:
     forbidden_exact = {
         "fitmas.legacy",
         "fitmas.legacy.coach_understanding_adapter",
-        "fitmas.llm",
+        "fitmas.legacy.llm",
         "fitmas.conversation_pipeline",
         "fitmas.final_reply",
-        "fitmas.tools.registry",
+        "fitmas.legacy.tools.registry",
     }
     forbidden_prefixes = (
         "fitmas.legacy.",
-        "fitmas.tools.",
+        "fitmas.legacy.tools.",
     )
 
     offenders: list[str] = []
@@ -238,7 +238,7 @@ def test_legacy_package_has_no_runtime_source_modules() -> None:
 
 
 def test_decision_understanding_has_no_legacy_contract_fields() -> None:
-    from fitmas.decision import CoachUnderstanding, PendingResolution, RequestedPlanChange, UserSignal
+    from fitmas.legacy.decision import CoachUnderstanding, PendingResolution, RequestedPlanChange, UserSignal
 
     checked = (CoachUnderstanding, PendingResolution, RequestedPlanChange, UserSignal)
     forbidden = {

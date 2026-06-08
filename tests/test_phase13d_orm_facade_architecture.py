@@ -84,14 +84,14 @@ def test_13d_orm_records_live_in_core_orm_owner_modules() -> None:
 
 
 def test_13d_core_orm_import_registers_same_tables() -> None:
-    from fitmas.core import orm  # noqa: F401
-    from fitmas.core.db import Base
+    from fitmas.legacy.core import orm  # noqa: F401
+    from fitmas.legacy.core.db import Base
 
     assert set(Base.metadata.tables) == EXPECTED_TABLES
 
 
 def test_13d_core_orm_owner_import_resolves_records() -> None:
-    from fitmas.core import orm as s
+    from fitmas.legacy.core import orm as s
 
     assert s.User.__tablename__ == "users"
     assert s.ScheduledSession.__tablename__ == "scheduled_sessions"
@@ -99,8 +99,8 @@ def test_13d_core_orm_owner_import_resolves_records() -> None:
 
 
 def test_13d_base_metadata_creates_expected_tables() -> None:
-    from fitmas.core import orm  # noqa: F401
-    from fitmas.core.db import Base
+    from fitmas.legacy.core import orm  # noqa: F401
+    from fitmas.legacy.core.db import Base
 
     engine = create_engine("sqlite:///:memory:")
     Base.metadata.create_all(bind=engine)

@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from datetime import date
 
-from fitmas.llm.reply_backend import compose_plan_lookup_reply, verify_factual_reply
-from fitmas.decision.grounding import PlanWindowFact, ReplyGroundingPacket
+from fitmas.legacy.llm.reply_backend import compose_plan_lookup_reply, verify_factual_reply
+from fitmas.legacy.decision.grounding import PlanWindowFact, ReplyGroundingPacket
 
 
 def _packet() -> ReplyGroundingPacket:

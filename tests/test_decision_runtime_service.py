@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import UTC, datetime
 
-from fitmas.decision import (
+from fitmas.legacy.decision import (
     CoachUnderstanding,
     Command,
     CommandResult,
@@ -12,7 +12,7 @@ from fitmas.decision import (
     InputEvent,
     ReplyContract,
 )
-from fitmas.decision.runtime import DecisionRuntimeService
+from fitmas.legacy.decision.runtime import DecisionRuntimeService
 
 
 def _event() -> InputEvent:

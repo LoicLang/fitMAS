@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from fitmas.domain.planning.plan_patch import PlanPatch, PlanPatchOperation
-from fitmas.domain.planning.candidates import (
+from fitmas.legacy.domain.planning.plan_patch import PlanPatch, PlanPatchOperation
+from fitmas.legacy.domain.planning.candidates import (
     PlanPatchCandidate,
     validate_plan_patch_candidate_contract,
 )

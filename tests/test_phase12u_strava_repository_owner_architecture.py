@@ -54,7 +54,7 @@ def test_12u_strava_connection_consumers_use_integration_repository() -> None:
     offenders: list[str] = []
     for name, path in STRAVA_CONNECTION_CONSUMERS.items():
         source = path.read_text(encoding="utf-8")
-        if "fitmas.integrations import repository as integration_repo" not in source:
+        if "fitmas.legacy.integrations import repository as integration_repo" not in source:
             offenders.append(f"{name}: missing integration repository import")
         if re.search(r"(?<!_)repo\.get_strava_connection", source):
             offenders.append(f"{name}: root repo get_strava_connection")

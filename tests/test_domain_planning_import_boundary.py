@@ -14,8 +14,8 @@ def test_plan_patch_import_does_not_cycle_domain_planning_package() -> None:
         [
             sys.executable,
             "-c",
-            "from fitmas.domain.planning.plan_patch import PlanPatch, validate_plan_patch; "
-            "from fitmas.domain.planning import decide_plan_change; "
+            "from fitmas.legacy.domain.planning.plan_patch import PlanPatch, validate_plan_patch; "
+            "from fitmas.legacy.domain.planning import decide_plan_change; "
             "assert PlanPatch and validate_plan_patch and decide_plan_change",
         ],
         cwd=ROOT,

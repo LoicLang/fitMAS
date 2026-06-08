@@ -6,9 +6,9 @@ from unittest.mock import AsyncMock
 
 import httpx
 
-from fitmas.app.telegram.delivery import CoachDraft
-import fitmas.app.telegram.commands as telegram_commands
-from fitmas.app.telegram.debounce import reset_state
+from fitmas.legacy.app.telegram.delivery import CoachDraft
+import fitmas.legacy.app.telegram.commands as telegram_commands
+from fitmas.legacy.app.telegram.debounce import reset_state
 
 
 class _FakeJob:
@@ -143,7 +143,7 @@ class TelegramCommandsTest(unittest.IsolatedAsyncioTestCase):
     async def test_cmd_heartbeat_routes_manual_cutover_through_runtime(self) -> None:
         import os
 
-        import fitmas.skills.heartbeat.runtime_adapter as adapter
+        import fitmas.legacy.skills.heartbeat.runtime_adapter as adapter
 
         draft = CoachDraft(text="Runtime heartbeat", proactive=True)
         calls: list[dict[str, object]] = []

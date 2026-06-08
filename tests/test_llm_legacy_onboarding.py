@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-import fitmas.llm.legacy_onboarding as legacy_onboarding
+import fitmas.legacy.llm.legacy_onboarding as legacy_onboarding
 
 
 def _context() -> dict:

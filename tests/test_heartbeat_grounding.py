@@ -6,23 +6,23 @@ import unittest
 from datetime import datetime, timedelta
 from datetime import timezone as dt_timezone
 from types import SimpleNamespace
-from fitmas.domain.coaching import repo_conversation
-from fitmas.domain.execution import repository as execution_repo
-from fitmas.domain.memory import repository as memory_repo
-from fitmas.domain.planning import repository as planning_repo
-from fitmas.domain.planning import template_repository as template_repo
+from fitmas.legacy.domain.coaching import repo_conversation
+from fitmas.legacy.domain.execution import repository as execution_repo
+from fitmas.legacy.domain.memory import repository as memory_repo
+from fitmas.legacy.domain.planning import repository as planning_repo
+from fitmas.legacy.domain.planning import template_repository as template_repo
 
 os.environ.setdefault("FITMAS_DB_PATH", tempfile.mktemp(prefix="fitmas-heartbeat-", suffix=".db"))
 
-import fitmas.skills.heartbeat.heartbeat as heartbeat
-import fitmas.domain.planning.adaptation as adaptation
-from fitmas.core import orm as s
-from fitmas.domain.planning.adaptation import AdaptationResult
-from fitmas.app.telegram.delivery import persist_draft
-from fitmas.core.db import Base, SessionLocal, engine, init_db
-from fitmas.skills.heartbeat.reply_composer import HeartbeatReplyContext, HeartbeatReplyFact
-from fitmas.domain.planning.mutation_decision import MutationDecision
-from fitmas.core.time_context import DAY_KEYS, day_label_fr, get_local_now
+import fitmas.legacy.skills.heartbeat.heartbeat as heartbeat
+import fitmas.legacy.domain.planning.adaptation as adaptation
+from fitmas.legacy.core import orm as s
+from fitmas.legacy.domain.planning.adaptation import AdaptationResult
+from fitmas.legacy.app.telegram.delivery import persist_draft
+from fitmas.legacy.core.db import Base, SessionLocal, engine, init_db
+from fitmas.legacy.skills.heartbeat.reply_composer import HeartbeatReplyContext, HeartbeatReplyFact
+from fitmas.legacy.domain.planning.mutation_decision import MutationDecision
+from fitmas.legacy.core.time_context import DAY_KEYS, day_label_fr, get_local_now
 
 
 class HeartbeatGroundingTest(unittest.TestCase):

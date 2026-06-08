@@ -2,13 +2,13 @@ from __future__ import annotations
 
 import asyncio
 
-from fitmas.app.telegram.delivery import CoachDraft
-from fitmas.skills.heartbeat.runtime_adapter import HeartbeatRuntimeResult, run_heartbeat_trigger
+from fitmas.legacy.app.telegram.delivery import CoachDraft
+from fitmas.legacy.skills.heartbeat.runtime_adapter import HeartbeatRuntimeResult, run_heartbeat_trigger
 
 
 def test_heartbeat_draft_factory_routes_through_runtime_by_default(monkeypatch) -> None:
-    from fitmas.app.telegram import scheduler
-    import fitmas.skills.heartbeat.runtime_adapter as adapter
+    from fitmas.legacy.app.telegram import scheduler
+    import fitmas.legacy.skills.heartbeat.runtime_adapter as adapter
 
     draft = CoachDraft(text="Legacy draft", proactive=True)
     calls: list[dict[str, object]] = []
@@ -27,8 +27,8 @@ def test_heartbeat_draft_factory_routes_through_runtime_by_default(monkeypatch) 
 
 
 def test_heartbeat_draft_factory_routes_through_runtime_when_cutover_on(monkeypatch) -> None:
-    from fitmas.app.telegram import scheduler
-    import fitmas.skills.heartbeat.runtime_adapter as adapter
+    from fitmas.legacy.app.telegram import scheduler
+    import fitmas.legacy.skills.heartbeat.runtime_adapter as adapter
 
     draft = CoachDraft(text="Runtime draft", proactive=True)
     calls: list[dict[str, object]] = []
@@ -55,8 +55,8 @@ def test_heartbeat_draft_factory_routes_through_runtime_when_cutover_on(monkeypa
 
 
 def test_heartbeat_draft_factory_enforced_verifier_can_suppress_draft(monkeypatch) -> None:
-    from fitmas.app.telegram import scheduler
-    import fitmas.skills.heartbeat.runtime_adapter as adapter
+    from fitmas.legacy.app.telegram import scheduler
+    import fitmas.legacy.skills.heartbeat.runtime_adapter as adapter
 
     draft = CoachDraft(text="Runtime draft", proactive=True)
 
@@ -81,7 +81,7 @@ def test_heartbeat_draft_factory_enforced_verifier_can_suppress_draft(monkeypatc
 
 
 def test_send_serialized_draft_persists_only_after_successful_send(monkeypatch) -> None:
-    from fitmas.app.telegram import scheduler
+    from fitmas.legacy.app.telegram import scheduler
 
     sent: list[tuple[int, str, str]] = []
     persisted: list[CoachDraft] = []
@@ -113,7 +113,7 @@ def test_send_serialized_draft_persists_only_after_successful_send(monkeypatch) 
 
 
 def test_send_serialized_draft_does_not_persist_after_failed_send(monkeypatch) -> None:
-    from fitmas.app.telegram import scheduler
+    from fitmas.legacy.app.telegram import scheduler
 
     persisted: list[CoachDraft] = []
     guarded: list[bool] = []

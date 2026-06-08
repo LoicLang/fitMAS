@@ -13,4 +13,4 @@ fi
 
 # Start API server
 echo "Starting API on port 8000..."
-exec python -m uvicorn --app-dir backend/src fitmas.main:app --host 0.0.0.0 --port 8000
+exec python -m uvicorn --app-dir backend/src fitmas.legacy.main:app --host 0.0.0.0 --port 8000

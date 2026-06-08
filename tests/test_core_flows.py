@@ -5,39 +5,39 @@ import tempfile
 import unittest
 from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
-from fitmas.domain.coaching import repo_conversation
-from fitmas.domain.execution import repository as execution_repo
-from fitmas.domain.planning import repository as planning_repo
-from fitmas.domain.planning import template_repository as template_repo
+from fitmas.legacy.domain.coaching import repo_conversation
+from fitmas.legacy.domain.execution import repository as execution_repo
+from fitmas.legacy.domain.planning import repository as planning_repo
+from fitmas.legacy.domain.planning import template_repository as template_repo
 
 os.environ.setdefault("FITMAS_DB_PATH", tempfile.mktemp(prefix="fitmas-tests-", suffix=".db"))
 
 from fastapi.testclient import TestClient
 
-from fitmas.app.api import routes_messages as api_messages
-import fitmas.decision.conversation_pipeline as conversation_pipeline
-import fitmas.domain.planning.patch_mutation_service as plan_mutation_service
-from fitmas.api import app
-from fitmas.decision.conversation_contract import (
+from fitmas.legacy.app.api import routes_messages as api_messages
+import fitmas.legacy.decision.conversation_pipeline as conversation_pipeline
+import fitmas.legacy.domain.planning.patch_mutation_service as plan_mutation_service
+from fitmas.legacy.api import app
+from fitmas.legacy.decision.conversation_contract import (
     ConversationTurnOutcome,
 )
-from fitmas.core.db import Base, SessionLocal, engine, init_db
-from fitmas.decision import PendingResolution
-from fitmas.decision.command_actions import (
+from fitmas.legacy.core.db import Base, SessionLocal, engine, init_db
+from fitmas.legacy.decision import PendingResolution
+from fitmas.legacy.decision.command_actions import (
     AvailabilityConstraintAction,
     ExecutionUpdateAction,
 )
-from fitmas.decision import command_application
-from fitmas.decision import plan_patch_reply
-from fitmas.decision import pending_resolution as conversation_pending_bridge
-from fitmas.decision.message_models import Extraction
-from fitmas.domain.planning.mutation_permissions import serialize_plan_patch_confirmation
-from fitmas.domain.planning.plan_patch import PlanPatch, PlanPatchOperation, PlanPatchValidation
-from fitmas.domain.planning.session_actions import move_session
-from fitmas.domain.athlete.training_load import compute_ctl_atl_tsb, estimate_tss
-from fitmas.core import orm as s
-from fitmas.core.time_context import DAY_KEYS, day_label_fr, get_local_now
-from fitmas.domain.planning.week_coherence import WeekCoherenceFinding, WeekCoherenceReview
+from fitmas.legacy.decision import command_application
+from fitmas.legacy.decision import plan_patch_reply
+from fitmas.legacy.decision import pending_resolution as conversation_pending_bridge
+from fitmas.legacy.decision.message_models import Extraction
+from fitmas.legacy.domain.planning.mutation_permissions import serialize_plan_patch_confirmation
+from fitmas.legacy.domain.planning.plan_patch import PlanPatch, PlanPatchOperation, PlanPatchValidation
+from fitmas.legacy.domain.planning.session_actions import move_session
+from fitmas.legacy.domain.athlete.training_load import compute_ctl_atl_tsb, estimate_tss
+from fitmas.legacy.core import orm as s
+from fitmas.legacy.core.time_context import DAY_KEYS, day_label_fr, get_local_now
+from fitmas.legacy.domain.planning.week_coherence import WeekCoherenceFinding, WeekCoherenceReview
 
 
 def _pending(
@@ -1327,7 +1327,7 @@ class FitMASCoreFlowsTest(unittest.TestCase):
         )
         self.db.commit()
 
-        from fitmas.decision.conversation_context import build_conversation_context
+        from fitmas.legacy.decision.conversation_context import build_conversation_context
 
         scheduled_payloads = [
             {

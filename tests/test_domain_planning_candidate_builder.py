@@ -3,10 +3,10 @@ from __future__ import annotations
 from datetime import date
 from types import SimpleNamespace
 
-from fitmas.domain.coaching.coach_voice import message_has_user_facing_internal_jargon
-from fitmas.decision import RequestedPlanChange
-from fitmas.domain.planning.candidate_builder import PlanCandidateBuilder
-from fitmas.domain.planning.models import PlanChangeReference, ResolvedPlanChange
+from fitmas.legacy.domain.coaching.coach_voice import message_has_user_facing_internal_jargon
+from fitmas.legacy.decision import RequestedPlanChange
+from fitmas.legacy.domain.planning.candidate_builder import PlanCandidateBuilder
+from fitmas.legacy.domain.planning.models import PlanChangeReference, ResolvedPlanChange
 
 
 def _session(

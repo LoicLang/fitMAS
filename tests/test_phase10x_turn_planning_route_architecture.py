@@ -4,7 +4,7 @@ import ast
 from pathlib import Path
 from types import SimpleNamespace
 
-from fitmas.decision import turn_planning_route
+from fitmas.legacy.decision import turn_planning_route
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -35,8 +35,8 @@ def test_10x_turn_router_delegates_canonical_planning_route() -> None:
     router = _source("decision/turn_router.py")
     imports = _imports("decision/turn_router.py")
 
-    assert "fitmas.decision.turn_planning_route" in imports
-    assert "fitmas.decision.planning_runtime" not in imports
+    assert "fitmas.legacy.decision.turn_planning_route" in imports
+    assert "fitmas.legacy.decision.planning_runtime" not in imports
     assert "handle_canonical_planning(" not in router
     assert "should_prepare_canonical_planning_understanding(" not in router
 

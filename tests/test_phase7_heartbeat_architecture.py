@@ -31,16 +31,16 @@ def test_app_telegram_scheduler_exists_without_root_compat_wrapper() -> None:
 def test_decision_package_imports_no_heartbeat_or_telegram_runtime() -> None:
     forbidden = {
         "fitmas.heartbeat",
-        "fitmas.skills.heartbeat",
+        "fitmas.legacy.skills.heartbeat",
         "fitmas.telegram_scheduler",
-        "fitmas.app.telegram",
-        "fitmas.app.telegram.delivery",
+        "fitmas.legacy.app.telegram",
+        "fitmas.legacy.app.telegram.delivery",
     }
     offenders: list[str] = []
 
     for path in sorted(DECISION.glob("*.py")):
         for module in _imports(path):
-            if module in forbidden or module.startswith("fitmas.skills.heartbeat."):
+            if module in forbidden or module.startswith("fitmas.legacy.skills.heartbeat."):
                 offenders.append(f"{path.name}: {module}")
 
     assert offenders == []
@@ -66,7 +66,7 @@ def test_heartbeat_runtime_bridge_imports_are_explicitly_bounded() -> None:
         if "/skills/heartbeat/" in str(path):
             continue
         modules = _imports(path)
-        if not any(module == "fitmas.skills.heartbeat" or module.startswith("fitmas.skills.heartbeat.") for module in modules):
+        if not any(module == "fitmas.legacy.skills.heartbeat" or module.startswith("fitmas.legacy.skills.heartbeat.") for module in modules):
             continue
         if path not in allowed:
             offenders.append(str(path.relative_to(SRC)))

@@ -19,17 +19,17 @@ sys.path.insert(0, str(ROOT / "backend" / "src"))
 
 from fastapi.testclient import TestClient
 
-import fitmas.skills.heartbeat.heartbeat as heartbeat
-from fitmas.core import orm as s
-from fitmas.api import app
-from fitmas.app.telegram.delivery import CoachDraft, persist_draft
-from fitmas.core.db import Base, SessionLocal, engine, init_db
-from fitmas.core.time_context import DAY_KEYS, day_label_fr, get_local_now
-from fitmas.domain.coaching import repository as coaching_repo
-from fitmas.domain.execution import repository as execution_repo
-from fitmas.domain.memory import repository as memory_repo
-from fitmas.domain.planning import repository as planning_repo
-from fitmas.domain.planning import template_repository as template_repo
+import fitmas.legacy.skills.heartbeat.heartbeat as heartbeat
+from fitmas.legacy.core import orm as s
+from fitmas.legacy.api import app
+from fitmas.legacy.app.telegram.delivery import CoachDraft, persist_draft
+from fitmas.legacy.core.db import Base, SessionLocal, engine, init_db
+from fitmas.legacy.core.time_context import DAY_KEYS, day_label_fr, get_local_now
+from fitmas.legacy.domain.coaching import repository as coaching_repo
+from fitmas.legacy.domain.execution import repository as execution_repo
+from fitmas.legacy.domain.memory import repository as memory_repo
+from fitmas.legacy.domain.planning import repository as planning_repo
+from fitmas.legacy.domain.planning import template_repository as template_repo
 
 
 ScenarioFn = Callable[[SessionLocal, TestClient, s.User], None]
@@ -625,8 +625,8 @@ def scenario_golden_case_autonomy(db: SessionLocal, client: TestClient, user: s.
     Le refactor (Chantiers 1 a 5) doit faire disparaitre chacun de ces bugs.
     """
     # Tour 1 : briefing Sunday evening (heartbeat weekly_review)
-    import fitmas.skills.heartbeat.heartbeat as heartbeat
-    from fitmas.app.telegram.delivery import persist_draft
+    import fitmas.legacy.skills.heartbeat.heartbeat as heartbeat
+    from fitmas.legacy.app.telegram.delivery import persist_draft
 
     sunday_review = "2026-04-19T20:00:00+02:00"
     monday_followup = "2026-04-20T08:05:00+02:00"

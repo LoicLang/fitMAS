@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
-from fitmas.decision import no_change_reply as bridge
+from fitmas.legacy.decision import no_change_reply as bridge
 
 
 def test_no_change_bridge_does_not_fallback_to_invalid_analysis_summary(monkeypatch) -> None:

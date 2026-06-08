@@ -47,7 +47,7 @@ def test_15a_reply_backend_reexports_plan_adaptation_without_owning_it() -> None
     source = _source(REPLY_BACKEND)
     imports = _imports(REPLY_BACKEND)
 
-    assert "fitmas.llm.reply_plan_adaptation" in imports
+    assert "fitmas.legacy.llm.reply_plan_adaptation" in imports
     assert "def compose_plan_adaptation_reply(" not in source
     assert "def build_plan_adaptation_reply_context(" not in source
     assert "Decision adaptation:" not in source
@@ -60,8 +60,8 @@ def test_15a_plan_adaptation_owner_is_planning_specific() -> None:
 
     assert "AdaptationPolicyDecision" in source
     assert "BlockedEvent" in source
-    assert "fitmas.domain.planning.policy" in imports
-    assert "fitmas.decision.grounding" not in imports
+    assert "fitmas.legacy.domain.planning.policy" in imports
+    assert "fitmas.legacy.decision.grounding" not in imports
 
 
 def test_15a_reply_backend_shrinks_below_reply_slice_budget() -> None:

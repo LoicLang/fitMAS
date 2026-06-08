@@ -23,13 +23,13 @@ PIPELINE_CONTEXT_HELPERS_TO_REMOVE = {
 }
 
 PIPELINE_CONTEXT_IMPORTS_TO_REMOVE = {
-    "fitmas.domain.coaching.coach_reading_digest",
-    "fitmas.domain.coaching.coach_state",
-    "fitmas.decision.conversation_context",
-    "fitmas.domain.execution.clarification",
-    "fitmas.decision.grounding",
-    "fitmas.domain.memory.profile_summary",
-    "fitmas.domain.coaching.signals",
+    "fitmas.legacy.domain.coaching.coach_reading_digest",
+    "fitmas.legacy.domain.coaching.coach_state",
+    "fitmas.legacy.decision.conversation_context",
+    "fitmas.legacy.domain.execution.clarification",
+    "fitmas.legacy.decision.grounding",
+    "fitmas.legacy.domain.memory.profile_summary",
+    "fitmas.legacy.domain.coaching.signals",
 }
 
 
@@ -69,7 +69,7 @@ def test_10s_conversation_pipeline_no_longer_defines_context_helpers() -> None:
 def test_10s_conversation_pipeline_imports_turn_context_owner() -> None:
     imports = _imports(PIPELINE)
 
-    assert "fitmas.decision.turn_context" in imports
+    assert "fitmas.legacy.decision.turn_context" in imports
 
 
 def test_10s_conversation_pipeline_no_longer_imports_context_builders_directly() -> None:

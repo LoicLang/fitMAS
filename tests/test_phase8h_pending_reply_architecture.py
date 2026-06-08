@@ -45,7 +45,7 @@ def test_8h_pending_reply_adapter_owns_pending_decision_outcomes() -> None:
     assert "DecisionReplyComposer" in source
     assert "fitmas.conversation_pipeline" not in imports
     assert "fitmas.final_reply" not in imports
-    assert "fitmas.llm" not in imports
+    assert "fitmas.legacy.llm" not in imports
 
 
 def test_8h_decision_package_stays_pure() -> None:

@@ -62,5 +62,5 @@ def test_11l_no_python_imports_use_root_turn_planner() -> None:
 def test_11l_decision_turn_planner_receives_provider_by_injection() -> None:
     imports = _imports(SRC / "decision" / "turn_planner.py")
 
-    assert "fitmas.llm.gateway" not in imports
-    assert "fitmas.llm" not in imports
+    assert "fitmas.legacy.llm.gateway" not in imports
+    assert "fitmas.legacy.llm" not in imports

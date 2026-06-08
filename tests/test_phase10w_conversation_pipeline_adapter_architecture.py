@@ -12,13 +12,13 @@ ALLOWED_IMPORT_PREFIXES = {
     "sqlalchemy.orm",
     "fitmas",
     "fitmas.repository",
-    "fitmas.decision",
-    "fitmas.decision.conversation_contract",
+    "fitmas.legacy.decision",
+    "fitmas.legacy.decision.conversation_contract",
     "fitmas.models",
 }
 
 FORBIDDEN_RUNTIME_TOKENS = {
-    "fitmas.llm",
+    "fitmas.legacy.llm",
     "claim_guard",
     "DecisionReplyComposer",
     "ConversationTurnOutcome",

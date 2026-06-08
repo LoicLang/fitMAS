@@ -3,8 +3,8 @@ from __future__ import annotations
 from datetime import date, datetime
 from types import SimpleNamespace
 
-from fitmas.domain.execution.recent_reality import RecentRealityWindow
-from fitmas.skills.heartbeat.context import (
+from fitmas.legacy.domain.execution.recent_reality import RecentRealityWindow
+from fitmas.legacy.skills.heartbeat.context import (
     build_heartbeat_context_bundle,
     render_heartbeat_context_bundle,
 )

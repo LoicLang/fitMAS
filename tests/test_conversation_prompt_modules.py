@@ -1,6 +1,6 @@
-from fitmas.domain.coaching import coach_voice
-from fitmas.llm.prompts.conversation_policy import select_conversation_prompt_policy
-from fitmas.llm.prompts.conversation_system import (
+from fitmas.legacy.domain.coaching import coach_voice
+from fitmas.legacy.llm.prompts.conversation_policy import select_conversation_prompt_policy
+from fitmas.legacy.llm.prompts.conversation_system import (
     build_action_contract_system_text,
     build_calendar_truth_system_text,
     build_coach_voice_examples_system_text,
@@ -10,8 +10,8 @@ from fitmas.llm.prompts.conversation_system import (
     build_turn_scope_contract_system_text,
     build_tool_workflow_system_text,
 )
-from fitmas.llm.prompt_contracts import get_prompt_contract
-from fitmas.tools.routing import IntentCategory
+from fitmas.legacy.llm.prompt_contracts import get_prompt_contract
+from fitmas.legacy.tools.routing import IntentCategory
 
 
 def test_identity_voice_system_text_contains_voice_contract() -> None:

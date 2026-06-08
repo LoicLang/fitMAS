@@ -49,7 +49,7 @@ def test_16a_turn_understanding_route_uses_command_reply_owner() -> None:
     source = _source(UNDERSTANDING_ROUTE)
     imports = _imports(UNDERSTANDING_ROUTE)
 
-    assert "fitmas.decision.command_reply" in imports
+    assert "fitmas.legacy.decision.command_reply" in imports
     assert "command_reply.should_compose_understanding_command_reply(" in source
     assert "command_reply.compose_understanding_command_reply(" in source
     assert "readonly_reply.compose_understanding_command_reply(" not in source

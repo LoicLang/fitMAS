@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import date
 from types import SimpleNamespace
 
-from fitmas.domain.planning.plan_patch import (
+from fitmas.legacy.domain.planning.plan_patch import (
     PlanPatch,
     PlanPatchOperation,
     adapt_plan_patch_to_mutation_decisions,

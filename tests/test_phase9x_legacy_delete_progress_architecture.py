@@ -71,7 +71,7 @@ def test_9x_api_read_uses_runtime_week_models_directly() -> None:
     imports = _imports(path)
 
     assert "fitmas.legacy.weekly_plan_compat" not in source
-    assert "fitmas.app.api.read_models.RuntimeDay" in imports
-    assert "fitmas.app.api.read_models.RuntimeWeek" in imports
+    assert "fitmas.legacy.app.api.read_models.RuntimeDay" in imports
+    assert "fitmas.legacy.app.api.read_models.RuntimeWeek" in imports
     assert "WeeklyPlan" not in source
     assert "DayPlan" not in source

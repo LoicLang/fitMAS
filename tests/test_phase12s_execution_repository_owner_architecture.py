@@ -70,7 +70,7 @@ def test_12s_activity_consumers_use_execution_repository_for_activity_storage() 
     )
     for name, path in ACTIVITY_CONSUMERS.items():
         source = path.read_text(encoding="utf-8")
-        if "fitmas.domain.execution import repository" not in source:
+        if "fitmas.legacy.domain.execution import repository" not in source:
             offenders.append(f"{name}: missing execution repository import")
         offenders.extend(
             f"{name}: {pattern}"

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from fitmas.domain.athlete.load_projection import build_load_forecast
+from fitmas.legacy.domain.athlete.load_projection import build_load_forecast
 
 
 def test_load_forecast_returns_four_weeks_and_deload() -> None:

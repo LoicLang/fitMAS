@@ -4,13 +4,13 @@ import os
 import tempfile
 import unittest
 from datetime import datetime, timedelta, timezone
-from fitmas.domain.memory import repository as memory_repo
+from fitmas.legacy.domain.memory import repository as memory_repo
 
 os.environ.setdefault("FITMAS_DB_PATH", tempfile.mktemp(prefix="fitmas-memory-maint-", suffix=".db"))
 
-from fitmas.core import orm as s
-from fitmas.core.db import Base, SessionLocal, engine, init_db
-from fitmas.domain.memory.maintenance import run_memory_maintenance
+from fitmas.legacy.core import orm as s
+from fitmas.legacy.core.db import Base, SessionLocal, engine, init_db
+from fitmas.legacy.domain.memory.maintenance import run_memory_maintenance
 
 
 class MemoryMaintenanceTest(unittest.TestCase):

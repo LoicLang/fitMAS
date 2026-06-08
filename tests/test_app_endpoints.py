@@ -4,22 +4,22 @@ import os
 import tempfile
 import unittest
 from datetime import datetime, timedelta
-from fitmas.domain.coaching import repository as coaching_repo
-from fitmas.domain.execution import repository as execution_repo
-from fitmas.integrations import repository as integration_repo
-from fitmas.integrations import strava as strava_service
-from fitmas.domain.planning import repository as planning_repo
-from fitmas.domain.planning import template_repository as template_repo
+from fitmas.legacy.domain.coaching import repository as coaching_repo
+from fitmas.legacy.domain.execution import repository as execution_repo
+from fitmas.legacy.integrations import repository as integration_repo
+from fitmas.legacy.integrations import strava as strava_service
+from fitmas.legacy.domain.planning import repository as planning_repo
+from fitmas.legacy.domain.planning import template_repository as template_repo
 
 os.environ.setdefault("FITMAS_DB_PATH", tempfile.mktemp(prefix="fitmas-app-tests-", suffix=".db"))
 
 from fastapi.testclient import TestClient
 
-from fitmas.core import orm as s
-from fitmas.domain.coaching.adaptation_log import AdaptationLogEntry
-from fitmas.api import app
-from fitmas.core.db import Base, SessionLocal, engine, init_db
-from fitmas.core.time_context import DAY_KEYS, day_label_fr, get_local_now
+from fitmas.legacy.core import orm as s
+from fitmas.legacy.domain.coaching.adaptation_log import AdaptationLogEntry
+from fitmas.legacy.api import app
+from fitmas.legacy.core.db import Base, SessionLocal, engine, init_db
+from fitmas.legacy.core.time_context import DAY_KEYS, day_label_fr, get_local_now
 
 
 class AppEndpointsTest(unittest.TestCase):

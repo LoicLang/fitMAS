@@ -63,7 +63,7 @@ def test_10l_runtime_no_longer_imports_legacy_decision_provider_module() -> None
         if relative in allowed:
             continue
         imports = _imports(relative)
-        if "fitmas.llm.decision_legacy" in imports:
+        if "fitmas.legacy.llm.decision_legacy" in imports:
             offenders.append(relative)
 
     assert offenders == []

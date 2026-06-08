@@ -4,7 +4,7 @@ import unittest
 from datetime import datetime, timezone
 from types import SimpleNamespace
 
-from fitmas.domain.memory.patterns import derive_pattern_payloads
+from fitmas.legacy.domain.memory.patterns import derive_pattern_payloads
 
 
 class MemoryPatternsTest(unittest.TestCase):

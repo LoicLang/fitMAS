@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from fitmas.decision import turn_planner as planner
+from fitmas.legacy.decision import turn_planner as planner
 
 
 def test_plan_conversation_turn_parses_compound_intent() -> None:

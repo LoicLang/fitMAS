@@ -23,7 +23,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "backend" / "src"))
 load_dotenv(ROOT / ".env")
 
-from fitmas.llm.gateway import _robust_json_loads  # noqa: E402
+from fitmas.legacy.llm.gateway import _robust_json_loads  # noqa: E402
 
 
 DEFAULT_MODEL_CANDIDATES = (

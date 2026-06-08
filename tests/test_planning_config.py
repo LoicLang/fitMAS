@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import unittest
 
-from fitmas.domain.planning.planning_config import (
+from fitmas.legacy.domain.planning.planning_config import (
     SUPPORTED_SPORTS,
     get_global_planning_config,
     get_level_planning_config,

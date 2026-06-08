@@ -700,7 +700,7 @@ def test_smoke_fails_closed_when_fallback_census_import_fails(monkeypatch):
     real_import = builtins.__import__
 
     def broken_import(name, globals=None, locals=None, fromlist=(), level=0):
-        if name == "fitmas.decision.fallback_census":
+        if name == "fitmas.legacy.decision.fallback_census":
             raise ImportError("fallback census unavailable")
         return real_import(name, globals, locals, fromlist, level)
 
@@ -736,7 +736,7 @@ def test_smoke_fails_closed_when_fallback_census_runtime_fails(monkeypatch):
     monkeypatch.delenv("FITMAS_CANONICAL_PLANNING_PROVIDER", raising=False)
     if str(smoke.BACKEND_SRC) not in sys.path:
         sys.path.insert(0, str(smoke.BACKEND_SRC))
-    from fitmas.decision import fallback_census
+    from fitmas.legacy.decision import fallback_census
 
     def broken_check(_context):
         raise RuntimeError("census broken")

@@ -3,8 +3,8 @@ from __future__ import annotations
 from datetime import date
 from types import SimpleNamespace
 
-from fitmas.decision import CoachUnderstanding, PendingResolution, RequestedPlanChange, UserSignal
-from fitmas.decision import understanding_runtime as bridge
+from fitmas.legacy.decision import CoachUnderstanding, PendingResolution, RequestedPlanChange, UserSignal
+from fitmas.legacy.decision import understanding_runtime as bridge
 
 
 def _understanding() -> CoachUnderstanding:

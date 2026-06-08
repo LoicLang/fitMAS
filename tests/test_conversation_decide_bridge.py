@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from fitmas.decision.coach_decision_runtime import (
+from fitmas.legacy.decision.coach_decision_runtime import (
     legacy_provider_skip_reason,
     trace_legacy_provider_skipped,
 )

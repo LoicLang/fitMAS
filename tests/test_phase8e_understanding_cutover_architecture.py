@@ -31,10 +31,10 @@ def test_8e_llm_understanding_service_exists_without_legacy_contracts() -> None:
 
     assert "class LLMUnderstandingService" in source
     assert "parse_coach_understanding_payload" in source
-    assert "fitmas.decision" in imports
-    assert "fitmas.llm.prompts.understanding" in imports
+    assert "fitmas.legacy.decision" in imports
+    assert "fitmas.legacy.llm.prompts.understanding" in imports
     assert "from . import gateway as gw" in source
-    assert "fitmas.llm.decision_legacy" not in imports
+    assert "fitmas.legacy.llm.decision_legacy" not in imports
     assert "fitmas.legacy" not in imports
     assert "fitmas.conversation_pipeline" not in imports
     assert "PlanPatch" not in source
@@ -62,7 +62,7 @@ def test_8e_understanding_bridge_is_legacy_boundary() -> None:
     assert "FITMAS_UNDERSTANDING_RUNTIME_PLANNING_CUTOVER" not in source
     assert "run_canonical_understanding_shadow" in source
     assert "understanding_to_turn_context_payload" in source
-    assert "from fitmas.llm.understanding_service import" in source
+    assert "from fitmas.legacy.llm.understanding_service import" in source
 
 
 def test_8e_planning_runtime_accepts_canonical_understanding_input() -> None:
@@ -95,10 +95,10 @@ def test_8e_decision_package_still_has_no_llm_or_legacy_imports() -> None:
                 module = node.module
             elif isinstance(node, ast.Import):
                 for alias in node.names:
-                    if alias.name.startswith(("fitmas.llm", "fitmas.legacy", "fitmas.conversation_pipeline")):
+                    if alias.name.startswith(("fitmas.legacy.llm", "fitmas.legacy", "fitmas.conversation_pipeline")):
                         offenders.append(f"{path.name}:{alias.name}")
                 continue
-            if module and module.startswith(("fitmas.llm", "fitmas.legacy", "fitmas.conversation_pipeline")):
+            if module and module.startswith(("fitmas.legacy.llm", "fitmas.legacy", "fitmas.conversation_pipeline")):
                 offenders.append(f"{path.name}:{module}")
 
     assert offenders == []

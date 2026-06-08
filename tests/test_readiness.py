@@ -3,9 +3,9 @@ from __future__ import annotations
 import unittest
 from datetime import date
 
-from fitmas.domain.athlete.profile import AthleteProfileSnapshot
-from fitmas.domain.athlete.fitness_snapshot import FitnessSnapshot
-from fitmas.domain.athlete.readiness import build_readiness_state
+from fitmas.legacy.domain.athlete.profile import AthleteProfileSnapshot
+from fitmas.legacy.domain.athlete.fitness_snapshot import FitnessSnapshot
+from fitmas.legacy.domain.athlete.readiness import build_readiness_state
 
 
 class ReadinessTest(unittest.TestCase):

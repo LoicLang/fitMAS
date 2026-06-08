@@ -29,7 +29,7 @@ def test_10g_conversation_pipeline_uses_canonical_command_application() -> None:
     understanding_route = _source("decision/turn_understanding_route.py")
 
     assert "turn_understanding_route" in router
-    assert "from fitmas.decision import command_application" in understanding_route
+    assert "from fitmas.legacy.decision import command_application" in understanding_route
     assert "conversation_command_bridge" not in router
     assert not (SRC / "legacy/conversation_command_bridge.py").exists()
     assert not (SRC / "legacy/conversation_command_bus.py").exists()
@@ -42,8 +42,8 @@ def test_10g_command_application_is_the_only_conversation_command_writer() -> No
     assert "class RuntimeCommandBus" in source
     assert "def apply_coach_decision_commands(" in source
     assert "def apply_turn_plan_memory_commands(" in source
-    assert "fitmas.domain.memory.mutation_service" in imports
-    assert "fitmas.domain.execution.mutation_service" in imports
+    assert "fitmas.legacy.domain.memory.mutation_service" in imports
+    assert "fitmas.legacy.domain.execution.mutation_service" in imports
     assert "fitmas.legacy" not in imports
     assert "fitmas.conversation_pipeline" not in imports
 
@@ -57,8 +57,8 @@ def test_10g_command_mapping_is_canonical_and_legacy_free() -> None:
     assert "def memory_action_from_command(" in source
     assert "def execution_action_from_command(" in source
     assert "fitmas.legacy" not in imports
-    assert "fitmas.domain.memory.mutation_service" not in imports
-    assert "fitmas.domain.execution.mutation_service" not in imports
+    assert "fitmas.legacy.domain.memory.mutation_service" not in imports
+    assert "fitmas.legacy.domain.execution.mutation_service" not in imports
 
 
 def test_10g_action_contracts_are_not_owned_by_legacy_decision_contracts() -> None:

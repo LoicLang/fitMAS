@@ -24,11 +24,11 @@ from types import SimpleNamespace
 
 import pytest
 
-from fitmas.domain.coaching.coach_reading_digest import CoachReadingLens
-from fitmas.domain.execution.recent_reality import RecentRealityWindow
-from fitmas.skills.heartbeat.context import HeartbeatContextBundle, build_heartbeat_context_bundle
-from fitmas.skills.heartbeat import roles
-from fitmas.skills.heartbeat.roles import build_briefing_prompt
+from fitmas.legacy.domain.coaching.coach_reading_digest import CoachReadingLens
+from fitmas.legacy.domain.execution.recent_reality import RecentRealityWindow
+from fitmas.legacy.skills.heartbeat.context import HeartbeatContextBundle, build_heartbeat_context_bundle
+from fitmas.legacy.skills.heartbeat import roles
+from fitmas.legacy.skills.heartbeat.roles import build_briefing_prompt
 
 
 def _user() -> SimpleNamespace:

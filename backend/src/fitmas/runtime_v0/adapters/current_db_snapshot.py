@@ -44,10 +44,10 @@ from sqlalchemy.orm import Session
 
 # Importing the orm package registers every ORM model on Base so the mappers
 # (and their relationships) resolve when we query individual entities.
-from fitmas.core import orm  # noqa: F401
-from fitmas.core.orm.execution import Activity
-from fitmas.core.orm.memory import UserFact
-from fitmas.core.orm.planning import ScheduledSession
+from fitmas.legacy.core import orm  # noqa: F401
+from fitmas.legacy.core.orm.execution import Activity
+from fitmas.legacy.core.orm.memory import UserFact
+from fitmas.legacy.core.orm.planning import ScheduledSession
 from fitmas.runtime_v0.db import connect, reset_db
 
 _VALID_FACT_KINDS = frozenset({"preference", "health", "availability", "constraint", "goal"})

@@ -8,7 +8,7 @@ os.environ.setdefault("FITMAS_DB_PATH", tempfile.mktemp(prefix="fitmas-planning-
 
 from sqlalchemy import inspect
 
-from fitmas.core.db import Base, engine, init_db
+from fitmas.legacy.core.db import Base, engine, init_db
 
 
 class PlanningPersistenceSchemaTest(unittest.TestCase):

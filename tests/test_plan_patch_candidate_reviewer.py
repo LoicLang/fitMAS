@@ -1,10 +1,10 @@
 from __future__ import annotations
 
-from fitmas.domain.planning.plan_patch import PlanPatch, PlanPatchOperation, PlanPatchValidation
-from fitmas.domain.planning.evaluator import EvaluatedPlanPatchCandidate
-from fitmas.domain.planning.reviewer import review_plan_patch_candidates
-from fitmas.domain.planning.candidates import PlanPatchCandidate, PlanPatchCandidateValidation
-from fitmas.domain.planning.week_coherence import WeekCoherenceScore
+from fitmas.legacy.domain.planning.plan_patch import PlanPatch, PlanPatchOperation, PlanPatchValidation
+from fitmas.legacy.domain.planning.evaluator import EvaluatedPlanPatchCandidate
+from fitmas.legacy.domain.planning.reviewer import review_plan_patch_candidates
+from fitmas.legacy.domain.planning.candidates import PlanPatchCandidate, PlanPatchCandidateValidation
+from fitmas.legacy.domain.planning.week_coherence import WeekCoherenceScore
 
 
 def test_reviewer_accepts_only_known_candidate_id_and_ignores_patch_payload() -> None:

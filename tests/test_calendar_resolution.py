@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import date, datetime
 
-from fitmas.core.calendar_resolution import build_session_item, resolve_calendar_payload
+from fitmas.legacy.core.calendar_resolution import build_session_item, resolve_calendar_payload
 
 
 def test_past_unfinished_session_becomes_missing() -> None:

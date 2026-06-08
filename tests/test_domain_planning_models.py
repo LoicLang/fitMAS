@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from datetime import date
 
-from fitmas.decision import RequestedPlanChange
-from fitmas.domain.planning.models import (
+from fitmas.legacy.decision import RequestedPlanChange
+from fitmas.legacy.domain.planning.models import (
     PlanChangeReference,
     PlanningCandidateSet,
     PlanningDecisionResult,

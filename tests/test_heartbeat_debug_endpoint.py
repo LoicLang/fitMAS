@@ -5,21 +5,21 @@ import tempfile
 import unittest
 from datetime import timedelta
 from types import SimpleNamespace
-from fitmas.domain.execution import repository as execution_repo
-from fitmas.domain.planning import template_repository as template_repo
+from fitmas.legacy.domain.execution import repository as execution_repo
+from fitmas.legacy.domain.planning import template_repository as template_repo
 
 os.environ.setdefault("FITMAS_DB_PATH", tempfile.mktemp(prefix="fitmas-heartbeat-debug-", suffix=".db"))
 os.environ["FITMAS_ENABLE_DEBUG_ENDPOINTS"] = "1"
 
 from fastapi.testclient import TestClient
 
-import fitmas.skills.heartbeat.heartbeat as heartbeat
-from fitmas.core import orm as s
-from fitmas.api import app
-from fitmas.app.telegram.delivery import CoachDraft
-from fitmas.core.db import Base, SessionLocal, engine, init_db
-from fitmas.skills.heartbeat import tool_loop
-from fitmas.core.time_context import DAY_KEYS, day_label_fr, get_local_now
+import fitmas.legacy.skills.heartbeat.heartbeat as heartbeat
+from fitmas.legacy.core import orm as s
+from fitmas.legacy.api import app
+from fitmas.legacy.app.telegram.delivery import CoachDraft
+from fitmas.legacy.core.db import Base, SessionLocal, engine, init_db
+from fitmas.legacy.skills.heartbeat import tool_loop
+from fitmas.legacy.core.time_context import DAY_KEYS, day_label_fr, get_local_now
 
 
 class HeartbeatDebugEndpointTest(unittest.TestCase):
@@ -170,7 +170,7 @@ class HeartbeatDebugEndpointTest(unittest.TestCase):
         self.assertIsNone(debug["final"]["message"])
 
     def test_debug_heartbeat_routes_normal_cutover_through_runtime(self) -> None:
-        import fitmas.skills.heartbeat.runtime_adapter as adapter
+        import fitmas.legacy.skills.heartbeat.runtime_adapter as adapter
 
         draft = CoachDraft(text="Runtime debug heartbeat", proactive=True)
         calls: list[dict[str, object]] = []
@@ -215,7 +215,7 @@ class HeartbeatDebugEndpointTest(unittest.TestCase):
         self.assertTrue(calls[0]["manual"])
 
     def test_ops_heartbeat_routes_normal_cutover_through_runtime(self) -> None:
-        import fitmas.skills.heartbeat.runtime_adapter as adapter
+        import fitmas.legacy.skills.heartbeat.runtime_adapter as adapter
 
         draft = CoachDraft(text="Runtime ops heartbeat", proactive=True)
         calls: list[dict[str, object]] = []

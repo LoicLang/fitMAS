@@ -3,8 +3,8 @@ from __future__ import annotations
 from datetime import date
 from types import SimpleNamespace
 
-from fitmas.decision import RequestedPlanChange
-from fitmas.domain.planning.reference_resolver import ReferenceResolver
+from fitmas.legacy.decision import RequestedPlanChange
+from fitmas.legacy.domain.planning.reference_resolver import ReferenceResolver
 
 
 def _context(*sessions):

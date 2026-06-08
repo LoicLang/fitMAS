@@ -801,7 +801,7 @@ def _unclassified_legacy_fallback_reasons(turns: tuple[dict[str, Any], ...]) -> 
     try:
         if str(BACKEND_SRC) not in sys.path:
             sys.path.insert(0, str(BACKEND_SRC))
-        from fitmas.decision.fallback_census import (
+        from fitmas.legacy.decision.fallback_census import (
             unclassified_legacy_fallback_reasons as check_turn_context,
         )
     except Exception:
@@ -897,7 +897,7 @@ def _fallback_entries_for_context(context: dict[str, Any]) -> list[dict[str, Any
     try:
         if str(BACKEND_SRC) not in sys.path:
             sys.path.insert(0, str(BACKEND_SRC))
-        from fitmas.decision.fallback_census import fallback_entries
+        from fitmas.legacy.decision.fallback_census import fallback_entries
     except Exception:
         return []
     try:
@@ -987,7 +987,7 @@ def _looks_like_backend_action_claim(message: str) -> bool:
     try:
         if str(BACKEND_SRC) not in sys.path:
             sys.path.insert(0, str(BACKEND_SRC))
-        from fitmas.decision.output_verifier import looks_like_action_claim
+        from fitmas.legacy.decision.output_verifier import looks_like_action_claim
     except Exception:
         return False
     return looks_like_action_claim(message)
@@ -1298,7 +1298,7 @@ def _start_server(
             "uvicorn",
             "--app-dir",
             str(BACKEND_SRC),
-            "fitmas.main:app",
+            "fitmas.legacy.main:app",
             "--host",
             "127.0.0.1",
             "--port",
@@ -1553,10 +1553,10 @@ def _row_to_dict(row: sqlite3.Row) -> dict[str, Any]:
 def _reset_and_seed_database(db_path: Path) -> None:
     _reset_database_schema(db_path)
 
-    from fitmas.core import orm as s
-    from fitmas.core.db import SessionLocal
-    from fitmas.core.time_context import DAY_KEYS, day_label_fr, get_local_now
-    from fitmas.domain.execution import repository as execution_repo
+    from fitmas.legacy.core import orm as s
+    from fitmas.legacy.core.db import SessionLocal
+    from fitmas.legacy.core.time_context import DAY_KEYS, day_label_fr, get_local_now
+    from fitmas.legacy.domain.execution import repository as execution_repo
 
     with SessionLocal() as db:
         user = s.User(
@@ -1710,7 +1710,7 @@ def _reset_database_schema(db_path: Path) -> None:
     if str(BACKEND_SRC) not in sys.path:
         sys.path.insert(0, str(BACKEND_SRC))
 
-    from fitmas.core.db import Base, engine, init_db
+    from fitmas.legacy.core.db import Base, engine, init_db
 
     db_path.parent.mkdir(parents=True, exist_ok=True)
     Base.metadata.drop_all(bind=engine)

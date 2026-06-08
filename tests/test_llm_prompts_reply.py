@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from fitmas.llm.prompts.reply import ReplyPromptInput, build_reply_prompt
+from fitmas.legacy.llm.prompts.reply import ReplyPromptInput, build_reply_prompt
 
 
 def test_reply_prompt_uses_backend_facts_and_forbids_invention() -> None:

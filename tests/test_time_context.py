@@ -4,7 +4,7 @@ import os
 import unittest
 from datetime import datetime, timezone
 
-from fitmas.core.time_context import get_local_now, utc_now
+from fitmas.legacy.core.time_context import get_local_now, utc_now
 
 
 class TimeContextOverrideTest(unittest.TestCase):

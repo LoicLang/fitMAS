@@ -3,9 +3,9 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-from fitmas.app.telegram.delivery import CoachDraft, DraftPendingConfirmation
-from fitmas.decision import VerificationResult
-from fitmas.skills.heartbeat.runtime_adapter import (
+from fitmas.legacy.app.telegram.delivery import CoachDraft, DraftPendingConfirmation
+from fitmas.legacy.decision import VerificationResult
+from fitmas.legacy.skills.heartbeat.runtime_adapter import (
     HeartbeatRuntimeResult,
     build_heartbeat_input_event,
     heartbeat_draft_to_outcome,
@@ -183,7 +183,7 @@ def test_allowed_verifier_keeps_draft() -> None:
 
 
 def test_runtime_flag_helpers_read_environment(monkeypatch) -> None:
-    import fitmas.skills.heartbeat.runtime_adapter as adapter
+    import fitmas.legacy.skills.heartbeat.runtime_adapter as adapter
 
     monkeypatch.delenv("FITMAS_HEARTBEAT_RUNTIME_CUTOVER", raising=False)
     monkeypatch.delenv("FITMAS_HEARTBEAT_RUNTIME_VERIFY_ENFORCE", raising=False)

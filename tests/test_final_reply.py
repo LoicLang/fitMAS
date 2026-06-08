@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from fitmas.llm.reply_backend import (
+from fitmas.legacy.llm.reply_backend import (
     BlockedEvent,
     FinalReplyContext,
     build_post_event_reply_verifier_prompt,
@@ -19,8 +19,8 @@ from fitmas.llm.reply_backend import (
     verify_uncommitted_reply,
     verify_post_event_reply,
 )
-from fitmas.domain.planning.policy import AdaptationPolicyDecision
-from fitmas.skills.heartbeat.reply_composer import (
+from fitmas.legacy.domain.planning.policy import AdaptationPolicyDecision
+from fitmas.legacy.skills.heartbeat.reply_composer import (
     HeartbeatReplyContext,
     HeartbeatReplyFact,
     build_heartbeat_reply_prompt,

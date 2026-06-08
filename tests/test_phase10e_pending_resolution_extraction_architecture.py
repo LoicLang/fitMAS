@@ -34,7 +34,7 @@ def test_10e_pending_resolution_lives_in_decision_without_legacy_or_llm_imports(
     assert "def keep_pending_for_non_mutating_turn(" in source
     assert "def supersede_pending_if_replaced(" in source
     assert not any(module.startswith("fitmas.legacy") for module in imports)
-    assert not any(module.startswith("fitmas.llm") for module in imports)
+    assert not any(module.startswith("fitmas.legacy.llm") for module in imports)
 
 
 def test_10e_runtime_uses_decision_pending_resolution_not_legacy_bridge() -> None:

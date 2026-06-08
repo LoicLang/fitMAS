@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import date, datetime
 from types import SimpleNamespace
 
-from fitmas.decision.grounding import (
+from fitmas.legacy.decision.grounding import (
     ReplyGroundingPacket,
     plan_window_facts_from_sessions,
     render_grounding_packet_for_prompt,
