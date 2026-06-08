@@ -160,7 +160,7 @@ function DayEntry({ item }: { item: CalendarItem }) {
     </div>
   );
 
-  if (item.kind === "session") {
+  if (item.kind === "session" || item.kind === "offplan") {
     return <Link to={`/workout/${item.id}`} className="block w-full min-w-0 max-w-full">{content}</Link>;
   }
 
