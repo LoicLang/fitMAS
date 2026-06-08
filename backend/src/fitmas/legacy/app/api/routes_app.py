@@ -113,6 +113,54 @@ def _v0_overview() -> dict:
     overview["week_context"] = {"summary": "", "planning": {}, "next_week": {}, "coach_reading": ""}
     return _v0_neutral_bundle(overview)
 
+
+def _v0_evolution() -> dict:
+    """Build the evolution (trends) view from the live V0 store."""
+    from fitmas.legacy.app.api import v0_source
+
+    sessions = v0_source.get_scheduled_sessions()
+    activities = v0_source.get_activities()
+    today_date = date.today()
+    performance_overview = build_performance_overview(
+        user_id=1,
+        timezone_name=None,
+        activities=activities,
+        scheduled_sessions=sessions,
+        planning_decision=None,
+    )
+    training_load = build_training_load_stats(activities, as_of_date=today_date, weeks=16)
+    evolution = build_app_evolution(
+        today_date=today_date,
+        scheduled_sessions=sessions,
+        activities=activities,
+        performance_overview=performance_overview,
+        training_load=training_load,
+    )
+    evolution["week_context"] = {"summary": "", "planning": {}, "next_week": {}, "coach_reading": ""}
+    return _v0_neutral_bundle(evolution)
+
+
+def _v0_session_detail(session_id: int) -> dict:
+    """Build the session-detail view for a V0 session id."""
+    from fitmas.legacy.app.api import v0_source
+
+    sessions = v0_source.get_scheduled_sessions()
+    session = next((s for s in sessions if s.id == session_id), None)
+    if session is None:
+        raise HTTPException(status_code=404, detail="Scheduled session not found")
+    return build_session_detail(
+        today_date=date.today(),
+        session=session,
+        linked_activity=None,
+        fitness=None,
+        recent_activity=None,
+        change_notes=[],
+        watch_items=[],
+        recent_reality=None,
+        active_facts=(),
+        surrounding_sessions=sessions,
+    )
+
 @router.get("/api/v0/app/overview")
 def get_app_overview(db: Session = Depends(get_db)) -> dict:
     if _app_source_is_v0():
@@ -234,6 +282,8 @@ def get_app_calendar(
 
 @router.get("/api/v0/app/evolution")
 def get_app_evolution(db: Session = Depends(get_db)) -> dict:
+    if _app_source_is_v0():
+        return _v0_evolution()
     user = athlete_repo.get_user_optional(db)
     if user is None:
         raise HTTPException(status_code=404, detail="No onboarded user yet")
@@ -288,6 +338,8 @@ def get_app_evolution(db: Session = Depends(get_db)) -> dict:
 
 @router.get("/api/v0/sessions/{session_id}")
 def get_session_detail(session_id: int, db: Session = Depends(get_db)) -> dict:
+    if _app_source_is_v0():
+        return _v0_session_detail(session_id)
     user = athlete_repo.get_user_optional(db)
     if user is None:
         raise HTTPException(status_code=404, detail="No onboarded user yet")

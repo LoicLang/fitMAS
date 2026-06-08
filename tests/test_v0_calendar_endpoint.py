@@ -84,6 +84,46 @@ def test_v0_activities_endpoint_serves_v0(monkeypatch):
         db.unlink(missing_ok=True)
 
 
+def test_v0_evolution_serves_v0_without_crashing(monkeypatch):
+    with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as tmp:
+        db = Path(tmp.name)
+    try:
+        init_db(db)
+        _seed(db)
+        monkeypatch.setenv("FITMAS_V0_DB_PATH", str(db))
+        monkeypatch.setenv("FITMAS_APP_SOURCE", "v0")
+        from fitmas.legacy.app.api import routes_app
+
+        evo = routes_app._v0_evolution()
+        assert evo["planning_contract"] == {}
+        assert "week_context" in evo
+    finally:
+        db.unlink(missing_ok=True)
+
+
+def test_v0_session_detail_serves_and_404(monkeypatch):
+    import fastapi
+
+    with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as tmp:
+        db = Path(tmp.name)
+    try:
+        init_db(db)
+        _seed(db)
+        monkeypatch.setenv("FITMAS_V0_DB_PATH", str(db))
+        monkeypatch.setenv("FITMAS_APP_SOURCE", "v0")
+        from fitmas.legacy.app.api import routes_app
+
+        detail = routes_app._v0_session_detail(1)  # first seeded session
+        assert isinstance(detail, dict) and detail
+        try:
+            routes_app._v0_session_detail(999999)
+            raise AssertionError("expected 404 for a missing session id")
+        except fastapi.HTTPException as exc:
+            assert exc.status_code == 404
+    finally:
+        db.unlink(missing_ok=True)
+
+
 def test_app_source_flag_off_by_default(monkeypatch):
     monkeypatch.delenv("FITMAS_APP_SOURCE", raising=False)
     from fitmas.legacy.app.api import routes_app
