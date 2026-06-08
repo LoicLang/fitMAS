@@ -13,7 +13,7 @@ read_when:
 
 Pièces 1 (runner Telegram `scripts/dogfood_telegram.py`), 2 (`get_planned_week`), 3 (#2
 availability `blocked_days`) livrées et prouvées couche 2 (blessure 5/5/5/5, indispo
-5/5/5/5 — `probe_live_simulation`). 262 tests, cap 4440. Reste : README repo + flip
+5/5/5/5 — `probe_live_simulation`). 262 tests, cap 4440. Reste : README racine + flip
 public (confirmation Loïc).
 
 Contexte : `docs/RUNTIME-MIGRATION-PLAN.md` (Phase 3 interface dogfood), `docs/BUILD-ORDER.md`
@@ -108,10 +108,10 @@ les jours bloqués**, same-turn).
 
 - **Secrets** : déjà gated (`.gitignore` couvre `.env`, `*.db`, `exports/runtime-v0/` ; zéro
   secret committé — vérifié). Re-check final avant flip.
-- **README.md racine** (absent aujourd'hui) : README **repo** — pitch (coach IA fiable,
+- **README.md racine** : README racine — pitch (coach IA fiable,
   LLM-first + vérificateur déterministe), la thèse evals/fiabilité, l'archi V0 (la boucle),
   les preuves (253 tests, couche 2), comment lire le repo (PROJECT/AGENTS/docs), quickstart,
-  licence. Cible : lisible par un recruteur FDE/AI-Deployment.
+  licence. Cible : lisible par un lecteur externe.
 - **Flip visibilité** : `gh repo edit --visibility public` — **action sortante irréversible-ish,
   confirmation Loïc explicite avant de flipper.**
 
