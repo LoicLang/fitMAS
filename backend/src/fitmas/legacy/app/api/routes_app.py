@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from datetime import date
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -22,6 +23,52 @@ from fitmas.legacy.domain.execution import repository as execution_repo
 from fitmas.legacy.domain.memory import repository as memory_repo
 
 router = APIRouter()
+
+
+def _app_source_is_v0() -> bool:
+    """True when the webapp should read the live V0 store instead of the legacy DB."""
+    return os.getenv("FITMAS_APP_SOURCE", "").strip().lower() == "v0"
+
+
+def _v0_neutral_bundle(calendar: dict) -> dict:
+    """Stub the legacy-only coach aggregates (no V0 equivalent) with neutral shapes.
+
+    The exact shapes the React frontend expects are verified at render time (Slice 3);
+    these defaults keep the API response well-formed and the legacy path untouched.
+    """
+    calendar["planning_contract"] = {}
+    calendar["availability_state"] = {}
+    calendar["week_mission"] = {}
+    calendar["last_adaptation"] = None
+    calendar["recent_adaptations"] = []
+    calendar["calibration_status"] = {}
+    return calendar
+
+
+def _v0_calendar(month: str | None) -> dict:
+    """Build the calendar view from the live V0 store (FITMAS_APP_SOURCE=v0)."""
+    from fitmas.legacy.app.api import v0_source
+
+    sessions = v0_source.get_scheduled_sessions()
+    activities = v0_source.get_activities()
+    today_date = date.today()
+    month_start = date.fromisoformat(f"{month or today_date.isoformat()[:7]}-01")
+    performance_overview = build_performance_overview(
+        user_id=1,
+        timezone_name=None,
+        activities=activities,
+        scheduled_sessions=sessions,
+        planning_decision=None,
+    )
+    calendar = build_app_calendar(
+        today_date=today_date,
+        month_start=month_start,
+        scheduled_sessions=sessions,
+        activities=activities,
+        performance_overview=performance_overview,
+        session_policies=(),
+    )
+    return _v0_neutral_bundle(calendar)
 
 @router.get("/api/v0/app/overview")
 def get_app_overview(db: Session = Depends(get_db)) -> dict:
@@ -94,6 +141,8 @@ def get_app_calendar(
     month: str | None = Query(default=None, pattern=r"^\d{4}-\d{2}$"),
     db: Session = Depends(get_db),
 ) -> dict:
+    if _app_source_is_v0():
+        return _v0_calendar(month)
     user = athlete_repo.get_user_optional(db)
     if user is None:
         raise HTTPException(status_code=404, detail="No onboarded user yet")
