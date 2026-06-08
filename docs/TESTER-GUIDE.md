@@ -26,7 +26,7 @@ Ca prend 3-5 minutes.
 ## Ou regarder apres
 
 - **Telegram** : c'est ton canal de conversation avec le coach. Tu lui parles, il adapte.
-- **L'app web** (the deployed app) : c'est ton cockpit. Plan de la semaine, calendrier, activites, evolution.
+- **L'app web** : c'est ton cockpit. Plan de la semaine, calendrier, activites, evolution.
 
 Pas de chat dans l'app. L'app montre, Telegram ecoute.
 
