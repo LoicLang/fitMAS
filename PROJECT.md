@@ -45,11 +45,11 @@ Ne pas ouvrir Phase B progression/prescription sans demande explicite.
 Verifie offline le 8 juin 2026 :
 
 ```text
-tests/runtime_v0 : 253 passed
+tests/runtime_v0 : 262 passed
 fake matrix      : 11/11
 danger metrics   : 0 wrong_write, 0 old_plan, 0 wrong_correction_target,
                    0 claim_without_event
-core             : ~4337 LOC (cap 4337 ; noyau conversationnel + moteur Meso —
+core             : ~4440 LOC (cap 4440 ; noyau conversationnel + moteur Meso —
                    enveloppe acquise (re-baseline), voir docs/RUNTIME-V0.md Budget)
 ```
 
@@ -60,10 +60,18 @@ commit semaine** (3b : `pending_resolution`, store type `v0_planned_weeks`, cha�
 forward). Le coach est enseigne qu'un « oui mais [contrainte] » n'est pas un accept.
 **Tranche #1 livree + prouvee couche 2** : sur « oui mais [douleur/blessure] », le
 coach note le fait sante ET re-propose une semaine sans intensite dans le **meme tour**
-(`intensity_restricted` sur `propose_week` ; nouveau pending annule le precedent ;
-verificateur tient l'autorite) — probe DeepSeek : PASS, juge LLM 5/5/5/5.
+(probe DeepSeek : PASS, juge LLM 5/5/5/5).
+**Tranche #2 livree + prouvee couche 2** : sur « oui mais [indispo jours] », le
+coach note le fait availability ET re-propose une semaine avec REST sur les jours bloques
+dans le **meme tour** (`blocked_days` declares, verificateur `_check_blocked_days`,
+probe DeepSeek : PASS, juge LLM 5/5/5/5).
+**`get_planned_week`** (read tool, relit la semaine committée).
+**Runner dogfood Telegram standalone** `scripts/dogfood_telegram.py` — boucle semaine
+(plan + ajuste blessure/indispo + voit) dogfoodable localement ; store v0_*, DeepSeek,
+allowlist. Pas de deploy (phase 2).
 **Prouve couche 2** (DeepSeek) : propose->confirme->commit + reject, semaine sous
-contrainte 4/4 (respectee, source=llm), simulation live multi-tour qui echoue safe.
+contrainte 4/4, simulation live multi-tour qui echoue safe (blessure 5/5/5/5, indispo
+5/5/5/5).
 Detail : `docs/V0-CODE-MAP.md`, `docs/PLANNING-V0.md`, `docs/BUILD-ORDER.md`,
 `docs/superpowers/specs/2026-06-*`.
 

@@ -311,16 +311,20 @@ vit à la fois. Le fact-rider committe la note santé en parallèle. Le vérific
 la semaine sans intensité (réduction-sous-contrainte existante). État : *blessure
 ré-adaptée same-turn*.
 
-**Indispo** : note le fait + tient — l'availability n'est pas encore une contrainte typée
-(`fact_to_constraint` ne mappe que `health`) ; le coach dégrade en `no_send` bénin.
-Prochaine tranche : typer l'availability (fenêtre-jours).
+**Indispo** (8 juin 2026, tranche #2 livrée) : same-turn note availability +
+`propose_week(blocked_days=[...])` -> semaine avec REST sur les jours bloqués, clé sur un
+jour disponible. Vérificateur `_check_blocked_days` (rejette toute séance sur un jour
+bloqué, tous modes) + plancher de charge relâché (garde la clé prescrite). Générateur et
+template blocked-days-aware. Prouvé couche 2 (`probe_live_simulation --persona indispo`) :
+PASS, juge LLM 5/5/5/5. Résiduel : persistance cross-tour différée.
 
-**Cible résolue pour la blessure.** Spec : `docs/superpowers/specs/2026-06-08-readapt-blessure-same-turn-design.md`.
-Couche 2 (`probe_live_simulation --persona blessure`) **prouvée** (8 juin) : PASS, juge LLM 5/5/5/5. Détails : `BUILD-ORDER.md`.
+**Cibles résolues.** Spécs : `docs/superpowers/specs/2026-06-08-readapt-blessure-same-turn-design.md` (tranche #1),
+`docs/superpowers/specs/2026-06-08-v0-dogfood-wiring-design.md` (tranche #2 + dogfood).
+Détails : `BUILD-ORDER.md`.
 
-**Différés (accommodés, pas codés)** : matérialisation de la semaine committée vers
-`v0_scheduled_sessions` (plan exécutable) ; handler de commit `plan_patch` ; décision
-`modify` (« fais plus varié »).
+**Différés (accommodés, pas codés)** : persistance cross-tour de l'availability ; matérialisation
+de la semaine committée vers `v0_scheduled_sessions` (plan exécutable) ; handler de commit
+`plan_patch` ; décision `modify` (« fais plus varié ») ; suivi d'exécution (phase 2).
 
 ## 10. Tests & sondes (deux couches)
 
@@ -353,6 +357,7 @@ Doctrine : `V0-TEST-DOCTRINE.md`.
 | changer ce que le coach a le droit d'appeler | `tool_catalog.py` |
 | enseigner un comportement au coach | `prompts/coach_system.py` |
 | ajouter un tool de lecture | `tools_read.py` |
+| lire la semaine committée (get_planned_week) | `tools_read.py` → `v0_planned_weeks` |
 | ajouter un tool d'action (proposal) | `tools_proposal.py` (+ draft dans `proposals.py`) |
 | changer une règle d'autorité / un grounding | `policy.py` |
 | ajouter une règle sportive de sécurité | `sport_rules.py` |
@@ -362,3 +367,4 @@ Doctrine : `V0-TEST-DOCTRINE.md`.
 | toucher la génération de semaine | `meso/generator.py` + `prompts/week_generation.py` |
 | changer une propriété de semaine saine | `meso/verifier.py` |
 | brancher le produit réel | `adapters/` (hors noyau) |
+| dogfood Telegram standalone (V0, local) | `scripts/dogfood_telegram.py` (hors noyau) |

@@ -9,6 +9,13 @@ read_when:
 
 # Design — dogfood V0 (boucle semaine) + repo public
 
+## Statut (8 juin 2026)
+
+Pièces 1 (runner Telegram `scripts/dogfood_telegram.py`), 2 (`get_planned_week`), 3 (#2
+availability `blocked_days`) livrées et prouvées couche 2 (blessure 5/5/5/5, indispo
+5/5/5/5 — `probe_live_simulation`). 262 tests, cap 4440. Reste : README repo + flip
+public (confirmation Loïc).
+
 Contexte : `docs/RUNTIME-MIGRATION-PLAN.md` (Phase 3 interface dogfood), `docs/BUILD-ORDER.md`
 (tranche #2 availability), `docs/PLANNING-V0.md` (réduction-sous-contrainte : indispo-fenêtre
 = 3e cas, relâche l'anti-drop), `docs/V0-DOGFOOD-SCOPE.md`. Décisions brainstorm 8 juin :

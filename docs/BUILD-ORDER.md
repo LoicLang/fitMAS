@@ -65,8 +65,20 @@ Fait :
   [douleur/blessure] », le coach note le fait sante ET re-propose une semaine sans
   intensite **dans le meme tour** (`propose_week(intensity_restricted=true)`, supersede
   du pending precedent). Offline : 253 tests, matrix 11/11, danger 0, cap 4320->4337.
-  Couche 2 (`probe_live_simulation --persona blessure`) prouvee : PASS, juge LLM 5/5/5/5. Indispo : note + tient
-  (prochaine tranche). Spec : `docs/superpowers/specs/2026-06-08-readapt-blessure-same-turn-design.md`.
+  Couche 2 (`probe_live_simulation --persona blessure`) prouvee : PASS, juge LLM 5/5/5/5.
+  Spec : `docs/superpowers/specs/2026-06-08-readapt-blessure-same-turn-design.md`.
+
+- **#2 availability typee + dogfood V0** (8 juin 2026) : sur « oui mais [indispo jours] »,
+  le coach note le fait availability ET appelle `propose_week(blocked_days=[...])` **dans
+  le meme tour** — la semaine re-proposee place REST sur les jours bloques, cle sur un
+  jour disponible. Mecanisme : `TypedConstraint.blocked_days` + verificateur
+  `_check_blocked_days` (rejette toute seance sur un jour bloque, tous modes) + plancher
+  de charge relache (garde la cle). Generateur et template blocked-days-aware.
+  `get_planned_week` (read tool) : relit la semaine committee sur un tour ulterieur.
+  Runner dogfood Telegram standalone `scripts/dogfood_telegram.py` (poll -> handle_event
+  -> reply, store v0_*, DeepSeek, allowlist).
+  Offline : 262 tests, cap 4440. Couche 2 (`probe_live_simulation --persona indispo`) :
+  PASS, juge LLM 5/5/5/5. Spec : `docs/superpowers/specs/2026-06-08-v0-dogfood-wiring-design.md`.
 
 - liberation de la voix : la reply layer ne sert plus de template sur le chemin
   nominal (pending, blocage, clarification passent par le LLM). Les templates
@@ -97,16 +109,17 @@ Fait :
 Ordre recommande :
 
 1. ~~Blessure re-adapte same-turn~~ **FAIT** (8 juin 2026, tranche #1 — `propose_week(intensity_restricted=true)` + supersede pending ; spec `2026-06-08-readapt-blessure-same-turn-design.md`).
-2. **Typer l'availability** comme contrainte (fenetre-jours) pour que le coach
-   re-planifie autour des jours bloques sur « oui mais [indispo] » (tranche #2).
+2. ~~**Typer l'availability**~~ **FAIT** (8 juin 2026, tranche #2 — `blocked_days` declares,
+   repos sur jours bloques, juge LLM 5/5/5/5 ; spec `2026-06-08-v0-dogfood-wiring-design.md`).
 3. **Chemin modify/preference** (« fais plus varie »).
 4. Follow-ups differes Slice 3b : materialisation semaine->plan executable
    (sessions dans `v0_scheduled_sessions`) ; handler commit `plan_patch`.
-5. Relancer une provider matrix ciblee sur les 11 scenarios.
-6. Construire un `WorldSnapshot` depuis une copie DB actuelle, en distinguant
+5. Persistance cross-tour de l'availability (stocker les jours bloques sur le fait, ingestion typee).
+6. Relancer une provider matrix ciblee sur les 11 scenarios.
+7. Construire un `WorldSnapshot` depuis une copie DB actuelle, en distinguant
    replay fidele (`conversation_context`) et debug approximatif (`current_state`).
-7. Construire un executor adapter vers les writers existants.
-8. Brancher Telegram/API sous flag et allowlist user.
+8. Construire un executor adapter vers les writers existants.
+9. Brancher Telegram/API sous flag et allowlist user.
 
 ## Chantier Moteur Sport (co-evolue avec le runtime)
 
@@ -215,18 +228,17 @@ affirmer une adaptation non faite. Re-probe : blessure et indispo echouent desor
   same-turn**. Spec : `docs/superpowers/specs/2026-06-08-readapt-blessure-same-turn-design.md`.
   Couche 2 (`probe_live_simulation --persona blessure`) **prouvee** (8 juin) : PASS, juge LLM 5/5/5/5 — same-turn re-adaptation confirmee en live non scripte (semaine sans intensite proposee puis committee, guard ok).
 
-- **Indispo** : note le fait + tient (ne re-propose pas encore — availability non typee).
-  Prochaine tranche.
+- **Indispo** (8 juin 2026, tranche #2 livree) : same-turn note availability +
+  `propose_week(blocked_days=[...])` -> semaine avec REST sur les jours bloques ;
+  verificateur `_check_blocked_days` + plancher relache (garde la cle) ; prouve couche 2
+  (indispo, juge LLM 5/5/5/5). Residuel : persistance cross-tour des jours bloques (differee).
 
 **Residuels (follow-ups)** :
-l'**availability n'est pas une contrainte typee** (`fact_to_constraint` ne mappe que
-`health`) donc le coach ne sait pas re-planifier autour de jours precis -> degrade en
-`no_send` benin ; et le **chemin preference/modify** (« fais plus varie ») reste a concevoir
-(rouvre la decision modify de 3b).
-
-Follow-ups differes : availability typee (contrainte fenetre-jours) ; chemin modify/preference ;
-materialisation semaine->plan executable (sessions dans `v0_scheduled_sessions`) ; handler
-commit `plan_patch`.
+- persistance cross-tour de l'availability (stocker les jours bloques sur le fait, ingestion typee) — differee ;
+- **chemin preference/modify** (« fais plus varie ») — tranche #3 ;
+- materialisation semaine->plan executable (`v0_scheduled_sessions`) — Slice 3b follow-up ;
+- handler commit `plan_patch` — Slice 3b follow-up ;
+- suivi d'execution (phase 2).
 
 La passe de simplification pre-3b est resolue **en re-baseline** (7 juin,
 `RUNTIME-V0.md` Budget : moteur Meso = enveloppe acquise, pas du creep ;
