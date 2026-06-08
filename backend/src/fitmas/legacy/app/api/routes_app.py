@@ -70,8 +70,53 @@ def _v0_calendar(month: str | None) -> dict:
     )
     return _v0_neutral_bundle(calendar)
 
+
+def _v0_profile_stub():
+    from fitmas.legacy.domain.athlete.view_models import Profile
+
+    return Profile(
+        name="Athlete",
+        age=30,
+        objective="",
+        coaching_style="direct",
+        constraints=[],
+        preferences=[],
+        integrations=[],
+    )
+
+
+def _v0_overview() -> dict:
+    """Build the overview (landing) view from the live V0 store (FITMAS_APP_SOURCE=v0)."""
+    from fitmas.legacy.app.api import v0_source
+
+    sessions = v0_source.get_scheduled_sessions()
+    activities = v0_source.get_activities()
+    today_date = date.today()
+    performance_overview = build_performance_overview(
+        user_id=1,
+        timezone_name=None,
+        activities=activities,
+        scheduled_sessions=sessions,
+        planning_decision=None,
+    )
+    strava_status = {"configured": strava.is_configured(), "connected": False, "last_sync_at": None}
+    overview = build_app_overview(
+        today_date=today_date,
+        profile=_v0_profile_stub(),
+        strava_status=strava_status,
+        scheduled_sessions=sessions,
+        activities=activities,
+        performance_overview=performance_overview,
+        today_view=None,
+        session_policies=(),
+    )
+    overview["week_context"] = {"summary": "", "planning": {}, "next_week": {}, "coach_reading": ""}
+    return _v0_neutral_bundle(overview)
+
 @router.get("/api/v0/app/overview")
 def get_app_overview(db: Session = Depends(get_db)) -> dict:
+    if _app_source_is_v0():
+        return _v0_overview()
     user = athlete_repo.get_user_optional(db)
     if user is None:
         raise HTTPException(status_code=404, detail="No onboarded user yet")

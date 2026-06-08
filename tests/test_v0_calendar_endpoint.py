@@ -48,6 +48,42 @@ def test_v0_calendar_serves_v0_sessions_without_crashing(monkeypatch):
         db.unlink(missing_ok=True)
 
 
+def test_v0_overview_serves_v0_sessions_without_crashing(monkeypatch):
+    with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as tmp:
+        db = Path(tmp.name)
+    try:
+        init_db(db)
+        _seed(db)
+        monkeypatch.setenv("FITMAS_V0_DB_PATH", str(db))
+        monkeypatch.setenv("FITMAS_APP_SOURCE", "v0")
+        from fitmas.legacy.app.api import routes_app
+
+        overview = routes_app._v0_overview()
+        assert overview["planning_contract"] == {}
+        assert "week_context" in overview
+        blob = json.dumps(overview, default=str)
+        assert "2026-06-16" in blob or "Seuil" in blob
+    finally:
+        db.unlink(missing_ok=True)
+
+
+def test_v0_activities_endpoint_serves_v0(monkeypatch):
+    with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as tmp:
+        db = Path(tmp.name)
+    try:
+        init_db(db)
+        _seed(db)
+        monkeypatch.setenv("FITMAS_V0_DB_PATH", str(db))
+        monkeypatch.setenv("FITMAS_APP_SOURCE", "v0")
+        from fitmas.legacy.app.api import routes_read
+
+        acts = routes_read.get_activities(db=None)  # V0 branch returns before touching db
+        assert len(acts) == 1
+        assert acts[0].duration_min == 44
+    finally:
+        db.unlink(missing_ok=True)
+
+
 def test_app_source_flag_off_by_default(monkeypatch):
     monkeypatch.delenv("FITMAS_APP_SOURCE", raising=False)
     from fitmas.legacy.app.api import routes_app

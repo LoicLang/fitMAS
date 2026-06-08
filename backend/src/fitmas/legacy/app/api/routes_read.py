@@ -249,6 +249,12 @@ def get_patterns(db: Session = Depends(get_db)) -> list[UserPattern]:
 
 @router.get("/api/v0/activities", response_model=list[Activity])
 def get_activities(db: Session = Depends(get_db)) -> list[Activity]:
+    import os
+
+    if os.getenv("FITMAS_APP_SOURCE", "").strip().lower() == "v0":
+        from fitmas.legacy.app.api import v0_source
+
+        return v0_source.get_activities()
     user = athlete_repo.get_user_optional(db)
     if user is None:
         return []
