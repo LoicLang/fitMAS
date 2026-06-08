@@ -1,16 +1,75 @@
 ---
-summary: resultats de comparaison entre l'app actuelle et Runtime V0 sur tours reels
+summary: comparaison anonymisée Runtime V0 vs app legacy sur tours réels — preuve publique du "fail-safe", + résultats empiriques détaillés et durcissement du swap
 read_when:
-  - comparer Runtime V0 au pipeline actuel
-  - decider si Runtime V0 peut avancer vers dogfood Telegram
-  - analyser les ecarts policy, pending ou qualite de reponse
+  - comparer Runtime V0 au pipeline legacy
+  - écrire / relire la comparaison V0-vs-legacy publique
+  - analyser les écarts policy, pending ou qualité de réponse
 ---
 
-# Runtime V0 vs app actuelle
+# V0 vs Legacy — A Study in Failing Safe
 
-Passe du 30 mai 2026 sur 30 tours reels recents, avec 3 providers V0.
+> How the rebuilt coach (`runtime_v0/`) behaves on the same real-world inputs that broke its
+> deterministic predecessor. The thesis: a trustworthy LLM product fails *safe*, and you prove it
+> on the danger profile — not on a green usefulness number.
 
-Commande:
+## Why compare at all
+
+The legacy coach was a deterministic generator with the LLM in a narrow role: every broken case
+got one more rule (a regex, a keyword, a template, a branch). Those rules are invisible in tests
+(you only test the cases you imagined) and lethal in production (the case you didn't). V0 inverts
+the split — the LLM understands and generates; a deterministic verifier holds authority over safety
+and structure, and nothing is written except through one audited executor.
+
+## Architecture, before and after
+
+| | Legacy app | V0 rebuild |
+|---|---|---|
+| Decision / planning brain | deterministic generator (fix-on-fix, rigid, buggy) | LLM understands + deterministic verifier holds authority |
+| Free user text | regex / keywords / branches | zero determinism — the LLM understands it |
+| Typical failure | "perfect in test, incapable in reality" | "survives reality ≠ a green number" |
+| Reliability | unguarded claims | output guard + `claim_without_event` + every write audited |
+| Strategy | — | strangle the brain, keep the envelope |
+
+## The memorable case — fabricated block, false confirmation
+
+A real turn, anonymized (scenario `move_today_open_week`, see [`V0-TEST-DOCTRINE.md`](V0-TEST-DOCTRINE.md) layer 2).
+The athlete is unavailable and asks to move the day's session; the week and week-end are open.
+
+- **Legacy:** fabricated a justification ("the end of the week is full") to refuse, then replied as
+  if settled ("all sorted") — **without moving anything**. The visible reply claimed an action that
+  never happened.
+- **V0, same world state:** stays **safe and useful** — turn 1 asks which day to move to *without
+  inventing a constraint*, or moves the session to an open slot and reports exactly what it
+  committed. It never claims a write that didn't occur: the output guard reads the model's own reply
+  and blocks anything that lies about a write (`claim_without_event` stays 0).
+
+## What the numbers do — and don't — say
+
+The detailed empirical run is below. The honest headline:
+
+- V0 **fails safe**: `tie_bad` 0, no inconclusive snapshot, and the one systematic danger class —
+  an auto-committed planning *swap* — was **found, closed, and re-verified** (6 → 0; see below).
+- V0 is **not yet better on raw usefulness** on this scripted replay (`app_better` 14, `v0_better`
+  0) — *and that is the point*. The scripted matrix tunes both sides of the exchange, so it can only
+  ever be an anti-regression / danger net, never a quality compass. Quality is judged on **layer 2**:
+  an unscripted athlete (an injury, a work trip, boredom) role-played against the real coach loop,
+  with deterministic safety oracles and an LLM quality judge.
+
+Refusing to game a raw rate is the mature evaluation signal — the two-layer method itself (danger
+metrics + unscripted subagent simulation) is the real artifact.
+
+> *Personal-data note: this is a solo personal project; the only athlete is the author. The detailed
+> report below references turns by id and paraphrases them — no verbatim messages, no third-party
+> data. The raw comparison dump and shadow DBs are regenerable and not committed (they replay real
+> turns).*
+
+---
+
+# Detailed empirical report
+
+Run of 30 May 2026 over 30 recent real turns, with 3 V0 providers.
+
+Reproduce (the real source DB and the raw export are local-only, gitignored — PII + regenerable):
 
 ```bash
 .venv/bin/python scripts/v0_eval/compare_app_vs_v0.py \
@@ -21,13 +80,6 @@ Commande:
   --export-dir exports/runtime-v0/app-vs-v0-30 \
   --report-path exports/runtime-v0/app-vs-v0-30/report.md
 ```
-
-Exports conserves:
-
-- `exports/runtime-v0/app-vs-v0-30/report.md`: rapport lisible, run par run.
-- `exports/runtime-v0/app-vs-v0-30/records.json`: donnees brutes du comparateur.
-
-Les DB shadow generees dans `exports/runtime-v0/app-vs-v0-30/db/` ne sont pas destinees a etre versionnees.
 
 ## Resultats baseline (avant durcissement du swap)
 
@@ -92,8 +144,6 @@ Re-run du meme panel apres le fix (30 tours, 3 providers, 90 runs) :
 Par provider apres fix (tie_safe / app_better) : DeepSeek 27/3, Grok 23/7,
 Mistral 26/4.
 
-Export : `exports/runtime-v0/app-vs-v0-30-swapgate/`.
-
 Ce qui change vraiment :
 
 - Les 6 `unsafe_auto_commit` du baseline etaient exactement les 2 tours `Echange`
@@ -137,4 +187,3 @@ Avant dogfood Telegram, traiter en priorite:
    (`missed_pending`, stable a 7).
 5. Reduire les `no_send` inutiles sans autoriser de fausse mutation
    (`unhelpful_no_send`).
-
