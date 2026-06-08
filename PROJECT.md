@@ -46,11 +46,11 @@ Ne pas ouvrir Phase B progression/prescription sans demande explicite.
 Verifie offline puis deploye live le 8 juin 2026 :
 
 ```text
-tests/runtime_v0 : 262 passed
+tests/runtime_v0 : 265 passed
 fake matrix      : 11/11
 danger metrics   : 0 wrong_write, 0 old_plan, 0 wrong_correction_target,
                    0 claim_without_event
-core             : ~4440 LOC (cap 4440 ; noyau conversationnel + moteur Meso —
+core             : ~4496 LOC (cap 4496 ; noyau + moteur Meso + pont de plan —
                    enveloppe acquise (re-baseline), voir docs/RUNTIME-V0.md Budget)
 ```
 
@@ -67,6 +67,14 @@ coach note le fait availability ET re-propose une semaine avec REST sur les jour
 dans le **meme tour** (`blocked_days` declares, verificateur `_check_blocked_days`,
 probe DeepSeek : PASS, juge LLM 5/5/5/5).
 **`get_planned_week`** (read tool, relit la semaine committee).
+**Reconciliation des 2 stores de plan + injury-after-commit (8 juin, soir)** : au commit d'une
+semaine Meso, `_materialize_week_sessions` la pose sur le calendrier (`v0_scheduled_sessions` ;
+replace planifie / preserve execute / saute rest) -> une seule verite du plan jour, le coach voit
+enfin la semaine committee. Sur une **blessure signalee APRES commit**, il re-propose une semaine
+sans intensite (sonde forced-ordering `probe_injury_after_commit` : PASS x2). Debloque l'execution
+et le patch chirurgical sur une semaine generee. Root cause via systematic-debugging (le juge LLM
+notait 5/5/5/5 un tour que l'oracle deterministe attrapait). Spec :
+`2026-06-08-plan-store-reconciliation-design.md`.
 **Deploy live prod (8 juin, soir)** : `scripts/dogfood_telegram.py` remplace le legacy
 bot ; store bootstrap depuis les donnees reelles (`materialize_v0_db` : remap user_id,
 faits legacy jetes, plan futur legacy supprime) ; Strava->V0 sync active
@@ -74,8 +82,8 @@ faits legacy jetes, plan futur legacy supprime) ; Strava->V0 sync active
 **Lacunes connues** : run<->session non matchees auto ; voix terse ; propose_week ->
 prochain lundi seulement ; proactivite off ; solo.
 **Prouve couche 2** (DeepSeek) : propose->confirme->commit + reject, semaine sous
-contrainte 4/4, simulation live multi-tour qui echoue safe (blessure 5/5/5/5, indispo
-5/5/5/5).
+contrainte 4/4, simulation live multi-tour (blessure same-turn 5/5/5/5, indispo 5/5/5/5,
+**injury-after-commit forced-ordering 2/2**).
 Detail : `docs/V0-CODE-MAP.md`, `docs/PLANNING-V0.md`, `docs/BUILD-ORDER.md`,
 `docs/superpowers/specs/2026-06-*`.
 

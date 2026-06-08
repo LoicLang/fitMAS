@@ -28,12 +28,12 @@ InputEvent -> Snapshot -> Agent -> Proposal -> Policy -> Executor
 
 Preuve (verifiee offline puis deploye) :
 
-- `tests/runtime_v0` : 262 passed ;
+- `tests/runtime_v0` : 265 passed ;
 - fake matrix : `11/11` ;
 - danger metrics : `0 wrong_write`, `0 old_plan`,
   `0 wrong_correction_target`, `0 claim_without_event` ;
 - guard fallback rate : `0 %` ;
-- core : ~4440 LOC (cap 4440 ; noyau conversationnel + moteur Meso — enveloppe acquise,
+- core : ~4496 LOC (cap 4496 ; noyau + moteur Meso + pont de plan — enveloppe acquise,
   re-baseline 7 juin). Cible ~2500 = ratchet du noyau conversationnel nu ; le cap ne
   monte que sur capacite prouvee. Detail : `docs/RUNTIME-V0.md` Budget.
 
@@ -162,9 +162,18 @@ Ordre recommande :
 3. ~~**Dogfood deploy live**~~ **FAIT** (8 juin 2026, soir) : runner remplace legacy bot,
    store bootstrap depuis donnees reelles (materialize + remap user_id + faits propres),
    Strava->V0 sync active (900 s, verifie live).
+3bis. ~~**Reconciliation des 2 stores de plan + injury-after-commit**~~ **FAIT** (8 juin 2026,
+   soir) : au commit d'une semaine Meso, `_materialize_week_sessions` la pose sur le calendrier
+   (`v0_scheduled_sessions` ; replace planifie / preserve execute) -> une seule verite du plan
+   jour, le coach voit/patche/re-propose une semaine committee. Sur blessure APRES commit, il
+   re-propose une semaine sans intensite (sonde `probe_injury_after_commit` PASS x2). Debloque
+   l'execution et le patch chirurgical sur une semaine generee. Spec
+   `2026-06-08-plan-store-reconciliation-design.md`.
 4. **Run <-> session matching** : chemin LLM-first — enseigner au coach a marquer
    une seance done quand il voit une activite Strava qui matche clairement
    (`propose_execution_update` + `recent_activities` + `current_plan` dans le snapshot) ;
+   *les seances d'une semaine committee sont desormais sur le calendrier (3bis), donc
+   l'execution peut s'y accrocher — reste l'auto-matching Strava->seance* ;
    proactivite complete (heartbeat auto-reconcile) differee a la tranche heartbeat.
 5. **Presence / Voix — PRIORITE (frontiere actuelle).** Le data est regle ; ce qui manque,
    c'est *etre* le coach, pas seulement *faire*. Revele en dogfood reel (8 juin) : sur
