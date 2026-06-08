@@ -203,6 +203,13 @@ Ordre recommande :
 10. **Hygiene/robustesse** : museler les logs httpx INFO (token dans les logs Fly) ;
     `sync_strava_to_v0` hardcode `legacy_user=1` (solo-only, a parametriser si multi-user) ;
     dedup run<->session a confirmer sur volume reel.
+11. **Webapp V0 — retravailler le front (8 juin, soir).** La webapp lit le store V0 en prod
+    (`FITMAS_APP_SOURCE=v0`) et le minimum marche, MAIS le store V0 est minimal → **détails Strava
+    riches manquants** (carte/map, FC moy/max, denivele, splits/zones), charge = estimation
+    (TSS ≈ duree × 0.8), sections legacy stubbees (readiness/calibration/week_mission/coach_bundle).
+    Pistes : (a) enrichir le sync Strava->V0 (`v0_activities` : map/FC/denivele/TSS) + exposer via
+    `legacy/app/api/v0_source.py` ; (b) et/ou simplifier le front pour le modele V0. Spec :
+    `2026-06-08-webapp-v0-source-design.md` (§Limites connues). Pas urgent.
 
 ## Chantier Moteur Sport (co-evolue avec le runtime)
 

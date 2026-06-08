@@ -74,3 +74,22 @@ end-to-end quand le navigateur est dispo / au deploy.
 - L'écriture depuis la webapp (complete/skip/move) en mode V0 — lecture d'abord ; les mutations V0
   passeront par l'executor V0 (tranche séparée).
 - Le deploy (couplé prod, étape Loïc).
+
+## Statut & limites connues — 8 juin (soir), DÉPLOYÉ
+
+Déployé en prod via le secret Fly `FITMAS_APP_SOURCE=v0`. Toute la webapp lit le store V0
+(calendar, overview, activités, evolution, détail séance + activité off-plan rendue cliquable).
+Vérifié backend + rendu cœur confirmé par Loïc. Rollback : `fly secrets unset FITMAS_APP_SOURCE`.
+
+**À RETRAVAILLER (front + données) — le store V0 est volontairement minimal :**
+- **Détail pauvre / pas de Strava riche.** `v0_scheduled_sessions` = date/sport/titre/durée/
+  intensité/statut ; `v0_activities` = date/sport/durée/distance. Donc en mode V0 **il manque la
+  carte (map polyline), la FC moy/max, le dénivelé, les splits/zones réelles** — le détail montre
+  titre/durée + contenu dérivé du titre, pas la donnée Strava. (C'est le point relevé par Loïc.)
+- **Charge = estimation** (TSS ≈ durée × 0.8 ; pas de TSS mesuré par activité dans le store V0).
+- **Sections stubbées** : readiness, calibration_status, week_mission, coach_bundle = vides (pas
+  d'équivalent V0) → certains blocs de la webapp s'affichent creux.
+- **Front conçu pour le modèle riche legacy** → à adapter à la forme V0-minimale.
+- **Pistes** : (a) enrichir le sync Strava→V0 pour porter map/FC/dénivelé/TSS dans `v0_activities`
+  + les exposer via `v0_source` ; (b) et/ou simplifier le front pour le modèle V0 (cacher les
+  sections sans source V0). À faire à tête reposée — pas urgent.
