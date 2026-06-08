@@ -107,16 +107,23 @@ def get_activities(user_id: int | None = None, limit: int = 500) -> list[Activit
         distance_km = row["distance_km"] if "distance_km" in keys else None
         sport = row["sport"] or "running"
         note = (row["notes"] if "notes" in keys else "") or ""
+        duration_min = row["duration_min"]
+        # The V0 store keeps duration but no per-activity load. Estimate a TSS proxy
+        # from duration (~0.8 TSS/min, consistent with the session estimator) so the
+        # training-load chart has signal. It is an estimate, not a measured TSS.
+        tss = round(duration_min * 0.8, 1) if duration_min else None
         activities.append(
             Activity(
                 id=row["id"],
                 source=(row["source"] if "source" in keys else "v0") or "v0",
                 sport_type=sport,
                 title=note or _TITLE.get(sport, sport.capitalize()),
-                duration_min=row["duration_min"],
+                duration_min=duration_min,
                 distance_m=(float(distance_km) * 1000 if distance_km is not None else None),
                 note=note,
                 started_at=row["date"],
+                tss=tss,
+                perceived_load=int(tss) if tss else None,
             )
         )
     return activities

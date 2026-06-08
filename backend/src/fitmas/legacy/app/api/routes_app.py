@@ -85,6 +85,34 @@ def _v0_profile_stub():
     )
 
 
+def _v0_today_view(sessions, today_date):
+    """Build today's detailed session card (TodayView) from the V0 store, or None."""
+    from fitmas.legacy.app.api.read_models import TodayView
+
+    iso = today_date.isoformat()
+    session = next((s for s in sessions if s.scheduled_date == iso), None)
+    if session is None:
+        return None
+    return TodayView(
+        scheduled_session_id=session.id,
+        scheduled_date=session.scheduled_date,
+        day=session.day,
+        label=session.label,
+        sport_type=session.sport_type,
+        session_type=session.session_type,
+        session_title=session.session_title,
+        session_goal=session.session_goal,
+        duration_min=session.duration_min,
+        intensity=session.intensity,
+        load_band=session.load_band,
+        priority=session.priority,
+        nutrition_focus="",
+        completion_status=session.completion_status,
+        change_notes=[],
+        watch_items=[],
+    ).model_dump()
+
+
 def _v0_overview() -> dict:
     """Build the overview (landing) view from the live V0 store (FITMAS_APP_SOURCE=v0)."""
     from fitmas.legacy.app.api import v0_source
@@ -107,7 +135,7 @@ def _v0_overview() -> dict:
         scheduled_sessions=sessions,
         activities=activities,
         performance_overview=performance_overview,
-        today_view=None,
+        today_view=_v0_today_view(sessions, today_date),
         session_policies=(),
     )
     overview["week_context"] = {"summary": "", "planning": {}, "next_week": {}, "coach_reading": ""}

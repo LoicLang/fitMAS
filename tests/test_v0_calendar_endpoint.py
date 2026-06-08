@@ -124,6 +124,27 @@ def test_v0_session_detail_serves_and_404(monkeypatch):
         db.unlink(missing_ok=True)
 
 
+def test_v0_today_view_built_for_matching_date(monkeypatch):
+    from datetime import date
+
+    with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as tmp:
+        db = Path(tmp.name)
+    try:
+        init_db(db)
+        _seed(db)
+        monkeypatch.setenv("FITMAS_V0_DB_PATH", str(db))
+        from fitmas.legacy.app.api import routes_app, v0_source
+
+        sessions = v0_source.get_scheduled_sessions()
+        tv = routes_app._v0_today_view(sessions, date(2026, 6, 16))  # matches seeded threshold
+        assert tv is not None
+        assert tv["session_title"] == "Seuil"
+        assert tv["scheduled_session_id"] == sessions[0].id
+        assert routes_app._v0_today_view(sessions, date(2030, 1, 1)) is None  # no session that day
+    finally:
+        db.unlink(missing_ok=True)
+
+
 def test_app_source_flag_off_by_default(monkeypatch):
     monkeypatch.delenv("FITMAS_APP_SOURCE", raising=False)
     from fitmas.legacy.app.api import routes_app

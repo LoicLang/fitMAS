@@ -47,6 +47,7 @@ def test_v0_source_maps_sessions_and_activities(monkeypatch):
         assert acts[0].duration_min == 44
         assert acts[0].distance_m == 9300.0
         assert acts[0].source == "strava"
+        assert acts[0].tss == round(44 * 0.8, 1)  # duration-based load proxy
     finally:
         db.unlink(missing_ok=True)
 
