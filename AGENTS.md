@@ -71,9 +71,9 @@ Current durable direction:
 
 V0 status (8 juin 2026):
 
-- Core proven offline: 248 tests pass, fake matrix 11/11, danger metrics 0, guard fallback 0 %, core ~4306 LOC (cap 4320). Budget **re-baselined** (7 juin): the Meso engine is a deliberate **earned envelope**, not creep; ~2500 stays the ratchet for the bare conversational loop; the cap moves only on proven capability. See `docs/RUNTIME-V0.md` Budget.
-- Recently shipped: the **Meso week engine, end to end** — typed week model + deterministic verifier (constraint-aware réduction-sous-contrainte + non-empty floor), LLM-first generator (generate→verify + template fallback), context-pack (Slice 2.0/2.1), `propose_week` coach tool (3a), and **pending resolution + week commit** (3b: `pending_resolution`, `v0_planned_weeks` typed store, forward chaining). The coach is taught that a confirmation raising a new constraint ("oui mais [blessure/indispo]") is **not** an accept. Earlier: fact resolution, fact rider, LLM-first visible voice, execution commit gated on the carrying fact.
-- Proven couche 2 (DeepSeek): propose→confirm→commit + reject; constrained-week 4/4 (constraint respected, source=llm); live multi-turn self-play (injury / indispo / boredom) fails **safe** — V0 holds where the app would commit a hard week under injury. Residual: "oui mais" holds without yet re-proposing an adapted week; availability not yet typed. Probes: `scripts/v0_eval/probe_*`.
+- Core proven offline: 253 tests pass, fake matrix 11/11, danger metrics 0, guard fallback 0 %, core ~4337 LOC (cap 4337). Budget **re-baselined** (7 juin): the Meso engine is a deliberate **earned envelope**, not creep; ~2500 stays the ratchet for the bare conversational loop; the cap moves only on proven capability. See `docs/RUNTIME-V0.md` Budget.
+- Recently shipped: the **Meso week engine, end to end** — typed week model + deterministic verifier (constraint-aware réduction-sous-contrainte + non-empty floor), LLM-first generator (generate→verify + template fallback), context-pack (Slice 2.0/2.1), `propose_week` coach tool (3a), and **pending resolution + week commit** (3b: `pending_resolution`, `v0_planned_weeks` typed store, forward chaining). The coach is taught that a confirmation raising a new constraint ("oui mais [blessure/indispo]") is **not** an accept. **Tranche #1 shipped + proven couche 2**: on "oui mais [douleur/blessure]", the coach notes the health fact AND re-proposes a no-intensity week in the **same turn** (`intensity_restricted` param on `propose_week`; new pending supersedes the prior open one; verifier holds authority). Earlier: fact resolution, fact rider, LLM-first visible voice, execution commit gated on the carrying fact.
+- Proven couche 2 (DeepSeek): propose→confirm→commit + reject; constrained-week 4/4 (constraint respected, source=llm); live multi-turn self-play (injury / indispo / boredom) fails **safe** — V0 holds where the app would commit a hard week under injury. **Injury same-turn re-adaptation proven** (`probe_live_simulation --persona blessure`): PASS, no-intensity week proposed then committed on accept, guard ok, LLM judge 5/5/5/5. Residual: availability not yet typed (tranche #2); modify/preference path (tranche #3). Probes: `scripts/v0_eval/probe_*`.
 - Provider matrix: 11 scenarios x 3 providers (DeepSeek main path, + Mistral, Grok; Gemini opt-in, no credit). DeepSeek may emit prose after tool-use; repair the artifact, never accept an invalid final decision silently. Re-run for a fresh number; exports are not committed.
 
 Proof bar (current milestone):
@@ -108,7 +108,7 @@ Sport engine <-> runtime co-evolution (`docs/PLANNING-V0.md`):
 
 Next tranche (`docs/BUILD-ORDER.md`):
 
-1. Make "oui mais [constraint]" **re-propose proactively at turn N+1** for typed constraints (injury → no-intensity week) — close the "safe but not yet re-adapted" gap.
+1. ~~Make "oui mais [constraint]" re-propose at turn N+1 for injury~~ — **DONE (couche 2 proven, 8 juin)**. Same-turn re-adaptation shipped.
 2. **Type availability** as a constraint so the coach can re-plan around blocked days (today only `health` maps).
 3. The `modify` / preference path ("make it more varied").
 4. Deferred 3b follow-ups: materialize a committed week into `v0_scheduled_sessions` (executable plan); the `plan_patch` commit handler.
