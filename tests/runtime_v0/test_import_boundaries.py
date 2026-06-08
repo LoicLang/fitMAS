@@ -104,5 +104,12 @@ def test_runtime_v0_core_stays_under_v0_budget():
     # couche 2 (probe_live_simulation persona indispo) confirme la ré-adaptation autour des
     # jours bloqués. Le ratchet ~2500 du noyau conversationnel nu reste inchangé (croissance
     # = enveloppe Meso acquise). Spec : docs/superpowers/specs/2026-06-08-v0-dogfood-wiring-design.md.
+    # 4440 -> 4495 (8 juin 2026): réconciliation des deux stores de plan — au commit d'une
+    # semaine Meso, _materialize_week_sessions la pose sur le calendrier (v0_scheduled_sessions) :
+    # remplace le planifié, préserve l'exécuté, saute les rest. Une seule vérité du plan jour ;
+    # débloque injury-after-commit, l'exécution et le patch chirurgical sur une semaine générée.
+    # Enveloppe Meso acquise (le pont), pas du noyau conversationnel nu. Prouvé offline
+    # (test_executor_week_materialization) ; couche 2 ensuite.
+    # Spec : docs/superpowers/specs/2026-06-08-plan-store-reconciliation-design.md.
     loc = sum(len(path.read_text().splitlines()) for path in _core_files())
-    assert loc <= 4440
+    assert loc <= 4495

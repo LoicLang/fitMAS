@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 import json
 from pathlib import Path
 from typing import Any, Literal
@@ -262,6 +262,59 @@ def _apply_resolve_pending(command: ResolvePendingConfirmationCommand, connectio
     return before, after, command.note or "accepted"
 
 
+_MESO_TITLE = {
+    "easy_run": "Footing facile",
+    "long_run": "Sortie longue",
+    "threshold": "Seuil",
+    "intervals": "Intervalles",
+    "recovery_run": "Récupération",
+}
+
+
+def _materialize_week_sessions(week: dict[str, Any], connection, user_id: int) -> int:
+    """Bridge a committed Meso week onto the day calendar (v0_scheduled_sessions).
+
+    Replace `planned` rows in the week window; preserve executed ones; skip rest
+    days and any day already settled. Returns the number of rows inserted.
+    """
+    week_start = date.fromisoformat(week["week_start"])
+    week_end = week_start + timedelta(days=6)
+    key_type = week.get("key_type")
+    settled = {
+        r["date"]
+        for r in connection.execute(
+            "select date from v0_scheduled_sessions "
+            "where user_id = ? and date between ? and ? and status != 'planned'",
+            (user_id, week_start.isoformat(), week_end.isoformat()),
+        ).fetchall()
+    }
+    connection.execute(
+        "delete from v0_scheduled_sessions "
+        "where user_id = ? and date between ? and ? and status = 'planned'",
+        (user_id, week_start.isoformat(), week_end.isoformat()),
+    )
+    inserted = 0
+    for session in week["sessions"]:
+        if session["type"] == "rest" or session["date"] in settled:
+            continue
+        connection.execute(
+            "insert into v0_scheduled_sessions "
+            "(user_id, date, sport, title, duration_min, intensity_label, priority, status) "
+            "values (?, ?, ?, ?, ?, ?, ?, 'planned')",
+            (
+                user_id,
+                session["date"],
+                "running",
+                _MESO_TITLE.get(session["type"], session["type"]),
+                int(session["duration_min"]),
+                session["intensity"],
+                "key" if session["type"] == key_type else "secondary",
+            ),
+        )
+        inserted += 1
+    return inserted
+
+
 def _apply_commit_week(payload: dict[str, Any], connection, user_id: int) -> dict[str, Any]:
     week = payload.get("week_proposal")
     if not week:
@@ -279,7 +332,9 @@ def _apply_commit_week(payload: dict[str, Any], connection, user_id: int) -> dic
         ),
     )
     row = connection.execute("select * from v0_planned_weeks where id = ?", (cursor.lastrowid,)).fetchone()
-    return dict(row)
+    after = dict(row)
+    after["materialized_sessions"] = _materialize_week_sessions(week, connection, user_id)
+    return after
 
 
 def _apply_update_conversation_state(command: UpdateConversationStateCommand, connection, user_id: int) -> tuple[dict[str, Any], dict[str, Any], str]:
