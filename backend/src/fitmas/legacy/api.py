@@ -9,6 +9,7 @@ from fastapi import FastAPI
 
 load_dotenv(Path(__file__).resolve().parents[4] / ".env")
 
+from fitmas.legacy.app.api.basic_auth import BasicAuthMiddleware
 from fitmas.legacy.app.api.routes_activities import router as activities_router
 from fitmas.legacy.app.api.routes_app import router as app_router
 from fitmas.legacy.app.api.routes_debug import router as debug_router
@@ -42,6 +43,7 @@ async def lifespan(_: FastAPI):
 
 
 app = FastAPI(title="FitMAS V0 API", version="0.1.0", lifespan=lifespan)
+app.add_middleware(BasicAuthMiddleware)
 app.include_router(read_router)
 app.include_router(app_router)
 app.include_router(stats_router)
