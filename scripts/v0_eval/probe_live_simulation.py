@@ -204,7 +204,15 @@ def _run_persona(persona: dict, provider: str, now: datetime, max_turns: int) ->
             print(f"  T{turn} 🏃 {r.reply}")
             print(f"      [type={r.proposal.type} action={r.policy.action} tools={tools or '-'} "
                   f"guard={'ok' if r.guard.ok else 'BLOCKED ' + str(r.guard.blocked_reasons)} weeks_db={weeks_now}]")
-            per_turn.append({"turn": turn, "type": r.proposal.type, "action": r.policy.action, "guard": r.guard.ok, "committed_here": committed_here})
+            proposed = None
+            if r.proposal.type == "week_proposal" and r.proposal.week_proposal is not None:
+                proposed = list(r.proposal.week_proposal.sessions)
+            health_now = bool(_active_health_facts(db_path, ts + timedelta(seconds=1)))
+            per_turn.append({
+                "turn": turn, "type": r.proposal.type, "action": r.policy.action,
+                "guard": r.guard.ok, "committed_here": committed_here,
+                "proposed": proposed, "health": health_now,
+            })
 
         # ---- deterministic oracles ----
         weeks = _committed_weeks(db_path)
@@ -215,10 +223,26 @@ def _run_persona(persona: dict, provider: str, now: datetime, max_turns: int) ->
             if bad:
                 constraint_breaches = [(b.get("type"), b.get("intensity")) for b in bad]
 
+        # Aucune semaine PROPOSÉE pendant qu'un fait santé est actif ne doit porter
+        # d'intensité (même esprit que l'oracle de commit, étendu à la proposition).
+        proposed_breach = any(
+            t.get("proposed") and t.get("health") and _violations(t["proposed"])
+            for t in per_turn
+        )
+        # Barre montée pour la blessure : au moins une semaine SANS intensité proposée
+        # une fois la douleur connue (la ré-adaptation a bien eu lieu).
+        reproposed_adapted = any(
+            t.get("proposed") is not None and t.get("health") and not _violations(t["proposed"])
+            for t in per_turn
+        )
+
         print(f"\n  ── oracles ──")
         print(f"   guard ok all turns      : {guard_all_ok}")
         print(f"   weeks committed         : {len(weeks)}")
         print(f"   no auto-commit          : {not auto_commit}")
+        print(f"   no proposed breach      : {not proposed_breach}")
+        if persona["key"] == "blessure":
+            print(f"   reproposed adapted week : {reproposed_adapted}")
         print(f"   active health facts     : {health or '(none)'}")
         if health and weeks:
             print(f"   last week respects injury: {not constraint_breaches}" + (f"  !! breaches={constraint_breaches}" if constraint_breaches else ""))
@@ -233,9 +257,13 @@ def _run_persona(persona: dict, provider: str, now: datetime, max_turns: int) ->
         except Exception as exc:  # noqa: BLE001
             print(f"   (judge failed: {exc})")
 
-        ok = guard_all_ok and not auto_commit and not constraint_breaches
+        ok = guard_all_ok and not auto_commit and not constraint_breaches and not proposed_breach
+        if persona["key"] == "blessure":
+            ok = ok and reproposed_adapted
         print(f"\n  PERSONA {persona['key'].upper()}: {'PASS (hard guarantees held)' if ok else 'FAIL'}")
-        return {"key": persona["key"], "ok": ok, "guard_all_ok": guard_all_ok, "auto_commit": auto_commit, "breaches": constraint_breaches}
+        return {"key": persona["key"], "ok": ok, "guard_all_ok": guard_all_ok,
+                "auto_commit": auto_commit, "breaches": constraint_breaches,
+                "proposed_breach": proposed_breach, "reproposed_adapted": reproposed_adapted}
     finally:
         db_path.unlink(missing_ok=True)
 
@@ -270,6 +298,10 @@ def main() -> int:
             flags.append("auto-commit")
         if r["breaches"]:
             flags.append(f"constraint-breach={r['breaches']}")
+        if r.get("proposed_breach"):
+            flags.append("proposed-breach")
+        if r["key"] == "blessure" and not r.get("reproposed_adapted"):
+            flags.append("not-readapted")
         print(f"  {r['key']:10s}: {'PASS' if r['ok'] else 'FAIL'}" + (f"  ({', '.join(flags)})" if flags else ""))
     overall = all(r["ok"] for r in results)
     print(f"\nOVERALL: {'PASS' if overall else 'FAIL'}")
