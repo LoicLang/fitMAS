@@ -66,20 +66,24 @@ Use the repository for durable knowledge.
 Current durable direction:
 
 - The active build is a **dogfoodable Product V0** around `backend/src/fitmas/runtime_v0/`. We are no longer finishing the legacy app.
-- Architecture decision: the repo is the **product envelope**, `runtime_v0` is the **proven target core**, the old pipeline is **legacy to strangle**. No new repo, no big-bang Telegram migration, do not delete the old pipeline before adapters are proven.
+- Architecture decision: the repo is the **product envelope**, `runtime_v0` is the **live core** (deployed prod 8 juin 2026), the old pipeline is **legacy — retired**. No new repo. The read-adapter (`materialize_v0_db`) was used one-shot to bootstrap the live store; the legacy bot is off. Legacy FastAPI/webapp still runs but its data is no longer the source of truth for the coach.
 - Sources of truth: next steps `docs/BUILD-ORDER.md`; product scope `docs/V0-DOGFOOD-SCOPE.md`; core reference `docs/RUNTIME-V0.md`; internal code map `docs/V0-CODE-MAP.md` (how V0 works file-by-file); test method `docs/V0-TEST-DOCTRINE.md`; user-text doctrine `docs/LLM-FIRST-CONVERSATION.md`; planning engine architecture `docs/PLANNING-V0.md`.
 
-V0 status (8 juin 2026):
+V0 status (8 juin 2026, soir) — **LIVE IN PROD**:
 
-- Core proven offline: 262 tests pass, fake matrix 11/11, danger metrics 0, guard fallback 0 %, core ~4440 LOC (cap 4440). Budget **re-baselined** (7 juin): the Meso engine is a deliberate **earned envelope**, not creep; ~2500 stays the ratchet for the bare conversational loop; the cap moves only on proven capability. See `docs/RUNTIME-V0.md` Budget.
-- Recently shipped: the **Meso week engine, end to end** — typed week model + deterministic verifier (constraint-aware réduction-sous-contrainte + non-empty floor), LLM-first generator (generate→verify + template fallback), context-pack (Slice 2.0/2.1), `propose_week` coach tool (3a), and **pending resolution + week commit** (3b: `pending_resolution`, `v0_planned_weeks` typed store, forward chaining). The coach is taught that a confirmation raising a new constraint ("oui mais [blessure/indispo]") is **not** an accept. **Tranche #1 shipped + proven couche 2**: on "oui mais [douleur/blessure]", the coach notes the health fact AND re-proposes a no-intensity week in the **same turn** (`intensity_restricted` param on `propose_week`; new pending supersedes the prior open one; verifier holds authority). **Tranche #2 shipped + proven couche 2**: on "oui mais [indispo jours]", the coach notes the availability fact AND calls `propose_week(blocked_days=[...])` in the **same turn** — re-proposed week puts REST on blocked days, key on an available day; verifier `_check_blocked_days` enforces (all modes), load floor relaxed (keeps prescribed key); LLM judge 5/5/5/5. **`get_planned_week`** read tool (re-reads the committed week on a later turn). **Dogfood Telegram runner** `scripts/dogfood_telegram.py` (standalone poll→handle_event→reply on v0_* store, DeepSeek, allowlist — week loop plan+adjust injury/availability+view now dogfoodable). Earlier: fact resolution, fact rider, LLM-first visible voice, execution commit gated on the carrying fact.
-- Proven couche 2 (DeepSeek): propose→confirm→commit + reject; constrained-week 4/4 (constraint respected, source=llm); live multi-turn self-play (injury / indispo / boredom) fails **safe** — V0 holds where the app would commit a hard week under injury. **Injury same-turn re-adaptation proven** (`probe_live_simulation --persona blessure`): PASS, LLM judge 5/5/5/5. **Availability same-turn re-adaptation proven** (`probe_live_simulation --persona indispo`): PASS, REST on blocked days, LLM judge 5/5/5/5. Residual: cross-turn availability persistence (deferred); modify/preference path (tranche #3); execution tracking (phase 2). Probes: `scripts/v0_eval/probe_*`.
-- Provider matrix: 11 scenarios x 3 providers (DeepSeek main path, + Mistral, Grok; Gemini opt-in, no credit). DeepSeek may emit prose after tool-use; repair the artifact, never accept an invalid final decision silently. Re-run for a fresh number; exports are not committed.
+- **V0 is Loïc's live Telegram coach as of evening 8 juin 2026.** `scripts/dogfood_telegram.py` runs in prod via `scripts/start-prod`, replacing the legacy bot. The legacy bot is retired; its scheduled jobs (Strava cron, morning briefing, weekly review) are off.
+- **Live store**: `FITMAS_V0_DB_PATH` → `/data/fitmas_v0_dogfood.db` (Fly volume). V0 `v0_*` tables = source of truth. Allowlist via `FITMAS_V0_DOGFOOD_CHAT_IDS` (Fly secret) = Loïc's Telegram chat id.
+- **Bootstrapped from real data** (8 juin, `materialize_v0_db` in `runtime_v0/adapters/current_db_snapshot.py`): current plan → `v0_scheduled_sessions`, activities → `v0_activities`, facts → `v0_facts`. Critical: `users.id=1` remapped to `telegram_chat_id`; legacy future plan dropped (V0 plans the future itself); legacy junk facts dropped (literal "9.3", duplicates, meta-coach instructions — exactly the rule/fact accumulation V0 is built to avoid).
+- **Strava → V0 sync LIVE**: `runtime_v0/adapters/strava_v0_sync.py` (`sync_strava_to_v0`) pulls recent Strava activities via legacy token, upserts into `v0_activities` de-duped by Strava activity id. Periodic job in runner (`FITMAS_V0_STRAVA_SYNC_SECONDS`, default 900 s). Verified live (HTTP 200, ~100 activities synced).
+- Core proven: 262 tests pass, fake matrix 11/11, danger metrics 0, guard fallback 0 %, core ~4440 LOC (cap 4440). Budget **re-baselined** (7 juin): the Meso engine is a deliberate **earned envelope**, not creep; ~2500 stays the ratchet for the bare conversational loop. See `docs/RUNTIME-V0.md` Budget.
+- Proven couche 2 (DeepSeek): propose→confirm→commit + reject; constrained-week 4/4; injury same-turn re-adaptation PASS (LLM judge 5/5/5/5); availability same-turn re-adaptation PASS (REST on blocked days, LLM judge 5/5/5/5). Live multi-turn self-play fails **safe** where the legacy app committed a hard week under injury.
+- **Known gaps (not bugs — next tranches)**: run↔session not auto-matched (coach sees activities, can mark done on user request, no auto-mark from Strava sync); reply voice is terse; `propose_week` targets next Monday only; proactivity (briefings, weekly review) is off; solo only (Strava sync hardcodes `legacy_user=1`).
+- Provider matrix: 11 scenarios x 3 providers (DeepSeek main, + Mistral, Grok; Gemini opt-in). Re-run for fresh numbers; exports not committed.
 
 Proof bar (current milestone):
 
-- Potential is **shown**. The bar is now: **prove V0 better than the legacy app on real, unscripted simulation** (couche 2) — not on the scripted matrix, not on the legacy replay harness.
-- "Better" keeps failure-profile-first: V0 must fail **safe** where the app fails **dangerous**, and at least match usefulness on the scenarios V0 covers. Never game a raw rate.
+- **Bar cleared for prod**: V0 is live on real data. Potential shown AND verified on real unscripted simulation. The bar now is: **sustain reliability on real dogfood** — track failure profile on real turns, fix safe, never accumulate deterministic rules.
+- "Better" remains failure-profile-first: V0 must fail **safe** where the app failed **dangerous**. Never game a raw rate.
 
 Test doctrine (`docs/V0-TEST-DOCTRINE.md`), two layers:
 
@@ -110,10 +114,13 @@ Next tranche (`docs/BUILD-ORDER.md`):
 
 1. ~~Make "oui mais [constraint]" re-propose at turn N+1 for injury~~ — **DONE (couche 2 proven, 8 juin)**. Same-turn re-adaptation shipped.
 2. ~~**Type availability** as a constraint so the coach can re-plan around blocked days~~ — **DONE (couche 2 proven, 8 juin)**. `blocked_days` declared, REST on blocked days, LLM judge 5/5/5/5.
-3. The `modify` / preference path ("make it more varied").
-4. Cross-turn availability persistence (store blocked days on the fact, typed ingestion).
-5. Deferred 3b follow-ups: materialize a committed week into `v0_scheduled_sessions` (executable plan); the `plan_patch` commit handler.
-6. Migration track: build a `WorldSnapshot` from the real DB → executor adapter to existing writers → wire Telegram / API under a flag + allowlist.
+3. ~~**Deploy V0 live in prod**~~ — **DONE (8 juin, soir)**. Runner replaces legacy bot, store bootstrapped from real data (materialize + user_id remap + junk-facts drop), Strava→V0 sync live (900 s, verified).
+4. **Run↔session matching** (LLM-first: teach coach to mark done from a clearly matching Strava activity; full auto-proactive needs heartbeat — deferred).
+5. **Voice tuning** — warm up terse list replies.
+6. **`propose_week` "this week" param** — target the in-progress week, not only next Monday.
+7. **Cross-turn availability persistence** (store typed blocked-days on the fact).
+8. **Modify / preference path** ("make it more varied").
+9. **Heartbeat / proactivity** (briefings, weekly review, auto-reconcile — what the legacy bot did, V0 will own).
 
 Hard rules:
 

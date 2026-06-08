@@ -192,9 +192,16 @@ exactes de `handle_event` :
 - **`llm_clients/fake.py`** — `FakeLLMClient` (réponses scriptées) pour les tests couche 1.
 
 ### Pont legacy (`adapters/`, hors noyau)
-- **`adapters/current_db_snapshot.py`** — construit un `WorldSnapshot` depuis la DB produit
-  existante. Peut dépendre du legacy ; **ne compte pas** dans le budget LOC ; le noyau ne
-  l'importe jamais (la dépendance pointe `adapters -> core`, jamais l'inverse).
+- **`adapters/current_db_snapshot.py`** — `materialize_v0_db` : bootstrap one-shot du
+  store live depuis la DB legacy (plan -> `v0_scheduled_sessions`, activites ->
+  `v0_activities`, faits -> `v0_facts`). Utilisé pour la mise en prod le 8 juin 2026.
+  **Point critique** : remap `users.id=1 -> telegram_chat_id` ; faits legacy jetes
+  (bruit accumule) ; plan futur legacy supprime (V0 planifie l'avenir). Hors budget LOC ;
+  le noyau ne l'importe jamais (dépendance `adapters -> core`, jamais l'inverse).
+- **`adapters/strava_v0_sync.py`** — `sync_strava_to_v0` : tire les activites Strava
+  recentes via le token legacy (`strava_connections`), upserte dans `v0_activities`,
+  dedoublon par Strava activity id. Import paresseux. **Seul writer de `v0_activities`**
+  (hors bootstrap). Actif en prod via le job periodique du runner.
 
 ## 4. L'agent coach en détail (`agent.py`)
 
@@ -342,7 +349,25 @@ Doctrine : `V0-TEST-DOCTRINE.md`.
     (indispo / blessure / lassitude) face au vrai coach ; oracles déterministes + transcript
     + juge LLM. C'est la sonde qui révèle le comportement réel multi-tour.
 
-## 11. Isolation & budget
+## 11. Deploiement / live (8 juin 2026)
+
+V0 est le coach Telegram de Loïc depuis le soir du 8 juin 2026.
+
+- **Entrypoint prod** : `scripts/dogfood_telegram.py` — poll Telegram (long-poll),
+  `handle_event` sur le store v0_*, reply, allowlist (`FITMAS_V0_DOGFOOD_CHAT_IDS`).
+  Job periodique integre : `sync_strava_to_v0` toutes les `FITMAS_V0_STRAVA_SYNC_SECONDS`
+  secondes (defaut 900). Lancé via `scripts/start-prod` (remplace l'ancien bot legacy).
+- **Store live** : `FITMAS_V0_DB_PATH` -> `/data/fitmas_v0_dogfood.db` (volume Fly CDG).
+  Tables `v0_*` = source de verite. La DB legacy FastAPI tourne encore mais ses donnees
+  ne sont plus utilisees par le coach.
+- **Bootstrap (one-shot, 8 juin)** : `materialize_v0_db` a injecte le plan courant, les
+  activites et des faits propres depuis la DB legacy. Remap `user_id 1 -> chat_id` ;
+  faits legacy jetes (accumulation de bruit) ; plan futur legacy supprime.
+- **Lacunes connues** : run<->session non matchees automatiquement ; voix terse ;
+  `propose_week` cible prochain lundi uniquement ; pas de proactivite (briefings off) ;
+  solo (`legacy_user=1` hardcode dans `strava_v0_sync`).
+
+## 12. Isolation & budget
 
 - **Isolation** (test `test_import_boundaries.py`) : le noyau n'importe aucun layer legacy ;
   `adapters/` est le seul pont et ne compte pas dans le budget.
@@ -350,7 +375,7 @@ Doctrine : `V0-TEST-DOCTRINE.md`.
   Meso est une **enveloppe acquise** (re-baseline 7 juin) ; le cap dur ne monte que sur
   capacité **prouvée**, justification loggée dans le test. Détail : `RUNTIME-V0.md` Budget.
 
-## 12. Où vit quoi (réflexe rapide)
+## 13. Où vit quoi (réflexe rapide)
 
 | Je veux… | Fichier |
 |---|---|
@@ -367,4 +392,6 @@ Doctrine : `V0-TEST-DOCTRINE.md`.
 | toucher la génération de semaine | `meso/generator.py` + `prompts/week_generation.py` |
 | changer une propriété de semaine saine | `meso/verifier.py` |
 | brancher le produit réel | `adapters/` (hors noyau) |
-| dogfood Telegram standalone (V0, local) | `scripts/dogfood_telegram.py` (hors noyau) |
+| runner Telegram V0 (prod + local) | `scripts/dogfood_telegram.py` (hors noyau) |
+| sync Strava -> v0_activities | `adapters/strava_v0_sync.py` |
+| bootstrap store depuis legacy (one-shot) | `adapters/current_db_snapshot.py` `materialize_v0_db` |
