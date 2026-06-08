@@ -61,6 +61,13 @@ _GOOD_WEEK = [
     {"date": "2026-06-14", "type": "long_run", "duration_min": 70, "intensity": "moderate"}, # 105
 ]
 
+_EASY_WEEK = [
+    {"date": "2026-06-09", "type": "easy_run", "duration_min": 80, "intensity": "easy"},  # 80
+    {"date": "2026-06-11", "type": "easy_run", "duration_min": 80, "intensity": "easy"},  # 80
+    {"date": "2026-06-13", "type": "easy_run", "duration_min": 70, "intensity": "easy"},  # 70
+    {"date": "2026-06-14", "type": "easy_run", "duration_min": 80, "intensity": "easy"},  # 80
+]  # load 310 in band (300,330), zéro intensité / zéro séance clé
+
 
 def _snapshot(facts=()):
     return WorldSnapshot(
@@ -197,3 +204,31 @@ def test_propose_week_requires_generation_llm():
     ctx = ToolContext(db_path=None, snapshot=_snapshot(), generation_llm=None)
     with pytest.raises(ValueError):
         propose_week(ctx, last_week_load=300.0, key_type="threshold")
+
+
+def test_propose_week_intensity_restricted_accepts_no_key_week():
+    # Douleur signalée CE tour : le coach déclare intensity_restricted. Le snapshot
+    # de début de tour ne porte pas encore le fait santé, donc la restriction vient
+    # du param. Sous restriction, le vérif relâche la clé prescrite -> une semaine
+    # facile sans intensité est acceptée (source=llm).
+    generation_llm = FakeLLMClient([_emit(_EASY_WEEK)])
+    ctx = ToolContext(db_path=None, snapshot=_snapshot(), generation_llm=generation_llm)
+    proposal = propose_week(
+        ctx, last_week_load=300.0, key_type="threshold", intensity_restricted=True
+    )
+    assert proposal.type == "week_proposal"
+    assert proposal.week_proposal.source == "llm"
+    sessions = proposal.week_proposal.sessions
+    assert all(s["intensity"] != "hard" for s in sessions)
+    assert all(s["type"] not in {"threshold", "intervals"} for s in sessions)
+
+
+def test_propose_week_schema_exposes_intensity_restricted():
+    event = InputEvent(
+        id="e1", user_id=1, source="test", type="user_message",
+        text="x", payload={}, occurred_at=NOW,
+    )
+    tools = {tool.name: tool for tool in for_event(event, _snapshot())}
+    props = tools["propose_week"].parameters["properties"]
+    assert "intensity_restricted" in props
+    assert props["intensity_restricted"]["type"] == "boolean"
