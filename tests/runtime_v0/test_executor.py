@@ -342,3 +342,51 @@ def test_execute_is_idempotent_by_turn_command_and_target(tmp_path):
         event_count = connection.execute("select count(*) from v0_command_events").fetchone()[0]
     assert event_count == 1
     assert first[0].id == second[0].id
+
+
+def test_new_week_pending_supersedes_prior_open_week_pending(tmp_path):
+    db_path = tmp_path / "fitmas_v0.db"
+    init_db(db_path)
+    executor = CommandExecutor(db_path)
+    expires = datetime(2026, 12, 31, tzinfo=PARIS)
+
+    def _week_pending(summary):
+        return CreatePendingConfirmationCommand(
+            type="week_proposal", summary=summary, payload_json="{}", expires_at=expires
+        )
+
+    executor.execute((_week_pending("semaine A"),), turn_id="t1")
+    executor.execute((_week_pending("semaine B"),), turn_id="t2")
+
+    with connect(db_path) as connection:
+        rows = connection.execute(
+            "select summary, status from v0_pending_confirmations order by id"
+        ).fetchall()
+    status = {r["summary"]: r["status"] for r in rows}
+    assert status == {"semaine A": "superseded", "semaine B": "open"}
+
+
+def test_week_pending_does_not_supersede_other_pending_types(tmp_path):
+    db_path = tmp_path / "fitmas_v0.db"
+    init_db(db_path)
+    executor = CommandExecutor(db_path)
+    expires = datetime(2026, 12, 31, tzinfo=PARIS)
+    with connect(db_path) as connection:
+        connection.execute(
+            "insert into v0_pending_confirmations (user_id, type, summary, payload_json, expires_at) "
+            "values (?, ?, ?, ?, ?)",
+            (1, "plan_patch", "swap en attente", "{}", expires.isoformat()),
+        )
+        connection.commit()
+    executor.execute(
+        (CreatePendingConfirmationCommand(
+            type="week_proposal", summary="semaine", payload_json="{}", expires_at=expires),),
+        turn_id="t1",
+    )
+    with connect(db_path) as connection:
+        rows = connection.execute(
+            "select type, status from v0_pending_confirmations order by id"
+        ).fetchall()
+    status = {r["type"]: r["status"] for r in rows}
+    assert status["plan_patch"] == "open"      # un autre type n'est pas touché
+    assert status["week_proposal"] == "open"

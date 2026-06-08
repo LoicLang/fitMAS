@@ -112,7 +112,7 @@ CREATE TABLE IF NOT EXISTS v0_pending_confirmations (
     type TEXT NOT NULL,
     summary TEXT NOT NULL,
     payload_json TEXT NOT NULL,
-    status TEXT NOT NULL DEFAULT 'open',
+    status TEXT NOT NULL DEFAULT 'open',  -- open | accepted | rejected | superseded
     expires_at TEXT NOT NULL,
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
