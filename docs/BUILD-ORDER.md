@@ -67,7 +67,11 @@ Preuve (verifiee offline puis deploye) :
 - Run <-> session : pas de matching automatique. Le coach *voit* les activites recentes
   et peut marquer une seance done sur la demande de l'utilisateur (chemin LLM-first
   prevu), mais aucun auto-mark depuis la sync Strava.
-- Voix de reponse : tersee / liste ("08 Footing… 09…") ; chaleur a regler.
+- Presence / voix : pas qu'un ton terse. Sur un tour NON-actionnable (social / motivation,
+  ex « il pleut mais je vais la faire ! ») V0 repond a cote (« je n'ai pas d'info fraiche…
+  raconte-moi ta seance ») — erreur de categorie + zero chaleur + confond intention/bilan.
+  Et il n'a PAS de personnalite : le *soul* legacy (« ClawCoach, pote encourageant », table
+  `users`) n'a pas ete migre -> voix d'assistant generique. Detail + chantier : Ordre #5.
 - `propose_week` cible toujours le prochain lundi ; pas de "cette semaine" en cours.
 - Proactivite (briefings, revue hebdo que le legacy faisait) : eteinte.
 - Solo uniquement : `sync_strava_to_v0` hardcode `legacy_user=1`.
@@ -162,8 +166,24 @@ Ordre recommande :
    une seance done quand il voit une activite Strava qui matche clairement
    (`propose_execution_update` + `recent_activities` + `current_plan` dans le snapshot) ;
    proactivite complete (heartbeat auto-reconcile) differee a la tranche heartbeat.
-5. **Voix** : rechauffer les reponses (prompt reply) — "08 Footing…" -> chaleur
-   conversationnelle + contexte.
+5. **Presence / Voix — PRIORITE (frontiere actuelle).** Le data est regle ; ce qui manque,
+   c'est *etre* le coach, pas seulement *faire*. Revele en dogfood reel (8 juin) : sur
+   « il pleut mais je vais la faire ! » (social + motivation + intention future), V0 a
+   repondu « je n'ai pas d'info fraiche a te partager… raconte-moi ta seance… on ajuste »
+   — pas de faute, mais pas naturel. Quatre volets :
+   (a) **mode reponse non-actionnable** : un tour social / motivation / « j'y vais » ne
+       demande AUCUN tool -> presence + encouragement bref, sans machinerie d'action
+       (aujourd'hui V0 retombe sur une reponse creuse cadree donnees/execution) ;
+   (b) **porter le soul/personnalite** : recuperer (profil legacy `users` : ClawCoach,
+       « direct, humain, encourageant, comme un vrai pote ») ou redeclarer la voix — V0
+       parle generique, pas comme *son* coach (le soul n'a pas ete migre) ;
+   (c) **bannir le reflexe « je n'ai pas d'info »** quand rien n'est demande ;
+   (d) **gerer intention vs bilan** (« je vais faire » != « j'ai fait » -> pas de saut
+       premature vers le log d'execution).
+   Garde-fou doctrine : c'est du prompt/voix LLM-first, JAMAIS du determinisme sur le texte
+   user (pas de regex/keyword pour detecter « social » vs « action »). Le run<->session
+   matching (#4) est *differe* (decision Loic : ok pour dogfood en l'etat) ; cette frontiere
+   passe devant.
 6. **`propose_week` "cette semaine"** : ajouter un param permettant de cibler la
    semaine en cours (pas seulement le prochain lundi).
 7. **Persistance cross-tour availability** (stocker les jours bloques sur le fait,
