@@ -268,7 +268,7 @@ serres (chaque piece est utilisee ou est un seam documente pour 3b / 2.1 / Macro
 ```text
 noyau conversationnel V0 (boucle, hors meso/): cible ~2500, garder la pression
 moteur Meso (meso/ + cablage week_proposal): enveloppe dediee, acquise
-cap dur (test_import_boundaries): 4337
+cap dur (test_import_boundaries): 4440
 > cap: justification de CAPACITE obligatoire (jamais du creep), bump au landing
 ```
 
@@ -283,6 +283,12 @@ contrainte ; le verif tient l'autorite) + supersede du pending ouvert
 (`executor._apply_create_pending`, status `superseded`). 253 tests, matrix 11/11, danger 0.
 Couche 2 (`probe_live_simulation --persona blessure`) confirmee : PASS, juge LLM 5/5/5/5. Spec :
 `docs/superpowers/specs/2026-06-08-readapt-blessure-same-turn-design.md`.
+
+4337 -> 4440 (8 juin 2026) : chantier dogfood — #2 availability (`blocked_days` declares,
+verificateur `_check_blocked_days`, plancher relache, generateur/template blocked-days-aware)
++ `get_planned_week` (read tool semaine committee) + runner Telegram standalone
+`scripts/dogfood_telegram.py`. 262 tests. Capacite prouvee couche 2 (indispo, juge LLM
+5/5/5/5). Spec dogfood : `docs/superpowers/specs/2026-06-08-v0-dogfood-wiring-design.md`.
 
 ## Sport Core V0
 

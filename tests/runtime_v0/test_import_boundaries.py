@@ -96,5 +96,13 @@ def test_runtime_v0_core_stays_under_v0_budget():
     # "safe mais pas ré-adapté" pour la blessure. Capacité prouvée offline ; couche 2
     # (probe_live_simulation persona blessure) confirme la ré-adaptation réelle.
     # Spec : docs/superpowers/specs/2026-06-08-readapt-blessure-same-turn-design.md.
+    # 4337 -> 4440 (8 juin 2026): chantier dogfood — (a) #2 availability typée :
+    # TypedConstraint.blocked_days + verifier _check_blocked_days/blocked_weekday_indices
+    # + relâche du plancher de charge sous jours bloqués (garde la clé) + générateur et
+    # template constraint-aware + propose_week(blocked_days) + sous-règle coach indispo ;
+    # (b) get_planned_week (lire la semaine committée). Capacité prouvée offline (261 tests) ;
+    # couche 2 (probe_live_simulation persona indispo) confirme la ré-adaptation autour des
+    # jours bloqués. Le ratchet ~2500 du noyau conversationnel nu reste inchangé (croissance
+    # = enveloppe Meso acquise). Spec : docs/superpowers/specs/2026-06-08-v0-dogfood-wiring-design.md.
     loc = sum(len(path.read_text().splitlines()) for path in _core_files())
-    assert loc <= 4337
+    assert loc <= 4440

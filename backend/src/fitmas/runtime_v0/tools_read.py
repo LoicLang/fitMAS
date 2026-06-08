@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass, field
 from datetime import date, timedelta
 from pathlib import Path
@@ -90,6 +91,28 @@ def get_recent_execution_events(ctx: ToolContext, limit: int = 5) -> dict[str, A
     ]
     _record(ctx, name, True)
     return {"events": events}
+
+def get_planned_week(ctx: ToolContext) -> dict[str, Any]:
+    name = "get_planned_week"
+    with connect(ctx.db_path) as connection:
+        row = connection.execute(
+            "select week_start, source, week_load, key_type, sessions_json "
+            "from v0_planned_weeks where user_id = ? and status = 'committed' "
+            "order by week_start desc, id desc limit 1",
+            (ctx.snapshot.user_id,),
+        ).fetchone()
+    _record(ctx, name, True)
+    if row is None:
+        return {"planned_week": None}
+    return {
+        "planned_week": {
+            "week_start": row["week_start"],
+            "week_load": row["week_load"],
+            "key_type": row["key_type"],
+            "source": row["source"],
+            "sessions": json.loads(row["sessions_json"]),
+        }
+    }
 
 def get_active_facts(ctx: ToolContext) -> dict[str, Any]:
     name = "get_active_facts"

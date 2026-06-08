@@ -17,6 +17,7 @@ from fitmas.runtime_v0.tools_read import (
     get_active_facts,
     get_current_plan,
     get_plan_day,
+    get_planned_week,
     get_recent_execution_events,
     get_session,
     resolve_date_reference,
@@ -59,6 +60,13 @@ def for_event(event: InputEvent, snapshot: WorldSnapshot) -> tuple[ToolSchema, .
             description="Return active non-expired user facts.",
             parameters=_schema({}),
             handler=get_active_facts,
+            is_proposal=False,
+        ),
+        ToolSchema(
+            name="get_planned_week",
+            description="Return the most recent committed running week (Meso) with its sessions. Use when the user asks to see or re-read their planned week.",
+            parameters=_schema({}),
+            handler=get_planned_week,
             is_proposal=False,
         ),
         ToolSchema(
@@ -140,7 +148,8 @@ def for_event(event: InputEvent, snapshot: WorldSnapshot) -> tuple[ToolSchema, .
                 "load of the last real week) and key_type (the prescribed key session "
                 "type). The engine generates and verifies the week; it is only proposed, "
                 "never committed. Set intensity_restricted=true when the user has just "
-                "reported pain/injury this turn so the engine drops all intensity."
+                "reported pain/injury this turn so the engine drops all intensity. "
+                "Pass blocked_days=[...] (monday..sunday) when the user is unavailable on specific days this week."
             ),
             parameters=_schema(
                 {
@@ -151,6 +160,10 @@ def for_event(event: InputEvent, snapshot: WorldSnapshot) -> tuple[ToolSchema, .
                     },
                     "phase": {"type": "string", "enum": ["build", "recovery", "taper"]},
                     "intensity_restricted": {"type": "boolean"},
+                    "blocked_days": {
+                        "type": "array",
+                        "items": {"type": "string", "enum": ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"]},
+                    },
                 },
                 ("last_week_load", "key_type"),
             ),

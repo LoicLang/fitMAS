@@ -96,6 +96,7 @@ class TypedConstraint:
     severity: Severity
     restricts: tuple[Restrict, ...]
     active: bool = True  # already filtered for expiry/resolution upstream
+    blocked_days: tuple[str, ...] = ()  # weekday names monday..sunday; () = no day block
 
 
 @dataclass(frozen=True)

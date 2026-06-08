@@ -241,3 +241,86 @@ def test_reduced_constraint_week_still_passes_after_non_empty_check():
     )  # load = 40 + 35 + 90 = 165, in a generous band
     verdict = verify_week(week, _target(band=(50.0, 250.0)), constraint, "continuity")
     assert verdict.ok, _codes(verdict)
+
+
+# --- Availability / blocked_days tests ---
+
+def test_blocked_day_session_rejected():
+    # Wednesday (day=2 from BASE=Monday) is blocked; a training session on it must fail.
+    # _GOOD_WEEK-style week but with a training session on Wed (day 2).
+    week = PlannedWeek(
+        sessions=(
+            _s(1, "easy_run", 45, "easy"),        # Tue
+            _s(2, "threshold", 60, "hard"),        # Wed — BLOCKED
+            _s(4, "easy_run", 40, "easy"),         # Fri
+            _s(6, "long_run", 90, "moderate"),     # Sun
+        )
+    )  # load within band (350, 430): 45 + 120 + 40 + 135 = 340 — use a wider band
+    constraint = TypedConstraint(
+        severity="moderate", restricts=(), active=True, blocked_days=("wednesday",)
+    )
+    target = _target(band=(200.0, 500.0), key_type="threshold")
+    verdict = verify_week(week, target, constraints=(constraint,))
+    assert verdict.ok is False
+    assert "blocked_day_session" in _codes(verdict)
+
+
+def test_week_avoiding_blocked_days_ok():
+    # Same constraint but all training sessions on non-blocked days: no blocked_day_session.
+    week = PlannedWeek(
+        sessions=(
+            _s(1, "easy_run", 45, "easy"),         # Tue — ok
+            _s(3, "threshold", 60, "hard"),        # Thu — ok
+            _s(4, "easy_run", 40, "easy"),         # Fri — ok
+            _s(6, "long_run", 90, "moderate"),     # Sun — ok
+        )
+    )
+    constraint = TypedConstraint(
+        severity="moderate", restricts=(), active=True, blocked_days=("wednesday",)
+    )
+    target = _target(band=(200.0, 500.0), key_type="threshold")
+    verdict = verify_week(week, target, constraints=(constraint,))
+    assert "blocked_day_session" not in _codes(verdict)
+
+
+def test_blocked_days_relax_load_floor():
+    # A below-band-load week WITH a blocked-days constraint → no load_drop.
+    # The same week WITHOUT the constraint → load_drop fires.
+    target = _target(band=(300.0, 330.0), key_type="threshold")
+    # Both sessions on Mon (day 0) and Tue (day 1) — neither is in the blocked set.
+    low_week = PlannedWeek(
+        sessions=(
+            _s(0, "threshold", 50, "hard"),    # 100 — key present, Monday
+            _s(1, "easy_run", 30, "easy"),     # 30 — Tuesday
+        )
+    )  # load = 130 < 300 (well below floor)
+    constraint = TypedConstraint(
+        severity="moderate", restricts=(), active=True, blocked_days=("wednesday", "thursday", "friday", "saturday", "sunday")
+    )
+    verdict_with = verify_week(low_week, target, constraints=(constraint,))
+    assert "load_drop" not in _codes(verdict_with), "blocked_days should relax load floor"
+
+    verdict_without = verify_week(low_week, target, constraints=())
+    assert "load_drop" in _codes(verdict_without), "without constraint load_drop must fire"
+
+
+def test_blocked_days_keep_key_requirement():
+    # Pure availability constraint (restricts=(), blocked_days set) — build phase.
+    # A week missing the prescribed key must still raise a key violation
+    # (availability alone does NOT drop the key; only intensity restriction does).
+    target = _target(band=(200.0, 500.0), key_type="threshold")
+    no_key_week = PlannedWeek(
+        sessions=(
+            _s(1, "easy_run", 90, "easy"),     # Mon
+            _s(3, "easy_run", 80, "easy"),     # Wed — but this day is NOT blocked
+            _s(5, "easy_run", 60, "easy"),     # Fri
+            _s(6, "long_run", 80, "moderate"), # Sat
+        )
+    )  # no threshold/intervals key session
+    constraint = TypedConstraint(
+        severity="moderate", restricts=(), active=True, blocked_days=("tuesday",)
+    )
+    verdict = verify_week(no_key_week, target, constraints=(constraint,))
+    assert "key_session_count" in _codes(verdict) or "key_type_drift" in _codes(verdict), (
+        "availability constraint must not drop the key requirement"
+    )

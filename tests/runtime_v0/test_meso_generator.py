@@ -151,3 +151,24 @@ def test_generate_week_requires_target():
     bare = ContextPack(target=None, last_week_actuals=None, constraints=(), signals=())
     with pytest.raises(ValueError):
         generate_week(FakeLLMClient([]), bare, MONDAY)
+
+
+def test_template_fallback_respects_blocked_days():
+    # Force template: LLM never emits a valid week -> 3 contract msgs -> fallback.
+    # The template must place sessions only on non-blocked days.
+    constraint = TypedConstraint(
+        severity="moderate", restricts=(), active=True, blocked_days=("wednesday", "thursday")
+    )
+    pack = _pack(constraints=(constraint,))
+    llm = FakeLLMClient(
+        [LLMResponse(text="..."), LLMResponse(text="..."), LLMResponse(text="...")]
+    )
+    result = generate_week(llm, pack, MONDAY, max_attempts=3)
+    assert result.source == "template_fallback"
+    blocked_weekdays = {2, 3}  # wednesday=2, thursday=3
+    assert all(
+        s.date.weekday() not in blocked_weekdays
+        for s in result.week.sessions
+        if s.type != "rest"
+    )
+    assert result.verdict.ok, f"template violated verifier: {result.verdict.violations}"

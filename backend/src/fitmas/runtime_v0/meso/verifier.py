@@ -42,6 +42,41 @@ def limits_intensity(constraints: tuple[TypedConstraint, ...]) -> bool:
     )
 
 
+def restricts_days(constraints: tuple[TypedConstraint, ...]) -> bool:
+    """True if an active constraint blocks specific weekdays (availability window)."""
+    return any(constraint.active and constraint.blocked_days for constraint in constraints)
+
+
+_WEEKDAY_INDEX = {
+    "monday": 0, "tuesday": 1, "wednesday": 2, "thursday": 3,
+    "friday": 4, "saturday": 5, "sunday": 6,
+}
+
+
+def blocked_weekday_indices(constraints: tuple[TypedConstraint, ...]) -> set[int]:
+    """Weekday ints (Mon=0..Sun=6) blocked by active availability constraints."""
+    return {
+        _WEEKDAY_INDEX[day]
+        for constraint in constraints
+        if constraint.active
+        for day in constraint.blocked_days
+        if day in _WEEKDAY_INDEX
+    }
+
+
+def _check_blocked_days(
+    week: PlannedWeek, constraints: tuple[TypedConstraint, ...]
+) -> list[Violation]:
+    blocked = blocked_weekday_indices(constraints)
+    if not blocked:
+        return []
+    bad = [s for s in week.sessions if s.type != "rest" and s.date.weekday() in blocked]
+    if bad:
+        days = sorted({s.date.isoformat() for s in bad})
+        return [Violation("blocked_day_session", f"training on blocked day(s) {days}", "high")]
+    return []
+
+
 def verify_week(
     week: PlannedWeek,
     target: WeekTarget,
@@ -49,18 +84,23 @@ def verify_week(
     mode: Mode = "continuity",
 ) -> WeekVerdict:
     violations: list[Violation] = []
-    relaxed = limits_intensity(constraints)
+    relaxed_intensity = limits_intensity(constraints)
+    relaxed_days = restricts_days(constraints)
+    load_floor_relaxed = relaxed_intensity or relaxed_days
     # Structural floor in EVERY mode: a degenerate week slips through otherwise —
     # under a relaxed constraint the key + load-floor checks are both dropped, so an
     # empty (or all-rest) week would pass with no other gate.
     violations.extend(_check_non_empty(week))
     if mode == "continuity":
-        if target.phase == "build" and not relaxed:
+        if target.phase == "build" and not relaxed_intensity:
+            # Availability-only constraint keeps the key requirement; only intensity
+            # restriction drops the prescribed hard key this week.
             violations.extend(_check_key(week, target))
-        violations.extend(_check_load_continuity(week, target, drop_relaxed=relaxed))
+        violations.extend(_check_load_continuity(week, target, drop_relaxed=load_floor_relaxed))
     else:  # transition: discontinuity + type change allowed, safety enforced
         violations.extend(_check_load_transition(week, target))
     violations.extend(_check_spacing(week))
+    violations.extend(_check_blocked_days(week, constraints))
     violations.extend(_check_health(week, constraints))
     return WeekVerdict(
         ok=not violations,

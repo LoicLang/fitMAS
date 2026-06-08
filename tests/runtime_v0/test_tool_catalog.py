@@ -44,6 +44,7 @@ def test_user_message_gets_all_v0_tools(tmp_path):
         "get_session",
         "get_recent_execution_events",
         "get_active_facts",
+        "get_planned_week",
         "resolve_date_reference",
         "propose_execution_update",
         "propose_execution_correction",
