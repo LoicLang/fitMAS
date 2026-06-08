@@ -18,7 +18,9 @@ GENERATION_SYSTEM = (
     "EXCEPTION contrainte: si l'intensite est restreinte, la seance cle prescrite SAUTE "
     "cette semaine — aucune seance dure, ni seuil, ni fractionne; remplace-la par du "
     "volume facile (easy, plus une long_run moderate).\n"
-    "charge = duree_min x poids (easy=1.0, moderate=1.5, hard=2.0); rest = 0."
+    "charge = duree_min x poids (easy=1.0, moderate=1.5, hard=2.0); rest = 0.\n"
+    "Si des jours sont bloques (indisponibilite), ne place aucune seance ces jours-la "
+    "et reduis le volume en consequence."
 )
 
 
@@ -57,4 +59,7 @@ def render_generation_prompt(pack: ContextPack, week_start: date, mode: str) -> 
         restrictions = sorted({r for c in pack.constraints if c.active for r in c.restricts})
         if restrictions:
             lines.append(f"contraintes actives: restreint {', '.join(restrictions)}")
+    blocked = sorted({day for c in pack.constraints if c.active for day in c.blocked_days})
+    if blocked:
+        lines.append(f"jours bloques (indisponible): {', '.join(blocked)} — ne place AUCUNE seance ces jours-la")
     return "\n".join(lines)

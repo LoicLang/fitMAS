@@ -232,3 +232,41 @@ def test_propose_week_schema_exposes_intensity_restricted():
     props = tools["propose_week"].parameters["properties"]
     assert "intensity_restricted" in props
     assert props["intensity_restricted"]["type"] == "boolean"
+
+
+# --- Availability / blocked_days tests ---
+
+# Week that avoids Wed (2026-06-10) and Thu (2026-06-11), with key + in band (300, 330)
+_WEEK_NO_WEDTHU = [
+    {"date": "2026-06-09", "type": "threshold", "duration_min": 50, "intensity": "hard"},    # Tue, key, 100
+    {"date": "2026-06-12", "type": "easy_run", "duration_min": 60, "intensity": "easy"},      # Fri, 60
+    {"date": "2026-06-13", "type": "easy_run", "duration_min": 50, "intensity": "easy"},      # Sat, 50
+    {"date": "2026-06-14", "type": "long_run", "duration_min": 70, "intensity": "moderate"},  # Sun, 105
+]  # load 315 in band (300, 330), no Wed/Thu
+
+
+def test_propose_week_blocked_days_accepts_avoiding_week():
+    # propose_week with blocked_days=["wednesday","thursday"]; LLM emits a week
+    # that avoids those days → proposal accepted, no session on 06-10 or 06-11.
+    generation_llm = FakeLLMClient([_emit(_WEEK_NO_WEDTHU)])
+    ctx = ToolContext(db_path=None, snapshot=_snapshot(), generation_llm=generation_llm)
+    proposal = propose_week(
+        ctx, last_week_load=300.0, key_type="threshold",
+        blocked_days=["wednesday", "thursday"],
+    )
+    assert proposal.type == "week_proposal"
+    assert proposal.week_proposal.source == "llm"
+    session_dates = {s["date"] for s in proposal.week_proposal.sessions}
+    assert "2026-06-10" not in session_dates, "wednesday must not appear"
+    assert "2026-06-11" not in session_dates, "thursday must not appear"
+
+
+def test_propose_week_schema_exposes_blocked_days():
+    event = InputEvent(
+        id="e1", user_id=1, source="test", type="user_message",
+        text="x", payload={}, occurred_at=NOW,
+    )
+    tools = {tool.name: tool for tool in for_event(event, _snapshot())}
+    props = tools["propose_week"].parameters["properties"]
+    assert "blocked_days" in props
+    assert props["blocked_days"]["type"] == "array"

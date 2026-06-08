@@ -148,7 +148,8 @@ def for_event(event: InputEvent, snapshot: WorldSnapshot) -> tuple[ToolSchema, .
                 "load of the last real week) and key_type (the prescribed key session "
                 "type). The engine generates and verifies the week; it is only proposed, "
                 "never committed. Set intensity_restricted=true when the user has just "
-                "reported pain/injury this turn so the engine drops all intensity."
+                "reported pain/injury this turn so the engine drops all intensity. "
+                "Pass blocked_days=[...] (monday..sunday) when the user is unavailable on specific days this week."
             ),
             parameters=_schema(
                 {
@@ -159,6 +160,10 @@ def for_event(event: InputEvent, snapshot: WorldSnapshot) -> tuple[ToolSchema, .
                     },
                     "phase": {"type": "string", "enum": ["build", "recovery", "taper"]},
                     "intensity_restricted": {"type": "boolean"},
+                    "blocked_days": {
+                        "type": "array",
+                        "items": {"type": "string", "enum": ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"]},
+                    },
                 },
                 ("last_week_load", "key_type"),
             ),
