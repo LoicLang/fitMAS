@@ -129,7 +129,9 @@ Then message it: *"plan my week"* → confirm → *"actually my knee hurts"* / *
 
 ## Status & honesty
 
-This is an in-progress prototype, not a finished product. The V0 conversational core and the running week engine are proven offline and on live unscripted simulation; the next steps are real Telegram dogfooding and strangling the remaining legacy pipeline behind proven adapters. The architecture decision is explicit: **the repo is the product envelope, `runtime_v0/` is the proven target core, the old pipeline is legacy to strangle** — no big-bang rewrite.
+As of June 2026, **V0 is live in production** — it is the author's daily Telegram coach, running on its own audited store and having replaced the legacy bot. This is early dogfood, not a finished product: the conversational core and the running-week engine are proven offline (262 tests, danger metrics 0), on live unscripted simulation, and now in real daily use. Known gaps are tracked honestly — the reply voice is terse, Strava activities aren't yet auto-matched to planned sessions, and proactive briefings are off.
+
+The architecture decision is explicit: **the repo is the product envelope, `runtime_v0/` is the live core, and the old pipeline is legacy — retired and quarantined under [`backend/src/fitmas/legacy/`](backend/src/fitmas/legacy/)** — no big-bang rewrite.
 
 Stack: FastAPI · SQLite · SQLAlchemy 2.0 · python-telegram-bot · OpenAI-compatible providers (DeepSeek primary) · React/Vite webapp.
 
