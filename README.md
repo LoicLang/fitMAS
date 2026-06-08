@@ -1,5 +1,7 @@
 # FitMAS — a reliable LLM running coach
 
+[![CI](https://github.com/LoicLang/fitMAS/actions/workflows/ci.yml/badge.svg)](https://github.com/LoicLang/fitMAS/actions/workflows/ci.yml)
+
 > An adaptive running coach you talk to in plain language. The bet: **the LLM understands and generates; a deterministic verifier holds authority.** Reliability comes from the checker, not from caging the model.
 
 FitMAS is a personal engineering project about one hard problem in LLM products: **how do you make a conversational agent that mutates real state trustworthy enough to use every day — without drowning it in rules?**
@@ -62,6 +64,8 @@ The discipline is that **a green test number is never the bar.** A scripted matr
 
 Crucially, the design **fails safe**: where the predecessor would commit a hard week under a fresh injury, V0 holds.
 
+A worked **V0-vs-legacy comparison** (anonymized) is in [`docs/RUNTIME-V0-APP-COMPARISON.md`](docs/RUNTIME-V0-APP-COMPARISON.md) — including the case where the legacy app fabricated a block and falsely confirmed a move it never made, and V0 fails safe on the same input.
+
 ---
 
 ## What it does today (V0 dogfood scope)
@@ -84,9 +88,11 @@ This repo is built to explain itself. Start here:
 1. [`AGENTS.md`](AGENTS.md) — the doctrine and working agreement (the north star, the hard rules).
 2. [`PROJECT.md`](PROJECT.md) — current status and proof.
 3. [`docs/`](docs/) — `RUNTIME-V0.md` (core reference), `V0-CODE-MAP.md` (file-by-file), `PLANNING-V0.md` (the LLM/verifier split), `V0-TEST-DOCTRINE.md` (the two layers), `LLM-FIRST-CONVERSATION.md` (the user-text rule).
-4. `backend/src/fitmas/runtime_v0/` — the proven core (isolated; it imports no legacy module).
+4. `backend/src/fitmas/runtime_v0/` — the proven core (isolated; imports no legacy module). Everything under `backend/src/fitmas/legacy/` is the **retired** pipeline, kept for provenance.
 
 Design specs and implementation plans for each shipped slice live under [`docs/superpowers/`](docs/superpowers/).
+
+> Built and maintained with agentic coding tools (Claude Code + Codex) — the working doctrine lives in [`AGENTS.md`](AGENTS.md), which doubles as the Codex agents convention.
 
 > Most docs are in French (this is a solo project); the code, tests, and this README are the entry points for an English reader.
 
