@@ -2,30 +2,48 @@
 
 [![CI](https://github.com/LoicLang/fitMAS/actions/workflows/ci.yml/badge.svg)](https://github.com/LoicLang/fitMAS/actions/workflows/ci.yml)
 
-> An adaptive running coach you talk to in plain language. The bet: **the LLM understands and generates; a deterministic verifier holds authority.** Reliability comes from the checker, not from caging the model.
+> An adaptive running coach you talk to in plain language. The bet: **the LLM understands and generates; a deterministic verifier holds authority.** Reliability comes from the checker — not from caging the model.
 
-FitMAS is a personal engineering project about one hard problem in LLM products: **how do you make a conversational agent that mutates real state trustworthy enough to use every day — without drowning it in rules?**
-
-It is built as an antidote to the failure mode that killed its own predecessor.
+FitMAS is a personal engineering project, and an honest one: it is me working out, by trial and error, one hard problem in LLM products — **how do you make a conversational agent that mutates real state trustworthy enough to use every day, without drowning it in rules?** Most of what is here was *discovered by experiment*, not designed up front. What follows is the failure that started it, the bet that fixed it, and what each iteration taught me.
 
 ---
 
-## The failure mode this refuses
+## What went wrong first
 
-The earlier version of this app died of **deterministic fix-on-fix**: every broken case got one more rule (a regex, a keyword, a template, a branch). Those rules are invisible in tests (you only test the cases you imagined) and lethal in production (the case you didn't). The result is the classic trap:
+The first version died of **deterministic fix-on-fix**: every broken case got one more rule — a regex, a keyword, a template, a branch. Those rules are invisible in tests (you only test the cases you imagined) and lethal in production (the case you didn't). The classic trap:
 
 > **perfect in test, incapable in reality.**
 
-So the rebuild (`runtime_v0/`) inverts the responsibility split:
+It bloated, too: **234 files, 46,507 lines** of decision/planning logic that was rigid *and* unreliable. The lesson wasn't "write better rules" — it was that the architecture itself manufactured the rules.
+
+---
+
+## The bet
+
+The rebuild (`runtime_v0/`) inverts who owns what:
 
 | Concern | Owner |
 |---|---|
-| Understanding free user text | **LLM** (never a regex / keyword) |
-| Generating a plan / personalizing | **LLM** |
-| Validating, authorizing, committing, auditing | **Deterministic backend** |
-| Holding authority on safety & structure | **Deterministic verifier + policy** |
+| Understanding free user text | **LLM** — never a regex / keyword |
+| Generating & personalizing a plan | **LLM** |
+| Validating, committing, auditing | **Deterministic backend** |
+| Authority over safety & structure | **Deterministic verifier + policy** |
 
-The principle, applied to planning: **verifying is easier than generating — so determinism lives on the tractable side.** The LLM proposes a training week; a deterministic verifier judges it against a handful of safety/structure properties (load progression, no unexplained drop, key-session type, no session on a day the athlete is away, no hard work on an injury). Nothing the LLM says about the user's text is parsed by a rule. Nothing is written to the DB except through one audited executor. No visible reply is allowed to claim a write that didn't happen.
+The principle, applied to planning: **verifying is easier than generating — so determinism lives on the tractable side.** The LLM proposes a training week; a deterministic verifier judges it against a few safety/structure properties (load progression, no unexplained drop, key-session type, no session on a day the athlete is away, no hard work on an injury). No rule parses the user's text. Nothing reaches the DB except through one audited executor. No reply may claim a write that didn't happen.
+
+---
+
+## By the numbers
+
+The small size is the *result* of getting the split right, not the premise:
+
+| | Legacy (retired) | V0 (live core) |
+|---|---:|---:|
+| Files | 234 | **35** |
+| Lines of Python | 46,507 | **5,015** |
+| Systematic danger class (auto-commit) | present | **closed (6 → 0)** |
+
+~**9× less code — and it fails safe where the old one failed dangerous.**
 
 ---
 
@@ -36,48 +54,60 @@ InputEvent → WorldSnapshot → CoachAgent → ActionProposal → RuntimePolicy
           → CommandExecutor → RuntimeResult → ReplyComposer → OutputGuard → Audit
 ```
 
-- **WorldSnapshot** — a read-only photo of the user (plan, recent training, active facts, pending) handed to the model. The model never queries the DB directly.
-- **CoachAgent** — the LLM, in a bounded ReAct loop, reads via read-tools and emits a typed `ActionProposal` (never raw text that gets parsed).
-- **RuntimePolicy** — the authority. Grounds the proposal against DB truth, decides allow / pending / block, and compiles typed commands.
-- **CommandExecutor** — the only writer. Transactional, idempotent per event, every mutation emits an audit event.
-- **OutputGuard** — reads the *model's own output* and blocks a reply that lies about a write, leaks internals, or claims a non-existent action.
+- **WorldSnapshot** — a read-only photo of the user handed to the model; it never queries the DB.
+- **CoachAgent** — the LLM in a bounded ReAct loop; emits a typed `ActionProposal`, never raw text to be parsed.
+- **RuntimePolicy** — the authority: grounds the proposal against DB truth, decides allow / pending / block, compiles typed commands.
+- **CommandExecutor** — the only writer; transactional, idempotent per event, every mutation audited.
+- **OutputGuard** — reads the *model's own reply* and blocks anything that lies about a write or claims a non-existent action.
 
-The sport engine is a **coach-callable toolbox** (`propose_week`) in the same tool-calling paradigm: high-level intent → deterministic engine → typed proposal → policy gate. The LLM places the easy runs and writes the prose; the verifier owns the numbers and the prescribed key session.
-
----
-
-## How reliability is actually proven
-
-The discipline is that **a green test number is never the bar.** A scripted matrix tunes both sides of the exchange — so it can only ever be an anti-regression / danger net, never a quality compass. Quality is judged on an **unscripted turn**.
-
-**Two layers:**
-
-1. **Mechanical matrix** (`scripts/v0_eval/run_matrix.py`) — anti-regression + danger metrics across scenarios and providers. A change must not regress it and must keep danger metrics at zero (`wrong_write`, `old_plan`, `claim_without_event`, …).
-2. **Live subagent simulation** (`scripts/v0_eval/probe_live_simulation.py`) — an LLM role-plays an unscripted athlete (an injury, a work trip, boredom) against the *real* coach loop on a real provider. Deterministic oracles guarantee safety (guard ok every turn, no auto-commit, no constraint breach); an LLM judge scores quality. A change is "done" only when it survives a real turn here.
-
-**Current proof (offline):** 262 tests pass, fake matrix 11/11, danger metrics 0, output-guard fallback 0%.
-
-**Current proof (live, DeepSeek, unscripted):** two adaptation capabilities hold end-to-end —
-
-- *Injury* — "looks good, but my knee hurts since yesterday" → the coach notes the constraint **and re-proposes a no-intensity week in the same turn**, presented for confirmation. Judge 5/5/5/5.
-- *Availability* — "I'm away Wed–Thu, can you make it still work?" → the coach re-plans around the blocked days (rest on Wed/Thu, compensates elsewhere), same turn. Judge 5/5/5/5.
-
-Crucially, the design **fails safe**: where the predecessor would commit a hard week under a fresh injury, V0 holds.
-
-A worked **V0-vs-legacy comparison** (anonymized) is in [`docs/RUNTIME-V0-APP-COMPARISON.md`](docs/RUNTIME-V0-APP-COMPARISON.md) — including the case where the legacy app fabricated a block and falsely confirmed a move it never made, and V0 fails safe on the same input.
+The sport engine is a coach-callable tool (`propose_week`): high-level intent → deterministic engine → typed proposal → policy gate. The LLM places the easy runs and writes the prose; the verifier owns the numbers and the prescribed key session.
 
 ---
 
-## What it does today (V0 dogfood scope)
+## How I prove it — and how my testing had to change
 
-Plan a running week, adjust it as life happens, see it:
+My first instinct was a scripted test matrix. It went green — and lied. A scripted matrix tunes *both* sides of the exchange, so a high score only proves I imagined the right cases. That is the v1 trap, one level up. So the method itself had to evolve:
 
-- propose / commit a week (always behind a confirmation — the engine never auto-commits a plan)
-- re-adapt **same-turn** under an injury (no-intensity week) or an availability window (rest on blocked days)
-- read back the committed week
-- block sport-unsafe mutations; an output guard that won't let a reply lie
+1. **Mechanical matrix** (`run_matrix.py`) — an anti-regression / danger net, never a quality compass. A change must not regress it and must keep danger metrics at zero (`wrong_write`, `old_plan`, `claim_without_event`, …).
+2. **Live unscripted simulation** (`probe_live_simulation.py`) — an LLM role-plays an unscripted athlete (an injury, a work trip, boredom) against the *real* coach loop on a real provider. Deterministic oracles enforce safety; an LLM judge scores quality. **A change is "done" only when it survives a turn no one scripted.**
 
-**Deliberately out of scope (for now):** execution tracking against the plan, long-term periodization, multi-sport, nutrition, a heartbeat that mutates state. Running-only first — because load is verifiable by hand, and you can't prove reliability you can't check.
+**Proof today** — offline: 265 tests, fake matrix 11/11, danger metrics 0, guard fallback 0%. And the live layer earned its keep the hard way: it once scored an injury turn **5/5/5/5 on the LLM judge while the deterministic oracle failed it** — the coach had noted a fresh injury but left a hard session in the already-committed week. The judge was fooled; the oracle was not. Root cause: two plan stores (the engine's planned week vs the live day calendar) were never reconciled, so a committed week was invisible to the coach. I fixed it (materialize the committed week onto the calendar; teach the coach to re-propose under a post-commit injury) and a forced-ordering probe now passes it (see **In action** below). Availability behaves the same — rest the blocked days, keep the key session. On a 90-run replay against the legacy app, V0 is **not yet better on raw usefulness** — and I say so — but the one systematic danger class is closed and `tie_bad` is 0. Honest write-up: [`docs/RUNTIME-V0-APP-COMPARISON.md`](docs/RUNTIME-V0-APP-COMPARISON.md).
+
+---
+
+## In action
+
+A real, unscripted turn (DeepSeek; the coach is the live loop, operating in French — glossed here). The athlete commits a week, then reports an injury:
+
+> **Athlete:** *"Plan my week, please."* → the coach proposes a week with a Tuesday **threshold** (hard) session.
+> **Athlete:** *"Yes, lock it in."* → committed.
+> **Athlete:** *"By the way — since yesterday my right calf hurts when I run."*
+> **Coach:** *(reads the committed week, notes the injury)* *"Here's an adjusted week of the 15th — all easy running plus one moderate long run, no hard session, to respect the calf. Want me to set it?"* → behind confirmation, output guard clean.
+
+Before the fix, on this exact ordering the coach only recorded the injury and left the hard session in the plan — the gap the LLM judge missed and the deterministic oracle caught. Now it re-plans safely. Reproduce: [`scripts/v0_eval/probe_injury_after_commit.py`](scripts/v0_eval/probe_injury_after_commit.py).
+
+---
+
+## What I learned
+
+- **A deterministic generator accumulates rules you can't see.** They pass every test you wrote and fail the user you didn't imagine.
+- **Verifying is easier than generating** — so put determinism on the verifier and let the LLM do the understanding it's actually good at.
+- **A green number is not proof — not even an LLM judge's.** A scripted matrix measures your imagination; and an LLM quality judge happily scored a genuinely unsafe turn 5/5/5/5. Only a deterministic safety oracle reliably catches the dangerous case.
+- **Bolt-on subsystems don't link themselves.** The planning engine and the live calendar grew as two stores; "committing" a week didn't put it on the calendar until I built the bridge. Design the seam in, or it *becomes* the bug.
+- **"Fail safe" is designed, not hoped for** — a guard that reads the model's *own* output is the line between a wrong answer and a dangerous one.
+- **Earn capability; don't assume it.** Running-only first, because load is verifiable by hand — you can't prove reliability you can't check.
+
+---
+
+## Where it is, and where it's going
+
+**Live today (June 2026):** V0 is my daily Telegram coach, on its own audited store, having replaced the legacy bot. It plans a running week, adjusts it same-turn as life happens (injury, travel), reads it back, blocks unsafe mutations, and won't let a reply lie. This is early dogfood — honest gaps: the voice is terse, Strava activities aren't auto-matched to sessions yet, and proactive briefings are off.
+
+**North star:** *the smallest reliable coach worth using every day* — then grow capability only once it's proven, one tool at a time (the line budget is a deliberate ratchet, not an accident).
+
+**Next:** auto-match Strava activities to planned sessions (LLM-first) · warm up the reply voice · target the in-progress week, not just next Monday · grow the planning engine under the verifier (progression, then declared cycle transitions) · proactivity (morning brief, weekly review).
+
+**Deliberately not yet:** multi-month periodization, multi-sport, nutrition, a heartbeat that auto-commits a mutation. The live next-step list is [`docs/BUILD-ORDER.md`](docs/BUILD-ORDER.md).
 
 ---
 
@@ -90,7 +120,7 @@ This repo is built to explain itself. Start here:
 3. [`docs/`](docs/) — `RUNTIME-V0.md` (core reference), `V0-CODE-MAP.md` (file-by-file), `PLANNING-V0.md` (the LLM/verifier split), `V0-TEST-DOCTRINE.md` (the two layers), `LLM-FIRST-CONVERSATION.md` (the user-text rule).
 4. `backend/src/fitmas/runtime_v0/` — the proven core (isolated; imports no legacy module). Everything under `backend/src/fitmas/legacy/` is the **retired** pipeline, kept for provenance.
 
-Design specs and implementation plans for each shipped slice live under [`docs/superpowers/`](docs/superpowers/).
+Design specs and implementation plans for each shipped slice live under [`docs/superpowers/`](docs/superpowers/) — the trail of how each piece was reasoned, built, and proven.
 
 > Built and maintained with agentic coding tools (Claude Code + Codex) — the working doctrine lives in [`AGENTS.md`](AGENTS.md), which doubles as the Codex agents convention.
 
@@ -127,12 +157,6 @@ Then message it: *"plan my week"* → confirm → *"actually my knee hurts"* / *
 
 ---
 
-## Status & honesty
-
-As of June 2026, **V0 is live in production** — it is the author's daily Telegram coach, running on its own audited store and having replaced the legacy bot. This is early dogfood, not a finished product: the conversational core and the running-week engine are proven offline (262 tests, danger metrics 0), on live unscripted simulation, and now in real daily use. Known gaps are tracked honestly — the reply voice is terse, Strava activities aren't yet auto-matched to planned sessions, and proactive briefings are off.
-
-The architecture decision is explicit: **the repo is the product envelope, `runtime_v0/` is the live core, and the old pipeline is legacy — retired and quarantined under [`backend/src/fitmas/legacy/`](backend/src/fitmas/legacy/)** — no big-bang rewrite.
-
-Stack: FastAPI · SQLite · SQLAlchemy 2.0 · python-telegram-bot · OpenAI-compatible providers (DeepSeek primary) · React/Vite webapp.
+Stack: FastAPI · SQLite · SQLAlchemy 2.0 · python-telegram-bot · OpenAI-compatible providers (DeepSeek primary). The repo is the product envelope; `runtime_v0/` is the live core; the legacy pipeline is retired under `backend/src/fitmas/legacy/` — no big-bang rewrite.
 
 Personal project by Loïc Lang. Source-available for review.
