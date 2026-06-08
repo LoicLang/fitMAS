@@ -46,15 +46,23 @@ def _connect(path: Path) -> sqlite3.Connection:
     return conn
 
 
-def get_scheduled_sessions(user_id: int = 1, limit: int = 120) -> list[ScheduledSession]:
+def get_scheduled_sessions(user_id: int | None = None, limit: int = 120) -> list[ScheduledSession]:
+    """Read the V0 calendar. The V0 store is solo (one user, keyed on the telegram
+    chat id, not ``1``), so by default we don't filter by user_id."""
     path = v0_db_path()
     if not path.exists():
         return []
     with _connect(path) as conn:
-        rows = conn.execute(
-            "select * from v0_scheduled_sessions where user_id = ? order by date asc, id asc limit ?",
-            (user_id, limit),
-        ).fetchall()
+        if user_id is None:
+            rows = conn.execute(
+                "select * from v0_scheduled_sessions order by date asc, id asc limit ?",
+                (limit,),
+            ).fetchall()
+        else:
+            rows = conn.execute(
+                "select * from v0_scheduled_sessions where user_id = ? order by date asc, id asc limit ?",
+                (user_id, limit),
+            ).fetchall()
     sessions: list[ScheduledSession] = []
     for row in rows:
         day = date.fromisoformat(row["date"])
@@ -77,15 +85,22 @@ def get_scheduled_sessions(user_id: int = 1, limit: int = 120) -> list[Scheduled
     return sessions
 
 
-def get_activities(user_id: int = 1, limit: int = 500) -> list[Activity]:
+def get_activities(user_id: int | None = None, limit: int = 500) -> list[Activity]:
+    """Read the V0 activities. Solo store → default to no user_id filter (see above)."""
     path = v0_db_path()
     if not path.exists():
         return []
     with _connect(path) as conn:
-        rows = conn.execute(
-            "select * from v0_activities where user_id = ? order by date desc, id desc limit ?",
-            (user_id, limit),
-        ).fetchall()
+        if user_id is None:
+            rows = conn.execute(
+                "select * from v0_activities order by date desc, id desc limit ?",
+                (limit,),
+            ).fetchall()
+        else:
+            rows = conn.execute(
+                "select * from v0_activities where user_id = ? order by date desc, id desc limit ?",
+                (user_id, limit),
+            ).fetchall()
     activities: list[Activity] = []
     for row in rows:
         keys = row.keys()
