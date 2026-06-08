@@ -198,6 +198,42 @@ def main() -> None:
     tg_app = Application.builder().token(token).build()
     tg_app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, on_message))
 
+    # Periodic Strava -> V0 sync: pull the user's real runs into the V0 store so the
+    # coach knows what they actually trained. Lazy import (the legacy bridge) so a
+    # legacy import problem can never block the conversational bot.
+    legacy_db_path = Path(os.getenv("FITMAS_DB_PATH", "fitmas.db"))
+    legacy_user_id = int(os.getenv("FITMAS_V0_STRAVA_LEGACY_USER", "1"))
+    strava_interval = int(os.getenv("FITMAS_V0_STRAVA_SYNC_SECONDS", "900"))
+
+    async def _strava_sync_job(context: object) -> None:  # noqa: ARG001
+        from functools import partial
+        try:
+            from fitmas.runtime_v0.adapters.strava_v0_sync import sync_strava_to_v0
+        except Exception:
+            logger.exception("dogfood: strava sync adapter import failed")
+            return
+        loop = asyncio.get_running_loop()
+        for uid in allowlist:
+            try:
+                n = await loop.run_in_executor(
+                    None,
+                    partial(
+                        sync_strava_to_v0,
+                        legacy_db_path=legacy_db_path,
+                        v0_db_path=db_path,
+                        legacy_user_id=legacy_user_id,
+                        runner_user_id=uid,
+                    ),
+                )
+                if n:
+                    logger.info("dogfood: strava->v0 synced %d new activities (chat %s)", n, uid)
+            except Exception:
+                logger.exception("dogfood: strava->v0 sync failed (chat %s)", uid)
+
+    if allowlist and tg_app.job_queue is not None:
+        tg_app.job_queue.run_repeating(_strava_sync_job, interval=strava_interval, first=15, name="strava_v0_sync")
+        logger.info("dogfood: strava->v0 sync every %ds", strava_interval)
+
     logger.info("dogfood: starting polling...")
     tg_app.run_polling(allowed_updates=Update.ALL_TYPES)
 
