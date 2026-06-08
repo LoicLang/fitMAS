@@ -2,30 +2,31 @@
 
 Coach IA multisport proactif qui ajuste l'entrainement selon la vraie vie.
 
-## Statut — 8 juin 2026
+## Statut — 8 juin 2026 (soir) — V0 LIVE EN PROD
 
-FitMAS sort du chantier "prototype runtime" et entre dans le chantier
-**Produit V0 dogfoodable**.
+**V0 est le coach Telegram de Loïc depuis le soir du 8 juin 2026.**
+`scripts/dogfood_telegram.py` remplace le legacy bot dans `scripts/start-prod`.
+Legacy bot retraite. V0 store (`v0_*` sur le volume Fly) = source de verite du coaching.
 
 Decision :
 
 ```text
 repo actuel = enveloppe produit
-runtime_v0 = noyau cible prouve
-ancien pipeline = legacy a etrangler progressivement
+runtime_v0 = noyau live (prod)
+ancien pipeline = legacy retraite
 ```
 
-Le but n'est pas de refaire FitMAS dans un nouveau repo.
-Le but est de reconstruire la colonne vertebrale autour du Runtime V0, avec
-des adapters vers la DB, Telegram, l'API et les writers existants.
+La migration par etapes est **partiellement depassee** : l'adapteur de lecture
+(`materialize_v0_db`) a ete utilise en one-shot pour le bootstrap ; la coexistence
+write-adapter est devenue inutile puisque le legacy est retraite. FastAPI/webapp
+tournent encore mais leurs donnees ne sont plus la verite du coaching.
 
 ## Cap Actuel
 
 Phrase guide :
 
 ```text
-Construire le plus petit coach Telegram auquel Loic peut faire confiance
-pendant 1 a 2 semaines.
+Maintenir le plus petit coach Telegram fiable sur lequel Loïc s'appuie.
 ```
 
 Le V0 dogfoodable doit :
@@ -42,7 +43,7 @@ Ne pas ouvrir Phase B progression/prescription sans demande explicite.
 
 ## Preuve Runtime V0
 
-Verifie offline le 8 juin 2026 :
+Verifie offline puis deploye live le 8 juin 2026 :
 
 ```text
 tests/runtime_v0 : 262 passed
@@ -56,7 +57,7 @@ core             : ~4440 LOC (cap 4440 ; noyau conversationnel + moteur Meso —
 Construit depuis : moteur Meso de bout en bout (`runtime_v0/meso/` — modele type +
 verificateur deterministe constraint-aware, generateur LLM-first generate->verify,
 context-pack), le tool coach `propose_week` (3a), et la **resolution de pending +
-commit semaine** (3b : `pending_resolution`, store type `v0_planned_weeks`, chaînage
+commit semaine** (3b : `pending_resolution`, store type `v0_planned_weeks`, chainage
 forward). Le coach est enseigne qu'un « oui mais [contrainte] » n'est pas un accept.
 **Tranche #1 livree + prouvee couche 2** : sur « oui mais [douleur/blessure] », le
 coach note le fait sante ET re-propose une semaine sans intensite dans le **meme tour**
@@ -65,10 +66,13 @@ coach note le fait sante ET re-propose une semaine sans intensite dans le **meme
 coach note le fait availability ET re-propose une semaine avec REST sur les jours bloques
 dans le **meme tour** (`blocked_days` declares, verificateur `_check_blocked_days`,
 probe DeepSeek : PASS, juge LLM 5/5/5/5).
-**`get_planned_week`** (read tool, relit la semaine committée).
-**Runner dogfood Telegram standalone** `scripts/dogfood_telegram.py` — boucle semaine
-(plan + ajuste blessure/indispo + voit) dogfoodable localement ; store v0_*, DeepSeek,
-allowlist. Pas de deploy (phase 2).
+**`get_planned_week`** (read tool, relit la semaine committee).
+**Deploy live prod (8 juin, soir)** : `scripts/dogfood_telegram.py` remplace le legacy
+bot ; store bootstrap depuis les donnees reelles (`materialize_v0_db` : remap user_id,
+faits legacy jetes, plan futur legacy supprime) ; Strava->V0 sync active
+(`runtime_v0/adapters/strava_v0_sync.py`, job 900 s, verifie live ~100 activites).
+**Lacunes connues** : run<->session non matchees auto ; voix terse ; propose_week ->
+prochain lundi seulement ; proactivite off ; solo.
 **Prouve couche 2** (DeepSeek) : propose->confirme->commit + reject, semaine sous
 contrainte 4/4, simulation live multi-tour qui echoue safe (blessure 5/5/5/5, indispo
 5/5/5/5).
@@ -108,12 +112,14 @@ InputEvent
 -> Audit
 ```
 
-Prochaine difficulte :
+Live en prod — lacunes actives :
 
 ```text
-DB actuelle -> WorldSnapshot
-ActionProposal -> writes actuels audites
-RuntimeResult -> Telegram/API
+run <-> session matching (LLM-first, pas encore auto)
+voix terse (a rechauffer)
+propose_week -> prochain lundi seulement
+proactivite (briefings, revue hebdo) off
+solo (legacy_user=1 hardcode dans strava_v0_sync)
 ```
 
 ## Ordre De Lecture

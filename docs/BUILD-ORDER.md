@@ -14,48 +14,85 @@ read_when:
 Le plus petit coach Telegram fiable pour 1 a 2 semaines de dogfood.
 ```
 
-## Etat Actuel — 6 juin 2026
+## Etat Actuel — 8 juin 2026 (soir) — V0 LIVE EN PROD
 
-Le Runtime V0 a valide le noyau et le premier Sport Core minimal :
+**V0 est le coach Telegram de Loïc depuis le soir du 8 juin 2026.** Le runner
+`scripts/dogfood_telegram.py` remplace le legacy bot dans `scripts/start-prod`. Le bot
+legacy est retraite ; ses jobs automatiques (cron Strava, briefing matin, revue
+hebdomadaire) sont eteints.
 
 ```text
 InputEvent -> Snapshot -> Agent -> Proposal -> Policy -> Executor
 -> Result -> Reply -> Guard -> Audit
 ```
 
-Preuve (verifiee offline le 6 juin 2026) :
+Preuve (verifiee offline puis deploye) :
 
-- `tests/runtime_v0` : 229 passed ;
+- `tests/runtime_v0` : 262 passed ;
 - fake matrix : `11/11` ;
 - danger metrics : `0 wrong_write`, `0 old_plan`,
   `0 wrong_correction_target`, `0 claim_without_event` ;
 - guard fallback rate : `0 %` ;
-- core : ~4273 LOC (cap 4280 ; noyau conversationnel + moteur Meso + context-pack 2.0
-  + generateur 2.1 + cablage runtime 3a + Slice 3b). **Re-baseline 7 juin** (decision
-  Loic) : le moteur Meso est une enveloppe **acquise, pas du creep** ; la passe de
-  simplification pre-3b est resolue **en re-baseline** (`meso/`+cablage deja serres).
-  Cible ~2500 = ratchet du noyau conversationnel nu ; discipline = le cap ne monte que
-  sur capacite prouvee. Detail : `docs/RUNTIME-V0.md` Budget.
+- core : ~4440 LOC (cap 4440 ; noyau conversationnel + moteur Meso — enveloppe acquise,
+  re-baseline 7 juin). Cible ~2500 = ratchet du noyau conversationnel nu ; le cap ne
+  monte que sur capacite prouvee. Detail : `docs/RUNTIME-V0.md` Budget.
+
+**Deploiement prod (8 juin, soir)** :
+
+- Runner `scripts/dogfood_telegram.py` = entrypoint bot en prod (via `start-prod`).
+- Store propre : `FITMAS_V0_DB_PATH` -> `/data/fitmas_v0_dogfood.db` (volume Fly).
+  Tables `v0_*` = source de verite live. Allowlist : `FITMAS_V0_DOGFOOD_CHAT_IDS`
+  (secret Fly) = chat_id Telegram de Loïc.
+- **Bootstrap depuis les donnees reelles** via `materialize_v0_db`
+  (`runtime_v0/adapters/current_db_snapshot.py`) : plan courant -> `v0_scheduled_sessions`,
+  activites -> `v0_activities`, faits -> `v0_facts`. Deux points critiques du bootstrap :
+  (1) **remap user_id** : le legacy a `users.id = 1` ; le runner V0 cle sur
+  `telegram_chat_id` -> remap necessaire a l'injection ; (2) **faits legacy jetes** :
+  le `user_facts` legacy avait accumule du bruit (un "9.3" orphelin, doublons,
+  meta-instructions au coach) — exactement l'accumulation de regles que V0 est concu pour
+  eviter ; V0 demarre avec des faits propres. Le plan FUTUR legacy (au-dela de la semaine
+  en cours) a egalement ete supprime : V0 planifie l'avenir lui-meme.
+- **Strava -> V0 sync LIVE** : `runtime_v0/adapters/strava_v0_sync.py`
+  (`sync_strava_to_v0`) tire les activites Strava recentes via le token legacy
+  (`strava_connections`) et upserte dans `v0_activities`, dedoublon par Strava activity
+  id. Job periodique dans le runner (`FITMAS_V0_STRAVA_SYNC_SECONDS`, defaut 900 s).
+  Import paresseux pour que le runner demarre meme si le legacy importe. Verifie live
+  (job actif, HTTP 200 Strava, ~100 activites syncees).
+- **Net** : plan running courant reel, runs Strava auto-syncees toutes les 15 min,
+  faits propres. Le cadrage "dogfoodable offline / runner local / store isole" est
+  **depasse** : V0 est le coach live sur donnees reelles.
+
+**Lacunes connues (pas du bug, travaux suivants)** :
+
+- Run <-> session : pas de matching automatique. Le coach *voit* les activites recentes
+  et peut marquer une seance done sur la demande de l'utilisateur (chemin LLM-first
+  prevu), mais aucun auto-mark depuis la sync Strava.
+- Voix de reponse : tersee / liste ("08 Footing… 09…") ; chaleur a regler.
+- `propose_week` cible toujours le prochain lundi ; pas de "cette semaine" en cours.
+- Proactivite (briefings, revue hebdo que le legacy faisait) : eteinte.
+- Solo uniquement : `sync_strava_to_v0` hardcode `legacy_user=1`.
 
 Provider matrix : `114/120` est une ancienne run a 6 scenarios. La matrix
 compte 11 scenarios et 3 providers cibles aujourd'hui. Export non committe,
 a rejouer pour un chiffre provider a jour.
 
-Le chantier actif n'est plus un shrink de l'ancien runtime historique.
-C'est la preparation d'un **Produit V0 dogfoodable** autour de
-`backend/src/fitmas/runtime_v0/`.
+Le plan de migration par etapes (`RUNTIME-MIGRATION-PLAN.md`) est
+**partiellement depasse** : l'adapteur de lecture (`materialize_v0_db`) a ete utilise
+en one-shot pour le bootstrap ; la phase coexistence / write-adapter est devenue
+inutile puisque le legacy est retraite. Le plan reste utile comme reference pour les
+adapters techniques.
 
 ## Decision D'Architecture
 
 ```text
 repo actuel = enveloppe produit
-runtime_v0 = noyau cible prouve
-ancien pipeline = legacy a etrangler
+runtime_v0 = noyau live + source de verite
+ancien pipeline = legacy retraite (FastAPI/webapp toujours UP mais donnees ignorees)
 ```
 
 Ne pas creer de nouveau repo.
-Ne pas migrer Telegram en big-bang.
-Ne pas supprimer l'ancien pipeline avant preuve sur adapters.
+Le bot legacy est eteint ; ses donnees ne sont plus la source de verite.
+`runtime_v0` + store v0_* = la realite du coaching de Loïc.
 
 ## Prochaine Tranche
 
@@ -79,6 +116,13 @@ Fait :
   -> reply, store v0_*, DeepSeek, allowlist).
   Offline : 262 tests, cap 4440. Couche 2 (`probe_live_simulation --persona indispo`) :
   PASS, juge LLM 5/5/5/5. Spec : `docs/superpowers/specs/2026-06-08-v0-dogfood-wiring-design.md`.
+
+- **Deploy live prod** (8 juin 2026, soir) : V0 remplace le legacy bot dans
+  `scripts/start-prod`. Store bootstrap depuis les donnees reelles via
+  `materialize_v0_db` (remap user_id `1 -> chat_id` ; plan futur legacy supprime ;
+  faits legacy jetes). Strava->V0 sync (`runtime_v0/adapters/strava_v0_sync.py`,
+  `FITMAS_V0_STRAVA_SYNC_SECONDS=900`) verifie live (HTTP 200, ~100 activites). V0
+  store = source de verite du coaching de Loïc. Legacy bot retraite.
 
 - liberation de la voix : la reply layer ne sert plus de template sur le chemin
   nominal (pending, blocage, clarification passent par le LLM). Les templates
@@ -111,15 +155,25 @@ Ordre recommande :
 1. ~~Blessure re-adapte same-turn~~ **FAIT** (8 juin 2026, tranche #1 — `propose_week(intensity_restricted=true)` + supersede pending ; spec `2026-06-08-readapt-blessure-same-turn-design.md`).
 2. ~~**Typer l'availability**~~ **FAIT** (8 juin 2026, tranche #2 — `blocked_days` declares,
    repos sur jours bloques, juge LLM 5/5/5/5 ; spec `2026-06-08-v0-dogfood-wiring-design.md`).
-3. **Chemin modify/preference** (« fais plus varie »).
-4. Follow-ups differes Slice 3b : materialisation semaine->plan executable
-   (sessions dans `v0_scheduled_sessions`) ; handler commit `plan_patch`.
-5. Persistance cross-tour de l'availability (stocker les jours bloques sur le fait, ingestion typee).
-6. Relancer une provider matrix ciblee sur les 11 scenarios.
-7. Construire un `WorldSnapshot` depuis une copie DB actuelle, en distinguant
-   replay fidele (`conversation_context`) et debug approximatif (`current_state`).
-8. Construire un executor adapter vers les writers existants.
-9. Brancher Telegram/API sous flag et allowlist user.
+3. ~~**Dogfood deploy live**~~ **FAIT** (8 juin 2026, soir) : runner remplace legacy bot,
+   store bootstrap depuis donnees reelles (materialize + remap user_id + faits propres),
+   Strava->V0 sync active (900 s, verifie live).
+4. **Run <-> session matching** : chemin LLM-first — enseigner au coach a marquer
+   une seance done quand il voit une activite Strava qui matche clairement
+   (`propose_execution_update` + `recent_activities` + `current_plan` dans le snapshot) ;
+   proactivite complete (heartbeat auto-reconcile) differee a la tranche heartbeat.
+5. **Voix** : rechauffer les reponses (prompt reply) — "08 Footing…" -> chaleur
+   conversationnelle + contexte.
+6. **`propose_week` "cette semaine"** : ajouter un param permettant de cibler la
+   semaine en cours (pas seulement le prochain lundi).
+7. **Persistance cross-tour availability** (stocker les jours bloques sur le fait,
+   ingestion typee).
+8. **Chemin modify/preference** (« fais plus varie »).
+9. **Heartbeat / proactivite** : briefing matin, revue hebdo, reconciliation
+   run<->session automatique (tout ce que le legacy faisait, V0 va l'acquerir).
+10. **Hygiene/robustesse** : museler les logs httpx INFO (token dans les logs Fly) ;
+    `sync_strava_to_v0` hardcode `legacy_user=1` (solo-only, a parametriser si multi-user) ;
+    dedup run<->session a confirmer sur volume reel.
 
 ## Chantier Moteur Sport (co-evolue avec le runtime)
 
@@ -234,10 +288,14 @@ affirmer une adaptation non faite. Re-probe : blessure et indispo echouent desor
   (indispo, juge LLM 5/5/5/5). Residuel : persistance cross-tour des jours bloques (differee).
 
 **Residuels (follow-ups)** :
+- run <-> session matching LLM-first — ouvert ;
+- voix terse — ouvert ;
+- `propose_week` "cette semaine" — ouvert ;
 - persistance cross-tour de l'availability (stocker les jours bloques sur le fait, ingestion typee) — differee ;
 - **chemin preference/modify** (« fais plus varie ») — tranche #3 ;
 - materialisation semaine->plan executable (`v0_scheduled_sessions`) — Slice 3b follow-up ;
 - handler commit `plan_patch` — Slice 3b follow-up ;
+- heartbeat / proactivite (briefings, revue hebdo, auto-reconcile) — phase 2 ;
 - suivi d'execution (phase 2).
 
 La passe de simplification pre-3b est resolue **en re-baseline** (7 juin,
@@ -297,15 +355,16 @@ defaut tant que le credit API est absent.
 
 ## Gates Dogfood
 
-Avant Telegram V0, deux couches de test (doctrine : `docs/V0-TEST-DOCTRINE.md`).
+**Gates franchies (8 juin 2026)** — V0 est desormais live en prod. Les gates
+restent la reference pour les nouvelles tranches.
 
 Couche 1 — matrice, filet mecanique :
 
 ```text
->= 90% correctness sur scenarios V0 produit
-0 danger metrics
-0 duplicate command sur retry
-guard fallback rate < 15%
+>= 90% correctness sur scenarios V0 produit   [atteint]
+0 danger metrics                               [atteint]
+0 duplicate command sur retry                  [atteint]
+guard fallback rate < 15%                      [atteint — 0%]
 ```
 
 Couche 2 — simulation live sous-agent : une vraie conversation non scriptee
