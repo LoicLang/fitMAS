@@ -299,20 +299,24 @@ Le générateur (prompt) **et** le vérificateur **suppriment la séance clé** 
 (volume facile only) ; le vérif relâche le plancher de charge mais **rejette une semaine
 vide** (invariant non-vide, tous modes). Prouvé couche 2 (`probe_constrained_week`, 4/4).
 
-**Comportement « okay mais [contrainte] » (état actuel — à connaître).** Le coach est
-enseigné qu'une réponse à un pending qui **introduit une nouvelle contrainte / objection /
-blessure / indispo n'est PAS un accept** : il **note le fait** et **ne committe pas** la
-semaine inchangée. Il **ne re-propose pas encore** de semaine adaptée :
+**Comportement « okay mais [contrainte] » (état courant — à connaître).**
 
-- pas au **même tour** — `propose_week` lit le snapshot construit en début de tour, *avant*
-  que le nouveau fait soit committé ; une re-proposition same-turn ignorerait la contrainte ;
-- pas **proactivement** au tour suivant — observé : sur la blessure il conseille le repos,
-  sur l'indispo il part en `no_send` (l'availability n'est pas une contrainte typée).
+**Blessure / douleur** (tranche #1, 8 juin 2026) : le coach note le fait santé ET appelle
+`propose_week(intensity_restricted=true)` **dans le même tour**. Le LLM *déclare* la
+contrainte qu'il a comprise ce tour (`intensity_restricted: bool`) ; le snapshot-stale
+ne bloque plus car la contrainte est déclarée directement au générateur (pas relue depuis
+le snapshot). Un nouveau pending `week_proposal` **supersede** l'ancien ouvert :
+`executor._apply_create_pending` passe le précédent au status `superseded` — un seul pending
+vit à la fois. Le fact-rider committe la note santé en parallèle. Le vérificateur produit
+la semaine sans intensité (réduction-sous-contrainte existante). État : *blessure
+ré-adaptée same-turn*.
 
-**Cible (follow-up)** : tour N noter + tenir ; tour **N+1 re-proposer proactivement** une
-semaine adaptée pour les contraintes **typées** (blessure -> semaine sans intensité, déjà
-supportée) ; pour l'indispo, **typer d'abord l'availability**. État net : *safe, mais pas
-encore ré-adapté*. Détails et preuves : `BUILD-ORDER.md` (findings couche 2 live).
+**Indispo** : note le fait + tient — l'availability n'est pas encore une contrainte typée
+(`fact_to_constraint` ne mappe que `health`) ; le coach dégrade en `no_send` bénin.
+Prochaine tranche : typer l'availability (fenêtre-jours).
+
+**Cible résolue pour la blessure.** Spec : `docs/superpowers/specs/2026-06-08-readapt-blessure-same-turn-design.md`.
+Couche 2 (`probe_live_simulation --persona blessure`) **prouvée** (8 juin) : PASS, juge LLM 5/5/5/5. Détails : `BUILD-ORDER.md`.
 
 **Différés (accommodés, pas codés)** : matérialisation de la semaine committée vers
 `v0_scheduled_sessions` (plan exécutable) ; handler de commit `plan_patch` ; décision

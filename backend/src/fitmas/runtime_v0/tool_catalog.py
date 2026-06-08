@@ -139,7 +139,8 @@ def for_event(event: InputEvent, snapshot: WorldSnapshot) -> tuple[ToolSchema, .
                 "training, then declare the seed: last_week_load (total minutes-weighted "
                 "load of the last real week) and key_type (the prescribed key session "
                 "type). The engine generates and verifies the week; it is only proposed, "
-                "never committed."
+                "never committed. Set intensity_restricted=true when the user has just "
+                "reported pain/injury this turn so the engine drops all intensity."
             ),
             parameters=_schema(
                 {
@@ -149,6 +150,7 @@ def for_event(event: InputEvent, snapshot: WorldSnapshot) -> tuple[ToolSchema, .
                         "enum": ["easy_run", "long_run", "threshold", "intervals", "recovery_run"],
                     },
                     "phase": {"type": "string", "enum": ["build", "recovery", "taper"]},
+                    "intensity_restricted": {"type": "boolean"},
                 },
                 ("last_week_load", "key_type"),
             ),

@@ -186,12 +186,30 @@ def _apply_operation(connection, operation: PlanPatchOperation) -> None:
     raise ValueError("unsupported_plan_operation")
 
 def _apply_create_pending(command: CreatePendingConfirmationCommand, connection, user_id: int) -> tuple[dict[str, Any], dict[str, Any], str]:
+    before: dict[str, Any] = {}
+    if command.type == "week_proposal":
+        # Une nouvelle semaine proposée remplace toute semaine encore en attente de
+        # confirmation : on ne laisse jamais deux pendings semaine ouverts (ex : un
+        # "oui mais [blessure]" re-propose une semaine adaptée pendant que l'originale
+        # est encore ouverte). Audité via `before`.
+        prior = connection.execute(
+            "select id from v0_pending_confirmations "
+            "where user_id = ? and type = 'week_proposal' and status = 'open'",
+            (user_id,),
+        ).fetchall()
+        if prior:
+            connection.execute(
+                "update v0_pending_confirmations set status = 'superseded' "
+                "where user_id = ? and type = 'week_proposal' and status = 'open'",
+                (user_id,),
+            )
+            before = {"superseded_pending_ids": [r["id"] for r in prior]}
     cursor = connection.execute(
         "insert into v0_pending_confirmations (user_id, type, summary, payload_json, expires_at) values (?, ?, ?, ?, ?)",
         (user_id, command.type, command.summary, command.payload_json, command.expires_at.isoformat()),
     )
     row = _pending(connection, cursor.lastrowid)
-    return {}, row, command.summary
+    return before, row, command.summary
 
 def _apply_upsert_memory_fact(command: UpsertMemoryFactCommand, connection, user_id: int) -> tuple[dict[str, Any], dict[str, Any], str]:
     cursor = connection.execute(

@@ -89,5 +89,12 @@ def test_runtime_v0_core_stays_under_v0_budget():
     # "oui mais [constraint/injury/indispo]" is NOT a clean accept (note the fact, don't
     # commit the unchanged week). Found by probe_live_simulation (committed a hard week
     # under a fresh injury / claimed false adjustments). Coach-prompt teaching only.
+    # 4320 -> 4337 (8 juin 2026): ré-adaptation same-turn sous blessure (tranche #1).
+    # propose_week accepte une contrainte déclarée (intensity_restricted) pour
+    # re-proposer une semaine sans intensité dans le MÊME tour qu'un "oui mais
+    # [blessure]" ; un nouveau pending semaine supersede l'ancien. Ferme le gap
+    # "safe mais pas ré-adapté" pour la blessure. Capacité prouvée offline ; couche 2
+    # (probe_live_simulation persona blessure) confirme la ré-adaptation réelle.
+    # Spec : docs/superpowers/specs/2026-06-08-readapt-blessure-same-turn-design.md.
     loc = sum(len(path.read_text().splitlines()) for path in _core_files())
-    assert loc <= 4320
+    assert loc <= 4337

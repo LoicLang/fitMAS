@@ -61,6 +61,13 @@ Ne pas supprimer l'ancien pipeline avant preuve sur adapters.
 
 Fait :
 
+- ré-adaptation same-turn sous blessure (8 juin 2026, tranche #1) : sur « oui mais
+  [douleur/blessure] », le coach note le fait sante ET re-propose une semaine sans
+  intensite **dans le meme tour** (`propose_week(intensity_restricted=true)`, supersede
+  du pending precedent). Offline : 253 tests, matrix 11/11, danger 0, cap 4320->4337.
+  Couche 2 (`probe_live_simulation --persona blessure`) prouvee : PASS, juge LLM 5/5/5/5. Indispo : note + tient
+  (prochaine tranche). Spec : `docs/superpowers/specs/2026-06-08-readapt-blessure-same-turn-design.md`.
+
 - liberation de la voix : la reply layer ne sert plus de template sur le chemin
   nominal (pending, blocage, clarification passent par le LLM). Les templates
   restent en filet `_fallback` seulement. Guard durci en parallele
@@ -89,13 +96,17 @@ Fait :
 
 Ordre recommande :
 
-1. Follow-ups differes Slice 3b : materialisation semaine->plan executable
+1. ~~Blessure re-adapte same-turn~~ **FAIT** (8 juin 2026, tranche #1 — `propose_week(intensity_restricted=true)` + supersede pending ; spec `2026-06-08-readapt-blessure-same-turn-design.md`).
+2. **Typer l'availability** comme contrainte (fenetre-jours) pour que le coach
+   re-planifie autour des jours bloques sur « oui mais [indispo] » (tranche #2).
+3. **Chemin modify/preference** (« fais plus varie »).
+4. Follow-ups differes Slice 3b : materialisation semaine->plan executable
    (sessions dans `v0_scheduled_sessions`) ; handler commit `plan_patch`.
-2. Relancer une provider matrix ciblee sur les 11 scenarios.
-3. Construire un `WorldSnapshot` depuis une copie DB actuelle, en distinguant
+5. Relancer une provider matrix ciblee sur les 11 scenarios.
+6. Construire un `WorldSnapshot` depuis une copie DB actuelle, en distinguant
    replay fidele (`conversation_context`) et debug approximatif (`current_state`).
-4. Construire un executor adapter vers les writers existants.
-5. Brancher Telegram/API sous flag et allowlist user.
+7. Construire un executor adapter vers les writers existants.
+8. Brancher Telegram/API sous flag et allowlist user.
 
 ## Chantier Moteur Sport (co-evolue avec le runtime)
 
@@ -193,16 +204,19 @@ LLM-first) : une reponse a un pending qui souleve une nouvelle contrainte/object
 affirmer une adaptation non faite. Re-probe : blessure et indispo echouent desormais
 **safe** (note + hold, zero commit dangereux/menteur).
 
-**Comportement actuel sur « okay mais [contrainte] » (a savoir)** : le coach **tient** — il
-note le fait et **ne committe pas** la semaine inchangee — mais il **ne re-propose pas
-encore** de semaine adaptee. Deux raisons : (a) il ne peut pas re-proposer au **meme tour**
-(`propose_week` lit le snapshot construit en debut de tour, **avant** que le fait soit
-committe -> une re-proposition same-turn ignorerait la contrainte) ; (b) il ne relance pas
-**proactivement** au tour suivant (sur la blessure il a conseille le repos ; sur l'indispo
-il est parti en `no_send`). **Cible** : au tour N noter + tenir ; au tour **N+1 re-proposer
-proactivement** une semaine adaptee pour les contraintes **typees** (blessure -> semaine sans
-intensite, deja supportee par le moteur) ; pour l'indispo, **typer d'abord l'availability**.
-Etat net aujourd'hui : **safe, mais pas encore re-adapte**.
+**Comportement sur « okay mais [contrainte] » (etat courant)** :
+
+- **Blessure / douleur** (8 juin 2026, tranche #1 livree) : le coach note le fait sante
+  ET appelle `propose_week(intensity_restricted=true)` **dans le meme tour** — le LLM
+  declare la contrainte qu'il a comprise ce tour ; le verificateur tient l'autorite
+  (reduction-sous-contrainte deja codee). Un nouveau pending `week_proposal` **supersede**
+  l'ancien ouvert (`executor._apply_create_pending`, status `superseded`) — un seul pending
+  vit. Le fact-rider committe la note sante en parallele. Etat net : **blessure re-adaptee
+  same-turn**. Spec : `docs/superpowers/specs/2026-06-08-readapt-blessure-same-turn-design.md`.
+  Couche 2 (`probe_live_simulation --persona blessure`) **prouvee** (8 juin) : PASS, juge LLM 5/5/5/5 — same-turn re-adaptation confirmee en live non scripte (semaine sans intensite proposee puis committee, guard ok).
+
+- **Indispo** : note le fait + tient (ne re-propose pas encore — availability non typee).
+  Prochaine tranche.
 
 **Residuels (follow-ups)** :
 l'**availability n'est pas une contrainte typee** (`fact_to_constraint` ne mappe que

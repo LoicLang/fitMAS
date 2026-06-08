@@ -45,11 +45,11 @@ Ne pas ouvrir Phase B progression/prescription sans demande explicite.
 Verifie offline le 8 juin 2026 :
 
 ```text
-tests/runtime_v0 : 248 passed
+tests/runtime_v0 : 253 passed
 fake matrix      : 11/11
 danger metrics   : 0 wrong_write, 0 old_plan, 0 wrong_correction_target,
                    0 claim_without_event
-core             : ~4306 LOC (cap 4320 ; noyau conversationnel + moteur Meso —
+core             : ~4337 LOC (cap 4337 ; noyau conversationnel + moteur Meso —
                    enveloppe acquise (re-baseline), voir docs/RUNTIME-V0.md Budget)
 ```
 
@@ -58,6 +58,10 @@ verificateur deterministe constraint-aware, generateur LLM-first generate->verif
 context-pack), le tool coach `propose_week` (3a), et la **resolution de pending +
 commit semaine** (3b : `pending_resolution`, store type `v0_planned_weeks`, chaînage
 forward). Le coach est enseigne qu'un « oui mais [contrainte] » n'est pas un accept.
+**Tranche #1 livree + prouvee couche 2** : sur « oui mais [douleur/blessure] », le
+coach note le fait sante ET re-propose une semaine sans intensite dans le **meme tour**
+(`intensity_restricted` sur `propose_week` ; nouveau pending annule le precedent ;
+verificateur tient l'autorite) — probe DeepSeek : PASS, juge LLM 5/5/5/5.
 **Prouve couche 2** (DeepSeek) : propose->confirme->commit + reject, semaine sous
 contrainte 4/4 (respectee, source=llm), simulation live multi-tour qui echoue safe.
 Detail : `docs/V0-CODE-MAP.md`, `docs/PLANNING-V0.md`, `docs/BUILD-ORDER.md`,

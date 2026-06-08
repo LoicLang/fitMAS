@@ -13,7 +13,7 @@ from datetime import date, timedelta
 
 from fitmas.runtime_v0.meso.context import constraints_from_snapshot
 from fitmas.runtime_v0.meso.generator import generate_week
-from fitmas.runtime_v0.meso.model import ContextPack, WeekActuals, derive_continuity_target
+from fitmas.runtime_v0.meso.model import ContextPack, TypedConstraint, WeekActuals, derive_continuity_target
 from fitmas.runtime_v0.proposals import ActionProposal, WeekProposalDraft
 from fitmas.runtime_v0.tools_proposal import _record, _trace
 from fitmas.runtime_v0.tools_read import ToolContext
@@ -28,6 +28,7 @@ def propose_week(
     last_week_load: float,
     key_type: str,
     phase: str = "build",
+    intensity_restricted: bool = False,
 ) -> ActionProposal:
     if ctx.generation_llm is None:
         # Fail loud on misconfiguration rather than crashing deep in generate_week
@@ -40,10 +41,18 @@ def propose_week(
         total_load=float(last_week_load), key_type=key_type
     )
     target = derive_continuity_target(actuals, phase)
+    constraints = constraints_from_snapshot(snapshot)
+    if intensity_restricted and not any("intensity" in c.restricts for c in constraints):
+        # Douleur signalée CE tour : le snapshot de début de tour n'a pas encore le
+        # fait santé, donc le coach (qui a compris le texte) déclare la restriction.
+        # Le vérificateur garde l'autorité sur la semaine.
+        constraints = constraints + (
+            TypedConstraint(severity="moderate", restricts=("intensity",), active=True),
+        )
     pack = ContextPack(
         target=target,
         last_week_actuals=actuals,
-        constraints=constraints_from_snapshot(snapshot),
+        constraints=constraints,
         signals=(),
     )
     week_start = _next_monday(snapshot.today)
