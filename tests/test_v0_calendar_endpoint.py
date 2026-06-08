@@ -145,6 +145,30 @@ def test_v0_today_view_built_for_matching_date(monkeypatch):
         db.unlink(missing_ok=True)
 
 
+def test_v0_session_detail_falls_back_to_offplan_activity(monkeypatch):
+    with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as tmp:
+        db = Path(tmp.name)
+    try:
+        init_db(db)
+        _seed(db)
+        with connect(db) as conn:
+            conn.execute(
+                "insert into v0_activities (id,user_id,date,sport,duration_min,distance_km,notes,source) "
+                "values (9001,1,'2026-06-08','running',31,5.0,'Course à pied en soirée','strava')"
+            )
+            conn.commit()
+        monkeypatch.setenv("FITMAS_V0_DB_PATH", str(db))
+        monkeypatch.setenv("FITMAS_APP_SOURCE", "v0")
+        from fitmas.legacy.app.api import routes_app
+
+        detail = routes_app._v0_session_detail(9001)  # an activity id, not a session id
+        assert isinstance(detail, dict)
+        assert detail.get("linked_activity") is not None
+        assert detail.get("session")
+    finally:
+        db.unlink(missing_ok=True)
+
+
 def test_app_source_flag_off_by_default(monkeypatch):
     monkeypatch.delenv("FITMAS_APP_SOURCE", raising=False)
     from fitmas.legacy.app.api import routes_app

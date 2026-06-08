@@ -168,18 +168,42 @@ def _v0_evolution() -> dict:
     return _v0_neutral_bundle(evolution)
 
 
+_WEEKDAY_TO_DAY = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"]
+
+
 def _v0_session_detail(session_id: int) -> dict:
-    """Build the session-detail view for a V0 session id."""
+    """Build the session-detail view for a V0 session id — or, if the id is an
+    off-plan activity, a detail built from that activity (so the click opens a page
+    instead of 404-ing the way the legacy endpoint does on an activity id)."""
     from fitmas.legacy.app.api import v0_source
+    from fitmas.legacy.domain.planning.view_models import DayId, ScheduledSession
 
     sessions = v0_source.get_scheduled_sessions()
     session = next((s for s in sessions if s.id == session_id), None)
+    linked_activity = None
     if session is None:
-        raise HTTPException(status_code=404, detail="Scheduled session not found")
+        activity = next((a for a in v0_source.get_activities() if a.id == session_id), None)
+        if activity is None:
+            raise HTTPException(status_code=404, detail="Scheduled session not found")
+        act_date = date.fromisoformat((activity.started_at or date.today().isoformat())[:10])
+        session = ScheduledSession(
+            id=activity.id,
+            day=DayId(_WEEKDAY_TO_DAY[act_date.weekday()]),
+            label=activity.title,
+            scheduled_date=act_date.isoformat(),
+            sport_type=activity.sport_type,
+            session_title=activity.title,
+            session_goal="",
+            duration_min=activity.duration_min,
+            intensity="easy",
+            priority="secondary",
+            completion_status="done",
+        )
+        linked_activity = activity.model_dump()
     return build_session_detail(
         today_date=date.today(),
         session=session,
-        linked_activity=None,
+        linked_activity=linked_activity,
         fitness=None,
         recent_activity=None,
         change_notes=[],
