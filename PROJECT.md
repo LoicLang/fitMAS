@@ -2,7 +2,7 @@
 
 Coach IA multisport proactif qui ajuste l'entrainement selon la vraie vie.
 
-## Statut — 5 juin 2026
+## Statut — 8 juin 2026
 
 FitMAS sort du chantier "prototype runtime" et entre dans le chantier
 **Produit V0 dogfoodable**.
@@ -42,22 +42,26 @@ Ne pas ouvrir Phase B progression/prescription sans demande explicite.
 
 ## Preuve Runtime V0
 
-Verifie offline le 6 juin 2026 :
+Verifie offline le 8 juin 2026 :
 
 ```text
-tests/runtime_v0 : 229 passed
+tests/runtime_v0 : 248 passed
 fake matrix      : 11/11
 danger metrics   : 0 wrong_write, 0 old_plan, 0 wrong_correction_target,
                    0 claim_without_event
-core             : ~4087 LOC (cap 4100 ; noyau conversationnel + moteur Meso —
-                   enveloppe acquise, pas du creep, voir docs/RUNTIME-V0.md Budget)
+core             : ~4306 LOC (cap 4320 ; noyau conversationnel + moteur Meso —
+                   enveloppe acquise (re-baseline), voir docs/RUNTIME-V0.md Budget)
 ```
 
-Construit depuis : moteur Meso (`runtime_v0/meso/` — modele type + verificateur
-5 proprietes dont anti-TSS-drop, bridge fact->TypedConstraint), resolution de fact
-(douleur passee), fact-rider (noter un fait durable ET agir dans le meme tour).
-Detail : `docs/PLANNING-V0.md`, `docs/BUILD-ORDER.md`,
-`docs/superpowers/specs/2026-06-05-*`.
+Construit depuis : moteur Meso de bout en bout (`runtime_v0/meso/` — modele type +
+verificateur deterministe constraint-aware, generateur LLM-first generate->verify,
+context-pack), le tool coach `propose_week` (3a), et la **resolution de pending +
+commit semaine** (3b : `pending_resolution`, store type `v0_planned_weeks`, chaînage
+forward). Le coach est enseigne qu'un « oui mais [contrainte] » n'est pas un accept.
+**Prouve couche 2** (DeepSeek) : propose->confirme->commit + reject, semaine sous
+contrainte 4/4 (respectee, source=llm), simulation live multi-tour qui echoue safe.
+Detail : `docs/V0-CODE-MAP.md`, `docs/PLANNING-V0.md`, `docs/BUILD-ORDER.md`,
+`docs/superpowers/specs/2026-06-*`.
 
 Provider matrix : le `114/120` historique vient d'une run a 6 scenarios
 (4 providers x 6 x 5 reps = 120). La matrix par defaut compte aujourd'hui
@@ -108,8 +112,9 @@ RuntimeResult -> Telegram/API
 4. `docs/BUILD-ORDER.md`
 5. `docs/V0-DOGFOOD-SCOPE.md`
 6. `docs/RUNTIME-V0.md`
-7. `docs/RUNTIME-MIGRATION-PLAN.md`
-8. `docs/RUNBOOK.md`
+7. `docs/V0-CODE-MAP.md`
+8. `docs/RUNTIME-MIGRATION-PLAN.md`
+9. `docs/RUNBOOK.md`
 
 ## Commandes
 
