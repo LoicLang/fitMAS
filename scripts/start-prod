@@ -3,10 +3,12 @@ set -e
 
 echo "Starting FitMAS production..."
 
-# Start Telegram bot in background (if token is set)
+# Start the V0 dogfood coach on Telegram in background (replaces the legacy bot).
+# It polls TELEGRAM_BOT_TOKEN, routes the allowlisted user to runtime_v0.handle_event
+# on its own v0_* store (FITMAS_V0_DB_PATH). A crash here never kills the API below.
 if [ -n "$TELEGRAM_BOT_TOKEN" ]; then
-    echo "Starting Telegram bot..."
-    python -m fitmas.app.telegram.bot &
+    echo "Starting V0 coach (Telegram)..."
+    python scripts/dogfood_telegram.py &
 fi
 
 # Start API server
