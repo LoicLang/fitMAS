@@ -1,0 +1,21 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  core:
+    name: Proven core (runtime_v0)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install package
+        run: pip install -e .
+      - name: Run proven core test suite
+        run: pytest tests/runtime_v0
+      - name: Mechanical matrix (fake provider, offline)
+        run: python scripts/v0_eval/run_matrix.py --provider fake --repetitions 1
