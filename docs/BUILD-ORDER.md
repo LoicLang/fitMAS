@@ -65,7 +65,7 @@ Fait :
   [douleur/blessure] », le coach note le fait sante ET re-propose une semaine sans
   intensite **dans le meme tour** (`propose_week(intensity_restricted=true)`, supersede
   du pending precedent). Offline : 253 tests, matrix 11/11, danger 0, cap 4320->4337.
-  Couche 2 (`probe_live_simulation --persona blessure`) = gate. Indispo : note + tient
+  Couche 2 (`probe_live_simulation --persona blessure`) prouvee : PASS, juge LLM 5/5/5/5. Indispo : note + tient
   (prochaine tranche). Spec : `docs/superpowers/specs/2026-06-08-readapt-blessure-same-turn-design.md`.
 
 - liberation de la voix : la reply layer ne sert plus de template sur le chemin
@@ -213,7 +213,7 @@ affirmer une adaptation non faite. Re-probe : blessure et indispo echouent desor
   l'ancien ouvert (`executor._apply_create_pending`, status `superseded`) — un seul pending
   vit. Le fact-rider committe la note sante en parallele. Etat net : **blessure re-adaptee
   same-turn**. Spec : `docs/superpowers/specs/2026-06-08-readapt-blessure-same-turn-design.md`.
-  Couche 2 (`probe_live_simulation --persona blessure`) = gate de validation restant.
+  Couche 2 (`probe_live_simulation --persona blessure`) **prouvee** (8 juin) : PASS, juge LLM 5/5/5/5 — same-turn re-adaptation confirmee en live non scripte (semaine sans intensite proposee puis committee, guard ok).
 
 - **Indispo** : note le fait + tient (ne re-propose pas encore — availability non typee).
   Prochaine tranche.

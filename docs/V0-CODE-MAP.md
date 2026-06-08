@@ -316,7 +316,7 @@ ré-adaptée same-turn*.
 Prochaine tranche : typer l'availability (fenêtre-jours).
 
 **Cible résolue pour la blessure.** Spec : `docs/superpowers/specs/2026-06-08-readapt-blessure-same-turn-design.md`.
-Couche 2 (`probe_live_simulation --persona blessure`) = gate de validation. Détails : `BUILD-ORDER.md`.
+Couche 2 (`probe_live_simulation --persona blessure`) **prouvée** (8 juin) : PASS, juge LLM 5/5/5/5. Détails : `BUILD-ORDER.md`.
 
 **Différés (accommodés, pas codés)** : matérialisation de la semaine committée vers
 `v0_scheduled_sessions` (plan exécutable) ; handler de commit `plan_patch` ; décision

@@ -281,7 +281,7 @@ commit handler, forward chaining) = capacite prouvee, pas du creep.
 `propose_week` gagne le param declare `intensity_restricted: bool` (le LLM declare la
 contrainte ; le verif tient l'autorite) + supersede du pending ouvert
 (`executor._apply_create_pending`, status `superseded`). 253 tests, matrix 11/11, danger 0.
-Couche 2 (`probe_live_simulation --persona blessure`) confirme. Spec :
+Couche 2 (`probe_live_simulation --persona blessure`) confirmee : PASS, juge LLM 5/5/5/5. Spec :
 `docs/superpowers/specs/2026-06-08-readapt-blessure-same-turn-design.md`.
 
 ## Sport Core V0
