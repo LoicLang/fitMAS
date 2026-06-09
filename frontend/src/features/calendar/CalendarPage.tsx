@@ -2,8 +2,8 @@ import { addMonths, subMonths } from "date-fns";
 import { ChevronLeft, ChevronRight, MoveRight } from "lucide-react";
 import { motion } from "motion/react";
 import { useEffect, useMemo, useState } from "react";
-import { Link, type LoaderFunctionArgs, useLoaderData, useNavigate, useSearchParams } from "react-router-dom";
-import { loadCalendar } from "../../shared/api";
+import { Link, type LoaderFunctionArgs, useLoaderData, useNavigate, useRevalidator, useSearchParams } from "react-router-dom";
+import { linkActivityToSession, loadCalendar, unlinkActivity } from "../../shared/api";
 import { formatDateLong, formatMonthLabel, loadBandLabel, sportLabel } from "../../shared/format";
 import type { CalendarItem, CalendarView } from "../../types";
 import { calendarStatusCount, initialSelectedDate } from "./view-model";
@@ -24,8 +24,19 @@ const STATUS_STYLES: Record<string, string> = {
 export function CalendarPage() {
   const data = useLoaderData() as CalendarView;
   const navigate = useNavigate();
+  const revalidator = useRevalidator();
   const [searchParams] = useSearchParams();
   const [selectedDate, setSelectedDate] = useState(initialSelectedDate(data.days));
+
+  async function onLink(activityId: number, sessionId: number) {
+    await linkActivityToSession(activityId, sessionId);
+    revalidator.revalidate();
+  }
+
+  async function onUnlink(activityId: number) {
+    await unlinkActivity(activityId);
+    revalidator.revalidate();
+  }
 
   useEffect(() => {
     setSelectedDate(initialSelectedDate(data.days));
@@ -133,7 +144,20 @@ export function CalendarPage() {
 
           <div className="grid gap-3">
             {selectedDay?.items.length ? (
-              selectedDay.items.map((item) => <DayEntry key={`${item.kind}-${item.id}-${item.display_date}`} item={item} />)
+              selectedDay.items.map((item) => {
+                const plannedTargets = (selectedDay.items ?? []).filter(
+                  (i) => i.kind === "session" && i.status === "planned",
+                );
+                return (
+                  <DayEntry
+                    key={`${item.kind}-${item.id}-${item.display_date}`}
+                    item={item}
+                    plannedTargets={plannedTargets}
+                    onLink={onLink}
+                    onUnlink={onUnlink}
+                  />
+                );
+              })
             ) : (
               <div className="surface-panel p-5 text-sm font-medium text-zinc-500">Aucune séance ni activité sur ce jour.</div>
             )}
@@ -144,7 +168,17 @@ export function CalendarPage() {
   );
 }
 
-function DayEntry({ item }: { item: CalendarItem }) {
+function DayEntry({
+  item,
+  plannedTargets,
+  onLink,
+  onUnlink,
+}: {
+  item: CalendarItem;
+  plannedTargets: CalendarItem[];
+  onLink: (activityId: number, sessionId: number) => void;
+  onUnlink: (activityId: number) => void;
+}) {
   const content = (
     <div data-calendar-entry className="surface-panel flex w-full max-w-full min-w-0 items-center gap-3 overflow-hidden p-3 transition hover:bg-white sm:gap-4 sm:p-4">
       <span className={`shrink-0 rounded-full px-2.5 py-1.5 text-[0.65rem] font-bold uppercase tracking-[0.1em] sm:px-3 sm:text-xs ${STATUS_STYLES[item.status] || STATUS_STYLES.planned}`}>
@@ -160,11 +194,56 @@ function DayEntry({ item }: { item: CalendarItem }) {
     </div>
   );
 
-  if (item.kind === "session" || item.kind === "offplan") {
-    return <Link to={`/workout/${item.id}`} className="block w-full min-w-0 max-w-full">{content}</Link>;
-  }
+  const linkRow = item.kind === "offplan" ? (
+    <div className="mt-1.5 flex flex-wrap gap-1.5 px-1">
+      {plannedTargets.length > 0 ? (
+        plannedTargets.map((target) => (
+          <button
+            key={target.id}
+            type="button"
+            onClick={() => onLink(item.id, target.id)}
+            className="rounded-full border border-black/8 bg-zinc-50 px-3 py-1.5 text-[0.65rem] font-bold uppercase tracking-[0.1em] text-zinc-600 transition hover:border-[#7c2bbf]/30 hover:bg-[rgba(157,78,221,0.07)] hover:text-[#7c2bbf]"
+          >
+            Lier à &laquo; {target.title} &raquo;
+          </button>
+        ))
+      ) : (
+        <span className="text-[0.65rem] font-bold uppercase tracking-[0.1em] text-zinc-400">Aucune séance à lier</span>
+      )}
+    </div>
+  ) : null;
 
-  return content;
+  const unlinkRow =
+    item.kind === "session" && item.status === "done" && item.linked_activity_id ? (
+      <div className="mt-1.5 px-1">
+        <button
+          type="button"
+          onClick={() => onUnlink(item.linked_activity_id!)}
+          className="rounded-full border border-black/8 bg-zinc-50 px-3 py-1.5 text-[0.65rem] font-bold uppercase tracking-[0.1em] text-zinc-500 transition hover:border-[#d4183d]/30 hover:bg-[rgba(212,24,61,0.06)] hover:text-[#d4183d]"
+        >
+          Délier
+        </button>
+      </div>
+    ) : null;
+
+  const entryLink =
+    item.kind === "session" || item.kind === "offplan" ? (
+      <Link to={`/workout/${item.id}`} className="block w-full min-w-0 max-w-full">
+        {content}
+      </Link>
+    ) : (
+      content
+    );
+
+  if (!linkRow && !unlinkRow) return entryLink;
+
+  return (
+    <div>
+      {entryLink}
+      {linkRow}
+      {unlinkRow}
+    </div>
+  );
 }
 
 function Dot({ color }: { color: string }) {
