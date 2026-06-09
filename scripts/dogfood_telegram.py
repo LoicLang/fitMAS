@@ -50,6 +50,21 @@ from scripts.v0_eval.provider_clients import (  # noqa: E402
 logger = logging.getLogger(__name__)
 
 
+def _configure_logging() -> None:
+    """Set up logging — and keep the bot token out of the logs.
+
+    httpx/httpcore log every request at INFO, and the Telegram bot token sits in
+    the request URL path (``/bot<TOKEN>/...``). Left at INFO that token lands in
+    the Fly logs on every poll. Pin those loggers to WARNING; keep ours at INFO.
+    """
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s [%(name)s] %(levelname)s: %(message)s",
+    )
+    for noisy in ("httpx", "httpcore"):
+        logging.getLogger(noisy).setLevel(logging.WARNING)
+
+
 # ---------------------------------------------------------------------------
 # Deps builder — mirrors probe _build_deps, no MeteredLLMClient
 # ---------------------------------------------------------------------------
@@ -118,10 +133,7 @@ def _parse_allowlist(raw: str) -> set[int]:
 
 
 def main() -> None:
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s [%(name)s] %(levelname)s: %(message)s",
-    )
+    _configure_logging()
 
     # Load .env so credentials are available without manual export
     load_dotenv(ROOT / ".env")
@@ -205,6 +217,18 @@ def main() -> None:
     legacy_user_id = int(os.getenv("FITMAS_V0_STRAVA_LEGACY_USER", "1"))
     strava_interval = int(os.getenv("FITMAS_V0_STRAVA_SYNC_SECONDS", "900"))
 
+    # Strava sync is solo: one legacy account (legacy_user_id) maps to ONE runner.
+    # Applying it to every allowlisted chat would pull the same person's runs into
+    # someone else's store, so only sync the owner chat (the first allowlisted id).
+    # Per-user Strava mapping is a multi-user concern, deliberately not built yet.
+    strava_chat_ids = allowlist[:1]
+    if len(allowlist) > 1:
+        logger.warning(
+            "dogfood: strava->v0 sync is solo (legacy user %s) — syncing only chat %s and "
+            "skipping %d other allowlisted chat(s); per-user Strava mapping is not built yet",
+            legacy_user_id, strava_chat_ids[0], len(allowlist) - 1,
+        )
+
     async def _strava_sync_job(context: object) -> None:  # noqa: ARG001
         from functools import partial
         try:
@@ -213,7 +237,7 @@ def main() -> None:
             logger.exception("dogfood: strava sync adapter import failed")
             return
         loop = asyncio.get_running_loop()
-        for uid in allowlist:
+        for uid in strava_chat_ids:
             try:
                 n = await loop.run_in_executor(
                     None,
@@ -230,9 +254,9 @@ def main() -> None:
             except Exception:
                 logger.exception("dogfood: strava->v0 sync failed (chat %s)", uid)
 
-    if allowlist and tg_app.job_queue is not None:
+    if strava_chat_ids and tg_app.job_queue is not None:
         tg_app.job_queue.run_repeating(_strava_sync_job, interval=strava_interval, first=15, name="strava_v0_sync")
-        logger.info("dogfood: strava->v0 sync every %ds", strava_interval)
+        logger.info("dogfood: strava->v0 sync every %ds (chat %s)", strava_interval, strava_chat_ids[0])
 
     logger.info("dogfood: starting polling...")
     tg_app.run_polling(allowed_updates=Update.ALL_TYPES)

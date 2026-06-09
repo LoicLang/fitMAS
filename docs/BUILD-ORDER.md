@@ -200,9 +200,23 @@ Ordre recommande :
 8. **Chemin modify/preference** (« fais plus varie »).
 9. **Heartbeat / proactivite** : briefing matin, revue hebdo, reconciliation
    run<->session automatique (tout ce que le legacy faisait, V0 va l'acquerir).
-10. **Hygiene/robustesse** : museler les logs httpx INFO (token dans les logs Fly) ;
-    `sync_strava_to_v0` hardcode `legacy_user=1` (solo-only, a parametriser si multi-user) ;
-    dedup run<->session a confirmer sur volume reel.
+10. **Hygiene/robustesse** :
+    - ~~logs httpx INFO (token dans les logs Fly)~~ **FAIT (9 juin)** : `_configure_logging`
+      epingle `httpx`/`httpcore` a WARNING — le token Telegram est dans l'URL `/bot<TOKEN>/`,
+      donc a INFO il fuyait dans les logs Fly a chaque poll.
+    - ~~`sync_strava_to_v0` hardcode `legacy_user=1`~~ **FAIT (9 juin)** : lu depuis
+      `FITMAS_V0_STRAVA_LEGACY_USER` (defaut "1"). La sync est **solo** par construction
+      (un legacy user -> le seul chat owner = 1er de l'allowlist ; garde-fou + warning si
+      l'allowlist grossit). Le mapping Strava par utilisateur = multi-user, non construit
+      (hors scope).
+    - **dedup activites (bootstrap vs sync)** : **BUG CONFIRME (9 juin)**. Le bootstrap
+      one-shot (`materialize_v0_db`) ecrit `v0_activities.id = legacy Activity.id` (petit),
+      la sync Strava ecrit `id = strava activity id` (enorme), et l'`external_id` strava
+      n'est pas porte dans `v0_activities` -> chaque run strava bootstrappe le 8 juin ET dans
+      la fenetre de sync est **double compte** (l'`insert or ignore` ne dedup que
+      strava<->strava). Impact : `recent_training` gonfle -> seed `propose_week` biaise. Fix
+      = nettoyage one-shot du store live (script dry-run d'abord) ; non lancable d'ici (le
+      store vit sur le volume Fly).
 11. **Webapp V0 — retravailler le front (8 juin, soir).** La webapp lit le store V0 en prod
     (`FITMAS_APP_SOURCE=v0`) et le minimum marche, MAIS le store V0 est minimal → **détails Strava
     riches manquants** (carte/map, FC moy/max, denivele, splits/zones), charge = estimation
