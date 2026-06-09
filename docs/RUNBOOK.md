@@ -13,13 +13,13 @@ read_when:
 ## Lire Avant De Coder
 
 ```bash
-./scripts/docs:list
+./scripts/docs-list
 ```
 
 Archives et anciens plans :
 
 ```bash
-./scripts/docs:list --all
+./scripts/docs-list --all
 ```
 
 Ordre utile :

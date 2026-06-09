@@ -221,7 +221,7 @@ avec snapshot borne, proposal typee, policy explicite, write audite et reply gar
 ## Verification
 
 ```bash
-./scripts/docs:list
+./scripts/docs-list
 ./scripts/test-backend
 ```
 

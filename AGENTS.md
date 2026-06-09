@@ -112,7 +112,7 @@ Hard rules:
 Before coding:
 
 1. read the latest messages in the conversation
-2. run `./scripts/docs:list`
+2. run `./scripts/docs-list`
 3. read relevant docs
 4. inspect related code
 

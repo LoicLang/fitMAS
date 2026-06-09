@@ -13,8 +13,8 @@ Les docs actives doivent aider un agent a agir vite.
 Les journaux de refactor et plans termines vont dans `docs/archive/`.
 
 ```bash
-./scripts/docs:list
-./scripts/docs:list --all
+./scripts/docs-list
+./scripts/docs-list --all
 ```
 
 ## Lecture Recommandee

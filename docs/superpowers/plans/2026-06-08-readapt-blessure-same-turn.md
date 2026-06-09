@@ -618,7 +618,7 @@ Ajouter une ligne au journal Budget : `4320 -> <N> (8 juin 2026)` = ré-adaptati
 
 - [ ] **Step 4 : vérifier la cohérence docs**
 
-Run: `./scripts/docs:list`
+Run: `./scripts/docs-list`
 Expected: pas d'erreur de front-matter ; les docs touchés restent listés.
 
 - [ ] **Step 5 : commit**

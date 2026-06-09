@@ -96,7 +96,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.all:
         print("Listing all markdown files in docs folder, including archive and historical plans:")
     else:
-        print("Listing active markdown docs. Use ./scripts/docs:list --all for archive and historical plans:")
+        print("Listing active markdown docs. Use ./scripts/docs-list --all for archive and historical plans:")
     markdown_files = walk_markdown_files(DOCS_DIR, include_all=args.all)
 
     for full_path in markdown_files:

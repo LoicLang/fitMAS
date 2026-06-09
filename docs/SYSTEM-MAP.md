@@ -320,5 +320,5 @@ Smoke core :
 Docs actives :
 
 ```bash
-./scripts/docs:list
+./scripts/docs-list
 ```

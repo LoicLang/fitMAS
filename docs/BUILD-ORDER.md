@@ -456,7 +456,7 @@ fiable.
 ## Verification Minimale
 
 ```bash
-./scripts/docs:list
+./scripts/docs-list
 pytest tests/runtime_v0
 python3 scripts/v0_eval/run_matrix.py --provider fake --repetitions 1
 python3 scripts/v0_eval/run_matrix.py --repetitions 5

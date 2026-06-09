@@ -2,4 +2,4 @@
 set -euo pipefail
 
 script_dir="$(cd "$(dirname "$0")" && pwd)"
-exec "$script_dir/docs:list"
+exec python3 "$script_dir/docs_list.py" "$@"
