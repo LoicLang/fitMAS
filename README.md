@@ -110,6 +110,14 @@ A real, unscripted turn (DeepSeek; the coach is the live loop, operating in Fren
 
 Before the fix, on this exact ordering the coach only recorded the injury and left the hard session in the plan — a gap the LLM judge scored 5/5/5/5 and the deterministic oracle caught. Now it re-plans safely. Reproduce: [`scripts/v0_eval/probe_injury_after_commit.py`](scripts/v0_eval/probe_injury_after_commit.py).
 
+### The companion webapp
+
+The Telegram coach is the product, but the same V0 store also powers a small read webapp (calendar + session detail). Link a Strava run to a planned session and it shows the realized, enriched detail — pace, heart rate, elevation, calories, the route map — all from the coach's own store.
+
+![Rich, Strava-enriched session detail in the companion webapp](docs/assets/webapp-session-detail.png)
+
+*Synthetic seed data — no real activity or GPS. Regenerated deterministically from a Playwright scenario (`cd frontend && npm run shots`).*
+
 ## By the numbers
 
 The small live core is the *result* of getting the split right, not the premise:
