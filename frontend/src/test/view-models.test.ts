@@ -38,11 +38,15 @@ describe("frontend view models", () => {
   });
 
   it("preserves route proportions when building svg paths", () => {
-    const path = buildSvgPath([
+    const route = buildSvgPath([
       [0, 0],
       [1, 1],
     ]);
 
-    expect(path).toBe("M 26.00 48.00 L 74.00 0.00");
+    expect(route).not.toBeNull();
+    // Equal lat/lng spans near the equator -> a square-ish bounding box (true proportions).
+    const [, , w, h] = route!.viewBox.split(" ").map(Number);
+    expect(Math.abs(w - h)).toBeLessThan(0.01);
+    expect(route!.path.startsWith("M ")).toBe(true);
   });
 });

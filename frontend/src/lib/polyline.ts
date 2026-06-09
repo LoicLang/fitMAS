@@ -34,30 +34,43 @@ export function decodePolyline(encoded?: string | null): [number, number][] {
   return points;
 }
 
-export function buildSvgPath(points: [number, number][], width = 100, height = 48) {
-  if (points.length < 2) return "";
+export interface RoutePath {
+  path: string;
+  viewBox: string;
+}
+
+/**
+ * Build an SVG path for a route in its *own* bounding box, plus the matching
+ * viewBox. The caller renders it with `preserveAspectRatio="xMidYMid meet"` so the
+ * route fills the container at its true proportions (single fit — no fixed inner box
+ * to letterbox into) and with `vector-effect="non-scaling-stroke"` so the line keeps
+ * a constant screen width regardless of the (tiny, degree-scale) viewBox units.
+ * Longitude is compressed by cos(latitude) so the shape stays geographically true.
+ */
+export function buildSvgPath(points: [number, number][]): RoutePath | null {
+  if (points.length < 2) return null;
 
   const lats = points.map(([lat]) => lat);
-  const lngs = points.map(([, lng]) => lng);
-  const minLat = Math.min(...lats);
-  const maxLat = Math.max(...lats);
-  const minLng = Math.min(...lngs);
-  const maxLng = Math.max(...lngs);
-  const latRange = maxLat - minLat || 0.001;
-  const avgLat = (minLat + maxLat) / 2;
+  const avgLat = (Math.min(...lats) + Math.max(...lats)) / 2;
   const lngScale = Math.max(Math.cos((avgLat * Math.PI) / 180), 0.001);
-  const lngRange = (maxLng - minLng || 0.001) * lngScale;
-  const scale = Math.min(width / lngRange, height / latRange);
-  const routeWidth = lngRange * scale;
-  const routeHeight = latRange * scale;
-  const offsetX = (width - routeWidth) / 2;
-  const offsetY = (height - routeHeight) / 2;
 
-  return points
-    .map(([lat, lng], index) => {
-      const x = offsetX + ((lng - minLng) * lngScale * scale);
-      const y = height - offsetY - ((lat - minLat) * scale);
-      return `${index === 0 ? "M" : "L"} ${x.toFixed(2)} ${y.toFixed(2)}`;
+  // North-up planar projection: x from longitude (compressed), y from negated latitude.
+  const project = ([lat, lng]: [number, number]): [number, number] => [lng * lngScale, -lat];
+  const xs = points.map((p) => project(p)[0]);
+  const ys = points.map((p) => project(p)[1]);
+  const minX = Math.min(...xs);
+  const minY = Math.min(...ys);
+  const w = Math.max(...xs) - minX || 0.0001;
+  const h = Math.max(...ys) - minY || 0.0001;
+
+  const path = points
+    .map((p, index) => {
+      const [px, py] = project(p);
+      return `${index === 0 ? "M" : "L"} ${(px - minX).toFixed(6)} ${(py - minY).toFixed(6)}`;
     })
     .join(" ");
+
+  const pad = Math.max(w, h) * 0.06;
+  const viewBox = `${-pad} ${-pad} ${w + 2 * pad} ${h + 2 * pad}`;
+  return { path, viewBox };
 }

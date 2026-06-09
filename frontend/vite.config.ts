@@ -17,6 +17,8 @@ export default defineConfig({
     emptyOutDir: true,
   },
   test: {
+    // Unit tests live under src/; e2e/ is Playwright (its own runner), keep it out of vitest.
+    include: ["src/**/*.{test,spec}.{ts,tsx}"],
     environment: "jsdom",
     setupFiles: "./src/test/setup.ts",
   },

@@ -50,5 +50,5 @@ test("a linked session detail shows rich Strava metrics + the route map", async 
   await expect(page.getByText(/kcal/).first()).toBeVisible(); // calories
 
   // The route map renders from the activity's polyline (RoutePreview svg).
-  await expect(page.locator('svg[viewBox="0 0 100 48"]')).toBeVisible();
+  await expect(page.getByTestId("route-map")).toBeVisible();
 });
