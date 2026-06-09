@@ -17,9 +17,19 @@ dependencies = [
   "pytz>=2024.1",
 ]
 
+[project.optional-dependencies]
+dev = [
+  "pytest>=8,<10",
+]
+
 [build-system]
 requires = ["setuptools>=68", "wheel"]
 build-backend = "setuptools.build_meta"
+
+[tool.pytest.ini_options]
+# Tests import the repo-root `scripts.v0_eval` namespace package; put the repo
+# root on sys.path so the bare `pytest` console script works like `python -m pytest`.
+pythonpath = ["."]
 
 [tool.setuptools]
 package-dir = {"" = "backend/src"}
