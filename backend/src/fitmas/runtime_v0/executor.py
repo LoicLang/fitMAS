@@ -12,9 +12,11 @@ from fitmas.runtime_v0.policy import (
     Command,
     CorrectSessionStatusCommand,
     CreatePendingConfirmationCommand,
+    LinkActivityToSessionCommand,
     ResolveMemoryFactCommand,
     ResolvePendingConfirmationCommand,
     SetSessionStatusCommand,
+    UnlinkActivityCommand,
     UpdateConversationStateCommand,
     UpsertMemoryFactCommand,
 )
@@ -94,6 +96,10 @@ def _apply_command(command: Command, connection, user_id: int) -> tuple[dict[str
         return _apply_resolve_pending(command, connection, user_id)
     if isinstance(command, UpdateConversationStateCommand):
         return _apply_update_conversation_state(command, connection, user_id)
+    if isinstance(command, LinkActivityToSessionCommand):
+        return _apply_link_activity_to_session(command, connection, user_id)
+    if isinstance(command, UnlinkActivityCommand):
+        return _apply_unlink_activity(command, connection, user_id)
     raise ValueError("unsupported_command")
 
 def _apply_set_session_status(command: SetSessionStatusCommand, connection) -> tuple[dict[str, Any], dict[str, Any], str]:
@@ -445,6 +451,10 @@ def _target(command: Command, user_id: int) -> tuple[str, str]:
         return "pending", str(command.pending_id)
     if isinstance(command, UpdateConversationStateCommand):
         return "state", str(user_id)
+    if isinstance(command, LinkActivityToSessionCommand):
+        return "activity", str(command.activity_id)
+    if isinstance(command, UnlinkActivityCommand):
+        return "activity", str(command.activity_id)
     return "unknown", type(command).__name__
 
 def _session(connection, session_id: int) -> dict[str, Any] | None:
@@ -456,6 +466,51 @@ def _session_or_raise(connection, session_id: int) -> dict[str, Any]:
     if row is None:
         raise ValueError("session_not_found")
     return row
+
+def _activity(connection, activity_id: int) -> dict[str, Any] | None:
+    row = connection.execute("select * from v0_activities where id = ?", (activity_id,)).fetchone()
+    return dict(row) if row else None
+
+def _activity_or_raise(connection, activity_id: int) -> dict[str, Any]:
+    row = _activity(connection, activity_id)
+    if row is None:
+        raise ValueError("activity_not_found")
+    return row
+
+def _apply_link_activity_to_session(command: LinkActivityToSessionCommand, connection, user_id: int) -> tuple[dict[str, Any], dict[str, Any], str]:
+    activity = _activity_or_raise(connection, command.activity_id)
+    session = _session_or_raise(connection, command.session_id)
+    if activity["user_id"] != user_id or session["user_id"] != user_id:
+        raise ValueError("not_owner")
+    before = {"activity": activity, "session": session}
+    connection.execute(
+        "update v0_activities set scheduled_session_id = ? where id = ?",
+        (command.session_id, command.activity_id),
+    )
+    connection.execute(
+        "update v0_scheduled_sessions set status = 'done', updated_at = ? where id = ?",
+        (_now_text(), command.session_id),
+    )
+    after = {"activity": _activity(connection, command.activity_id), "session": _session(connection, command.session_id)}
+    return before, after, command.evidence
+
+def _apply_unlink_activity(command: UnlinkActivityCommand, connection, user_id: int) -> tuple[dict[str, Any], dict[str, Any], str]:
+    activity = _activity_or_raise(connection, command.activity_id)
+    if activity["user_id"] != user_id:
+        raise ValueError("not_owner")
+    session_id = activity["scheduled_session_id"]
+    before = {"activity": activity, "session": _session(connection, session_id) if session_id else None}
+    connection.execute(
+        "update v0_activities set scheduled_session_id = null where id = ?",
+        (command.activity_id,),
+    )
+    if session_id is not None:
+        connection.execute(
+            "update v0_scheduled_sessions set status = 'planned', updated_at = ? where id = ?",
+            (_now_text(), session_id),
+        )
+    after = {"activity": _activity(connection, command.activity_id), "session": _session(connection, session_id) if session_id else None}
+    return before, after, command.evidence
 
 def _pending(connection, pending_id: int) -> dict[str, Any]:
     row = connection.execute("select * from v0_pending_confirmations where id = ?", (pending_id,)).fetchone()

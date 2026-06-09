@@ -66,6 +66,17 @@ class UpdateConversationStateCommand(Command):
     last_pending_id: int | None
 
 @dataclass(frozen=True)
+class LinkActivityToSessionCommand(Command):
+    activity_id: int
+    session_id: int
+    evidence: str
+
+@dataclass(frozen=True)
+class UnlinkActivityCommand(Command):
+    activity_id: int
+    evidence: str
+
+@dataclass(frozen=True)
 class PolicyDecision:
     action: Literal[
         "allow_commit",
