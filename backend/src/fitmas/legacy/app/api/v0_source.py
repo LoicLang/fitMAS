@@ -85,6 +85,18 @@ def get_scheduled_sessions(user_id: int | None = None, limit: int = 120) -> list
     return sessions
 
 
+def v0_user_id() -> int | None:
+    """Resolve the single V0 user id (the store is solo)."""
+    path = v0_db_path()
+    if not path.exists():
+        return None
+    with _connect(path) as conn:
+        row = conn.execute(
+            "select user_id from v0_scheduled_sessions union select user_id from v0_activities limit 1"
+        ).fetchone()
+    return int(row["user_id"]) if row else None
+
+
 def get_activities(user_id: int | None = None, limit: int = 500) -> list[Activity]:
     """Read the V0 activities. Solo store → default to no user_id filter (see above)."""
     path = v0_db_path()
@@ -108,6 +120,7 @@ def get_activities(user_id: int | None = None, limit: int = 500) -> list[Activit
         sport = row["sport"] or "running"
         note = (row["notes"] if "notes" in keys else "") or ""
         duration_min = row["duration_min"]
+        scheduled_session_id = row["scheduled_session_id"] if "scheduled_session_id" in keys else None
         # The V0 store keeps duration but no per-activity load. Estimate a TSS proxy
         # from duration (~0.8 TSS/min, consistent with the session estimator) so the
         # training-load chart has signal. It is an estimate, not a measured TSS.
@@ -124,6 +137,7 @@ def get_activities(user_id: int | None = None, limit: int = 500) -> list[Activit
                 started_at=row["date"],
                 tss=tss,
                 perceived_load=int(tss) if tss else None,
+                scheduled_session_id=scheduled_session_id,
             )
         )
     return activities
