@@ -120,5 +120,7 @@ def test_runtime_v0_core_stays_under_v0_budget():
     # two new executor commands (policy dataclasses + dispatch + _target cases +
     # _activity/_activity_or_raise helpers + handlers). Audited, ownership-checked.
     # Task 2/7 of the manual activity<->session link feature.
+    # 4571 -> 4573 (9 juin 2026): sport_mismatch guard in _apply_link_activity_to_session —
+    # +2 lines to reject cross-sport links before any write (backstop for bug #1).
     loc = sum(len(path.read_text().splitlines()) for path in _core_files())
-    assert loc <= 4571
+    assert loc <= 4573

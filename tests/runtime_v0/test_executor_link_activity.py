@@ -64,3 +64,19 @@ def test_link_rejects_wrong_user(tmp_path):
     )
     assert events[0].status == "blocked"
     assert _row(db, "select scheduled_session_id from v0_activities where id=900")[0] is None
+
+
+def test_link_rejects_sport_mismatch(tmp_path):
+    db = tmp_path / "v0.db"; _seed(db)
+    # seed an activity of a different sport than session 10 (running)
+    con = sqlite3.connect(db)
+    con.execute("insert into v0_activities (id,user_id,date,sport,duration_min,distance_km,notes,source) "
+                "values (901, ?, '2026-06-08', 'cycling', 60, 25.0, 'ride', 'strava')", (USER,))
+    con.commit(); con.close()
+    events = CommandExecutor(db).execute(
+        (LinkActivityToSessionCommand(activity_id=901, session_id=10, evidence="x"),),
+        turn_id="tsm", user_id=USER,
+    )
+    assert events[0].status == "blocked"
+    assert _row(db, "select scheduled_session_id from v0_activities where id=901")[0] is None
+    assert _row(db, "select status from v0_scheduled_sessions where id=10")[0] == "planned"

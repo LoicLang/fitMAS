@@ -482,6 +482,8 @@ def _apply_link_activity_to_session(command: LinkActivityToSessionCommand, conne
     session = _session_or_raise(connection, command.session_id)
     if activity["user_id"] != user_id or session["user_id"] != user_id:
         raise ValueError("not_owner")
+    if str(activity["sport"]).lower() != str(session["sport"]).lower():
+        raise ValueError("sport_mismatch")
     before = {"activity": activity, "session": session}
     connection.execute(
         "update v0_activities set scheduled_session_id = ? where id = ?",

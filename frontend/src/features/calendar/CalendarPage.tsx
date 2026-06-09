@@ -146,7 +146,10 @@ export function CalendarPage() {
             {selectedDay?.items.length ? (
               selectedDay.items.map((item) => {
                 const plannedTargets = (selectedDay.items ?? []).filter(
-                  (i) => i.kind === "session" && i.status === "planned",
+                  (s) =>
+                    s.kind === "session" &&
+                    s.completion_status === "planned" &&
+                    (s.sport_type ?? "").toLowerCase() === (item.sport_type ?? "").toLowerCase(),
                 );
                 return (
                   <DayEntry
