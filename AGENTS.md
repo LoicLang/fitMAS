@@ -1,6 +1,6 @@
 # AGENTS.md
 
-How AI coding agents work inside FitMAS. Public on purpose: FitMAS is also an experiment in **agentic software development** — keeping AI-assisted work grounded in specs, tests, architecture constraints, runtime safety, and real dogfood feedback. (Claude Code reads `CLAUDE.md`; this is the shared / Codex convention.)
+How AI coding agents work inside FitMAS. Public on purpose: FitMAS is also an experiment in **agentic software development** — keeping AI-assisted work grounded in specs, tests, architecture constraints, runtime safety, and real dogfood feedback. **Single source of truth for agent doctrine, all tools** (`CLAUDE.md` is a short stub pointing here).
 
 Working style: short and telegraphic, spec- and test-first. Start from the doctrine below before proposing work.
 
