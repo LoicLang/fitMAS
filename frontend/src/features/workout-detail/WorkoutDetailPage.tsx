@@ -1,7 +1,7 @@
 import { useRef } from "react";
 import { ArrowLeft, Clock, Flame, Gauge, HeartPulse, Mountain, Route as RouteIcon, TrendingUp } from "lucide-react";
 import { motion, useScroll, useTransform } from "motion/react";
-import { type LoaderFunctionArgs, useLoaderData, useNavigate } from "react-router-dom";
+import { type LoaderFunctionArgs, useLoaderData, useLocation, useNavigate } from "react-router-dom";
 import { loadWorkoutDetail } from "../../shared/api";
 import { formatDateLong, formatDistance, loadBandLabel, sportLabel } from "../../shared/format";
 import { sessionBackdrop } from "../../shared/session-visuals";
@@ -19,6 +19,10 @@ export async function workoutDetailLoader({ params }: LoaderFunctionArgs) {
 export function WorkoutDetailPage() {
   const data = useLoaderData() as WorkoutDetailView;
   const navigate = useNavigate();
+  const location = useLocation();
+  // navigate(-1) is a no-op on a direct load / refresh (no in-app history to pop).
+  // location.key is "default" only on that first entry — fall back to the calendar.
+  const goBack = () => (location.key === "default" ? navigate("/calendar") : navigate(-1));
   const stats = workoutStats(data);
   const session = data.session;
   const content = data.content;
@@ -51,7 +55,7 @@ export function WorkoutDetailPage() {
         <header className="fixed left-0 right-0 top-0 z-50 p-6">
           <button
             type="button"
-            onClick={() => navigate(-1)}
+            onClick={goBack}
             className="flex h-12 w-12 items-center justify-center rounded-full border border-black/10 bg-white/80 text-zinc-900 shadow-sm backdrop-blur-md transition hover:bg-white"
           >
             <ArrowLeft className="h-6 w-6" />

@@ -52,3 +52,10 @@ test("a linked session detail shows rich Strava metrics + the route map", async 
   // The route map renders from the activity's polyline (RoutePreview svg).
   await expect(page.getByTestId("route-map")).toBeVisible();
 });
+
+test("the detail back button returns to the calendar on a direct load", async ({ page }) => {
+  // Direct load / refresh: no in-app history to pop, so navigate(-1) would be a no-op.
+  await page.goto("/workout/1");
+  await page.locator("header button").click();
+  await expect(page).toHaveURL(/\/calendar/);
+});

@@ -19,34 +19,38 @@ export function AppLayout() {
       <div className="min-h-screen bg-[var(--app-bg)] text-[var(--text-main)]">
         <AmbientBackground />
 
-        <header className="fixed inset-x-0 top-0 z-40">
-          <div className="mx-auto flex h-16 w-full max-w-7xl items-center justify-between px-5 md:px-8">
-            <NavLink to="/" className="text-sm font-extrabold tracking-[0.24em] text-zinc-950">
-              FITMAS
-              <span className="text-[var(--accent)]">.</span>
-            </NavLink>
+        {/* The workout detail is an immersive view with its own back button — its
+            global nav would otherwise overlap (and intercept clicks on) that button. */}
+        {isWorkoutDetail ? null : (
+          <header className="fixed inset-x-0 top-0 z-40">
+            <div className="mx-auto flex h-16 w-full max-w-7xl items-center justify-between px-5 md:px-8">
+              <NavLink to="/" className="text-sm font-extrabold tracking-[0.24em] text-zinc-950">
+                FITMAS
+                <span className="text-[var(--accent)]">.</span>
+              </NavLink>
 
-            <nav className="hidden items-center gap-8 md:flex">
-              {NAV_ITEMS.map(({ to, label }) => (
-                <NavLink
-                  key={to}
-                  to={to}
-                  end={to === "/"}
-                  className={({ isActive }) =>
-                    `text-sm font-semibold tracking-wide transition ${
-                      isActive ? "text-zinc-950" : "text-zinc-500 hover:text-zinc-800"
-                    }`
-                  }
-                >
-                  {label}
-                </NavLink>
-              ))}
-            </nav>
-          </div>
-          {navigation.state !== "idle" ? <div className="h-px w-full bg-cyan-300/50 shadow-[0_0_18px_rgba(103,232,249,0.5)]" /> : null}
-        </header>
+              <nav className="hidden items-center gap-8 md:flex">
+                {NAV_ITEMS.map(({ to, label }) => (
+                  <NavLink
+                    key={to}
+                    to={to}
+                    end={to === "/"}
+                    className={({ isActive }) =>
+                      `text-sm font-semibold tracking-wide transition ${
+                        isActive ? "text-zinc-950" : "text-zinc-500 hover:text-zinc-800"
+                      }`
+                    }
+                  >
+                    {label}
+                  </NavLink>
+                ))}
+              </nav>
+            </div>
+            {navigation.state !== "idle" ? <div className="h-px w-full bg-cyan-300/50 shadow-[0_0_18px_rgba(103,232,249,0.5)]" /> : null}
+          </header>
+        )}
 
-        <main className="relative z-10 pb-36 pt-16 md:pb-16">
+        <main className={`relative z-10 pb-36 md:pb-16 ${isWorkoutDetail ? "" : "pt-16"}`}>
           <Outlet />
         </main>
 
