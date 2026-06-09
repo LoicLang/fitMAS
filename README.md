@@ -142,18 +142,18 @@ Two layers, by design:
 
 Proof today: 273 tests, fake matrix 11/11, danger metrics 0, output-guard fallback 0%. The live layer earned its keep the hard way — it once scored an injury turn **5/5/5/5 on the LLM judge while the deterministic oracle failed it** (the coach left a hard session in an already-committed week). The judge was fooled; the oracle was not. That bug is now fixed and proven by a forced-ordering probe. On a 90-run replay against the legacy app, V0 is **not yet better on raw usefulness** — and I say so — but the one systematic danger class is closed and `tie_bad` is 0.
 
-## For technical reviewers
+## Reading guide
 
-A dense repo — here's the path that shows the most in the least time:
+FitMAS is easier to understand in layers:
 
-1. this README — the thesis and the proof in one place
-2. [`docs/RUNTIME-V0-APP-COMPARISON.md`](docs/RUNTIME-V0-APP-COMPARISON.md) — the honest V0-vs-legacy write-up (the failure-profile argument)
-3. [`docs/V0-CODE-MAP.md`](docs/V0-CODE-MAP.md) — file-by-file map of the live core
-4. [`backend/src/fitmas/runtime_v0/runtime.py`](backend/src/fitmas/runtime_v0/runtime.py) — the loop end to end
-5. [`backend/src/fitmas/runtime_v0/policy.py`](backend/src/fitmas/runtime_v0/policy.py) — the authority (allow / pending / block)
-6. [`backend/src/fitmas/runtime_v0/guard.py`](backend/src/fitmas/runtime_v0/guard.py) — the guard on the model's own output
+1. this README — product vision, architecture thesis, and current proof
+2. [`docs/RUNTIME-V0-APP-COMPARISON.md`](docs/RUNTIME-V0-APP-COMPARISON.md) — the honest V0-vs-legacy evaluation
+3. [`docs/V0-CODE-MAP.md`](docs/V0-CODE-MAP.md) — how the runtime is structured file by file
+4. [`backend/src/fitmas/runtime_v0/runtime.py`](backend/src/fitmas/runtime_v0/runtime.py) — the main event loop
+5. [`backend/src/fitmas/runtime_v0/policy.py`](backend/src/fitmas/runtime_v0/policy.py) — the deterministic authority layer
+6. [`backend/src/fitmas/runtime_v0/guard.py`](backend/src/fitmas/runtime_v0/guard.py) — the output truth guard
 7. [`tests/runtime_v0/`](tests/runtime_v0/) — the proven-core suite
-8. [`scripts/v0_eval/`](scripts/v0_eval/) — the evals (mechanical matrix + live probes)
+8. [`scripts/v0_eval/`](scripts/v0_eval/) — mechanical matrix and live simulation probes
 
 ## Roadmap
 
