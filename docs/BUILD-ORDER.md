@@ -169,12 +169,25 @@ Ordre recommande :
    re-propose une semaine sans intensite (sonde `probe_injury_after_commit` PASS x2). Debloque
    l'execution et le patch chirurgical sur une semaine generee. Spec
    `2026-06-08-plan-store-reconciliation-design.md`.
-4. **Run <-> session matching** : chemin LLM-first — enseigner au coach a marquer
-   une seance done quand il voit une activite Strava qui matche clairement
-   (`propose_execution_update` + `recent_activities` + `current_plan` dans le snapshot) ;
-   *les seances d'une semaine committee sont desormais sur le calendrier (3bis), donc
-   l'execution peut s'y accrocher — reste l'auto-matching Strava->seance* ;
-   proactivite complete (heartbeat auto-reconcile) differee a la tranche heartbeat.
+4. **Run <-> session matching** (lier une activite Strava realisee a la seance planifiee
+   pour la noter `done`) — chemin **LLM-first** : le coach marque une seance done quand il
+   voit une activite Strava qui matche clairement la seance planifiee.
+   - **Deja en place** : le tool `propose_execution_update(status=done|skipped|partial)`
+     (`tools_proposal.py`), le gate policy `_execution_update` (`policy.py`), et
+     `recent_activities` (les runs Strava) charges dans le `WorldSnapshot` (`snapshot.py`) ;
+     les seances d'une semaine committee sont sur le calendrier (3bis), donc l'execution a
+     une cible a accrocher.
+   - **Trou bloquant (constate 9 juin)** : `recent_activities` n'est **jamais rendu dans le
+     prompt** du coach. `SnapshotHeader.to_prompt_text` affiche `next_sessions`,
+     `recent_training` (sessions *planifiees*) et les faits — mais **pas les activites
+     realisees**. Le coach est donc **aveugle au run Strava** : il ne peut pas proposer de
+     noter la seance done. C'est la premiere brique a poser.
+   - **Etape** : surfacer `recent_activities` dans le header (date/sport/duree/distance/source),
+     puis enseigner au coach a proposer `propose_execution_update(done)` quand une activite
+     matche clairement une seance planifiee. **Le LLM juge le match** (jamais de
+     regex/keyword sur la duree/le titre). Garder le chemin **user-prompted** (« note ma
+     sortie de hier ») ; l'auto-reconcile proactif (sans message user) = **tranche heartbeat**,
+     differee.
 5. **Presence / Voix — PRIORITE (frontiere actuelle).** Le data est regle ; ce qui manque,
    c'est *etre* le coach, pas seulement *faire*. Revele en dogfood reel (8 juin) : sur
    « il pleut mais je vais la faire ! » (social + motivation + intention future), V0 a
