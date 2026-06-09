@@ -16,6 +16,9 @@ Le plus petit coach Telegram fiable pour 1 a 2 semaines de dogfood.
 
 ## Etat Actuel — 8 juin 2026 (soir) — V0 LIVE EN PROD
 
+Cadre du deploiement : **dogfood personnel** (mono-utilisateur, pas
+production-grade).
+
 **V0 est le coach Telegram de Loïc depuis le soir du 8 juin 2026.** Le runner
 `scripts/dogfood_telegram.py` remplace le legacy bot dans `scripts/start-prod`. Le bot
 legacy est retraite ; ses jobs automatiques (cron Strava, briefing matin, revue
@@ -61,6 +64,11 @@ Preuve (verifiee offline puis deploye) :
 - **Net** : plan running courant reel, runs Strava auto-syncees toutes les 15 min,
   faits propres. Le cadrage "dogfoodable offline / runner local / store isole" est
   **depasse** : V0 est le coach live sur donnees reelles.
+
+**Barre de preuve courante** : potentiel montre ET verifie en simulation reelle non
+scriptee ; la barre est maintenant **tenir la fiabilite en dogfood reel** — suivre le
+profil d'echec sur les tours reels, corriger safe, ne jamais accumuler de regles
+deterministes.
 
 **Lacunes connues (pas du bug, travaux suivants)** :
 
