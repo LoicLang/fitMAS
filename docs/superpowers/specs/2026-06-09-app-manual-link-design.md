@@ -105,6 +105,24 @@ Composant exact à localiser en planning.
 - **Write depuis la webapp** : la webapp dépend désormais de `runtime_v0` (via l'adapter). C'est un
   couplage **intentionnel et mince** (adapter only), cohérent avec la doctrine (executor = writer).
 
+## Edge cases connus — NON gardés (acceptable en dogfood solo, à durcir avant un usage plus large)
+
+Gardés aujourd'hui : ownership (`not_owner`) + anti cross-sport (`sport_mismatch`). **Pas encore**
+gardés (le LLM/UI ne les déclenche pas en pratique solo, mais le write s'autorise) :
+
+- **Activité déjà liée à une autre séance** : re-lier la déplace sans avertir ; l'ancienne séance
+  reste `done` (FK orphelin côté séance). Garde manquante : refuser/ré-router si `activity.scheduled_session_id`
+  est déjà set (ou exiger un overwrite explicite).
+- **Séance déjà liée à une autre activité** : le 2e lien écrase l'association affichée sans nettoyer
+  la 1re activité.
+- **Date activité ≠ date séance** : autorisé (l'UI ne propose que le même jour, mais l'API ne vérifie pas).
+- **Unlink remet la séance `planned`** même si elle était `done` pour une autre raison (commit
+  d'exécution distinct). Inoffensif en solo ; à rendre conscient du contexte plus tard.
+
+Prochain durcissement logique si on vend ce chemin comme « write audité fiable » : 2 tests
+(refuser un lien sur une activité déjà liée sans overwrite ; refuser des dates différentes) + les
+gardes correspondantes dans `_apply_link_activity_to_session`.
+
 ## Phasage
 
 - **Phase 1 (backend)** : §1–5. Prouvable sans UI (tests + curl) : migration, commandes

@@ -14,13 +14,13 @@
 
 FitMAS is not a fitness app, and the hard problem was never *generating a training plan* — any model can write you a plan. The hard problem is **consistency in real life**: staying on track when a calf niggles, a work trip lands, a week falls apart, motivation dips. Generic trackers ignore all of that and plow ahead with the idealized plan.
 
-The long-term ambition is an **autonomous coaching staff** — not one chatbot, but a set of cooperating agents: a coach that plans, a recovery reviewer that reads your fatigue, an accountability agent that keeps you honest, a memory that carries your history, and an arbiter that resolves them into one safe decision. A continuous layer of *accompaniment*, not a generator of answers.
+The long-term ambition is **your own team for real life** — not one chatbot, but a set of cooperating *specialist* agents. A coach today; over time a nutritionist, a mental coach, a physio for recovery and mobility, an accountability agent that keeps you honest, a memory that carries your history, and an arbiter that resolves them into one safe plan. A standing staff that has your back across the domains of a healthy life — a continuous layer of *accompaniment*, not a generator of answers.
 
 And it should reach out **first**. A good coach doesn't wait to be messaged — when it notices your sessions quietly getting shorter, it checks in: *something off? tired? what's going on?* Turning a passive responder into an agent that **initiates on a real signal** — at the right moment, without nagging and without acting behind your back — is the proactivity challenge at the core of this. The mechanism is a **heartbeat**: a periodic, read-only pulse that can notice and ask, but never silently commits a change.
 
 That's the destination. This repo is the **first reliable brick** toward it. Three levels, kept explicit on purpose:
 
-- **Long-term vision** — an autonomous accompaniment system for real-life consistency.
+- **Long-term vision** — your autonomous *team for life* (coaching now, then nutrition, mental, recovery), holding real-life consistency across domains.
 - **Current V0** — a deliberately small personal running coach on Telegram, live as my daily dogfood.
 - **Architecture thesis** — the LLM proposes, the backend verifies, the executor writes, the audit proves, the guard protects.
 
@@ -98,6 +98,7 @@ What it does today:
 - **Re-adapt a week you've already committed** when a fresh injury lands.
 - Read the committed week back; block sport-unsafe mutations.
 - An output guard that won't let a reply lie about a write.
+- Manually link a Strava activity to a planned session **from the companion webapp** — the first audited webapp → V0 write, through the same official executor as the coach.
 
 ### In action
 
@@ -194,6 +195,9 @@ Then message it: *"plan my week"* → confirm → *"actually my knee hurts"* / *
 
 # live subagent simulation (needs a provider key in .env, e.g. DEEPSEEK_API_KEY)
 .venv/bin/python scripts/v0_eval/probe_live_simulation.py --provider deepseek --persona all
+
+# webapp end-to-end (Playwright drives the real browser against a seeded V0 store)
+cd frontend && npm ci && npx playwright install chromium && npm run test:e2e
 ```
 
 ## Project layout

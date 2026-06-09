@@ -1,8 +1,8 @@
-Loïc owns this, 
+# AGENTS.md
 
-Start every session: say hi + one motivating line, only on the first sessions message 
+How AI coding agents work inside FitMAS. Public on purpose: FitMAS is also an experiment in **agentic software development** — keeping AI-assisted work grounded in specs, tests, architecture constraints, runtime safety, and real dogfood feedback. (Claude Code reads `CLAUDE.md`; this is the shared / Codex convention.)
 
-Work style: telegraph. Short phrases. Minimal tokens. Drop filler.
+Working style: short and telegraphic, spec- and test-first. Start from the doctrine below before proposing work.
 
 
 # North Star & Anti-Reactive Doctrine
@@ -69,7 +69,7 @@ Current durable direction:
 - Architecture decision: the repo is the **product envelope**, `runtime_v0` is the **live core** (deployed prod 8 juin 2026), the old pipeline is **legacy — retired**. No new repo. The read-adapter (`materialize_v0_db`) was used one-shot to bootstrap the live store; the legacy bot is off. Legacy FastAPI/webapp still runs but its data is no longer the source of truth for the coach.
 - Sources of truth: next steps `docs/BUILD-ORDER.md`; product scope `docs/V0-DOGFOOD-SCOPE.md`; core reference `docs/RUNTIME-V0.md`; internal code map `docs/V0-CODE-MAP.md` (how V0 works file-by-file); test method `docs/V0-TEST-DOCTRINE.md`; user-text doctrine `docs/LLM-FIRST-CONVERSATION.md`; planning engine architecture `docs/PLANNING-V0.md`.
 
-V0 status (8 juin 2026, soir) — **LIVE IN PROD**:
+V0 status (8 juin 2026, soir) — **LIVE PERSONAL DOGFOOD** (deployed, single-user, not production-grade):
 
 - **V0 is Loïc's live Telegram coach as of evening 8 juin 2026.** `scripts/dogfood_telegram.py` runs in prod via `scripts/start-prod`, replacing the legacy bot. The legacy bot is retired; its scheduled jobs (Strava cron, morning briefing, weekly review) are off.
 - **Live store**: `FITMAS_V0_DB_PATH` → `/data/fitmas_v0_dogfood.db` (Fly volume). V0 `v0_*` tables = source of truth. Allowlist via `FITMAS_V0_DOGFOOD_CHAT_IDS` (Fly secret) = Loïc's Telegram chat id.
@@ -82,7 +82,7 @@ V0 status (8 juin 2026, soir) — **LIVE IN PROD**:
 
 Proof bar (current milestone):
 
-- **Bar cleared for prod**: V0 is live on real data. Potential shown AND verified on real unscripted simulation. The bar now is: **sustain reliability on real dogfood** — track failure profile on real turns, fix safe, never accumulate deterministic rules.
+- **Bar cleared for live dogfood**: V0 is live on real data. Potential shown AND verified on real unscripted simulation. The bar now is: **sustain reliability on real dogfood** — track failure profile on real turns, fix safe, never accumulate deterministic rules.
 - "Better" remains failure-profile-first: V0 must fail **safe** where the app failed **dangerous**. Never game a raw rate.
 
 Test doctrine (`docs/V0-TEST-DOCTRINE.md`), two layers:
