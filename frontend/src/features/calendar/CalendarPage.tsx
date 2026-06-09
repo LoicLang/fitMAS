@@ -27,15 +27,26 @@ export function CalendarPage() {
   const revalidator = useRevalidator();
   const [searchParams] = useSearchParams();
   const [selectedDate, setSelectedDate] = useState(initialSelectedDate(data.days));
+  const [linkError, setLinkError] = useState<string | null>(null);
 
   async function onLink(activityId: number, sessionId: number) {
-    await linkActivityToSession(activityId, sessionId);
-    revalidator.revalidate();
+    setLinkError(null);
+    try {
+      await linkActivityToSession(activityId, sessionId);
+      revalidator.revalidate();
+    } catch {
+      setLinkError("Impossible de lier la séance pour le moment. Réessaie.");
+    }
   }
 
   async function onUnlink(activityId: number) {
-    await unlinkActivity(activityId);
-    revalidator.revalidate();
+    setLinkError(null);
+    try {
+      await unlinkActivity(activityId);
+      revalidator.revalidate();
+    } catch {
+      setLinkError("Impossible de délier la séance pour le moment. Réessaie.");
+    }
   }
 
   useEffect(() => {
@@ -143,6 +154,11 @@ export function CalendarPage() {
           </article>
 
           <div className="grid gap-3">
+            {linkError ? (
+              <div className="rounded-[1.1rem] border border-[rgba(212,24,61,0.22)] bg-[rgba(212,24,61,0.06)] px-4 py-3 text-sm font-bold text-[#d4183d]">
+                {linkError}
+              </div>
+            ) : null}
             {selectedDay?.items.length ? (
               selectedDay.items.map((item) => {
                 const plannedTargets = (selectedDay.items ?? []).filter(
