@@ -113,5 +113,8 @@ def test_runtime_v0_core_stays_under_v0_budget():
     # Enveloppe Meso acquise (le pont), pas du noyau conversationnel nu. Prouvé offline
     # (test_executor_week_materialization) ; couche 2 (probe blessure post-commit).
     # Spec : docs/superpowers/specs/2026-06-08-plan-store-reconciliation-design.md.
+    # 4496 -> 4505 (9 juin 2026): v0_activities.scheduled_session_id — schema column +
+    # _ensure_activity_columns idempotent migration (mirrors _ensure_fact_columns).
+    # Foundation for the manual activity<->session link feature (task 1/7).
     loc = sum(len(path.read_text().splitlines()) for path in _core_files())
-    assert loc <= 4496
+    assert loc <= 4505

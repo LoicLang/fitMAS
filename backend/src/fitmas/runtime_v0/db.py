@@ -82,7 +82,8 @@ CREATE TABLE IF NOT EXISTS v0_activities (
     duration_min INTEGER NOT NULL,
     distance_km REAL,
     notes TEXT,
-    source TEXT NOT NULL DEFAULT 'manual'
+    source TEXT NOT NULL DEFAULT 'manual',
+    scheduled_session_id INTEGER
 );
 
 CREATE TABLE IF NOT EXISTS v0_facts (
@@ -154,6 +155,7 @@ def init_db(db_path: Path | None = None) -> None:
     with connect(db_path) as connection:
         connection.executescript(SCHEMA)
         _ensure_fact_columns(connection)
+        _ensure_activity_columns(connection)
         connection.commit()
 
 def _ensure_fact_columns(connection: sqlite3.Connection) -> None:
@@ -162,6 +164,13 @@ def _ensure_fact_columns(connection: sqlite3.Connection) -> None:
     columns = {row["name"] for row in connection.execute("PRAGMA table_info(v0_facts)")}
     if "resolved_at" not in columns:
         connection.execute("ALTER TABLE v0_facts ADD COLUMN resolved_at TEXT")
+
+def _ensure_activity_columns(connection: sqlite3.Connection) -> None:
+    # Older v0 DBs predate the activity<->session link. CREATE TABLE IF NOT EXISTS
+    # won't add the column, so add it here when missing.
+    columns = {row["name"] for row in connection.execute("PRAGMA table_info(v0_activities)")}
+    if "scheduled_session_id" not in columns:
+        connection.execute("ALTER TABLE v0_activities ADD COLUMN scheduled_session_id INTEGER")
 
 def reset_db(db_path: Path | None = None) -> None:
     with connect(db_path) as connection:
