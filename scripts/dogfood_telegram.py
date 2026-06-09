@@ -221,7 +221,7 @@ def main() -> None:
     # Applying it to every allowlisted chat would pull the same person's runs into
     # someone else's store, so only sync the owner chat (the first allowlisted id).
     # Per-user Strava mapping is a multi-user concern, deliberately not built yet.
-    strava_chat_ids = allowlist[:1]
+    strava_chat_ids = sorted(allowlist)[:1]
     if len(allowlist) > 1:
         logger.warning(
             "dogfood: strava->v0 sync is solo (legacy user %s) — syncing only chat %s and "
