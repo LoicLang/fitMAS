@@ -16,6 +16,8 @@ FitMAS is not a fitness app, and the hard problem was never *generating a traini
 
 The long-term ambition is an **autonomous coaching staff** — not one chatbot, but a set of cooperating agents: a coach that plans, a recovery reviewer that reads your fatigue, an accountability agent that keeps you honest, a memory that carries your history, and an arbiter that resolves them into one safe decision. A continuous layer of *accompaniment*, not a generator of answers.
 
+And it should reach out **first**. A good coach doesn't wait to be messaged — when it notices your sessions quietly getting shorter, it checks in: *something off? tired? what's going on?* Turning a passive responder into an agent that **initiates on a real signal** — at the right moment, without nagging and without acting behind your back — is the proactivity challenge at the core of this. The mechanism is a **heartbeat**: a periodic, read-only pulse that can notice and ask, but never silently commits a change.
+
 That's the destination. This repo is the **first reliable brick** toward it. Three levels, kept explicit on purpose:
 
 - **Long-term vision** — an autonomous accompaniment system for real-life consistency.
@@ -33,6 +35,7 @@ Running is the **testbed**, not the point. A coach that adapts to a real athlete
 - safety with real stakes (never prescribe intensity onto an injury)
 - memory that has to persist and stay clean
 - decisions, not just text
+- **initiative** — noticing a signal and speaking up unprompted, at the right moment, without nagging
 - auditability — proving what the system actually did
 - evaluation that resists being gamed
 - acting in the real world, not just answering
@@ -148,7 +151,7 @@ A dense repo — here's the path that shows the most in the least time:
 The north star is *the smallest reliable coach worth using every day* — then grow capability only once it's proven, one tool at a time (the line budget is a deliberate ratchet). Each step is earned on an unscripted turn before it counts.
 
 - **Now** *(proving the small brick)* — auto-match Strava activities to planned sessions (LLM-first) · warm up the terse reply voice · target the in-progress week, not just next Monday.
-- **Next** *(growing capability under the verifier)* — progression in the planning engine, then declared cycle transitions · proactivity (morning brief, weekly review) · cross-turn constraint persistence.
+- **Next** *(growing capability under the verifier)* — progression in the planning engine, then declared cycle transitions · **proactivity**: a read-only heartbeat that notices a signal (e.g. training sessions trending shorter) and checks in on its own · morning brief / weekly review · cross-turn constraint persistence.
 - **Later** *(toward the vision)* — the coaching staff: a recovery reviewer, an accountability agent, a long-term consistency model, multi-sport, multi-user.
 
 Deliberately **not yet**: multi-month periodization, nutrition, a heartbeat that auto-commits. The live next-step list is [`docs/BUILD-ORDER.md`](docs/BUILD-ORDER.md).
