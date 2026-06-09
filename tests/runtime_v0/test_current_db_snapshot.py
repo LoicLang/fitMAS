@@ -373,3 +373,58 @@ def test_back_compat_shim_reexports_adapter():
 
     assert real_snapshot.materialize_v0_db is current_db_snapshot.materialize_v0_db
     assert real_snapshot.materialize_v0_db_for_turn is current_db_snapshot.materialize_v0_db_for_turn
+
+
+def test_materialize_keys_strava_activity_by_external_id(tmp_path):
+    """A Strava activity bootstraps under its Strava id (external_id), not the legacy
+    autoincrement id — so a later sync_strava_to_v0 INSERT OR IGNORE de-dupes against
+    it instead of inserting a second copy of the same run. Manual activities (no
+    external id) keep the legacy id."""
+    import sqlite3
+
+    real_db = tmp_path / "real.db"
+    v0_db = tmp_path / "v0.db"
+
+    engine = create_engine(f"sqlite:///{real_db}")
+    Base.metadata.create_all(engine)
+    try:
+        with Session(engine) as session:
+            session.add(
+                Activity(
+                    id=7,                       # small legacy autoincrement id
+                    user_id=USER_ID,
+                    source="strava",
+                    external_id="11000000001",  # the real Strava activity id (huge)
+                    sport_type="running",
+                    title="Sortie",
+                    duration_min=40,
+                    distance_m=8000.0,
+                    started_at=AS_OF - timedelta(days=1),
+                )
+            )
+            session.add(
+                Activity(
+                    id=8,                       # manual: no external id
+                    user_id=USER_ID,
+                    source="manual",
+                    sport_type="running",
+                    title="Footing libre",
+                    duration_min=30,
+                    started_at=AS_OF - timedelta(days=2),
+                )
+            )
+            session.commit()
+    finally:
+        engine.dispose()
+
+    materialize_v0_db(real_db, USER_ID, AS_OF, v0_db)
+
+    con = sqlite3.connect(v0_db)
+    try:
+        ids = {row[0] for row in con.execute("select id from v0_activities").fetchall()}
+    finally:
+        con.close()
+
+    assert 11000000001 in ids   # strava row keyed by external_id...
+    assert 7 not in ids         # ...not the legacy id
+    assert 8 in ids             # manual row keeps the legacy id

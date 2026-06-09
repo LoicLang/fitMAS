@@ -214,9 +214,13 @@ Ordre recommande :
       la sync Strava ecrit `id = strava activity id` (enorme), et l'`external_id` strava
       n'est pas porte dans `v0_activities` -> chaque run strava bootstrappe le 8 juin ET dans
       la fenetre de sync est **double compte** (l'`insert or ignore` ne dedup que
-      strava<->strava). Impact : `recent_training` gonfle -> seed `propose_week` biaise. Fix
-      = nettoyage one-shot du store live (script dry-run d'abord) ; non lancable d'ici (le
-      store vit sur le volume Fly).
+      strava<->strava). Impact : `recent_training` gonfle -> seed `propose_week` biaise.
+      **Forward fix livre (9 juin)** : `_insert_activity` cle les activites strava par leur
+      id strava (`external_id`) -> un futur bootstrap ne recree plus le double (teste).
+      **Live** : nettoyage one-shot via `scripts/cleanup_duplicate_activities.py` (dry-run par
+      defaut, idempotent, teste) — `--v0-db /data/fitmas_v0_dogfood.db --legacy-db
+      /data/fitmas.db --user 1`, dry-run puis `--apply`. **Non lance d'ici** (le store vit sur
+      le volume Fly) : reste a executer sur le store live.
 11. **Webapp V0 — retravailler le front (8 juin, soir).** La webapp lit le store V0 en prod
     (`FITMAS_APP_SOURCE=v0`) et le minimum marche, MAIS le store V0 est minimal → **détails Strava
     riches manquants** (carte/map, FC moy/max, denivele, splits/zones), charge = estimation

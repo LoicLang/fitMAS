@@ -333,6 +333,23 @@ def _captured_session_from_grounding_line(line: str, user_id: int) -> CapturedSe
     )
 
 
+def _v0_activity_id(row: Activity) -> int:
+    """Pick the v0_activities row id for a legacy activity.
+
+    A Strava activity is keyed everywhere by its Strava id — that is what the live
+    `sync_strava_to_v0` writes — so bootstrapping by the Strava id lets a later sync
+    de-dupe (INSERT OR IGNORE) against the bootstrapped row instead of inserting a
+    second copy of the same run. Fall back to the legacy row id when there is no
+    usable external id (manual activities, or strava rows missing external_id).
+    """
+    if row.source == "strava" and row.external_id:
+        try:
+            return int(row.external_id)
+        except (TypeError, ValueError):
+            pass
+    return row.id
+
+
 def _insert_activity(connection, row: Activity) -> None:
     connection.execute(
         """
@@ -340,7 +357,7 @@ def _insert_activity(connection, row: Activity) -> None:
         values (?, ?, ?, ?, ?, ?, ?, ?)
         """,
         (
-            row.id,
+            _v0_activity_id(row),
             row.user_id,
             _date_text(row.started_at or row.created_at),
             row.sport_type or "running",
