@@ -28,7 +28,7 @@ InputEvent -> Snapshot -> Agent -> Proposal -> Policy -> Executor
 
 Preuve (verifiee offline puis deploye) :
 
-- `tests/runtime_v0` : 265 passed ;
+- `tests/runtime_v0` : 273 passed ;
 - fake matrix : `11/11` ;
 - danger metrics : `0 wrong_write`, `0 old_plan`,
   `0 wrong_correction_target`, `0 claim_without_event` ;
@@ -172,16 +172,19 @@ Ordre recommande :
 4. **Run <-> session matching** (lier une activite Strava realisee a la seance planifiee
    pour la noter `done`). Scinde en deux volets (decision 9 juin) :
 
-   **#4b — lien MANUEL dans l'app (ACTIF, en cours).** Dans le calendrier, l'utilisateur
-   rattache explicitement une activite a une seance planifiee -> seance `done` + lien stocke +
-   affiche. Deterministe (choix explicite = reference typee), audite. C'est le **1er write
-   webapp -> store V0**, via l'executor officiel (adapter mince `runtime_v0/adapters/app_actions.py`).
-   Couches : colonne `v0_activities.scheduled_session_id` + commandes executor
-   `LinkActivityToSession` / `Unlink` + endpoint `POST /api/v0/activities/{id}/link|unlink` +
-   exposition `v0_source` + UI calendrier. Inclut l'unlink. **Finding** : les endpoints d'ecriture
-   webapp existants (`/complete` `/skip` `/move`, `routes_plan.py`) ecrivent en **legacy**, pas en
-   V0 -> deconnectes du coach en mode v0 (cleanup separe, hors scope #4b). Spec :
-   `2026-06-09-app-manual-link-design.md`.
+   **#4b — lien MANUEL dans l'app — FAIT (9 juin 2026, deploye + e2e Playwright).** Dans le
+   calendrier, l'utilisateur rattache explicitement une activite a une seance planifiee -> seance
+   `done` + lien stocke + affiche. Deterministe (choix explicite = reference typee), audite. C'est
+   le **1er write webapp -> store V0**, via l'executor officiel (adapter mince
+   `runtime_v0/adapters/app_actions.py`). Couches livrees : colonne
+   `v0_activities.scheduled_session_id` + commandes executor `LinkActivityToSession` / `Unlink`
+   (ownership + anti cross-sport) + endpoint `POST /api/v0/activities/{id}/link|unlink` (mode v0) +
+   exposition `v0_source` + UI calendrier (lier/delier, feedback d'erreur). Spec :
+   `2026-06-09-app-manual-link-design.md`. **Finding garde** : les endpoints d'ecriture webapp
+   legacy (`/complete` `/skip` `/move`, `routes_plan.py`) ecrivent en **legacy**, pas en V0
+   (cleanup separe, hors scope). **Fixes webapp embarques le 9 juin** : detail d'une seance liee
+   montre le reel ; Apercu montre la prochaine seance les jours de repos ; bouton Strava (etat
+   connecte + sync vers V0) ; bouton retour du detail ; rendu du trace carte (cf. #11).
 
    **#4a — matching LLM-first dans le CHAT (DIFFERE -> heartbeat).** Le coach voit un run Strava
    qui matche et propose de noter la seance done (user-prompted, auto si cible unique). Trou
@@ -233,13 +236,15 @@ Ordre recommande :
       (aucune ligne bootstrap residuelle), 0 repetition (date,sport,duree) -> la duplication
       predite ne s'est **pas materialisee** en prod (le store live est peuple par la sync
       Strava). Le script de cleanup reste comme garde-fou si un re-bootstrap arrive un jour.
-11. **Webapp V0 — retravailler le front (8 juin, soir).** La webapp lit le store V0 en prod
-    (`FITMAS_APP_SOURCE=v0`) et le minimum marche, MAIS le store V0 est minimal → **détails Strava
-    riches manquants** (carte/map, FC moy/max, denivele, splits/zones), charge = estimation
-    (TSS ≈ duree × 0.8), sections legacy stubbees (readiness/calibration/week_mission/coach_bundle).
-    Pistes : (a) enrichir le sync Strava->V0 (`v0_activities` : map/FC/denivele/TSS) + exposer via
-    `legacy/app/api/v0_source.py` ; (b) et/ou simplifier le front pour le modele V0. Spec :
-    `2026-06-08-webapp-v0-source-design.md` (§Limites connues). Pas urgent.
+11. **Webapp V0 — front sur le store V0 (8 juin).** La webapp lit le store V0 en prod
+    (`FITMAS_APP_SOURCE=v0`). **Détails Strava riches — FAIT (9 juin 2026)** : le sync enrichit
+    `v0_activities` (allure/`avg_speed`, FC moy/`avg_hr`, dénivelé/`elevation_m`, calories via appel
+    détaillé plafonné `FITMAS_V0_STRAVA_CALORIES_PER_SYNC`, tracé/`map_polyline`) en upsert ;
+    `v0_source` les mappe ; le détail d'une séance liée les affiche (cartes allure/FC/calories +
+    rendu carte corrigé, fit à la bbox + non-scaling-stroke). **Reste** : splits/zones, FC max, TSS
+    encore estimé (≈ durée × 0.8), sections legacy stubbées
+    (readiness/calibration/week_mission/coach_bundle). Spec : `2026-06-08-webapp-v0-source-design.md`
+    + `2026-06-09-app-manual-link-design.md`. Pas urgent.
 
 ## Chantier Moteur Sport (co-evolue avec le runtime)
 

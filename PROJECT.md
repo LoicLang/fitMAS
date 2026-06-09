@@ -46,7 +46,7 @@ Ne pas ouvrir Phase B progression/prescription sans demande explicite.
 Verifie offline puis deploye live le 8 juin 2026 :
 
 ```text
-tests/runtime_v0 : 265 passed
+tests/runtime_v0 : 273 passed
 fake matrix      : 11/11
 danger metrics   : 0 wrong_write, 0 old_plan, 0 wrong_correction_target,
                    0 claim_without_event

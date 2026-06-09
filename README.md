@@ -131,7 +131,7 @@ Two layers, by design:
 1. **Mechanical matrix** (`scripts/v0_eval/run_matrix.py`) — anti-regression + danger metrics across scenarios and providers; offline, deterministic. A change must keep danger metrics at zero.
 2. **Live unscripted simulation** (`scripts/v0_eval/probe_live_simulation.py`) — an LLM role-plays an unscripted athlete (an injury, a work trip, boredom) against the *real* coach loop on a real provider. Deterministic oracles enforce safety; an LLM judge scores quality. **A change is "done" only when it survives a turn no one scripted.**
 
-Proof today: 265 tests, fake matrix 11/11, danger metrics 0, output-guard fallback 0%. The live layer earned its keep the hard way — it once scored an injury turn **5/5/5/5 on the LLM judge while the deterministic oracle failed it** (the coach left a hard session in an already-committed week). The judge was fooled; the oracle was not. That bug is now fixed and proven by a forced-ordering probe. On a 90-run replay against the legacy app, V0 is **not yet better on raw usefulness** — and I say so — but the one systematic danger class is closed and `tie_bad` is 0.
+Proof today: 273 tests, fake matrix 11/11, danger metrics 0, output-guard fallback 0%. The live layer earned its keep the hard way — it once scored an injury turn **5/5/5/5 on the LLM judge while the deterministic oracle failed it** (the coach left a hard session in an already-committed week). The judge was fooled; the oracle was not. That bug is now fixed and proven by a forced-ordering probe. On a 90-run replay against the legacy app, V0 is **not yet better on raw usefulness** — and I say so — but the one systematic danger class is closed and `tie_bad` is 0.
 
 ## For technical reviewers
 
