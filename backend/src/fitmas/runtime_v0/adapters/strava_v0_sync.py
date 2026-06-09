@@ -2,9 +2,10 @@
 
 Pulls the user's recent Strava activities via their stored token (legacy
 `strava_connections`) and upserts them into the isolated V0 store (`v0_activities`),
-de-duplicated by the Strava activity id (used as the `v0_activities` id). The Strava
-sync is the SINGLE writer of `v0_activities`, so keying by the Strava id makes every
-re-sync idempotent (INSERT OR IGNORE).
+keyed by the Strava activity id (used as the `v0_activities` id). On conflict it
+refreshes the rich fields (pace/HR/elevation/map, and coalesces calories) while
+preserving fields owned by other paths — `scheduled_session_id` (manual/chat link)
+and `notes`. Keying by the Strava id keeps re-syncs from inserting duplicate runs.
 
 Lives under `runtime_v0/adapters/` (the legacy bridge): it MAY import the legacy app
 (`fitmas.legacy.integrations.strava`, the ORM); the V0 core never imports it
