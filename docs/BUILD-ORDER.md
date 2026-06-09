@@ -170,24 +170,24 @@ Ordre recommande :
    l'execution et le patch chirurgical sur une semaine generee. Spec
    `2026-06-08-plan-store-reconciliation-design.md`.
 4. **Run <-> session matching** (lier une activite Strava realisee a la seance planifiee
-   pour la noter `done`) — chemin **LLM-first** : le coach marque une seance done quand il
-   voit une activite Strava qui matche clairement la seance planifiee.
-   - **Deja en place** : le tool `propose_execution_update(status=done|skipped|partial)`
-     (`tools_proposal.py`), le gate policy `_execution_update` (`policy.py`), et
-     `recent_activities` (les runs Strava) charges dans le `WorldSnapshot` (`snapshot.py`) ;
-     les seances d'une semaine committee sont sur le calendrier (3bis), donc l'execution a
-     une cible a accrocher.
-   - **Trou bloquant (constate 9 juin)** : `recent_activities` n'est **jamais rendu dans le
-     prompt** du coach. `SnapshotHeader.to_prompt_text` affiche `next_sessions`,
-     `recent_training` (sessions *planifiees*) et les faits — mais **pas les activites
-     realisees**. Le coach est donc **aveugle au run Strava** : il ne peut pas proposer de
-     noter la seance done. C'est la premiere brique a poser.
-   - **Etape** : surfacer `recent_activities` dans le header (date/sport/duree/distance/source),
-     puis enseigner au coach a proposer `propose_execution_update(done)` quand une activite
-     matche clairement une seance planifiee. **Le LLM juge le match** (jamais de
-     regex/keyword sur la duree/le titre). Garder le chemin **user-prompted** (« note ma
-     sortie de hier ») ; l'auto-reconcile proactif (sans message user) = **tranche heartbeat**,
-     differee.
+   pour la noter `done`). Scinde en deux volets (decision 9 juin) :
+
+   **#4b — lien MANUEL dans l'app (ACTIF, en cours).** Dans le calendrier, l'utilisateur
+   rattache explicitement une activite a une seance planifiee -> seance `done` + lien stocke +
+   affiche. Deterministe (choix explicite = reference typee), audite. C'est le **1er write
+   webapp -> store V0**, via l'executor officiel (adapter mince `runtime_v0/adapters/app_actions.py`).
+   Couches : colonne `v0_activities.scheduled_session_id` + commandes executor
+   `LinkActivityToSession` / `Unlink` + endpoint `POST /api/v0/activities/{id}/link|unlink` +
+   exposition `v0_source` + UI calendrier. Inclut l'unlink. **Finding** : les endpoints d'ecriture
+   webapp existants (`/complete` `/skip` `/move`, `routes_plan.py`) ecrivent en **legacy**, pas en
+   V0 -> deconnectes du coach en mode v0 (cleanup separe, hors scope #4b). Spec :
+   `2026-06-09-app-manual-link-design.md`.
+
+   **#4a — matching LLM-first dans le CHAT (DIFFERE -> heartbeat).** Le coach voit un run Strava
+   qui matche et propose de noter la seance done (user-prompted, auto si cible unique). Trou
+   connu : `recent_activities` n'est pas rendu dans le prompt (le coach est aveugle au run). Part
+   avec la proactivite/heartbeat (le chat-matching est intrinsequement proactif). Spec (valide,
+   differe) : `2026-06-09-run-session-matching-design.md`.
 5. **Presence / Voix — PRIORITE (frontiere actuelle).** Le data est regle ; ce qui manque,
    c'est *etre* le coach, pas seulement *faire*. Revele en dogfood reel (8 juin) : sur
    « il pleut mais je vais la faire ! » (social + motivation + intention future), V0 a

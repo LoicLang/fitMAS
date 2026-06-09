@@ -8,6 +8,10 @@ read_when:
 
 # Run ↔ session matching (1re brique, couche 2)
 
+> **DIFFÉRÉ → tranche heartbeat (décision 9 juin).** On fait d'abord le volet **app / lien
+> manuel** (`2026-06-09-app-manual-link-design.md`). Ce design chat (LLM-first) reste valide et
+> repart avec la proactivité/heartbeat — le chat-matching est intrinsèquement proactif.
+>
 > BUILD-ORDER #4. Lier un run Strava réalisé à la séance planifiée pour la noter `done`.
 > Décision (9 juin) : **LLM-first**, **user-prompted**, **auto-commit si cible unique**.
 > PAS d'auto-link déterministe en background (= fix-on-fix / auto-commit sur heuristique,
