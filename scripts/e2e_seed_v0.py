@@ -29,9 +29,10 @@ def seed(db_path: str) -> None:
         (today,),
     )
     con.execute(
-        "insert into v0_activities (id,user_id,date,sport,duration_min,distance_km,notes,source) "
-        "values (1001,1,?,'running',47,9.2,'Sortie e2e','strava')",
-        (today,),
+        "insert into v0_activities "
+        "(id,user_id,date,sport,duration_min,distance_km,notes,source,avg_speed,avg_hr,elevation_m,calories,map_polyline) "
+        "values (1001,1,?,'running',47,9.2,'Sortie e2e','strava',2.8,148,120,520,?)",
+        (today, "_p~iF~ps|U_ulLnnqC_mqNvxq`@"),
     )
     con.commit()
     con.close()

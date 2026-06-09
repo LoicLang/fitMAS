@@ -30,3 +30,25 @@ test("link an off-plan activity to a session, then unlink", async ({ page }) => 
   await expect(sessionEntry).toContainText("prévu");
   await expect(page.locator("[data-calendar-entry]", { hasText: "Sortie e2e" })).toBeVisible();
 });
+
+test("a linked session detail shows rich Strava metrics + the route map", async ({ page }) => {
+  await page.goto("/calendar");
+
+  // Link the off-plan running activity to the day's planned session.
+  await page.getByRole("button", { name: /Lier à/ }).click();
+  await expect(page.locator("[data-calendar-entry]", { hasText: "Footing du jour" })).toContainText("fait");
+
+  // Open the session detail (session id 1 from the seed).
+  await page.goto("/workout/1");
+
+  // The realized activity's rich metrics are shown (not the empty "—" planned view).
+  await expect(page.getByText("Allure", { exact: true })).toBeVisible();
+  await expect(page.getByText("FC moy", { exact: true })).toBeVisible();
+  await expect(page.getByText("Calories", { exact: true })).toBeVisible();
+  await expect(page.getByText(/\/km/).first()).toBeVisible(); // pace value
+  await expect(page.getByText(/bpm/).first()).toBeVisible(); // heart rate
+  await expect(page.getByText(/kcal/).first()).toBeVisible(); // calories
+
+  // The route map renders from the activity's polyline (RoutePreview svg).
+  await expect(page.locator('svg[viewBox="0 0 100 48"]')).toBeVisible();
+});
