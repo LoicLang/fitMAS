@@ -12,7 +12,7 @@ from fitmas.legacy.integrations import repository as integration_repo
 from fitmas.legacy.app.api.routes_read import _build_recent_activity, _build_today_fitness, _build_today_view
 from fitmas.legacy.app.api.app_views import build_app_calendar, build_app_evolution, build_app_overview, build_session_detail
 from fitmas.legacy.domain.coaching.coach_state import build_coach_state_bundle
-from fitmas.legacy.core.db import get_db
+from fitmas.legacy.core.db import SessionLocal, get_db
 from fitmas.legacy.domain.athlete import repository as athlete_repo
 from fitmas.legacy.domain.athlete.performance_overview import build_performance_overview
 from fitmas.legacy.domain.athlete.performance_stats import build_training_load_stats
@@ -113,6 +113,28 @@ def _v0_today_view(sessions, today_date):
     ).model_dump()
 
 
+def _v0_strava_status() -> dict:
+    """Real Strava connection state for V0 mode.
+
+    The token lives in the legacy DB (`strava_connections`) — the same one the V0
+    bot syncs from — keyed on the legacy user id (`FITMAS_V0_STRAVA_LEGACY_USER`,
+    default 1). The V0 overview used to hardcode `connected: False`, so the webapp
+    always showed "Connecter Strava" even though the bot was connected and syncing.
+    """
+    status = {"configured": strava.is_configured(), "connected": False, "last_sync_at": None}
+    legacy_user_id = int(os.getenv("FITMAS_V0_STRAVA_LEGACY_USER", "1"))
+    try:
+        with SessionLocal() as db:
+            connection = integration_repo.get_strava_connection(db, legacy_user_id)
+            if connection is not None:
+                status["connected"] = True
+                if connection.last_sync_at:
+                    status["last_sync_at"] = connection.last_sync_at.isoformat()
+    except Exception:
+        pass  # legacy DB unavailable -> report not connected (safe default)
+    return status
+
+
 def _v0_overview() -> dict:
     """Build the overview (landing) view from the live V0 store (FITMAS_APP_SOURCE=v0)."""
     from fitmas.legacy.app.api import v0_source
@@ -127,7 +149,7 @@ def _v0_overview() -> dict:
         scheduled_sessions=sessions,
         planning_decision=None,
     )
-    strava_status = {"configured": strava.is_configured(), "connected": False, "last_sync_at": None}
+    strava_status = _v0_strava_status()
     overview = build_app_overview(
         today_date=today_date,
         profile=_v0_profile_stub(),

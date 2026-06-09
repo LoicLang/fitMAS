@@ -123,8 +123,39 @@ def create_manual_activity(payload: ManualActivityPayload, db: Session = Depends
     return execution_repo.to_pydantic_activity(activity)
 
 
+def _v0_strava_sync() -> dict:
+    """Sync Strava into the V0 store (FITMAS_APP_SOURCE=v0) — the same path the bot
+    runs, so the webapp 'Synchroniser' button refreshes the coach's real V0
+    activities instead of the ignored legacy DB."""
+    import os
+    from pathlib import Path
+
+    from fitmas.legacy.app.api.v0_source import v0_db_path, v0_user_id
+    from fitmas.runtime_v0.adapters.strava_v0_sync import sync_strava_to_v0
+
+    if not strava.is_configured():
+        return {"synced": False, "reason": "Strava not configured"}
+    runner_user_id = v0_user_id()
+    if runner_user_id is None:
+        return {"synced": False, "reason": "No V0 user yet"}
+    legacy_user_id = int(os.getenv("FITMAS_V0_STRAVA_LEGACY_USER", "1"))
+    legacy_db_path = Path(os.getenv("FITMAS_DB_PATH", "fitmas.db"))
+    imported = sync_strava_to_v0(
+        legacy_db_path=legacy_db_path,
+        v0_db_path=v0_db_path(),
+        legacy_user_id=legacy_user_id,
+        runner_user_id=runner_user_id,
+    )
+    logger.info("V0 Strava sync (app button): %d new activities", imported)
+    return {"synced": True, "imported": imported}
+
+
 @router.post("/api/v0/strava/sync")
 def sync_strava(db: Session = Depends(get_db)) -> dict:
+    from fitmas.legacy.app.api.routes_app import _app_source_is_v0
+
+    if _app_source_is_v0():
+        return _v0_strava_sync()
     user = athlete_repo.get_user_optional(db)
     if user is None:
         raise HTTPException(status_code=404, detail="No onboarded user yet")
