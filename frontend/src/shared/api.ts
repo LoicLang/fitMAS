@@ -57,3 +57,17 @@ export function createManualActivity(payload: Record<string, unknown>) {
     body: JSON.stringify(payload),
   });
 }
+
+export function linkActivityToSession(activityId: number, sessionId: number) {
+  return fetchJson<{ activity_id: number; session_id: number | null; session_status: string | null }>(
+    `/api/v0/activities/${activityId}/link`,
+    { method: "POST", body: JSON.stringify({ session_id: sessionId }) },
+  );
+}
+
+export function unlinkActivity(activityId: number) {
+  return fetchJson<{ activity_id: number; session_id: number | null; session_status: string | null }>(
+    `/api/v0/activities/${activityId}/unlink`,
+    { method: "POST", body: JSON.stringify({}) },
+  );
+}
