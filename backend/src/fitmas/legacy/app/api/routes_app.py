@@ -201,10 +201,17 @@ def _v0_session_detail(session_id: int) -> dict:
     from fitmas.legacy.domain.planning.view_models import DayId, ScheduledSession
 
     sessions = v0_source.get_scheduled_sessions()
+    activities = v0_source.get_activities()
     session = next((s for s in sessions if s.id == session_id), None)
     linked_activity = None
+    if session is not None:
+        # A done session may have a Strava activity linked to it (manual or chat link);
+        # surface its realized metrics (distance, pace, HR, elevation, map) on the detail.
+        act = next((a for a in activities if a.scheduled_session_id == session_id), None)
+        if act is not None:
+            linked_activity = act.model_dump()
     if session is None:
-        activity = next((a for a in v0_source.get_activities() if a.id == session_id), None)
+        activity = next((a for a in activities if a.id == session_id), None)
         if activity is None:
             raise HTTPException(status_code=404, detail="Scheduled session not found")
         act_date = date.fromisoformat((activity.started_at or date.today().isoformat())[:10])

@@ -477,6 +477,7 @@ export interface WorkoutDetailView {
     elevation_m?: number | null;
     avg_hr?: number | null;
     avg_speed?: number | null;
+    calories?: number | null;
     tss?: number | null;
   };
   linked_activity?: Activity | null;

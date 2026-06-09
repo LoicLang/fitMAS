@@ -122,5 +122,7 @@ def test_runtime_v0_core_stays_under_v0_budget():
     # Task 2/7 of the manual activity<->session link feature.
     # 4571 -> 4573 (9 juin 2026): sport_mismatch guard in _apply_link_activity_to_session —
     # +2 lines to reject cross-sport links before any write (backstop for bug #1).
+    # 4573 -> 4586 (9 juin 2026): rich Strava fields on v0_activities (avg_speed, avg_hr,
+    # elevation_m, calories, map_polyline) — schema columns + migration loop in db.py.
     loc = sum(len(path.read_text().splitlines()) for path in _core_files())
-    assert loc <= 4573
+    assert loc <= 4586

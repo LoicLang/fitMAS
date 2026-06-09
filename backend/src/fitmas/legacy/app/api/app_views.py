@@ -39,11 +39,11 @@ def build_app_overview(
     lead_session = None
     if today_view is not None:
         lead_session = next((session for session in visible_sessions if int(_value(session, "id") or 0) == int(today_view.get("scheduled_session_id") or 0)), None)
-    if lead_session is None and not today_is_rest:
-        # Only fall through to the next future session if today is NOT a rest day.
-        # On rest days we show no lead session rather than jumping to tomorrow.
+    if lead_session is None:
+        # Fall through to the next upcoming non-rest session — including on rest days, so
+        # the overview always surfaces the next useful session instead of going empty.
         lead_session = next((session for session in visible_sessions if (_as_date(_value(session, "scheduled_date")) or today_date) >= today_date), None)
-    if lead_session is None and visible_sessions and not today_is_rest:
+    if lead_session is None and visible_sessions:
         lead_session = visible_sessions[0]
 
     activity_by_session = _activity_map_by_session(activities)
@@ -248,6 +248,7 @@ def build_session_detail(
             "elevation_m": elevation_m,
             "avg_hr": _float(_value(linked_activity, "avg_hr")),
             "avg_speed": avg_speed,
+            "calories": _float(_value(linked_activity, "calories")),
             "tss": _float(_value(linked_activity, "tss")) or round(estimate_scheduled_session_tss(session), 1),
         },
         "linked_activity": linked_activity,

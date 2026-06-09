@@ -12,12 +12,20 @@ export function workoutStats(data: WorkoutDetailView) {
       value: data.metrics.duration_min ? `${Math.round(data.metrics.duration_min)} min` : "—",
     },
     {
+      label: "Allure",
+      value: formatPace(data.metrics.avg_speed) || "—",
+    },
+    {
       label: "Dénivelé",
       value: data.metrics.elevation_m ? `+${Math.round(data.metrics.elevation_m)} m` : "—",
     },
     {
-      label: "Intensité",
-      value: data.metrics.avg_hr ? `${Math.round(data.metrics.avg_hr)} bpm` : formatPace(data.metrics.avg_speed) || "—",
+      label: "FC moy",
+      value: data.metrics.avg_hr ? `${Math.round(data.metrics.avg_hr)} bpm` : "—",
+    },
+    {
+      label: "Calories",
+      value: data.metrics.calories ? `${Math.round(data.metrics.calories)} kcal` : "—",
     },
   ];
 }

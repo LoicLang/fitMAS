@@ -12,6 +12,7 @@ Lives under `runtime_v0/adapters/` (the legacy bridge): it MAY import the legacy
 """
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 from sqlalchemy import create_engine
@@ -51,6 +52,10 @@ def sync_strava_to_v0(
     finally:
         engine.dispose()
 
+    # Calories isn't in the Strava summary list — it needs a detailed call per activity.
+    # Cap how many detailed calls we make per sync so a backfill of many activities
+    # spreads over runs instead of hammering the Strava rate limit.
+    calories_budget = int(os.getenv("FITMAS_V0_STRAVA_CALORIES_PER_SYNC", "25"))
     inserted = 0
     with connect(v0_db_path) as v0:
         for activity in raw_activities:
@@ -62,10 +67,29 @@ def sync_strava_to_v0(
                 continue
             duration_min = int(round((activity.get("moving_time") or 0) / 60)) or None
             distance_km = (activity["distance"] / 1000.0) if activity.get("distance") is not None else None
+            # Rich fields from the Strava summary.
+            avg_speed = activity.get("average_speed")  # m/s
+            avg_hr = activity.get("average_heartrate")
+            elevation_m = activity.get("total_elevation_gain")
+            map_polyline = (activity.get("map") or {}).get("summary_polyline")
+            # Calories: summary first; else a detailed call, only when missing and within budget.
+            calories = activity.get("calories")
+            if calories is None and calories_budget > 0:
+                existing = v0.execute(
+                    "select calories from v0_activities where id = ?", (int(strava_id),)
+                ).fetchone()
+                if existing is None or existing["calories"] is None:
+                    calories = strava.fetch_activity_calories(access_token, int(strava_id))
+                    calories_budget -= 1
             cursor = v0.execute(
-                "insert or ignore into v0_activities "
-                "(id, user_id, date, sport, duration_min, distance_km, notes, source) "
-                "values (?, ?, ?, ?, ?, ?, ?, 'strava')",
+                "insert into v0_activities "
+                "(id, user_id, date, sport, duration_min, distance_km, notes, source, "
+                "avg_speed, avg_hr, elevation_m, calories, map_polyline) "
+                "values (?, ?, ?, ?, ?, ?, ?, 'strava', ?, ?, ?, ?, ?) "
+                "on conflict(id) do update set "
+                "avg_speed = excluded.avg_speed, avg_hr = excluded.avg_hr, "
+                "elevation_m = excluded.elevation_m, map_polyline = excluded.map_polyline, "
+                "calories = coalesce(excluded.calories, v0_activities.calories)",
                 (
                     int(strava_id),
                     runner_user_id,
@@ -74,6 +98,11 @@ def sync_strava_to_v0(
                     duration_min,
                     distance_km,
                     activity.get("name") or "",
+                    avg_speed,
+                    avg_hr,
+                    elevation_m,
+                    calories,
+                    map_polyline,
                 ),
             )
             inserted += cursor.rowcount

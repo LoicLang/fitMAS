@@ -1,5 +1,5 @@
 import { useRef } from "react";
-import { ArrowLeft, Clock, HeartPulse, Mountain, Route as RouteIcon, TrendingUp } from "lucide-react";
+import { ArrowLeft, Clock, Flame, Gauge, HeartPulse, Mountain, Route as RouteIcon, TrendingUp } from "lucide-react";
 import { motion, useScroll, useTransform } from "motion/react";
 import { type LoaderFunctionArgs, useLoaderData, useNavigate } from "react-router-dom";
 import { loadWorkoutDetail } from "../../shared/api";
@@ -87,33 +87,26 @@ export function WorkoutDetailPage() {
         </section>
 
         <section className="relative z-10 mx-auto max-w-5xl px-6 pb-24">
-          <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
-            {stats.map((stat, index) => (
-              <motion.article
-                key={stat.label}
-                initial={{ opacity: 0, y: 20 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true }}
-                transition={{ duration: 0.5, delay: index * 0.08 }}
-                className="rounded-[2rem] border border-black/5 bg-white p-6 shadow-sm transition-all hover:shadow-xl hover:border-transparent"
-              >
-                <div className={`mb-4 flex h-14 w-14 items-center justify-center rounded-2xl ${STAT_BACKGROUNDS[index]}`}>
-                  {index === 0 ? (
-                    <RouteIcon className={`h-6 w-6 ${STAT_COLORS[index]}`} />
-                  ) : index === 1 ? (
-                    <Clock className={`h-6 w-6 ${STAT_COLORS[index]}`} />
-                  ) : index === 2 ? (
-                    <TrendingUp className={`h-6 w-6 ${STAT_COLORS[index]}`} />
-                  ) : index === 3 ? (
-                    <HeartPulse className={`h-6 w-6 ${STAT_COLORS[index]}`} />
-                  ) : (
-                    <Mountain className={`h-6 w-6 ${STAT_COLORS[index]}`} />
-                  )}
-                </div>
-                <div className="text-3xl font-black tracking-[-0.05em] text-zinc-950">{stat.value}</div>
-                <div className="mt-1 text-xs font-bold uppercase tracking-[0.18em] text-zinc-500">{stat.label}</div>
-              </motion.article>
-            ))}
+          <div className="grid grid-cols-2 gap-4 md:grid-cols-3">
+            {stats.map((stat, index) => {
+              const Icon = STAT_ICONS[index] ?? Mountain;
+              return (
+                <motion.article
+                  key={stat.label}
+                  initial={{ opacity: 0, y: 20 }}
+                  whileInView={{ opacity: 1, y: 0 }}
+                  viewport={{ once: true }}
+                  transition={{ duration: 0.5, delay: index * 0.08 }}
+                  className="rounded-[2rem] border border-black/5 bg-white p-6 shadow-sm transition-all hover:shadow-xl hover:border-transparent"
+                >
+                  <div className={`mb-4 flex h-14 w-14 items-center justify-center rounded-2xl ${STAT_BACKGROUNDS[index % STAT_BACKGROUNDS.length]}`}>
+                    <Icon className={`h-6 w-6 ${STAT_COLORS[index % STAT_COLORS.length]}`} />
+                  </div>
+                  <div className="text-3xl font-black tracking-[-0.05em] text-zinc-950">{stat.value}</div>
+                  <div className="mt-1 text-xs font-bold uppercase tracking-[0.18em] text-zinc-500">{stat.label}</div>
+                </motion.article>
+              );
+            })}
           </div>
 
           <div className="mt-12 grid gap-5 lg:grid-cols-2">
@@ -251,5 +244,7 @@ function shouldShowRouteProfile({
   return Boolean(polyline || elevationM);
 }
 
-const STAT_BACKGROUNDS = ["bg-purple-50", "bg-orange-50", "bg-yellow-50", "bg-red-50"];
-const STAT_COLORS = ["text-[#9d4edd]", "text-[#ff6b35]", "text-[#ffd166]", "text-red-500"];
+// Order matches workoutStats: Distance, Durée, Allure, Dénivelé, FC moy, Calories.
+const STAT_ICONS = [RouteIcon, Clock, Gauge, Mountain, HeartPulse, Flame];
+const STAT_BACKGROUNDS = ["bg-purple-50", "bg-orange-50", "bg-sky-50", "bg-yellow-50", "bg-red-50", "bg-amber-50"];
+const STAT_COLORS = ["text-[#9d4edd]", "text-[#ff6b35]", "text-[#0ea5e9]", "text-[#ffd166]", "text-red-500", "text-[#f59e0b]"];

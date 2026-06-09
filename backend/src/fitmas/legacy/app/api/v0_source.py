@@ -121,6 +121,12 @@ def get_activities(user_id: int | None = None, limit: int = 500) -> list[Activit
         note = (row["notes"] if "notes" in keys else "") or ""
         duration_min = row["duration_min"]
         scheduled_session_id = row["scheduled_session_id"] if "scheduled_session_id" in keys else None
+        # Rich Strava fields (present once the enriched sync has run; guarded for old DBs).
+        avg_speed = row["avg_speed"] if "avg_speed" in keys else None
+        avg_hr = row["avg_hr"] if "avg_hr" in keys else None
+        elevation_m = row["elevation_m"] if "elevation_m" in keys else None
+        calories = row["calories"] if "calories" in keys else None
+        map_polyline = row["map_polyline"] if "map_polyline" in keys else None
         # The V0 store keeps duration but no per-activity load. Estimate a TSS proxy
         # from duration (~0.8 TSS/min, consistent with the session estimator) so the
         # training-load chart has signal. It is an estimate, not a measured TSS.
@@ -138,6 +144,11 @@ def get_activities(user_id: int | None = None, limit: int = 500) -> list[Activit
                 tss=tss,
                 perceived_load=int(tss) if tss else None,
                 scheduled_session_id=scheduled_session_id,
+                avg_speed=avg_speed,
+                avg_hr=avg_hr,
+                elevation_m=elevation_m,
+                calories=calories,
+                map_polyline=map_polyline,
             )
         )
     return activities

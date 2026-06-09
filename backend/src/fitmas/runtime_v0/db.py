@@ -83,7 +83,12 @@ CREATE TABLE IF NOT EXISTS v0_activities (
     distance_km REAL,
     notes TEXT,
     source TEXT NOT NULL DEFAULT 'manual',
-    scheduled_session_id INTEGER
+    scheduled_session_id INTEGER,
+    avg_speed REAL,
+    avg_hr REAL,
+    elevation_m REAL,
+    calories REAL,
+    map_polyline TEXT
 );
 
 CREATE TABLE IF NOT EXISTS v0_facts (
@@ -166,11 +171,19 @@ def _ensure_fact_columns(connection: sqlite3.Connection) -> None:
         connection.execute("ALTER TABLE v0_facts ADD COLUMN resolved_at TEXT")
 
 def _ensure_activity_columns(connection: sqlite3.Connection) -> None:
-    # Older v0 DBs predate the activity<->session link. CREATE TABLE IF NOT EXISTS
-    # won't add the column, so add it here when missing.
+    # Older v0 DBs predate the activity<->session link and the rich Strava fields.
+    # CREATE TABLE IF NOT EXISTS won't add columns, so add any missing ones here.
     columns = {row["name"] for row in connection.execute("PRAGMA table_info(v0_activities)")}
-    if "scheduled_session_id" not in columns:
-        connection.execute("ALTER TABLE v0_activities ADD COLUMN scheduled_session_id INTEGER")
+    for name, decl in (
+        ("scheduled_session_id", "INTEGER"),
+        ("avg_speed", "REAL"),
+        ("avg_hr", "REAL"),
+        ("elevation_m", "REAL"),
+        ("calories", "REAL"),
+        ("map_polyline", "TEXT"),
+    ):
+        if name not in columns:
+            connection.execute(f"ALTER TABLE v0_activities ADD COLUMN {name} {decl}")
 
 def reset_db(db_path: Path | None = None) -> None:
     with connect(db_path) as connection:

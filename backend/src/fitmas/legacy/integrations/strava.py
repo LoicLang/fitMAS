@@ -90,6 +90,26 @@ def fetch_recent_activities(access_token: str, *, per_page: int = 20) -> list[di
     return response.json()
 
 
+ACTIVITY_DETAIL_URL = "https://www.strava.com/api/v3/activities"
+
+
+def fetch_activity_calories(access_token: str, activity_id: int) -> float | None:
+    """Fetch one activity's calories from the Strava *detailed* endpoint (calories is
+    not in the summary list). Best-effort: returns None on any error so a sync never
+    breaks on a single activity."""
+    try:
+        response = httpx.get(
+            f"{ACTIVITY_DETAIL_URL}/{int(activity_id)}",
+            headers={"Authorization": f"Bearer {access_token}"},
+            params={"include_all_efforts": "false"},
+            timeout=30,
+        )
+        response.raise_for_status()
+        return response.json().get("calories")
+    except Exception:
+        return None
+
+
 def store_connection_from_token_payload(db: Session, *, user_id: int, payload: dict) -> s.StravaConnection:
     athlete_id = int(payload["athlete"]["id"])
     scopes = ",".join(payload.get("scope", "").split(",")) if isinstance(payload.get("scope"), str) else ""
