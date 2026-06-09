@@ -222,18 +222,17 @@ Ordre recommande :
       (un legacy user -> le seul chat owner = 1er de l'allowlist ; garde-fou + warning si
       l'allowlist grossit). Le mapping Strava par utilisateur = multi-user, non construit
       (hors scope).
-    - **dedup activites (bootstrap vs sync)** : **BUG CONFIRME (9 juin)**. Le bootstrap
-      one-shot (`materialize_v0_db`) ecrit `v0_activities.id = legacy Activity.id` (petit),
-      la sync Strava ecrit `id = strava activity id` (enorme), et l'`external_id` strava
-      n'est pas porte dans `v0_activities` -> chaque run strava bootstrappe le 8 juin ET dans
-      la fenetre de sync est **double compte** (l'`insert or ignore` ne dedup que
-      strava<->strava). Impact : `recent_training` gonfle -> seed `propose_week` biaise.
-      **Forward fix livre (9 juin)** : `_insert_activity` cle les activites strava par leur
-      id strava (`external_id`) -> un futur bootstrap ne recree plus le double (teste).
-      **Live** : nettoyage one-shot via `scripts/cleanup_duplicate_activities.py` (dry-run par
-      defaut, idempotent, teste) — `--v0-db /data/fitmas_v0_dogfood.db --legacy-db
-      /data/fitmas.db --user 1`, dry-run puis `--apply`. **Non lance d'ici** (le store vit sur
-      le volume Fly) : reste a executer sur le store live.
+    - **dedup activites (bootstrap vs sync)** : bug REEL au niveau code, **sans impact live**.
+      Le risque : le bootstrap one-shot ecrit `v0_activities.id = legacy Activity.id` (petit)
+      tandis que la sync Strava ecrit `id = strava activity id` (enorme), et l'`external_id`
+      strava n'est pas porte -> un run a la fois bootstrappe ET syncE serait double compte.
+      **Forward fix livre (9 juin)** : `_insert_activity` cle les activites strava par leur id
+      strava (`external_id`) -> un futur bootstrap ne recree plus le double (teste).
+      **Verifie sur le store live (9 juin, `fly ssh` + `scripts/cleanup_duplicate_activities.py`
+      en dry-run)** : **0 doublon**. Le store contient 101 activites, **toutes en id strava**
+      (aucune ligne bootstrap residuelle), 0 repetition (date,sport,duree) -> la duplication
+      predite ne s'est **pas materialisee** en prod (le store live est peuple par la sync
+      Strava). Le script de cleanup reste comme garde-fou si un re-bootstrap arrive un jour.
 11. **Webapp V0 — retravailler le front (8 juin, soir).** La webapp lit le store V0 en prod
     (`FITMAS_APP_SOURCE=v0`) et le minimum marche, MAIS le store V0 est minimal → **détails Strava
     riches manquants** (carte/map, FC moy/max, denivele, splits/zones), charge = estimation
