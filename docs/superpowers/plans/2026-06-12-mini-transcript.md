@@ -4,7 +4,7 @@
 
 **Goal:** Donner au coach V0 une mémoire court terme conversationnelle (4 derniers échanges verbatim dans le SnapshotHeader) + instrumenter la « promesse fantôme » (warning guard non bloquant `warn:confirmation_without_pending`).
 
-**Architecture:** Le transcript est reconstruit **read-only** au build du snapshot (jointure `v0_input_events` × `v0_turns`), rendu dans `to_prompt_text()` — agent et reply LLM le voient sans câblage neuf. Le guard gagne un canal `warnings` séparé des `blocked_reasons` (jamais bloquant, persisté avec préfixe `warn:` dans `guard_reasons_json`). Spec : `docs/superpowers/specs/2026-06-12-mini-transcript-design.md`.
+**Architecture:** Le transcript est reconstruit **read-only** au build du snapshot (jointure `v0_input_events` × `v0_turns`), rendu dans `to_prompt_text()` — l'agent coach le voit sans câblage neuf (le reply LLM, lui, ne reçoit pas le header — corrigé post-landing, voir spec). Le guard gagne un canal `warnings` séparé des `blocked_reasons` (jamais bloquant, persisté avec préfixe `warn:` dans `guard_reasons_json`). Spec : `docs/superpowers/specs/2026-06-12-mini-transcript-design.md`.
 
 **Tech Stack:** Python 3, sqlite3, pytest. Zéro nouvelle dépendance, zéro nouvelle table.
 

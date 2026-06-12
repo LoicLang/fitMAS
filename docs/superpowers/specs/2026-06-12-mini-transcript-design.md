@@ -75,8 +75,11 @@ Le clip par message est de la troncature budget, pas de la compréhension.
 - **Clip** : 300 chars par message, suffixe `…` si tronqué.
 - **Budget header** : l'assert `<= 500` mots de `to_prompt_text()` passe à **900**
   (8 messages × ~50 mots). Seul relâchement du budget.
-- **Consommateurs** : `agent.py` et le reply LLM reçoivent déjà le header → les deux
-  voient le fil, zéro câblage supplémentaire.
+- **Consommateurs** : `agent.py` reçoit le header (`system_context`) → le coach voit
+  le fil, zéro câblage supplémentaire. **Correction post-landing (12 juin)** : le
+  reply LLM, lui, ne voit PAS le header (`ReplyComposer._payload` ne le porte pas) —
+  la voix reste thread-blind sur les tours `answer_only`. Câblage volontairement non
+  fait (non prouvé nécessaire, couche 2 PASS sans) ; à revisiter au chantier #5 voix.
 - Un tour sans reply persistée (crash avant audit) rend une entrée user seule —
   acceptable, le LLM voit le trou via les timestamps.
 
