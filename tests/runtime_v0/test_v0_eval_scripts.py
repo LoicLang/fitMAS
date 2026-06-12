@@ -86,6 +86,7 @@ def test_report_renders_quality_metrics_and_failure_triage():
                 guard_repair_count=1,
                 sanitized_fallback_count=1,
                 raw_json_block_count=1,
+                confirmation_without_pending_warn_count=1,
                 reply_quality_issue_count=1,
                 reply_missing_expected_text_count=1,
                 wrong_write_count=0,
@@ -100,7 +101,7 @@ def test_report_renders_quality_metrics_and_failure_triage():
     assert "## Quality Metrics" in markdown
     assert "| guard_block_rate | 1 | 50.0% |" in markdown
     assert "| raw_json_block_count | 1 | 50.0% |" in markdown
-    assert "| confirmation_without_pending_warn_count | 0 | 0.0% |" in markdown
+    assert "| confirmation_without_pending_warn_count | 1 | 50.0% |" in markdown
     assert "| reply_quality_issue_count | 1 | 100.0% |" in markdown
     assert "| reply_missing_expected_text_count | 1 | 100.0% |" in markdown
     assert "## Failure Triage" in markdown

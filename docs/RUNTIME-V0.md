@@ -87,8 +87,29 @@ unsupported_date         date hors read_facts sur un answer_only
 old_plan_date            date > 7 jours dans le passe et hors read_facts
 ```
 
+Canal warnings (jamais bloquant, persiste dans `guard_reasons_json` avec le
+prefixe `warn:`, compte par la matrix) :
+
+```text
+warn:confirmation_without_pending   reply demande une confirmation alors
+                                    qu'aucun pending n'est ouvert ni cree
+                                    ce tour (promesse fantome instrumentee)
+```
+
 `guard fallback rate` est une gate dogfood (< 15 %) : il mesure le cout de la
 verite sur le naturel. Sur la fake matrix il reste a 0 %.
+
+## Mémoire Court Terme (transcript)
+
+Le snapshot porte les 4 derniers échanges user/coach verbatim (≤ 48 h),
+reconstruits **read-only** depuis `v0_input_events` × `v0_turns` (aucune
+nouvelle table) et rendus dans le header (`recent_conversation:`, clip
+300 chars / 40 mots par message, budget header 900 mots). Une réponse
+courte (« oui », « c'est bien ça ») se rattache ainsi au fil. Le moyen
+terme reste porté par les artefacts typés (facts, pendings, planned
+weeks) ; pas de résumé roulant — le rework profond du contexte est un
+chantier dédié après le moteur V0 (spec
+`docs/superpowers/specs/2026-06-12-mini-transcript-design.md`).
 
 ## Isolation
 
@@ -289,6 +310,13 @@ verificateur `_check_blocked_days`, plancher relache, generateur/template blocke
 + `get_planned_week` (read tool semaine committee) + runner Telegram standalone
 `scripts/dogfood_telegram.py`. 262 tests. Capacite prouvee couche 2 (indispo, juge LLM
 5/5/5/5). Spec dogfood : `docs/superpowers/specs/2026-06-08-v0-dogfood-wiring-design.md`.
+
+4586 -> 4654 (12 juin 2026) : memoire court terme conversationnelle — transcript verbatim
+des 4 derniers echanges dans le header + canal warnings du guard
+(`warn:confirmation_without_pending`). Motive par le dogfood du 12 juin (fil mort a
+chaque tour). 288 tests, matrix 11/11, danger 0. Couche 2 : persona `fil`
+(`probe_live_simulation`), DeepSeek 2/2 PASS, juge 5/5/5/5. Spec :
+`docs/superpowers/specs/2026-06-12-mini-transcript-design.md`.
 
 ## Sport Core V0
 

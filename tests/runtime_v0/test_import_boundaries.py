@@ -124,5 +124,12 @@ def test_runtime_v0_core_stays_under_v0_budget():
     # +2 lines to reject cross-sport links before any write (backstop for bug #1).
     # 4573 -> 4586 (9 juin 2026): rich Strava fields on v0_activities (avg_speed, avg_hr,
     # elevation_m, calories, map_polyline) — schema columns + migration loop in db.py.
+    # 4586 -> 4654 (12 juin 2026): mémoire court terme conversationnelle — transcript
+    # verbatim des 4 derniers échanges (<=48h) dans le SnapshotHeader, reconstruit
+    # read-only depuis v0_input_events x v0_turns (zéro nouvelle table) ; + canal
+    # warnings du guard (warn:confirmation_without_pending, jamais bloquant). Motivé
+    # par le dogfood du 12 juin (fil de conversation mort à chaque tour). Capacité
+    # prouvée couche 2 (probe_live_simulation persona fil, DeepSeek 2/2, juge 5/5/5/5).
+    # Spec : docs/superpowers/specs/2026-06-12-mini-transcript-design.md.
     loc = sum(len(path.read_text().splitlines()) for path in _core_files())
-    assert loc <= 4586
+    assert loc <= 4654
