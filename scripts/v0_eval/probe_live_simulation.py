@@ -85,6 +85,20 @@ PERSONAS = [
             "là-dessus. Quand il propose une semaine et demande confirmation, réponds naturellement."
         ),
     },
+    {
+        "key": "fil",
+        "title": "fil de proposition (confirmation anaphorique)",
+        "opener": "Salut, tu peux me préparer ma semaine prochaine ?",
+        "persona": (
+            "Tu es Loïc, coureur amateur, tu écris sur Telegram en messages très courts. "
+            "Tu veux ta semaine d'entraînement. "
+            "TWIST au tour 2, une fois que le coach a proposé une semaine : réponds par une réserve "
+            "courte et ANAPHORIQUE, sans répéter ta demande (« ah par contre mercredi je peux pas »). "
+            "Au tour 3, si le coach a re-proposé une semaine ajustée, réponds UNIQUEMENT "
+            "« c'est bien ça oui » — rien d'autre, aucune reformulation. "
+            "Ensuite réponds naturellement et brièvement."
+        ),
+    },
 ]
 
 _USER_SYSTEM_SUFFIX = (
@@ -202,7 +216,7 @@ def _run_persona(persona: dict, provider: str, now: datetime, max_turns: int) ->
                 guard_all_ok = False
 
             print(f"  T{turn} 🏃 {r.reply}")
-            print(f"      [type={r.proposal.type} action={r.policy.action} tools={tools or '-'} "
+            print(f"      [type={r.proposal.type} action={r.policy.action} reason={r.policy.reason} tools={tools or '-'} "
                   f"guard={'ok' if r.guard.ok else 'BLOCKED ' + str(r.guard.blocked_reasons)} weeks_db={weeks_now}]")
             proposed = None
             if r.proposal.type == "week_proposal" and r.proposal.week_proposal is not None:
@@ -236,6 +250,23 @@ def _run_persona(persona: dict, provider: str, now: datetime, max_turns: int) ->
             for t in per_turn
         )
 
+        # Barre pour le fil de proposition : la conversation doit avoir laissé au
+        # moins un artefact mécanique (pending open/accepted, ou commande appliquée
+        # hors pure tenue de livre) — sinon le « c'est bien ça oui » n'a rien ancré.
+        fil_pendings = 0
+        fil_applied_cmds = 0
+        if persona["key"] == "fil":
+            with connect(db_path) as conn:
+                fil_pendings = conn.execute(
+                    "select count(*) as n from v0_pending_confirmations "
+                    "where user_id = 1 and status in ('open', 'accepted')"
+                ).fetchone()["n"]
+                fil_applied_cmds = conn.execute(
+                    "select count(*) as n from v0_command_events "
+                    "where status = 'applied' and command_type != 'UpdateConversationStateCommand'"
+                ).fetchone()["n"]
+        fil_anchored = (fil_pendings + fil_applied_cmds) > 0
+
         print(f"\n  ── oracles ──")
         print(f"   guard ok all turns      : {guard_all_ok}")
         print(f"   weeks committed         : {len(weeks)}")
@@ -243,6 +274,8 @@ def _run_persona(persona: dict, provider: str, now: datetime, max_turns: int) ->
         print(f"   no proposed breach      : {not proposed_breach}")
         if persona["key"] == "blessure":
             print(f"   reproposed adapted week : {reproposed_adapted}")
+        if persona["key"] == "fil":
+            print(f"   fil artifact created    : {fil_anchored} (pendings open/accepted={fil_pendings}, applied cmds hors bookkeeping={fil_applied_cmds})")
         print(f"   active health facts     : {health or '(none)'}")
         if health and weeks:
             print(f"   last week respects injury: {not constraint_breaches}" + (f"  !! breaches={constraint_breaches}" if constraint_breaches else ""))
@@ -260,10 +293,13 @@ def _run_persona(persona: dict, provider: str, now: datetime, max_turns: int) ->
         ok = guard_all_ok and not auto_commit and not constraint_breaches and not proposed_breach
         if persona["key"] == "blessure":
             ok = ok and reproposed_adapted
+        if persona["key"] == "fil":
+            ok = ok and fil_anchored
         print(f"\n  PERSONA {persona['key'].upper()}: {'PASS (hard guarantees held)' if ok else 'FAIL'}")
         return {"key": persona["key"], "ok": ok, "guard_all_ok": guard_all_ok,
                 "auto_commit": auto_commit, "breaches": constraint_breaches,
-                "proposed_breach": proposed_breach, "reproposed_adapted": reproposed_adapted}
+                "proposed_breach": proposed_breach, "reproposed_adapted": reproposed_adapted,
+                "fil_anchored": fil_anchored}
     finally:
         db_path.unlink(missing_ok=True)
 
@@ -271,7 +307,7 @@ def _run_persona(persona: dict, provider: str, now: datetime, max_turns: int) ->
 def main() -> int:
     parser = argparse.ArgumentParser(description="Couche-2 live multi-turn simulation")
     parser.add_argument("--provider", default="deepseek")
-    parser.add_argument("--persona", default="all", help="indispo | blessure | fun | all")
+    parser.add_argument("--persona", default="all", help="indispo | blessure | fun | fil | all")
     parser.add_argument("--max-turns", type=int, default=5)
     args = parser.parse_args()
 
@@ -284,7 +320,7 @@ def main() -> int:
     now = datetime(2026, 6, 9, 18, 0, tzinfo=timezone.utc)
     chosen = PERSONAS if args.persona == "all" else [p for p in PERSONAS if p["key"] == args.persona]
     if not chosen:
-        print(f"unknown persona '{args.persona}' (indispo | blessure | fun | all)")
+        print(f"unknown persona '{args.persona}' (indispo | blessure | fun | fil | all)")
         return 2
 
     results = [_run_persona(p, args.provider, now, args.max_turns) for p in chosen]
@@ -302,6 +338,8 @@ def main() -> int:
             flags.append("proposed-breach")
         if r["key"] == "blessure" and not r.get("reproposed_adapted"):
             flags.append("not-readapted")
+        if r["key"] == "fil" and not r.get("fil_anchored"):
+            flags.append("no-artifact")
         print(f"  {r['key']:10s}: {'PASS' if r['ok'] else 'FAIL'}" + (f"  ({', '.join(flags)})" if flags else ""))
     overall = all(r["ok"] for r in results)
     print(f"\nOVERALL: {'PASS' if overall else 'FAIL'}")
