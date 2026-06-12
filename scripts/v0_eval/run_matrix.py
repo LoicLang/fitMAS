@@ -552,6 +552,7 @@ def _run_metrics(db_path: Path, verdicts: tuple[OracleVerdict, ...]) -> dict:
         "raw_json_block_count": guard_reasons.count("raw_json_visible"),
         "truncated_reply_count": guard_reasons.count("truncated_reply"),
         "technical_id_block_count": guard_reasons.count("technical_id_visible"),
+        "confirmation_without_pending_warn_count": guard_reasons.count("warn:confirmation_without_pending"),
         "wrong_write_count": sum(verdict.wrong_write_count for verdict in verdicts),
         "old_plan_date_count": sum(1 for verdict in verdicts if verdict.old_plan_date_detected),
         "wrong_correction_target_count": sum(1 for verdict in verdicts if verdict.wrong_correction_target),

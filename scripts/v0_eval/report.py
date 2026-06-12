@@ -24,6 +24,7 @@ class MatrixRunRecord:
     raw_json_block_count: int = 0
     truncated_reply_count: int = 0
     technical_id_block_count: int = 0
+    confirmation_without_pending_warn_count: int = 0
     wrong_write_count: int = 0
     old_plan_date_count: int = 0
     wrong_correction_target_count: int = 0
@@ -101,6 +102,7 @@ def _quality_metrics_lines(records: list[MatrixRunRecord]) -> list[str]:
         ("raw_json_block_count", sum(record.raw_json_block_count for record in records), total_turns),
         ("truncated_reply_count", sum(record.truncated_reply_count for record in records), total_turns),
         ("technical_id_block_count", sum(record.technical_id_block_count for record in records), total_turns),
+        ("confirmation_without_pending_warn_count", sum(record.confirmation_without_pending_warn_count for record in records), total_turns),
         ("wrong_write_count", sum(record.wrong_write_count for record in records), len(records) or 1),
         ("old_plan_date_count", sum(record.old_plan_date_count for record in records), len(records) or 1),
         ("wrong_correction_target_count", sum(record.wrong_correction_target_count for record in records), len(records) or 1),
