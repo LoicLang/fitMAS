@@ -74,7 +74,7 @@ def persist_turn(
                 tokens_in,
                 tokens_out,
                 1 if guard.ok else 0,
-                json.dumps(guard.blocked_reasons, ensure_ascii=False),
+                json.dumps([*guard.blocked_reasons, *guard.warnings], ensure_ascii=False),
             ),
         )
         connection.commit()

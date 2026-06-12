@@ -204,3 +204,44 @@ def test_blocks_english_leak():
     checked = guard.verify("Let me move your session to friday.", _result(committed=(_committed_event(),)))
 
     assert "english_leak" in checked.blocked_reasons
+
+
+def test_confirmation_request_without_pending_warns_not_blocks():
+    guard = OutputGuard(date(2026, 5, 22), pending_open=False)
+
+    result = guard.verify("Un fractionné en fin de journée, tu me confirmes ?", _result())
+
+    assert result.ok
+    assert result.blocked_reasons == ()
+    assert result.warnings == ("warn:confirmation_without_pending",)
+
+
+def test_confirmation_request_with_open_pending_does_not_warn():
+    guard = OutputGuard(date(2026, 5, 22), pending_open=True)
+
+    result = guard.verify("Un fractionné en fin de journée, tu me confirmes ?", _result())
+
+    assert result.ok
+    assert result.warnings == ()
+
+
+def test_confirmation_request_with_pending_created_this_turn_does_not_warn():
+    pending = PendingView(7, "week_proposal", "semaine du 15 juin", datetime(2026, 5, 23, 14, 0, tzinfo=PARIS))
+    guard = OutputGuard(date(2026, 5, 22), pending_open=False)
+
+    result = guard.verify(
+        "Je te propose la semaine du 15 juin, tu valides ?",
+        _result(policy_action="requires_confirmation", pending=pending),
+    )
+
+    assert result.ok
+    assert result.warnings == ()
+
+
+def test_reply_without_confirmation_request_does_not_warn():
+    guard = OutputGuard(date(2026, 5, 22), pending_open=False)
+
+    result = guard.verify("Demain c'est footing facile, 35 minutes tranquilles.", _result())
+
+    assert result.ok
+    assert result.warnings == ()

@@ -413,6 +413,57 @@ def test_next_turn_snapshot_sees_previous_exchange(tmp_path):
     )
 
 
+def test_second_turn_coach_prompt_contains_first_turn_transcript(tmp_path):
+    db_path = tmp_path / "fitmas_v0.db"
+    init_db(db_path)
+    _seed_session(db_path)
+
+    first_text = "C'est quoi mon plan ?"
+    first = InputEvent(
+        id="evt-two-1", user_id=1, source="test", type="user_message",
+        text=first_text, payload={},
+        occurred_at=datetime(2026, 5, 22, 14, 0, tzinfo=PARIS),
+    )
+    second = InputEvent(
+        id="evt-two-2", user_id=1, source="test", type="user_message",
+        text="Et demain ?", payload={},
+        occurred_at=datetime(2026, 5, 22, 14, 5, tzinfo=PARIS),
+    )
+
+    coach_first = FakeLLMClient([
+        LLMResponse(tool_calls=(ToolCall(name="get_current_plan", args={"days": 7}),)),
+        LLMResponse(text="Aujourd'hui: Footing."),
+    ])
+    coach_second = FakeLLMClient([
+        LLMResponse(tool_calls=(ToolCall(name="get_current_plan", args={"days": 7}),)),
+        LLMResponse(text="Pas de séance prévue demain."),
+    ])
+
+    deps_first = RuntimeDeps(
+        db_path=db_path,
+        coach_llm=coach_first,
+        reply_llm=FakeLLMClient([LLMResponse(text="Aujourd'hui: Footing.")]),
+    )
+    deps_second = RuntimeDeps(
+        db_path=db_path,
+        coach_llm=coach_second,
+        reply_llm=FakeLLMClient([LLMResponse(text="Pas de séance prévue demain.")]),
+    )
+
+    handle_event(first, deps=deps_first, turn_id="turn-two-1")
+    handle_event(second, deps=deps_second, turn_id="turn-two-2")
+
+    # coach_second received at least one call; the system_context message (index 0)
+    # of the first step should contain the transcript from the previous turn.
+    assert coach_second.requests, "coach for turn 2 was never called"
+    first_step_messages = coach_second.requests[0]["messages"]
+    system_context_content = next(
+        m["content"] for m in first_step_messages if m.get("role") == "system_context"
+    )
+    assert "recent_conversation:" in system_context_content
+    assert first_text in system_context_content
+
+
 def test_propose_then_reject_drops_week(tmp_path):
     from datetime import datetime, timezone
     from fitmas.runtime_v0.db import connect, init_db

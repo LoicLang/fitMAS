@@ -18,16 +18,24 @@ DATE_PATTERN = re.compile(r"\b20\d{2}-\d{2}-\d{2}\b")
 RAW_JSON_PATTERN = re.compile(r"[{}]|\b(sessions|duration_min|target_session_id)\b", re.IGNORECASE)
 TECHNICAL_ID_PATTERN = re.compile(r"\b(session_id|source_ref|target_session_id|ID\s*\d+)\b", re.IGNORECASE)
 TRUNCATED_END_PATTERN = re.compile(r"\b(avec|et|pour|:)\s*$", re.IGNORECASE)
+# Doctrinaire: liste courte intentionnelle. Si friction répétée, repenser structurellement
+# plutôt qu'ajouter item par item (cf. note JARGON_PATTERN dans BUILD-ORDER «Failles Ouvertes»).
+CONFIRMATION_REQUEST_PATTERN = re.compile(
+    r"\b(tu me confirmes|tu confirmes|tu valides|ça te va|ça te convient|dis-moi si)\b",
+    re.IGNORECASE,
+)
 
 @dataclass(frozen=True)
 class GuardResult:
     ok: bool
     blocked_reasons: tuple[str, ...]
     sanitized_reply: str
+    warnings: tuple[str, ...] = ()
 
 class OutputGuard:
-    def __init__(self, today: date):
+    def __init__(self, today: date, pending_open: bool = False):
         self.today = today
+        self.pending_open = pending_open
 
     def verify(self, reply: str, result: RuntimeResult) -> GuardResult:
         reasons: list[str] = []
@@ -56,9 +64,16 @@ class OutputGuard:
             if parsed < self.today - timedelta(days=7) and not _in_read_facts(date_text, result):
                 reasons.append("old_plan_date")
                 break
+        warnings: list[str] = []
+        if (
+            not self.pending_open
+            and result.pending is None
+            and CONFIRMATION_REQUEST_PATTERN.search(reply)
+        ):
+            warnings.append("warn:confirmation_without_pending")
         if reasons:
-            return GuardResult(False, tuple(reasons), _safe_reply(result, self.today))
-        return GuardResult(True, (), reply)
+            return GuardResult(False, tuple(reasons), _safe_reply(result, self.today), tuple(warnings))
+        return GuardResult(True, (), reply, tuple(warnings))
 
 def _in_read_facts(value: str, result: RuntimeResult) -> bool:
     return any(value in fact for fact in result.read_facts)

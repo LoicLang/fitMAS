@@ -91,7 +91,7 @@ def _handle_new_event(event: InputEvent, deps: RuntimeDeps, turn_id: str, starte
     result = build_runtime_result(event, turn_id, proposal, policy, events, pending=_pending_from_events(events))
     reply_calls = _calls(deps.reply_llm)
     reply = ReplyComposer(deps.reply_llm, REPLY_SYSTEM_PROMPT).compose(result, snapshot)
-    guarder = OutputGuard(snapshot.today)
+    guarder = OutputGuard(snapshot.today, pending_open=snapshot.active_pending is not None)
     guard = guarder.verify(reply, result)
     guard_repair_used = False
     if not guard.ok:
@@ -168,7 +168,13 @@ def _existing_result(turn) -> HandleEventResult:
         (), tuple(result_data.get("blocked_reasons", ())), None, tuple(result_data.get("read_facts", ())),
         ReplyContract((), (), "informative", 3),
     )
-    guard = GuardResult(bool(turn["guard_ok"]), tuple(json.loads(turn["guard_reasons_json"])), turn["reply"])
+    stored_reasons = json.loads(turn["guard_reasons_json"])
+    guard = GuardResult(
+        bool(turn["guard_ok"]),
+        tuple(reason for reason in stored_reasons if not reason.startswith("warn:")),
+        turn["reply"],
+        tuple(reason for reason in stored_reasons if reason.startswith("warn:")),
+    )
     return HandleEventResult(result.turn_id, turn["reply"], proposal, policy, result, guard)
 
 def _turn_complete(turn) -> bool:
