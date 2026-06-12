@@ -382,6 +382,37 @@ def test_propose_then_confirm_commits_week(tmp_path):
     assert r2.guard.ok
 
 
+def test_next_turn_snapshot_sees_previous_exchange(tmp_path):
+    from fitmas.runtime_v0.snapshot import SnapshotBuilder
+    from fitmas.runtime_v0.llm_clients.base import LLMResponse
+
+    db_path = tmp_path / "fitmas_v0.db"
+    init_db(db_path)
+    _seed_session(db_path)
+    first = InputEvent(
+        id="evt-fil-1", user_id=1, source="test", type="user_message",
+        text="Tu peux deplacer ma seance a demain ?", payload={},
+        occurred_at=datetime(2026, 5, 22, 14, 0, tzinfo=PARIS),
+    )
+    deps = RuntimeDeps(
+        db_path=db_path,
+        coach_llm=FakeLLMClient([LLMResponse(text="Je décale ta séance à demain.")]),
+        reply_llm=FakeLLMClient([LLMResponse(text="C'est noté, ta séance est déplacée à demain.")]),
+    )
+    handle_event(first, deps=deps, turn_id="turn-fil-1")
+
+    snapshot = SnapshotBuilder(db_path).build(
+        user_id=1,
+        now=datetime(2026, 5, 22, 14, 5, tzinfo=PARIS),
+        current_event_id="evt-fil-2",
+    )
+
+    assert any(
+        entry.role == "user" and entry.text == "Tu peux deplacer ma seance a demain ?"
+        for entry in snapshot.recent_transcript
+    )
+
+
 def test_propose_then_reject_drops_week(tmp_path):
     from datetime import datetime, timezone
     from fitmas.runtime_v0.db import connect, init_db

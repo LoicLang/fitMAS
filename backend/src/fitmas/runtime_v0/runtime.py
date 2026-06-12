@@ -68,7 +68,7 @@ def handle_event(event: InputEvent, deps: RuntimeDeps, turn_id: str) -> HandleEv
         raise
 
 def _handle_new_event(event: InputEvent, deps: RuntimeDeps, turn_id: str, started: float) -> HandleEventResult:
-    snapshot = SnapshotBuilder(deps.db_path).build(event.user_id, event.occurred_at)
+    snapshot = SnapshotBuilder(deps.db_path).build(event.user_id, event.occurred_at, current_event_id=event.id)
     ctx = ToolContext(deps.db_path, snapshot, {}, generation_llm=deps.generation_llm)
     if event.type != "user_message":
         proposal = _no_send("event_type_not_supported_in_v0")
