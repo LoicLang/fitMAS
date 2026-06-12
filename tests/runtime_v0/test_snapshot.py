@@ -329,6 +329,22 @@ def test_header_word_budget_holds_with_full_transcript(tmp_path):
     assert "recent_conversation:" in text  # l'assert interne <= 900 mots n'a pas sauté
 
 
+def test_header_word_budget_holds_with_dense_short_tokens(tmp_path):
+    db_path = tmp_path / "fitmas_v0.db"
+    now = datetime(2026, 6, 12, 12, 0, tzinfo=PARIS)
+    init_db(db_path)
+    dense_message = "a " * 200
+    with connect(db_path) as connection:
+        for index in range(4):
+            _insert_input_event(connection, f"evt-{index}", now, dense_message, hours_ago=4 - index)
+            _insert_turn_reply(connection, f"turn-{index}", f"evt-{index}", dense_message)
+        connection.commit()
+
+    text = SnapshotBuilder(db_path).build(user_id=1, now=now).header().to_prompt_text()
+
+    assert "recent_conversation:" in text  # l'assert interne <= 900 mots n'a pas sauté
+
+
 def test_transcript_user_message_without_reply_stands_alone(tmp_path):
     db_path = tmp_path / "fitmas_v0.db"
     now = datetime(2026, 6, 12, 12, 0, tzinfo=PARIS)

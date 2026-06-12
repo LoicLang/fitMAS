@@ -357,5 +357,8 @@ def _timezone_name(value: datetime) -> str:
 def _date_text(value: date) -> str:
     return value.isoformat()
 
-def _clip(text: str, limit: int = 300) -> str:
+def _clip(text: str, limit: int = 300, word_limit: int = 40) -> str:
+    words = text.split()
+    if len(words) > word_limit:
+        text = " ".join(words[:word_limit]) + "…"
     return text if len(text) <= limit else text[: limit - 1] + "…"
