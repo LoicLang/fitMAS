@@ -501,3 +501,53 @@ def test_propose_then_reject_drops_week(tmp_path):
     assert week_count == 0
     assert pending["status"] == "rejected"
     assert r2.guard.ok
+
+
+def test_guard_warning_round_trip_audit_to_existing_result(tmp_path):
+    """Pin the audit.py:77 serialization / runtime.py _existing_result re-split contract.
+
+    The reply "Un fractionné demain, ça te va ?" triggers
+    warn:confirmation_without_pending (pending_open=False, result.pending=None,
+    CONFIRMATION_REQUEST_PATTERN matches "ça te va"). The guard is ok=True (warning
+    only, no blocking reason). The turn is persisted with guard_ok=1 and
+    guard_reasons_json=["warn:confirmation_without_pending"]. On idempotent replay,
+    _existing_result must reconstruct guard correctly by splitting on "warn:" prefix.
+    """
+    db_path = tmp_path / "fitmas_v0.db"
+    init_db(db_path)
+
+    # No session seeded → no pending_open, result.pending=None
+    event = InputEvent(
+        id="evt-guard-warn",
+        user_id=1,
+        source="test",
+        type="user_message",
+        text="Plan actuel ?",
+        payload={},
+        occurred_at=datetime(2026, 5, 22, 14, 0, tzinfo=PARIS),
+    )
+    turn_id = "turn-guard-warn"
+
+    # Coach: plain answer proposal (no tool call, no mutation)
+    # Reply: triggers CONFIRMATION_REQUEST_PATTERN via "ça te va ?"
+    deps = RuntimeDeps(
+        db_path=db_path,
+        coach_llm=FakeLLMClient([LLMResponse(text="Pas de séance prévue.")]),
+        reply_llm=FakeLLMClient([LLMResponse(text="Un fractionné demain, ça te va ?")]),
+    )
+
+    result1 = handle_event(event, deps=deps, turn_id=turn_id)
+
+    # Step 2: assert DB round-trip
+    turn = load_turn(db_path, turn_id)
+    assert turn is not None
+    assert turn["guard_ok"] == 1
+    assert json.loads(turn["guard_reasons_json"]) == ["warn:confirmation_without_pending"]
+
+    # Step 3: idempotent replay → _existing_result path
+    deps2 = RuntimeDeps(db_path=db_path, coach_llm=FakeLLMClient([]), reply_llm=FakeLLMClient([]))
+    result2 = handle_event(event, deps=deps2, turn_id="ignored-turn-warn")
+
+    assert result2.guard.ok is True
+    assert result2.guard.blocked_reasons == ()
+    assert result2.guard.warnings == ("warn:confirmation_without_pending",)
