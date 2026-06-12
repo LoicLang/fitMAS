@@ -210,3 +210,93 @@ def test_snapshot_loads_last_committed_week(tmp_path):
 
     snapshot = SnapshotBuilder(db_path).build(1, datetime(2026, 6, 12, 9, 0, tzinfo=timezone.utc))
     assert snapshot.last_planned_week == WeekActuals(total_load=330.0, key_type="intervals")
+
+
+def _insert_input_event(connection, event_id: str, now, text: str, hours_ago: float):
+    connection.execute(
+        "insert into v0_input_events (id, user_id, source, type, text, payload_json, occurred_at)"
+        " values (?, 1, 'test', 'user_message', ?, '{}', ?)",
+        (event_id, text, (now - timedelta(hours=hours_ago)).isoformat()),
+    )
+
+
+def _insert_turn_reply(connection, turn_id: str, event_id: str, reply: str):
+    connection.execute(
+        "insert into v0_turns (id, event_id, reply) values (?, ?, ?)",
+        (turn_id, event_id, reply),
+    )
+
+
+def test_transcript_keeps_last_four_exchanges_chronological(tmp_path):
+    db_path = tmp_path / "fitmas_v0.db"
+    now = datetime(2026, 6, 12, 12, 0, tzinfo=PARIS)
+    init_db(db_path)
+    with connect(db_path) as connection:
+        for index in range(6):
+            _insert_input_event(connection, f"evt-{index}", now, f"message {index}", hours_ago=6 - index)
+            _insert_turn_reply(connection, f"turn-{index}", f"evt-{index}", f"reponse {index}")
+        connection.commit()
+
+    snapshot = SnapshotBuilder(db_path).build(user_id=1, now=now)
+
+    entries = [(entry.role, entry.text) for entry in snapshot.recent_transcript]
+    assert entries == [
+        ("user", "message 2"), ("coach", "reponse 2"),
+        ("user", "message 3"), ("coach", "reponse 3"),
+        ("user", "message 4"), ("coach", "reponse 4"),
+        ("user", "message 5"), ("coach", "reponse 5"),
+    ]
+
+
+def test_transcript_drops_messages_older_than_48h(tmp_path):
+    db_path = tmp_path / "fitmas_v0.db"
+    now = datetime(2026, 6, 12, 12, 0, tzinfo=PARIS)
+    init_db(db_path)
+    with connect(db_path) as connection:
+        _insert_input_event(connection, "evt-old", now, "vieux message", hours_ago=49)
+        _insert_turn_reply(connection, "turn-old", "evt-old", "vieille reponse")
+        _insert_input_event(connection, "evt-new", now, "message frais", hours_ago=1)
+        _insert_turn_reply(connection, "turn-new", "evt-new", "reponse fraiche")
+        connection.commit()
+
+    snapshot = SnapshotBuilder(db_path).build(user_id=1, now=now)
+
+    assert [entry.text for entry in snapshot.recent_transcript] == ["message frais", "reponse fraiche"]
+
+
+def test_transcript_excludes_current_event_and_foreign_user(tmp_path):
+    db_path = tmp_path / "fitmas_v0.db"
+    now = datetime(2026, 6, 12, 12, 0, tzinfo=PARIS)
+    init_db(db_path)
+    with connect(db_path) as connection:
+        _insert_input_event(connection, "evt-prev", now, "tour precedent", hours_ago=2)
+        _insert_turn_reply(connection, "turn-prev", "evt-prev", "reponse precedente")
+        _insert_input_event(connection, "evt-current", now, "tour courant", hours_ago=0)
+        connection.execute(
+            "insert into v0_input_events (id, user_id, source, type, text, payload_json, occurred_at)"
+            " values ('evt-autre', 2, 'test', 'user_message', 'autre user', '{}', ?)",
+            ((now - timedelta(hours=1)).isoformat(),),
+        )
+        connection.commit()
+
+    snapshot = SnapshotBuilder(db_path).build(user_id=1, now=now, current_event_id="evt-current")
+
+    assert [entry.text for entry in snapshot.recent_transcript] == ["tour precedent", "reponse precedente"]
+
+
+def test_transcript_user_message_without_reply_stands_alone(tmp_path):
+    db_path = tmp_path / "fitmas_v0.db"
+    now = datetime(2026, 6, 12, 12, 0, tzinfo=PARIS)
+    init_db(db_path)
+    with connect(db_path) as connection:
+        _insert_input_event(connection, "evt-crash", now, "message sans reponse", hours_ago=3)
+        _insert_input_event(connection, "evt-nosend", now, "message no_send", hours_ago=2)
+        _insert_turn_reply(connection, "turn-nosend", "evt-nosend", "")
+        connection.commit()
+
+    snapshot = SnapshotBuilder(db_path).build(user_id=1, now=now)
+
+    assert [(entry.role, entry.text) for entry in snapshot.recent_transcript] == [
+        ("user", "message sans reponse"),
+        ("user", "message no_send"),
+    ]

@@ -57,6 +57,12 @@ class CommandEventView:
     created_at: datetime
 
 @dataclass(frozen=True)
+class TranscriptEntry:
+    role: Literal["user", "coach"]
+    text: str
+    at: datetime
+
+@dataclass(frozen=True)
 class SnapshotHeader:
     today: date
     timezone: str
@@ -125,6 +131,7 @@ class WorldSnapshot:
     recent_plan_events: tuple[CommandEventView, ...]
     conversation_state: ConversationState
     last_planned_week: WeekActuals | None = None
+    recent_transcript: tuple[TranscriptEntry, ...] = ()
 
     def header(self) -> SnapshotHeader:
         next_sessions = self.current_plan[:3]
@@ -148,7 +155,7 @@ class SnapshotBuilder:
     def __init__(self, db_path: Path):
         self.db_path = db_path
 
-    def build(self, user_id: int, now: datetime) -> WorldSnapshot:
+    def build(self, user_id: int, now: datetime, current_event_id: str | None = None) -> WorldSnapshot:
         now = _ensure_timezone(now)
         today = now.date()
         with connect(self.db_path) as connection:
@@ -164,6 +171,7 @@ class SnapshotBuilder:
             recent_plan_events = _load_command_events(connection, ("ApplyPlanPatchCommand",))
             conversation_state = _load_conversation_state(connection, user_id, now)
             last_planned_week = _load_last_planned_week(connection, user_id)
+            recent_transcript = _load_transcript(connection, user_id, now, current_event_id)
 
         assert len(active_facts) <= 10
         assert len(recent_execution_events) <= 5
@@ -183,6 +191,7 @@ class SnapshotBuilder:
             recent_plan_events=recent_plan_events,
             conversation_state=conversation_state,
             last_planned_week=last_planned_week,
+            recent_transcript=recent_transcript,
         )
 
 def _load_sessions(connection, user_id: int, start: date, end: date) -> tuple[SessionView, ...]:
@@ -247,6 +256,30 @@ def _load_command_events(connection, command_types: tuple[str, ...]) -> tuple[Co
         command_types,
     ).fetchall()
     return tuple(_command_event_from_row(row) for row in rows)
+
+def _load_transcript(connection, user_id: int, now: datetime, exclude_event_id: str | None) -> tuple[TranscriptEntry, ...]:
+    cutoff = (now - timedelta(hours=48)).isoformat()
+    rows = connection.execute(
+        """
+        select e.text, e.occurred_at, t.reply
+        from v0_input_events e
+        left join v0_turns t on t.event_id = e.id
+        where e.user_id = ? and e.type = 'user_message'
+          and e.text is not null and e.text != ''
+          and e.occurred_at >= ?
+          and e.id != ?
+        order by e.occurred_at desc, e.id desc
+        limit 4
+        """,
+        (user_id, cutoff, exclude_event_id or ""),
+    ).fetchall()
+    entries: list[TranscriptEntry] = []
+    for row in reversed(rows):
+        at = _parse_datetime(row["occurred_at"])
+        entries.append(TranscriptEntry("user", row["text"], at))
+        if row["reply"]:
+            entries.append(TranscriptEntry("coach", row["reply"], at))
+    return tuple(entries)
 
 def _load_conversation_state(connection, user_id: int, now: datetime) -> ConversationState:
     row = connection.execute(
