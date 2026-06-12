@@ -284,6 +284,51 @@ def test_transcript_excludes_current_event_and_foreign_user(tmp_path):
     assert [entry.text for entry in snapshot.recent_transcript] == ["tour precedent", "reponse precedente"]
 
 
+def test_header_renders_recent_conversation_clipped(tmp_path):
+    db_path = tmp_path / "fitmas_v0.db"
+    now = datetime(2026, 6, 12, 12, 0, tzinfo=PARIS)
+    init_db(db_path)
+    with connect(db_path) as connection:
+        _insert_input_event(connection, "evt-a", now, "x" * 400, hours_ago=2)
+        _insert_turn_reply(connection, "turn-a", "evt-a", "reponse courte")
+        connection.commit()
+
+    text = SnapshotBuilder(db_path).build(user_id=1, now=now).header().to_prompt_text()
+
+    assert "recent_conversation:" in text
+    assert "user: " + "x" * 299 + "…" in text
+    assert "coach: reponse courte" in text
+    assert "[12/06 10:00]" in text
+
+
+def test_header_omits_recent_conversation_when_empty(tmp_path):
+    db_path = tmp_path / "fitmas_v0.db"
+    now = datetime(2026, 6, 12, 12, 0, tzinfo=PARIS)
+    init_db(db_path)
+
+    text = SnapshotBuilder(db_path).build(user_id=1, now=now).header().to_prompt_text()
+
+    assert "recent_conversation" not in text
+
+
+def test_header_word_budget_holds_with_full_transcript(tmp_path):
+    db_path = tmp_path / "fitmas_v0.db"
+    now = datetime(2026, 6, 12, 12, 0, tzinfo=PARIS)
+    init_db(db_path)
+    long_message = " ".join(["mot"] * 80)
+    with connect(db_path) as connection:
+        for offset in (0, 1, 2, 14):
+            _insert_session(connection, now, offset)
+        for index in range(4):
+            _insert_input_event(connection, f"evt-{index}", now, long_message, hours_ago=4 - index)
+            _insert_turn_reply(connection, f"turn-{index}", f"evt-{index}", long_message)
+        connection.commit()
+
+    text = SnapshotBuilder(db_path).build(user_id=1, now=now).header().to_prompt_text()
+
+    assert "recent_conversation:" in text  # l'assert interne <= 900 mots n'a pas sauté
+
+
 def test_transcript_user_message_without_reply_stands_alone(tmp_path):
     db_path = tmp_path / "fitmas_v0.db"
     now = datetime(2026, 6, 12, 12, 0, tzinfo=PARIS)

@@ -73,6 +73,7 @@ class SnapshotHeader:
     last_unresolved_intent: dict[str, Any] | None
     last_execution_event: CommandEventView | None
     recent_training: tuple[SessionView, ...] = ()
+    recent_transcript: tuple[TranscriptEntry, ...] = ()
 
     def to_prompt_text(self) -> str:
         lines = [
@@ -111,8 +112,13 @@ class SnapshotHeader:
                 f"{self.last_execution_event.id} {self.last_execution_event.type} "
                 f"{self.last_execution_event.summary}"
             )
+        if self.recent_transcript:
+            lines.append("recent_conversation:")
+            for entry in self.recent_transcript:
+                stamp = entry.at.strftime("%d/%m %H:%M")
+                lines.append(f"- [{stamp}] {entry.role}: {_clip(entry.text)}")
         text = "\n".join(lines)
-        assert len(text.split()) <= 500
+        assert len(text.split()) <= 900
         return text
 
 @dataclass(frozen=True)
@@ -149,6 +155,7 @@ class WorldSnapshot:
             last_unresolved_intent=self.conversation_state.last_unresolved_intent,
             last_execution_event=last_execution_event,
             recent_training=self.recent_plan[:6],
+            recent_transcript=self.recent_transcript,
         )
 
 class SnapshotBuilder:
@@ -349,3 +356,6 @@ def _timezone_name(value: datetime) -> str:
 
 def _date_text(value: date) -> str:
     return value.isoformat()
+
+def _clip(text: str, limit: int = 300) -> str:
+    return text if len(text) <= limit else text[: limit - 1] + "…"
